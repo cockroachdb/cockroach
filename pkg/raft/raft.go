@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -259,6 +260,8 @@ type Config struct {
 	// This behavior will become unconditional in the future. See:
 	// https://github.com/etcd-io/raft/issues/83
 	StepDownOnRemoval bool
+
+	FlowControl FlowControl
 }
 
 func (c *Config) validate() error {
@@ -315,6 +318,8 @@ type raft struct {
 
 	// the log
 	raftLog *raftLog
+
+	replFlow FlowControl
 
 	maxMsgSize         entryEncodingSize
 	maxUncommittedSize entryPayloadSize
@@ -422,6 +427,7 @@ func newRaft(c *Config) *raft {
 		lead:                        None,
 		isLearner:                   false,
 		raftLog:                     raftlog,
+		replFlow:                    c.FlowControl,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
 		trk:                         tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
@@ -434,8 +440,12 @@ func newRaft(c *Config) *raft {
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		stepDownOnRemoval:           c.StepDownOnRemoval,
 	}
-	lastID := r.raftLog.lastEntryID()
 
+	if r.replFlow == nil {
+		r.replFlow = FlowControlNoop{}
+	}
+
+	lastID := r.raftLog.lastEntryID()
 	// To initialize accTerm correctly, we make sure its invariant is true: the
 	// log is a prefix of the accTerm leader's log. This can be achieved by
 	// conservatively initializing accTerm to the term of the last log entry.
@@ -629,6 +639,9 @@ func (r *raft) maybeSendAppend(to uint64) bool {
 	})
 	pr.SentEntries(len(entries), uint64(payloadsSize(entries)))
 	pr.SentCommit(commit)
+	if pr.State == tracker.StateReplicate && len(entries) > 0 {
+		r.replFlow.Update(NodeID(to), FlowStateFrom(pr))
+	}
 	return true
 }
 
@@ -744,6 +757,9 @@ func (r *raft) maybeCommit() bool {
 }
 
 func (r *raft) reset(term uint64) {
+	if r.state == StateLeader {
+		r.replFlow.Stop()
+	}
 	if r.Term != term {
 		r.Term = term
 		r.Vote = None
@@ -801,6 +817,7 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 	//  	r.bcastAppend()
 	//  }
 	r.send(pb.Message{To: r.id, Type: pb.MsgAppResp, Index: li})
+	r.replFlow.Append(r.raftLog.lastIndex())
 	return true
 }
 
@@ -911,6 +928,7 @@ func (r *raft) becomeLeader() {
 	// could be expensive.
 	r.pendingConfIndex = r.raftLog.lastIndex()
 
+	r.replFlow.Lead(r.Term, r.raftLog.lastIndex())
 	emptyEnt := pb.Entry{Data: nil}
 	if !r.appendEntry(emptyEnt) {
 		// This won't happen because we just called reset() above.
@@ -1450,6 +1468,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
 				if pr.State == tracker.StateReplicate {
 					pr.BecomeProbe()
+					r.replFlow.Disconnect(NodeID(m.From))
 				}
 				r.maybeSendAppend(m.From)
 			}
@@ -1484,6 +1503,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				case pr.State == tracker.StateReplicate:
 					pr.Inflights.FreeLE(m.Index)
 				}
+				r.replFlow.Update(NodeID(m.From), FlowStateFrom(pr))
 
 				if r.maybeCommit() {
 					r.bcastAppend()
@@ -1531,6 +1551,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		// there is huge probability that a MsgApp is lost.
 		if pr.State == tracker.StateReplicate {
 			pr.BecomeProbe()
+			r.replFlow.Disconnect(NodeID(m.From))
 		}
 		r.logger.Debugf("%x failed to send message to %x because it is unreachable [%s]", r.id, m.From, pr)
 	case pb.MsgTransferLeader:
@@ -1875,6 +1896,11 @@ func (r *raft) promotable() bool {
 }
 
 func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
+	var ids []uint64
+	if r.state == StateLeader {
+		ids = maps.Keys(r.trk.Progress)
+	}
+
 	cfg, trk, err := func() (tracker.Config, tracker.ProgressMap, error) {
 		changer := confchange.Changer{
 			Tracker:   r.trk,
@@ -1891,6 +1917,15 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 	if err != nil {
 		// TODO(tbg): return the error to the caller.
 		panic(err)
+	}
+
+	// If we were the leader, signal the flow control about all the peers removed
+	// from the config.
+	for _, id := range ids {
+		if id == r.id || trk[id] != nil {
+			continue
+		}
+		r.replFlow.Remove(NodeID(id))
 	}
 
 	return r.switchToConfig(cfg, trk)

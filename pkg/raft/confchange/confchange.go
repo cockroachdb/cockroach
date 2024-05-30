@@ -246,6 +246,7 @@ func (c Changer) remove(cfg *tracker.Config, trk tracker.ProgressMap, id uint64)
 
 	// If the peer is still a voter in the outgoing config, keep the Progress.
 	if _, onRight := outgoing(cfg.Voters)[id]; !onRight {
+		// TODO(pav-kv): signal the upper layer about this remove.
 		delete(trk, id)
 	}
 }
