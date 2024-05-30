@@ -108,10 +108,12 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
     return null;
   }
   const { data } = problemRanges;
-  const ids = _.chain(_.keys(data.problems_by_node_id))
-    .map(id => parseInt(id, 10))
-    .sortBy(id => id)
-    .value();
+  const ids = flow(
+    keys,
+    nodeIds => map(nodeIds, id => parseInt(id, 10)),
+    nodeIds => sortBy(nodeIds, id => id)
+  )(data.problems_by_node_id)
+
   return (
     <div>
       <h2 className="base-heading">Connections (via Node {data.node_id})</h2>
