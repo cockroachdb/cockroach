@@ -176,14 +176,6 @@ func (pr *Progress) SentEntries(entries int, bytes uint64) {
 	pr.MsgAppProbesPaused = true
 }
 
-// CanSendEntries returns true if the flow control state allows sending at least
-// one log entry to this follower.
-//
-// Must be used with StateProbe or StateReplicate.
-func (pr *Progress) CanSendEntries(lastIndex uint64) bool {
-	return pr.Next <= lastIndex && (pr.State == StateProbe || !pr.Inflights.Full())
-}
-
 // CanBumpCommit returns true if sending the given commit index can potentially
 // advance the follower's commit index.
 func (pr *Progress) CanBumpCommit(index uint64) bool {
@@ -314,11 +306,11 @@ func (pr *Progress) ShouldSendMsgApp(last, commit uint64) MsgAppType {
 		}
 
 	case StateReplicate:
-		// If the in-flight limits are not saturated, and there are pending entries
-		// (Next <= lastIndex), send a MsgApp with some entries.
-		if pr.CanSendEntries(last) {
+		switch {
+		// If there are pending entries, and the in-flight limits are not saturated,
+		// send a MsgApp with some entries.
+		case pr.Next <= last && !pr.Inflights.Full():
 			return MsgAppWithEntries
-		}
 		// We can't send any entries at this point, but we need to be sending a
 		// MsgApp periodically, to guarantee liveness of the MsgApp flow: the
 		// follower eventually will reply with an ack or reject.
@@ -326,17 +318,17 @@ func (pr *Progress) ShouldSendMsgApp(last, commit uint64) MsgAppType {
 		// If the follower's log is outdated, and we haven't recently sent a MsgApp
 		// (according to the MsgAppProbesPaused flag), send one now. This is going
 		// to be an empty "probe" MsgApp.
-		if pr.Match < last && !pr.MsgAppProbesPaused {
+		case pr.Match < last && !pr.MsgAppProbesPaused:
 			return MsgAppProbe
-		}
 		// Send an empty MsgApp containing the latest commit index if:
 		//	- our commit index exceeds the in-flight commit index, and
 		//	- sending it can commit at least one of the follower's entries
 		//	  (including the ones still in flight to it).
-		if pr.CanBumpCommit(commit) {
+		case pr.CanBumpCommit(commit):
 			return MsgAppProbe
+		default:
+			return MsgAppNone
 		}
-		return MsgAppNone
 
 	case StateSnapshot:
 		return MsgAppNone
