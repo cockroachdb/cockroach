@@ -25,6 +25,7 @@ go_library(
         "//pkg/ccl/securityccl/fipsccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/storageccl/engineccl",
+        "//pkg/ccl/streamingccl/logical",
         "//pkg/ccl/streamingccl/streamingest",
         "//pkg/ccl/streamingccl/streamproducer",
         "//pkg/ccl/utilccl",

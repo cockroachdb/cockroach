@@ -58,7 +58,7 @@ func TestMergeSubscriptionsRun(t *testing.T) {
 		sub2, err := mockClient.Subscribe(ctx, 0, 0, streamclient.SubscriptionToken("partition2"), hlc.Timestamp{}, nil)
 		require.NoError(t, err)
 
-		merged := mergeSubscriptions(ctx, map[string]streamclient.Subscription{
+		merged := MergeSubscriptions(ctx, map[string]streamclient.Subscription{
 			"partition1": sub1,
 			"partition2": sub2,
 		})
@@ -83,7 +83,7 @@ func TestMergeSubscriptionsRun(t *testing.T) {
 		sub2, err := mockClient.Subscribe(ctx, 0, 0, streamclient.SubscriptionToken("partition2"), hlc.Timestamp{}, nil)
 		require.NoError(t, err)
 
-		merged := mergeSubscriptions(ctx, map[string]streamclient.Subscription{
+		merged := MergeSubscriptions(ctx, map[string]streamclient.Subscription{
 			"partition1": sub1,
 			"partition2": sub2,
 		})

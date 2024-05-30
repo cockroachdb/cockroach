@@ -10,23 +10,33 @@ package streamproducer
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 type replicationStreamManagerImpl struct {
 	evalCtx   *eval.Context
+	resolver  resolver.SchemaResolver
 	txn       isql.Txn
 	sessionID clusterunique.ID
 }
@@ -39,6 +49,93 @@ func (r *replicationStreamManagerImpl) StartReplicationStream(
 		return streampb.ReplicationProducerSpec{}, err
 	}
 	return StartReplicationProducerJob(ctx, r.evalCtx, r.txn, tenantName, req, false)
+}
+
+// StartReplicationStreamForTables implements streaming.ReplicationStreamManager interface.
+func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
+	ctx context.Context, req streampb.ReplicationProducerRequest,
+) (streampb.ReplicationProducerSpec, error) {
+	if err := r.checkLicense(); err != nil {
+		return streampb.ReplicationProducerSpec{}, err
+	}
+
+	var replicationStartTime hlc.Timestamp
+	if !req.ReplicationStartTime.IsEmpty() {
+		replicationStartTime = req.ReplicationStartTime
+	} else {
+		replicationStartTime = hlc.Timestamp{
+			WallTime: r.evalCtx.GetStmtTimestamp().UnixNano(),
+		}
+	}
+
+	// Resolve table names to spans.
+	//
+	// TODO(ssd): Sort out the rules we want for this resolution. Right now
+	// the source sends fully qualified names and we accept them. I think we
+	// should probably do resolution
+	spans := make([]roachpb.Span, 0, len(req.TableNames))
+	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
+	for _, name := range req.TableNames {
+		parts := strings.SplitN(name, ".", 3)
+		dbName, schemaName, tblName := parts[0], parts[1], parts[2]
+		tn := tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(schemaName), tree.Name(tblName))
+		_, td, err := resolver.ResolveMutableExistingTableObject(ctx, r.resolver, &tn, true, tree.ResolveRequireTableDesc)
+		if err != nil {
+			return streampb.ReplicationProducerSpec{}, err
+		}
+		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
+		tableDescs[name] = td.TableDescriptor
+	}
+
+	execConfig := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+	registry := execConfig.JobRegistry
+	ptsID := uuid.MakeV4()
+	jr := makeProducerJobRecordForLogicalReplication(
+		registry,
+		defaultExpirationWindow,
+		r.evalCtx.SessionData().User(),
+		ptsID,
+		spans,
+		strings.Join(req.TableNames, ","))
+
+	// TODO(ssd): Update this to protect the right set of
+	// tables. Perhaps we can just protect the tables and depend
+	// on something else to protect the namespace and descriptor
+	// tables.
+	deprecatedSpansToProtect := roachpb.Spans(spans)
+	targetToProtect := ptpb.MakeClusterTarget()
+	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), replicationStartTime,
+		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
+
+	ptp := execConfig.ProtectedTimestampProvider.WithTxn(r.txn)
+	if err := ptp.Protect(ctx, pts); err != nil {
+		return streampb.ReplicationProducerSpec{}, err
+	}
+
+	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, r.txn); err != nil {
+		return streampb.ReplicationProducerSpec{}, err
+	}
+
+	return streampb.ReplicationProducerSpec{
+		StreamID:             streampb.StreamID(jr.JobID),
+		SourceClusterID:      r.evalCtx.ClusterID,
+		ReplicationStartTime: replicationStartTime,
+		TableSpans:           spans,
+		TableDescriptors:     tableDescs,
+	}, nil
+}
+
+// TODO(ssd): This should probably just be an overload of
+// getReplicationStreamSpec once we are re-using the producer job rather than
+// the start history retention job.
+func (r *replicationStreamManagerImpl) PartitionSpans(
+	ctx context.Context, spans []roachpb.Span,
+) (*streampb.ReplicationStreamSpec, error) {
+	_, tenID, err := keys.DecodeTenantPrefix(r.evalCtx.Codec.TenantPrefix())
+	if err != nil {
+		return nil, err
+	}
+	return buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.
@@ -114,14 +211,18 @@ func (r *replicationStreamManagerImpl) DebugGetProducerStatuses(
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
-	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	sc resolver.SchemaResolver,
+	txn isql.Txn,
+	sessionID clusterunique.ID,
 ) (eval.ReplicationStreamManager, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
 		syntheticprivilege.GlobalPrivilegeObject,
 		privilege.REPLICATION); err != nil {
 		return nil, err
 	}
-	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn, sessionID: sessionID}, nil
+	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn, sessionID: sessionID, resolver: sc}, nil
 }
 
 func (r *replicationStreamManagerImpl) checkLicense() error {
