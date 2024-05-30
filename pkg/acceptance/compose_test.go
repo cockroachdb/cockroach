@@ -74,7 +74,8 @@ func testCompose(t *testing.T, path string, exitCodeFrom string) {
 		t.Fatalf(err.Error())
 	}
 	cmd := exec.Command(
-		"docker-compose",
+		"docker",
+		"compose",
 		"--no-ansi",
 		"-f", path,
 		"up",
