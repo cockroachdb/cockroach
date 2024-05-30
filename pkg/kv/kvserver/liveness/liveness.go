@@ -701,7 +701,9 @@ var errNodeAlreadyLive = errors.New("node already live")
 //
 // If this method returns nil, the node's liveness has been extended,
 // relative to the previous value. It may or may not still be alive
-// when this method returns.
+// when this method returns. It may also not have been extended as far
+// as the livenessThreshold, because the caller may have raced with
+// another heartbeater.
 //
 // On failure, this method returns ErrEpochIncremented, although this
 // may not necessarily mean that the epoch was actually incremented.
@@ -839,17 +841,6 @@ func (nl *NodeLiveness) heartbeatInternal(
 		// expired while in flight, so maybe we don't have to care about
 		// that and only need to distinguish between same and different
 		// epochs in our return value.
-		//
-		// TODO(nvanbenschoten): Unlike the early return above, this doesn't
-		// guarantee that the resulting expiration is past minExpiration,
-		// only that it's different than our oldLiveness. Is that ok? It
-		// hasn't caused issues so far, but we might want to detect this
-		// case and retry, at least in the case of the liveness heartbeat
-		// loop. The downside of this is that a heartbeat that's intending
-		// to bump the expiration of a record out 9s into the future may
-		// return a success even if the expiration is only 5 seconds in the
-		// future. The next heartbeat will then start with only 0.5 seconds
-		// before expiration.
 		if actual.IsLive(nl.clock.Now()) && !incrementEpoch {
 			return errNodeAlreadyLive
 		}
