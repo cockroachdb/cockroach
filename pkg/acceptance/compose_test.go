@@ -74,8 +74,13 @@ func testCompose(t *testing.T, path string, exitCodeFrom string) {
 		t.Fatalf(err.Error())
 	}
 	cmd := exec.Command(
-		"docker-compose",
-		"--no-ansi",
+		"docker",
+		"compose",
+		// NB: Using --compatibility here in order to preserve compose V1 hostnames
+		// (with underscores) instead of V2 hostnames (with -), because the
+		// hostnames are hardcoded in the Kerberos keys.
+		"--compatibility",
+		"--ansi=never",
 		"-f", path,
 		"up",
 		"--force-recreate",
