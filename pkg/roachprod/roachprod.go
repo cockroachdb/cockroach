@@ -2605,6 +2605,59 @@ func CreateLoadBalancer(
 	return nil
 }
 
+// LoadBalancerPgURL generates the postgres URL for a load balancer serving the
+// given cluster.
+func LoadBalancerPgURL(
+	ctx context.Context, l *logger.Logger, clusterName, certsDir string, opts PGURLOptions,
+) (string, error) {
+	c, err := getClusterFromCache(l, clusterName, install.SecureOption(opts.Secure), install.PGUrlCertsDirOption(certsDir))
+	if err != nil {
+		return "", err
+	}
+
+	services, err := c.DiscoverServices(ctx, opts.VirtualClusterName, install.ServiceTypeSQL,
+		install.ServiceInstancePredicate(opts.SQLInstance))
+	if err != nil {
+		return "", err
+	}
+	port := config.DefaultSQLPort
+	serviceMode := install.ServiceModeExternal
+	if len(services) > 0 {
+		port = services[0].Port
+		serviceMode = services[0].ServiceMode
+	}
+	addr, err := c.FindLoadBalancer(l, port)
+	if err != nil {
+		return "", err
+	}
+	return c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth), nil
+}
+
+// LoadBalancerIP resolves the IP of a load balancer serving the
+// given cluster.
+func LoadBalancerIP(
+	ctx context.Context, l *logger.Logger, clusterName, virtualClusterName string, sqlInstance int,
+) (string, error) {
+	c, err := getClusterFromCache(l, clusterName)
+	if err != nil {
+		return "", err
+	}
+	services, err := c.DiscoverServices(ctx, virtualClusterName, install.ServiceTypeSQL,
+		install.ServiceInstancePredicate(sqlInstance))
+	if err != nil {
+		return "", err
+	}
+	port := config.DefaultSQLPort
+	if len(services) > 0 {
+		port = services[0].Port
+	}
+	addr, err := c.FindLoadBalancer(l, port)
+	if err != nil {
+		return "", err
+	}
+	return addr.IP, nil
+}
+
 // Deploy deploys a new version of cockroach to the given cluster. It currently
 // does not support clusters running external SQL instances.
 // TODO(herko): Add support for virtual clusters (external SQL processes)
