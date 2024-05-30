@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { Action } from "redux";
-import { PayloadAction } from "src/interfaces/action";
 import { TimeScale, api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+
+import { PayloadAction } from "src/interfaces/action";
 
 export const CREATE_STATEMENT_DIAGNOSTICS_REPORT =
   "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_REPORT";

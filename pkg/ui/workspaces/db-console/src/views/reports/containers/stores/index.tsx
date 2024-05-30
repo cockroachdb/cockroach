@@ -8,20 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
+import { Loading } from "@cockroachlabs/cluster-ui";
+import isEqual from "lodash/isEqual";
+import isEmpty from "lodash/isEmpty";
+import map from "lodash/map";
+import isNil from "lodash/isNil";
+import sortBy from "lodash/sortBy";
 
 import * as protos from "src/js/protos";
 import { storesRequestKey, refreshStores } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
-import { Loading } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
+
+
 import { BackToAdvanceDebug } from "../util";
 
 interface StoresOwnProps {
@@ -54,14 +60,14 @@ export class Stores extends React.Component<StoresProps, {}> {
   }
 
   componentDidUpdate(prevProps: StoresProps) {
-    if (!_.isEqual(this.props.location, prevProps.location)) {
+    if (!isEqual(this.props.location, prevProps.location)) {
       this.refresh(this.props);
     }
   }
 
-  renderSimpleRow(header: string, value: string, title: string = "") {
+  renderSimpleRow(header: string, value: string, title = "") {
     let realTitle = title;
-    if (_.isEmpty(realTitle)) {
+    if (isEmpty(realTitle)) {
       realTitle = value;
     }
     return (
@@ -91,19 +97,21 @@ export class Stores extends React.Component<StoresProps, {}> {
     const { stores, match } = this.props;
 
     const nodeID = getMatchParamByName(match, nodeIDAttr);
-    if (_.isEmpty(stores)) {
+    if (isEmpty(stores)) {
       return (
         <h2 className="base-heading">No stores were found on node {nodeID}.</h2>
       );
     }
 
-    return _.map(this.props.stores, this.renderStore);
+    return (
+      <>${React.Children.toArray(map(this.props.stores, this.renderStore))}</>
+    );
   };
 
   render() {
     const nodeID = getMatchParamByName(this.props.match, nodeIDAttr);
     let header: string = null;
-    if (_.isNaN(parseInt(nodeID, 10))) {
+    if (isNaN(parseInt(nodeID, 10))) {
       header = "Local Node";
     } else {
       header = `Node ${nodeID}`;
@@ -133,7 +141,7 @@ function selectStoresState(state: AdminUIState, props: StoresProps) {
 
 const selectStoresLoading = createSelector(selectStoresState, stores => {
   return (
-    _.isEmpty(stores) || (_.isEmpty(stores.data) && _.isNil(stores.lastError))
+    isEmpty(stores) || (isEmpty(stores.data) && isNil(stores.lastError))
   );
 });
 
@@ -144,7 +152,7 @@ const selectSortedStores = createSelector(
     if (loading) {
       return null;
     }
-    return _.sortBy(stores.data?.stores, store => store.store_id);
+    return sortBy(stores.data?.stores, store => store.store_id);
   },
 );
 

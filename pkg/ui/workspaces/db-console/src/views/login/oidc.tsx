@@ -9,10 +9,10 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { LoginAPIState } from "oss/src/redux/login";
 import { Button } from "src/components";
-import { RouteComponentProps, withRouter } from "react-router-dom";
 
 const OIDC_LOGIN_PATH = "oidc/v1/login";
 const OIDC_LOGIN_PATH_WITH_JWT = "oidc/v1/login?jwt";

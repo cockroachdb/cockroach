@@ -8,14 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import React from "react";
+import { Loading, util } from "@cockroachlabs/cluster-ui";
+import isEmpty from "lodash/isEmpty";
+import orderBy from "lodash/orderBy";
+import map from "lodash/map";
 
 import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { FixLong } from "src/util/fixLong";
 import Print from "src/views/reports/containers/range/print";
-import { Loading, util } from "@cockroachlabs/cluster-ui";
 
 interface LogTableProps {
   rangeID: Long;
@@ -68,7 +70,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
   }
 
   renderLogInfoDescriptor(title: string, desc: string) {
-    if (_.isEmpty(desc)) {
+    if (isEmpty(desc)) {
       return null;
     }
     return (
@@ -100,7 +102,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
     const { log } = this.props;
 
     // Sort by descending timestamp.
-    const events = _.orderBy(
+    const events = orderBy(
       log && log.data && log.data.events,
       event => util.TimestampToMoment(event.event.timestamp).valueOf(),
       "desc",
@@ -123,7 +125,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
             </th>
             <th className="log-table__cell log-table__cell--header">Info</th>
           </tr>
-          {_.map(events, (event, key) => (
+          {map(events, (event, key) => (
             <tr key={key} className="log-table__row">
               <td className="log-table__cell log-table__cell--date">
                 {Print.Timestamp(event.event.timestamp)}

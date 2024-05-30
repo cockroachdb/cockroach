@@ -8,8 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { PayloadAction } from "src/interfaces/action";
 import { TimeScale } from "@cockroachlabs/cluster-ui";
+
+import { PayloadAction } from "src/interfaces/action";
 
 export const TRACK_STATEMENTS_SEARCH =
   "cockroachui/analytics/TRACK_STATEMENTS_SEARCH";

@@ -11,20 +11,22 @@
 import { shallow, ShallowWrapper } from "enzyme";
 import React from "react";
 import uPlot from "uplot";
-import _ from "lodash";
-
-import LineGraph, { InternalLineGraph, OwnProps } from "./index";
-import { fillGaps } from "./index";
-import * as timewindow from "src/redux/timeScale";
-import * as protos from "src/js/protos";
-import { Axis } from "src/views/shared/components/metricQuery";
+import isEmpty from "lodash/isEmpty";
+import flatMap from "lodash/flatMap";
 import {
   calculateXAxisDomain,
   calculateYAxisDomain,
   util,
 } from "@cockroachlabs/cluster-ui";
-import { configureUPlotLineChart } from "src/views/cluster/util/graphs";
 import Long from "long";
+
+import * as timewindow from "src/redux/timeScale";
+import * as protos from "src/js/protos";
+import { Axis } from "src/views/shared/components/metricQuery";
+import { configureUPlotLineChart } from "src/views/cluster/util/graphs";
+
+
+import LineGraph, { fillGaps, InternalLineGraph, OwnProps } from "./index";
 
 describe("<LineGraph>", function () {
   let mockProps: OwnProps;
@@ -114,7 +116,7 @@ describe("<LineGraph>", function () {
         ],
       },
     });
-    const result = _.isEmpty(instance.u);
+    const result = isEmpty(instance.u);
     expect(result).toEqual(false);
   });
 
@@ -148,7 +150,7 @@ describe("<LineGraph>", function () {
     };
     const mockData: protos.cockroach.ts.tspb.TimeSeriesQueryResponse =
       new protos.cockroach.ts.tspb.TimeSeriesQueryResponse();
-    const resultDatapoints = _.flatMap(mockData.results, result =>
+    const resultDatapoints = flatMap(mockData.results, result =>
       result.datapoints.map(dp => dp.value),
     );
     const mockOptions = configureUPlotLineChart(

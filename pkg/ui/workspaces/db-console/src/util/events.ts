@@ -8,8 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as eventTypes from "src/util/eventTypes";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+
+import * as eventTypes from "src/util/eventTypes";
 
 /**
  * getEventDescription returns a short summary of an event.

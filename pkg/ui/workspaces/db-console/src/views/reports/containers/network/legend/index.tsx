@@ -11,10 +11,11 @@
 import { Tooltip } from "antd";
 import "antd/lib/divider/style";
 import "antd/lib/tooltip/style";
-import { Chip } from "src/views/app/components/chip";
 import React from "react";
-import "./legend.styl";
+
+import { Chip } from "src/views/app/components/chip";
 import { Text, TextTypes } from "src/components";
+import "./legend.styl";
 
 interface ILegendProps {
   stddevMinus2: number;

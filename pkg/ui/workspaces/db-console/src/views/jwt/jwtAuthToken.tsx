@@ -13,6 +13,7 @@ import Helmet from "react-helmet";
 import { useParams } from "react-router-dom";
 import Select from "react-select";
 import { Spinner } from "@cockroachlabs/ui-components";
+import ErrorCircle from "assets/error-circle.svg";
 
 import {
   Button,
@@ -21,8 +22,6 @@ import {
   TextInput,
   TextTypes,
 } from "src/components";
-
-import ErrorCircle from "assets/error-circle.svg";
 import "./jwtAuthToken.styl";
 
 const OIDC_LOGIN_PATH_WITH_JWT = "oidc/v1/login?jwt";

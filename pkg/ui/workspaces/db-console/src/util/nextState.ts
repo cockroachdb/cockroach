@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import assign from "lodash/assign";
 
 /**
  * nextState is a utility function that allows type-safe replacement of fields
@@ -39,5 +39,5 @@ export default function nextState<T extends Object>(
   lastState: T,
   changes: Partial<T>,
 ): T {
-  return _.assign({}, lastState, changes);
+  return assign({}, lastState, changes);
 }

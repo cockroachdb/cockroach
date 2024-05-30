@@ -8,9 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import isEqual from "lodash/isEqual";
 import React, { Component } from "react";
 import classNames from "classnames";
+import { util } from "@cockroachlabs/cluster-ui";
+
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import { cockroach, google } from "src/js/protos";
 
 import {
   TreeNode,
@@ -21,12 +25,8 @@ import {
   LayoutCell,
   FlattenedNode,
 } from "./tree";
-import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import { util } from "@cockroachlabs/cluster-ui";
 
-import { cockroach } from "src/js/protos";
 import NodeDescriptor$Properties = cockroach.roachpb.INodeDescriptor;
-import { google } from "src/js/protos";
 import ITimestamp = google.protobuf.ITimestamp;
 
 import "./replicaMatrix.styl";
@@ -63,7 +63,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
   expandRow = (path: TreePath) => {
     this.setState({
       collapsedRows: this.state.collapsedRows.filter(
-        tp => !_.isEqual(tp, path),
+        tp => !isEqual(tp, path),
       ),
     });
   };
@@ -77,7 +77,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
   expandCol = (path: TreePath) => {
     this.setState({
       collapsedCols: this.state.collapsedCols.filter(
-        tp => !_.isEqual(tp, path),
+        tp => !isEqual(tp, path),
       ),
     });
   };

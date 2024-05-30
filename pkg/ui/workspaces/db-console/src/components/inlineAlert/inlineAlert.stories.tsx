@@ -11,9 +11,10 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 
-import { InlineAlert } from "./inlineAlert";
 import { styledWrapper } from "src/util/decorators";
 import { Anchor } from "src/components";
+
+import { InlineAlert } from "./inlineAlert";
 
 storiesOf("InlineAlert", module)
   .addDecorator(styledWrapper({ padding: "24px" }))

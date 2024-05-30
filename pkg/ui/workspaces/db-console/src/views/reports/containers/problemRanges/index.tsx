@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import Long from "long";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
+import { Loading } from "@cockroachlabs/cluster-ui";
+
 import * as protos from "src/js/protos";
 import {
   problemRangesRequestKey,
@@ -24,7 +25,6 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
-import { Loading } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 

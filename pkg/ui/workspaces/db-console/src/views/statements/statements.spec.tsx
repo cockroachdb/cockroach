@@ -12,7 +12,8 @@ import Long from "long";
 import moment from "moment-timezone";
 import { RouteComponentProps } from "react-router-dom";
 import * as H from "history";
-import { merge } from "lodash";
+import merge from "lodash/merge";
+import { TimeScale, toRoundedDateRange, util } from "@cockroachlabs/cluster-ui";
 
 import "src/protobufInit";
 import * as protos from "src/js/protos";
@@ -22,11 +23,12 @@ import {
   statementAttr,
   unset,
 } from "src/util/constants";
+import { AdminUIState, createAdminUIStore } from "src/redux/state";
+
 import { selectLastReset } from "./statementsPage";
 import { selectStatementDetails } from "./statementDetails";
+
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
-import { AdminUIState, createAdminUIStore } from "src/redux/state";
-import { TimeScale, toRoundedDateRange, util } from "@cockroachlabs/cluster-ui";
 
 const { generateStmtDetailsToID, longToInt } = util;
 
@@ -207,11 +209,11 @@ describe("selectStatement", () => {
 
 function makeFingerprint(
   id: number,
-  app: string = "",
-  nodeId: number = 1,
-  distSQL: boolean = false,
-  failed: boolean = false,
-  vec: boolean = false,
+  app = "",
+  nodeId = 1,
+  distSQL = false,
+  failed = false,
+  vec = false,
 ) {
   return {
     key: {

@@ -10,12 +10,14 @@
 
 import React from "react";
 import cn from "classnames";
-
-import { OutsideEventHandler } from "../outsideEventHandler";
-import "./dropdown.styl";
 import { Icon } from "antd";
+
 import "antd/lib/icon/style";
 import { Button } from "src/components/button";
+
+import { OutsideEventHandler } from "../outsideEventHandler";
+
+import "./dropdown.styl";
 
 export interface Item {
   value: string;

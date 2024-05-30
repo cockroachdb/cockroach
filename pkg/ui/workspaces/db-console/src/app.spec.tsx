@@ -8,7 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import React from "react";
+import { Action, Store } from "redux";
+import { createMemoryHistory, MemoryHistory } from "history";
+import { screen, render } from "@testing-library/react";
+
+import { App } from "src/app";
+import { AdminUIState, createAdminUIStore } from "src/redux/state";
+
 import { stubComponentInModule } from "./test-utils/mockComponent";
+
 stubComponentInModule("src/views/cluster/containers/nodeGraphs", "default");
 stubComponentInModule("src/views/cluster/containers/events", "EventPage");
 stubComponentInModule("src/views/databases/databasesPage", "DatabasesPage");
@@ -53,14 +62,6 @@ stubComponentInModule(
   "src/views/app/components/tenantDropdown/tenantDropdown",
   "default",
 );
-
-import React from "react";
-import { Action, Store } from "redux";
-import { createMemoryHistory, MemoryHistory } from "history";
-import { screen, render } from "@testing-library/react";
-
-import { App } from "src/app";
-import { AdminUIState, createAdminUIStore } from "src/redux/state";
 
 const CLUSTER_OVERVIEW_CAPACITY_LABEL = "Capacity Usage";
 const CLUSTER_VIZ_NODE_MAP_LABEL = "Node Map";

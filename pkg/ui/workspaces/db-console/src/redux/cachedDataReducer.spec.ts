@@ -8,9 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import isError from "lodash/isError"
 import { Action } from "redux";
 import moment from "moment-timezone";
+
 import {
   CachedDataReducer,
   CachedDataReducerState,
@@ -178,7 +179,7 @@ describe("basic cachedDataReducer", function () {
           "duplicatenamespace",
         );
       } catch (e) {
-        expect(_.isError(e)).toBeTruthy();
+        expect(isError(e)).toBeTruthy();
         return;
       }
       // expected to throw an error after using a duplicate actionNamespace
@@ -354,8 +355,8 @@ describe("PaginatedCachedDataReducer", function () {
     totalPages: number,
     pageSize: number,
   ) => (req: Request) => Promise<Response> = (
-    totalPages: number = 5,
-    pageSize: number = 10,
+    totalPages = 5,
+    pageSize = 10,
   ) => {
     let requestCounter = 0;
     return (req = new Request(null, pageSize, requestCounter.toString())) => {
