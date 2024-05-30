@@ -28,7 +28,6 @@ go_library(
         "//pkg/roachprod/vm/local",
         "//pkg/server/debug/replay",
         "//pkg/util/ctxgroup",
-        "//pkg/util/envutil",
         "//pkg/util/httputil",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
