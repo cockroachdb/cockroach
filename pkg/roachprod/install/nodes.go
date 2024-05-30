@@ -44,9 +44,7 @@ func ListNodes(s string, numNodesInCluster int) (Nodes, error) {
 		return nil, errors.AssertionFailedf("invalid number of nodes %d", numNodesInCluster)
 	}
 
-	// "lb" is a special value that also returns all nodes, but is used to
-	// indicate that a load balancer should be used.
-	if s == "all" || strings.ToLower(s) == "lb" {
+	if s == "all" {
 		return allNodes(numNodesInCluster), nil
 	}
 
