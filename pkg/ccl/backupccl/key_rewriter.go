@@ -221,8 +221,12 @@ func MakeKeyRewriterPrefixIgnoringInterleaved(tableID descpb.ID, indexID descpb.
 
 // RewriteTenant rewrites a tenant key.
 func (kr *KeyRewriter) RewriteTenant(key []byte) ([]byte, bool, error) {
+	return kr.rewriteTenant(key, false)
+}
+
+func (kr *KeyRewriter) rewriteTenant(key []byte, forSpan bool) ([]byte, bool, error) {
 	k, ok := kr.tenants.rewriteKey(key)
-	if ok {
+	if ok && !forSpan {
 		// Skip keys from ephemeral cluster status tables so that the restored
 		// cluster does not observe stale leases/liveness until it expires.
 		noTenantPrefix, _, err := keys.DecodeTenantPrefix(key)
@@ -248,13 +252,19 @@ func (kr *KeyRewriter) RewriteTenant(key []byte) ([]byte, bool, error) {
 func (kr *KeyRewriter) RewriteKey(
 	key []byte, walltimeForImportElision int64,
 ) ([]byte, bool, error) {
+	return kr.rewriteKey(key, walltimeForImportElision, false)
+}
+
+func (kr *KeyRewriter) rewriteKey(
+	key []byte, walltimeForImportElision int64, forSpan bool,
+) ([]byte, bool, error) {
 	// If we are reading a system tenant backup and this is a tenant key then it
 	// is part of a backup *of* that tenant, so we only restore it if we have a
 	// tenant rekey for it, i.e. we're restoring that tenant.
 	// We also enable rekeying if we are restoring a tenant from a replication stream
 	// in which case we are restoring as a system tenant.
 	if kr.fromSystemTenant && bytes.HasPrefix(key, keys.TenantPrefix) {
-		return kr.RewriteTenant(key)
+		return kr.rewriteTenant(key, forSpan)
 	}
 
 	// At this point we know we're not restoring a tenant, however the keys we're
@@ -266,7 +276,7 @@ func (kr *KeyRewriter) RewriteKey(
 		return nil, false, err
 	}
 
-	rekeyed, ok, err := kr.checkAndRewriteTableKey(noTenantPrefix, walltimeForImportElision)
+	rekeyed, ok, err := kr.checkAndRewriteTableKey(noTenantPrefix, walltimeForImportElision, forSpan)
 	if err != nil || !ok {
 		return nil, false, err
 	}
@@ -318,17 +328,19 @@ func (kr *KeyRewriter) RewriteKey(
 // filtering occurs. Filtering is necessary during restore because the restoring
 // cluster should not contain keys from an in-progress import.
 func (kr *KeyRewriter) checkAndRewriteTableKey(
-	key []byte, walltimeForImportElision int64,
+	key []byte, walltimeForImportElision int64, forSpan bool,
 ) ([]byte, bool, error) {
 	// Fetch the original table ID for descriptor lookup. Ignore errors because
 	// they will be caught later on if tableID isn't in descs or kr doesn't
 	// perform a rewrite.
 	_, tableID, _ := keys.SystemSQLCodec.DecodeTablePrefix(key)
 
-	// Skip keys from ephemeral cluster status tables so that the restored cluster
-	// does not observe stale leases/liveness until it expires.
-	if tableID == keys.SQLInstancesTableID || tableID == keys.SqllivenessID || tableID == keys.LeaseTableID {
-		return nil, false, nil
+	if !forSpan {
+		// Skip keys from ephemeral cluster status tables so that the restored cluster
+		// does not observe stale leases/liveness until it expires.
+		if tableID == keys.SQLInstancesTableID || tableID == keys.SqllivenessID || tableID == keys.LeaseTableID {
+			return nil, false, nil
+		}
 	}
 
 	desc := kr.descs[descpb.ID(tableID)]
@@ -351,4 +363,27 @@ func (kr *KeyRewriter) checkAndRewriteTableKey(
 		return nil, false, nil
 	}
 	return key, true, nil
+}
+
+func (kr *KeyRewriter) RewriteSpan(span roachpb.Span) (roachpb.Span, error) {
+	var (
+		ok  bool
+		err error
+	)
+	span.Key, ok, err = kr.rewriteKey(span.Key, 0, true)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "span start key %s was not rewritten", span.Key)
+	}
+	if !ok {
+		return roachpb.Span{}, errors.Newf("rewriting span start key %s failed", span.Key)
+	}
+
+	span.EndKey, ok, err = kr.rewriteKey(span.EndKey, 0, true)
+	if err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "rewriting span end key %s failed", span.EndKey)
+	}
+	if !ok {
+		return roachpb.Span{}, errors.Newf("span end key %s was not rewritten", span.EndKey)
+	}
+	return span, nil
 }

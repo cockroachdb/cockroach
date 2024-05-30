@@ -226,22 +226,10 @@ func assertCommonPrefix(span roachpb.Span, elidedPrefixType execinfrapb.ElidePre
 func rewriteSpan(
 	kr *KeyRewriter, span roachpb.Span, elidedPrefixType execinfrapb.ElidePrefix,
 ) (roachpb.Span, error) {
-	var (
-		ok  bool
-		err error
-	)
-	if err = assertCommonPrefix(span, elidedPrefixType); err != nil {
-		return span, err
+	if err := assertCommonPrefix(span, elidedPrefixType); err != nil {
+		return roachpb.Span{}, err
 	}
-	span.Key, ok, err = kr.RewriteKey(span.Key, 0)
-	if !ok || err != nil {
-		return span, errors.Wrapf(err, "span start key %s was not rewritten", span.Key)
-	}
-	span.EndKey, ok, err = kr.RewriteKey(span.EndKey, 0)
-	if !ok || err != nil {
-		return span, errors.Wrapf(err, "span end key %s was not rewritten ", span.Key)
-	}
-	return span, nil
+	return kr.RewriteSpan(span)
 }
 
 // linkExternalFiles runs through all entries produced by genSpans and links in
