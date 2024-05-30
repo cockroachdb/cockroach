@@ -173,6 +173,9 @@ message KVStats {
   // UsedStreamer indicates whether the Streamer API was used to perform KV
   // operations.
   optional bool used_streamer = 25 [(gogoproto.nullable) = false];
+
+  // NodeIDs are the NodeIDs of the KV servers that evaluated the requests.
+  repeated int32 node_ids = 26 [(gogoproto.customname) = "NodeIDs"];
 }
 
 // ExecStats contains statistics about the execution of a component.

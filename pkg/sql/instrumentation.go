@@ -972,17 +972,20 @@ func (m execNodeTraceMetadata) annotateExplain(
 			var nodeStats exec.ExecutionStats
 
 			incomplete := false
-			var nodes intsets.Fast
+			var sqlInstanceIDs, kvNodeIDs intsets.Fast
 			regionsMap := make(map[string]struct{})
 			for _, c := range components {
 				if c.Type == execinfrapb.ComponentID_PROCESSOR {
-					nodes.Add(int(c.SQLInstanceID))
+					sqlInstanceIDs.Add(int(c.SQLInstanceID))
 					regionsMap[regionsInfo[int64(c.SQLInstanceID)]] = struct{}{}
 				}
 				stats := statsMap[c]
 				if stats == nil {
 					incomplete = true
 					break
+				}
+				for _, kvNodeID := range stats.KV.NodeIDs {
+					kvNodeIDs.Add(int(kvNodeID))
 				}
 				nodeStats.RowCount.MaybeAdd(stats.Output.NumTuples)
 				nodeStats.KVTime.MaybeAdd(stats.KV.KVTime)
@@ -1014,8 +1017,11 @@ func (m execNodeTraceMetadata) annotateExplain(
 			// incomplete results. In the future, we may consider an incomplete flag
 			// if we want to show them with a warning.
 			if !incomplete {
-				for i, ok := nodes.Next(0); ok; i, ok = nodes.Next(i + 1) {
-					nodeStats.Nodes = append(nodeStats.Nodes, fmt.Sprintf("n%d", i))
+				for i, ok := sqlInstanceIDs.Next(0); ok; i, ok = sqlInstanceIDs.Next(i + 1) {
+					nodeStats.SQLNodes = append(nodeStats.SQLNodes, fmt.Sprintf("n%d", i))
+				}
+				for i, ok := kvNodeIDs.Next(0); ok; i, ok = kvNodeIDs.Next(i + 1) {
+					nodeStats.KVNodes = append(nodeStats.KVNodes, fmt.Sprintf("n%d", i))
 				}
 				regions := make([]string, 0, len(regionsMap))
 				for r := range regionsMap {
