@@ -98,8 +98,13 @@ message RaftMessageRequest {
 
   // AdmissionPriorityOverride specifies whether the priority of the Entries
   // in the Message, which is of type MsgApp are overridden, and the new
-  // priority. It is ignored if the Message is not a MsgApp, or if this is
-  // AdmissionPriorityNotOverridden.
+  // priority. It is ignored if the Message is not a MsgApp.
+  // For a MsgApp, this must be either:
+  // - PriorityNotOverriddenForFlowControl: there is no priority override. The
+  //   priority encoded in the entries should be used.
+  //   NotSubjectToACForFlowControl: these entries should not be subject to
+  //   AC, regardless of what the entry encoding says.
+  // - Neither of the above: this is the real priority override.
   int32 admission_priority_override = 12;
   reserved 10;
 }

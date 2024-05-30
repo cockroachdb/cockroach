@@ -27,33 +27,65 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TODO: force-flush the leaseholder.
+// NB: bare TODO: are more urgent. TODO(sumeer) are for later.
 
-// TODO: kvflowcontrol and the packages it contains are sliced and diced quite
-// fine, with the benefit of multiple code iterations to get to that final
-// structure. We don't yet have that benefit, so we just lump things together
-// for now, until most of the code is written and we know how to abstract into
-// packages. There are things here that don't belong in kvflowconnectedstream,
-// especially all the interfaces.
-
-// TODO: many of the comments here are to guide the implementation. They will
-// need to be cleaned up.
-
-// TODO: we don't want force-flush entries to usually use up tokens since we
-// don't want logical AC on the other side since it could cause an OOM.
-// Check what we do now when we encode something with AC encoding and send it
-// over -- it happens regardless of who we are sending too and whether we
-// deducted tokens or not. So will do logical admission even for a node that
-// has come back up. Got lucky with no OOM?
+// TODO:
+// - force-flush when there isn't quorum.
 //
-// TODO: two kinds of priority in the second byte. No logical admission and no
-// priority override Keep these two fields separate in RaftMessageRequest.
+// - delay force-flush slightly (say 1s) since there could be a transient
+//   transition to StateProbe and back to StateReplicate due to a single
+//   MsgApp drop. Should we delay the closing of the replicaSendStream since
+//   it has all the interesting stats. It also has tokens that we should be
+//   wary of returning -- we will have to return the tokens anyway since the
+//   MsgApp drop must be due to a TransportDisconnected. This is a regression
+//   in indexToSend. We won't have approx stats for this regression, but so be
+//   it.
 //
+// - While in StateReplicate, send-queue could have some elements popped
+//   (indexToSend advanced) because there could have been some inflight
+//   MsgApps that we forgot about due to a transition out of StateReplicate
+//   and back into StateReplicate, and we got acks for them (Match advanced
+//   past indexToSend). To handle this we need to do the same approx stats
+//   thing we do when transitioning from StateSnapshot => StateReplicate (we
+//   are still holding tokens unlike StateSnapshot and we can keep some of
+//   them since the transport did not break.
+//
+// - If we miss a transition out of StateReplicate and back, Match will not
+//   regress, but Next can regress. This is similar to us ignoring a
+//   transition into StateProbe to avoid force-flushing immediately. So should
+//   handle it in a similar manner.
+//
+// - use NotSubjectToACForFlowControl for most of force-flush.
+//
+// - for the first 1MB of force-flush, deduct flow tokens. So these will need
+//   to be in a separate MsgApp. Don't do any priority override for these.
+
+// TODO(sumeer): kvflowcontrol and the packages it contains are sliced and
+// diced quite fine, with the benefit of multiple code iterations to get to
+// that final structure. We don't yet have that benefit, so we just lump
+// things together for now, until most of the code is written and we know how
+// to abstract into packages. There are things here that don't belong in
+// kvflowconnectedstream, especially all the interfaces.
+
+// TODO(sumeer): many of the comments here are to guide the implementation.
+// They will need to be cleaned up.
+
+// TODO(sumeer): Incorporate the following comment somewhere: we don't want
+// force-flush entries to usually use up tokens since we don't want logical AC
+// on the other side since it could cause an OOM. Also, a force-flush on range
+// r1 to s3 because of a lack of quorum could consume all the tokens for s3
+// that are needed by range r2 -- this is not a problem by itself since we are
+// not trying to inter-range isolation.
+//
+// In ACv1, when a node rejoins, we send it entries saying they are subject to
+// AC, but don't track them on the sender, so they will logically queue. So
+// that OOM possibility is real -- we just haven't seen it happen.
+
 // A RangeController exists when a local replica of the range is the raft
 // leader. It does not have a goroutine of its own and reacts to events. No
-// mutex inside RangeController should be ordered before Replica.raftMu, since
-// some event notifications happen with Replica.raftMu already held. We
-// consider the following events:
+// mutex inside RangeController should be ordered before Replica.raftMu (or
+// Replica.mu), since most event notifications happen with Replica.raftMu
+// already held. We consider the following events:
 //
 // - RaftEvent: This happens on the raftScheduler and already holds raftMu, so
 //   the RangeController can be sure that any questions it asks of
@@ -64,19 +96,20 @@ import (
 //   500ms of COCKROACH_RAFT_TICK_INTERVAL).
 //
 // - ControllerSchedulerEvent: This happens on the raftScheduler and
-//   represents some work that the RangeController had scheduled. If the
-//   RangeController needs to call into RaftInterface, it must itself acquire
-//   raftMu before doing so. Such events are used to dequeue raft entries from
-//   the send-queue when tokens are available, or to force-flush.
+//   represents some work that the RangeController had scheduled. The Replica
+//   will acquire raftMu before calling into RangeController. Such events are
+//   used to dequeue raft entries from the send-queue when tokens are
+//   available, or to force-flush.
 //
-// - SetReplicas: raftMu is already held. This ensures RaftEvent and
-//   SetReplicas are serialized and the latest set of replicas provided by
-//   SetReplicas is also what Raft is operating with. We will back this with a
-//   data-structure under Replica.raftMu (and Replica.mu) that is updated in
-//   setDescLockedRaftMuLocked. This consistency is important for multiple
-//   reasons, including knowing which replicas to use when calling the various
-//   methods in RaftInterface (i.e., it isn't only needed for quorum
-//   calculaton as discussed on the slack thread
+// - SetReplicas: raftMu is already held (Replica.mu also happens to be held,
+//   so SetReplicas should do a minimal amount of work). This ensures
+//   RaftEvent and SetReplicas are serialized and the latest set of replicas
+//   provided by SetReplicas is also what Raft is operating with. We will back
+//   this with a data-structure under Replica.raftMu (and Replica.mu) that is
+//   updated in setDescLockedRaftMuLocked. This consistency is important for
+//   multiple reasons, including knowing which replicas to use when calling
+//   the various methods in RaftInterface (i.e., it isn't only needed for
+//   quorum calculation as discussed on the thread
 //   https://cockroachlabs.slack.com/archives/C06UFBJ743F/p1715692063606459?thread_ts=1715641995.372289&cid=C06UFBJ743F)
 //
 // - SetLeaseholder: This is not synchronized with raftMu. The callee should
@@ -86,8 +119,10 @@ import (
 // - ReplicaDisconnected: raftMu is not held. Informs that a replica has
 //   its RaftTransport disconnected. This is necessary to prevent lossiness of
 //   tokens. The aforementioned map under Replica.mu will be used to
-//   ensure consistency. TODO: make it a narrower data-structure
-//   mutex in Replica, so that Raft.mu is not held when calling RangeController.
+//   ensure consistency.
+//   TODO: make it a narrower data-structure mutex in Replica, which will be
+//   held in read mode. So that Raft.mu is not held when calling
+//   RangeController.
 //
 //   Connection events are not communicated. The current state of connectivity
 //   should be requested from RaftInterface when handling RaftEvent (in case
@@ -108,7 +143,7 @@ import (
 // - init after restart: initRaftMuLockedReplicaMuLocked does both
 // initialization of the raft group and that of the descriptor.
 //
-// Since we are relying on this consistency, we should better document it
+// Since we are relying on this consistency, we should better document it.
 // ======================================================================
 // Buffering and delayed transition to StateProbe:
 // Replica.addUnreachableRemoteReplica causes that transition, and is caused by
@@ -116,31 +151,30 @@ import (
 // RaftTransport has a queue, it should not be get filled up due to a very
 // transient connection break and reestablishment. This is good since transitions
 // to StateProbe can result in force flush of some other replica.
+//
+// But a single MsgApp drop will also cause a transition to StateProbe, and
+// that risk of force flush needs to be mitigated.
 // ======================================================================
 // Reproposal handling: We no longer do any special handling of reproposals.
-// v1 was accounting before an entry emerged in Ready, so there was a higher chance
-// of lossiness (it may never emerge). With v2, there is lossiness too, but less,
-// and since both the proposal and reproposal are going to be persisted in the raft
-// log we count them both.
+// v1 was accounting before an entry emerged in Ready, so there was a higher
+// chance of lossiness (it may never emerge). With v2, there is lossiness too,
+// but less, and since both the proposal and reproposal are going to be
+// persisted in the raft log we count them both.
 // ======================================================================
 
 type RangeController interface {
 	// WaitForEval is called concurrently by all requests wanting to evaluate.
-	//
-	// TODO: Needs high concurrency. Use a copy-on-write scheme for whatever
-	// data-structures are needed.
 	WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) error
-	// HandleRaftEvent will be called from handleRaftReadyRaftMuLocked, including
-	// the case of snapshot application.
+	// HandleRaftEvent is called from handleRaftReadyRaftMuLocked, including the
+	// case of snapshot application.
 	HandleRaftEvent(e RaftEvent) error
-	// HandleControllerSchedulerEvent will be called from the raftScheduler when
-	// an event the controller scheduled can be processed.
+	// HandleControllerSchedulerEvent ia called from the raftScheduler when an
+	// event the controller scheduled can be processed.
 	HandleControllerSchedulerEvent() error
-	// SetReplicas will be called from setDescLockedRaftMuLocked.
+	// SetReplicas is called from setDescLockedRaftMuLocked.
 	//
-	// A new follower here may already be in StateReplicate and have a
-	// send-queue, so we should schedule a ControllerSchedulerEvent without
-	// waiting for the next Ready.
+	// NB: a new follower here may already be in StateReplicate and have a
+	// send-queue.
 	SetReplicas(replicas ReplicaSet) error
 	// SetLeaseholder is called from leasePostApplyLocked.
 	// TODO: I suspect raftMu is held here too.
@@ -148,32 +182,20 @@ type RangeController interface {
 	// TransportDisconnected originates in RaftTransport.startProcessNewQueue.
 	// To demux to the relevant ranges, the latest set of replicas for a range
 	// must be known. We don't want to acquire Replica.raftMu in this iteration
-	// from RaftTransport, since Replica.raftMu is held for longer than
-	// Replica.mu (and so this read to demultiplex can encounter contention). We
-	// will keep a map of StoreID=>ReplicaID in the Replica struct that is
-	// updated when the RangeDescriptor is set (which holds both Replica.raftMu
-	// and Replica.mu), and so this map can be read with either of these mutexes
-	// (and we will read it with Replica.mu).
-	//
-	// Unlike v1, where this destroyed the connected-stream data-structure for
-	// this replica, we could just return the inflight send tokens and keep the
-	// rest of the state (send-queue and stats, and eval token deductions) since
-	// it may still be in StateReplicate. Though if this is actually down and we
-	// stay in StateReplicate, we are penalizing elastic work which will still
-	// pace at rate of slowest replica (and the rate of this replica will be 0).
-	// Actually, we should keep the connected-stream for a couple of ticks. This
-	// will also ensure that this stream can participate in the quorum, and we
-	// don't force-flush. But this will also be building up a send-queue, so we
-	// may have a quorum of connected-streams with tokens, but we don't have a
-	// quorum with an empty send-queue -- figure out a reasonable heuristic
-	// (perhaps wait to force-flush until the non-empty send-queue has existed
-	// for more than a tick).
-	//
-	// TODO: this is what motivates having a mutex in RangeController.
+	// (over ranges) from RaftTransport, since Replica.raftMu is held for longer
+	// than Replica.mu (and so this read to demultiplex can encounter
+	// contention). We will keep a map of StoreID=>ReplicaID in the Replica
+	// struct that has its own narrow mutex (ordered after Replica.raftMu and
+	// Replica.mu, for updates), and that narrow mutex will be held in read mode
+	// when calling TransportDisconnected (which means that mutex is ordered
+	// before RangeControllerImpl.mu). TransportDisconnected should do very
+	// little work and return.
 	TransportDisconnected(replica roachpb.ReplicaID)
-	// Close the controller, since no longer the leader. Can be called concurrently
-	// with other methods like WaitForEval. WaitForEval should unblock and return
-	// without an error.
+	// Close the controller, since no longer the leader. Called from
+	// handleRaftReadyRaftMuLocked. It can be called concurrently with
+	// WaitForEval. WaitForEval should unblock and return without an error,
+	// since there is no need to wait for tokens at this replica (which may
+	// still be the leaseholder).
 	Close()
 }
 
@@ -188,33 +210,29 @@ type RaftEvent interface {
 // which replication AC will operate. In this pull mode, the Raft leader will
 // produce a Ready that has the new entries it knows about, but MsgApps will
 // only be produced for a follower for (a) entries in (Match, Next), i.e.,
-// entries that are already in-flight for that follower, and have been nacked,
-// (b) empty MsgApps to ping the follower. Next is only advanced via pull,
-// which is serviced via RaftInterface. In a sense, there is a NextUpperBound
-// maintained by Raft, that never regresses in StateReplicate -- it advances
+// entries that are already in-flight for that follower, that Raft may want to
+// resend (b) empty MsgApps to ping the follower (it seems like (a) doesn't
+// happen in our Raft implementation, but it is permitted).
+//
+// Next is typically only advanced via pull, which is serviced via
+// RaftInterface. Next, never regresses in StateReplicate, and advances
 // whenever RaftInterface.MakeMsgApp is called. And everything in (Match,
-// NextUpperBound) is the responsibility of Raft to retry. The existing notion
-// of Next is protocol state internal to raft, regarding what to retry
-// sending. NextUpperBound can regress if the replica transitions out of
-// StateReplicate, and back into StateReplicate.
+// Next) is the responsibility of Raft to maintain liveness for (via MsgApp
+// pings). Next can regress if the replica transitions out of StateReplicate,
+// and back into StateReplicate. Also, in the rare case, Next can advance
+// within Raft there were old MsgApps forgotten about due to a transition to
+// StateProbe and back to StateReplicate, and we receive acks for those e.g.
+// if (Match, Next) was (5, 10), it is possible to receive acks up to 11, and
+// so the state becomes (12, 12).
 //
 // The Ready described here is only the subset that is needed by replication
 // AC -- heartbeats, appending to the local log etc. are not relevant.
 //
-// Ready must be called on every tick/ready of Raft since we cannot tolerate
-// state transitions from
+// Ready must be called on every tick/ready of Raft.
 //
-// StateReplicate => {state in all states: state != StateReplicate} =>
-// StateReplicate
-//
-// that is not observed by RangeController. Since outgoing messages are sent
-// in the tick/ready handling and a return from the intermediate state to
-// StateReplicate relies on receiving responses to those outgoing messages, we
-// should not miss any transitions. If stale messages received in a step can
-// cause transitions out and back without observation, we can add a monotonic
-// counter for each follower inside Raft (this is just local state at the
-// leader), which will be incremented on every state transition and expose
-// that via the RaftInterface.
+// The RangeController may not see all state transitions involving
+// StateProbe/StateReplicate/StateSnapshot for a replica, and must be prepared
+// to adjust its internal state to reflect the current reality.
 type Ready interface {
 	// Entries represents the new entries that are being added to the log.
 	// This may be empty.
@@ -227,8 +245,7 @@ type Ready interface {
 	Entries() []raftpb.Entry
 	// RetransmitMsgApps returns the MsgApps that are being retransmitted, or
 	// being used to ping the follower. These will never be queued by
-	// replication AC, but it may adjust the priority before sending (due to
-	// priority inheritance, when the Message has non-empty Entries).
+	// replication AC.
 	RetransmitMsgApps() []raftpb.Message
 }
 
@@ -242,17 +259,18 @@ type Ready interface {
 // it depends on information inside and outside Raft. The methods in Raft are
 // the ones RangeController will call.
 //
-// The implementation should not need to acquire Replica.mu since we have not
-// said anything about the relative lock ordering of Replica.mu and the
-// internal mutexes in RangeController.
+// The implementation can assume Replica.raftMu is already held. It should not
+// need to acquire Replica.mu, since there is no promise made on whether it is
+// already held.
 type RaftInterface interface {
-	// FollowerState returns the current state of a follower. The value of
-	// nextUpperBound is populated iff in StateReplicate. All entries >=
-	// nextUpperBound have not yet had MsgApps constructed.
+	// FollowerState returns the current state of a follower. The value of match
+	// and next are populated iff in StateReplicate. All entries >= next have
+	// not had MsgApps constructed during the lifetime of this StateReplicate
+	// (they may have been constructed previously)
 	//
+	// TODO: **resume here**
 	// When a follower transitions from {StateProbe,StateSnapshot} =>
-	// StateReplicate, or was already in StateReplicate but was disconnected and
-	// has now reconnected, we can now start trying to send MsgApps. We should
+	// StateReplicate, we start trying to send MsgApps. We should
 	// notice such transitions both in HandleRaftEvent and SetReplicas. We
 	// should *not* construct MsgApps for a StateReplicate follower that is
 	// disconnected -- there is no timeliness guarantee on how long a follower
@@ -848,6 +866,8 @@ func (rs *replicaState) createReplicaSendStream(nextUpperBound uint64) {
 	if rs.parent.leaseholder == rs.desc.ReplicaID && !rss.isEmptySendQueue() {
 		rss.scheduleForceFlush()
 	}
+	// TODO: need to do something here like changeToStateReplicate, in that we
+	// should try to grab tokens, and then try to schedule on raftScheduler.
 }
 
 func (rs *replicaState) close() {
@@ -873,7 +893,8 @@ func (rs *replicaState) close() {
 // So this is a replica-stream. Soft-down when disconnect notified. Up when
 // known to be connected. Hard-down if soft-down and send returns false. If we
 // stop evaluating because have to wait for hard-down then we have a problem
-// in that may never feed something to switch to hard-down.
+// in that may never feed something to switch to hard-down. Circuit-breaker also exists!
+//
 // So keep feeding until hard-down. And remove from elastic wait when soft-down.
 // If circuit-breaker does not trip too bad. When soft-down, those messages not
 // subject to AC since not tracking them on the sender.
@@ -888,6 +909,7 @@ func (rs *replicaState) close() {
 //
 // "breaker will open in 3-6 seconds after no more TCP packets are flowing. If
 // we assume 6 seconds, then that is ~1600 messages/second."
+// Why does soft-disconnected matter at all.
 type replicaSendStream struct {
 	parent *replicaState
 	// TODO: synchronization.
@@ -1395,7 +1417,7 @@ type connectedState uint32
 // negative due to some other replica, we may not evaluate new work, which
 // means we would not call SendRaftMessage hence never triggering the
 // transition to StateProbe. That would unnecessarily stop elastic work when a
-// node is down.
+// node is down. The transition to StateProbe will happen anyway.
 //
 // We call this state softDisconnected since MsgApps are still being generated.
 //
@@ -1405,6 +1427,8 @@ type connectedState uint32
 //	connected => softDisconnected
 //	softDisconnected => connected
 //	* => replicaSendStream closed
+//
+// Why do we return tokens early?
 const (
 	replicateConnected connectedState = iota
 	replicateSoftDisconnected

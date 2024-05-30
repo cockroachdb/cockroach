@@ -14,7 +14,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"reflect"
 	"slices"
 	"time"
 
@@ -150,8 +149,6 @@ func (c *Controller) mode() kvflowcontrol.ModeT {
 // Admit is part of the kvflowcontrol.Controller interface. It blocks until
 // there are flow tokens available for replication over the given stream for
 // work of the given priority.
-//
-// TODO: not used in RACv2.
 func (c *Controller) Admit(
 	ctx context.Context,
 	pri admissionpb.WorkPriority,
@@ -167,7 +164,7 @@ func (c *Controller) Admit(
 	// being available, we'll also let them through if we're not
 	// applying flow control to their specific work class.
 	bypass := c.mode() == kvflowcontrol.ApplyToElastic && class == admissionpb.RegularWorkClass
-	waitEndState := WaitSuccess
+	waitEndState := waitSuccess
 	waited := false
 	if !bypass {
 		b := c.getBucket(connection.Stream())
@@ -182,7 +179,7 @@ func (c *Controller) Admit(
 	// the wait duration metrics with CPU scheduling artifacts, causing
 	// confusion.
 
-	if waitEndState == WaitSuccess {
+	if waitEndState == waitSuccess {
 		const formatStr = "admitted request (pri=%s stream=%s wait-duration=%s mode=%s)"
 		if waited {
 			// Always trace if there is any waiting.
@@ -198,7 +195,7 @@ func (c *Controller) Admit(
 		} else {
 			return true, nil
 		}
-	} else if waitEndState == ContextCanceled {
+	} else if waitEndState == contextCanceled {
 		const formatStr = "canceled after waiting (pri=%s stream=%s wait-duration=%s mode=%s)"
 		log.VEventf(ctx, 2, formatStr, pri, connection.Stream(), waitDuration, c.mode())
 		c.metrics.onErrored(class, waitDuration)
@@ -441,22 +438,22 @@ func (bwc *bucketPerWorkClass) signal() {
 	}
 }
 
-type WaitEndState int32
+type waitEndState int32
 
 const (
-	WaitSuccess WaitEndState = iota
-	ContextCanceled
-	StopWaitSignaled
+	waitSuccess waitEndState = iota
+	contextCanceled
+	stopWaitSignaled
 )
 
-func (bwc *bucketPerWorkClass) wait(ctx context.Context, stopWaitCh <-chan struct{}) WaitEndState {
+func (bwc *bucketPerWorkClass) wait(ctx context.Context, stopWaitCh <-chan struct{}) waitEndState {
 	select {
 	case <-bwc.signalCh:
-		return WaitSuccess
+		return waitSuccess
 	case <-stopWaitCh:
-		return StopWaitSignaled
+		return stopWaitSignaled
 	case <-ctx.Done():
-		return ContextCanceled
+		return contextCanceled
 	}
 }
 
@@ -503,7 +500,7 @@ func (b *bucket) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 
 // wait causes the caller that has work with work class wc to wait until
 // either tokens are available for work class wc, or the context is cancelled,
-// or stopWaitCh is signaled. The WaitEndState return value indicates which
+// or stopWaitCh is signaled. The waitEndState return value indicates which
 // one of these terminated the wait. The waited bool is set to true only if
 // there was some waiting, since the common case is that there will be tokens
 // available and there will be no waiting.
@@ -515,7 +512,7 @@ func (b *bucket) tokensLocked(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 // signaling scheme.
 func (b *bucket) wait(
 	ctx context.Context, wc admissionpb.WorkClass, stopWaitCh <-chan struct{},
-) (state WaitEndState, waited bool) {
+) (state waitEndState, waited bool) {
 	waitedWithWaitSuccess := false
 	for {
 		b.mu.RLock()
@@ -528,11 +525,11 @@ func (b *bucket) wait(
 				// the entry in the channel. Unblock another waiter.
 				b.mu.buckets[wc].signal()
 			}
-			return WaitSuccess, waited
+			return waitSuccess, waited
 		}
 		waited = true
 		state = b.mu.buckets[wc].wait(ctx, stopWaitCh)
-		if state != WaitSuccess {
+		if state != waitSuccess {
 			// We could have previously removed the entry in the channel, if in a
 			// previous iteration waitedWithWaitSuccess became true. But we don't
 			// need to add an entry here, since we've sampled the tokens after
@@ -545,124 +542,6 @@ func (b *bucket) wait(
 			// case).
 		}
 	}
-}
-
-// TokensAvailable is an alternative waiting interface for RACv2. Use it
-// together with WaitForHandlesAndChannels.
-//
-// We considered an alternative implementation where the caller provides a
-// channel, and all the queued caller channels are signaled when tokens become
-// positive. This has the advantage that the caller can pull a quorum count of
-// entries from the channel, if it is waiting for a quorum, instead of the
-// WaitForHandlesAndChannels logic below. We chose not to, since that does not
-// provide the natural throttling to reduce over-admission that is provided by
-// the signalCh being signaled by the waiter that gets to run.
-func (b *bucket) TokensAvailable(wc admissionpb.WorkClass) (available bool, handle interface{}) {
-	b.mu.RLock()
-	tokens := b.tokensLocked(wc)
-	b.mu.RUnlock()
-	if tokens > 0 {
-		return true, nil
-	}
-	return false, waitHandle{wc: wc, b: b}
-}
-
-type waitHandle struct {
-	wc admissionpb.WorkClass
-	b  *bucket
-}
-
-// Each handle is paired with a stop channel that allows the callee to stop
-// waiting on the handle if stopWaitCh is closed/signaled, when
-// waitForAllNonStoppedHandles is true. This is useful for elastic work that
-// needs a quorum and needs to wait for eval tokens from all connected replica
-// streams.
-type HandleAndStopCh struct {
-	Handle     interface{}
-	StopWaitCh <-chan struct{}
-}
-
-// WaitForHandlesAndChannels ...
-// We always need minNumHandlesToWaitFor, even if the stopWaitCh channels have
-// been closed/signaled. If the replica stream is no longer connected, and
-// then later reconnects, the stopWaitCh will change, but that is ok, since we
-// are simply waiting on the handle.
-//
-// TODO: add identity of leader. We also want a special stopWaitCh across all
-// that is closed if the RangeController is closed, or the leaseholder
-// changes. Also add the identity of the leader or leaseholder since
-// specifically waiting for those eval tokens to be > 0. We will let in a
-// burst if the leaseholder changes, while the local replica is still the
-// leader -- so be it.
-//
-// NO! The above is all wrong. We want to internalize this implementation in
-// RangeController. RangeController will get a list of all the voters, and
-// which ones are required (leader, leaseholder, and for elastic traffic, all
-// the ones in StateReplicate). There will also be a refresh channel for the waiter
-// which it will notify if it needs to refresh. Then the waiter will wait.
-// If leaseholder, leader change, or for elastic the ones in StateReplica are
-// no longer in StateReplicate, or the sets of voter change, refresh will be
-// signalled. All this state will either need to be copy-on-write or read locked
-// since there are many waiting requests for eval.
-func WaitForHandlesAndChannels(
-	ctx context.Context,
-	stopWaitCh <-chan struct{},
-	minNumHandlesToWaitFor int,
-	waitForAllNonStoppedHandles bool,
-	handleAndStopChSlice []HandleAndStopCh,
-	scratch []reflect.SelectCase,
-) (state WaitEndState, scratch2 []reflect.SelectCase) {
-	return 0, nil
-}
-
-func WaitForHandlesAndChannelsOld(
-	ctx context.Context,
-	stopWaitCh <-chan struct{},
-	numHandlesToWaitFor int,
-	handles []interface{},
-	scratch []reflect.SelectCase,
-) (state WaitEndState, scratch2 []reflect.SelectCase) {
-	scratch = scratch[:0]
-	if len(handles) < numHandlesToWaitFor || numHandlesToWaitFor == 0 {
-		panic("")
-	}
-	scratch = append(scratch,
-		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())})
-	scratch = append(scratch,
-		reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(stopWaitCh)})
-	for _, h := range handles {
-		handle := h.(waitHandle)
-		scratch = append(scratch,
-			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(handle.b.mu.buckets[handle.wc].signalCh)})
-	}
-	m := len(scratch)
-	for numHandlesToWaitFor > 0 {
-		chosen, _, _ := reflect.Select(scratch)
-		switch chosen {
-		case 0:
-			return ContextCanceled, scratch
-		case 1:
-			return StopWaitSignaled, scratch
-		default:
-			h := handles[chosen-2].(waitHandle)
-			h.b.mu.RLock()
-			tokens := h.b.tokensLocked(h.wc)
-			h.b.mu.RUnlock()
-			if tokens > 0 {
-				// Consumed the entry in the channel. Unblock another waiter.
-				h.b.mu.buckets[h.wc].signal()
-				numHandlesToWaitFor--
-				if numHandlesToWaitFor == 0 {
-					return WaitSuccess, scratch
-				}
-				m--
-				scratch[chosen], scratch[m] = scratch[m], scratch[chosen]
-				scratch = scratch[:m]
-			}
-			// Else tokens < 0, so keep this SelectCase.
-		}
-	}
-	panic("unreachable")
 }
 
 // admin is set to true when this method is called because of a settings
