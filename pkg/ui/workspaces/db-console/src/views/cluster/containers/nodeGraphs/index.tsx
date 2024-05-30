@@ -521,17 +521,15 @@ const nodeDropdownOptionsSelector = createSelector(
   (nodeIds, nodeDisplayNameByID, livenessStatusByNodeID): DropdownOption[] => {
     const base = [{ value: "", label: "Cluster" }];
     return base.concat(
-      _.chain(nodeIds)
-        .filter(
-          id =>
-            livenessStatusByNodeID[id] !==
-            LivenessStatus.NODE_STATUS_DECOMMISSIONED,
-        )
-        .map(id => ({
-          value: id.toString(),
-          label: nodeDisplayNameByID[id],
-        }))
-        .value(),
+      nodeIds.filter(
+        id =>
+          livenessStatusByNodeID[id] !==
+          LivenessStatus.NODE_STATUS_DECOMMISSIONED,
+      )
+      .map(id => ({
+        value: id.toString(),
+        label: nodeDisplayNameByID[id],
+      }))
     );
   },
 );

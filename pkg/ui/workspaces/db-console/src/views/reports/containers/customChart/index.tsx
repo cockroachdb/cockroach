@@ -8,7 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import map from "lodash/map";
+import sortBy from "lodash/sortBy";
+import startsWith from "lodash/startsWith";
+import isEmpty from "lodash/isEmpty";
+import keys from "lodash/keys";
+import flatMap from "lodash/flatMap";
+import has from "lodash/has";
+import flow from "lodash/flow";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
@@ -113,15 +120,16 @@ export class CustomChart extends React.Component<
     (nodeStatuses, nodeDisplayNameByID): DropdownOption[] => {
       const base = [{ value: "", label: "Cluster" }];
       return base.concat(
-        _.chain(nodeStatuses)
-          .map(ns => {
-            return {
+        flow(
+          (statuses: INodeStatus[]) => map(
+            statuses,
+            ns => ({
               value: ns.desc.node_id.toString(),
               label: nodeDisplayNameByID[ns.desc.node_id],
-            };
-          })
-          .sortBy(value => _.startsWith(value.label, "[decommissioned]"))
-          .value(),
+            })
+          ),
+          values => sortBy(values, value => startsWith(value.label, "[decommissioned]"))
+        )(nodeStatuses)
       );
     },
   );

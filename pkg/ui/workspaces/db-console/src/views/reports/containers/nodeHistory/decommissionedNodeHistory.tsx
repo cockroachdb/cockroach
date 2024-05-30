@@ -34,6 +34,11 @@ import {
 import { createSelector } from "reselect";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
+import "./decommissionedNodeHistory.styl";
+
+import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
+import ILiveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
+
 const decommissionedNodesSortSetting = new LocalSetting<
   AdminUIState,
   SortSetting
@@ -150,17 +155,14 @@ const decommissionedNodesTableData = createSelector(
       return liveness?.membership === MembershipStatus.DECOMMISSIONED;
     });
 
-    const data = _.chain(decommissionedNodes)
-      .orderBy([liveness => getDecommissionedTime(liveness.node_id)], ["desc"])
-      .map((liveness, idx: number) => {
-        const { node_id } = liveness;
-        return {
-          key: `${idx}`,
-          nodeId: node_id,
-          decommissionedDate: getDecommissionedTime(node_id),
-        };
-      })
-      .value();
+    const data = flow(
+      (liveness: ILiveness[]) => orderBy(liveness, [l => getDecommissionedTime(l.node_id)], ["desc"]),
+      (liveness: ILiveness[]) => map(liveness, (l, idx: number) => ({
+        key: `${idx}`,
+        nodeId: l.node_id,
+        decommissionedDate: getDecommissionedTime(l.node_id),
+      }))
+    )(decommissionedNodes)
 
     return data;
   },
