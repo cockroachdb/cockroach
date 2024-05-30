@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -92,6 +93,15 @@ func withSchedulerHelper(sh *testHelper) func(opts *feedTestOptions) {
 			}
 		}
 	}
+}
+
+func (h *testHelper) loadSchedule(t *testing.T, scheduleID jobspb.ScheduleID) *jobs.ScheduledJob {
+	t.Helper()
+
+	loaded, err := jobs.ScheduledJobDB(h.internalDB()).
+		Load(context.Background(), h.env, scheduleID)
+	require.NoError(t, err)
+	return loaded
 }
 
 func (h *testHelper) clearSchedules(t *testing.T) {
@@ -160,6 +170,10 @@ func getScheduledChangefeedStatement(t *testing.T, arg *jobspb.ExecutionArgument
 	var scheduledChangefeed changefeedpb.ScheduledChangefeedExecutionArgs
 	require.NoError(t, pbtypes.UnmarshalAny(arg.Args, &scheduledChangefeed))
 	return scheduledChangefeed.ChangefeedStatement
+}
+
+func (h *testHelper) internalDB() descs.DB {
+	return h.server.InternalDB().(descs.DB)
 }
 
 // This test examines serialized representation of changefeed schedule arguments
@@ -502,6 +516,111 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 			assertPayloads(t, feed, test.expectedPayload)
 		})
 	}
+}
+
+// TestPauseScheduledChangefeedOnNewClusterID schedules a changefeed and verifies the changefeed pauses
+// if it is running on a cluster with a different ID than is stored in the schedule details
+func TestPauseScheduledChangefeedOnNewClusterID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.sqlDB.Exec(t, `
+CREATE TABLE t1(a INT PRIMARY KEY, b STRING);
+INSERT INTO t1 values (1, 'one'), (10, 'ten'), (100, 'hundred');
+
+CREATE TABLE t2(b INT PRIMARY KEY, c STRING);
+INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
+`)
+
+	getFeed := func(isBare bool, db *gosql.DB) (string, *webhookFeed, func()) {
+		cert, _, err := cdctest.NewCACertBase64Encoded()
+		require.NoError(t, err)
+		sinkDest, err := cdctest.StartMockWebhookSink(cert)
+		require.NoError(t, err)
+
+		dummyWrapper := func(s Sink) Sink {
+			return s
+		}
+		// NB: This is a partially initialized webhookFeed.
+		// You must call th.waitForSuccessfulScheduledJob prior to reading
+		// feed messages. If messages are tried to access before they are present,
+		// this feed will panic because sink synchronizer is not initialized.
+		feed := &webhookFeed{
+			seenTrackerMap: make(map[string]struct{}),
+			mockSink:       sinkDest,
+			isBare:         isBare,
+			jobFeed:        newJobFeed(db, dummyWrapper),
+		}
+
+		sinkURI := fmt.Sprintf("webhook-%s?insecure_tls_skip_verify=true", sinkDest.URL())
+		return sinkURI, feed, sinkDest.Close
+	}
+
+	testCase := struct {
+		name            string
+		scheduleStmt    string
+		expectedPayload []string
+		isBare          bool
+	}{
+		name:         "one-table",
+		scheduleStmt: "CREATE SCHEDULE FOR changefeed TABLE t1 INTO $1 RECURRING '@hourly'",
+		expectedPayload: []string{
+			`t1: [1]->{"after": {"a": 1, "b": "one"}}`,
+			`t1: [10]->{"after": {"a": 10, "b": "ten"}}`,
+			`t1: [100]->{"after": {"a": 100, "b": "hundred"}}`,
+		},
+		isBare: false,
+	}
+
+	t.Run(testCase.name, func(t *testing.T) {
+		sinkURI, feed, cleanup := getFeed(testCase.isBare, th.db)
+		defer cleanup()
+
+		sj, err := th.createChangefeedSchedule(
+			t, testCase.scheduleStmt, sinkURI)
+		require.NoError(t, err)
+		defer th.clearSchedules(t)
+
+		// Get schedule DB to update the schedule with new clusterID
+		scheduleStorage := jobs.ScheduledJobDB(th.internalDB())
+
+		details := sj.ScheduleDetails()
+		currentClusterID := details.ClusterID
+		require.NotZero(t, currentClusterID)
+
+		// Modify the scheduled clusterID and update the job
+		details.ClusterID = jobstest.DummyClusterID
+		sj.SetScheduleDetails(*details)
+		th.env.SetTime(sj.NextRun().Add(time.Second))
+		require.NoError(t, scheduleStorage.Update(context.Background(), sj))
+		require.NoError(t, th.executeSchedules())
+
+		// Schedule is expected to be paused
+		testutils.SucceedsSoon(t, func() error {
+			expectPausedSchedule := th.loadSchedule(t, sj.ScheduleID())
+			if !expectPausedSchedule.IsPaused() {
+				return errors.New("schedule has not paused yet")
+			}
+			// The cluster ID should have been reset.
+			require.Equal(t, currentClusterID, expectPausedSchedule.ScheduleDetails().ClusterID)
+			return nil
+		})
+
+		th.sqlDB.Exec(t, "RESUME SCHEDULE $1", sj.ScheduleID())
+		resumedSchedule := th.loadSchedule(t, sj.ScheduleID())
+		require.False(t, resumedSchedule.IsPaused())
+		th.env.SetTime(resumedSchedule.NextRun().Add(time.Second))
+		require.NoError(t, th.executeSchedules())
+		jobID := th.waitForSuccessfulScheduledJob(t, sj.ScheduleID())
+		// We need to set the job ID here explicitly because the webhookFeed.Next
+		// function calls jobFeed.Details, which uses the job ID to get the
+		// changefeed details from the system.jobs table.
+		feed.jobFeed.jobID = jobspb.JobID(jobID)
+		assertPayloads(t, feed, testCase.expectedPayload)
+	})
 }
 
 // TestScheduledChangefeedErrors tests cases where a schedule changefeed statement will return an error.

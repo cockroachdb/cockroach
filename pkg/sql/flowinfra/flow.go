@@ -660,39 +660,6 @@ func (f *FlowBase) GetOnCleanupFns() (startCleanup, endCleanup func()) {
 	return onCleanupStart, onCleanupEnd
 }
 
-// ConsumerClosedOnHeadProc calls ConsumerClosed method on the "head" processor
-// of this flow to make sure that all resources are released. This is needed for
-// pausable portal execution model where execinfra.Run might never call
-// ConsumerClosed on the source (i.e. the "head" processor).
-//
-// The method is only called if:
-// - the flow is local (pausable portals currently don't support DistSQL)
-// - there is exactly 1 processor in the flow that runs in its own goroutine
-// (which is always the case for pausable portal model at this time)
-// - Start was called on that processor (ConsumerClosed is only valid to be
-// called after Start)
-// - that single processor implements execinfra.RowSource interface (those
-// processors that don't implement it shouldn't be running through pausable
-// portal model).
-//
-// Otherwise, this method is a noop.
-func (f *FlowBase) ConsumerClosedOnHeadProc() {
-	if !f.IsLocal() {
-		return
-	}
-	if len(f.processors) != 1 {
-		return
-	}
-	if !f.headProcStarted {
-		return
-	}
-	rs, ok := f.processors[0].(execinfra.RowSource)
-	if !ok {
-		return
-	}
-	rs.ConsumerClosed()
-}
-
 // Cleanup is part of the Flow interface.
 // NOTE: this implements only the shared cleanup logic between row-based and
 // vectorized flows.
@@ -700,6 +667,21 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	if buildutil.CrdbTestBuild {
 		if f.getStatus() == flowFinished {
 			panic("flow cleanup called twice")
+		}
+	}
+
+	// Ensure that all processors are closed. Usually this is done automatically
+	// (when a processor is exhausted or at the end of execinfra.Run loop), but
+	// in edge cases we need to do it here. ConsumerClosed can be called
+	// multiple times.
+	//
+	// Note that ConsumerClosed is not thread-safe, but at this point if the
+	// processor wasn't fused and ran in its own goroutine, that goroutine must
+	// have exited since Cleanup is called after having waited for all started
+	// goroutines to exit.
+	for _, proc := range f.processors {
+		if rs, ok := proc.(execinfra.RowSource); ok {
+			rs.ConsumerClosed()
 		}
 	}
 

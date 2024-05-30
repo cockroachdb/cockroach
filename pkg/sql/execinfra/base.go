@@ -170,7 +170,7 @@ type RowSource interface {
 
 	// ConsumerClosed informs the source that the consumer is done and will not
 	// make any more calls to Next(). Must be called at least once on a given
-	// RowSource.
+	// RowSource and can be called multiple times.
 	//
 	// Like ConsumerDone(), if the consumer of the source stops consuming rows
 	// before Next indicates that there are no more rows, ConsumerDone() and/or

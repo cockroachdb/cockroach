@@ -267,7 +267,7 @@ type streamIngestionProcessor struct {
 	// stopCh stops the cutover poller and flush loop.
 	stopCh chan struct{}
 
-	mergedSubscription *mergedSubscription
+	mergedSubscription *MergedSubscription
 
 	flushCh chan flushableBuffer
 
@@ -290,8 +290,8 @@ type streamIngestionProcessor struct {
 	aggTimer timeutil.Timer
 }
 
-// partitionEvent augments a normal event with the partition it came from.
-type partitionEvent struct {
+// PartitionEvent augments a normal event with the partition it came from.
+type PartitionEvent struct {
 	streamingccl.Event
 	partition string
 }
@@ -474,7 +474,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		})
 	}
 
-	sip.mergedSubscription = mergeSubscriptions(sip.Ctx(), subscriptions)
+	sip.mergedSubscription = MergeSubscriptions(sip.Ctx(), subscriptions)
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		if err := sip.mergedSubscription.Run(); err != nil {
 			sip.sendError(errors.Wrap(err, "merge subscription"))
@@ -710,7 +710,7 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 
 }
 
-func (sip *streamIngestionProcessor) handleEvent(event partitionEvent) error {
+func (sip *streamIngestionProcessor) handleEvent(event PartitionEvent) error {
 	sv := &sip.FlowCtx.Cfg.Settings.SV
 
 	if event.Type() == streamingccl.KVEvent {
@@ -911,7 +911,7 @@ func (sip *streamIngestionProcessor) bufferKVs(kvs []roachpb.KeyValue) error {
 	return nil
 }
 
-func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
+func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) error {
 	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.ElideCheckpointEvent != nil {
 			if streamingKnobs.ElideCheckpointEvent(sip.FlowCtx.NodeID.SQLInstanceID(), sip.frontier.Frontier()) {
@@ -1351,32 +1351,6 @@ func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, erro
 	}
 
 	return false, nil
-}
-
-// frontierForSpan returns the lowest timestamp in the frontier within
-// the given subspans. If the subspans are entirely outside the
-// Frontier's tracked span an empty timestamp is returned.
-func frontierForSpans(f span.Frontier, spans ...roachpb.Span) hlc.Timestamp {
-	var (
-		minTimestamp hlc.Timestamp
-		sawEmptyTS   bool
-	)
-
-	for _, spanToCheck := range spans {
-		f.SpanEntries(spanToCheck, func(frontierSpan roachpb.Span, ts hlc.Timestamp) span.OpResult {
-			if ts.IsEmpty() {
-				sawEmptyTS = true
-			}
-			if minTimestamp.IsEmpty() || ts.Less(minTimestamp) {
-				minTimestamp = ts
-			}
-			return span.ContinueMatch
-		})
-	}
-	if sawEmptyTS {
-		return hlc.Timestamp{}
-	}
-	return minTimestamp
 }
 
 func init() {

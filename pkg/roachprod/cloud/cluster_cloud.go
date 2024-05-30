@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/errors"
@@ -360,6 +361,15 @@ func GrowCluster(l *logger.Logger, c *Cluster, NumNodes int) error {
 
 // DestroyCluster TODO(peter): document
 func DestroyCluster(l *logger.Logger, c *Cluster) error {
+	// check if any node is supported as promhelper cluster
+	for _, node := range c.VMs {
+		if _, ok := promhelperclient.SupportedPromProjects[node.Project]; ok &&
+			node.Provider == gce.ProviderName {
+			_ = promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
+				c.Name, false, l)
+			break
+		}
+	}
 	// DNS entries are destroyed first to ensure that the GC job will not try
 	// and clean-up entries prematurely.
 	dnsErr := vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {

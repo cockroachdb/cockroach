@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -70,6 +71,7 @@ func newTxnKVFetcher(
 	} else {
 		negotiated := false
 		sendFn = func(ctx context.Context, ba *kvpb.BatchRequest) (br *kvpb.BatchResponse, _ error) {
+			log.VEventf(ctx, 2, "kv fetcher (bounded staleness): sending a batch with %d requests", len(ba.Requests))
 			ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 			var pErr *kvpb.Error
 			// Only use NegotiateAndSend if we have not yet negotiated a timestamp.

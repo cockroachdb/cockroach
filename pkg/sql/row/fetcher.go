@@ -348,7 +348,9 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	rf.args = args
 
 	if args.MemMonitor != nil {
-		rf.mon = mon.NewMonitorInheritWithLimit("fetcher-mem", 0 /* limit */, args.MemMonitor)
+		rf.mon = mon.NewMonitorInheritWithLimit(
+			"fetcher-mem", 0 /* limit */, args.MemMonitor, false, /* longLiving */
+		)
 		rf.mon.StartNoReserved(ctx, args.MemMonitor)
 		memAcc := rf.mon.MakeBoundAccount()
 		rf.kvFetcherMemAcc = &memAcc
@@ -646,6 +648,7 @@ func (rf *Fetcher) StartInconsistentScan(
 			}
 		}
 
+		log.VEventf(ctx, 2, "inconsistent scan: sending a batch with %d requests", len(ba.Requests))
 		res, err := txn.Send(ctx, ba)
 		if err != nil {
 			return nil, err.GoError()

@@ -905,6 +905,16 @@ type ReplicationStreamManager interface {
 	) error
 
 	DebugGetProducerStatuses(ctx context.Context) []*streampb.DebugProducerStatus
+
+	PartitionSpans(
+		ctx context.Context,
+		spans []roachpb.Span,
+	) (*streampb.ReplicationStreamSpec, error)
+
+	StartReplicationStreamForTables(
+		ctx context.Context,
+		req streampb.ReplicationProducerRequest,
+	) (streampb.ReplicationProducerSpec, error)
 }
 
 // StreamIngestManager represents a collection of APIs that streaming replication supports

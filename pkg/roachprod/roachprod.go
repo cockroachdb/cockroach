@@ -803,7 +803,8 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
 	for _, node := range c.Nodes {
-		if _, ok := supportedPromProjects[c.VMs[node-1].Project]; ok && c.VMs[node-1].Provider == gce.ProviderName {
+		if _, ok := promhelperclient.SupportedPromProjects[c.VMs[node-1].Project]; ok &&
+			c.VMs[node-1].Provider == gce.ProviderName {
 			wg.Add(1)
 			go func(index int, v vm.VM) {
 				defer wg.Done()
@@ -816,14 +817,14 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 				nodeInfo := fmt.Sprintf("%s:%d", v.PrivateIP, desc.Port)
 				nodeIPPortsMutex.Lock()
 				// ensure atomicity in map update
-				nodeIPPorts[index] = &promhelperclient.NodeInfo{Target: nodeInfo, CustomLabels: getLabels(v)}
+				nodeIPPorts[index] = &promhelperclient.NodeInfo{Target: nodeInfo, CustomLabels: createLabels(v)}
 				nodeIPPortsMutex.Unlock()
 			}(int(node), c.VMs[node-1])
 		}
 	}
 	wg.Wait()
 	if len(nodeIPPorts) > 0 {
-		if err := promhelperclient.DefaultPromClient.UpdatePrometheusTargets(ctx,
+		if err := promhelperclient.NewPromClient().UpdatePrometheusTargets(ctx,
 			c.Name, false, nodeIPPorts, !c.Secure, l); err != nil {
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
@@ -833,14 +834,16 @@ func updatePrometheusTargets(ctx context.Context, l *logger.Logger, c *install.S
 // regionRegEx is the regex to extract the region label from zone available as vm property
 var regionRegEx = regexp.MustCompile("(^.+[0-9]+)(-[a-f]$)")
 
-// getLabels returns the labels to be populated in the target configuration in prometheus
-func getLabels(v vm.VM) map[string]string {
+// createLabels returns the labels to be populated in the target configuration in prometheus
+func createLabels(v vm.VM) map[string]string {
 	labels := map[string]string{
 		"cluster":  v.Labels["cluster"],
 		"instance": v.Name,
 		"host_ip":  v.PrivateIP,
 		"project":  v.Project,
 		"zone":     v.Zone,
+		"tenant":   install.SystemInterfaceName,
+		"job":      "cockroachdb",
 	}
 	match := regionRegEx.FindStringSubmatch(v.Zone)
 	if len(match) > 1 {
@@ -1474,16 +1477,7 @@ func destroyCluster(
 		l.Printf("Destroying cluster %s with %d nodes", clusterName, len(c.VMs))
 	}
 
-	if err := deleteClusterConfig(ctx, clusterName, l); err != nil {
-		l.Printf("Failed to delete cluster config: %v", err)
-	}
-
 	return cloud.DestroyCluster(l, c)
-}
-
-// deleteClusterConfig deletes the prometheus instance cluster config. Any error is logged and ignored.
-func deleteClusterConfig(ctx context.Context, clusterName string, l *logger.Logger) error {
-	return promhelperclient.DefaultPromClient.DeleteClusterConfig(ctx, clusterName, false, l)
 }
 
 func destroyLocalCluster(ctx context.Context, l *logger.Logger, clusterName string) error {

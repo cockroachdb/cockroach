@@ -277,6 +277,7 @@ func makeTxnKVFetcherDefaultSendFunc(txn *kv.Txn, batchRequestsIssued *int64) se
 		ctx context.Context,
 		ba *kvpb.BatchRequest,
 	) (*kvpb.BatchResponse, error) {
+		log.VEventf(ctx, 2, "kv fetcher: sending a batch with %d requests", len(ba.Requests))
 		res, err := txn.Send(ctx, ba)
 		if err != nil {
 			return nil, err.GoError()

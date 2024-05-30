@@ -106,6 +106,15 @@ type Client interface {
 	) (id string, replicatedFrom string, activated hlc.Timestamp, _ error)
 }
 
+// LogicalReplicationClient is a Client with additional methods
+// specific to logical replication.
+type LogicalReplicationClient interface {
+	Client
+
+	PartitionSpans([]roachpb.Span) (Topology, error)
+	CreateForTables(ctx context.Context, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
+}
+
 type subscribeConfig struct {
 	// withFiltering controls whether the producer-side rangefeeds
 	// should be started with the WithFiltering option which

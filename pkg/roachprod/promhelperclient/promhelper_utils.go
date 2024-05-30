@@ -47,8 +47,8 @@ const (
 	objectLocation = "promhelpers-secrets"
 )
 
-// SetPromHelperCredsEnv sets the environment variables ServiceAccountAudience and
-// ServiceAccountJson based on the following conditions:
+// setPromHelperCredsEnv sets the environment variables serviceAccountAudience and
+// serviceAccountJson based on the following conditions:
 // > check if forFetch is false
 //
 //	> forceFetch is false
@@ -58,15 +58,15 @@ const (
 //	> read the creds from secrets manager
 //
 // > set the env variable and save the creds to the promCredFile
-func SetPromHelperCredsEnv(
+func setPromHelperCredsEnv(
 	ctx context.Context, forceFetch bool, l *logger.Logger,
 ) (FetchedFrom, error) {
 	creds := ""
 	fetchedFrom := Env
 	if !forceFetch { // bypass environment and creds file if forceFetch is false
 		// check if environment is set
-		audience := os.Getenv(ServiceAccountAudience)
-		saJson := os.Getenv(ServiceAccountJson)
+		audience := os.Getenv(serviceAccountAudience)
+		saJson := os.Getenv(serviceAccountJson)
 		if audience != "" && saJson != "" {
 			l.Printf("Secrets obtained from environment.")
 			return fetchedFrom, nil
@@ -82,7 +82,14 @@ func SetPromHelperCredsEnv(
 	if creds == "" {
 		// creds == "" means (env is not set and the file does not have the creds) or forceFetch is true
 		l.Printf("creds need to be fetched from store.")
-		client, err := storage.NewClient(ctx, option.WithScopes(storage.ScopeReadOnly))
+		options := []option.ClientOption{option.WithScopes(storage.ScopeReadOnly)}
+		cj := os.Getenv("GOOGLE_EPHEMERAL_CREDENTIALS")
+		if len(cj) != 0 {
+			options = append(options, option.WithCredentialsJSON([]byte(cj)))
+		} else {
+			l.Printf("GOOGLE_EPHEMERAL_CREDENTIALS env is not set.")
+		}
+		client, err := storage.NewClient(ctx, options...)
 		if err != nil {
 			return fetchedFrom, err
 		}
@@ -106,8 +113,8 @@ func SetPromHelperCredsEnv(
 	}
 	secretValues := strings.Split(creds, secretsDelimiter)
 	if len(secretValues) == 2 {
-		_ = os.Setenv(ServiceAccountAudience, secretValues[0])
-		_ = os.Setenv(ServiceAccountJson, secretValues[1])
+		_ = os.Setenv(serviceAccountAudience, secretValues[0])
+		_ = os.Setenv(serviceAccountJson, secretValues[1])
 		return fetchedFrom, nil
 	}
 	return fetchedFrom, fmt.Errorf("invalid secret values - %s", creds)

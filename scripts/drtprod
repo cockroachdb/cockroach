@@ -71,7 +71,7 @@ case $1 in
     cluster=$1
     roachprod adminurl $cluster --ips |
       awk '{printf "%04d\t%s\n", NR, $0}' | # prepend the padded node IDs.
-      sed -e 's,http://\(.*\):26258/,\1,g' | # remove the HTTP part.
+      sed -e 's,https://\(.*\):26258/,\1,g' | # remove the HTTPS part.
       while read node ip; do
         host="${cluster}-${node}.drt.crdb.io."
         gcloud dns --project=cockroach-shared record-sets ${2:-update} "${host}" --rrdatas="${ip}" \

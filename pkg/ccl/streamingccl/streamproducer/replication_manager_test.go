@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -63,7 +64,7 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		})
 		defer cleanup()
 		ec := pi.EvalContext()
-		return newReplicationStreamManagerWithPrivilegesCheck(ctx, ec, pi.InternalSQLTxn(), clusterunique.ID{})
+		return newReplicationStreamManagerWithPrivilegesCheck(ctx, ec, p.(resolver.SchemaResolver), pi.InternalSQLTxn(), clusterunique.ID{})
 	}
 
 	tDB.Exec(t, "CREATE ROLE somebody")

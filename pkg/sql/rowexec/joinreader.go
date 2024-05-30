@@ -511,7 +511,7 @@ func newJoinReader(
 		// We need to use an unlimited monitor for the streamer's budget since
 		// the streamer itself is responsible for staying under the limit.
 		jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
-			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.Mon,
+			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.Mon, false, /* longLiving */
 		)
 		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
