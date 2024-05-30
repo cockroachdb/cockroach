@@ -505,7 +505,8 @@ type ExecutionStats struct {
 	SQLNodes []string
 	// KVNodes that served read requests.
 	KVNodes []string
-	// Regions on which this operator was executed.
+	// Regions on which this operator was executed. Includes both KV and SQL
+	// processing.
 	// Only being generated on EXPLAIN ANALYZE.
 	Regions []string
 }
