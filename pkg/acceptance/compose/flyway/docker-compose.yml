@@ -1,4 +1,3 @@
-version: '3'
 services:
   cockroach:
     # We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.

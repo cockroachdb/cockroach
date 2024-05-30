@@ -121,7 +121,7 @@ func TestComposeCompare(t *testing.T) {
 		"docker",
 		"compose",
 		"-f", dockerComposeYml,
-		"--no-ansi",
+		"--ansi=never",
 		"up",
 		"--force-recreate",
 		"--exit-code-from", "test",
