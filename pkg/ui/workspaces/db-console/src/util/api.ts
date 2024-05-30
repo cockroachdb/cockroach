@@ -444,6 +444,7 @@ export function getJobs(
     (response: JobsResponseMessage) => response,
     (err: Error) => {
       if (err instanceof TimeoutError) {
+        // eslint-disable-next-line no-console
         console.log(
           `Jobs page time out because attempt to retrieve jobs exceeded ${err.timeout.asMilliseconds()}ms.`,
           `URL: ${url}. Request: ${JSON.stringify(req)}`,
