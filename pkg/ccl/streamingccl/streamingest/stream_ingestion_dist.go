@@ -527,7 +527,7 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 			p.initialDestinationNodes = sqlInstanceIDs
 
 		}
-		destNodeLocalities, err := getDestNodeLocalities(ctx, dsp, sqlInstanceIDs)
+		destNodeLocalities, err := GetDestNodeLocalities(ctx, dsp, sqlInstanceIDs)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -634,13 +634,13 @@ func measurePlanChange(before, after *sql.PhysicalPlan) float64 {
 	return float64(diff) / float64(oldCount)
 }
 
-type partitionWithCandidates struct {
-	partition          streamclient.PartitionInfo
-	closestDestIDs     []base.SQLInstanceID
+type PartitionWithCandidates struct {
+	Partition          streamclient.PartitionInfo
+	ClosestDestIDs     []base.SQLInstanceID
 	sharedPrefixLength int
 }
 
-type candidatesByPriority []partitionWithCandidates
+type candidatesByPriority []PartitionWithCandidates
 
 func (a candidatesByPriority) Len() int      { return len(a) }
 func (a candidatesByPriority) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
@@ -661,11 +661,11 @@ func (a candidatesByPriority) Less(i, j int) bool {
 // as only US matches with the src node's locality.
 //
 // - Prioritize matching src nodes with a higher locality match count, via the
-// findSourceNodePriority() function.
+// FindSourceNodePriority() function.
 //
 // - While we have src nodes left to match, match the highest priority src node
 // to the dst node candidate that has the fewest matches already, via the
-// findMatch() function.
+// FindMatch() function.
 
 type nodeMatcher struct {
 	destMatchCount     map[base.SQLInstanceID]int
@@ -673,7 +673,7 @@ type nodeMatcher struct {
 	destNodeToLocality map[base.SQLInstanceID]roachpb.Locality
 }
 
-func makeNodeMatcher(destNodesInfo []sql.InstanceLocality) *nodeMatcher {
+func MakeNodeMatcher(destNodesInfo []sql.InstanceLocality) *nodeMatcher {
 	nodeToLocality := make(map[base.SQLInstanceID]roachpb.Locality, len(destNodesInfo))
 	for _, node := range destNodesInfo {
 		nodeToLocality[node.GetInstanceID()] = node.GetLocality()
@@ -685,19 +685,15 @@ func makeNodeMatcher(destNodesInfo []sql.InstanceLocality) *nodeMatcher {
 	}
 }
 
-func (nm *nodeMatcher) destNodeIDs() []base.SQLInstanceID {
-	allDestNodeIDs := make([]base.SQLInstanceID, 0, len(nm.destNodesInfo))
-	for _, info := range nm.destNodesInfo {
-		allDestNodeIDs = append(allDestNodeIDs, info.GetInstanceID())
-	}
-	return allDestNodeIDs
+func (nm *nodeMatcher) DestNodeToLocality(id base.SQLInstanceID) roachpb.Locality {
+	return nm.destNodeToLocality[id]
 }
 
-// findSourceNodePriority finds the closest dest nodes for each source node and
+// FindSourceNodePriority finds the closest dest nodes for each source node and
 // returns a list of (source node, dest node match candidates) pairs ordered by
 // matching priority. A source node is earlier (higher priority) in the list if
 // it shares more locality tiers with their destination node match candidates.
-func (nm *nodeMatcher) findSourceNodePriority(topology streamclient.Topology) candidatesByPriority {
+func (nm *nodeMatcher) FindSourceNodePriority(topology streamclient.Topology) candidatesByPriority {
 
 	allDestNodeIDs := nm.destNodeIDs()
 	candidates := make(candidatesByPriority, 0, len(topology.Partitions))
@@ -707,9 +703,9 @@ func (nm *nodeMatcher) findSourceNodePriority(topology streamclient.Topology) ca
 		if sharedPrefixLength == 0 {
 			closestDestIDs = allDestNodeIDs
 		}
-		candidate := partitionWithCandidates{
-			partition:          partition,
-			closestDestIDs:     closestDestIDs,
+		candidate := PartitionWithCandidates{
+			Partition:          partition,
+			ClosestDestIDs:     closestDestIDs,
 			sharedPrefixLength: sharedPrefixLength,
 		}
 		candidates = append(candidates, candidate)
@@ -719,8 +715,16 @@ func (nm *nodeMatcher) findSourceNodePriority(topology streamclient.Topology) ca
 	return candidates
 }
 
-// findMatch returns the destination node id with the fewest src node matches from the input list.
-func (nm *nodeMatcher) findMatch(destIDCandidates []base.SQLInstanceID) base.SQLInstanceID {
+func (nm *nodeMatcher) destNodeIDs() []base.SQLInstanceID {
+	allDestNodeIDs := make([]base.SQLInstanceID, 0, len(nm.destNodesInfo))
+	for _, info := range nm.destNodesInfo {
+		allDestNodeIDs = append(allDestNodeIDs, info.GetInstanceID())
+	}
+	return allDestNodeIDs
+}
+
+// FindMatch returns the destination node id with the fewest src node matches from the input list.
+func (nm *nodeMatcher) FindMatch(destIDCandidates []base.SQLInstanceID) base.SQLInstanceID {
 	minCount := math.MaxInt
 	currentMatch := base.SQLInstanceID(0)
 
@@ -735,7 +739,7 @@ func (nm *nodeMatcher) findMatch(destIDCandidates []base.SQLInstanceID) base.SQL
 	return currentMatch
 }
 
-func getDestNodeLocalities(
+func GetDestNodeLocalities(
 	ctx context.Context, dsp *sql.DistSQLPlanner, instanceIDs []base.SQLInstanceID,
 ) ([]sql.InstanceLocality, error) {
 
@@ -787,16 +791,16 @@ func constructStreamIngestionPlanSpecs(
 	streamIngestionSpecs := make(map[base.SQLInstanceID][]execinfrapb.StreamIngestionDataSpec, len(destSQLInstances))
 
 	// Update stream ingestion specs with their matched source node.
-	matcher := makeNodeMatcher(destSQLInstances)
-	for _, candidate := range matcher.findSourceNodePriority(topology) {
-		destID := matcher.findMatch(candidate.closestDestIDs)
+	matcher := MakeNodeMatcher(destSQLInstances)
+	for _, candidate := range matcher.FindSourceNodePriority(topology) {
+		destID := matcher.FindMatch(candidate.ClosestDestIDs)
 		log.Infof(ctx, "physical replication src-dst pair candidate: %s (locality %s) - %d ("+
 			"locality %s)",
-			candidate.partition.ID,
-			candidate.partition.SrcLocality,
+			candidate.Partition.ID,
+			candidate.Partition.SrcLocality,
 			destID,
-			matcher.destNodeToLocality[destID])
-		partition := candidate.partition
+			matcher.DestNodeToLocality(destID))
+		partition := candidate.Partition
 
 		spec := baseSpec
 		spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{

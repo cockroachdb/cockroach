@@ -23,6 +23,7 @@ import "util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 import "roachpb/span_config.proto";
+import "sql/catalog/descpb/structured.proto";
 
 // ReplicationProducerSpec is the specification returned by the replication
 // producer job when it is created.
@@ -46,6 +47,18 @@ message ReplicationProducerSpec {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "SourceTenantID"
   ];
+
+  // TableSpans is the set of spans that cover the requested tables if
+  // this is in response to a ReplicationProducerRequest that
+  // specified individual tables.
+  repeated roachpb.Span table_spans = 5 [(gogoproto.nullable) = false];
+
+  // TableDescriptors are the descriptors for the tables in the
+  // ReplicationProducerRequest.
+  //
+  // TODO(ssd): We likely want to remove this one-time table
+  // descriptor fetch with a schemafeed that the consumer starts.
+  map<string, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 7 [(gogoproto.nullable) = false];
 }
 
 // ReplicationProducerRequest is sent by the consuming cluster when
@@ -74,6 +87,13 @@ message ReplicationProducerRequest {
   roachpb.TenantID tenant_id = 3 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "TenantID"
+  ];
+
+
+  // TableNames, if set, are the names of the individual tables that a
+  // logical replication ingestion processor are interested in.
+  repeated string table_names = 4 [
+    (gogoproto.nullable) = false
   ];
 }
 

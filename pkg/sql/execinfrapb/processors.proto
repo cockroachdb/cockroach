@@ -126,6 +126,7 @@ message ProcessorCoreUnion {
   optional CloudStorageTestSpec cloudStorageTest = 42;
   optional InsertSpec insert = 43;
   optional IngestStoppedSpec ingestStopped = 44;
+  optional LogicalReplicationWriterSpec logicalReplicationWriter = 45;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
   // NEXT ID: 45.

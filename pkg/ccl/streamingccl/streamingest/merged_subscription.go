@@ -15,22 +15,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 )
 
-// mergedSubscription combines multiple subscriptions into a single
+// MergedSubscription combines multiple subscriptions into a single
 // merged stream of events.
-type mergedSubscription struct {
+type MergedSubscription struct {
 	cg       ctxgroup.Group
 	cgCancel context.CancelFunc
-	eventCh  chan partitionEvent
+	eventCh  chan PartitionEvent
 }
 
-func mergeSubscriptions(
+func MergeSubscriptions(
 	ctx context.Context, subscriptions map[string]streamclient.Subscription,
-) *mergedSubscription {
+) *MergedSubscription {
 	ctx, cancel := context.WithCancel(ctx)
-	m := &mergedSubscription{
+	m := &MergedSubscription{
 		cg:       ctxgroup.WithContext(ctx),
 		cgCancel: cancel,
-		eventCh:  make(chan partitionEvent),
+		eventCh:  make(chan PartitionEvent),
 	}
 	for partition, sub := range subscriptions {
 		partition := partition
@@ -44,7 +44,7 @@ func mergeSubscriptions(
 						return sub.Err()
 					}
 
-					pe := partitionEvent{
+					pe := PartitionEvent{
 						Event:     event,
 						partition: partition,
 					}
@@ -64,7 +64,7 @@ func mergeSubscriptions(
 }
 
 // Run blocks until the merged stream is closed.
-func (m *mergedSubscription) Run() error {
+func (m *MergedSubscription) Run() error {
 	err := m.cg.Wait()
 	close(m.eventCh)
 	return err
@@ -72,11 +72,11 @@ func (m *mergedSubscription) Run() error {
 
 // Close stops the merged stream. Note that the underlying
 // subscriptions are not closed.
-func (m *mergedSubscription) Close() {
+func (m *MergedSubscription) Close() {
 	m.cgCancel()
 }
 
 // Events returns the merged event channel.
-func (m *mergedSubscription) Events() chan partitionEvent {
+func (m *MergedSubscription) Events() chan PartitionEvent {
 	return m.eventCh
 }

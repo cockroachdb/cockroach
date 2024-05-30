@@ -469,4 +469,84 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Volatile,
 		},
 	),
+	// TODO(ssd): These functions likely aren't the final API we
+	// want.  Namely, boths should perhaps just be overloads of
+	// existing functions.
+	"crdb_internal.partition_spans": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryClusterReplication,
+			Undocumented:     true,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "spans", Typ: types.BytesArray},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
+				if err != nil {
+					return nil, err
+				}
+				spanByteArray := tree.MustBeDArray(args[0])
+				spans := make([]roachpb.Span, len(spanByteArray.Array))
+				for i, spanByteExpr := range spanByteArray.Array {
+					spanBytes := []byte(tree.MustBeDBytes(spanByteExpr))
+					if err := protoutil.Unmarshal(spanBytes, &spans[i]); err != nil {
+						return nil, err
+					}
+				}
+
+				spec, err := mgr.PartitionSpans(ctx, spans)
+				if err != nil {
+					return nil, err
+				}
+				rawSpec, err := protoutil.Marshal(spec)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(rawSpec)), err
+			},
+			Info:       "TODO(ssd)",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	"crdb_internal.start_replication_stream_for_tables": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryClusterReplication,
+			Undocumented:     true,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "req", Typ: types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
+				if err != nil {
+					return nil, err
+				}
+				reqBytes := []byte(tree.MustBeDBytes(args[0]))
+				req := streampb.ReplicationProducerRequest{}
+				if err := protoutil.Unmarshal(reqBytes, &req); err != nil {
+					return nil, err
+				}
+
+				spec, err := mgr.StartReplicationStreamForTables(ctx, req)
+				if err != nil {
+					return nil, err
+				}
+
+				rawSpec, err := protoutil.Marshal(&spec)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(rawSpec)), err
+			},
+			Info:       "TODO(ssd)",
+			Volatility: volatility.Volatile,
+		},
+	),
 }
