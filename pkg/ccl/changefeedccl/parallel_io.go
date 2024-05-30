@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -275,10 +276,12 @@ func (p *ParallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 	workerResultCh := make(chan *ioRequest, numEmitWorkers)
 
 	for i := 0; i < numEmitWorkers; i++ {
+		i := i
 		p.wg.GoCtx(func(ctx context.Context) error {
 			var workerStuff any
 			var err error
 			if p.workerSetup != nil {
+				log.Printf("worker setup for worker %d", i)
 				workerStuff, err = p.workerSetup(ctx)
 				if err != nil {
 					return err

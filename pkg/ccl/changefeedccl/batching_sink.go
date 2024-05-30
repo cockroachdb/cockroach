@@ -580,7 +580,7 @@ func makeBatchingSink(
 		log.Infof(ctx, "creating new static client")
 		client, err := clientFactory(ctx)
 		if err != nil {
-			panic("TODO err")
+			panic("TODO err: " + err.Error())
 		}
 		sink.client = client.(SinkClient)
 	}

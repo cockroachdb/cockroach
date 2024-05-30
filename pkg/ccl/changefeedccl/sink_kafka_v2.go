@@ -2,7 +2,13 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path"
+	"slices"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -84,6 +90,9 @@ type kafkaSinkClient struct {
 	canTryResizing bool
 
 	lastMetadataRefresh time.Time
+
+	debuggingId   int64
+	didFirstFlush bool
 }
 
 // Close implements SinkClient.
@@ -94,27 +103,103 @@ func (k *kafkaSinkClient) Close() error {
 	return k.client.Close()
 }
 
+func (k *kafkaSinkClient) isSortedRight(ctx context.Context, msgs []*sarama.ProducerMessage) bool {
+	// split by topic & partition
+	topicParts := make(map[string][]*sarama.ProducerMessage)
+	for _, m := range msgs {
+		if k.didFirstFlush && m.Offset == 0 { // first offset can actually be zero
+			log.Infof(ctx, `kafka message has offset 0: %v (id=%d)`, m, k.debuggingId)
+			return false
+		}
+		topicParts[m.Topic+strconv.Itoa(int(m.Partition))] = append(topicParts[m.Topic+strconv.Itoa(int(m.Partition))], m)
+	}
+	for _, msgs := range topicParts {
+		if !slices.IsSortedFunc(msgs, func(a, b *sarama.ProducerMessage) int { return int(a.Offset - b.Offset) }) {
+			log.Infof(ctx, `kafka messages are not sorted right. id=%d %#+v`, k.debuggingId, msgs)
+			return false
+		}
+	}
+	return true
+}
+
 // Flush implements SinkClient. Does not retry -- retries will be handled by ParallelIO.
-func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) error {
+func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
+	defer func() {
+		k.didFirstFlush = true
+	}()
 	msgs := payload.([]*sarama.ProducerMessage)
+	defer log.Infof(ctx, `flushed %d messages to kafka (id=%d, err=%v)`, len(msgs), k.debuggingId, retErr)
 
 	log.Infof(ctx, `sending %d messages to kafka`, len(msgs))
+	debugDir := path.Join(debugRoot, strconv.Itoa(int(k.debuggingId)))
+	dfn := path.Join(debugDir, time.Now().Format(`2006-01-02T15:04:05.000000000`))
+	fh, err := os.OpenFile(dfn, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer fh.Close()
+	out := json.NewEncoder(fh)
+	for _, m := range msgs {
+		mm := map[string]any{
+			`topic`:     m.Topic,
+			`partition`: m.Partition,
+			`key`:       string(m.Key.(sarama.ByteEncoder)),
+			`value`:     string(m.Value.(sarama.ByteEncoder)),
+			`offset`:    m.Offset,
+		}
+		if err := out.Encode(mm); err != nil {
+			return err
+		}
+	}
+	log.Infof(ctx, `KAFKADEBUG: %d wrote %d messages to %s`, k.debuggingId, len(msgs), fh.Name())
+
+	defer func() {
+		fh2, err := os.OpenFile(dfn+".after", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+		if err != nil {
+			panic(err)
+		}
+		out := json.NewEncoder(fh2)
+		for _, m := range msgs {
+			mm := map[string]any{
+				`topic`:     m.Topic,
+				`partition`: m.Partition,
+				`key`:       string(m.Key.(sarama.ByteEncoder)),
+				`value`:     string(m.Value.(sarama.ByteEncoder)),
+				`offset`:    m.Offset,
+			}
+			if err := out.Encode(mm); err != nil {
+				panic(err)
+			}
+		}
+		log.Infof(ctx, `KAFKADEBUG.after: %d wrote %d messages to %s`, k.debuggingId, len(msgs), fh2.Name())
+		_ = fh2.Close()
+	}()
 
 	// TODO: make this better. possibly moving the resizing up into the batch worker would help a bit
 	var flushMsgs func(msgs []*sarama.ProducerMessage) error
 	flushMsgs = func(msgs []*sarama.ProducerMessage) error {
 		handleErr := func(err error) error {
-			// log.Infof(ctx, `kafka error: %s`, err.Error())
+			log.Infof(ctx, `kafka error in %d: %s`, k.debuggingId, err.Error())
 			if k.shouldTryResizing(err, msgs) {
 				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
 				// recurse
 				return errors.Join(flushMsgs(a), flushMsgs(b))
 			}
+			// offsets should be ordered right. maybe we can catch intra batch reorderings here
+			if !k.isSortedRight(ctx, msgs) {
+				log.Errorf(ctx, `kafka messages are not sorted right. id=%d, debugfile=%s`, k.debuggingId, fh.Name())
+			}
+
 			return err
 		}
 
 		if err := k.producer.SendMessages(msgs); err != nil {
 			return handleErr(err)
+		}
+
+		// offsets should be ordered right. maybe we can catch intra batch reorderings here
+		if !k.isSortedRight(ctx, msgs) {
+			log.Errorf(ctx, `kafka messages are not sorted right. id=%d, debugfile=%s`, k.debuggingId, fh.Name())
 		}
 
 		// trk := tracker{pendingIDs: make(map[int]struct{})}
@@ -164,32 +249,35 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 	forEachTopic func(func(topic string) error) error,
 	retryOpts retry.Options,
 ) error {
-	const metadataRefreshMinDuration = time.Minute
-	if timeutil.Since(k.lastMetadataRefresh) > metadataRefreshMinDuration {
-		if err := k.client.RefreshMetadata(k.topics.DisplayNamesSlice()...); err != nil {
-			return err
-		}
-		k.lastMetadataRefresh = timeutil.Now()
-	}
+	// disabled to reduce variables
+	return nil
 
-	return forEachTopic(func(topic string) error {
-		partitions, err := k.client.Partitions(topic)
-		if err != nil {
-			return err
-		}
-		for _, partition := range partitions {
-			msgs := []*sarama.ProducerMessage{{
-				Topic:     topic,
-				Partition: partition,
-				Key:       nil,
-				Value:     sarama.ByteEncoder(body),
-			}}
-			if err := k.Flush(ctx, msgs); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	// const metadataRefreshMinDuration = time.Minute
+	// if timeutil.Since(k.lastMetadataRefresh) > metadataRefreshMinDuration {
+	// 	if err := k.client.RefreshMetadata(k.topics.DisplayNamesSlice()...); err != nil {
+	// 		return err
+	// 	}
+	// 	k.lastMetadataRefresh = timeutil.Now()
+	// }
+
+	// return forEachTopic(func(topic string) error {
+	// 	partitions, err := k.client.Partitions(topic)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	for _, partition := range partitions {
+	// 		msgs := []*sarama.ProducerMessage{{
+	// 			Topic:     topic,
+	// 			Partition: partition,
+	// 			Key:       nil,
+	// 			Value:     sarama.ByteEncoder(body),
+	// 		}}
+	// 		if err := k.Flush(ctx, msgs); err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// 	return nil
+	// })
 }
 
 // MakeBatchBuffer implements SinkClient.
@@ -247,6 +335,10 @@ func (b *kafkaBuffer) ShouldFlush() bool {
 
 var _ BatchBuffer = (*kafkaBuffer)(nil)
 
+var lastSinkId atomic.Int64
+
+const debugRoot = `/mnt/data2/kafka_sink_debug/`
+
 func makeKafkaSinkV2(ctx context.Context,
 	u sinkURL,
 	targets changefeedbase.Targets,
@@ -297,8 +389,27 @@ func makeKafkaSinkV2(ctx context.Context,
 	}
 
 	clientFactory := func(ctx context.Context) (any, error) {
+		log.Infof(ctx, `creating kafka sink client`)
+		topicNamer2, err := MakeTopicNamer(
+			targets,
+			WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(SQLNameToKafkaName))
+
+		if err != nil {
+			return nil, err
+		}
+
 		// TODO: how to handle knobs
-		return newKafkaSinkClient(kafkaCfg, batchCfg, u.Host, topicNamer, settings, kafkaSinkKnobs{})
+		client, err := newKafkaSinkClient(kafkaCfg, batchCfg, u.Host, topicNamer2, settings, kafkaSinkKnobs{})
+		if err != nil {
+			return nil, err
+		}
+		client.debuggingId = lastSinkId.Add(1)
+		debugDir := path.Join(debugRoot, strconv.Itoa(int(client.debuggingId)))
+		if err := os.MkdirAll(debugDir, 0755); err != nil {
+			return nil, err
+		}
+
+		return client, nil
 	}
 
 	return makeBatchingSink(ctx, sinkTypeKafka, nil, clientFactory, time.Second, retryOpts,
