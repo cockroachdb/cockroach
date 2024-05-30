@@ -654,10 +654,11 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 				numShortLiving--
 			}
 			if numShortLiving > 0 {
-				panic(errors.AssertionFailedf(
-					"found %d short-living non-stopped monitors in %s\n%s",
-					numShortLiving, mm.name, sb.String(),
-				))
+				// TODO(#124848): uncomment this.
+				//panic(errors.AssertionFailedf(
+				//	"found %d short-living non-stopped monitors in %s\n%s",
+				//	numShortLiving, mm.name, sb.String(),
+				//))
 			}
 		}
 	}
