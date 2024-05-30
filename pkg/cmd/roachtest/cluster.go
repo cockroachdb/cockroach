@@ -34,6 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/DataExMachina-dev/side-eye-go/sideeyeclient"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -3140,4 +3141,67 @@ func (c *clusterImpl) GetHostErrorVMs(ctx context.Context, l *logger.Logger) ([]
 		allHostErrorVMs = append(allHostErrorVMs, hostErrorVMS...)
 	}
 	return allHostErrorVMs, nil
+}
+
+var sideEyeToken, _ = os.LookupEnv("SIDE_EYE_API_TOKEN")
+
+// CaptureSideEyeSnapshot asks the Side-Eye service to take a snapshot of the
+// cockroach processes of this cluster. All errors are logged and swallowed, and
+// the call is a no-op if the SIDE_EYE_API_TOKEN is not in the env. The agents
+// must previously have been installed and started with the cluster's name as
+// the env name.
+func (c *clusterImpl) CaptureSideEyeSnapshot(ctx context.Context, l *logger.Logger) {
+	if sideEyeToken == "" {
+		l.PrintfCtx(ctx, "Side-Eye token is not configured, skipping snapshot")
+		return
+	}
+
+	l.PrintfCtx(ctx, "capturing snapshot %s env with Side-Eye", c.Name())
+
+	client, err := sideeyeclient.NewSideEyeClient(sideeyeclient.WithApiToken(sideEyeToken))
+	if err != nil {
+		l.Errorf("failed to create Side-Eye client: %s", err)
+		return
+	}
+	defer client.Close()
+
+	// Protect against the snapshot taking too long.
+	snapCtx, cancel := context.WithTimeout(ctx, time.Second*30)
+	defer cancel()
+	snapRes, err := client.CaptureSnapshot(snapCtx, c.Name())
+	if err != nil {
+		msg := err.Error()
+		if errors.Is(err, sideeyeclient.NoProcessesError{}) {
+			msg += "; cockroach not running?"
+		}
+		l.PrintfCtx(ctx, "Side-Eye failed to capture cluster snapshot: %s", msg)
+		return
+	}
+
+	l.PrintfCtx(ctx, "captured a snapshot of the cluster with Side-Eye: %s", snapRes.SnapshotURL)
+}
+
+// StartSideEye installs and starts the side-eye agents on this cluster if the
+// token is available.
+func (c *clusterImpl) StartSideEye(ctx context.Context, l *logger.Logger) {
+	if sideEyeToken == "" {
+		// TODO(dt): if it isn't in the env, look for it in gcloud before giving up.
+		return
+	}
+
+	env := c.Name()
+
+	// Note that this command duplicates `roachprod install side-eye` but that one
+	// is run on dev machines that have access to the token via `gcloud secrets`
+	// and thus implicitly finds the token to use there. This command uses the key
+	// from env where it is expected to be on CIs.
+	if err := c.RunE(ctx, option.WithNodes(c.All()), fmt.Sprintf(
+		`curl https://sh.side-eye.io/ | SIDE_EYE_API_TOKEN="%s" SIDE_EYE_ENVIRONMENT="%s" sh`,
+		sideEyeToken, env,
+	)); err != nil {
+		l.PrintfCtx(ctx, "side-eye install failed: %v", err)
+		return
+	}
+
+	l.PrintfCtx(ctx, "installed the Side-Eye agent on all nodes, env=%s", env)
 }
