@@ -176,14 +176,6 @@ func (pr *Progress) SentEntries(entries int, bytes uint64) {
 	pr.MsgAppProbesPaused = true
 }
 
-// CanSendEntries returns true if the flow control state allows sending at least
-// one log entry to this follower.
-//
-// Must be used with StateProbe or StateReplicate.
-func (pr *Progress) CanSendEntries(lastIndex uint64) bool {
-	return pr.Next <= lastIndex && (pr.State == StateProbe || !pr.Inflights.Full())
-}
-
 // CanBumpCommit returns true if sending the given commit index can potentially
 // advance the follower's commit index.
 func (pr *Progress) CanBumpCommit(index uint64) bool {
@@ -274,6 +266,14 @@ func (pr *Progress) IsPaused() bool {
 	}
 }
 
+type MsgAppType uint8
+
+const (
+	MsgAppNone MsgAppType = iota
+	MsgAppWithEntries
+	MsgAppProbe
+)
+
 // ShouldSendMsgApp returns true if the leader should send a MsgApp to the
 // follower represented by this Progress. The given last and commit index of the
 // leader log help determining if there is outstanding workload, and contribute
@@ -293,17 +293,24 @@ func (pr *Progress) IsPaused() bool {
 // to guarantee that eventually the flow is either accepted or rejected.
 //
 // In StateSnapshot, we do not send append messages.
-func (pr *Progress) ShouldSendMsgApp(last, commit uint64) bool {
+func (pr *Progress) ShouldSendMsgApp(last, commit uint64) MsgAppType {
 	switch pr.State {
 	case StateProbe:
-		return !pr.MsgAppProbesPaused
+		switch {
+		case pr.MsgAppProbesPaused:
+			return MsgAppNone
+		case pr.Next <= last:
+			return MsgAppWithEntries
+		default:
+			return MsgAppProbe
+		}
 
 	case StateReplicate:
-		// If the in-flight limits are not saturated, and there are pending entries
-		// (Next <= lastIndex), send a MsgApp with some entries.
-		if pr.CanSendEntries(last) {
-			return true
-		}
+		switch {
+		// If there are pending entries, and the in-flight limits are not saturated,
+		// send a MsgApp with some entries.
+		case pr.Next <= last && !pr.Inflights.Full():
+			return MsgAppWithEntries
 		// We can't send any entries at this point, but we need to be sending a
 		// MsgApp periodically, to guarantee liveness of the MsgApp flow: the
 		// follower eventually will reply with an ack or reject.
@@ -311,17 +318,20 @@ func (pr *Progress) ShouldSendMsgApp(last, commit uint64) bool {
 		// If the follower's log is outdated, and we haven't recently sent a MsgApp
 		// (according to the MsgAppProbesPaused flag), send one now. This is going
 		// to be an empty "probe" MsgApp.
-		if pr.Match < last && !pr.MsgAppProbesPaused {
-			return true
-		}
+		case pr.Match < last && !pr.MsgAppProbesPaused:
+			return MsgAppProbe
 		// Send an empty MsgApp containing the latest commit index if:
 		//	- our commit index exceeds the in-flight commit index, and
 		//	- sending it can commit at least one of the follower's entries
 		//	  (including the ones still in flight to it).
-		return pr.CanBumpCommit(commit)
+		case pr.CanBumpCommit(commit):
+			return MsgAppProbe
+		default:
+			return MsgAppNone
+		}
 
 	case StateSnapshot:
-		return false
+		return MsgAppNone
 	default:
 		panic("unexpected state")
 	}

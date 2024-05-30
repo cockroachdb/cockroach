@@ -139,6 +139,38 @@ func (rn *RawNode) Ready() Ready {
 	return rd
 }
 
+// SendAppend sends a log replication (MsgApp) message to a particular node. The
+// message will be available via next Ready.
+//
+// It may also send a snapshot (MsgSnap) instead, if the log can't be read (e.g.
+// it was already compacted at the follower's Next index).
+//
+// The total size of log entries in the message is <= Config.MaxSizePerMsg, with
+// the exception that the last entry can bring a size < maxSize to a size
+// exceeding maxSize.
+//
+// This method is used when Config.EnableLazyAppends is true. Typically, it
+// should be called before processing Ready, for all node IDs in StateReplicate
+// which have pending replication work.
+//
+// TODO(pav-kv): deprecate Config.MsgSizePerMsg, and pass the maxSize in, for an
+// accurate and flexible size control.
+//
+// TODO(pav-kv): integrate with Admission Control, which will be calling this
+// under two conditions: the node's Next <= raftLog.lastIndex (i.e. the "send
+// queue" is not empty), and there are some acquired "send tokens" (hence the
+// need for maxSize parameter).
+//
+// TODO(pav-kv): since the caller is tracking the replication state, it knows
+// Next, and might also have a good idea on the number and sizes of entries to
+// send. Pass additional parameters, and do safety checks.
+func (rn *RawNode) SendAppend(to uint64) bool {
+	if !rn.raft.enableLazyAppends || to == rn.raft.id {
+		return false
+	}
+	return rn.raft.maybeSendAppendImpl(to, false /* lazy */)
+}
+
 // readyWithoutAccept returns a Ready. This is a read-only operation, i.e. there
 // is no obligation that the Ready must be handled.
 func (rn *RawNode) readyWithoutAccept() Ready {
