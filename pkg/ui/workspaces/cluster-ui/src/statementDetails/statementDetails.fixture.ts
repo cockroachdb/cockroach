@@ -183,6 +183,7 @@ const statementDetailsData: StatementDetailsResponse = {
         nanos: 111613000,
       },
       nodes: [new Long(1)],
+      kv_node_ids: [2],
       plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
     },
   },
@@ -284,6 +285,7 @@ const statementDetailsData: StatementDetailsResponse = {
           nanos: 111613000,
         },
         nodes: [new Long(1)],
+        kv_node_ids: [2],
         plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
       },
       aggregated_ts: {
@@ -388,6 +390,7 @@ const statementDetailsData: StatementDetailsResponse = {
           nanos: 111613000,
         },
         nodes: [new Long(1)],
+        kv_node_ids: [2],
         plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
       },
       aggregated_ts: {
@@ -492,6 +495,7 @@ const statementDetailsData: StatementDetailsResponse = {
           nanos: 111613000,
         },
         nodes: [new Long(1)],
+        kv_node_ids: [2],
         plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
       },
       aggregated_ts: {
@@ -596,6 +600,7 @@ const statementDetailsData: StatementDetailsResponse = {
           nanos: 111613000,
         },
         nodes: [new Long(1)],
+        kv_node_ids: [2],
         plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
       },
       aggregated_ts: {
@@ -702,6 +707,7 @@ const statementDetailsData: StatementDetailsResponse = {
           nanos: 111613000,
         },
         nodes: [new Long(1)],
+        kv_node_ids: [2],
         plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
       },
       explain_plan: "• virtual table\n  table: @primary",
@@ -804,6 +810,7 @@ const statementDetailsData: StatementDetailsResponse = {
           nanos: 111613000,
         },
         nodes: [new Long(1)],
+        kv_node_ids: [2],
         plan_gists: ["Ah0GAg=="],
       },
       explain_plan: "• virtual table\n  table: @primary\nFULL SCAN",
