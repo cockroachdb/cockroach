@@ -3251,7 +3251,8 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 }
 
 // randParentColumnForFkRelation fetches a column and table to use as the parent in a single-column foreign key relation.
-// To successfully use a column as the parent, the column must be unique and must not be generated.
+// To successfully use a column as the parent, the column must be unique, must not be generated, and must not be an invalid
+// type (refcursor).
 func (og *operationGenerator) randParentColumnForFkRelation(
 	ctx context.Context, tx pgx.Tx, unique bool,
 ) (*tree.TableName, *column, error) {
@@ -3272,6 +3273,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 		          FROM pg_catalog.pg_constraint
 		       ) AS cons ON cons.conrelid = cols.tableid
 		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%'
+     AND crdb_sql_type != 'REFCURSOR'
   `)
 	if unique {
 		subQuery.WriteString(`
