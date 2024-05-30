@@ -404,6 +404,7 @@ func TestTelemetryLogging(t *testing.T) {
 				KVTime:                             9223372036854775807,
 				Regions:                            []string{"9223372036854775807EastUS9223372036854775807/z^&*&#()(!@%&^61%^7'\\\\&*@#$%"},
 				SQLInstanceIDs:                     []int32{-2147483648, 0, 2147483647},
+				KVNodeIDs:                          []int32{-2147483648, 0, 2147483647},
 			},
 			enableTracing: true,
 		},
@@ -592,6 +593,7 @@ func TestTelemetryLogging(t *testing.T) {
 					require.Equal(t, tc.queryLevelStats.KVTime.Nanoseconds(), sampledQueryFromLog.KvTimeNanos)
 					require.Equal(t, tc.queryLevelStats.Regions, sampledQueryFromLog.Regions)
 					require.Equal(t, tc.queryLevelStats.SQLInstanceIDs, sampledQueryFromLog.SQLInstanceIDs)
+					require.Equal(t, tc.queryLevelStats.KVNodeIDs, sampledQueryFromLog.KVNodeIDs)
 					require.Equal(t, tc.queryLevelStats.CPUTime.Nanoseconds(), sampledQueryFromLog.CpuTimeNanos)
 					require.Greater(t, sampledQueryFromLog.PlanLatencyNanos, int64(0))
 					require.Greater(t, sampledQueryFromLog.RunLatencyNanos, int64(0))

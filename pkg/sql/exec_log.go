@@ -384,6 +384,7 @@ func (p *planner) maybeLogStatementInternal(
 			ContentionNanos:                       queryLevelStats.ContentionTime.Nanoseconds(),
 			Regions:                               queryLevelStats.Regions,
 			SQLInstanceIDs:                        queryLevelStats.SQLInstanceIDs,
+			KVNodeIDs:                             queryLevelStats.KVNodeIDs,
 			NetworkBytesSent:                      queryLevelStats.NetworkBytesSent,
 			MaxMemUsage:                           queryLevelStats.MaxMemUsage,
 			MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,

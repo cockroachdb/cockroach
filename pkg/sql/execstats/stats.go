@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -93,6 +94,7 @@ func (l *ScanStatsListener) Notify(event tracing.Structured) tracing.EventConsum
 	l.mu.ScanStats.numGets += ss.NumGets
 	l.mu.ScanStats.numScans += ss.NumScans
 	l.mu.ScanStats.numReverseScans += ss.NumReverseScans
+	l.mu.ScanStats.nodeIDs = util.InsertUnique(l.mu.ScanStats.nodeIDs, int32(ss.NodeID))
 	return tracing.EventConsumed
 }
 
@@ -161,6 +163,9 @@ type ScanStats struct {
 	numGets                         uint64
 	numScans                        uint64
 	numReverseScans                 uint64
+	// nodeIDs stores the ordered list of all KV nodes that were used to
+	// evaluate the KV requests.
+	nodeIDs []int32
 }
 
 // PopulateKVMVCCStats adds data from the input ScanStats to the input KVStats.
@@ -181,4 +186,5 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 	kvStats.NumGets = optional.MakeUint(ss.numGets)
 	kvStats.NumScans = optional.MakeUint(ss.numScans)
 	kvStats.NumReverseScans = optional.MakeUint(ss.numReverseScans)
+	kvStats.NodeIDs = ss.nodeIDs
 }
