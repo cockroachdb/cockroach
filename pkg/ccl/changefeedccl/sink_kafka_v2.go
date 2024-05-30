@@ -372,8 +372,8 @@ func makeKafkaSinkV2(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	kafkaCfg.Producer.Retry.Max = 0 // retry is handled by the batching sink / parallelIO
-	kafkaCfg.Net.MaxOpenRequests = 1
+	kafkaCfg.Producer.Retry.Max = 0  // retry is handled by the batching sink / parallelIO
+	kafkaCfg.Net.MaxOpenRequests = 1 // need to set this to ensure message ordering without turning on idempotency
 
 	topicNamer, err := MakeTopicNamer(
 		targets,
