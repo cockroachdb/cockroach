@@ -210,6 +210,14 @@ type Config struct {
 	// throughput limit of 10 MB/s for this group. With RTT of 400ms, this drops
 	// to 2.5 MB/s. See Little's law to understand the maths behind.
 	MaxInflightBytes uint64
+	// EnableLazyAppends makes raft hold off constructing log append messages in
+	// response to Step() calls, for the StateReplicate followers. The messages
+	// can be triggered via a separate RawNode.SendAppend method.
+	//
+	// This way, the application has better control when raft may call Storage
+	// methods and allocate memory for entries and messages. This provides flow
+	// control for leader->follower log replication streams.
+	EnableLazyAppends bool
 
 	// CheckQuorum specifies if the leader should check quorum activity. Leader
 	// steps down when quorum is not active for an electionTimeout.
@@ -350,6 +358,10 @@ type raft struct {
 	// Messages in this list have the type MsgAppResp, MsgVoteResp, or
 	// MsgPreVoteResp. See the comment in raft.send for details.
 	msgsAfterAppend []pb.Message
+	// enableLazyAppends delays append message construction and sending until the
+	// RawNode is explicitly requested to do so. This provides control over the
+	// follower replication flows.
+	enableLazyAppends bool
 
 	// the leader id
 	lead pb.PeerID
@@ -421,6 +433,7 @@ func newRaft(c *Config) *raft {
 		raftLog:                     raftlog,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
+		enableLazyAppends:           c.EnableLazyAppends,
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
@@ -583,10 +596,19 @@ func (r *raft) send(m pb.Message) {
 // if the follower log and commit index are up-to-date, the flow is paused (for
 // reasons like in-flight limits), or the message could not be constructed.
 func (r *raft) maybeSendAppend(to pb.PeerID) bool {
-	pr := r.trk.Progress(to)
+	return r.maybeSendAppendImpl(to, r.enableLazyAppends)
+}
 
+// maybeSendAppendImpl is the same as maybeSendAppend, but it supports the lazy
+// mode for StateReplicate, in which appends are not sent.
+func (r *raft) maybeSendAppendImpl(to pb.PeerID, lazy bool) bool {
+	pr := r.trk.Progress(to)
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
-	if !pr.ShouldSendMsgApp(last, commit) {
+	msgAppType := pr.ShouldSendMsgApp(last, commit)
+	if msgAppType == tracker.MsgAppNone {
+		return false
+	}
+	if lazy && pr.State == tracker.StateReplicate && msgAppType == tracker.MsgAppWithEntries {
 		return false
 	}
 
@@ -599,7 +621,7 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	}
 
 	var entries []pb.Entry
-	if pr.CanSendEntries(last) {
+	if msgAppType == tracker.MsgAppWithEntries {
 		if entries, err = r.raftLog.entries(pr.Next, r.maxMsgSize); err != nil {
 			// Send a snapshot if we failed to get the entries.
 			return r.maybeSendSnapshot(to, pr)
