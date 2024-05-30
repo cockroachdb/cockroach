@@ -20,6 +20,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 )
 
 // MajorityConfig is a set of IDs that uses majority quorums to make decisions.
@@ -193,4 +195,41 @@ func (c MajorityConfig) VoteResult(votes map[uint64]bool) VoteResult {
 		return VotePending
 	}
 	return VoteLost
+}
+
+// ComputeQSE takes a mapping of support timestamps and returns the quorum
+// supported expiration.
+//
+// TODO(arul): unify this with CommitIndex and VoteResult.
+func (c MajorityConfig) ComputeQSE(
+	supported map[uint64]raftstoreliveness.StoreLivenessExpiration,
+) raftstoreliveness.StoreLivenessExpiration {
+	if len(c) == 0 {
+		// By convention, an empty configuration has hlc.MaxTimestamp as its QSE.
+		// This is handy with joint quorums because it'll make a half populated
+		// joint quorum behave like a majority quorum.
+		return raftstoreliveness.MaxExpiration
+	}
+
+	var supportedUntil []raftstoreliveness.StoreLivenessExpiration
+	for id := range c {
+		ts, ok := supported[id]
+		if !ok {
+			supportedUntil = append(supportedUntil, raftstoreliveness.MinExpiration)
+		} else {
+			supportedUntil = append(supportedUntil, ts)
+		}
+	}
+	sort.Slice(supportedUntil, func(i, j int) bool {
+		return supportedUntil[i].Less(supportedUntil[j])
+	})
+	// The smallest index into the array for which the value is acked by a
+	// quorum. In other words, from the end of the slice, move n/2+1 to the
+	// left (accounting for zero-indexing).
+
+	// The smallest index into the array for which the timestamp has been
+	// supported by a quorum. From the end, move n/2+1 to the left, accounting for
+	// 0 indexing.
+	pos := len(c) - (len(c)/2 + 1)
+	return supportedUntil[pos]
 }

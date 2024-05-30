@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -363,7 +364,7 @@ func newRaftConfig(
 	appliedIndex kvpb.RaftIndex,
 	storeCfg StoreConfig,
 	logger raft.Logger,
-	storeLiveness raft.StoreLiveness,
+	storeLiveness raftstoreliveness.StoreLiveness,
 ) *raft.Config {
 	return &raft.Config{
 		ID:                          id,

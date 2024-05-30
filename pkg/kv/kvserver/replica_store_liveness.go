@@ -11,9 +11,16 @@
 package kvserver
 
 import (
+<<<<<<< Updated upstream
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+=======
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+>>>>>>> Stashed changes
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // replicaRLockedStoreLiveness implements the raft.StoreLiveness interface.
@@ -22,7 +29,17 @@ import (
 // held in read mode by their callers.
 type replicaRLockedStoreLiveness Replica
 
+<<<<<<< Updated upstream
 func (r *replicaRLockedStoreLiveness) getStoreIdentifier(replicaID uint64) (slpb.StoreIdent, bool) {
+=======
+func (r *replicaRLockedStoreLiveness) fabric() storeliveness.Fabric {
+	return r.store.cfg.StoreLiveness
+}
+
+func (r *replicaRLockedStoreLiveness) getStoreIdentifier(
+	replicaID uint64,
+) (storelivenesspb.StoreIdent, bool) {
+>>>>>>> Stashed changes
 	r.mu.AssertRHeld()
 	desc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
 	if ok {
@@ -38,8 +55,10 @@ func (r *replicaRLockedStoreLiveness) Enabled() bool {
 	return true
 }
 
-// SupportFor implements the raft.StoreLiveness interface.
-func (r *replicaRLockedStoreLiveness) SupportFor(replicaID uint64) (raft.StoreLivenessEpoch, bool) {
+// SupportFor implements the raftstoreliveness.StoreLiveness interface.
+func (r *replicaRLockedStoreLiveness) SupportFor(
+	replicaID uint64,
+) (raftstoreliveness.StoreLivenessEpoch, bool) {
 	storeID, ok := r.getStoreIdentifier(replicaID)
 	if !ok {
 		return 0, false
@@ -48,20 +67,25 @@ func (r *replicaRLockedStoreLiveness) SupportFor(replicaID uint64) (raft.StoreLi
 	if !ok {
 		return 0, false
 	}
-	return raft.StoreLivenessEpoch(epoch), true
+	return raftstoreliveness.StoreLivenessEpoch(epoch), true
 }
 
-// SupportFrom implements the raft.StoreLiveness interface.
+// SupportFrom implements the raftaftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFrom(
 	replicaID uint64,
-) (raft.StoreLivenessEpoch, raft.StoreLivenessExpiration, bool) {
+) (raftstoreliveness.StoreLivenessEpoch, raftstoreliveness.StoreLivenessExpiration, bool) {
 	storeID, ok := r.getStoreIdentifier(replicaID)
 	if !ok {
-		return 0, raft.StoreLivenessExpiration{}, false
+		return 0, raftstoreliveness.StoreLivenessExpiration{}, false
 	}
 	epoch, exp, ok := r.store.storeLiveness.SupportFrom(storeID)
 	if !ok {
-		return 0, raft.StoreLivenessExpiration{}, false
+		return 0, raftstoreliveness.StoreLivenessExpiration{}, false
 	}
-	return raft.StoreLivenessEpoch(epoch), raft.StoreLivenessExpiration(exp), true
+	return raftstoreliveness.StoreLivenessEpoch(epoch), raftstoreliveness.StoreLivenessExpiration(exp), true
+}
+
+// InPast implements the raftaftstoreliveness.StoreLiveness interface.
+func (r *replicaRLockedStoreLiveness) InPast(exp raftstoreliveness.StoreLivenessExpiration) bool {
+	return hlc.Timestamp(exp).Less(r.store.Clock().Now())
 }

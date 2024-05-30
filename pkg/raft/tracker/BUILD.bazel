@@ -6,6 +6,7 @@ go_library(
         "inflights.go",
         "progress.go",
         "state.go",
+        "support_tracker.go",
         "tracker.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/tracker",
@@ -13,6 +14,7 @@ go_library(
     deps = [
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
+        "//pkg/raft/raftstoreliveness",
     ],
 )
 

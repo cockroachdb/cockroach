@@ -15,13 +15,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/datadriven"
 )
 
 type livenessEntry struct {
-	epoch       raft.StoreLivenessEpoch
+	epoch       raftstoreliveness.StoreLivenessEpoch
 	isSupported bool
 }
 
@@ -98,25 +98,30 @@ type storeLiveness struct {
 	nodeID uint64
 }
 
-var _ raft.StoreLiveness = &storeLiveness{}
+var _ raftstoreliveness.StoreLiveness = &storeLiveness{}
 
 // Enabled implements the StoreLiveness interface.
 func (s *storeLiveness) Enabled() bool {
 	return true
 }
 
-// SupportFor implements the StoreLiveness interface.
-func (s *storeLiveness) SupportFor(id uint64) (raft.StoreLivenessEpoch, bool) {
+// SupportFor implements the raftstoreliveness.StoreLiveness interface.
+func (s *storeLiveness) SupportFor(id uint64) (raftstoreliveness.StoreLivenessEpoch, bool) {
 	return s.fabric.state[s.nodeID][id].epoch, s.fabric.state[s.nodeID][id].isSupported
 }
 
-// SupportFrom implements the StoreLiveness interface.
+// SupportFrom implements the raftstoreliveness.StoreLiveness interface.
 func (s *storeLiveness) SupportFrom(
 	id uint64,
-) (raft.StoreLivenessEpoch, raft.StoreLivenessExpiration, bool) {
+) (raftstoreliveness.StoreLivenessEpoch, raftstoreliveness.StoreLivenessExpiration, bool) {
 	return s.fabric.state[id][s.nodeID].epoch,
-		raft.StoreLivenessExpiration(hlc.MaxTimestamp),
+		raftstoreliveness.StoreLivenessExpiration(hlc.MaxTimestamp),
 		s.fabric.state[id][s.nodeID].isSupported
+}
+
+// InPast implements the raftaftstoreliveness.StoreLiveness interface.
+func (s *storeLiveness) InPast(exp raftstoreliveness.StoreLivenessExpiration) bool {
+	return false
 }
 
 // handleBumpEpoch handles the case where the epoch of a store is bumped and the

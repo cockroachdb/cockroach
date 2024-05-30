@@ -119,6 +119,8 @@ func TestLeaderBcastBeat(t *testing.T) {
 	msgs := r.readMessages()
 	sort.Sort(messageSlice(msgs))
 	assert.Equal(t, []pb.Message{
+		{From: 1, To: 2, Term: 1, Type: pb.MsgFortifyLeader},
+		{From: 1, To: 3, Term: 1, Type: pb.MsgFortifyLeader},
 		{From: 1, To: 2, Term: 1, Type: pb.MsgHeartbeat},
 		{From: 1, To: 3, Term: 1, Type: pb.MsgHeartbeat},
 	}, msgs)

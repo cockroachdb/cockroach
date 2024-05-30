@@ -14,6 +14,8 @@
 
 package quorum
 
+import "github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+
 // JointConfig is a configuration of two groups of (possibly overlapping)
 // majority configurations. Decisions require the support of both majorities.
 type JointConfig [2]MajorityConfig
@@ -72,4 +74,15 @@ func (c JointConfig) VoteResult(votes map[uint64]bool) VoteResult {
 	}
 	// One side won, the other one is pending, so the whole outcome is.
 	return VotePending
+}
+
+// ComputeQSE takes a mapping of support timestamps and returns the quorum
+// supported expiration. For joint quorums, this corresponds to the minimum QSE
+// across the two configs.
+func (c JointConfig) ComputeQSE(
+	support map[uint64]raftstoreliveness.StoreLivenessExpiration,
+) raftstoreliveness.StoreLivenessExpiration {
+	qse := c[0].ComputeQSE(support)
+	qse.Backward(c[1].ComputeQSE(support))
+	return qse
 }

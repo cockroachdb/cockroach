@@ -404,12 +404,19 @@ Messages:
 4->5 MsgHeartbeat Term:3 Log:0/0
 4->6 MsgHeartbeat Term:3 Log:0/0
 4->7 MsgHeartbeat Term:3 Log:0/0
+4->1 MsgFortifyLeader Term:3 Log:0/0
+4->2 MsgFortifyLeader Term:3 Log:0/0
+4->3 MsgFortifyLeader Term:3 Log:0/0
+4->5 MsgFortifyLeader Term:3 Log:0/0
+4->6 MsgFortifyLeader Term:3 Log:0/0
+4->7 MsgFortifyLeader Term:3 Log:0/0
 
 deliver-msgs 1
 ----
 4->1 MsgHeartbeat Term:3 Log:0/0
 INFO 1 [term: 2] received a MsgHeartbeat message with higher term from 4 [term: 3]
 INFO 1 became follower at term 3
+4->1 MsgFortifyLeader Term:3 Log:0/0
 
 process-ready 1
 ----
@@ -418,6 +425,7 @@ Lead:4 State:StateFollower
 HardState Term:3 Commit:11
 Messages:
 1->4 MsgHeartbeatResp Term:3 Log:0/0
+1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch 1
 1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Responses:[
   AppendThread->1 MsgStorageAppendResp Term:3 Log:2/12
 ]
@@ -425,6 +433,7 @@ Messages:
 deliver-msgs 4
 ----
 1->4 MsgHeartbeatResp Term:3 Log:0/0
+1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch 1
 
 process-ready 4
 ----

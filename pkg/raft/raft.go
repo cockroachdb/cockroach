@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
@@ -264,7 +265,7 @@ type Config struct {
 	StepDownOnRemoval bool
 
 	// StoreLiveness is a reference to the StoreLiveness fabric.
-	StoreLiveness StoreLiveness
+	StoreLiveness raftstoreliveness.StoreLiveness
 }
 
 func (c *Config) validate() error {
@@ -326,6 +327,7 @@ type raft struct {
 	maxUncommittedSize entryPayloadSize
 
 	trk tracker.ProgressTracker
+	st  tracker.SupportTracker
 
 	state StateType
 
@@ -354,15 +356,12 @@ type raft struct {
 	// leadEpoch, if set, corresponds to the StoreLiveness epoch that this
 	// follower has supported the leader in. It's unset on the leader or if the
 	// follower hasn't supported the leader.
-	leadEpoch StoreLivenessEpoch
+	//
+	// TODO(arul): consider putting this on SupportTracker.
+	leadEpoch raftstoreliveness.StoreLivenessEpoch
 	// leadTransferee is id of the leader transfer target when its value is not zero.
 	// Follow the procedure defined in raft thesis 3.10.
 	leadTransferee uint64
-	// leadSupport contains a map of nodes which have supported the leader through
-	// fortification handshakes, and the corresponding Store Liveness epochs that
-	// they have supported the leader in.
-	// TODO(arul): should this be on the progress tracker?
-	leadSupport map[uint64]StoreLivenessEpoch
 	// Only one conf change may be pending (in the log, but not yet
 	// applied) at a time. This is enforced via pendingConfIndex, which
 	// is set to a value >= the log index of the latest pending
@@ -404,7 +403,7 @@ type raft struct {
 	step stepFunc
 
 	logger        Logger
-	storeLiveness StoreLiveness
+	storeLiveness raftstoreliveness.StoreLiveness
 }
 
 func newRaft(c *Config) *raft {
@@ -417,6 +416,7 @@ func newRaft(c *Config) *raft {
 		panic(err) // TODO(bdarnell)
 	}
 
+	trk := tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes)
 	r := &raft{
 		id:                          c.ID,
 		lead:                        None,
@@ -424,9 +424,9 @@ func newRaft(c *Config) *raft {
 		raftLog:                     raftlog,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
-		trk:                         tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
+		trk:                         trk,
+		st:                          tracker.MakeSupportTracker(&trk.Config, c.StoreLiveness),
 		electionTimeout:             c.ElectionTick,
-		leadSupport:                 make(map[uint64]StoreLivenessEpoch),
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
 		checkQuorum:                 c.CheckQuorum,
@@ -438,14 +438,14 @@ func newRaft(c *Config) *raft {
 	}
 
 	lastID := r.raftLog.lastEntryID()
-	cfg, trk, err := confchange.Restore(confchange.Changer{
+	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Tracker:   r.trk,
 		LastIndex: lastID.index,
 	}, cs)
 	if err != nil {
 		panic(err)
 	}
-	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, trk))
+	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, progressMap))
 
 	if !IsEmptyHardState(hs) {
 		r.loadState(hs)
@@ -705,7 +705,7 @@ func (r *raft) maybeRefortify() {
 			// TODO(arul): should we try regardless?
 			return
 		}
-		fortifiedEpoch, found := r.leadSupport[id]
+		fortifiedEpoch, found := r.st.IsSupportedBy(id)
 		if !found {
 			// We hadn't successfully fortified this peer before. The peer's store is
 			// supporting us, so we have a chance to do so now.
@@ -888,9 +888,10 @@ func (r *raft) tickHeartbeat() {
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgBeat}); err != nil {
 			r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
 		}
-	}
 
-	r.maybeRefortify()
+		// Re-fortify at heartbeat timeout interval as well.
+		r.maybeRefortify()
+	}
 }
 
 func (r *raft) becomeFollower(term uint64, lead uint64) {
@@ -1272,7 +1273,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		r.bcastHeartbeat()
 		return nil
 	case pb.MsgCheckQuorum:
-		if !r.trk.QuorumActive() && !leadSupported(r) {
+		if !r.trk.QuorumActive() || !r.st.QuorumActive() {
 			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
 			r.becomeFollower(r.Term, None)
 		}
@@ -1798,6 +1799,7 @@ func (r *raft) handleFortify(m pb.Message) {
 	// The leader is supported by this follower in its liveness fabric.
 	// TODO(arul): do the hard state handling here.
 	r.leadEpoch = epoch
+	r.lead = m.From
 	r.send(pb.Message{To: m.From, Type: pb.MsgFortifyLeaderResp, LeadEpoch: uint64(r.leadEpoch)})
 }
 
@@ -1806,9 +1808,7 @@ func (r *raft) handleFortifyResp(m pb.Message) {
 	if m.Reject {
 		return // couldn't successfully fortify; we'll try again later
 	}
-	// The supported epoch should never regress. Guard against out of order
-	// delivery of fortify responses by using max.
-	r.leadSupport[m.From] = max(r.leadSupport[m.From], StoreLivenessEpoch(m.LeadEpoch))
+	r.st.RecordSupport(m.From, raftstoreliveness.StoreLivenessEpoch(m.LeadEpoch))
 }
 
 func (r *raft) handleSnapshot(m pb.Message) {

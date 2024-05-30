@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package raft
+package raftstoreliveness
 
 import "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
@@ -22,6 +22,30 @@ type StoreLivenessEpoch int64
 // one store to another in the Store Liveness fabric within a given epoch. This
 // expiration may be extended through the provision of additional support.
 type StoreLivenessExpiration hlc.Timestamp
+
+var (
+	MaxExpiration = StoreLivenessExpiration(hlc.MaxTimestamp)
+	MinExpiration = StoreLivenessExpiration(hlc.MinTimestamp)
+)
+
+// Less returns whether the receiver is less than the parameter.
+func (t StoreLivenessExpiration) Less(s StoreLivenessExpiration) bool {
+	return hlc.Timestamp(t).Less(hlc.Timestamp(s))
+}
+
+// Backward replaces the receiver with the argument, if that moves it backwards
+// in time.
+func (t *StoreLivenessExpiration) Backward(s StoreLivenessExpiration) {
+	(*hlc.Timestamp)(t).Backward(hlc.Timestamp(s))
+}
+
+// Forward replaces the receiver with the argument, if that moves it forwards in
+// time.
+func (t *StoreLivenessExpiration) Forward(s StoreLivenessExpiration) {
+	(*hlc.Timestamp)(t).Forward(hlc.Timestamp(s))
+}
+
+func (t StoreLivenessExpiration) IsEmpty() bool { return hlc.Timestamp(t).IsEmpty() }
 
 // StoreLiveness is a representation of the Store Liveness fabric. It provides
 // information about uninterrupted periods of "support" between stores.
@@ -61,15 +85,10 @@ type StoreLiveness interface {
 	//
 	// If S_local cannot map the replica ID to a store ID, false will be returned.
 	SupportFrom(id uint64) (StoreLivenessEpoch, StoreLivenessExpiration, bool)
-}
 
-func leadSupportUntil(r *raft) StoreLivenessExpiration {
-	// TODO(arul): use r.leadSupport and r.storeLiveness to compute this.
-	return StoreLivenessExpiration{}
-}
-
-func leadSupported(r *raft) bool {
-	return leadSupportUntil(r) != StoreLivenessExpiration{}
+	// InPast returns whether the StoreLivenessExpiration is before the
+	// current time.
+	InPast(StoreLivenessExpiration) bool
 }
 
 // AlwaysLiveStoreLiveness is a mock implementation of the store liveness fabric
@@ -91,4 +110,9 @@ func (AlwaysLiveStoreLiveness) SupportFrom(
 	uint64,
 ) (StoreLivenessEpoch, StoreLivenessExpiration, bool) {
 	return StoreLivenessEpoch(1), StoreLivenessExpiration(hlc.MaxTimestamp), true
+}
+
+// InPast implements the StoreLiveness interface.
+func (AlwaysLiveStoreLiveness) InPast(StoreLivenessExpiration) bool {
+	return false
 }
