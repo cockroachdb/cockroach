@@ -11,14 +11,8 @@
 package kvserver
 
 import (
-<<<<<<< Updated upstream
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
-	"github.com/cockroachdb/cockroach/pkg/raft"
-=======
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
->>>>>>> Stashed changes
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -29,17 +23,7 @@ import (
 // held in read mode by their callers.
 type replicaRLockedStoreLiveness Replica
 
-<<<<<<< Updated upstream
 func (r *replicaRLockedStoreLiveness) getStoreIdentifier(replicaID uint64) (slpb.StoreIdent, bool) {
-=======
-func (r *replicaRLockedStoreLiveness) fabric() storeliveness.Fabric {
-	return r.store.cfg.StoreLiveness
-}
-
-func (r *replicaRLockedStoreLiveness) getStoreIdentifier(
-	replicaID uint64,
-) (storelivenesspb.StoreIdent, bool) {
->>>>>>> Stashed changes
 	r.mu.AssertRHeld()
 	desc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
 	if ok {
@@ -70,7 +54,7 @@ func (r *replicaRLockedStoreLiveness) SupportFor(
 	return raftstoreliveness.StoreLivenessEpoch(epoch), true
 }
 
-// SupportFrom implements the raftaftstoreliveness.StoreLiveness interface.
+// SupportFrom implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFrom(
 	replicaID uint64,
 ) (raftstoreliveness.StoreLivenessEpoch, raftstoreliveness.StoreLivenessExpiration, bool) {
@@ -85,7 +69,7 @@ func (r *replicaRLockedStoreLiveness) SupportFrom(
 	return raftstoreliveness.StoreLivenessEpoch(epoch), raftstoreliveness.StoreLivenessExpiration(exp), true
 }
 
-// InPast implements the raftaftstoreliveness.StoreLiveness interface.
+// InPast implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) InPast(exp raftstoreliveness.StoreLivenessExpiration) bool {
 	return hlc.Timestamp(exp).Less(r.store.Clock().Now())
 }

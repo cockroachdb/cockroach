@@ -2292,7 +2292,8 @@ func shouldCampaignOnLeaseRequestRedirect(
 	// be partitioned from the liveness range.
 	// See TestRequestsOnFollowerWithNonLiveLeaseholder for an example of a test
 	// that demonstrates this case.
-	if shouldUseExpirationLease {
+	// TODO(nvanbenschoten): we shouldn't need to do this.
+	if shouldUseExpirationLease || true {
 		return false
 	}
 	// Determine if we think the leader is alive, if we don't have the leader in

@@ -34,7 +34,7 @@ import (
 var quiesceAfterTicks = envutil.EnvOrDefaultInt("COCKROACH_QUIESCE_AFTER_TICKS", 6)
 
 // raftDisableQuiescence disables raft quiescence.
-var raftDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
+var raftDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", true)
 
 func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) {
 	if !r.mu.quiescent {

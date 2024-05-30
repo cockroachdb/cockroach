@@ -853,6 +853,8 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 func (r *raft) tickElection() {
 	r.electionElapsed++
 
+	// TODO(arul): make sure we don't campaign if we're still supporting the
+	// leader.
 	if r.promotable() && r.pastElectionTimeout() {
 		r.electionElapsed = 0
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgHup}); err != nil {
@@ -895,6 +897,10 @@ func (r *raft) tickHeartbeat() {
 }
 
 func (r *raft) becomeFollower(term uint64, lead uint64) {
+	// TODO(arul): we should be able to make the following assertion.
+	//if r.state == StateLeader && r.st.QuorumActive() {
+	//	panic("invalid transition [leader -> follower] when quorum is active")
+	//}
 	r.step = stepFollower
 	r.reset(term)
 	r.tick = r.tickElection
@@ -985,6 +991,10 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Warningf("%x cannot campaign at term %d since there are still pending configuration changes to apply", r.id, r.Term)
 		return
 	}
+	// TODO(arul): make sure we don't campaign if we're still supporting the
+	// leader.
+	//if t != campaignTransfer && r.leadEpoch ... {
+	//}
 
 	r.logger.Infof("%x is starting a new election at term %d", r.id, r.Term)
 	r.campaign(t)
@@ -1094,6 +1104,8 @@ func (r *raft) Step(m pb.Message) error {
 		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
 			inLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
+			// TODO(arul): make sure we don't vote if we're still supporting the
+			// leader.
 			if !force && inLease {
 				// If a server receives a RequestVote request within the minimum election timeout
 				// of hearing from a current leader, it does not update its term or grant its vote
