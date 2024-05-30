@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { createMemoryHistory } from "history";
-import _ from "lodash";
+import find from "lodash/find";
 import { bindActionCreators, Store } from "redux";
 import {
   DatabasesPageActions,
@@ -22,8 +22,9 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import * as fakeApi from "src/util/fakeApi";
-import { mapDispatchToProps, mapStateToProps } from "./redux";
 import { indexUnusedDuration } from "src/util/constants";
+
+import { mapDispatchToProps, mapStateToProps } from "./redux";
 
 class TestDriver {
   private readonly actions: DatabasesPageActions;
@@ -68,7 +69,7 @@ class TestDriver {
   }
 
   private findDatabase(name: string) {
-    return _.find(this.properties().databases, row => row.name === name);
+    return find(this.properties().databases, row => row.name === name);
   }
 }
 

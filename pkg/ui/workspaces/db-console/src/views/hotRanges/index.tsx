@@ -8,13 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { cockroach } from "src/js/protos";
 import { useDispatch, useSelector } from "react-redux";
 import React, { useRef, useEffect, useState, useContext } from "react";
 import { Helmet } from "react-helmet";
-import { refreshHotRanges } from "src/redux/apiReducers";
-import HotRangesTable from "./hotRangesTable";
-import ErrorBoundary from "../app/components/errorMessage/errorBoundary";
 import {
   Loading,
   Text,
@@ -23,7 +19,9 @@ import {
   TimezoneContext,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
-import styles from "./hotRanges.module.styl";
+
+import { refreshHotRanges } from "src/redux/apiReducers";
+import { cockroach } from "src/js/protos";
 import {
   hotRangesSelector,
   isLoadingSelector,
@@ -34,6 +32,11 @@ import {
 import { selectNodeLocalities } from "src/redux/localities";
 import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { HotRangesFilter } from "src/views/hotRanges/hotRangesFilter";
+
+import ErrorBoundary from "../app/components/errorMessage/errorBoundary";
+
+import styles from "./hotRanges.module.styl";
+import HotRangesTable from "./hotRangesTable";
 
 const cx = classNames.bind(styles);
 const HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;

@@ -10,6 +10,7 @@
 
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
+
 import { findMostSpecificLocation, findOrCalculateLocation } from "./locations";
 
 const nycLocality: LocalityTier[] = [

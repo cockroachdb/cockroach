@@ -8,9 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { AdminUIState } from "src/redux/state";
 import { createSelector } from "reselect";
+
+import { AdminUIState } from "src/redux/state";
 import { cockroach } from "src/js/protos";
+
 import { LocalSetting } from "./localsettings";
 
 const hotRangesState = (state: AdminUIState) => state.cachedData.hotRanges;

@@ -13,23 +13,24 @@ import Helmet from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
+import ErrorCircle from "assets/error-circle.svg";
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import * as docsURL from "src/util/docs";
-
-import "./loginPage.styl";
 import {
   CockroachLabsLockupIcon,
   Button,
   TextInput,
   PasswordInput,
+  Text,
+  TextTypes,
 } from "src/components";
-import { Text, TextTypes } from "src/components";
-import ErrorCircle from "assets/error-circle.svg";
 import {
   OIDCGenerateJWTAuthTokenConnected,
   OIDCLoginConnected,
 } from "src/views/login/oidc";
+
+import "./loginPage.styl";
 
 export interface LoginPageProps {
   loginState: LoginAPIState;

@@ -8,10 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { propsToQueryString, queryByName } from "./query";
+import mapValues from "lodash/mapValues";
+import toString from "lodash/toString";
 import { Location } from "history";
-import _ from "lodash";
 import Long from "long";
+
+import { propsToQueryString, queryByName } from "./query";
 
 const location: Location = {
   pathname: "/debug/chart",
@@ -107,7 +109,7 @@ describe("Query utils", () => {
       };
 
       const querystring = propsToQueryString(testValues);
-      expect(_.mapValues(testValues, _.toString)).toEqual(
+      expect(mapValues(testValues, toString)).toEqual(
         decodeQueryString(querystring),
       );
     });

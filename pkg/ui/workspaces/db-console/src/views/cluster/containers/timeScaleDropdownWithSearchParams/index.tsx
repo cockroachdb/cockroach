@@ -11,8 +11,6 @@
 import React, { useEffect } from "react";
 import { useHistory } from "react-router-dom";
 import { connect } from "react-redux";
-import { AdminUIState } from "src/redux/state";
-import * as timewindow from "src/redux/timeScale";
 import {
   defaultTimeScaleOptions,
   TimeScaleDropdown,
@@ -23,6 +21,9 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
 import moment from "moment-timezone";
+
+import * as timewindow from "src/redux/timeScale";
+import { AdminUIState } from "src/redux/state";
 import { PayloadAction } from "src/interfaces/action";
 
 // The time scale dropdown from cluster-ui that updates route params as
@@ -90,7 +91,6 @@ const TimeScaleDropdownWithSearchParams = (
 
     // Passing an empty array of dependencies will cause this effect
     // to only run on the initial render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onTimeScaleChange = (timeScale: TimeScale) => {

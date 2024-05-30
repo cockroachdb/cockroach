@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import _ from "lodash";
+import omit from "lodash/omit";
 import React from "react";
 import { connect } from "react-redux";
 
@@ -61,7 +61,7 @@ export default function swapByLicense<TProps>(
       )})`;
 
       render() {
-        const props = _.omit(this.props, ["enterpriseEnabled"]);
+        const props = omit(this.props, ["enterpriseEnabled"]);
 
         if (!this.props.enterpriseEnabled) {
           return <OSSComponent {...(props as TProps)} />;

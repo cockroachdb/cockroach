@@ -9,7 +9,12 @@
 // licenses/APL.txt.
 
 import { RouteComponentProps } from "react-router";
-import { DatabaseTablePageData, util } from "@cockroachlabs/cluster-ui";
+import {
+  DatabaseTablePageData,
+  util,
+  deriveIndexDetailsMemoized,
+  deriveTablePageDetailsMemoized,
+} from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
 import {
@@ -25,10 +30,6 @@ import {
   nodeRegionsByIDSelector,
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
-import {
-  deriveIndexDetailsMemoized,
-  deriveTablePageDetailsMemoized,
-} from "@cockroachlabs/cluster-ui";
 import { selectHasAdminRole } from "src/redux/user";
 import {
   selectAutomaticStatsCollectionEnabled,

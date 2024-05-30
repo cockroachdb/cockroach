@@ -10,6 +10,7 @@
 
 import React from "react";
 import { Moment } from "moment-timezone";
+
 import { Text, TextTypes } from "src/components";
 
 export interface DateRangeLabelProps {

@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import d3 from "d3";
-
 import { util } from "@cockroachlabs/cluster-ui";
 
 const LOW_DISK_SPACE_RATIO = 0.15;

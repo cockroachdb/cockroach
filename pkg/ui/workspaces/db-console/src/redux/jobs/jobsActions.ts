@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { Action } from "redux";
-import { PayloadAction } from "src/interfaces/action";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+
+import { PayloadAction } from "src/interfaces/action";
 
 export const COLLECT_EXECUTION_DETAILS =
   "cockroachui/jobs/COLLECT_EXECUTION_DETAILS";
