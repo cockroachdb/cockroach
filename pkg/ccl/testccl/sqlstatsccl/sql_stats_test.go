@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,6 +45,7 @@ func TestSQLStatsRegions(t *testing.T) {
 	// and a secondary tenant, ensuring that a distsql query across multiple
 	// regions sees those regions reported in sqlstats.
 	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
 
 	numServers := 3
 	regionNames := []string{
@@ -188,6 +190,15 @@ func TestSQLStatsRegions(t *testing.T) {
 				_, err := db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
 				if err != nil {
 					return err
+				}
+
+				if rng.Float64() < 0.5 {
+					// In half of the cases disable DistSQL in order to check
+					// that KV regions information is propagated correctly.
+					_, err = db.DB.ExecContext(ctx, "SET distsql = off;")
+					if err != nil {
+						return err
+					}
 				}
 
 				// Use EXPLAIN ANALYSE (DISTSQL) to get the accurate list of nodes.

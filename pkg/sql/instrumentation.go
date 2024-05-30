@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -43,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -956,10 +956,10 @@ func (m execNodeTraceMetadata) annotateExplain(
 	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
 
 	// Retrieve which region each node is on.
-	regionsInfo := make(map[int64]string)
+	sqlInstanceIDToRegion := make(map[int64]string)
 	for componentId := range statsMap {
 		if componentId.Region != "" {
-			regionsInfo[int64(componentId.SQLInstanceID)] = componentId.Region
+			sqlInstanceIDToRegion[int64(componentId.SQLInstanceID)] = componentId.Region
 		}
 	}
 
@@ -973,11 +973,15 @@ func (m execNodeTraceMetadata) annotateExplain(
 
 			incomplete := false
 			var sqlInstanceIDs, kvNodeIDs intsets.Fast
-			regionsMap := make(map[string]struct{})
+			var regions []string
 			for _, c := range components {
 				if c.Type == execinfrapb.ComponentID_PROCESSOR {
 					sqlInstanceIDs.Add(int(c.SQLInstanceID))
-					regionsMap[regionsInfo[int64(c.SQLInstanceID)]] = struct{}{}
+					if region := sqlInstanceIDToRegion[int64(c.SQLInstanceID)]; region != "" {
+						// Add only if the region is not an empty string (it
+						// will be an empty string if the region is not setup).
+						regions = util.InsertUnique(regions, region)
+					}
 				}
 				stats := statsMap[c]
 				if stats == nil {
@@ -987,6 +991,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 				for _, kvNodeID := range stats.KV.NodeIDs {
 					kvNodeIDs.Add(int(kvNodeID))
 				}
+				regions = util.CombineUnique(regions, stats.KV.Regions)
 				nodeStats.RowCount.MaybeAdd(stats.Output.NumTuples)
 				nodeStats.KVTime.MaybeAdd(stats.KV.KVTime)
 				nodeStats.KVContentionTime.MaybeAdd(stats.KV.ContentionTime)
@@ -1023,15 +1028,6 @@ func (m execNodeTraceMetadata) annotateExplain(
 				for i, ok := kvNodeIDs.Next(0); ok; i, ok = kvNodeIDs.Next(i + 1) {
 					nodeStats.KVNodes = append(nodeStats.KVNodes, fmt.Sprintf("n%d", i))
 				}
-				regions := make([]string, 0, len(regionsMap))
-				for r := range regionsMap {
-					// Add only if the region is not an empty string (it will be an
-					// empty string if the region is not setup).
-					if r != "" {
-						regions = append(regions, r)
-					}
-				}
-				sort.Strings(regions)
 				nodeStats.Regions = regions
 				n.Annotate(exec.ExecutionStatsID, &nodeStats)
 			}
