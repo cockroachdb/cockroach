@@ -471,10 +471,10 @@ export const clusterNameSelector = createSelector(
         LivenessStatus.NODE_STATUS_LIVE,
     );
 
-    const nodesWithUniqClusterNames = _.chain(liveNodesOnCluster)
-      .filter(node => !_.isEmpty(node.desc.cluster_name))
-      .uniqBy(node => node.desc.cluster_name)
-      .value();
+    const nodesWithUniqClusterNames = flow(
+      (statuses: INodeStatus[]) => filter(statuses, s => !isEmpty(s.desc.cluster_name)),
+      statuses => uniqBy(statuses, s => s.desc.cluster_name)
+    )(liveNodesOnCluster)
 
     if (_.isEmpty(nodesWithUniqClusterNames)) {
       return undefined;

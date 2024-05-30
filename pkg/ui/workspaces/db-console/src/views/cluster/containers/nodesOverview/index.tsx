@@ -15,6 +15,7 @@ import moment, { Moment } from "moment-timezone";
 import { createSelector } from "reselect";
 import _ from "lodash";
 
+import flow from "lodash/flow";
 import {
   LivenessStatus,
   nodeCapacityStats,
@@ -57,6 +58,7 @@ import {
 } from "./tooltips";
 import { cockroach } from "src/js/protos";
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
+import ILiveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting",
@@ -532,12 +534,9 @@ export const liveNodesTableDataSelector = createSelector(
     // - top level record contains aggregated information about nodes in current region
     // In case cluster is setup without localities:
     // - it represents a flat structure.
-    const data = _.chain(liveStatuses)
-      .groupBy((node: INodeStatus) => {
-        return node.desc.locality.tiers.map(tier => tier.value).join(".");
-      })
-      .map(
-        (nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
+    const data = flow(
+      (statuses: INodeStatus[]) => groupBy(statuses, s => s.desc.locality.tiers.map(tier => tier.value).join(".")),
+      statusesByTiers => map(statusesByTiers, (nodesPerRegion: INodeStatus[], regionKey: string): NodeStatusRow => {
           const nestedRows = nodesPerRegion.map((ns, idx): NodeStatusRow => {
             const { used: usedCapacity, usable: availableCapacity } =
               nodeCapacityStats(ns);
@@ -612,7 +611,7 @@ export const liveNodesTableDataSelector = createSelector(
           };
         },
       )
-      .value();
+    )(liveStatuses)
 
     return data;
   },
@@ -637,20 +636,20 @@ export const decommissionedNodesTableDataSelector = createSelector(
     });
 
     // DecommissionedNodeList displays 5 most recent nodes.
-    const data = _.chain(decommissionedNodes)
-      .orderBy([liveness => getDecommissionedTime(liveness.node_id)], ["desc"])
-      .take(5)
-      .map((liveness, idx: number) => {
-        const { node_id } = liveness;
+    const data = flow(
+      (nodes: ILiveness[]) => orderBy(nodes, [ liveness => getDecommissionedTime(liveness.node_id) ], [ "desc" ]),
+      nodes => take(nodes, 5),
+      nodes => map(nodes, (liveness, idx: number) => {
+        const {node_id} = liveness;
         return {
           key: `${idx}`,
           nodeId: node_id,
           nodeName: `${node_id}`,
           status: nodesSummary.livenessStatusByNodeID[node_id],
           decommissionedDate: getDecommissionedTime(node_id),
-        };
-      })
-      .value();
+        }
+      }),
+    )(decommissionedNodes);
     return data;
   },
 );
