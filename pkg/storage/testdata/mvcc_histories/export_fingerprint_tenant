@@ -30,21 +30,21 @@ data: /Tenant/11/Table/1/1/"d"/0/2.000000000,0 -> /BYTES/d
 run ok
 export fingerprint k=/a end=/z ts=0 allRevisions tenant-prefix=10
 ----
-export: data_size:78 deprecated_rows:4 entry_counts:<key:4294967297 value:4 >  fingerprint=true
+export: data_size:78 entry_counts:<key:4294967297 value:4 >  fingerprint=true
 fingerprint: 9925016972726554372
 
 # Fingerprint tenant 11
 run ok
 export fingerprint k=/a end=/z ts=0 allRevisions tenant-prefix=11
 ----
-export: data_size:78 deprecated_rows:4 entry_counts:<key:4294967297 value:4 >  fingerprint=true
+export: data_size:78 entry_counts:<key:4294967297 value:4 >  fingerprint=true
 fingerprint: 11108963465360970374
 
 # Fingerprint tenant 10 with tenant prefix stripped
 run ok
 export fingerprint k=/a end=/z ts=0 allRevisions tenant-prefix=10 stripTenantPrefix stripValueChecksum
 ----
-export: data_size:78 deprecated_rows:4 entry_counts:<key:4294967297 value:4 >  fingerprint=true
+export: data_size:78 entry_counts:<key:4294967297 value:4 >  fingerprint=true
 fingerprint: 18366154626077700017
 
 # Fingerprint tenant 11 with tenant prefix stripped
@@ -52,5 +52,5 @@ fingerprint: 18366154626077700017
 run ok
 export fingerprint k=/a end=/z ts=0 allRevisions tenant-prefix=11 stripTenantPrefix stripValueChecksum
 ----
-export: data_size:78 deprecated_rows:4 entry_counts:<key:4294967297 value:4 >  fingerprint=true
+export: data_size:78 entry_counts:<key:4294967297 value:4 >  fingerprint=true
 fingerprint: 18366154626077700017

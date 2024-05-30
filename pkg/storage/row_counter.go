@@ -66,11 +66,5 @@ func (r *RowCounter) Count(key roachpb.Key) error {
 	}
 	r.EntryCounts[kvpb.BulkOpSummaryID(uint64(tableID), uint64(indexID))]++
 
-	if indexID == 1 {
-		r.DeprecatedRows++
-	} else {
-		r.DeprecatedIndexEntries++
-	}
-
 	return nil
 }
