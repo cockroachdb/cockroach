@@ -181,6 +181,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if len(s.KV.NodeIDs) > 0 {
 		fn("KV nodes", printNodeIDs(s.KV.NodeIDs))
 	}
+	if len(s.KV.Regions) > 0 {
+		fn("KV regions", strings.Join(s.KV.Regions, ", "))
+	}
 	if s.KV.KVTime.HasValue() {
 		fn("KV time", humanizeutil.Duration(s.KV.KVTime.Value()))
 	}
@@ -281,6 +284,9 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	// KV stats.
 	if len(other.KV.NodeIDs) != 0 {
 		result.KV.NodeIDs = util.CombineUnique(result.KV.NodeIDs, other.KV.NodeIDs)
+	}
+	if len(other.KV.Regions) != 0 {
+		result.KV.Regions = util.CombineUnique(result.KV.Regions, other.KV.Regions)
 	}
 	if !result.KV.KVTime.HasValue() {
 		result.KV.KVTime = other.KV.KVTime
@@ -429,6 +435,9 @@ func (s *ComponentStats) MakeDeterministic() {
 	}
 
 	// KV.
+	if len(s.KV.Regions) > 0 {
+		s.KV.Regions = []string{"test"}
+	}
 	timeVal(&s.KV.KVTime)
 	timeVal(&s.KV.ContentionTime)
 	resetUint(&s.KV.NumInterfaceSteps)
