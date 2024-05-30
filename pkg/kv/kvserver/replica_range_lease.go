@@ -868,8 +868,7 @@ func (r *Replica) leaseStatus(
 			LeadSupportUntil: hlc.Timestamp(raftStatus.LeadSupportUntil),
 		}
 		if lease.Term != status.LeaderSupport.Term || !status.LeaderSupport.Leader {
-			status.State = kvserverpb.LeaseState_EXPIRED
-			return status
+			status.LeaderSupport.LeadSupportUntil = hlc.Timestamp{}
 		}
 	}
 	expiration := status.Expiration()
