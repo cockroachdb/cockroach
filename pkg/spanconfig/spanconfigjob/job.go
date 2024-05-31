@@ -157,7 +157,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 
 	var lastCheckpoint = hlc.Timestamp{}
 	const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
-	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
+	for retrier := retry.Start(ctx, retryOpts); retrier.Next(); {
 		started := timeutil.Now()
 		if err := rc.Reconcile(ctx, lastCheckpoint, r.job.Session(), func() error {
 			if onCheckpointInterceptor != nil {

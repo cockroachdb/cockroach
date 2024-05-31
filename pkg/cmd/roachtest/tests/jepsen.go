@@ -239,7 +239,7 @@ func (j jepsenConfig) prepareBinary(
 			"test -x lein || (curl -o lein https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein)")
 	} else {
 		var err error
-		for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 3, InitialBackoff: 5 * time.Second}); r.Next(); {
+		for r := retry.Start(ctx, retry.Options{MaxRetries: 3, InitialBackoff: 5 * time.Second}); r.Next(); {
 			if ctx.Err() != nil {
 				t.Fatal()
 			}

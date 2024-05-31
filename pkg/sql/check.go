@@ -660,7 +660,7 @@ func validateUniqueConstraint(
 		Multiplier:     1.5,
 		MaxRetries:     5,
 	}
-	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
+	for r := retry.Start(ctx, retryOptions); r.Next(); {
 		values, err = txn.QueryRowEx(ctx, "validate unique constraint", txn.KV(), sessionDataOverride, query)
 		if err == nil {
 			break

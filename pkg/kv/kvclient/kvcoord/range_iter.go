@@ -201,7 +201,7 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	// Retry loop for looking up next range in the span. The retry loop
 	// deals with retryable range descriptor lookups.
 	var err error
-	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
+	for r := retry.Start(ctx, ri.ds.rpcRetryOptions); r.Next(); {
 		// Note that we pass an empty eviction token here because ri.token
 		// corresponds to the previous range.
 		var rngInfo rangecache.EvictionToken

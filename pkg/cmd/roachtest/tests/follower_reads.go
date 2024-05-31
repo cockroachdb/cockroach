@@ -502,7 +502,7 @@ func initFollowerReadsDB(
 	// Wait until the table has completed up-replication.
 	t.L().Printf("waiting for up-replication...")
 	retryOpts := retry.Options{MaxBackoff: 15 * time.Second}
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		// Check that the table has the expected number and location of voting and
 		// non-voting replicas. The valid location sets can be larger than the
 		// expected number of replicas, in which case, multiple valid combinations
@@ -563,7 +563,7 @@ func initFollowerReadsDB(
 	}
 
 	if topology.multiRegion {
-		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		for r := retry.Start(ctx, retryOpts); r.Next(); {
 			// Check that one of these replicas exists in each region. Do so by
 			// parsing the replica_localities array using the same pattern as the
 			// one used by SHOW REGIONS.
@@ -584,7 +584,7 @@ func initFollowerReadsDB(
 		}
 
 		if topology.deadPrimaryRegion {
-			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			for r := retry.Start(ctx, retryOpts); r.Next(); {
 				// If we're going to be killing nodes in a multi-region cluster, make
 				// sure system ranges have all upreplicated as expected as well. Do so
 				// using replication reports.

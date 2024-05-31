@@ -771,7 +771,7 @@ func (c *transientCluster) waitForNodeIDReadiness(
 	ctx context.Context, idx int, errCh chan error, timeoutCh <-chan time.Time,
 ) error {
 	retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond, MaxBackoff: time.Second}
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		c.infoLog(ctx, "waiting for server %d to know its node ID", idx)
 		select {
 		// Errors or premature shutdown.
@@ -814,7 +814,7 @@ func (c *transientCluster) waitForSQLReadiness(
 	baseCtx context.Context, idx int, errCh chan error, timeoutCh <-chan time.Time,
 ) error {
 	retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond, MaxBackoff: time.Second}
-	for r := retry.StartWithCtx(baseCtx, retryOpts); r.Next(); {
+	for r := retry.Start(baseCtx, retryOpts); r.Next(); {
 		ctx := logtags.AddTag(baseCtx, "n", c.servers[idx].NodeID())
 		c.infoLog(ctx, "waiting for server %d to become ready", idx)
 		select {
@@ -2161,7 +2161,7 @@ func (c *transientCluster) lockDir(
 	}
 
 	every := log.Every(1 * time.Second)
-	for retry := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 20}); retry.Next(); {
+	for retry := retry.Start(ctx, retry.Options{MaxRetries: 20}); retry.Next(); {
 		if err := tlsLock.TryLock(); err != nil {
 			if errors.Is(err, lockfile.ErrBusy) {
 				if every.ShouldLog() {
