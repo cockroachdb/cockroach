@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -70,10 +71,12 @@ type sharedMuxEvent struct {
 }
 
 type producer struct {
-	syncutil.Mutex
-	streamId     int64
-	rangeID      roachpb.RangeID
+	syncutil.RWMutex
+	streamId int64
+	rangeID  roachpb.RangeID
+	// TODO(wenyihu6): check if only disconnected need to be protected
 	disconnected bool
+	cleanup      func()
 }
 
 type StreamMuxer struct {
@@ -109,5 +112,107 @@ func NewStreamMuxer(wrapped kvpb.MuxRangeFeedEventSink) *StreamMuxer {
 }
 
 func (m *StreamMuxer) publish(e *kvpb.MuxRangeFeedEvent) error {
+
 	return m.wrapped.Send(e)
+}
+
+func (m *StreamMuxer) addProducer(ctx context.Context, streamId int64, rangeID roachpb.RangeID) {
+	m.prodsMu.Lock()
+	defer m.prodsMu.Unlock()
+	if _, ok := m.prodsMu.prods[streamId]; ok {
+		log.Error(ctx, "stream already exists")
+	}
+	m.prodsMu.prods[streamId] = &producer{streamId: streamId, rangeID: rangeID}
+}
+
+func (m *StreamMuxer) popAllConnectedProducers() (prods []*producer) {
+	m.prodsMu.Lock()
+	defer m.prodsMu.Unlock()
+
+	for streamId, producer := range m.prodsMu.prods {
+		delete(m.prodsMu.prods, streamId)
+		if producer.isConnected() {
+			prods = append(prods, producer)
+		}
+	}
+	return prods
+}
+
+func (p *producer) isConnected() bool {
+	p.RLock()
+	defer p.RUnlock()
+	return !p.disconnected
+}
+
+func (p *producer) callback() func() {
+	p.RLock()
+	defer p.RUnlock()
+	return p.cleanup
+}
+
+// event queue has been cleaned up already
+func (m *StreamMuxer) popProducerByStreamId(streamId int64) *producer {
+	m.prodsMu.Lock()
+	defer m.prodsMu.Unlock()
+
+	p, ok := m.prodsMu.prods[streamId]
+	delete(m.prodsMu.prods, streamId)
+	if !ok {
+		log.Error(context.Background(), "attempt to remove non-existent stream")
+	}
+	return p
+}
+
+func (m *StreamMuxer) getProducerIfExists(streamId int64) (bool, *producer) {
+	m.prodsMu.RLock()
+	defer m.prodsMu.RUnlock()
+	if _, ok := m.prodsMu.prods[streamId]; !ok {
+		return false, nil
+	}
+	return true, m.prodsMu.prods[streamId]
+}
+
+func (m *StreamMuxer) cleanupProducerIfExists(streamId int64) {
+	p := m.popProducerByStreamId(streamId)
+	if p == nil {
+		return
+	}
+	p.callback()()
+}
+
+func (m *StreamMuxer) cleanupProducers(streamErr *kvpb.Error) {
+	m.removeAll()
+	prods := m.popAllConnectedProducers()
+	var err error
+	for _, p := range prods {
+		if err != nil && streamErr != nil {
+			errEvent := &kvpb.MuxRangeFeedEvent{
+				RangeID:  p.rangeID,
+				StreamID: p.streamId,
+			}
+			errEvent.SetValue(&kvpb.RangeFeedError{
+				Error: *streamErr,
+			})
+			err = m.wrapped.Send(errEvent)
+		}
+		p.callback()()
+	}
+}
+
+func (m *StreamMuxer) removeAll() {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	m.queueMu.buffer.removeAll(context.Background())
+}
+
+func (m *StreamMuxer) removeProducerEvent(streamId int64) {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	m.queueMu.buffer.remove(context.Background(), streamId)
+}
+
+func (m *StreamMuxer) pushBack(event sharedMuxEvent) {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	m.queueMu.buffer.pushBack(event)
 }
