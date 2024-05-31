@@ -853,9 +853,7 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 func (r *raft) tickElection() {
 	r.electionElapsed++
 
-	// TODO(arul): make sure we don't campaign if we're still supporting the
-	// leader.
-	if r.promotable() && r.pastElectionTimeout() {
+	if r.promotable() && r.pastElectionTimeout() && !r.isSupportingFortifiedLeader() {
 		r.electionElapsed = 0
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgHup}); err != nil {
 			r.logger.Debugf("error occurred during election: %v", err)
@@ -991,10 +989,11 @@ func (r *raft) hup(t CampaignType) {
 		r.logger.Warningf("%x cannot campaign at term %d since there are still pending configuration changes to apply", r.id, r.Term)
 		return
 	}
-	// TODO(arul): make sure we don't campaign if we're still supporting the
-	// leader.
-	//if t != campaignTransfer && r.leadEpoch ... {
-	//}
+
+	if t != campaignTransfer && r.isSupportingFortifiedLeader() {
+		r.logger.Infof("%x is still supporting a fortified leader; can't campaign", r.id)
+		return
+	}
 
 	r.logger.Infof("%x is starting a new election at term %d", r.id, r.Term)
 	r.campaign(t)
@@ -1933,6 +1932,17 @@ func (r *raft) restore(s pb.Snapshot) bool {
 func (r *raft) promotable() bool {
 	pr := r.trk.Progress[r.id]
 	return pr != nil && !pr.IsLearner && !r.raftLog.hasNextOrInProgressSnapshot()
+}
+
+// isSupportingFortifiedLeader returns true if the replica if the state machine
+// is providing support to a fortified leader. In such cases, it should not
+// campaign or vote against the fortified leader.
+func (r *raft) isSupportingFortifiedLeader() bool {
+	supportEpoch, isSupporting := r.storeLiveness.SupportFor(r.lead)
+	runtimeAssert(supportEpoch >= r.leadEpoch,
+		"supported epoch in store liveness can't be lower than the leader's epoch supported by follower",
+	)
+	return isSupporting && supportEpoch == r.leadEpoch
 }
 
 func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
