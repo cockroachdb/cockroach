@@ -120,9 +120,10 @@ func TestComposeCompare(t *testing.T) {
 		}
 	}
 	cmd := exec.Command(
-		"docker-compose",
+		"docker",
+		"compose",
 		"-f", dockerComposeYml,
-		"--no-ansi",
+		"--ansi=never",
 		"up",
 		"--force-recreate",
 		"--exit-code-from", "test",
