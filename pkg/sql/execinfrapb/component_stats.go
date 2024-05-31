@@ -444,6 +444,7 @@ func (s *ComponentStats) MakeDeterministic() {
 	resetUint(&s.KV.RangeKeyCount)
 	resetUint(&s.KV.RangeKeyContainedPoints)
 	resetUint(&s.KV.RangeKeySkippedPoints)
+	s.KV.NodeIDs = nil
 	if s.KV.BytesRead.HasValue() {
 		// BytesRead is overridden to a useful value for tests.
 		s.KV.BytesRead.Set(8 * s.KV.TuplesRead.Value())
