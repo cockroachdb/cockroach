@@ -330,9 +330,12 @@ func (r *registration) outputLoop(ctx context.Context) error {
 
 		select {
 		case nextEvent := <-r.buf:
-			r.stream.SendBuffered(nextEvent.event, nextEvent.alloc)
+			err := r.stream.SendBuffered(nextEvent.event, nextEvent.alloc)
 			//nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
+			if err != nil {
+				return err
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-r.stream.Context().Done():

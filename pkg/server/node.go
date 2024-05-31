@@ -1853,7 +1853,7 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 	n.metrics.ActiveRangeFeed.Inc(1)
 	defer n.metrics.ActiveRangeFeed.Inc(-1)
 
-	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, stream))); err != nil {
+	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, &rangefeed.LockedRangefeedStreamAdapter{Wrapped: stream}))); err != nil {
 		// Got stream context error, probably won't be able to propagate it to the stream,
 		// but give it a try anyway.
 		var event kvpb.RangeFeedEvent
