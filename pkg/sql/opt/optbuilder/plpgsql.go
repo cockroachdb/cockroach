@@ -1014,7 +1014,9 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			return b.callContinuation(&callCon, s)
 
 		default:
-			panic(unsupportedPLStmtErr)
+			panic(errors.WithDetailf(unsupportedPLStmtErr,
+				"%s is not yet supported", stmt.PlpgSQLStatementTag(),
+			))
 		}
 	}
 	// Call the parent continuation to execute the rest of the function. Ignore

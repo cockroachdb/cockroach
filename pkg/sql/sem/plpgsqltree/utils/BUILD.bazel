@@ -11,6 +11,5 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",
         "//pkg/util/errorutil/unimplemented",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
