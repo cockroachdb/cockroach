@@ -78,7 +78,7 @@ ElementState:
   Status: PUBLIC
 - Owner:
     descriptorId: 105
-    owner: admin
+    owner: root
   Status: PUBLIC
 - Schema:
     isPublic: true
