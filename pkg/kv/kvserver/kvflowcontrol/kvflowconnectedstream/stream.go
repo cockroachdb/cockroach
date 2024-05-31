@@ -399,6 +399,10 @@ type RangeController interface {
 	// when calling TransportDisconnected (which means that mutex is ordered
 	// before RangeControllerImpl.mu). TransportDisconnected should do very
 	// little work and return.
+	//
+	// TODO: remove this after "Design for robust flow token return in RACv2"
+	// discussed above is finalized. All the complicated transport handling
+	// will go away.
 	TransportDisconnected(replica roachpb.ReplicaID)
 	// Close the controller, since no longer the leader. Called from
 	// handleRaftReadyRaftMuLocked. It can be called concurrently with
@@ -477,15 +481,9 @@ type RaftInterface interface {
 	// not had MsgApps constructed during the lifetime of this StateReplicate
 	// (they may have been constructed previously)
 	//
-	// TODO: **resume here**
 	// When a follower transitions from {StateProbe,StateSnapshot} =>
 	// StateReplicate, we start trying to send MsgApps. We should
-	// notice such transitions both in HandleRaftEvent and SetReplicas. We
-	// should *not* construct MsgApps for a StateReplicate follower that is
-	// disconnected -- there is no timeliness guarantee on how long a follower
-	// will stay in StateReplicate despite it being down, and by sending such a
-	// follower MsgApps that are not being received we are defeating flow
-	// control (since we will have advanced nextUpperBound).
+	// notice such transitions both in HandleRaftEvent and SetReplicas.
 	//
 	// RACv1 also cared about three other cases where the follower behaved as if
 	// it were disconnected (a) paused follower, (b) follower is behind, (c)
@@ -496,26 +494,27 @@ type RaftInterface interface {
 	// elastic experiencing a hiccup, given it paces at rate of slowest). For
 	// (a), we plan to remove follower pausing. So the v2 code will be
 	// simplified.
-	FollowerState(replicaID roachpb.ReplicaID) (state tracker.StateType, nextUpperBound uint64)
+	FollowerState(
+		replicaID roachpb.ReplicaID) (state tracker.StateType, match uint64, next uint64)
 	FollowerTransportConnected(storeID roachpb.StoreID) bool
-	// HighestEntryIndex is the highest index assigned in the log, and produced
-	// in Ready.Entries(). If there have been no entries produced, since this
-	// replica became the leader, this is the commit index.
-	HighestEntryIndex() uint64
+	// LastEntryIndex is the highest index assigned in the log.
+	LastEntryIndex() uint64
 	// MakeMsgApp is used to construct a MsgApp for entries in [start, end).
-	// REQUIRES: start == nextUpperBound and replicaID is in StateReplicate.
-	// REQUIRES: maxSize > 0.
+	// REQUIRES: start == next and replicaID is in StateReplicate.
+	//
+	// REQUIRES: maxSize > 0, maxEntries > 0.
 	//
 	// If the sum of all entries in [start,end) are <= maxSize, all will be
 	// returned. Else, entries will be returned until, and including, the first
 	// entry that causes maxSize to be equaled or exceeded. This implies at
 	// least one entry will be returned in the MsgApp on success.
 	//
-	// Returns raft.ErrCompacted error if log truncated. If no error,
-	// nextUpperBound is advanced to be equal to end. If raft.ErrCompacted is
-	// returned, and the replica was in StateReplicate prior to this call, it
-	// will transition to StateSnapshot.
-	MakeMsgApp(replicaID roachpb.ReplicaID, start, end uint64, maxSize int64) (raftpb.Message, error)
+	// Returns raft.ErrCompacted error if log truncated. If no error, there is
+	// at lease one entry in the message, and next is advanced to be equal to
+	// the index+1 of the last entry in the returned message. If
+	// raft.ErrCompacted is returned, the replica will transition to
+	// StateSnapshot.
+	MakeMsgApp(replicaID roachpb.ReplicaID, start, end uint64, maxSize int64, maxEntries int64) (raftpb.Message, error)
 }
 
 // Scheduler abstracts the raftScheduler to allow the RangeController to
@@ -523,6 +522,8 @@ type RaftInterface interface {
 type Scheduler interface {
 	ScheduleControllerEvent(rangeID roachpb.RangeID)
 }
+
+// TODO: resume here ***
 
 // MessageSender abstracts Replica.sendRaftMessage. The context used is always
 // Replica.raftCtx, so we do not need to pass it.
@@ -798,7 +799,10 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		//
 		// Transport connected => disconnected transitions will always be communicated via
 		// TransportDisconnected, but the reverse transition is not.
-		state, nextUB := rc.opts.RaftInterface.FollowerState(r)
+		//
+		// TODO: this is no longer nextUB. Also use match, since it may have
+		// moved past the indexToSend.
+		state, _, nextUB := rc.opts.RaftInterface.FollowerState(r)
 		switch state {
 		case tracker.StateProbe:
 			if rs.replicaSendStream != nil {
@@ -927,7 +931,9 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 			}
 			if to > from {
 				// Have deducted the send tokens. Proceed to send.
-				msg, err := rc.opts.RaftInterface.MakeMsgApp(r, from, to, math.MaxInt64)
+				//
+				// TODO: use configuration of a limit on max inflight entries.
+				msg, err := rc.opts.RaftInterface.MakeMsgApp(r, from, to, math.MaxInt64, math.MaxInt64)
 				if err != nil {
 					panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
 				}
@@ -1055,7 +1061,8 @@ func NewReplicaState(parent *RangeControllerImpl, desc roachpb.ReplicaDescriptor
 		desc:              desc,
 		replicaSendStream: nil,
 	}
-	state, nextUB := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
+	// TODO: this is no longer nextUB.
+	state, _, nextUB := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
 	if state == tracker.StateReplicate {
 		rs.createReplicaSendStream(nextUB)
 	}
@@ -1067,7 +1074,7 @@ func (rs *replicaState) createReplicaSendStream(nextUpperBound uint64) {
 	rss := newReplicaSendStream(rs, replicaSendStreamInitState{
 		isConnected:   isConnected,
 		indexToSend:   nextUpperBound,
-		nextRaftIndex: rs.parent.opts.RaftInterface.HighestEntryIndex() + 1,
+		nextRaftIndex: rs.parent.opts.RaftInterface.LastEntryIndex() + 1,
 		// TODO: these need to be based on some history observed by RangeControllerImpl.
 		approxMaxPriority:   admissionpb.NormalPri,
 		approxMeanSizeBytes: 1000,
@@ -1274,9 +1281,10 @@ func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
 	if bytesToSend == 0 {
 		return false
 	}
+	// TODO: use configuration of a limit on max inflight entries.
 	msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgApp(
 		rss.parent.desc.ReplicaID, rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex,
-		int64(bytesToSend))
+		int64(bytesToSend), math.MaxInt64)
 	if err != nil {
 		if !errors.Is(err, raft.ErrCompacted) {
 			panic(err)
@@ -1639,6 +1647,8 @@ type connectedState uint32
 //	* => replicaSendStream closed
 //
 // Why do we return tokens early?
+
+// TODO: get rid of replicateSoftDisconnected.
 const (
 	replicateConnected connectedState = iota
 	replicateSoftDisconnected
