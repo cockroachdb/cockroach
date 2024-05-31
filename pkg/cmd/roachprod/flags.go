@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/opentelemetry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
@@ -116,6 +117,8 @@ var (
 	sshKeyUser string
 
 	fluentBitConfig fluentbit.Config
+
+	opentelemetryConfig opentelemetry.Config
 )
 
 func initFlags() {
@@ -323,7 +326,7 @@ func initFlags() {
 		"the absolute path to dump prometheus data to (use the contained 'prometheus-docker-run.sh' to visualize")
 
 	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogSite, "datadog-site", "us5.datadoghq.com",
-		"Datadog site to send telemetry data to")
+		"Datadog site to send telemetry data to (e.g., us5.datadoghq.com)")
 
 	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogAPIKey, "datadog-api-key", "",
 		"Datadog API key")
@@ -331,8 +334,17 @@ func initFlags() {
 	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogService, "datadog-service", "cockroachdb",
 		"Datadog service name for emitted logs")
 
-	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogTeam, "datadog-team", "",
-		"Datadog team to tag emitted logs")
+	fluentBitStartCmd.Flags().StringSliceVar(&fluentBitConfig.DatadogTags, "datadog-tags", []string{},
+		"Datadog tags as a comma-separated list in the format KEY1:VAL1,KEY2:VAL2")
+
+	opentelemetryStartCmd.Flags().StringVar(&opentelemetryConfig.DatadogSite, "datadog-site", "us5.datadoghq.com",
+		"Datadog site to send telemetry data to (e.g., us5.datadoghq.com)")
+
+	opentelemetryStartCmd.Flags().StringVar(&opentelemetryConfig.DatadogAPIKey, "datadog-api-key", "",
+		"Datadog API key")
+
+	opentelemetryStartCmd.Flags().StringSliceVar(&opentelemetryConfig.DatadogTags, "datadog-tags", []string{},
+		"Datadog tags as a comma-separated list in the format KEY1:VAL1,KEY2:VAL2")
 
 	sshKeysAddCmd.Flags().StringVar(&sshKeyUser, "user", config.OSUser.Username,
 		"the user to be associated with the new key",
