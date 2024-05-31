@@ -3961,15 +3961,27 @@ FROM
 			return PickOne(og.params.rng, droppingEnumMembers)
 		},
 		"ParamRefs": func() (string, error) {
-			refs, err := PickBetween(og.params.rng, 1, 99, possibleParamReferences)
+			refs, err := PickBetween(
+				og.params.rng, min(1, len(possibleParamReferences)),
+				98, possibleParamReferences,
+			)
 			if err != nil {
 				return "", err
 			}
-			refsWithDefaults, err := PickBetween(og.params.rng, 1, 99, possibleParamReferencesWithDefaults)
-			if useParamRefs && err == nil {
-				return strings.Join(append(refs, refsWithDefaults...), ", "), nil
+			// The max number to pick is 99-len(refs), since we end up combining
+			// the slices together, and we don't want the total length to exceed 99.
+			refsWithDefaults, err := PickBetween(
+				og.params.rng, min(1, len(possibleParamReferencesWithDefaults)),
+				99-len(refs), possibleParamReferencesWithDefaults,
+			)
+			if err != nil {
+				return "", err
 			}
-			return "", nil //nolint:returnerrcheck
+			refs = append(refs, refsWithDefaults...)
+			if useParamRefs && len(refs) != 0 {
+				return strings.Join(refs, ", "), nil
+			}
+			return "", nil
 		},
 		"ReturnRefs": func() (string, error) {
 			ref, err := PickOne(og.params.rng, possibleReturnReferences)
