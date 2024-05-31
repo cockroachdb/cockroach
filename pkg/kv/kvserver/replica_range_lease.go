@@ -101,7 +101,7 @@ var PreferLeaderLeaseOverEpochBasedLease = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lease.prefer_leader_lease_over_epoch_based_lease.enabled",
 	"controls whether leader leases are preferred over epoch-based leases",
-	false,
+	true,
 )
 
 // ExpirationLeasesMaxReplicasPerNode converts from expiration back to epoch
