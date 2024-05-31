@@ -3647,7 +3647,7 @@ project
  ├── immutable
  ├── stats: [rows=1.031997]
  ├── cost: 122.172083
- ├── fd: ()-->(2,5,17,20)
+ ├── fd: ()-->(2,5,17,20), (5)==(20), (20)==(5)
  ├── distribution: ap-southeast-2
  ├── prune: (2-5,10,17-20)
  └── inner-join (lookup xyz [as=x])
