@@ -302,4 +302,3 @@ query I
 SELECT identity2(2);
 ----
 2
-

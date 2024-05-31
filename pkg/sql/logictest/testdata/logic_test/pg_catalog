@@ -431,7 +431,7 @@ oid         nspname             nspowner    nspacl
 4294967191  information_schema  3233629770  NULL
 4294967104  pg_catalog          3233629770  NULL
 4294966974  pg_extension        3233629770  NULL
-105         public              2310524507  NULL
+105         public              1546506610  NULL
 
 # Verify that we can still see the schemas even if we don't have any privilege
 # on the current database.
@@ -450,7 +450,7 @@ oid         nspname             nspowner    nspacl
 4294967191  information_schema  3233629770  NULL
 4294967104  pg_catalog          3233629770  NULL
 4294966974  pg_extension        3233629770  NULL
-105         public              2310524507  NULL
+105         public              1546506610  NULL
 
 user root
 

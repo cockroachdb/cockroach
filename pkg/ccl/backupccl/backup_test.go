@@ -8000,7 +8000,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 			{"information_schema", "node"},
 			{"pg_catalog", "node"},
 			{"pg_extension", "node"},
-			{"public", username.AdminRole},
+			{"public", username.RootUser},
 		})
 
 		sqlDB.ExpectErr(t, `schema "sc" is offline: restoring`, `SHOW TABLES FROM newdb.sc`)
