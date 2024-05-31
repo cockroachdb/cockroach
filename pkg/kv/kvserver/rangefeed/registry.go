@@ -28,15 +28,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Stream is a object capable of transmitting RangeFeedEvents.
-type Stream interface {
-	// Context returns the context for this stream.
-	Context() context.Context
-	// Send blocks until it sends m, the stream is done, or the stream breaks.
-	// Send must be safe to call on the same stream in different goroutines.
-	Send(*kvpb.RangeFeedEvent) error
-}
-
 // Shared event is an entry stored in registration channel. Each entry is
 // specific to registration but allocation is shared between all registrations
 // to track memory budgets. event itself could either be shared or not in case

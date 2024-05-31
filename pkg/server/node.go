@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
@@ -1865,33 +1866,6 @@ func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_Range
 	return nil
 }
 
-// setRangeIDEventSink annotates each response with range and stream IDs.
-// This is used by MuxRangeFeed.
-// TODO: This code can be removed in 22.2 once MuxRangeFeed is the default, and
-// the old style RangeFeed deprecated.
-type setRangeIDEventSink struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	rangeID  roachpb.RangeID
-	streamID int64
-	wrapped  *lockedMuxStream
-}
-
-func (s *setRangeIDEventSink) Context() context.Context {
-	return s.ctx
-}
-
-func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
-	response := &kvpb.MuxRangeFeedEvent{
-		RangeFeedEvent: *event,
-		RangeID:        s.rangeID,
-		StreamID:       s.streamID,
-	}
-	return s.wrapped.Send(response)
-}
-
-var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
-
 // lockedMuxStream provides support for concurrent calls to Send.
 // The underlying MuxRangeFeedServer is not safe for concurrent calls to Send.
 type lockedMuxStream struct {
@@ -1899,11 +1873,17 @@ type lockedMuxStream struct {
 	sendMu  syncutil.Mutex
 }
 
+//func (s *lockedMuxStream) Context() context.Context {
+//	return s.wrapped.Context()
+//}
+
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
 	return s.wrapped.Send(e)
 }
+
+var _ kvpb.MuxRangeFeedEventSink = (*lockedMuxStream)(nil)
 
 // newMuxRangeFeedCompletionWatcher returns 2 functions: one to forward mux
 // rangefeed completion events to the sender, and a cleanup function. Mux
@@ -1993,6 +1973,11 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 
 	var activeStreams sync.Map
 
+	type ctxAndCancel struct {
+		ctx    context.Context
+		cancel func()
+	}
+
 	for {
 		req, err := stream.Recv()
 		if err != nil {
@@ -2002,7 +1987,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		if req.CloseStream {
 			// Client issued a request to close previously established stream.
 			if v, loaded := activeStreams.LoadAndDelete(req.StreamID); loaded {
-				s := v.(*setRangeIDEventSink)
+				s := v.(*ctxAndCancel)
 				s.cancel()
 			} else {
 				// This is a bit strange, but it could happen if this stream completes
@@ -2019,14 +2004,8 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
 		streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-		streamSink := &setRangeIDEventSink{
-			ctx:      streamCtx,
-			cancel:   cancel,
-			rangeID:  req.RangeID,
-			streamID: req.StreamID,
-			wrapped:  muxStream,
-		}
-		activeStreams.Store(req.StreamID, streamSink)
+		streamSink := rangefeed.NewMuxFeedStream(streamCtx, req.StreamID, req.RangeID, muxStream)
+		activeStreams.Store(req.StreamID, ctxAndCancel{streamCtx, cancel})
 
 		n.metrics.NumMuxRangeFeed.Inc(1)
 		n.metrics.ActiveMuxRangeFeed.Inc(1)
@@ -2036,9 +2015,11 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 
 			_, loaded := activeStreams.LoadAndDelete(req.StreamID)
 			streamClosedByClient := !loaded
-			streamSink.cancel()
+			// TODO(wenyihu6): should we cancel if not loaded? shouldn't it be
+			// canceled already when client closes the stream.
+			cancel()
 
-			if streamClosedByClient && streamSink.ctx.Err() != nil {
+			if streamClosedByClient && streamSink.Context().Err() != nil {
 				// If the stream was explicitly closed by the client, we expect to see
 				// context.Canceled error.  In this case, return
 				// kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED to the client.
