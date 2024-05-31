@@ -74,7 +74,7 @@ type registration struct {
 	metrics          *Metrics
 
 	// Output.
-	stream Stream
+	stream BufferedStream
 	done   *future.ErrorFuture
 	unreg  func()
 	// Internal.
@@ -113,7 +113,7 @@ func newRegistration(
 	bufferSz int,
 	blockWhenFull bool,
 	metrics *Metrics,
-	stream Stream,
+	stream BufferedStream,
 	unregisterFn func(),
 	done *future.ErrorFuture,
 ) registration {
@@ -330,12 +330,9 @@ func (r *registration) outputLoop(ctx context.Context) error {
 
 		select {
 		case nextEvent := <-r.buf:
-			err := r.stream.Send(nextEvent.event)
-			nextEvent.alloc.Release(ctx)
+			r.stream.SendBuffered(nextEvent.event, nextEvent.alloc)
+			//nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
-			if err != nil {
-				return err
-			}
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-r.stream.Context().Done():
@@ -392,7 +389,7 @@ func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff, r.withFiltering)
+	return catchUpIter.CatchUpScan(ctx, r.stream.SendUnbuffered, r.withDiff, r.withFiltering)
 }
 
 // ID implements interval.Interface.

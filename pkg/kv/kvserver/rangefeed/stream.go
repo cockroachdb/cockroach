@@ -19,13 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// Stream is a object capable of transmitting RangeFeedEvents.
-type Stream interface {
-	// Context returns the context for this stream.
+type BufferedStream interface {
 	Context() context.Context
-	// Send blocks until it sends m, the stream is done, or the stream breaks.
-	// Send must be safe to call on the same stream in different goroutines.
-	Send(*kvpb.RangeFeedEvent) error
+	SendBuffered(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
+	SendUnbuffered(event *kvpb.RangeFeedEvent) error
 }
 
 type MuxFeedStream struct {
@@ -50,17 +47,19 @@ func (s *MuxFeedStream) Context() context.Context {
 	return s.ctx
 }
 
-func (s *MuxFeedStream) Send(event *kvpb.RangeFeedEvent) error {
-	response := &kvpb.MuxRangeFeedEvent{
+func (s *MuxFeedStream) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
+	return s.muxer.wrapped.Send(&kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
-	}
-	return s.muxer.publish(response)
+	})
 }
 
-var _ kvpb.RangeFeedEventSink = (*MuxFeedStream)(nil)
-var _ Stream = (*MuxFeedStream)(nil)
+func (s *MuxFeedStream) SendBuffered(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation) {
+	s.muxer.publish(s.streamID, s.rangeID, event, alloc)
+}
+
+var _ BufferedStream = (*MuxFeedStream)(nil)
 
 type sharedMuxEvent struct {
 	streamID int64
@@ -80,15 +79,16 @@ type producer struct {
 }
 
 type StreamMuxer struct {
-	wrapped    kvpb.MuxRangeFeedEventSink
-	capacity   int
-	notifyData chan struct{}
-	cleanup    chan int
+	wrapped  kvpb.MuxRangeFeedEventSink
+	capacity int
+	notify   chan struct{}
+	cleanup  chan int
 
 	// queue
 	queueMu struct {
 		syncutil.Mutex
-		buffer muxEventQueue
+		buffer   muxEventQueue
+		overflow bool
 	}
 
 	prodsMu struct {
@@ -101,19 +101,46 @@ const defaultEventBufferCapacity = 4096 * 2
 
 func NewStreamMuxer(wrapped kvpb.MuxRangeFeedEventSink) *StreamMuxer {
 	muxer := &StreamMuxer{
-		wrapped:    wrapped,
-		capacity:   defaultEventBufferCapacity,
-		notifyData: make(chan struct{}, 1),
-		cleanup:    make(chan int, 10),
+		wrapped:  wrapped,
+		capacity: defaultEventBufferCapacity,
+		notify:   make(chan struct{}, 1),
+		cleanup:  make(chan int, 10),
 	}
 	muxer.queueMu.buffer = newMuxEventQueue()
 	muxer.prodsMu.prods = make(map[int64]*producer)
 	return muxer
 }
 
-func (m *StreamMuxer) publish(e *kvpb.MuxRangeFeedEvent) error {
+func (m *StreamMuxer) publish(
+	streamId int64,
+	rangeID roachpb.RangeID,
+	event *kvpb.RangeFeedEvent,
+	alloc *SharedBudgetAllocation,
+) {
+	p, ok := m.getProducerIfExists(streamId)
+	if !ok || p.isDisconnected() {
+		return
+	}
 
-	return m.wrapped.Send(e)
+	//TODO(wenyihu6): check if alloc.Use() is needed
+
+	success := m.pushBack(sharedMuxEvent{
+		streamID: streamId,
+		rangeID:  rangeID,
+		event:    event,
+		alloc:    alloc,
+	})
+
+	if !success {
+		alloc.Release(context.Background())
+		return
+	}
+
+	// notify data incoming unless the signal is already there
+	select {
+	case m.notify <- struct{}{}:
+	default:
+	}
 }
 
 func (m *StreamMuxer) addProducer(ctx context.Context, streamId int64, rangeID roachpb.RangeID) {
@@ -131,14 +158,14 @@ func (m *StreamMuxer) popAllConnectedProducers() (prods []*producer) {
 
 	for streamId, producer := range m.prodsMu.prods {
 		delete(m.prodsMu.prods, streamId)
-		if producer.isConnected() {
+		if !producer.isDisconnected() {
 			prods = append(prods, producer)
 		}
 	}
 	return prods
 }
 
-func (p *producer) isConnected() bool {
+func (p *producer) isDisconnected() bool {
 	p.RLock()
 	defer p.RUnlock()
 	return !p.disconnected
@@ -163,13 +190,13 @@ func (m *StreamMuxer) popProducerByStreamId(streamId int64) *producer {
 	return p
 }
 
-func (m *StreamMuxer) getProducerIfExists(streamId int64) (bool, *producer) {
+func (m *StreamMuxer) getProducerIfExists(streamId int64) (*producer, bool) {
 	m.prodsMu.RLock()
 	defer m.prodsMu.RUnlock()
 	if _, ok := m.prodsMu.prods[streamId]; !ok {
-		return false, nil
+		return nil, false
 	}
-	return true, m.prodsMu.prods[streamId]
+	return m.prodsMu.prods[streamId], true
 }
 
 func (m *StreamMuxer) cleanupProducerIfExists(streamId int64) {
@@ -211,7 +238,22 @@ func (m *StreamMuxer) removeProducerEvent(streamId int64) {
 	m.queueMu.buffer.remove(context.Background(), streamId)
 }
 
-func (m *StreamMuxer) pushBack(event sharedMuxEvent) {
+func (m *StreamMuxer) pushBack(event sharedMuxEvent) bool {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	if m.queueMu.overflow {
+		return false
+	}
+	if m.queueMu.buffer.len() >= m.capacity {
+		m.queueMu.overflow = true
+		return false
+	}
+	m.queueMu.buffer.pushBack(event)
+	return true
+}
+
+// TODO(wenyihu6): check if adding back to err overflow should trigger
+func (m *StreamMuxer) addError(event sharedMuxEvent) {
 	m.queueMu.Lock()
 	defer m.queueMu.Unlock()
 	m.queueMu.buffer.pushBack(event)
