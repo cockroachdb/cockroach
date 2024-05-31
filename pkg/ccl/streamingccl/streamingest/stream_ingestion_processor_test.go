@@ -55,142 +55,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockStreamClient will return the slice of events associated to the stream
-// partition being consumed. Stream partitions are identified by unique
-// partition addresses.
-type mockStreamClient struct {
-	partitionEvents map[string][]streamingccl.Event
-	doneCh          chan struct{}
-	heartbeatErr    error
-	heartbeatStatus streampb.StreamReplicationStatus
-	onHeartbeat     func() (streampb.StreamReplicationStatus, error)
-}
-
-var _ streamclient.Client = &mockStreamClient{}
-
-// Create implements the Client interface.
-func (m *mockStreamClient) Create(
-	_ context.Context, _ roachpb.TenantName, _ streampb.ReplicationProducerRequest,
-) (streampb.ReplicationProducerSpec, error) {
-	panic("unimplemented")
-}
-
-// Dial implements the Client interface.
-func (m *mockStreamClient) Dial(_ context.Context) error {
-	panic("unimplemented")
-}
-
-// Heartbeat implements the Client interface.
-func (m *mockStreamClient) Heartbeat(
-	_ context.Context, _ streampb.StreamID, _ hlc.Timestamp,
-) (streampb.StreamReplicationStatus, error) {
-	if m.onHeartbeat != nil {
-		return m.onHeartbeat()
-	}
-	return m.heartbeatStatus, m.heartbeatErr
-}
-
-// Plan implements the Client interface.
-func (m *mockStreamClient) Plan(
-	_ context.Context, _ streampb.StreamID,
-) (streamclient.Topology, error) {
-	panic("unimplemented mock method")
-}
-
-type mockSubscription struct {
-	eventsCh chan streamingccl.Event
-}
-
-// Subscribe implements the Subscription interface.
-func (m *mockSubscription) Subscribe(_ context.Context) error {
-	return nil
-}
-
-// Events implements the Subscription interface.
-func (m *mockSubscription) Events() <-chan streamingccl.Event {
-	return m.eventsCh
-}
-
-// Err implements the Subscription interface.
-func (m *mockSubscription) Err() error {
-	return nil
-}
-
-// Subscribe implements the Client interface.
-func (m *mockStreamClient) Subscribe(
-	ctx context.Context,
-	_ streampb.StreamID,
-	_ int32,
-	token streamclient.SubscriptionToken,
-	initialScanTime hlc.Timestamp,
-	_ span.Frontier,
-	_ ...streamclient.SubscribeOption,
-) (streamclient.Subscription, error) {
-	var events []streamingccl.Event
-	var ok bool
-	if events, ok = m.partitionEvents[string(token)]; !ok {
-		return nil, errors.Newf("no events found for partition %s", string(token))
-	}
-	log.Infof(ctx, "%q beginning subscription from time %v ", string(token), initialScanTime)
-
-	log.Infof(ctx, "%q emitting %d events", string(token), len(events))
-	eventCh := make(chan streamingccl.Event, len(events))
-	for _, event := range events {
-		log.Infof(ctx, "%q emitting event %v", string(token), event)
-		eventCh <- event
-	}
-	log.Infof(ctx, "%q done emitting %d events", string(token), len(events))
-	go func() {
-		if m.doneCh != nil {
-			log.Infof(ctx, "%q waiting for doneCh", string(token))
-			<-m.doneCh
-			log.Infof(ctx, "%q received event on doneCh", string(token))
-		}
-		close(eventCh)
-	}()
-	return &mockSubscription{eventsCh: eventCh}, nil
-}
-
-// Close implements the Client interface.
-func (m *mockStreamClient) Close(_ context.Context) error {
-	return nil
-}
-
-// Complete implements the streamclient.Client interface.
-func (m *mockStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ bool) error {
-	return nil
-}
-
-// PriorReplicationDetails implements the streamclient.Client interface.
-func (m *mockStreamClient) PriorReplicationDetails(
-	_ context.Context, _ roachpb.TenantName,
-) (string, string, hlc.Timestamp, error) {
-	return "", "", hlc.Timestamp{}, nil
-}
-
-// errorStreamClient always returns an error when consuming a partition.
-type errorStreamClient struct{ mockStreamClient }
-
-var _ streamclient.Client = &errorStreamClient{}
-
-// ConsumePartition implements the streamclient.Client interface.
-func (m *errorStreamClient) Subscribe(
-	_ context.Context,
-	_ streampb.StreamID,
-	_ int32,
-	_ streamclient.SubscriptionToken,
-	_ hlc.Timestamp,
-	_ span.Frontier,
-	_ ...streamclient.SubscribeOption,
-) (streamclient.Subscription, error) {
-	return nil, errors.New("this client always returns an error")
-}
-
-// Complete implements the streamclient.Client interface.
-func (m *errorStreamClient) Complete(_ context.Context, _ streampb.StreamID, _ bool) error {
-	return nil
-}
-
 func TestStreamIngestionProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -283,8 +147,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p2Span, 5)),
 			}
 		}
-		mockClient := &mockStreamClient{
-			partitionEvents: map[string][]streamingccl.Event{string(p1): events(), string(p2): events()},
+		mockClient := &streamclient.MockStreamClient{
+			PartitionEvents: map[string][]streamingccl.Event{string(p1): events(), string(p2): events()},
 		}
 
 		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
@@ -317,9 +181,9 @@ func TestStreamIngestionProcessor(t *testing.T) {
 				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 4)),
 			}
 		}
-		mockClient := &mockStreamClient{
-			doneCh:          make(chan struct{}),
-			partitionEvents: map[string][]streamingccl.Event{string(p1): events()},
+		mockClient := &streamclient.MockStreamClient{
+			DoneCh:          make(chan struct{}),
+			PartitionEvents: map[string][]streamingccl.Event{string(p1): events()},
 		}
 
 		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
@@ -350,7 +214,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		require.Equal(t, []string{"key_1{-\\x00} 0.000000002,0"}, emittedRows, "partition 1 should advance to timestamp 2")
 		emittedRows = readRow(out)
 		require.Equal(t, []string{"key_1{-\\x00} 0.000000004,0"}, emittedRows, "partition 1 should advance to timestamp 4")
-		close(mockClient.doneCh)
+		close(mockClient.DoneCh)
 		require.NoError(t, g.Wait())
 	})
 	t.Run("kv-size-based-flush", func(t *testing.T) {
@@ -361,9 +225,9 @@ func TestStreamIngestionProcessor(t *testing.T) {
 				streamingccl.MakeKVEvent(sampleKV()),
 			}
 		}
-		mockClient := &mockStreamClient{
-			doneCh:          make(chan struct{}),
-			partitionEvents: map[string][]streamingccl.Event{string(p1): events()},
+		mockClient := &streamclient.MockStreamClient{
+			DoneCh:          make(chan struct{}),
+			PartitionEvents: map[string][]streamingccl.Event{string(p1): events()},
 		}
 
 		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
@@ -395,7 +259,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		require.Equal(t, []string{"key_1{-\\x00} 0.000000002,0"}, emittedRows, "partition 1 should advance to timestamp 2")
 		emittedRows = readRow(out)
 		require.Equal(t, []string{"key_1{-\\x00} 0.000000004,0"}, emittedRows, "partition 1 should advance to timestamp 4")
-		close(mockClient.doneCh)
+		close(mockClient.DoneCh)
 		require.NoError(t, g.Wait())
 	})
 	t.Run("range-kv-size-based-flush", func(t *testing.T) {
@@ -411,9 +275,9 @@ func TestStreamIngestionProcessor(t *testing.T) {
 				}),
 			}
 		}
-		mockClient := &mockStreamClient{
-			doneCh:          make(chan struct{}),
-			partitionEvents: map[string][]streamingccl.Event{string(p1): events()},
+		mockClient := &streamclient.MockStreamClient{
+			DoneCh:          make(chan struct{}),
+			PartitionEvents: map[string][]streamingccl.Event{string(p1): events()},
 		}
 
 		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
@@ -446,7 +310,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		require.Equal(t, []string{"key_1{-\\x00} 0.000000002,0"}, emittedRows, "partition 1 should advance to timestamp 2")
 		emittedRows = readRow(out)
 		require.Equal(t, []string{"key_1{-\\x00} 0.000000004,0"}, emittedRows, "partition 1 should advance to timestamp 4")
-		close(mockClient.doneCh)
+		close(mockClient.DoneCh)
 		require.NoError(t, g.Wait())
 	})
 
@@ -460,8 +324,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 6)),
 			}
 		}
-		mockClient := &mockStreamClient{
-			partitionEvents: map[string][]streamingccl.Event{string(p1): events(), string(p2): events()},
+		mockClient := &streamclient.MockStreamClient{
+			PartitionEvents: map[string][]streamingccl.Event{string(p1): events(), string(p2): events()},
 		}
 
 		initialScanTimestamp := hlc.Timestamp{WallTime: 1}
@@ -516,7 +380,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			Partitions: partitions,
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
-			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, &errorStreamClient{},
+			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, &streamclient.ErrorStreamClient{},
 			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 		require.NoError(t, err)
 

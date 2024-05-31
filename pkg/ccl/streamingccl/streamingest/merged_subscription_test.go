@@ -38,8 +38,8 @@ func TestMergeSubscriptionsRun(t *testing.T) {
 			}}),
 		}
 	}
-	mockClient := &mockStreamClient{
-		partitionEvents: map[string][]streamingccl.Event{
+	mockClient := &streamclient.MockStreamClient{
+		PartitionEvents: map[string][]streamingccl.Event{
 			"partition1": events("partition1"),
 			"partition2": events("partition2"),
 		},

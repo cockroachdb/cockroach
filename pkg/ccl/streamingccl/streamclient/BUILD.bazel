@@ -5,6 +5,8 @@ go_library(
     srcs = [
         "client.go",
         "client_helpers.go",
+        "heartbeat_sender.go",
+        "mock_stream_client.go",
         "partitioned_stream_client.go",
         "pgconn.go",
         "random_stream_client.go",
@@ -33,6 +35,7 @@ go_library(
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",
         "//pkg/util/bufalloc",
+        "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
@@ -55,6 +58,7 @@ go_test(
     size = "medium",
     srcs = [
         "client_test.go",
+        "heartbeat_sender_test.go",
         "main_test.go",
         "partitioned_stream_client_test.go",
         "span_config_stream_client_test.go",
