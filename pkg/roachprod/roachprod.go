@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/opentelemetry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -2297,6 +2298,41 @@ func StopFluentBit(ctx context.Context, l *logger.Logger, clusterName string) er
 	}
 
 	return fluentbit.Stop(ctx, l, c)
+}
+
+// StartOpenTelemetry installs, configures, and starts the OpenTelemetry
+// Collector on the cluster identified by clusterName.
+func StartOpenTelemetry(
+	ctx context.Context, l *logger.Logger, clusterName string, config opentelemetry.Config,
+) error {
+	if config.DatadogAPIKey == "" {
+		return errors.New("Datadog API cannot be empty")
+	}
+
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return opentelemetry.Install(ctx, l, c, config)
+}
+
+// Stop stops the OpenTelemetry Collector on the cluster identified by clusterName.
+func StopOpenTelemetry(ctx context.Context, l *logger.Logger, clusterName string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return opentelemetry.Stop(ctx, l, c)
 }
 
 // DestroyDNS destroys the DNS records for the given cluster.
