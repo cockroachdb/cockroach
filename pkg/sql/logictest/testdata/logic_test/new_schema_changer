@@ -1486,7 +1486,7 @@ crdb_internal       node
 information_schema  node
 pg_catalog          node
 pg_extension        node
-public              admin
+public              root
 sc                  root
 
 skipif config local-mixed-23.1
@@ -1501,7 +1501,7 @@ crdb_internal       node
 information_schema  node
 pg_catalog          node
 pg_extension        node
-public              admin
+public              root
 
 statement ok
 COMMIT

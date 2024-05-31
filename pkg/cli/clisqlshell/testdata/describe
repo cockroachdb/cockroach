@@ -109,7 +109,7 @@ List of schemas:
    AND n.nspname <> 'information_schema'
 ORDER BY 1
 Name,Owner
-public,admin
+public,root
 
 cli
 \dn p%
@@ -124,7 +124,7 @@ ORDER BY 1
 Name,Owner
 pg_catalog,node
 pg_extension,node
-public,admin
+public,root
 
 cli
 \dn+
@@ -142,7 +142,7 @@ List of schemas:
    AND n.nspname <> 'information_schema'
 ORDER BY 1
 Name,Owner,Access privileges,Description
-public,admin,,
+public,root,,
 
 cli
 \dn+ p%
@@ -159,7 +159,7 @@ ORDER BY 1
 Name,Owner,Access privileges,Description
 pg_catalog,node,,
 pg_extension,node,,
-public,admin,,
+public,root,,
 
 cli
 \dnS
@@ -176,7 +176,7 @@ crdb_internal,node
 information_schema,node
 pg_catalog,node
 pg_extension,node
-public,admin
+public,root
 
 cli
 \dnS+
@@ -195,7 +195,7 @@ crdb_internal,node,,
 information_schema,node,,
 pg_catalog,node,,
 pg_extension,node,,
-public,admin,,
+public,root,,
 
 subtest end
 
