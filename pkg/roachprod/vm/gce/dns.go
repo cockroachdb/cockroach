@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"sort"
@@ -24,6 +25,7 @@ import (
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
@@ -86,7 +88,8 @@ type dnsProvider struct {
 		mu      syncutil.Mutex
 		records map[string][]vm.DNSRecord
 	}
-	execFn ExecFn
+	execFn    ExecFn
+	resolvers []*net.Resolver
 }
 
 func NewDNSProvider() *dnsProvider {
@@ -113,7 +116,8 @@ func NewDNSProviderWithExec(execFn ExecFn) *dnsProvider {
 			mu      syncutil.Mutex
 			records map[string][]vm.DNSRecord
 		}{records: make(map[string][]vm.DNSRecord)},
-		execFn: execFn,
+		execFn:    execFn,
+		resolvers: googleDNSResolvers(),
 	}
 }
 
@@ -165,6 +169,14 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 			n.clearCacheEntry(name)
 			return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
 		}
+		// If fastDNS is enabled, we need to wait for the records to become available
+		// on the Google DNS servers.
+		if config.FastDNS {
+			err = n.waitForRecordsAvailable(ctx, maps.Values(combinedRecords)...)
+			if err != nil {
+				return err
+			}
+		}
 		n.updateCache(name, maps.Values(combinedRecords))
 	}
 	return nil
@@ -172,6 +184,10 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 
 // LookupSRVRecords implements the vm.DNSProvider interface.
 func (n *dnsProvider) LookupSRVRecords(ctx context.Context, name string) ([]vm.DNSRecord, error) {
+	if config.FastDNS {
+		rIdx := randutil.FastUint32() % uint32(len(n.resolvers))
+		return n.fastLookupSRVRecords(ctx, n.resolvers[rIdx], name, true)
+	}
 	return n.lookupSRVRecords(ctx, name)
 }
 

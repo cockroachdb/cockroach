@@ -67,6 +67,11 @@ var (
 
 	// DNSRequiredProviders is the list of cloud providers that must be active for
 	DNSRequiredProviders []string
+
+	// FastDNS enables fast DNS resolution via the standard Go net package. If
+	// this is disabled, lookups will be performed by the cloud provider's
+	// utilities to resolve DNS records.
+	FastDNS = false
 )
 
 // EnvOrDefaultString returns the value of the environment variable with the
