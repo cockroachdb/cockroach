@@ -19,32 +19,17 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-type ProgressHighWatermark struct {
-	WallTime int64 `json:"wall_time"`
-	Logical  int32 `json:"logical"`
-}
-
-type ProgressFractional struct {
-	FractionCompleted float32 `json:"fraction_completed;omitempty"`
-}
-
+// TODO[kyle.wong] should we have a job run id or job run number or something?
 type JobStateChange struct {
-	JobID   jobspb.JobID `json:"job_id"`
-	JobType string       `json:"job_type"`
-	Status  Status       `json:"status"`
-	// TODO(abarganier): we need to consider redaction for this string field.
-	RunningStatus        redact.RedactableString `json:"running_status,omitempty"`
-	StateChangeTimeNanos int64                   `json:"state_change_time_nanos"`
-	ModifiedMicros       int64                   `json:"modified_micros"`
-	// TODO(abarganier): Figure out redactable errors.
-	// TODO(abarganier): Payload struct has error, resume_errors, cleanup_errors, final_resume_error,
-	// do we need to include these?
-	Error redact.RedactableString `json:"error,omitempty"`
-	// TODO(abarganier): Should we include the RetriableExecutionFailures from the Payload?
-	ProgressWatermark  *ProgressHighWatermark  `json:"progress_watermark,omitempty"`
-	ProgressFractional *ProgressFractional     `json:"progress_fractional,omitempty"`
-	PauseReason        redact.RedactableString `json:"pause_reason,omitempty"`
-	// TODO(abarganier) should we include the Session?
+	JobID                  jobspb.JobID            `json:"job_id"`
+	JobType                string                  `json:"job_type"`
+	Status                 Status                  `json:"status"`
+	StateChangeTimeNanos   int64                   `json:"state_change_time_nanos"`
+	ProgressModifiedMicros int64                   `json:"progress_modified_micros"`
+	ProgressFractional     float32                 `json:"progress_fractional,omitempty"`
+	ProgressWatermark      int64                   `json:"progress_watermark,omitempty"`
+	Error                  redact.RedactableString `json:"error,omitempty"`
+	FinalResumeError       redact.RedactableString `json:"final_resume_error,omitempty"`
 }
 
 func maybeLogStateChangeStructured(ctx context.Context, job *Job, status Status, jobErr error) {
@@ -54,28 +39,28 @@ func maybeLogStateChangeStructured(ctx context.Context, job *Job, status Status,
 	payload := job.Payload()
 	progress := job.Progress()
 	out := &JobStateChange{
-		JobID:   job.ID(),
-		JobType: payload.Type().String(),
-		Status:  status,
-		// TODO(abarganier): properly redact
-		RunningStatus:        redact.RedactableString(progress.RunningStatus),
-		StateChangeTimeNanos: timeutil.Now().UnixNano(),
-		ModifiedMicros:       progress.ModifiedMicros,
-		// TODO(abarganier): properly redact
-		PauseReason: redact.RedactableString(payload.PauseReason),
+		JobID:                  job.ID(),
+		JobType:                payload.Type().String(),
+		Status:                 status,
+		StateChangeTimeNanos:   timeutil.Now().UnixNano(),
+		ProgressModifiedMicros: progress.ModifiedMicros,
 	}
+
 	if jobErr != nil {
 		// TODO(abarganier): properly redact
 		out.Error = redact.RedactableString(jobErr.Error())
 	}
+
+	if payload.FinalResumeError != nil {
+		out.FinalResumeError = redact.RedactableString(payload.FinalResumeError.String())
+	}
+
 	switch p := progress.Progress.(type) {
 	case *jobspb.Progress_FractionCompleted:
-		out.ProgressFractional = &ProgressFractional{FractionCompleted: p.FractionCompleted}
+		out.ProgressFractional = p.FractionCompleted
 	case *jobspb.Progress_HighWater:
-		out.ProgressWatermark = &ProgressHighWatermark{
-			WallTime: p.HighWater.WallTime,
-			Logical:  p.HighWater.Logical,
-		}
+		out.ProgressWatermark = p.HighWater.WallTime
 	}
+
 	log.Structured(ctx, log.StructuredMeta{EventType: log.JOB_STATE_CHANGE}, out)
 }
