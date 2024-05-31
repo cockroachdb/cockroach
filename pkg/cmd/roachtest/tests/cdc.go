@@ -1778,7 +1778,10 @@ func registerCDC(r registry.Registry) {
 					chaos:         true,
 					validateOrder: true,
 				},
-				opts: map[string]string{"initial_scan": "'no'"},
+				opts: map[string]string{
+					"initial_scan":      "'no'",
+					"kafka_sink_config": `'{"RequiredAcks": "ALL"}'`,
+				},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 3 * time.Minute,

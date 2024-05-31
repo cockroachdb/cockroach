@@ -192,10 +192,6 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 			return err
 		}
 
-		if err := k.producer.SendMessages(msgs); err != nil {
-			return handleErr(err)
-		}
-
 		// failed again:
 		// 23:46:14 test_impl.go:414: test failure #1: full stack retained in failure_1.log: (cdc.go:3802).validateMessage: topic consumer for district encountered validator error(s): topic district partition 0: saw new row timestamp 1717112771631751551.0000000000 after 1717112772130398025.0000000000 was seen (key [0, 3])
 		// ADIR=~/tmp/artifacts-backups/kafka-chaos-back-to-sync
@@ -239,6 +235,18 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 
 		// node2/274/2024-05-30T23:46:18.407261212.after:{"key":"[0, 3]","offset":50882,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
 		// node2/274/2024-05-30T23:46:18.407261212.after:{"key":"[0, 3]","offset":50884,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// this still hits the issue
+		// if err := k.producer.SendMessages(msgs); err != nil {
+		// 	return handleErr(err)
+		// }
+
+		// if we send them one at a time that should not hit it. but that's not a really tenable solution. but lets try it
+		for _, m := range msgs {
+			if _, _, err := k.producer.SendMessage(m); err != nil {
+				return handleErr(err)
+			}
+		}
 
 		// offsets should be ordered right. maybe we can catch intra batch reorderings here
 		if !k.isSortedRight(ctx, msgs) {
@@ -416,8 +424,16 @@ func makeKafkaSinkV2(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	kafkaCfg.Producer.Retry.Max = 0  // retry is handled by the batching sink / parallelIO
-	kafkaCfg.Net.MaxOpenRequests = 1 // need to set this to ensure message ordering without turning on idempotency
+	kafkaCfg.Producer.Retry.Max = 0 // retry is handled by the batching sink / parallelIO
+	// need to set this to ensure message ordering without turning on idempotency
+	// this is bugged though so doesnt work right. looks like this might still be the case even with retries off
+	// if we end up with 2 batches, A and B, A can fail and B can still go through.
+	kafkaCfg.Net.MaxOpenRequests = 1
+	// kafkaCfg.Producer.Flush.Bytes = int(sarama.MaxRequestSize)
+	// kafkaCfg.Producer.Flush.Messages = 0
+
+	// trying one by one. see Flush()
+	kafkaCfg.Producer.Flush.MaxMessages = 1
 
 	topicNamer, err := MakeTopicNamer(
 		targets,

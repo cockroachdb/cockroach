@@ -1,0 +1,1296 @@
+Locating and verifying binaries for os="linux", arch="amd64"
+WARN: unable to find "cockroach-ea" for "amd64": binary or library "cockroach-ea" not found (or was not executable)
+WARN: unable to find library libgeos, ignoring: binary or library "libgeos" not found (or was not executable)
+WARN: unable to find library libgeos_c, ignoring: binary or library "libgeos_c" not found (or was not executable)
+
+Found the following binaries:
+	cockroach "amd64" at: /home/miles/crdb/artifacts/cockroach
+	workload "amd64" at: /home/miles/crdb/artifacts/workload
+AMD64 clusters will be provisioned with probability 1.00
+
+Running tests which match regex "cdc/kafka-chaos$" and are compatible with cloud "gce".
+
+HTTP server listening on port 46247 on all network interfaces: http://:46247/
+18:09:38 run.go:369: test runner logs in: /home/miles/tmp/artifacts-backups/kafka-chaos-back-to-sync-onebyone2/_runner-logs/test_runner-1717178978.log
+test runner logs in: /home/miles/tmp/artifacts-backups/kafka-chaos-back-to-sync-onebyone2/_runner-logs/test_runner-1717178978.log
+18:09:38 run.go:163: global random seed: 3296120322773598479
+18:09:38 test_runner.go:356: test_run_id: miles-1717178978
+test_run_id: miles-1717178978
+[w0] 18:09:38 work_pool.go:204: Acquired quota for 64 CPUs
+[w0] 18:09:38 cluster.go:3102: Using randomly chosen arch="amd64", cdc/kafka-chaos
+18:09:38 test_runner.go:501: Attaching to existing cluster miles-runs-roachtests-all-day for test cdc/kafka-chaos
+18:09:44 test_runner.go:512: Creating new cluster with custom name "miles-runs-roachtests-all-day" for test cdc/kafka-chaos: n4cpu16 (arch="amd64")
+18:09:44 cluster.go:956: Attempting cluster creation (attempt #1/1)
+18:09:48 roachprod.go:1646: Creating cluster miles-runs-roachtests-all-day with 4 nodes...
+18:09:48 gcloud.go:1263: WARNING: SSD count must be at least 2 for "n2-standard-16". Setting --gce-local-ssd-count to 2
+18:09:48 gcloud.go:1509: Creating 4 instances, distributed across [us-east1-c]
+18:10:00 gcloud.go:2072: Propagating labels across all disks
+18:10:02 roachprod.go:1655: Created cluster miles-runs-roachtests-all-day; setting up SSH...
+18:10:08 cluster_cloud.go:170: miles-runs-roachtests-all-day: [gce:cockroach-ephemeral] 
+18:10:08 cluster_cloud.go:176: 12h49m51s remaining
+Name                                DNS                                                                Private IP    Public IP       Machine Type    CPU Arch  CPU Family  Provision Model  
+miles-runs-roachtests-all-day-0001  miles-runs-roachtests-all-day-0001.us-east1-c.cockroach-ephemeral  10.142.0.188  34.118.250.87   n2-standard-16  amd64     ice lake    ondemand         
+miles-runs-roachtests-all-day-0002  miles-runs-roachtests-all-day-0002.us-east1-c.cockroach-ephemeral  10.142.0.186  34.74.112.141   n2-standard-16  amd64     ice lake    ondemand         
+miles-runs-roachtests-all-day-0003  miles-runs-roachtests-all-day-0003.us-east1-c.cockroach-ephemeral  10.142.0.182  34.148.30.153   n2-standard-16  amd64     ice lake    ondemand         
+miles-runs-roachtests-all-day-0004  miles-runs-roachtests-all-day-0004.us-east1-c.cockroach-ephemeral  10.142.0.178  35.196.204.250  n2-standard-16  amd64     ice lake    ondemand         
+miles-runs-roachtests-all-day: waiting for nodes to start
+generating ssh key
+distributing ssh key
+scanning hosts
+distributing known_hosts
+adding additional authorized keys
+[w0] 18:11:12 test_runner.go:742: Created new cluster for test cdc/kafka-chaos: miles-runs-roachtests-all-day (arch="amd64")
+[w0] 18:11:12 cluster.go:1084: saving cluster miles-runs-roachtests-all-day [tag:] (4 nodes) for debugging (--debug specified)
+[w0] 18:11:12 test_runner.go:818: Starting test: cdc/kafka-chaos:1 on cluster=miles-runs-roachtests-all-day (arch="amd64")
+18:11:12 test_impl.go:157: Benchmark test, running with standard cockroach
+18:11:12 test_impl.go:157: Benchmark test, running with standard cockroach
+18:11:12 cluster.go:692: test status: uploading file
+[w0] 18:11:12 cluster_synced.go:2043: [31mWARNING: Source file is a symlink to /home/miles/go/src/github.com/cockroachdb/cockroach/artifacts/cockroach[0m
+[w0] 18:11:12 cluster_synced.go:2044: [31mWARNING: Remote file will inherit the target permissions '-rwxrwxrwx'.[0m
+[w0] 18:11:12 cluster_synced.go:2062: miles-runs-roachtests-all-day: putting (scp) /home/miles/crdb/artifacts/cockroach ./cockroach on nodes [1 2 3 4]
+[w0] 18:11:24 cluster_synced.go:2264: 
+[w0] 18:11:24 cluster_synced.go:2269:    1: done
+[w0] 18:11:24 cluster_synced.go:2269:    2: done
+[w0] 18:11:24 cluster_synced.go:2269:    3: done
+[w0] 18:11:24 cluster_synced.go:2269:    4: done
+18:11:24 cluster.go:692: test status: 
+18:11:24 cluster.go:692: test status: running test
+18:11:24 cluster.go:692: test status: metamorphically setting kv.expiration_leases_only.enabled = true
+18:11:39 test_runner.go:1233: === RUN   cdc/kafka-chaos  [metrics: https://go.crdb.dev/roachtest-grafana/miles-1717178978/cdc-kafka-chaos/1717179099985/1717180899985]
+=== RUN   cdc/kafka-chaos  [metrics: https://go.crdb.dev/roachtest-grafana/miles-1717178978/cdc-kafka-chaos/1717179099985/1717180899985]
+18:11:39 test_runner.go:1881: error adding annotation for test start: error adding grafana annotation: GRAFANA_SERVICE_ACCOUNT_JSON env variable was not found
+18:11:39 cluster.go:692: test status: starting nodes :1-3
+18:11:44 cluster_synced.go:1897: miles-runs-roachtests-all-day: checking certs.tar
+miles-runs-roachtests-all-day: initializing certs
+miles-runs-roachtests-all-day: distributing certs
+18:11:48 cockroach.go:452: miles-runs-roachtests-all-day (system): starting cockroach processes
+18:11:49 cockroach.go:1150: miles-runs-roachtests-all-day: initializing cluster
+18:11:50 cockroach.go:1159: warning: --url specifies user/password, but command "init" does not accept user/password details - details ignored
+Cluster successfully initialized
+18:11:52 cockroach.go:1223: miles-runs-roachtests-all-day (system): setting cluster settings
+18:11:53 cockroach.go:1233: SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+miles-runs-roachtests-all-day: executing sql
+18:11:54 cockroach.go:1217: log into DB console with user=roachprod password=cockroachdb
+18:11:54 promhelper_utils.go:77: Secrets obtained from temp file: /home/miles/.roachprod/promhelper-secrets
+18:11:54 client.go:93: invoking PUT for URL: https://grafana.testeng.crdb.io/promhelpers/v1/instance-configs/miles-runs-roachtests-all-day
+18:11:54 cluster.go:692: test status: getting ./certs
+18:11:54 cluster_synced.go:2448: miles-runs-roachtests-all-day: getting (scp) ./certs /tmp/roachtest-certs4126622443/certs on nodes [1]
+18:11:54 cluster_synced.go:2656:    1: done
+18:11:54 cluster.go:692: test status: 
+18:11:54 cluster.go:692: test status: uploading file
+18:11:55 cluster_synced.go:2043: [31mWARNING: Source file is a symlink to /home/miles/go/src/github.com/cockroachdb/cockroach/artifacts/workload[0m
+18:11:55 cluster_synced.go:2044: [31mWARNING: Remote file will inherit the target permissions '-rwxrwxrwx'.[0m
+18:11:55 cluster_synced.go:2062: miles-runs-roachtests-all-day: putting (scp) /home/miles/crdb/artifacts/workload ./workload on nodes [4]
+18:12:00 cluster_synced.go:2264: 
+18:12:00 cluster_synced.go:2269:    4: done
+18:12:00 cluster.go:692: test status: 
+miles-runs-roachtests-all-day:[1 2 3]: download node exporter
+   1: 	<ok>
+	Failed to stop node_exporter.service: Unit node_exporter.service not loaded.
+	node_exporter-1.2.2.linux-amd64/LICENSE
+	node_exporter-1.2.2.linux-amd64/NOTICE
+	node_exporter-1.2.2.linux-amd64/node_exporter
+	
+   2: 	<ok>
+	Failed to stop node_exporter.service: Unit node_exporter.service not loaded.
+	node_exporter-1.2.2.linux-amd64/LICENSE
+	node_exporter-1.2.2.linux-amd64/NOTICE
+	node_exporter-1.2.2.linux-amd64/node_exporter
+	
+   3: 	<ok>
+	Failed to stop node_exporter.service: Unit node_exporter.service not loaded.
+	node_exporter-1.2.2.linux-amd64/LICENSE
+	node_exporter-1.2.2.linux-amd64/NOTICE
+	node_exporter-1.2.2.linux-amd64/node_exporter
+	
+miles-runs-roachtests-all-day:[1 2 3]: init node exporter
+   1: 	<ok>
+	Running as unit: node_exporter.service
+	
+   2: 	<ok>
+	Running as unit: node_exporter.service
+	
+   3: 	<ok>
+	Running as unit: node_exporter.service
+	
+Failed to stop prometheus.service: Unit prometheus.service not loaded.
+no prometheus is running
+prometheus-2.27.1.linux-amd64/consoles/
+prometheus-2.27.1.linux-amd64/consoles/index.html.example
+prometheus-2.27.1.linux-amd64/consoles/node-cpu.html
+prometheus-2.27.1.linux-amd64/consoles/node-disk.html
+prometheus-2.27.1.linux-amd64/consoles/node-overview.html
+prometheus-2.27.1.linux-amd64/consoles/node.html
+prometheus-2.27.1.linux-amd64/consoles/prometheus-overview.html
+prometheus-2.27.1.linux-amd64/consoles/prometheus.html
+prometheus-2.27.1.linux-amd64/console_libraries/
+prometheus-2.27.1.linux-amd64/console_libraries/menu.lib
+prometheus-2.27.1.linux-amd64/console_libraries/prom.lib
+prometheus-2.27.1.linux-amd64/prometheus.yml
+prometheus-2.27.1.linux-amd64/LICENSE
+prometheus-2.27.1.linux-amd64/NOTICE
+prometheus-2.27.1.linux-amd64/prometheus
+prometheus-2.27.1.linux-amd64/promtool
+18:12:03 cluster_synced.go:2062: miles-runs-roachtests-all-day: putting (scp) /tmp/prometheus.yml2044688760 /tmp/prometheus/prometheus.yml on nodes [4]
+18:12:03 cluster_synced.go:2264: 
+18:12:03 cluster_synced.go:2269:    4: done
+Running as unit: prometheus.service
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+dpkg-preconfigure: unable to re-open stdin: 
+Selecting previously unselected package apt-transport-https.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 66021 files and directories currently installed.)
+Preparing to unpack .../apt-transport-https_2.4.12_all.deb ...
+Unpacking apt-transport-https (2.4.12) ...
+Setting up apt-transport-https (2.4.12) ...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Reading package lists...
+Building dependency tree...
+Reading state information...
+adduser is already the newest version (3.118ubuntu5).
+adduser set to manually installed.
+The following additional packages will be installed:
+  fontconfig-config fonts-dejavu-core
+The following NEW packages will be installed:
+  fontconfig-config fonts-dejavu-core libfontconfig1
+0 upgraded, 3 newly installed, 0 to remove and 63 not upgraded.
+Need to get 1202 kB of archives.
+After this operation, 3540 kB of additional disk space will be used.
+Get:1 http://us-east1.gce.archive.ubuntu.com/ubuntu jammy/main amd64 fonts-dejavu-core all 2.37-2build1 [1041 kB]
+Get:2 http://us-east1.gce.archive.ubuntu.com/ubuntu jammy/main amd64 fontconfig-config all 2.13.1-4.2ubuntu5 [29.1 kB]
+Get:3 http://us-east1.gce.archive.ubuntu.com/ubuntu jammy/main amd64 libfontconfig1 amd64 2.13.1-4.2ubuntu5 [131 kB]
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+dpkg-preconfigure: unable to re-open stdin: 
+Fetched 1202 kB in 0s (41.7 MB/s)
+Selecting previously unselected package fonts-dejavu-core.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 66025 files and directories currently installed.)
+Preparing to unpack .../fonts-dejavu-core_2.37-2build1_all.deb ...
+Unpacking fonts-dejavu-core (2.37-2build1) ...
+Selecting previously unselected package fontconfig-config.
+Preparing to unpack .../fontconfig-config_2.13.1-4.2ubuntu5_all.deb ...
+Unpacking fontconfig-config (2.13.1-4.2ubuntu5) ...
+Selecting previously unselected package libfontconfig1:amd64.
+Preparing to unpack .../libfontconfig1_2.13.1-4.2ubuntu5_amd64.deb ...
+Unpacking libfontconfig1:amd64 (2.13.1-4.2ubuntu5) ...
+Setting up fonts-dejavu-core (2.37-2build1) ...
+Setting up fontconfig-config (2.13.1-4.2ubuntu5) ...
+Setting up libfontconfig1:amd64 (2.13.1-4.2ubuntu5) ...
+Processing triggers for man-db (2.10.2-1) ...
+Processing triggers for libc-bin (2.35-0ubuntu3.6) ...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Downloading https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_amd64.deb
+Selecting previously unselected package grafana-enterprise.
+(Reading database ... 66140 files and directories currently installed.)
+Preparing to unpack grafana-enterprise_9.2.3_amd64.deb ...
+Unpacking grafana-enterprise (9.2.3) ...
+Setting up grafana-enterprise (9.2.3) ...
+Adding system user `grafana' (UID 114) ...
+Adding new user `grafana' (UID 114) with group `grafana' ...
+Not creating home directory `/usr/share/grafana'.
+### NOT starting on installation, please execute the following statements to configure grafana to start automatically using systemd
+ sudo /bin/systemctl daemon-reload
+ sudo /bin/systemctl enable grafana-server
+### You can start grafana-server by executing
+ sudo /bin/systemctl start grafana-server
+18:12:16 cluster_synced.go:2062: miles-runs-roachtests-all-day: putting (scp) /tmp/prometheus.yaml3014497193 /etc/grafana/provisioning/datasources/prometheus.yaml on nodes [4]
+18:12:16 cluster_synced.go:2264: 
+18:12:16 cluster_synced.go:2269:    4: done
+18:12:16 cluster_synced.go:2062: miles-runs-roachtests-all-day: putting (scp) /tmp/cockroach.yaml1757723809 /etc/grafana/provisioning/dashboards/cockroach.yaml on nodes [4]
+18:12:16 cluster_synced.go:2264: 
+18:12:16 cluster_synced.go:2269:    4: done
+18:12:17 cluster_synced.go:2062: miles-runs-roachtests-all-day: putting (scp) /tmp/grafana.ini1187230093 /etc/grafana/grafana.ini on nodes [4]
+18:12:17 cluster_synced.go:2264: 
+18:12:17 cluster_synced.go:2269:    4: done
+18:12:17 cluster_synced.go:2062: miles-runs-roachtests-all-day: putting (scp) /tmp/s-0.json4151019505 /var/lib/grafana/dashboards/s-0.json on nodes [4]
+18:12:17 cluster_synced.go:2264: 
+18:12:17 cluster_synced.go:2269:    4: done
+18:12:18 roachprod.go:1847: Grafana dashboard: http://35.196.204.250:3000/
+18:12:18 cdc.go:917: test status: started grafana at http://35.196.204.250:3000/d/928XNlN4k/basic?from=now-15m&to=now
+18:12:18 cdc.go:499: test status: installing TPCC workload
+18:12:18 cluster.go:2462: running cmd `./cockroach workload fixtur...` on nodes [:4]; details in run_181218.189872371_n4_cockroach-workload-f.log
+18:12:47 cdc.go:502: test status: Setting schema_locked for [tpcc.warehouse tpcc.district tpcc.customer tpcc.history tpcc.order tpcc.new_order tpcc.item tpcc.stock tpcc.order_line]
+18:12:50 cdc.go:513: test status: initiating TPCC workload
+18:12:50 cdc.go:707: test status: initiating kafka sink
+18:12:50 cdc.go:2908: test status: installing kafka
+18:12:50 cluster.go:2462: running cmd `mkdir -p /mnt/data1/confluent` on nodes [:4]; details in run_181250.444551554_n4_mkdir-p-mntdata1conf.log
+18:12:50 cluster.go:2462: running cmd `./workload run tpcc --wareh...` on nodes [:4]; details in run_181250.444674950_n4_workload-run-tpcc-wa.log
+18:12:50 cluster.go:692: test status: uploading string
+18:12:50 cluster.go:692: test status: uploading file
+18:12:50 cluster_synced.go:2062: miles-runs-roachtests-all-day: putting (scp) /tmp/install.sh1744887325 /mnt/data1/confluent/install.sh on nodes [4]
+18:12:51 cluster_synced.go:2264: 
+18:12:51 cluster_synced.go:2269:    4: done
+18:12:51 cluster.go:692: test status: 
+18:12:51 cluster.go:692: test status: 
+18:12:51 cluster.go:2462: running cmd `/mnt/data1/confluent/instal...` on nodes [:4]; details in run_181251.255388870_n4_mntdata1confluentins.log
+18:13:04 cluster.go:2462: running cmd `mkdir -p logs` on nodes [:4]; details in run_181304.596598967_n4_mkdir-p-logs.log
+18:13:05 cluster.go:2462: running cmd `sudo apt-get -q update 2>&1...` on nodes [:4]; details in run_181305.085136457_n4_sudo-aptget-q-update.log
+18:13:07 cluster.go:2462: running cmd `sudo DEBIAN_FRONTEND=nonint...` on nodes [:4]; details in run_181307.897378833_n4_sudo-DEBIANFRONTENDn.log
+18:13:20 cluster.go:2462: running cmd `echo "advertised.listeners=...` on nodes [:4]; details in run_181320.248100133_n4_echo-advertisedliste.log
+18:13:20 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181320.508759408_n4_CONFLUENTCURRENTmntd.log
+18:13:23 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_181323.370618815_n4_touch-mntdata1conflu.log
+18:13:23 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181323.629428349_n4_CONFLUENTCURRENTmntd.log
+18:13:26 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181326.203144964_n4_CONFLUENTCURRENTmntd.log
+18:13:29 cdc.go:3428: starting topic consumer for topic: warehouse
+18:13:29 cdc.go:3428: starting topic consumer for topic: district
+18:13:29 cdc.go:3428: starting topic consumer for topic: customer
+18:13:29 cdc.go:3428: starting topic consumer for topic: history
+18:13:29 cdc.go:3428: starting topic consumer for topic: order
+18:13:29 cdc.go:3428: starting topic consumer for topic: new_order
+18:13:29 cdc.go:3428: starting topic consumer for topic: item
+18:13:29 cdc.go:3428: starting topic consumer for topic: stock
+18:13:29 cdc.go:3428: starting topic consumer for topic: order_line
+18:13:29 cdc.go:714: test status: using sinkURI kafka://10.142.0.178:9092
+18:13:29 cdc.go:741: test status: creating kafka changefeed into targets [tpcc.warehouse tpcc.district tpcc.customer tpcc.history tpcc.order tpcc.new_order tpcc.item tpcc.stock tpcc.order_line] with options (map[initial_scan:'no' kafka_sink_config:'{"RequiredAcks": "ALL"}' min_checkpoint_frequency:'10s' resolved: updated:])
+changefeed: 18:13:30 cdc.go:3586: Setting kv.rangefeed.scheduler.enabled to true
+changefeed: 18:13:30 cdc.go:3597: Setting changefeed.default_range_distribution_strategy to default
+18:13:30 cdc.go:763: test status: created changefeed default with jobID 973566148850221057
+18:13:30 cdc.go:3412: topic consumer for warehouse has partitions: [0]
+18:13:30 cdc.go:3412: topic consumer for customer has partitions: [0]
+18:13:30 cdc.go:3412: topic consumer for district has partitions: [0]
+18:13:30 cdc.go:3412: topic consumer for new_order has partitions: [0]
+18:13:30 cdc.go:3412: topic consumer for history has partitions: [0]
+18:13:30 cdc.go:3412: topic consumer for order_line has partitions: [0]
+18:13:30 cdc.go:3412: topic consumer for order has partitions: [0]
+18:13:30 cdc.go:3412: topic consumer for item has partitions: [0]
+18:13:30 cdc.go:3412: topic consumer for stock has partitions: [0]
+18:13:30 cdc.go:3453: topic consumer for order_line validated 1 rows and 0 resolved timestamps
+18:13:30 cdc.go:3453: topic consumer for stock validated 1 rows and 0 resolved timestamps
+18:13:31 cdc.go:3453: topic consumer for history validated 1 rows and 0 resolved timestamps
+18:13:31 cdc.go:3453: topic consumer for warehouse validated 1 rows and 0 resolved timestamps
+18:13:31 cdc.go:3453: topic consumer for district validated 1 rows and 0 resolved timestamps
+18:13:31 cdc.go:3453: topic consumer for customer validated 1 rows and 0 resolved timestamps
+18:13:31 cdc.go:3453: topic consumer for order validated 1 rows and 0 resolved timestamps
+18:13:31 cdc.go:3453: topic consumer for new_order validated 1 rows and 0 resolved timestamps
+changefeed: 18:13:36 latency_verifier.go:96: initial scan completed: latency 6.097778162s, highwater 2024-05-31 18:13:30.335899359 +0000 UTC
+changefeed: 18:13:37 latency_verifier.go:117: catchup scan: latency 6.828s
+changefeed: 18:13:39 latency_verifier.go:117: catchup scan: latency 8.837s
+changefeed: 18:13:41 latency_verifier.go:117: catchup scan: latency 10.847s
+changefeed: 18:13:43 latency_verifier.go:117: catchup scan: latency 12.856s
+18:13:44 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 13.787s; max steady latency so far 13.787s; highwater 2024-05-31 18:13:30.409134333 +0000 UTC
+18:13:54 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 22.038s; max steady latency so far 22.038s; highwater 2024-05-31 18:13:32.20706572 +0000 UTC
+18:14:00 cdc.go:3453: topic consumer for order_line validated 13026 rows and 0 resolved timestamps
+18:14:01 cdc.go:3453: topic consumer for stock validated 6493 rows and 0 resolved timestamps
+18:14:01 cdc.go:3453: topic consumer for warehouse validated 623 rows and 0 resolved timestamps
+18:14:01 cdc.go:3453: topic consumer for customer validated 1285 rows and 0 resolved timestamps
+18:14:01 cdc.go:3453: topic consumer for district validated 1275 rows and 0 resolved timestamps
+18:14:01 cdc.go:3453: topic consumer for history validated 623 rows and 0 resolved timestamps
+18:14:02 cdc.go:3453: topic consumer for order validated 1323 rows and 0 resolved timestamps
+18:14:02 cdc.go:3453: topic consumer for new_order validated 1323 rows and 0 resolved timestamps
+18:14:04 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.064s; max steady latency so far 25.053s; highwater 2024-05-31 18:13:44.230410272 +0000 UTC
+18:14:14 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.73s; max steady latency so far 25.089s; highwater 2024-05-31 18:13:55.61441782 +0000 UTC
+18:14:24 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.567s; max steady latency so far 25.089s; highwater 2024-05-31 18:14:06.827766652 +0000 UTC
+18:14:31 cdc.go:3453: topic consumer for order_line validated 25035 rows and 0 resolved timestamps
+18:14:31 cdc.go:3453: topic consumer for stock validated 13180 rows and 0 resolved timestamps
+18:14:32 cdc.go:3453: topic consumer for district validated 2598 rows and 0 resolved timestamps
+18:14:32 cdc.go:3453: topic consumer for history validated 1284 rows and 0 resolved timestamps
+18:14:32 cdc.go:3453: topic consumer for customer validated 2477 rows and 0 resolved timestamps
+18:14:32 cdc.go:3453: topic consumer for warehouse validated 1283 rows and 0 resolved timestamps
+18:14:32 cdc.go:3453: topic consumer for order validated 2507 rows and 0 resolved timestamps
+18:14:32 cdc.go:3453: topic consumer for new_order validated 2507 rows and 0 resolved timestamps
+18:14:34 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.951s; max steady latency so far 25.089s; highwater 2024-05-31 18:14:16.494270633 +0000 UTC
+18:14:44 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 14.247s; max steady latency so far 25.095s; highwater 2024-05-31 18:14:30.24949495 +0000 UTC
+18:14:54 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.759s; max steady latency so far 25.095s; highwater 2024-05-31 18:14:30.785360849 +0000 UTC
+18:15:01 cdc.go:3453: topic consumer for stock validated 19488 rows and 0 resolved timestamps
+18:15:01 cdc.go:3453: topic consumer for order_line validated 36928 rows and 0 resolved timestamps
+18:15:02 cdc.go:3453: topic consumer for new_order validated 3686 rows and 0 resolved timestamps
+18:15:02 cdc.go:3453: topic consumer for customer validated 3643 rows and 0 resolved timestamps
+18:15:02 cdc.go:3453: topic consumer for order validated 3686 rows and 0 resolved timestamps
+18:15:02 cdc.go:3453: topic consumer for history validated 1914 rows and 0 resolved timestamps
+18:15:02 cdc.go:3453: topic consumer for district validated 3877 rows and 0 resolved timestamps
+18:15:02 cdc.go:3453: topic consumer for warehouse validated 1914 rows and 0 resolved timestamps
+18:15:04 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.316s; max steady latency so far 25.095s; highwater 2024-05-31 18:14:43.27847321 +0000 UTC
+18:15:14 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.518s; max steady latency so far 25.095s; highwater 2024-05-31 18:14:54.127795509 +0000 UTC
+18:15:24 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.998s; max steady latency so far 25.544s; highwater 2024-05-31 18:15:05.696964682 +0000 UTC
+18:15:29 cdc.go:3280: kafka chaos loop iteration 0: stopping
+18:15:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_181529.903744228_n4_rm-f-mntdata1conflue.log
+18:15:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181530.397198018_n4_CONFLUENTCURRENTmntd.log
+18:15:31 cdc.go:3453: topic consumer for order_line validated 48557 rows and 0 resolved timestamps
+18:15:31 cdc.go:3453: topic consumer for stock validated 25892 rows and 0 resolved timestamps
+18:15:34 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 29.047s; max steady latency so far 29.047s; highwater 2024-05-31 18:15:05.696964682 +0000 UTC
+18:15:44 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 39.098s; max steady latency so far 39.098s; highwater 2024-05-31 18:15:05.696964682 +0000 UTC
+18:15:52 cdc.go:3291: kafka chaos loop iteration 0: restarting
+18:15:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_181552.626181007_n4_touch-mntdata1conflu.log
+18:15:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181552.881383657_n4_CONFLUENTCURRENTmntd.log
+18:15:54 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 49.151s; max steady latency so far 49.151s; highwater 2024-05-31 18:15:05.696964682 +0000 UTC
+18:15:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181555.429632531_n4_CONFLUENTCURRENTmntd.log
+18:15:59 cdc.go:3453: topic consumer for order validated 4870 rows and 0 resolved timestamps
+18:15:59 cdc.go:3453: topic consumer for new_order validated 4870 rows and 0 resolved timestamps
+18:15:59 cdc.go:3453: topic consumer for district validated 5116 rows and 0 resolved timestamps
+18:15:59 cdc.go:3453: topic consumer for warehouse validated 2525 rows and 0 resolved timestamps
+18:15:59 cdc.go:3453: topic consumer for customer validated 4798 rows and 0 resolved timestamps
+18:16:00 cdc.go:3453: topic consumer for history validated 2528 rows and 0 resolved timestamps
+18:16:01 cdc.go:3453: topic consumer for order_line validated 70651 rows and 0 resolved timestamps
+18:16:01 cdc.go:3453: topic consumer for stock validated 38819 rows and 0 resolved timestamps
+18:16:04 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 8.076s; max steady latency so far 55.18s; highwater 2024-05-31 18:15:56.821608805 +0000 UTC
+18:16:14 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.117s; max steady latency so far 55.18s; highwater 2024-05-31 18:15:56.828638928 +0000 UTC
+18:16:24 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 16.418s; max steady latency so far 55.18s; highwater 2024-05-31 18:16:08.576998235 +0000 UTC
+18:16:30 cdc.go:3453: topic consumer for customer validated 8298 rows and 0 resolved timestamps
+18:16:30 cdc.go:3453: topic consumer for new_order validated 8867 rows and 0 resolved timestamps
+18:16:30 cdc.go:3453: topic consumer for history validated 4271 rows and 0 resolved timestamps
+18:16:30 cdc.go:3453: topic consumer for district validated 8603 rows and 0 resolved timestamps
+18:16:30 cdc.go:3453: topic consumer for order validated 8495 rows and 0 resolved timestamps
+18:16:30 cdc.go:3453: topic consumer for warehouse validated 4270 rows and 0 resolved timestamps
+18:16:31 cdc.go:3453: topic consumer for stock validated 45415 rows and 0 resolved timestamps
+18:16:32 cdc.go:3453: topic consumer for order_line validated 84340 rows and 0 resolved timestamps
+18:16:35 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.916s; max steady latency so far 55.18s; highwater 2024-05-31 18:16:11.129511516 +0000 UTC
+18:16:45 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 22.465s; max steady latency so far 55.18s; highwater 2024-05-31 18:16:22.63015077 +0000 UTC
+18:16:55 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.172s; max steady latency so far 55.18s; highwater 2024-05-31 18:16:33.972275045 +0000 UTC
+18:17:00 cdc.go:3453: topic consumer for customer validated 9401 rows and 0 resolved timestamps
+18:17:00 cdc.go:3453: topic consumer for new_order validated 9937 rows and 0 resolved timestamps
+18:17:00 cdc.go:3453: topic consumer for history validated 4952 rows and 0 resolved timestamps
+18:17:00 cdc.go:3453: topic consumer for district validated 9947 rows and 0 resolved timestamps
+18:17:01 cdc.go:3453: topic consumer for warehouse validated 4971 rows and 0 resolved timestamps
+18:17:01 cdc.go:3453: topic consumer for order validated 9569 rows and 0 resolved timestamps
+18:17:02 cdc.go:3453: topic consumer for order_line validated 95519 rows and 0 resolved timestamps
+18:17:02 cdc.go:3453: topic consumer for stock validated 51796 rows and 0 resolved timestamps
+18:17:05 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.357s; max steady latency so far 55.18s; highwater 2024-05-31 18:16:46.837286985 +0000 UTC
+18:17:15 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.899s; max steady latency so far 55.18s; highwater 2024-05-31 18:16:56.348480465 +0000 UTC
+18:17:25 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.867s; max steady latency so far 55.18s; highwater 2024-05-31 18:17:06.431278305 +0000 UTC
+18:17:29 cdc.go:3280: kafka chaos loop iteration 1: stopping
+18:17:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_181729.904468280_n4_rm-f-mntdata1conflue.log
+18:17:30 cdc.go:3453: topic consumer for customer validated 10732 rows and 0 resolved timestamps
+18:17:30 cdc.go:3453: topic consumer for new_order validated 11262 rows and 0 resolved timestamps
+18:17:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181730.397655234_n4_CONFLUENTCURRENTmntd.log
+18:17:30 cdc.go:3453: topic consumer for history validated 5553 rows and 0 resolved timestamps
+18:17:31 cdc.go:3453: topic consumer for district validated 11153 rows and 0 resolved timestamps
+18:17:35 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 25.644s; max steady latency so far 55.18s; highwater 2024-05-31 18:17:09.703130887 +0000 UTC
+18:17:45 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 35.696s; max steady latency so far 55.18s; highwater 2024-05-31 18:17:09.703130887 +0000 UTC
+18:17:52 cdc.go:3291: kafka chaos loop iteration 1: restarting
+18:17:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_181752.600021168_n4_touch-mntdata1conflu.log
+18:17:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181752.861302867_n4_CONFLUENTCURRENTmntd.log
+18:17:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181755.393291143_n4_CONFLUENTCURRENTmntd.log
+18:17:55 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 45.748s; max steady latency so far 55.18s; highwater 2024-05-31 18:17:09.703130887 +0000 UTC
+18:17:58 cdc.go:3453: topic consumer for order validated 10958 rows and 0 resolved timestamps
+18:17:58 cdc.go:3453: topic consumer for warehouse validated 5577 rows and 0 resolved timestamps
+18:17:59 cdc.go:3453: topic consumer for stock validated 57853 rows and 0 resolved timestamps
+18:17:59 cdc.go:3453: topic consumer for order_line validated 108628 rows and 0 resolved timestamps
+18:18:00 cdc.go:3453: topic consumer for new_order validated 13326 rows and 0 resolved timestamps
+18:18:00 cdc.go:3453: topic consumer for customer validated 12869 rows and 0 resolved timestamps
+18:18:00 cdc.go:3453: topic consumer for history validated 6558 rows and 0 resolved timestamps
+18:18:02 cdc.go:3453: topic consumer for district validated 13350 rows and 0 resolved timestamps
+18:18:05 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 12.023s; max steady latency so far 55.18s; highwater 2024-05-31 18:17:53.532900881 +0000 UTC
+18:18:15 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.942s; max steady latency so far 55.18s; highwater 2024-05-31 18:17:53.665544791 +0000 UTC
+18:18:25 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.493s; max steady latency so far 55.18s; highwater 2024-05-31 18:18:08.218172973 +0000 UTC
+18:18:29 cdc.go:3453: topic consumer for warehouse validated 7203 rows and 0 resolved timestamps
+18:18:29 cdc.go:3453: topic consumer for stock validated 74510 rows and 0 resolved timestamps
+18:18:29 cdc.go:3453: topic consumer for order_line validated 143314 rows and 0 resolved timestamps
+18:18:29 cdc.go:3453: topic consumer for order validated 14387 rows and 0 resolved timestamps
+18:18:31 cdc.go:3453: topic consumer for history validated 7252 rows and 0 resolved timestamps
+18:18:31 cdc.go:3453: topic consumer for new_order validated 14849 rows and 0 resolved timestamps
+18:18:31 cdc.go:3453: topic consumer for customer validated 14306 rows and 0 resolved timestamps
+18:18:32 cdc.go:3453: topic consumer for district validated 14599 rows and 0 resolved timestamps
+18:18:35 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.442s; max steady latency so far 55.18s; highwater 2024-05-31 18:18:18.319738715 +0000 UTC
+18:18:45 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.205s; max steady latency so far 55.18s; highwater 2024-05-31 18:18:28.604162932 +0000 UTC
+18:18:55 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 24.111s; max steady latency so far 55.18s; highwater 2024-05-31 18:18:31.798976221 +0000 UTC
+18:18:59 cdc.go:3453: topic consumer for stock validated 80876 rows and 0 resolved timestamps
+18:18:59 cdc.go:3453: topic consumer for order_line validated 156035 rows and 0 resolved timestamps
+18:18:59 cdc.go:3453: topic consumer for warehouse validated 7803 rows and 0 resolved timestamps
+18:19:00 cdc.go:3453: topic consumer for order validated 15681 rows and 0 resolved timestamps
+18:19:01 cdc.go:3453: topic consumer for history validated 7841 rows and 0 resolved timestamps
+18:19:01 cdc.go:3453: topic consumer for new_order validated 16166 rows and 0 resolved timestamps
+18:19:01 cdc.go:3453: topic consumer for customer validated 15568 rows and 0 resolved timestamps
+18:19:03 cdc.go:3453: topic consumer for district validated 15856 rows and 0 resolved timestamps
+18:19:05 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.688s; max steady latency so far 55.18s; highwater 2024-05-31 18:18:44.27049324 +0000 UTC
+18:19:16 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.756s; max steady latency so far 55.18s; highwater 2024-05-31 18:18:55.254293528 +0000 UTC
+18:19:26 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.095s; max steady latency so far 55.18s; highwater 2024-05-31 18:19:07.963305004 +0000 UTC
+18:19:29 cdc.go:3453: topic consumer for stock validated 86872 rows and 0 resolved timestamps
+18:19:29 cdc.go:3453: topic consumer for order_line validated 168665 rows and 0 resolved timestamps
+18:19:29 cdc.go:3280: kafka chaos loop iteration 2: stopping
+18:19:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_181929.903909925_n4_rm-f-mntdata1conflue.log
+18:19:30 cdc.go:3453: topic consumer for order validated 16934 rows and 0 resolved timestamps
+18:19:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181930.405090269_n4_CONFLUENTCURRENTmntd.log
+18:19:30 cdc.go:3453: topic consumer for warehouse validated 8421 rows and 0 resolved timestamps
+18:19:36 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.669s; max steady latency so far 55.18s; highwater 2024-05-31 18:19:14.441407445 +0000 UTC
+18:19:46 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 31.723s; max steady latency so far 55.18s; highwater 2024-05-31 18:19:14.441407445 +0000 UTC
+18:19:52 cdc.go:3291: kafka chaos loop iteration 2: restarting
+18:19:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_181952.624145387_n4_touch-mntdata1conflu.log
+18:19:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181952.885313662_n4_CONFLUENTCURRENTmntd.log
+18:19:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_181955.409255925_n4_CONFLUENTCURRENTmntd.log
+18:19:56 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 41.774s; max steady latency so far 55.18s; highwater 2024-05-31 18:19:14.441407445 +0000 UTC
+18:19:58 cdc.go:3453: topic consumer for district validated 17022 rows and 0 resolved timestamps
+18:19:58 cdc.go:3453: topic consumer for history validated 8452 rows and 0 resolved timestamps
+18:19:58 cdc.go:3453: topic consumer for customer validated 16783 rows and 0 resolved timestamps
+18:19:59 cdc.go:3453: topic consumer for stock validated 90097 rows and 0 resolved timestamps
+18:19:59 cdc.go:3453: topic consumer for order_line validated 172025 rows and 0 resolved timestamps
+18:19:59 cdc.go:3453: topic consumer for new_order validated 17451 rows and 0 resolved timestamps
+18:20:00 cdc.go:3453: topic consumer for order validated 18795 rows and 0 resolved timestamps
+18:20:01 cdc.go:3453: topic consumer for warehouse validated 9313 rows and 0 resolved timestamps
+18:20:06 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 12.576s; max steady latency so far 55.18s; highwater 2024-05-31 18:19:53.689524983 +0000 UTC
+18:20:16 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 22.427s; max steady latency so far 55.18s; highwater 2024-05-31 18:19:53.88966163 +0000 UTC
+18:20:26 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.531s; max steady latency so far 55.18s; highwater 2024-05-31 18:20:08.838261043 +0000 UTC
+18:20:28 cdc.go:3453: topic consumer for customer validated 19913 rows and 0 resolved timestamps
+18:20:29 cdc.go:3453: topic consumer for history validated 9984 rows and 0 resolved timestamps
+18:20:29 cdc.go:3453: topic consumer for district validated 20012 rows and 0 resolved timestamps
+18:20:29 cdc.go:3453: topic consumer for order_line validated 200377 rows and 0 resolved timestamps
+18:20:29 cdc.go:3453: topic consumer for stock validated 102166 rows and 0 resolved timestamps
+18:20:30 cdc.go:3453: topic consumer for new_order validated 20547 rows and 0 resolved timestamps
+18:20:31 cdc.go:3453: topic consumer for order validated 20128 rows and 0 resolved timestamps
+18:20:31 cdc.go:3453: topic consumer for warehouse validated 10029 rows and 0 resolved timestamps
+18:20:36 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 19.056s; max steady latency so far 55.18s; highwater 2024-05-31 18:20:17.365696132 +0000 UTC
+18:20:46 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 27.385s; max steady latency so far 55.18s; highwater 2024-05-31 18:20:19.083318638 +0000 UTC
+18:20:56 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.448s; max steady latency so far 55.18s; highwater 2024-05-31 18:20:33.07219731 +0000 UTC
+18:20:59 cdc.go:3453: topic consumer for customer validated 21165 rows and 0 resolved timestamps
+18:20:59 cdc.go:3453: topic consumer for history validated 10631 rows and 0 resolved timestamps
+18:20:59 cdc.go:3453: topic consumer for district validated 21284 rows and 0 resolved timestamps
+18:21:00 cdc.go:3453: topic consumer for order_line validated 212996 rows and 0 resolved timestamps
+18:21:00 cdc.go:3453: topic consumer for stock validated 108398 rows and 0 resolved timestamps
+18:21:00 cdc.go:3453: topic consumer for new_order validated 21809 rows and 0 resolved timestamps
+18:21:01 cdc.go:3453: topic consumer for warehouse validated 10679 rows and 0 resolved timestamps
+18:21:01 cdc.go:3453: topic consumer for order validated 21400 rows and 0 resolved timestamps
+18:21:06 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.268s; max steady latency so far 55.18s; highwater 2024-05-31 18:20:45.303376885 +0000 UTC
+18:21:16 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.483s; max steady latency so far 55.18s; highwater 2024-05-31 18:20:56.140902757 +0000 UTC
+18:21:26 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.404s; max steady latency so far 55.18s; highwater 2024-05-31 18:21:08.267609691 +0000 UTC
+18:21:29 cdc.go:3453: topic consumer for customer validated 22476 rows and 0 resolved timestamps
+18:21:29 cdc.go:3280: kafka chaos loop iteration 3: stopping
+18:21:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_182129.904106974_n4_rm-f-mntdata1conflue.log
+18:21:30 cdc.go:3453: topic consumer for history validated 11273 rows and 0 resolved timestamps
+18:21:30 cdc.go:3453: topic consumer for stock validated 114724 rows and 0 resolved timestamps
+18:21:30 cdc.go:3453: topic consumer for district validated 22552 rows and 0 resolved timestamps
+18:21:30 cdc.go:3453: topic consumer for order_line validated 225740 rows and 0 resolved timestamps
+18:21:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182130.405189842_n4_CONFLUENTCURRENTmntd.log
+18:21:31 cdc.go:3453: topic consumer for new_order validated 23099 rows and 0 resolved timestamps
+18:21:31 cdc.go:3453: topic consumer for warehouse validated 11321 rows and 0 resolved timestamps
+18:21:36 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.077s; max steady latency so far 55.18s; highwater 2024-05-31 18:21:13.644776982 +0000 UTC
+18:21:46 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 33.127s; max steady latency so far 55.18s; highwater 2024-05-31 18:21:13.644776982 +0000 UTC
+18:21:52 cdc.go:3291: kafka chaos loop iteration 3: restarting
+18:21:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_182152.567566062_n4_touch-mntdata1conflu.log
+18:21:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182152.865202933_n4_CONFLUENTCURRENTmntd.log
+18:21:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182155.481193797_n4_CONFLUENTCURRENTmntd.log
+18:21:56 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 43.178s; max steady latency so far 55.18s; highwater 2024-05-31 18:21:13.644776982 +0000 UTC
+18:21:59 cdc.go:3453: topic consumer for order validated 22721 rows and 0 resolved timestamps
+18:22:00 cdc.go:3453: topic consumer for customer validated 22591 rows and 0 resolved timestamps
+18:22:00 cdc.go:3453: topic consumer for stock validated 117085 rows and 0 resolved timestamps
+18:22:00 cdc.go:3453: topic consumer for history validated 11581 rows and 0 resolved timestamps
+18:22:00 cdc.go:3453: topic consumer for district validated 23053 rows and 0 resolved timestamps
+18:22:00 cdc.go:3453: topic consumer for order_line validated 227107 rows and 0 resolved timestamps
+18:22:01 cdc.go:3453: topic consumer for new_order validated 25099 rows and 0 resolved timestamps
+18:22:02 cdc.go:3453: topic consumer for warehouse validated 12386 rows and 0 resolved timestamps
+18:22:06 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 9.873s; max steady latency so far 55.18s; highwater 2024-05-31 18:21:57.000469326 +0000 UTC
+18:22:16 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 19.775s; max steady latency so far 55.18s; highwater 2024-05-31 18:21:57.152729077 +0000 UTC
+18:22:26 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.558s; max steady latency so far 55.18s; highwater 2024-05-31 18:22:08.419844349 +0000 UTC
+18:22:29 cdc.go:3453: topic consumer for order validated 25924 rows and 0 resolved timestamps
+18:22:30 cdc.go:3453: topic consumer for stock validated 131972 rows and 0 resolved timestamps
+18:22:30 cdc.go:3453: topic consumer for order_line validated 258670 rows and 0 resolved timestamps
+18:22:30 cdc.go:3453: topic consumer for customer validated 25844 rows and 0 resolved timestamps
+18:22:30 cdc.go:3453: topic consumer for history validated 12984 rows and 0 resolved timestamps
+18:22:30 cdc.go:3453: topic consumer for district validated 25862 rows and 0 resolved timestamps
+18:22:32 cdc.go:3453: topic consumer for new_order validated 26383 rows and 0 resolved timestamps
+18:22:32 cdc.go:3453: topic consumer for warehouse validated 13052 rows and 0 resolved timestamps
+18:22:37 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.587s; max steady latency so far 55.18s; highwater 2024-05-31 18:22:18.439898261 +0000 UTC
+18:22:47 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 16.785s; max steady latency so far 55.18s; highwater 2024-05-31 18:22:30.292827886 +0000 UTC
+18:22:57 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 24.702s; max steady latency so far 55.18s; highwater 2024-05-31 18:22:32.426492229 +0000 UTC
+18:23:00 cdc.go:3453: topic consumer for order validated 27136 rows and 0 resolved timestamps
+18:23:00 cdc.go:3453: topic consumer for stock validated 138434 rows and 0 resolved timestamps
+18:23:00 cdc.go:3453: topic consumer for order_line validated 270854 rows and 0 resolved timestamps
+18:23:01 cdc.go:3453: topic consumer for customer validated 27048 rows and 0 resolved timestamps
+18:23:01 cdc.go:3453: topic consumer for history validated 13610 rows and 0 resolved timestamps
+18:23:01 cdc.go:3453: topic consumer for district validated 27138 rows and 0 resolved timestamps
+18:23:03 cdc.go:3453: topic consumer for new_order validated 27644 rows and 0 resolved timestamps
+18:23:03 cdc.go:3453: topic consumer for warehouse validated 13675 rows and 0 resolved timestamps
+18:23:07 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 22.095s; max steady latency so far 55.18s; highwater 2024-05-31 18:22:45.085386765 +0000 UTC
+18:23:17 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 19.39s; max steady latency so far 55.18s; highwater 2024-05-31 18:22:57.841263431 +0000 UTC
+18:23:27 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.819s; max steady latency so far 55.18s; highwater 2024-05-31 18:23:08.460878529 +0000 UTC
+18:23:29 cdc.go:3280: kafka chaos loop iteration 4: stopping
+18:23:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_182329.903781567_n4_rm-f-mntdata1conflue.log
+18:23:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182330.433432196_n4_CONFLUENTCURRENTmntd.log
+18:23:30 cdc.go:3453: topic consumer for stock validated 144663 rows and 0 resolved timestamps
+18:23:30 cdc.go:3453: topic consumer for order_line validated 285380 rows and 0 resolved timestamps
+18:23:31 cdc.go:3453: topic consumer for order validated 28636 rows and 0 resolved timestamps
+18:23:31 cdc.go:3453: topic consumer for customer validated 28554 rows and 0 resolved timestamps
+18:23:37 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 28.871s; max steady latency so far 55.18s; highwater 2024-05-31 18:23:08.460878529 +0000 UTC
+18:23:47 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 38.921s; max steady latency so far 55.18s; highwater 2024-05-31 18:23:08.460878529 +0000 UTC
+18:23:52 cdc.go:3291: kafka chaos loop iteration 4: restarting
+18:23:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_182352.657951899_n4_touch-mntdata1conflu.log
+18:23:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182352.908898552_n4_CONFLUENTCURRENTmntd.log
+18:23:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182355.465362108_n4_CONFLUENTCURRENTmntd.log
+18:23:57 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 48.971s; max steady latency so far 55.18s; highwater 2024-05-31 18:23:08.460878529 +0000 UTC
+18:23:58 cdc.go:3453: topic consumer for district validated 28444 rows and 0 resolved timestamps
+18:23:58 cdc.go:3453: topic consumer for warehouse validated 14286 rows and 0 resolved timestamps
+18:23:58 cdc.go:3453: topic consumer for history validated 14265 rows and 0 resolved timestamps
+18:23:58 cdc.go:3453: topic consumer for new_order validated 29013 rows and 0 resolved timestamps
+18:24:01 cdc.go:3453: topic consumer for order_line validated 307658 rows and 0 resolved timestamps
+18:24:01 cdc.go:3453: topic consumer for stock validated 155808 rows and 0 resolved timestamps
+18:24:01 cdc.go:3453: topic consumer for customer validated 30696 rows and 0 resolved timestamps
+18:24:02 cdc.go:3453: topic consumer for order validated 30927 rows and 0 resolved timestamps
+18:24:07 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 15.865s; max steady latency so far 55.18s; highwater 2024-05-31 18:23:51.614395442 +0000 UTC
+18:24:17 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 25.79s; max steady latency so far 55.18s; highwater 2024-05-31 18:23:51.745686444 +0000 UTC
+18:24:27 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 19.508s; max steady latency so far 55.18s; highwater 2024-05-31 18:24:08.077647673 +0000 UTC
+18:24:29 cdc.go:3453: topic consumer for history validated 15902 rows and 0 resolved timestamps
+18:24:29 cdc.go:3453: topic consumer for district validated 31801 rows and 0 resolved timestamps
+18:24:29 cdc.go:3453: topic consumer for warehouse validated 15929 rows and 0 resolved timestamps
+18:24:29 cdc.go:3453: topic consumer for new_order validated 32319 rows and 0 resolved timestamps
+18:24:31 cdc.go:3453: topic consumer for order_line validated 319158 rows and 0 resolved timestamps
+18:24:31 cdc.go:3453: topic consumer for stock validated 162454 rows and 0 resolved timestamps
+18:24:31 cdc.go:3453: topic consumer for customer validated 31863 rows and 0 resolved timestamps
+18:24:33 cdc.go:3453: topic consumer for order validated 32094 rows and 0 resolved timestamps
+18:24:37 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 16.512s; max steady latency so far 55.18s; highwater 2024-05-31 18:24:21.122058283 +0000 UTC
+18:24:47 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.869s; max steady latency so far 55.18s; highwater 2024-05-31 18:24:29.814805377 +0000 UTC
+18:24:57 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 25.827s; max steady latency so far 55.18s; highwater 2024-05-31 18:24:31.908378506 +0000 UTC
+18:24:59 cdc.go:3453: topic consumer for history validated 16527 rows and 0 resolved timestamps
+18:24:59 cdc.go:3453: topic consumer for district validated 33075 rows and 0 resolved timestamps
+18:25:00 cdc.go:3453: topic consumer for warehouse validated 16554 rows and 0 resolved timestamps
+18:25:00 cdc.go:3453: topic consumer for new_order validated 33527 rows and 0 resolved timestamps
+18:25:01 cdc.go:3453: topic consumer for order_line validated 331192 rows and 0 resolved timestamps
+18:25:01 cdc.go:3453: topic consumer for stock validated 168786 rows and 0 resolved timestamps
+18:25:01 cdc.go:3453: topic consumer for customer validated 33013 rows and 0 resolved timestamps
+18:25:03 cdc.go:3453: topic consumer for order validated 33318 rows and 0 resolved timestamps
+18:25:07 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 22.616s; max steady latency so far 55.18s; highwater 2024-05-31 18:24:45.16914813 +0000 UTC
+18:25:17 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.88s; max steady latency so far 55.18s; highwater 2024-05-31 18:24:55.953387919 +0000 UTC
+18:25:27 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 19.551s; max steady latency so far 55.18s; highwater 2024-05-31 18:25:08.332920487 +0000 UTC
+18:25:29 cdc.go:3453: topic consumer for history validated 17154 rows and 0 resolved timestamps
+18:25:29 cdc.go:3280: kafka chaos loop iteration 5: stopping
+18:25:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_182529.903859938_n4_rm-f-mntdata1conflue.log
+18:25:30 cdc.go:3453: topic consumer for district validated 34367 rows and 0 resolved timestamps
+18:25:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182530.401262492_n4_CONFLUENTCURRENTmntd.log
+18:25:30 cdc.go:3453: topic consumer for warehouse validated 17203 rows and 0 resolved timestamps
+18:25:30 cdc.go:3453: topic consumer for new_order validated 34760 rows and 0 resolved timestamps
+18:25:31 cdc.go:3453: topic consumer for order_line validated 343288 rows and 0 resolved timestamps
+18:25:31 cdc.go:3453: topic consumer for stock validated 175288 rows and 0 resolved timestamps
+18:25:37 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 29.6s; max steady latency so far 55.18s; highwater 2024-05-31 18:25:08.332920487 +0000 UTC
+18:25:47 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 39.652s; max steady latency so far 55.18s; highwater 2024-05-31 18:25:08.332920487 +0000 UTC
+18:25:52 cdc.go:3291: kafka chaos loop iteration 5: restarting
+18:25:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_182552.769868729_n4_touch-mntdata1conflu.log
+18:25:53 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182553.025254816_n4_CONFLUENTCURRENTmntd.log
+18:25:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182555.569087435_n4_CONFLUENTCURRENTmntd.log
+18:25:58 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 49.704s; max steady latency so far 55.18s; highwater 2024-05-31 18:25:08.332920487 +0000 UTC
+18:25:58 cdc.go:3453: topic consumer for order validated 34475 rows and 0 resolved timestamps
+18:25:59 cdc.go:3453: topic consumer for customer validated 34225 rows and 0 resolved timestamps
+18:25:59 cdc.go:3453: topic consumer for history validated 18122 rows and 0 resolved timestamps
+18:26:00 cdc.go:3453: topic consumer for district validated 36410 rows and 0 resolved timestamps
+18:26:00 cdc.go:3453: topic consumer for warehouse validated 18208 rows and 0 resolved timestamps
+18:26:01 cdc.go:3453: topic consumer for order_line validated 365659 rows and 0 resolved timestamps
+18:26:01 cdc.go:3453: topic consumer for stock validated 186646 rows and 0 resolved timestamps
+18:26:01 cdc.go:3453: topic consumer for new_order validated 36945 rows and 0 resolved timestamps
+18:26:08 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 15.913s; max steady latency so far 55.18s; highwater 2024-05-31 18:25:52.174017271 +0000 UTC
+18:26:18 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 25.878s; max steady latency so far 55.18s; highwater 2024-05-31 18:25:52.260367937 +0000 UTC
+18:26:28 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.198s; max steady latency so far 55.18s; highwater 2024-05-31 18:26:07.994328336 +0000 UTC
+18:26:29 cdc.go:3453: topic consumer for customer validated 37630 rows and 0 resolved timestamps
+18:26:29 cdc.go:3453: topic consumer for order validated 37907 rows and 0 resolved timestamps
+18:26:30 cdc.go:3453: topic consumer for history validated 18859 rows and 0 resolved timestamps
+18:26:31 cdc.go:3453: topic consumer for warehouse validated 18895 rows and 0 resolved timestamps
+18:26:31 cdc.go:3453: topic consumer for district validated 37798 rows and 0 resolved timestamps
+18:26:31 cdc.go:3453: topic consumer for stock validated 192623 rows and 0 resolved timestamps
+18:26:31 cdc.go:3453: topic consumer for order_line validated 379222 rows and 0 resolved timestamps
+18:26:32 cdc.go:3453: topic consumer for new_order validated 38374 rows and 0 resolved timestamps
+18:26:38 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.002s; max steady latency so far 55.18s; highwater 2024-05-31 18:26:21.24304964 +0000 UTC
+18:26:48 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 16.556s; max steady latency so far 55.18s; highwater 2024-05-31 18:26:31.739399341 +0000 UTC
+18:26:58 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 16.872s; max steady latency so far 55.18s; highwater 2024-05-31 18:26:41.473969242 +0000 UTC
+18:26:59 cdc.go:3453: topic consumer for customer validated 38907 rows and 0 resolved timestamps
+18:26:59 cdc.go:3453: topic consumer for order validated 39218 rows and 0 resolved timestamps
+18:27:00 cdc.go:3453: topic consumer for history validated 19488 rows and 0 resolved timestamps
+18:27:01 cdc.go:3453: topic consumer for warehouse validated 19533 rows and 0 resolved timestamps
+18:27:01 cdc.go:3453: topic consumer for stock validated 199032 rows and 0 resolved timestamps
+18:27:01 cdc.go:3453: topic consumer for order_line validated 391950 rows and 0 resolved timestamps
+18:27:01 cdc.go:3453: topic consumer for district validated 39099 rows and 0 resolved timestamps
+18:27:02 cdc.go:3453: topic consumer for new_order validated 39673 rows and 0 resolved timestamps
+18:27:08 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 15.017s; max steady latency so far 55.18s; highwater 2024-05-31 18:26:53.380992705 +0000 UTC
+18:27:18 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 22.747s; max steady latency so far 55.18s; highwater 2024-05-31 18:26:55.702440107 +0000 UTC
+18:27:28 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.907s; max steady latency so far 55.18s; highwater 2024-05-31 18:27:07.591387599 +0000 UTC
+18:27:29 cdc.go:3280: kafka chaos loop iteration 6: stopping
+18:27:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_182729.903920624_n4_rm-f-mntdata1conflue.log
+18:27:29 cdc.go:3453: topic consumer for customer validated 40142 rows and 0 resolved timestamps
+18:27:29 cdc.go:3453: topic consumer for order validated 40404 rows and 0 resolved timestamps
+18:27:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182730.429122398_n4_CONFLUENTCURRENTmntd.log
+18:27:30 cdc.go:3453: topic consumer for history validated 20157 rows and 0 resolved timestamps
+18:27:31 cdc.go:3453: topic consumer for order_line validated 403988 rows and 0 resolved timestamps
+18:27:38 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 22.714s; max steady latency so far 55.18s; highwater 2024-05-31 18:27:15.841248822 +0000 UTC
+18:27:48 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 32.765s; max steady latency so far 55.18s; highwater 2024-05-31 18:27:15.841248822 +0000 UTC
+18:27:52 cdc.go:3291: kafka chaos loop iteration 6: restarting
+18:27:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_182752.615354035_n4_touch-mntdata1conflu.log
+18:27:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182752.872928256_n4_CONFLUENTCURRENTmntd.log
+18:27:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182755.421332535_n4_CONFLUENTCURRENTmntd.log
+18:27:58 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 42.814s; max steady latency so far 55.18s; highwater 2024-05-31 18:27:15.841248822 +0000 UTC
+18:27:58 cdc.go:3453: topic consumer for stock validated 204997 rows and 0 resolved timestamps
+18:27:58 cdc.go:3453: topic consumer for warehouse validated 20198 rows and 0 resolved timestamps
+18:27:58 cdc.go:3453: topic consumer for district validated 40371 rows and 0 resolved timestamps
+18:27:58 cdc.go:3453: topic consumer for new_order validated 40832 rows and 0 resolved timestamps
+18:28:00 cdc.go:3453: topic consumer for customer validated 42043 rows and 0 resolved timestamps
+18:28:00 cdc.go:3453: topic consumer for order validated 42293 rows and 0 resolved timestamps
+18:28:01 cdc.go:3453: topic consumer for order_line validated 423362 rows and 0 resolved timestamps
+18:28:01 cdc.go:3453: topic consumer for history validated 21140 rows and 0 resolved timestamps
+18:28:08 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 16.499s; max steady latency so far 55.18s; highwater 2024-05-31 18:27:52.221798665 +0000 UTC
+18:28:18 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 26.374s; max steady latency so far 55.18s; highwater 2024-05-31 18:27:52.396823426 +0000 UTC
+18:28:28 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.611s; max steady latency so far 55.18s; highwater 2024-05-31 18:28:08.208791647 +0000 UTC
+18:28:29 cdc.go:3453: topic consumer for new_order validated 43990 rows and 0 resolved timestamps
+18:28:29 cdc.go:3453: topic consumer for stock validated 219436 rows and 0 resolved timestamps
+18:28:29 cdc.go:3453: topic consumer for district validated 43372 rows and 0 resolved timestamps
+18:28:29 cdc.go:3453: topic consumer for warehouse validated 21763 rows and 0 resolved timestamps
+18:28:30 cdc.go:3453: topic consumer for customer validated 43622 rows and 0 resolved timestamps
+18:28:31 cdc.go:3453: topic consumer for order validated 43752 rows and 0 resolved timestamps
+18:28:31 cdc.go:3453: topic consumer for order_line validated 437199 rows and 0 resolved timestamps
+18:28:31 cdc.go:3453: topic consumer for history validated 21790 rows and 0 resolved timestamps
+18:28:38 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.398s; max steady latency so far 55.18s; highwater 2024-05-31 18:28:18.472139163 +0000 UTC
+18:28:48 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.425s; max steady latency so far 55.18s; highwater 2024-05-31 18:28:30.496954904 +0000 UTC
+18:28:58 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.372s; max steady latency so far 55.18s; highwater 2024-05-31 18:28:40.599689983 +0000 UTC
+18:28:59 cdc.go:3453: topic consumer for district validated 44654 rows and 0 resolved timestamps
+18:28:59 cdc.go:3453: topic consumer for stock validated 225545 rows and 0 resolved timestamps
+18:28:59 cdc.go:3453: topic consumer for warehouse validated 22438 rows and 0 resolved timestamps
+18:29:00 cdc.go:3453: topic consumer for new_order validated 45083 rows and 0 resolved timestamps
+18:29:00 cdc.go:3453: topic consumer for customer validated 44756 rows and 0 resolved timestamps
+18:29:01 cdc.go:3453: topic consumer for order_line validated 447912 rows and 0 resolved timestamps
+18:29:02 cdc.go:3453: topic consumer for history validated 22469 rows and 0 resolved timestamps
+18:29:02 cdc.go:3453: topic consumer for order validated 44869 rows and 0 resolved timestamps
+18:29:09 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 25.997s; max steady latency so far 55.18s; highwater 2024-05-31 18:28:43.025867795 +0000 UTC
+18:29:19 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 22.653s; max steady latency so far 55.18s; highwater 2024-05-31 18:28:56.421199986 +0000 UTC
+18:29:29 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.231s; max steady latency so far 55.18s; highwater 2024-05-31 18:29:08.892097751 +0000 UTC
+18:29:29 cdc.go:3453: topic consumer for stock validated 231948 rows and 0 resolved timestamps
+18:29:29 cdc.go:3280: kafka chaos loop iteration 7: stopping
+18:29:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_182929.904077628_n4_rm-f-mntdata1conflue.log
+18:29:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182930.393405265_n4_CONFLUENTCURRENTmntd.log
+18:29:30 cdc.go:3453: topic consumer for district validated 45952 rows and 0 resolved timestamps
+18:29:30 cdc.go:3453: topic consumer for warehouse validated 23110 rows and 0 resolved timestamps
+18:29:30 cdc.go:3453: topic consumer for new_order validated 46427 rows and 0 resolved timestamps
+18:29:31 cdc.go:3453: topic consumer for customer validated 46115 rows and 0 resolved timestamps
+18:29:39 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 30.284s; max steady latency so far 55.18s; highwater 2024-05-31 18:29:08.892097751 +0000 UTC
+18:29:49 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 40.335s; max steady latency so far 55.18s; highwater 2024-05-31 18:29:08.892097751 +0000 UTC
+18:29:52 cdc.go:3291: kafka chaos loop iteration 7: restarting
+18:29:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_182952.611547911_n4_touch-mntdata1conflu.log
+18:29:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182952.869069361_n4_CONFLUENTCURRENTmntd.log
+18:29:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_182955.409306609_n4_CONFLUENTCURRENTmntd.log
+18:29:58 cdc.go:3453: topic consumer for history validated 23122 rows and 0 resolved timestamps
+18:29:58 cdc.go:3453: topic consumer for order validated 46147 rows and 0 resolved timestamps
+18:29:59 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 50.387s; max steady latency so far 55.18s; highwater 2024-05-31 18:29:08.892097751 +0000 UTC
+18:29:59 cdc.go:3453: topic consumer for order_line validated 460673 rows and 0 resolved timestamps
+18:29:59 cdc.go:3453: topic consumer for stock validated 237280 rows and 0 resolved timestamps
+18:30:01 cdc.go:3453: topic consumer for warehouse validated 24153 rows and 0 resolved timestamps
+18:30:01 cdc.go:3453: topic consumer for new_order validated 48701 rows and 0 resolved timestamps
+18:30:01 cdc.go:3453: topic consumer for district validated 48161 rows and 0 resolved timestamps
+18:30:02 cdc.go:3453: topic consumer for customer validated 48372 rows and 0 resolved timestamps
+18:30:09 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 14.996s; max steady latency so far 55.18s; highwater 2024-05-31 18:29:54.335100304 +0000 UTC
+18:30:19 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 25.034s; max steady latency so far 55.18s; highwater 2024-05-31 18:29:54.349957753 +0000 UTC
+18:30:28 cdc.go:3453: topic consumer for order validated 49523 rows and 0 resolved timestamps
+18:30:28 cdc.go:3453: topic consumer for history validated 24750 rows and 0 resolved timestamps
+18:30:29 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.595s; max steady latency so far 55.18s; highwater 2024-05-31 18:30:08.840493316 +0000 UTC
+18:30:29 cdc.go:3453: topic consumer for order_line validated 495240 rows and 0 resolved timestamps
+18:30:29 cdc.go:3453: topic consumer for stock validated 249507 rows and 0 resolved timestamps
+18:30:32 cdc.go:3453: topic consumer for customer validated 49593 rows and 0 resolved timestamps
+18:30:32 cdc.go:3453: topic consumer for warehouse validated 24850 rows and 0 resolved timestamps
+18:30:32 cdc.go:3453: topic consumer for new_order validated 49973 rows and 0 resolved timestamps
+18:30:32 cdc.go:3453: topic consumer for district validated 49459 rows and 0 resolved timestamps
+18:30:39 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.742s; max steady latency so far 55.18s; highwater 2024-05-31 18:30:21.742680499 +0000 UTC
+18:30:49 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.473s; max steady latency so far 55.18s; highwater 2024-05-31 18:30:32.073578899 +0000 UTC
+18:30:59 cdc.go:3453: topic consumer for history validated 25349 rows and 0 resolved timestamps
+18:30:59 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.154s; max steady latency so far 55.18s; highwater 2024-05-31 18:30:42.442792707 +0000 UTC
+18:30:59 cdc.go:3453: topic consumer for order validated 50767 rows and 0 resolved timestamps
+18:31:00 cdc.go:3453: topic consumer for order_line validated 507508 rows and 0 resolved timestamps
+18:31:00 cdc.go:3453: topic consumer for stock validated 256241 rows and 0 resolved timestamps
+18:31:02 cdc.go:3453: topic consumer for district validated 50736 rows and 0 resolved timestamps
+18:31:02 cdc.go:3453: topic consumer for customer validated 50794 rows and 0 resolved timestamps
+18:31:02 cdc.go:3453: topic consumer for warehouse validated 25451 rows and 0 resolved timestamps
+18:31:02 cdc.go:3453: topic consumer for new_order validated 51249 rows and 0 resolved timestamps
+18:31:09 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 26.016s; max steady latency so far 55.18s; highwater 2024-05-31 18:30:43.630763271 +0000 UTC
+18:31:19 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.528s; max steady latency so far 55.18s; highwater 2024-05-31 18:30:56.170562992 +0000 UTC
+18:31:29 cdc.go:3453: topic consumer for history validated 26006 rows and 0 resolved timestamps
+18:31:29 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.994s; max steady latency so far 55.18s; highwater 2024-05-31 18:31:08.753487341 +0000 UTC
+18:31:29 cdc.go:3280: kafka chaos loop iteration 8: stopping
+18:31:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_183129.903876165_n4_rm-f-mntdata1conflue.log
+18:31:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183130.385458989_n4_CONFLUENTCURRENTmntd.log
+18:31:30 cdc.go:3453: topic consumer for order validated 52102 rows and 0 resolved timestamps
+18:31:30 cdc.go:3453: topic consumer for order_line validated 520819 rows and 0 resolved timestamps
+18:31:30 cdc.go:3453: topic consumer for stock validated 262420 rows and 0 resolved timestamps
+18:31:39 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 31.04s; max steady latency so far 55.18s; highwater 2024-05-31 18:31:08.753487341 +0000 UTC
+18:31:49 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 41.092s; max steady latency so far 55.18s; highwater 2024-05-31 18:31:08.753487341 +0000 UTC
+18:31:52 cdc.go:3291: kafka chaos loop iteration 8: restarting
+18:31:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_183152.551758344_n4_touch-mntdata1conflu.log
+18:31:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183152.805056365_n4_CONFLUENTCURRENTmntd.log
+18:31:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183155.441095430_n4_CONFLUENTCURRENTmntd.log
+18:31:59 cdc.go:3453: topic consumer for new_order validated 52549 rows and 0 resolved timestamps
+18:31:59 cdc.go:3453: topic consumer for warehouse validated 26070 rows and 0 resolved timestamps
+18:31:59 cdc.go:3453: topic consumer for district validated 51954 rows and 0 resolved timestamps
+18:31:59 cdc.go:3453: topic consumer for customer validated 52137 rows and 0 resolved timestamps
+18:31:59 cdc.go:3453: topic consumer for history validated 26053 rows and 0 resolved timestamps
+18:31:59 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 51.145s; max steady latency so far 55.18s; highwater 2024-05-31 18:31:08.753487341 +0000 UTC
+18:32:00 cdc.go:3453: topic consumer for order_line validated 524845 rows and 0 resolved timestamps
+18:32:00 cdc.go:3453: topic consumer for stock validated 273531 rows and 0 resolved timestamps
+18:32:00 cdc.go:3453: topic consumer for order validated 54202 rows and 0 resolved timestamps
+18:32:09 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 13.234s; max steady latency so far 55.18s; highwater 2024-05-31 18:31:56.714225158 +0000 UTC
+18:32:20 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.204s; max steady latency so far 55.18s; highwater 2024-05-31 18:31:56.797139133 +0000 UTC
+18:32:29 cdc.go:3453: topic consumer for history validated 27683 rows and 0 resolved timestamps
+18:32:29 cdc.go:3453: topic consumer for customer validated 55409 rows and 0 resolved timestamps
+18:32:29 cdc.go:3453: topic consumer for new_order validated 56738 rows and 0 resolved timestamps
+18:32:30 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.739s; max steady latency so far 55.18s; highwater 2024-05-31 18:32:11.31267977 +0000 UTC
+18:32:30 cdc.go:3453: topic consumer for order_line validated 555968 rows and 0 resolved timestamps
+18:32:30 cdc.go:3453: topic consumer for stock validated 280535 rows and 0 resolved timestamps
+18:32:30 cdc.go:3453: topic consumer for warehouse validated 27702 rows and 0 resolved timestamps
+18:32:30 cdc.go:3453: topic consumer for district validated 55275 rows and 0 resolved timestamps
+18:32:31 cdc.go:3453: topic consumer for order validated 55645 rows and 0 resolved timestamps
+18:32:40 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.777s; max steady latency so far 55.18s; highwater 2024-05-31 18:32:21.325702104 +0000 UTC
+18:32:50 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 15.727s; max steady latency so far 55.18s; highwater 2024-05-31 18:32:34.424624649 +0000 UTC
+18:32:59 cdc.go:3453: topic consumer for history validated 28251 rows and 0 resolved timestamps
+18:32:59 cdc.go:3453: topic consumer for customer validated 56575 rows and 0 resolved timestamps
+18:33:00 cdc.go:3453: topic consumer for new_order validated 57976 rows and 0 resolved timestamps
+18:33:00 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.725s; max steady latency so far 55.18s; highwater 2024-05-31 18:32:42.476898322 +0000 UTC
+18:33:01 cdc.go:3453: topic consumer for order_line validated 567663 rows and 0 resolved timestamps
+18:33:01 cdc.go:3453: topic consumer for stock validated 286780 rows and 0 resolved timestamps
+18:33:01 cdc.go:3453: topic consumer for district validated 56504 rows and 0 resolved timestamps
+18:33:01 cdc.go:3453: topic consumer for warehouse validated 28291 rows and 0 resolved timestamps
+18:33:02 cdc.go:3453: topic consumer for order validated 56803 rows and 0 resolved timestamps
+18:33:10 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 15.307s; max steady latency so far 55.18s; highwater 2024-05-31 18:32:54.946467412 +0000 UTC
+18:33:20 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.546s; max steady latency so far 55.18s; highwater 2024-05-31 18:32:56.758849865 +0000 UTC
+18:33:29 cdc.go:3280: kafka chaos loop iteration 9: stopping
+18:33:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_183329.903649769_n4_rm-f-mntdata1conflue.log
+18:33:30 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.82s; max steady latency so far 55.18s; highwater 2024-05-31 18:33:08.535157597 +0000 UTC
+18:33:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183330.404859028_n4_CONFLUENTCURRENTmntd.log
+18:33:30 cdc.go:3453: topic consumer for customer validated 57802 rows and 0 resolved timestamps
+18:33:30 cdc.go:3453: topic consumer for history validated 28862 rows and 0 resolved timestamps
+18:33:30 cdc.go:3453: topic consumer for new_order validated 59259 rows and 0 resolved timestamps
+18:33:31 cdc.go:3453: topic consumer for order_line validated 580902 rows and 0 resolved timestamps
+18:33:31 cdc.go:3453: topic consumer for stock validated 293283 rows and 0 resolved timestamps
+18:33:40 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 24.932s; max steady latency so far 55.18s; highwater 2024-05-31 18:33:15.476078956 +0000 UTC
+18:33:50 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 34.982s; max steady latency so far 55.18s; highwater 2024-05-31 18:33:15.476078956 +0000 UTC
+18:33:52 cdc.go:3291: kafka chaos loop iteration 9: restarting
+18:33:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_183352.655949645_n4_touch-mntdata1conflu.log
+18:33:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183352.993295425_n4_CONFLUENTCURRENTmntd.log
+18:33:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183355.541263710_n4_CONFLUENTCURRENTmntd.log
+18:33:58 cdc.go:3453: topic consumer for order validated 58103 rows and 0 resolved timestamps
+18:33:58 cdc.go:3453: topic consumer for district validated 57759 rows and 0 resolved timestamps
+18:33:58 cdc.go:3453: topic consumer for warehouse validated 28898 rows and 0 resolved timestamps
+18:34:00 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 8.358s; max steady latency so far 55.18s; highwater 2024-05-31 18:33:52.151735292 +0000 UTC
+18:34:00 cdc.go:3453: topic consumer for new_order validated 61189 rows and 0 resolved timestamps
+18:34:00 cdc.go:3453: topic consumer for customer validated 59702 rows and 0 resolved timestamps
+18:34:00 cdc.go:3453: topic consumer for history validated 29705 rows and 0 resolved timestamps
+18:34:01 cdc.go:3453: topic consumer for order_line validated 600145 rows and 0 resolved timestamps
+18:34:01 cdc.go:3453: topic consumer for stock validated 302904 rows and 0 resolved timestamps
+18:34:10 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.407s; max steady latency so far 55.18s; highwater 2024-05-31 18:33:52.151735292 +0000 UTC
+18:34:20 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 28.383s; max steady latency so far 55.18s; highwater 2024-05-31 18:33:52.226408358 +0000 UTC
+18:34:28 cdc.go:3453: topic consumer for order validated 61128 rows and 0 resolved timestamps
+18:34:29 cdc.go:3453: topic consumer for district validated 60806 rows and 0 resolved timestamps
+18:34:29 cdc.go:3453: topic consumer for warehouse validated 30432 rows and 0 resolved timestamps
+18:34:30 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.653s; max steady latency so far 55.18s; highwater 2024-05-31 18:34:07.007314665 +0000 UTC
+18:34:30 cdc.go:3453: topic consumer for customer validated 61039 rows and 0 resolved timestamps
+18:34:31 cdc.go:3453: topic consumer for order_line validated 612819 rows and 0 resolved timestamps
+18:34:31 cdc.go:3453: topic consumer for history validated 30468 rows and 0 resolved timestamps
+18:34:31 cdc.go:3453: topic consumer for new_order validated 62490 rows and 0 resolved timestamps
+18:34:31 cdc.go:3453: topic consumer for stock validated 309181 rows and 0 resolved timestamps
+18:34:40 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.927s; max steady latency so far 55.18s; highwater 2024-05-31 18:34:19.782606407 +0000 UTC
+18:34:50 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 19.098s; max steady latency so far 55.18s; highwater 2024-05-31 18:34:31.659388105 +0000 UTC
+18:34:59 cdc.go:3453: topic consumer for order validated 62404 rows and 0 resolved timestamps
+18:35:00 cdc.go:3453: topic consumer for warehouse validated 31094 rows and 0 resolved timestamps
+18:35:00 cdc.go:3453: topic consumer for district validated 62082 rows and 0 resolved timestamps
+18:35:00 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.437s; max steady latency so far 55.18s; highwater 2024-05-31 18:34:43.376725499 +0000 UTC
+18:35:01 cdc.go:3453: topic consumer for customer validated 62317 rows and 0 resolved timestamps
+18:35:01 cdc.go:3453: topic consumer for order_line validated 625324 rows and 0 resolved timestamps
+18:35:01 cdc.go:3453: topic consumer for stock validated 315202 rows and 0 resolved timestamps
+18:35:01 cdc.go:3453: topic consumer for history validated 31110 rows and 0 resolved timestamps
+18:35:02 cdc.go:3453: topic consumer for new_order validated 63748 rows and 0 resolved timestamps
+18:35:10 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 15.268s; max steady latency so far 55.18s; highwater 2024-05-31 18:34:55.596685468 +0000 UTC
+18:35:20 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 16.305s; max steady latency so far 55.18s; highwater 2024-05-31 18:35:04.610258534 +0000 UTC
+18:35:29 cdc.go:3280: kafka chaos loop iteration 10: stopping
+18:35:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_183529.903727969_n4_rm-f-mntdata1conflue.log
+18:35:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183530.409497565_n4_CONFLUENTCURRENTmntd.log
+18:35:30 cdc.go:3453: topic consumer for district validated 63358 rows and 0 resolved timestamps
+18:35:30 cdc.go:3453: topic consumer for warehouse validated 31733 rows and 0 resolved timestamps
+18:35:30 cdc.go:3453: topic consumer for order validated 63767 rows and 0 resolved timestamps
+18:35:30 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.446s; max steady latency so far 55.18s; highwater 2024-05-31 18:35:12.516741858 +0000 UTC
+18:35:31 cdc.go:3453: topic consumer for order_line validated 638437 rows and 0 resolved timestamps
+18:35:31 cdc.go:3453: topic consumer for customer validated 63670 rows and 0 resolved timestamps
+18:35:31 cdc.go:3453: topic consumer for stock validated 321470 rows and 0 resolved timestamps
+18:35:31 cdc.go:3453: topic consumer for history validated 31750 rows and 0 resolved timestamps
+18:35:41 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 28.499s; max steady latency so far 55.18s; highwater 2024-05-31 18:35:12.516741858 +0000 UTC
+18:35:51 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 38.554s; max steady latency so far 55.18s; highwater 2024-05-31 18:35:12.516741858 +0000 UTC
+18:35:52 cdc.go:3291: kafka chaos loop iteration 10: restarting
+18:35:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_183552.633657592_n4_touch-mntdata1conflu.log
+18:35:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183552.897100203_n4_CONFLUENTCURRENTmntd.log
+18:35:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183555.569369188_n4_CONFLUENTCURRENTmntd.log
+18:35:59 cdc.go:3453: topic consumer for new_order validated 65076 rows and 0 resolved timestamps
+18:36:00 cdc.go:3453: topic consumer for warehouse validated 32654 rows and 0 resolved timestamps
+18:36:00 cdc.go:3453: topic consumer for district validated 64619 rows and 0 resolved timestamps
+18:36:01 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 4.915s; max steady latency so far 55.18s; highwater 2024-05-31 18:35:56.208601597 +0000 UTC
+18:36:01 cdc.go:3453: topic consumer for order_line validated 660019 rows and 0 resolved timestamps
+18:36:01 cdc.go:3453: topic consumer for stock validated 332033 rows and 0 resolved timestamps
+18:36:01 cdc.go:3453: topic consumer for customer validated 65845 rows and 0 resolved timestamps
+18:36:01 cdc.go:3453: topic consumer for order validated 65900 rows and 0 resolved timestamps
+18:36:01 cdc.go:3453: topic consumer for history validated 32797 rows and 0 resolved timestamps
+18:36:11 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 14.964s; max steady latency so far 55.18s; highwater 2024-05-31 18:35:56.208601597 +0000 UTC
+18:36:21 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 24.979s; max steady latency so far 55.18s; highwater 2024-05-31 18:35:56.24388806 +0000 UTC
+18:36:30 cdc.go:3453: topic consumer for new_order validated 68387 rows and 0 resolved timestamps
+18:36:30 cdc.go:3453: topic consumer for warehouse validated 33420 rows and 0 resolved timestamps
+18:36:31 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 20.928s; max steady latency so far 55.18s; highwater 2024-05-31 18:36:10.344247913 +0000 UTC
+18:36:31 cdc.go:3453: topic consumer for district validated 66714 rows and 0 resolved timestamps
+18:36:31 cdc.go:3453: topic consumer for order_line validated 672740 rows and 0 resolved timestamps
+18:36:31 cdc.go:3453: topic consumer for stock validated 338226 rows and 0 resolved timestamps
+18:36:32 cdc.go:3453: topic consumer for history validated 33451 rows and 0 resolved timestamps
+18:36:32 cdc.go:3453: topic consumer for customer validated 67156 rows and 0 resolved timestamps
+18:36:32 cdc.go:3453: topic consumer for order validated 67222 rows and 0 resolved timestamps
+18:36:41 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 19.387s; max steady latency so far 55.18s; highwater 2024-05-31 18:36:21.935185563 +0000 UTC
+18:36:51 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.687s; max steady latency so far 55.18s; highwater 2024-05-31 18:36:32.688512492 +0000 UTC
+18:37:00 cdc.go:3453: topic consumer for new_order validated 69755 rows and 0 resolved timestamps
+18:37:00 cdc.go:3453: topic consumer for warehouse validated 34054 rows and 0 resolved timestamps
+18:37:01 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.208s; max steady latency so far 55.18s; highwater 2024-05-31 18:36:44.216923331 +0000 UTC
+18:37:01 cdc.go:3453: topic consumer for order_line validated 686373 rows and 0 resolved timestamps
+18:37:01 cdc.go:3453: topic consumer for stock validated 344489 rows and 0 resolved timestamps
+18:37:01 cdc.go:3453: topic consumer for district validated 68006 rows and 0 resolved timestamps
+18:37:02 cdc.go:3453: topic consumer for customer validated 68554 rows and 0 resolved timestamps
+18:37:02 cdc.go:3453: topic consumer for order validated 68637 rows and 0 resolved timestamps
+18:37:02 cdc.go:3453: topic consumer for history validated 34101 rows and 0 resolved timestamps
+18:37:11 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 16.753s; max steady latency so far 55.18s; highwater 2024-05-31 18:36:54.726672787 +0000 UTC
+18:37:21 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 25.19s; max steady latency so far 55.18s; highwater 2024-05-31 18:36:56.34787907 +0000 UTC
+18:37:29 cdc.go:3280: kafka chaos loop iteration 11: stopping
+18:37:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_183729.903828101_n4_rm-f-mntdata1conflue.log
+18:37:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183730.406039946_n4_CONFLUENTCURRENTmntd.log
+18:37:30 cdc.go:3453: topic consumer for new_order validated 71056 rows and 0 resolved timestamps
+18:37:30 cdc.go:3453: topic consumer for warehouse validated 34732 rows and 0 resolved timestamps
+18:37:31 cdc.go:3453: topic consumer for order_line validated 699498 rows and 0 resolved timestamps
+18:37:31 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.228s; max steady latency so far 55.18s; highwater 2024-05-31 18:37:08.362371623 +0000 UTC
+18:37:41 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 33.283s; max steady latency so far 55.18s; highwater 2024-05-31 18:37:08.362371623 +0000 UTC
+18:37:51 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 43.337s; max steady latency so far 55.18s; highwater 2024-05-31 18:37:08.362371623 +0000 UTC
+18:37:52 cdc.go:3291: kafka chaos loop iteration 11: restarting
+18:37:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_183752.601385116_n4_touch-mntdata1conflu.log
+18:37:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183752.897150812_n4_CONFLUENTCURRENTmntd.log
+18:37:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183755.461511504_n4_CONFLUENTCURRENTmntd.log
+18:37:59 cdc.go:3453: topic consumer for order validated 69889 rows and 0 resolved timestamps
+18:37:59 cdc.go:3453: topic consumer for customer validated 69902 rows and 0 resolved timestamps
+18:37:59 cdc.go:3453: topic consumer for stock validated 350750 rows and 0 resolved timestamps
+18:37:59 cdc.go:3453: topic consumer for district validated 69310 rows and 0 resolved timestamps
+18:37:59 cdc.go:3453: topic consumer for history validated 34770 rows and 0 resolved timestamps
+18:38:00 cdc.go:3453: topic consumer for warehouse validated 35512 rows and 0 resolved timestamps
+18:38:01 cdc.go:3453: topic consumer for new_order validated 73738 rows and 0 resolved timestamps
+18:38:01 cdc.go:3453: topic consumer for order_line validated 722685 rows and 0 resolved timestamps
+18:38:01 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 5.301s; max steady latency so far 55.18s; highwater 2024-05-31 18:37:56.449512617 +0000 UTC
+18:38:11 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 15.351s; max steady latency so far 55.18s; highwater 2024-05-31 18:37:56.449512617 +0000 UTC
+18:38:21 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 25.368s; max steady latency so far 55.18s; highwater 2024-05-31 18:37:56.488441246 +0000 UTC
+18:38:29 cdc.go:3453: topic consumer for history validated 36435 rows and 0 resolved timestamps
+18:38:29 cdc.go:3453: topic consumer for stock validated 367855 rows and 0 resolved timestamps
+18:38:29 cdc.go:3453: topic consumer for customer validated 73507 rows and 0 resolved timestamps
+18:38:29 cdc.go:3453: topic consumer for order validated 73460 rows and 0 resolved timestamps
+18:38:29 cdc.go:3453: topic consumer for district validated 72607 rows and 0 resolved timestamps
+18:38:30 cdc.go:3453: topic consumer for warehouse validated 36469 rows and 0 resolved timestamps
+18:38:31 cdc.go:3453: topic consumer for new_order validated 74969 rows and 0 resolved timestamps
+18:38:31 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.716s; max steady latency so far 55.18s; highwater 2024-05-31 18:38:10.190585744 +0000 UTC
+18:38:31 cdc.go:3453: topic consumer for order_line validated 734359 rows and 0 resolved timestamps
+18:38:41 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 22.226s; max steady latency so far 55.18s; highwater 2024-05-31 18:38:19.732449475 +0000 UTC
+18:38:52 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 19.159s; max steady latency so far 55.18s; highwater 2024-05-31 18:38:32.851297351 +0000 UTC
+18:38:59 cdc.go:3453: topic consumer for customer validated 74773 rows and 0 resolved timestamps
+18:38:59 cdc.go:3453: topic consumer for history validated 37093 rows and 0 resolved timestamps
+18:38:59 cdc.go:3453: topic consumer for stock validated 374084 rows and 0 resolved timestamps
+18:39:00 cdc.go:3453: topic consumer for order validated 74669 rows and 0 resolved timestamps
+18:39:00 cdc.go:3453: topic consumer for district validated 73894 rows and 0 resolved timestamps
+18:39:01 cdc.go:3453: topic consumer for warehouse validated 37134 rows and 0 resolved timestamps
+18:39:01 cdc.go:3453: topic consumer for order_line validated 746926 rows and 0 resolved timestamps
+18:39:02 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.086s; max steady latency so far 55.18s; highwater 2024-05-31 18:38:44.974218047 +0000 UTC
+18:39:02 cdc.go:3453: topic consumer for new_order validated 76186 rows and 0 resolved timestamps
+18:39:12 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.23s; max steady latency so far 55.18s; highwater 2024-05-31 18:38:54.881279936 +0000 UTC
+18:39:22 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 16.738s; max steady latency so far 55.18s; highwater 2024-05-31 18:39:05.425750966 +0000 UTC
+18:39:29 cdc.go:3280: kafka chaos loop iteration 12: stopping
+18:39:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_183929.903869225_n4_rm-f-mntdata1conflue.log
+18:39:30 cdc.go:3453: topic consumer for customer validated 76019 rows and 0 resolved timestamps
+18:39:30 cdc.go:3453: topic consumer for stock validated 380575 rows and 0 resolved timestamps
+18:39:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183930.429254251_n4_CONFLUENTCURRENTmntd.log
+18:39:30 cdc.go:3453: topic consumer for history validated 37738 rows and 0 resolved timestamps
+18:39:31 cdc.go:3453: topic consumer for district validated 75187 rows and 0 resolved timestamps
+18:39:31 cdc.go:3453: topic consumer for order validated 75913 rows and 0 resolved timestamps
+18:39:31 cdc.go:3453: topic consumer for warehouse validated 37777 rows and 0 resolved timestamps
+18:39:32 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.851s; max steady latency so far 55.18s; highwater 2024-05-31 18:39:08.362484936 +0000 UTC
+18:39:42 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 33.903s; max steady latency so far 55.18s; highwater 2024-05-31 18:39:08.362484936 +0000 UTC
+18:39:52 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 43.953s; max steady latency so far 55.18s; highwater 2024-05-31 18:39:08.362484936 +0000 UTC
+18:39:52 cdc.go:3291: kafka chaos loop iteration 12: restarting
+18:39:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_183952.651820985_n4_touch-mntdata1conflu.log
+18:39:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183952.909368129_n4_CONFLUENTCURRENTmntd.log
+18:39:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_183955.445314384_n4_CONFLUENTCURRENTmntd.log
+18:39:59 cdc.go:3453: topic consumer for new_order validated 77400 rows and 0 resolved timestamps
+18:39:59 cdc.go:3453: topic consumer for order_line validated 758929 rows and 0 resolved timestamps
+18:40:00 cdc.go:3453: topic consumer for stock validated 391799 rows and 0 resolved timestamps
+18:40:00 cdc.go:3453: topic consumer for customer validated 78286 rows and 0 resolved timestamps
+18:40:01 cdc.go:3453: topic consumer for district validated 77236 rows and 0 resolved timestamps
+18:40:01 cdc.go:3453: topic consumer for order validated 79128 rows and 0 resolved timestamps
+18:40:02 cdc.go:3453: topic consumer for history validated 38885 rows and 0 resolved timestamps
+18:40:02 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 6.173s; max steady latency so far 55.18s; highwater 2024-05-31 18:39:56.19636556 +0000 UTC
+18:40:02 cdc.go:3453: topic consumer for warehouse validated 38957 rows and 0 resolved timestamps
+18:40:12 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 16.095s; max steady latency so far 55.18s; highwater 2024-05-31 18:39:56.326648397 +0000 UTC
+18:40:22 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 26.146s; max steady latency so far 55.18s; highwater 2024-05-31 18:39:56.326648397 +0000 UTC
+18:40:29 cdc.go:3453: topic consumer for order_line validated 794552 rows and 0 resolved timestamps
+18:40:30 cdc.go:3453: topic consumer for new_order validated 80922 rows and 0 resolved timestamps
+18:40:30 cdc.go:3453: topic consumer for stock validated 399125 rows and 0 resolved timestamps
+18:40:30 cdc.go:3453: topic consumer for customer validated 79659 rows and 0 resolved timestamps
+18:40:31 cdc.go:3453: topic consumer for order validated 80418 rows and 0 resolved timestamps
+18:40:31 cdc.go:3453: topic consumer for district validated 78689 rows and 0 resolved timestamps
+18:40:32 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 25.426s; max steady latency so far 55.18s; highwater 2024-05-31 18:40:07.094367434 +0000 UTC
+18:40:32 cdc.go:3453: topic consumer for history validated 39546 rows and 0 resolved timestamps
+18:40:33 cdc.go:3453: topic consumer for warehouse validated 39574 rows and 0 resolved timestamps
+18:40:42 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 24.428s; max steady latency so far 55.18s; highwater 2024-05-31 18:40:18.143902158 +0000 UTC
+18:40:52 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.815s; max steady latency so far 55.18s; highwater 2024-05-31 18:40:30.807220469 +0000 UTC
+18:40:59 cdc.go:3453: topic consumer for order_line validated 806986 rows and 0 resolved timestamps
+18:41:00 cdc.go:3453: topic consumer for stock validated 405796 rows and 0 resolved timestamps
+18:41:00 cdc.go:3453: topic consumer for customer validated 80865 rows and 0 resolved timestamps
+18:41:00 cdc.go:3453: topic consumer for new_order validated 82181 rows and 0 resolved timestamps
+18:41:01 cdc.go:3453: topic consumer for order validated 81673 rows and 0 resolved timestamps
+18:41:02 cdc.go:3453: topic consumer for district validated 79971 rows and 0 resolved timestamps
+18:41:02 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.856s; max steady latency so far 55.18s; highwater 2024-05-31 18:40:40.814316448 +0000 UTC
+18:41:03 cdc.go:3453: topic consumer for history validated 40181 rows and 0 resolved timestamps
+18:41:03 cdc.go:3453: topic consumer for warehouse validated 40201 rows and 0 resolved timestamps
+18:41:12 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 19.062s; max steady latency so far 55.18s; highwater 2024-05-31 18:40:53.659048981 +0000 UTC
+18:41:22 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 18.04s; max steady latency so far 55.18s; highwater 2024-05-31 18:41:04.7318854 +0000 UTC
+18:41:29 cdc.go:3453: topic consumer for order_line validated 818258 rows and 0 resolved timestamps
+18:41:29 cdc.go:3280: kafka chaos loop iteration 13: stopping
+18:41:29 cluster.go:2462: running cmd `rm -f /mnt/data1/confluent/...` on nodes [:4]; details in run_184129.904289113_n4_rm-f-mntdata1conflue.log
+18:41:30 cdc.go:3453: topic consumer for stock validated 411926 rows and 0 resolved timestamps
+18:41:30 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_184130.397373084_n4_CONFLUENTCURRENTmntd.log
+18:41:30 cdc.go:3453: topic consumer for customer validated 81983 rows and 0 resolved timestamps
+18:41:31 cdc.go:3453: topic consumer for new_order validated 83347 rows and 0 resolved timestamps
+18:41:31 cdc.go:3453: topic consumer for order validated 82796 rows and 0 resolved timestamps
+18:41:32 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 17.353s; max steady latency so far 55.18s; highwater 2024-05-31 18:41:15.468320698 +0000 UTC
+18:41:42 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 27.415s; max steady latency so far 55.18s; highwater 2024-05-31 18:41:15.468320698 +0000 UTC
+18:41:52 cdc.go:3291: kafka chaos loop iteration 13: restarting
+18:41:52 cluster.go:2462: running cmd `touch /mnt/data1/confluent/...` on nodes [:4]; details in run_184152.627879086_n4_touch-mntdata1conflu.log
+18:41:52 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_184152.881140208_n4_CONFLUENTCURRENTmntd.log
+18:41:52 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 37.469s; max steady latency so far 55.18s; highwater 2024-05-31 18:41:15.468320698 +0000 UTC
+18:41:55 cluster.go:2462: running cmd `CONFLUENT_CURRENT=/mnt/data...` on nodes [:4]; details in run_184155.397497691_n4_CONFLUENTCURRENTmntd.log
+18:41:58 cdc.go:3453: topic consumer for warehouse validated 40772 rows and 0 resolved timestamps
+18:41:58 cdc.go:3453: topic consumer for history validated 40750 rows and 0 resolved timestamps
+18:41:58 cdc.go:3453: topic consumer for district validated 81189 rows and 0 resolved timestamps
+18:41:59 cdc.go:3453: topic consumer for order_line validated 830596 rows and 0 resolved timestamps
+18:42:00 cdc.go:3453: topic consumer for stock validated 421726 rows and 0 resolved timestamps
+18:42:01 cdc.go:3453: topic consumer for customer validated 83864 rows and 0 resolved timestamps
+18:42:02 cdc.go:3453: topic consumer for order validated 84803 rows and 0 resolved timestamps
+18:42:02 cdc.go:3453: topic consumer for new_order validated 85349 rows and 0 resolved timestamps
+18:42:02 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 11.045s; max steady latency so far 55.18s; highwater 2024-05-31 18:41:51.942974631 +0000 UTC
+18:42:13 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.097s; max steady latency so far 55.18s; highwater 2024-05-31 18:41:51.942974631 +0000 UTC
+18:42:23 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 31.135s; max steady latency so far 55.18s; highwater 2024-05-31 18:41:51.958131402 +0000 UTC
+18:42:28 cdc.go:3453: topic consumer for history validated 42269 rows and 0 resolved timestamps
+18:42:28 cdc.go:3453: topic consumer for district validated 84248 rows and 0 resolved timestamps
+18:42:28 cdc.go:3453: topic consumer for warehouse validated 42292 rows and 0 resolved timestamps
+18:42:29 cdc.go:3453: topic consumer for order_line validated 849686 rows and 0 resolved timestamps
+18:42:30 cdc.go:3453: topic consumer for stock validated 428399 rows and 0 resolved timestamps
+18:42:31 cdc.go:3453: topic consumer for customer validated 85099 rows and 0 resolved timestamps
+18:42:32 cdc.go:3453: topic consumer for new_order validated 86509 rows and 0 resolved timestamps
+18:42:33 cdc.go:3453: topic consumer for order validated 85963 rows and 0 resolved timestamps
+18:42:33 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 23.222s; max steady latency so far 55.18s; highwater 2024-05-31 18:42:09.92404962 +0000 UTC
+18:42:43 latency_verifier.go:145: test status: watching changefeed[default]: end-to-end steady latency 21.076s; max steady latency so far 55.18s; highwater 2024-05-31 18:42:22.119849152 +0000 UTC
+18:42:50 cdc.go:555: test status: cdcTester closing
+18:42:50 cdc.go:3453: topic consumer for item validated 0 rows and 0 resolved timestamps
+changefeed: 18:42:50 latency_verifier.go:212: changefeed[default] end-to-end __avg(ms)__p50(ms)__p75(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)
+changefeed: 18:42:50 latency_verifier.go:214: changefeed[default] end-to-end   23142.1  21474.8  25769.8  38654.7  45097.2  51539.6  55834.6
+18:42:51 cdc.go:568: test status: cdcTester closed
+18:42:51 test_runner.go:1244: test completed successfully
+18:42:51 test_runner.go:1248: error adding annotation for test end: error adding grafana annotation: GRAFANA_SERVICE_ACCOUNT_JSON env variable was not found
+18:42:51 test_runner.go:1273: running post test assertions (test-post-assertions.log)
+18:42:52 test_runner.go:1286: running test teardown (test-teardown.log)
+18:43:16 test_runner.go:1040: metrics: https://go.crdb.dev/roachtest-grafana/miles-1717178978/cdc-kafka-chaos/1717179099985/1717181092016
+18:43:16 test_runner.go:1123: --- PASS: cdc/kafka-chaos (1872.03s)
+--- PASS: cdc/kafka-chaos (1872.03s)
+[w0] 18:43:16 test_runner.go:888: test passed: cdc/kafka-chaos (run 1)
+[w0] 18:43:16 test_runner.go:684: No work remaining; runWorker is bailing out...
+No work remaining; runWorker is bailing out...
+[w0] 18:43:16 test_runner.go:584: Worker exiting; no cluster to destroy.
+18:43:16 test_runner.go:417: PASS
+PASS
+18:43:31 run.go:197: runTests destroying all clusters
+18:43:36 leaktest.go:162: 
+all stacks: 
+goroutine 1 [running]:
+github.com/cockroachdb/cockroach/pkg/util/allstacks.GetWithBuf({0x0?, 0x1da833bc7bd?, 0x0?})
+	github.com/cockroachdb/cockroach/pkg/util/allstacks/allstacks.go:32 +0x74
+github.com/cockroachdb/cockroach/pkg/util/allstacks.Get(...)
+	github.com/cockroachdb/cockroach/pkg/util/allstacks/allstacks.go:19
+github.com/cockroachdb/cockroach/pkg/util/leaktest.AfterTest.func2()
+	github.com/cockroachdb/cockroach/pkg/util/leaktest/leaktest.go:161 +0x1a8
+main.runTests(0x7b48b30, 0xc001b7a280)
+	main/pkg/cmd/roachtest/run.go:209 +0xcc2
+main.main.func3(0xc005a14908, {0xc0058fc2c0, 0x1, 0xb})
+	main/pkg/cmd/roachtest/main.go:157 +0xcb
+github.com/spf13/cobra.(*Command).execute(0xc005a14908, {0xc0058fc210, 0xb, 0xb})
+	github.com/spf13/cobra/external/com_github_spf13_cobra/command.go:916 +0x882
+github.com/spf13/cobra.(*Command).ExecuteC(0xc005a14008)
+	github.com/spf13/cobra/external/com_github_spf13_cobra/command.go:1044 +0x3a5
+github.com/spf13/cobra.(*Command).Execute(...)
+	github.com/spf13/cobra/external/com_github_spf13_cobra/command.go:968
+main.main()
+	main/pkg/cmd/roachtest/main.go:221 +0x735
+goroutine 11 [select]:
+go.opencensus.io/stats/view.(*worker).start(0xc0012ba800)
+	go.opencensus.io/stats/view/external/io_opencensus_go/stats/view/worker.go:292 +0x9f
+created by go.opencensus.io/stats/view.init.0 in goroutine 1
+	go.opencensus.io/stats/view/external/io_opencensus_go/stats/view/worker.go:34 +0x8d
+goroutine 12 [IO wait, 33 minutes]:
+internal/poll.runtime_pollWait(0x7f0ad9b669a0, 0x72)
+	GOROOT/src/runtime/netpoll.go:345 +0x85
+internal/poll.(*pollDesc).wait(0xc0014ec980?, 0xc001500ca0?, 0x0)
+	GOROOT/src/internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	GOROOT/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).ReadMsg(0xc0014ec980, {0xc001500ca0, 0x10, 0x10}, {0xc000f86628, 0x1000, 0x1000}, 0x40000000)
+	GOROOT/src/internal/poll/fd_unix.go:301 +0x38a
+net.(*netFD).readMsg(0xc0014ec980, {0xc001500ca0?, 0xb?, 0x8d07000000?}, {0xc000f86628?, 0x913bc40?, 0x0?}, 0x1?)
+	GOROOT/src/net/fd_posix.go:78 +0x31
+net.(*UnixConn).readMsg(0xc0001151a8, {0xc001500ca0?, 0x18?, 0x8?}, {0xc000f86628?, 0x42ec98?, 0x7f0b227ac1a8?})
+	GOROOT/src/net/unixsock_posix.go:115 +0x45
+net.(*UnixConn).ReadMsgUnix(0xc0001151a8, {0xc001500ca0?, 0x30?, 0x7f0b227a3108?}, {0xc000f86628?, 0xc000a88008?, 0xc000f8f830?})
+	GOROOT/src/net/unixsock.go:143 +0x36
+github.com/godbus/dbus.(*oobReader).Read(0xc000f86608, {0xc001500ca0?, 0xc0001a7e30?, 0x426125?})
+	github.com/godbus/dbus/external/com_github_godbus_dbus/transport_unix.go:21 +0x3c
+io.ReadAtLeast({0x90ba160, 0xc000f86608}, {0xc001500ca0, 0x10, 0x10}, 0x10)
+	GOROOT/src/io/io.go:335 +0x90
+io.ReadFull(...)
+	GOROOT/src/io/io.go:354
+github.com/godbus/dbus.(*unixTransport).ReadMessage(0xc0000132c0)
+	github.com/godbus/dbus/external/com_github_godbus_dbus/transport_unix.go:91 +0xfe
+github.com/godbus/dbus.(*Conn).inWorker(0xc0010e1560)
+	github.com/godbus/dbus/external/com_github_godbus_dbus/conn.go:294 +0x35
+created by github.com/godbus/dbus.(*Conn).Auth in goroutine 1
+	github.com/godbus/dbus/external/com_github_godbus_dbus/auth.go:118 +0x94c
+goroutine 15 [chan receive]:
+github.com/cockroachdb/cockroach/pkg/util/goschedstats.init.0.func1()
+	github.com/cockroachdb/cockroach/pkg/util/goschedstats/runnable.go:172 +0xc8
+created by github.com/cockroachdb/cockroach/pkg/util/goschedstats.init.0 in goroutine 1
+	github.com/cockroachdb/cockroach/pkg/util/goschedstats/runnable.go:164 +0x1a
+goroutine 16 [chan receive]:
+github.com/cockroachdb/cockroach/pkg/util/log.flushDaemon()
+	github.com/cockroachdb/cockroach/pkg/util/log/log_flush.go:117 +0x4e
+created by github.com/cockroachdb/cockroach/pkg/util/log.init.5 in goroutine 1
+	github.com/cockroachdb/cockroach/pkg/util/log/log_flush.go:83 +0x1a
+goroutine 66 [chan receive, 33 minutes]:
+github.com/cockroachdb/cockroach/pkg/util/log.signalFlusher()
+	github.com/cockroachdb/cockroach/pkg/util/log/log_flush.go:141 +0x89
+created by github.com/cockroachdb/cockroach/pkg/util/log.init.5 in goroutine 1
+	github.com/cockroachdb/cockroach/pkg/util/log/log_flush.go:84 +0x26
+goroutine 51 [syscall, 33 minutes]:
+os/signal.signal_recv()
+	GOROOT/src/runtime/sigqueue.go:152 +0x29
+os/signal.loop()
+	GOROOT/src/os/signal/signal_unix.go:23 +0x13
+created by os/signal.Notify.func1.1 in goroutine 66
+	GOROOT/src/os/signal/signal.go:151 +0x1f
+goroutine 83 [chan receive, 33 minutes]:
+main.CtrlC.func1()
+	main/pkg/cmd/roachtest/run.go:307 +0x5d
+created by main.CtrlC in goroutine 1
+	main/pkg/cmd/roachtest/run.go:306 +0xfe
+goroutine 100 [IO wait, 33 minutes]:
+internal/poll.runtime_pollWait(0x7f0ad9b668a8, 0x72)
+	GOROOT/src/runtime/netpoll.go:345 +0x85
+internal/poll.(*pollDesc).wait(0x8?, 0x10?, 0x0)
+	GOROOT/src/internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	GOROOT/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc001b84580)
+	GOROOT/src/internal/poll/fd_unix.go:611 +0x2ac
+net.(*netFD).accept(0xc001b84580)
+	GOROOT/src/net/fd_unix.go:172 +0x29
+net.(*TCPListener).accept(0xc0019a6260)
+	GOROOT/src/net/tcpsock_posix.go:159 +0x1e
+net.(*TCPListener).Accept(0xc0019a6260)
+	GOROOT/src/net/tcpsock.go:327 +0x30
+net/http.(*Server).Serve(0xc005a34000, {0x90d5ce8, 0xc0019a6260})
+	GOROOT/src/net/http/server.go:3255 +0x33e
+net/http.Serve(...)
+	GOROOT/src/net/http/server.go:2794
+main.(*testRunner).runHTTPServer.func1()
+	main/pkg/cmd/roachtest/test_runner.go:1657 +0x45
+created by main.(*testRunner).runHTTPServer in goroutine 1
+	main/pkg/cmd/roachtest/test_runner.go:1656 +0x1ef
+goroutine 101 [select, 30 minutes]:
+github.com/cockroachdb/cockroach/pkg/util/log.(*fileSink).gcDaemon(0xc0017d80e0, {0x90fbd90, 0xc001633450})
+	github.com/cockroachdb/cockroach/pkg/util/log/file_log_gc.go:25 +0x79
+created by github.com/cockroachdb/cockroach/pkg/util/log.ApplyConfig in goroutine 1
+	github.com/cockroachdb/cockroach/pkg/util/log/flags.go:328 +0x121f
+goroutine 102 [IO wait, 33 minutes]:
+internal/poll.runtime_pollWait(0x7f0ad9b667b0, 0x72)
+	GOROOT/src/runtime/netpoll.go:345 +0x85
+internal/poll.(*pollDesc).wait(0xa?, 0x10?, 0x0)
+	GOROOT/src/internal/poll/fd_poll_runtime.go:84 +0x27
+internal/poll.(*pollDesc).waitRead(...)
+	GOROOT/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc001bbc100)
+	GOROOT/src/internal/poll/fd_unix.go:611 +0x2ac
+net.(*netFD).accept(0xc001bbc100)
+	GOROOT/src/net/fd_unix.go:172 +0x29
+net.(*TCPListener).accept(0xc001a320a0)
+	GOROOT/src/net/tcpsock_posix.go:159 +0x1e
+net.(*TCPListener).Accept(0xc001a320a0)
+	GOROOT/src/net/tcpsock.go:327 +0x30
+net/http.(*Server).Serve(0xc002712000, {0x90d5ce8, 0xc001a320a0})
+	GOROOT/src/net/http/server.go:3255 +0x33e
+net/http.(*Server).ListenAndServe(0xc002712000)
+	GOROOT/src/net/http/server.go:3184 +0x71
+net/http.ListenAndServe(...)
+	GOROOT/src/net/http/server.go:3438
+main.runTests.func1()
+	main/pkg/cmd/roachtest/run.go:165 +0x1b4
+created by main.runTests in goroutine 1
+	main/pkg/cmd/roachtest/run.go:164 +0x99f
+goroutine 1314 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc003c6e820, {0x90fbd90, 0xc0016d0fa0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1384 [chan receive]:
+github.com/rcrowley/go-metrics.(*meterArbiter).tick(...)
+	github.com/rcrowley/go-metrics/external/com_github_rcrowley_go_metrics/meter.go:239
+created by github.com/rcrowley/go-metrics.NewMeter in goroutine 1427
+	github.com/rcrowley/go-metrics/external/com_github_rcrowley_go_metrics/meter.go:46 +0xc5
+goroutine 12108 [select]:
+database/sql.(*DB).connectionOpener(0xc00ddc04e0, {0x90fbd90, 0xc00cfef3b0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1316 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc00450b790, {0x90fbd90, 0xc0016d12c0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1152 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc0041c6dd0, {0x90fbd90, 0xc0016d0690})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1288 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc0042ee680, {0x90fbd90, 0xc001e4fb80})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1311 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc00475fd40, {0x90fbd90, 0xc000b2a730})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1309 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc0036aa0d0, {0x90fbd90, 0xc001809860})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1508 [select, 30 minutes]:
+database/sql.(*DB).connectionOpener(0xc00589e750, {0x90fbd90, 0xc0016d0ff0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1290 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc004aea0d0, {0x90fbd90, 0xc0013252c0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1284 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc0033ce410, {0x90fbd90, 0xc001e4f1d0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1233 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc003ffb790, {0x90fbd90, 0xc001e4e690})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1286 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc0035d51e0, {0x90fbd90, 0xc001e4f450})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1477 [select, 30 minutes]:
+database/sql.(*DB).connectionOpener(0xc0040fda00, {0x90fbd90, 0xc001648a00})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+goroutine 1480 [select, 30 minutes]:
+database/sql.(*DB).connectionOpener(0xc004e03520, {0x90fbd90, 0xc0016493b0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1478
+	GOROOT/src/database/sql/sql.go:824 +0x14c: Leaked goroutine: goroutine 1152 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc0041c6dd0, {0x90fbd90, 0xc0016d0690})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 12108 [select]:
+database/sql.(*DB).connectionOpener(0xc00ddc04e0, {0x90fbd90, 0xc00cfef3b0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1233 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc003ffb790, {0x90fbd90, 0xc001e4e690})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1284 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc0033ce410, {0x90fbd90, 0xc001e4f1d0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1286 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc0035d51e0, {0x90fbd90, 0xc001e4f450})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1288 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc0042ee680, {0x90fbd90, 0xc001e4fb80})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1290 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc004aea0d0, {0x90fbd90, 0xc0013252c0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1309 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc0036aa0d0, {0x90fbd90, 0xc001809860})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1311 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc00475fd40, {0x90fbd90, 0xc000b2a730})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1314 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc003c6e820, {0x90fbd90, 0xc0016d0fa0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1316 [select, 31 minutes]:
+database/sql.(*DB).connectionOpener(0xc00450b790, {0x90fbd90, 0xc0016d12c0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1384 [chan receive]:
+github.com/rcrowley/go-metrics.(*meterArbiter).tick(...)
+	github.com/rcrowley/go-metrics/external/com_github_rcrowley_go_metrics/meter.go:239
+created by github.com/rcrowley/go-metrics.NewMeter in goroutine 1427
+	github.com/rcrowley/go-metrics/external/com_github_rcrowley_go_metrics/meter.go:46 +0xc5
+Leaked goroutine: goroutine 1477 [select, 30 minutes]:
+database/sql.(*DB).connectionOpener(0xc0040fda00, {0x90fbd90, 0xc001648a00})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1480 [select, 30 minutes]:
+database/sql.(*DB).connectionOpener(0xc004e03520, {0x90fbd90, 0xc0016493b0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1478
+	GOROOT/src/database/sql/sql.go:824 +0x14c
+Leaked goroutine: goroutine 1508 [select, 30 minutes]:
+database/sql.(*DB).connectionOpener(0xc00589e750, {0x90fbd90, 0xc0016d0ff0})
+	GOROOT/src/database/sql/sql.go:1246 +0x87
+created by database/sql.OpenDB in goroutine 1016
+	GOROOT/src/database/sql/sql.go:824 +0x14c
