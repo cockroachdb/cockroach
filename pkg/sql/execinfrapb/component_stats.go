@@ -467,6 +467,11 @@ func (s *ComponentStats) MakeDeterministic() {
 		// BatchRequestsIssued is overridden to a useful value for tests.
 		s.KV.BatchRequestsIssued.Set(s.KV.TuplesRead.Value())
 	}
+	if len(s.KV.NodeIDs) > 0 {
+		// The nodes can be non-deterministic because they depend on the actual
+		// cluster configuration. Override to a useful value for tests.
+		s.KV.NodeIDs = []int32{1}
+	}
 
 	// Exec.
 	timeVal(&s.Exec.ExecTime)
