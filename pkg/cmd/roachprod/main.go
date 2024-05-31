@@ -1842,6 +1842,26 @@ var fluentBitStopCmd = &cobra.Command{
 	}),
 }
 
+var opentelemetryStartCmd = &cobra.Command{
+	Use:   "opentelemetry-start <cluster>",
+	Short: "Install and start the OpenTelemetry Collector",
+	Long: "Install and start the OpenTelemetry Collector",
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.StartOpenTelemetry(context.Background(), config.Logger, args[0], opentelemetryConfig)
+	}),
+}
+
+var opentelemetryStopCmd = &cobra.Command{
+	Use:   "opentelemetry-stop <cluster>",
+	Short: "Stop the OpenTelemetry Collector",
+	Long:  "Stop the OpenTelemetry Collector",
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.StopOpenTelemetry(context.Background(), config.Logger, args[0])
+	}),
+}
+
 func main() {
 	_ = roachprod.InitProviders()
 	providerOptsContainer = vm.CreateProviderOptionsContainer()
@@ -1904,6 +1924,8 @@ func main() {
 		jaegerURLCmd,
 		fluentBitStartCmd,
 		fluentBitStopCmd,
+		opentelemetryStartCmd,
+		opentelemetryStopCmd,
 	)
 	loadBalancerCmd.AddCommand(createLoadBalancerCmd)
 	loadBalancerCmd.AddCommand(loadBalancerPGUrl)

@@ -42,8 +42,8 @@ type Config struct {
 	// Datadog service for emitted logs.
 	DatadogService string
 
-	// Datadog team to tag the emitted logs.
-	DatadogTeam string
+	// Datadog tags as a comma-separated list in the format KEY1:VAL1,KEY2:VAL2.
+	DatadogTags []string
 }
 
 // Install installs, configures, and starts Fluent Bit on the given CockroachDB
@@ -58,14 +58,14 @@ func Install(ctx context.Context, l *logger.Logger, c *install.SyncedCluster, co
 		}
 
 		tags := []string{
+			// Reserved Datadog tags.
 			"env:development",
 			fmt.Sprintf("host:%s", vm.Name(c.Name, int(node))),
+
+			// Custom tags.
 			fmt.Sprintf("cluster:%s", c.Name),
 		}
-
-		if config.DatadogTeam != "" {
-			tags = append(tags, fmt.Sprintf("team:%s", config.DatadogTeam))
-		}
+		tags = append(tags, config.DatadogTags...)
 
 		data := templateData{
 			DatadogSite:    config.DatadogSite,
