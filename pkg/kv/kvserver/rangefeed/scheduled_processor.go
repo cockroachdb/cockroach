@@ -483,7 +483,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 			}()
 		}
 	}
-	ev := getPooledEvent(e)
+	ev := getPooledEventAndShallowCopy(e)
 	ev.alloc = alloc
 	if timeout == 0 {
 		// Timeout is zero if no timeout was requested or timeout is already set on
@@ -550,7 +550,8 @@ func (p *ScheduledProcessor) syncEventC() {
 // syncSendAndWait allows sync event to be sent and waited on its channel.
 // Exposed to allow special test syneEvents that contain span to be sent.
 func (p *ScheduledProcessor) syncSendAndWait(se *syncEvent) {
-	ev := getPooledEvent(event{sync: se})
+	ev := getPooledEvent()
+	ev.sync = se
 	select {
 	case p.eventC <- ev:
 		// This shouldn't happen as there should be no sync events after disconnect,

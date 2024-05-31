@@ -52,10 +52,11 @@ var sharedEventSyncPool = sync.Pool{
 	},
 }
 
-func getPooledSharedEvent(e sharedEvent) *sharedEvent {
-	ev := sharedEventSyncPool.Get().(*sharedEvent)
-	*ev = e
-	return ev
+func getPooledSharedEvent(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation) *sharedEvent {
+	e := sharedEventSyncPool.Get().(*sharedEvent)
+	e.event = event
+	e.alloc = alloc
+	return e
 }
 
 func putPooledSharedEvent(e *sharedEvent) {
@@ -153,7 +154,7 @@ func (r *registration) publish(
 	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
 	r.assertEvent(ctx, event)
-	e := getPooledSharedEvent(sharedEvent{event: r.maybeStripEvent(ctx, event), alloc: alloc})
+	e := getPooledSharedEvent(r.maybeStripEvent(ctx, event), alloc)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
