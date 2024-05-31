@@ -1422,7 +1422,6 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	opts := retry.Options{
 		InitialBackoff: time.Millisecond * 10,
 		MaxBackoff:     time.Millisecond * 100,
-		Multiplier:     2,
 	}
 
 	notReplicated := true

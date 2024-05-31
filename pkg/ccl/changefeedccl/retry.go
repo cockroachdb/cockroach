@@ -24,14 +24,12 @@ var useFastRetry = envutil.EnvOrDefaultBool(
 func getRetry(ctx context.Context) Retry {
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Second,
-		Multiplier:     2,
 		MaxBackoff:     10 * time.Minute,
 	}
 
 	if useFastRetry {
 		opts = retry.Options{
 			InitialBackoff: 5 * time.Millisecond,
-			Multiplier:     2,
 			MaxBackoff:     250 * time.Millisecond,
 		}
 	}

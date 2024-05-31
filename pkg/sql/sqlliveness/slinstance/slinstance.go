@@ -211,7 +211,6 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	opts := retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
 		MaxBackoff:     2 * time.Second,
-		Multiplier:     1.5,
 	}
 	everySecond := log.Every(time.Second)
 	for i, r := 0, retry.Start(ctx, opts); r.Next(); {
@@ -269,7 +268,6 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	opts := retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
 		MaxBackoff:     2 * time.Second,
-		Multiplier:     1.5,
 	}
 	var err error
 	var found bool

@@ -671,7 +671,6 @@ var jobRecordPollFrequency = 3 * time.Second
 
 var jobRecordRetryOpts = retry.Options{
 	InitialBackoff: jobRecordPollFrequency,
-	Multiplier:     2,
 	MaxBackoff:     1 * time.Minute,
 	MaxRetries:     10,
 }

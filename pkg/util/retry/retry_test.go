@@ -23,7 +23,6 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 	opts := Options{
 		InitialBackoff: time.Microsecond * 10,
 		MaxBackoff:     time.Microsecond * 100,
-		Multiplier:     2,
 		MaxRetries:     10,
 	}
 
@@ -42,7 +41,6 @@ func TestRetryExceedsMaxAttempts(t *testing.T) {
 	opts := Options{
 		InitialBackoff: time.Microsecond * 10,
 		MaxBackoff:     time.Second,
-		Multiplier:     2,
 		MaxRetries:     1,
 	}
 
@@ -59,7 +57,6 @@ func TestRetryReset(t *testing.T) {
 	opts := Options{
 		InitialBackoff: time.Microsecond * 10,
 		MaxBackoff:     time.Second,
-		Multiplier:     2,
 		MaxRetries:     1,
 	}
 
@@ -85,7 +82,6 @@ func TestRetryStop(t *testing.T) {
 	opts := Options{
 		InitialBackoff: time.Second,
 		MaxBackoff:     time.Second,
-		Multiplier:     2,
 		Closer:         closer,
 	}
 
@@ -108,7 +104,6 @@ func TestRetryNextCh(t *testing.T) {
 
 	opts := Options{
 		InitialBackoff: time.Millisecond,
-		Multiplier:     2,
 		MaxRetries:     1,
 	}
 	for r := Start(context.Background(), opts); attempts < 3; attempts++ {
@@ -184,7 +179,6 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 			opts: Options{
 				InitialBackoff: time.Microsecond * 10,
 				MaxBackoff:     time.Microsecond * 20,
-				Multiplier:     2,
 				MaxRetries:     1,
 			},
 			retryFunc:   noErrFunc,
@@ -199,7 +193,6 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 			opts: Options{
 				InitialBackoff: time.Microsecond * 10,
 				MaxBackoff:     time.Microsecond * 20,
-				Multiplier:     2,
 				MaxRetries:     1,
 			},
 			retryFunc:   errorUntilAttemptNumFunc(1),
@@ -214,7 +207,6 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 			opts: Options{
 				InitialBackoff: time.Microsecond * 10,
 				MaxBackoff:     time.Microsecond * 20,
-				Multiplier:     2,
 				MaxRetries:     1,
 			},
 			retryFunc:   errWithAttemptsCounterFunc,
@@ -230,7 +222,6 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 			opts: Options{
 				InitialBackoff: time.Microsecond * 10,
 				MaxBackoff:     time.Microsecond * 20,
-				Multiplier:     2,
 				MaxRetries:     0,
 			},
 			retryFunc:   errWithAttemptsCounterFunc,
@@ -246,7 +237,6 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 			opts: Options{
 				InitialBackoff: time.Microsecond * 10,
 				MaxBackoff:     time.Microsecond * 20,
-				Multiplier:     2,
 				MaxRetries:     1,
 			},
 			retryFunc:   errWithAttemptsCounterFunc,
@@ -265,7 +255,6 @@ func TestRetryWithMaxAttempts(t *testing.T) {
 			opts: Options{
 				InitialBackoff: time.Microsecond * 10,
 				MaxBackoff:     time.Microsecond * 20,
-				Multiplier:     2,
 				MaxRetries:     1,
 				Closer:         closeCh,
 			},

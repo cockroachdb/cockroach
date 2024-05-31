@@ -767,7 +767,6 @@ func DefaultRetryOptions() retry.Options {
 	return retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
-		Multiplier:     2,
 	}
 }
 

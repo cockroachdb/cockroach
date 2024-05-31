@@ -399,7 +399,6 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 	retryOpts := retry.Options{
 		InitialBackoff: time.Second,
 		MaxBackoff:     5 * time.Second,
-		Multiplier:     2,
 	}
 
 	warningFilter := []string{
@@ -1030,7 +1029,6 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		retryOpts   = retry.Options{
 			InitialBackoff: time.Second,
 			MaxBackoff:     5 * time.Second,
-			Multiplier:     2,
 		}
 		// The expected output of decommission while the node is about to be drained/is draining.
 		expReplicasTransferred = [][]string{

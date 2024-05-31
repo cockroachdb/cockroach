@@ -1977,7 +1977,6 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 			opts := retry.Options{
 				InitialBackoff: 10 * time.Millisecond,
 				MaxBackoff:     time.Second,
-				Multiplier:     2,
 			}
 			everySecond := log.Every(time.Second)
 			var err error

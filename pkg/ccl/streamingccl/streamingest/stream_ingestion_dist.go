@@ -848,7 +848,6 @@ func waitUntilProducerActive(
 ) error {
 	ro := retry.Options{
 		InitialBackoff: 1 * time.Second,
-		Multiplier:     2,
 		MaxBackoff:     5 * time.Second,
 		MaxRetries:     4,
 	}

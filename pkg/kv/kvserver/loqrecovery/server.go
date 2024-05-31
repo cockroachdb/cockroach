@@ -48,7 +48,6 @@ const retrieveKeyspaceHealthTimeout = time.Minute
 var fanOutConnectionRetryOptions = retry.Options{
 	MaxRetries:     3,
 	InitialBackoff: time.Second,
-	Multiplier:     1,
 }
 
 var errMarkRetry = errors.New("retryable")

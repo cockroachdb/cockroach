@@ -88,7 +88,6 @@ FROM
 `
 	r := retry.Start(ctx, retry.Options{
 		InitialBackoff: time.Millisecond * 500,
-		Multiplier:     2,
 		MaxBackoff:     time.Second * 10,
 	})
 	for r.Next() {

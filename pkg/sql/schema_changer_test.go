@@ -251,7 +251,6 @@ CREATE INDEX foo ON t.test (v)
 	retryOpts := retry.Options{
 		InitialBackoff: 20 * time.Millisecond,
 		MaxBackoff:     200 * time.Millisecond,
-		Multiplier:     2,
 	}
 
 	// Wait until index is created.

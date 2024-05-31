@@ -687,7 +687,6 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 	opts := retry.Options{
 		InitialBackoff: time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
-		Multiplier:     2,
 		Closer:         closer,
 	}
 	for r := retry.Start(ctx, opts); r.Next(); {

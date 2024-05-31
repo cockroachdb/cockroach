@@ -657,7 +657,6 @@ func validateUniqueConstraint(
 	var values tree.Datums
 	retryOptions := retry.Options{
 		InitialBackoff: 20 * time.Millisecond,
-		Multiplier:     1.5,
 		MaxRetries:     5,
 	}
 	for r := retry.Start(ctx, retryOptions); r.Next(); {

@@ -97,7 +97,6 @@ func (r *Registry) waitForJobsToBeTerminalOrPaused(
 	ret := retry.Start(ctx, retry.Options{
 		InitialBackoff: initialBackoff,
 		MaxBackoff:     maxBackoff,
-		Multiplier:     1.5,
 
 		// Setting the closer here will terminate the loop if the job finishes
 		// before the first InitialBackoff period.

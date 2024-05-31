@@ -88,7 +88,6 @@ func maybeAddGithubLink(issue string) string {
 
 var canaryRetryOptions = retry.Options{
 	InitialBackoff: 10 * time.Second,
-	Multiplier:     2,
 	MaxBackoff:     5 * time.Minute,
 	MaxRetries:     10,
 }

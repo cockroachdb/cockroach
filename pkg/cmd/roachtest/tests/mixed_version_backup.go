@@ -91,7 +91,6 @@ var (
 	backupCompletionRetryOptions = retry.Options{
 		InitialBackoff: 10 * time.Second,
 		MaxBackoff:     1 * time.Minute,
-		Multiplier:     1.5,
 		MaxRetries:     80,
 	}
 
@@ -1506,7 +1505,6 @@ func (mvb *mixedVersionBackup) waitForDBs(
 	retryOptions := retry.Options{
 		InitialBackoff: 10 * time.Second,
 		MaxBackoff:     1 * time.Minute,
-		Multiplier:     1.5,
 		MaxRetries:     20,
 	}
 

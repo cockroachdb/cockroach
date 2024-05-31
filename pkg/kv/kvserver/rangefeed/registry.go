@@ -588,7 +588,6 @@ func (reg *registry) forOverlappingRegs(
 func (r *registration) waitForCaughtUp(ctx context.Context) error {
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
-		Multiplier:     2,
 		MaxBackoff:     10 * time.Second,
 		MaxRetries:     50,
 	}

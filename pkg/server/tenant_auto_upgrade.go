@@ -137,7 +137,6 @@ func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) (bool, error)
 	upgradeRetryOpts := retry.Options{
 		InitialBackoff: 5 * time.Second,
 		MaxBackoff:     10 * time.Second,
-		Multiplier:     2,
 	}
 
 	// Run the set cluster setting version statement in a transaction

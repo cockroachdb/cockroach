@@ -155,7 +155,6 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 		retryOpts := retry.Options{
 			InitialBackoff: 10 * time.Second,
 			MaxBackoff:     time.Hour,
-			Multiplier:     2,
 		}
 		for r := retry.Start(ctx, retryOpts); r.Next(); {
 			// Nodes are already dead, but are in active state. Internal checks doesn't

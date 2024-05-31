@@ -614,7 +614,6 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 		return retry.Options{
 			InitialBackoff:      10 * time.Second,
 			MaxBackoff:          time.Minute,
-			Multiplier:          2.0,
 			RandomizationFactor: 1.0,
 			Closer:              ch,
 		}, ch

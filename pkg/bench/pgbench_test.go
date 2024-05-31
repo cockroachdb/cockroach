@@ -60,7 +60,6 @@ func BenchmarkPgbenchQueryParallel(b *testing.B) {
 		retryOpts := retry.Options{
 			InitialBackoff: 1 * time.Millisecond,
 			MaxBackoff:     200 * time.Millisecond,
-			Multiplier:     2,
 		}
 
 		b.ResetTimer()

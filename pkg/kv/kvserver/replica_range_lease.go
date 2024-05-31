@@ -1077,7 +1077,6 @@ func (r *Replica) AdminTransferLease(
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
-		Multiplier:     2,
 		MaxRetries:     10,
 	}
 	if count := r.store.TestingKnobs().LeaseTransferRejectedRetryLoopCount; count != 0 {

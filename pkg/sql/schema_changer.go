@@ -1455,7 +1455,6 @@ func WaitToUpdateLeases(
 	retryOpts := retry.Options{
 		InitialBackoff: time.Millisecond,
 		MaxBackoff:     time.Second,
-		Multiplier:     1.5,
 	}
 	start := timeutil.Now()
 	log.Infof(ctx, "waiting for a single version...")
@@ -2717,7 +2716,6 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		opts := retry.Options{
 			InitialBackoff: 20 * time.Millisecond,
 			MaxBackoff:     schemaChangeJobMaxRetryBackoff.Get(p.ExecCfg().SV()),
-			Multiplier:     1.5,
 		}
 
 		// The schema change may have to be retried if it is not first in line or

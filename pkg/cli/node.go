@@ -469,7 +469,6 @@ func runDecommissionNodeImpl(
 	minReplicaCount := int64(math.MaxInt64)
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
-		Multiplier:     2,
 		MaxBackoff:     20 * time.Second,
 	}
 

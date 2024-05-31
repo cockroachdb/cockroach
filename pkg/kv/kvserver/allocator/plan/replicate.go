@@ -525,7 +525,6 @@ func (rp ReplicaPlanner) findRemoveVoter(
 	retryOpts := retry.Options{
 		InitialBackoff: time.Millisecond,
 		MaxBackoff:     200 * time.Millisecond,
-		Multiplier:     2,
 	}
 	timeout := 5 * time.Second
 

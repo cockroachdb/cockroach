@@ -772,7 +772,6 @@ func defaultRetryConfig() retry.Options {
 	opts := retry.Options{
 		InitialBackoff: 500 * time.Millisecond,
 		MaxRetries:     3,
-		Multiplier:     2,
 	}
 	// max backoff should be initial * 2 ^ maxRetries
 	opts.MaxBackoff = opts.InitialBackoff * time.Duration(int(math.Pow(2.0, float64(opts.MaxRetries))))

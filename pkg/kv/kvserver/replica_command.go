@@ -1017,7 +1017,6 @@ func (r *Replica) WaitForLeaseAppliedIndex(
 ) (kvpb.LeaseAppliedIndex, error) {
 	retryOpts := retry.Options{
 		InitialBackoff: 10 * time.Millisecond,
-		Multiplier:     2,
 		MaxBackoff:     time.Second,
 	}
 	for retry := retry.Start(ctx, retryOpts); retry.Next(); {
@@ -4111,7 +4110,6 @@ func (r *Replica) adminScatter(
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
-		Multiplier:     2,
 		MaxRetries:     5,
 	}
 

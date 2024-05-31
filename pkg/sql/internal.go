@@ -1816,7 +1816,6 @@ func (ief *InternalDB) txn(
 		}
 		retryOpts := retry.Options{
 			InitialBackoff: time.Millisecond,
-			Multiplier:     1.5,
 			MaxBackoff:     time.Second,
 		}
 		lm := ief.server.cfg.LeaseManager

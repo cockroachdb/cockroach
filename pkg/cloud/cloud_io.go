@@ -70,7 +70,6 @@ var HTTPRetryOptions = retry.Options{
 	InitialBackoff: 100 * time.Millisecond,
 	MaxBackoff:     2 * time.Second,
 	MaxRetries:     32,
-	Multiplier:     4,
 }
 
 var httpMetrics = settings.RegisterBoolSetting(

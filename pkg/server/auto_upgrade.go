@@ -33,7 +33,6 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 		retryOpts := retry.Options{
 			InitialBackoff: time.Second,
 			MaxBackoff:     30 * time.Second,
-			Multiplier:     2,
 		}
 
 		// Check if auto upgrade is disabled for test purposes.
@@ -93,7 +92,6 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 			upgradeRetryOpts := retry.Options{
 				InitialBackoff: 5 * time.Second,
 				MaxBackoff:     10 * time.Second,
-				Multiplier:     2,
 			}
 
 			// Run the set cluster setting version statement in a transaction

@@ -126,10 +126,8 @@ func (s *fdCountingSemaphore) Acquire(ctx context.Context, n int) error {
 	// in the retry loop before timing out with the default value of the
 	// 'sql.distsql.acquire_vec_fds.max_retries' cluster settings.
 	opts := retry.Options{
-		InitialBackoff:      100 * time.Millisecond,
-		Multiplier:          2.0,
-		RandomizationFactor: 0.25,
-		MaxRetries:          s.acquireMaxRetries,
+		InitialBackoff: 100 * time.Millisecond,
+		MaxRetries:     s.acquireMaxRetries,
 	}
 	for r := retry.Start(ctx, opts); r.Next(); {
 		if s.TryAcquire(n) {

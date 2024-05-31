@@ -633,7 +633,6 @@ func (rq *replicateQueue) process(
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
-		Multiplier:     2,
 		MaxRetries:     5,
 	}
 	// TODO(baptist): Change to Replica.SpanConfig() once the refactor is done to

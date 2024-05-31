@@ -829,7 +829,6 @@ func (b *SSTBatcher) addSSTable(
 			var err error
 			opts := retry.Options{
 				InitialBackoff: 30 * time.Millisecond,
-				Multiplier:     2,
 				MaxRetries:     10,
 			}
 			for r := retry.Start(ctx, opts); r.Next(); {

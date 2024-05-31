@@ -78,7 +78,6 @@ type startupRetryKey struct{}
 var startupRetryOpts = retry.Options{
 	InitialBackoff: 100 * time.Millisecond,
 	MaxBackoff:     3 * time.Second,
-	Multiplier:     2,
 }
 
 // runningStartup is a counter showing number of concurrently running server

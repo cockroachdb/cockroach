@@ -193,7 +193,6 @@ func RangeLookup(
 	opts := retry.Options{
 		InitialBackoff: 1 * time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
-		Multiplier:     2,
 	}
 
 	for r := retry.Start(ctx, opts); r.Next(); {

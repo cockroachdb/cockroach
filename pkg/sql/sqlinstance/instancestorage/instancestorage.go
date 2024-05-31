@@ -298,7 +298,6 @@ func (s *Storage) createInstanceRow(
 	opts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     200 * time.Millisecond,
-		Multiplier:     2,
 	}
 	for r := retry.Start(ctx, opts); r.Next(); {
 		log.Infof(ctx, "assigning instance id to rpc addr %s and sql addr %s", rpcAddr, sqlAddr)

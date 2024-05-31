@@ -462,7 +462,6 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 			retry.Options{
 				InitialBackoff: 1 * time.Second,
 				MaxBackoff:     1 * time.Minute,
-				Multiplier:     2,
 				Closer:         closerCh,
 			},
 			5, // maxAttempts
