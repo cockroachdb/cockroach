@@ -61,10 +61,10 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 		tenantState.cleanup = func() {} // noop
 	} else {
 		serverGCJobKnobs := testServer.SystemLayer().TestingKnobs().GCJob
-		tenantGCJobKnobs := sql.GCJobTestingKnobs{SkipWaitingForMVCCGC: true}
+		// Copy the GC job knobs from the server to the tenant.
+		tenantGCJobKnobs := sql.GCJobTestingKnobs{}
 		if serverGCJobKnobs != nil {
 			tenantGCJobKnobs = *serverGCJobKnobs.(*sql.GCJobTestingKnobs)
-			tenantGCJobKnobs.SkipWaitingForMVCCGC = true
 		}
 		tenantArgs := base.TestTenantArgs{
 			TenantID: tenID,
