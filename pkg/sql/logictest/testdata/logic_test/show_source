@@ -474,7 +474,7 @@ query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS]
 ----
 schema_name         owner
-public              admin
+public              root
 crdb_internal       node
 pg_extension        node
 pg_catalog          node

@@ -68,7 +68,7 @@ crdb_internal node
 information_schema node
 pg_catalog node
 pg_extension node
-public admin
+public root
 
 # Ensure that a database level restore also cleans up after itself. We do this
 # by ensuring that no descriptor is left behind for the database `data` since we

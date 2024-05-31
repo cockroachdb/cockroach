@@ -382,3 +382,25 @@ query I
 SELECT count(*) FROM system.namespace WHERE name LIKE 'w_51782'
 ----
 0
+
+subtest end
+
+# Regression test to make sure a database owner can drop the database.
+subtest regression_121808
+
+statement ok
+CREATE USER db_owner WITH CREATEDB
+
+statement ok
+SET ROLE db_owner
+
+statement ok
+CREATE DATABASE db_121808
+
+statement ok
+DROP DATABASE db_121808 RESTRICT
+
+statement ok
+RESET role
+
+subtest end

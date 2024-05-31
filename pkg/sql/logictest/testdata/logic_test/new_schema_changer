@@ -1484,7 +1484,7 @@ crdb_internal       node
 information_schema  node
 pg_catalog          node
 pg_extension        node
-public              admin
+public              root
 sc                  root
 
 statement ok
@@ -1497,7 +1497,7 @@ crdb_internal       node
 information_schema  node
 pg_catalog          node
 pg_extension        node
-public              admin
+public              root
 
 statement ok
 COMMIT

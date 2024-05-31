@@ -42,7 +42,7 @@ DROP DATABASE db1 CASCADE
 - [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104, descriptorId: 105, name: public}
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
-  {descriptorId: 105, owner: admin}
+  {descriptorId: 105, owner: root}
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
   {descriptorId: 105, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]

@@ -65,7 +65,7 @@ StatementPhase stage 1 of 1 with 17 MutationType ops
     *scop.UpdateOwner
       Owner:
         DescriptorID: 105
-        Owner: admin
+        Owner: root
     *scop.UpdateUserPrivileges
       Privileges:
         DescriptorID: 105
@@ -170,7 +170,7 @@ PreCommitPhase stage 2 of 2 with 17 MutationType ops
     *scop.UpdateOwner
       Owner:
         DescriptorID: 105
-        Owner: admin
+        Owner: root
     *scop.UpdateUserPrivileges
       Privileges:
         DescriptorID: 105
