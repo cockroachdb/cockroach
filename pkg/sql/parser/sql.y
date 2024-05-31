@@ -7876,6 +7876,7 @@ show_backup_stmt:
 	}
 | SHOW BACKUP FILES string_or_placeholder opt_with_show_backup_options
 	{
+    /* SKIP DOC */
 		$$.val = &tree.ShowBackup{
 		  Details:  tree.BackupFileDetails,
 			Path:    $4.expr(),
@@ -7884,6 +7885,7 @@ show_backup_stmt:
 	}
 | SHOW BACKUP RANGES string_or_placeholder opt_with_show_backup_options
 	{
+    /* SKIP DOC */
 		$$.val = &tree.ShowBackup{
 		  Details:  tree.BackupRangeDetails,
 			Path:    $4.expr(),
@@ -7892,6 +7894,7 @@ show_backup_stmt:
 	}
 | SHOW BACKUP VALIDATE string_or_placeholder opt_with_show_backup_options
   	{
+      /* SKIP DOC */
   		$$.val = &tree.ShowBackup{
   		  Details:  tree.BackupValidateDetails,
   			Path:    $4.expr(),
@@ -7919,14 +7922,17 @@ show_backup_details:
   }
 | FILES
 	{
+    /* SKIP DOC */
 	$$.val = tree.BackupFileDetails
 	}
 | RANGES
 	{
+    /* SKIP DOC */
 	$$.val = tree.BackupRangeDetails
 	}
 | VALIDATE
 	{
+    /* SKIP DOC */
 	$$.val = tree.BackupValidateDetails
 	}
 
