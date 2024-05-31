@@ -1967,6 +1967,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	}
 	defer cleanup()
 
+	streamMuxer := rangefeed.NewStreamMuxer(muxStream)
 	n.metrics.NumMuxRangeFeed.Inc(1)
 	n.metrics.ActiveMuxRangeFeed.Inc(1)
 	defer n.metrics.ActiveMuxRangeFeed.Inc(-1)
@@ -2004,7 +2005,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
 		streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-		streamSink := rangefeed.NewMuxFeedStream(streamCtx, req.StreamID, req.RangeID, muxStream)
+		streamSink := rangefeed.NewMuxFeedStream(streamCtx, req.StreamID, req.RangeID, streamMuxer)
 		activeStreams.Store(req.StreamID, ctxAndCancel{streamCtx, cancel})
 
 		n.metrics.NumMuxRangeFeed.Inc(1)

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // Stream is a object capable of transmitting RangeFeedEvents.
@@ -30,21 +31,17 @@ type MuxFeedStream struct {
 	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  kvpb.MuxRangeFeedEventSink
-	// muxer    *StreamMuxer
+	muxer    *StreamMuxer
 }
 
 func NewMuxFeedStream(
-	ctx context.Context,
-	streamID int64,
-	rangeID roachpb.RangeID,
-	muxStream kvpb.MuxRangeFeedEventSink,
+	ctx context.Context, streamID int64, rangeID roachpb.RangeID, streamMuxer *StreamMuxer,
 ) *MuxFeedStream {
 	return &MuxFeedStream{
 		ctx:      ctx,
 		streamID: streamID,
 		rangeID:  rangeID,
-		wrapped:  muxStream,
+		muxer:    streamMuxer,
 	}
 }
 
@@ -58,8 +55,59 @@ func (s *MuxFeedStream) Send(event *kvpb.RangeFeedEvent) error {
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.Send(response)
+	return s.muxer.publish(response)
 }
 
 var _ kvpb.RangeFeedEventSink = (*MuxFeedStream)(nil)
 var _ Stream = (*MuxFeedStream)(nil)
+
+type sharedMuxEvent struct {
+	streamID int64
+	rangeID  roachpb.RangeID
+	event    *kvpb.RangeFeedEvent
+	alloc    *SharedBudgetAllocation
+	err      *kvpb.Error
+}
+
+type producer struct {
+	syncutil.Mutex
+	streamId     int64
+	rangeID      roachpb.RangeID
+	disconnected bool
+}
+
+type StreamMuxer struct {
+	wrapped    kvpb.MuxRangeFeedEventSink
+	capacity   int
+	notifyData chan struct{}
+	cleanup    chan int
+
+	// queue
+	queueMu struct {
+		syncutil.Mutex
+		buffer muxEventQueue
+	}
+
+	prodsMu struct {
+		syncutil.RWMutex
+		prods map[int64]*producer
+	}
+}
+
+const defaultEventBufferCapacity = 4096 * 2
+
+func NewStreamMuxer(wrapped kvpb.MuxRangeFeedEventSink) *StreamMuxer {
+	muxer := &StreamMuxer{
+		wrapped:    wrapped,
+		capacity:   defaultEventBufferCapacity,
+		notifyData: make(chan struct{}, 1),
+		cleanup:    make(chan int, 10),
+	}
+	muxer.queueMu.buffer = newMuxEventQueue()
+	muxer.prodsMu.prods = make(map[int64]*producer)
+	return muxer
+}
+
+func (m *StreamMuxer) publish(e *kvpb.MuxRangeFeedEvent) error {
+	return m.wrapped.Send(e)
+}
