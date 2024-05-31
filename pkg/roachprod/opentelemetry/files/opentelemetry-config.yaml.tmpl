@@ -1,0 +1,116 @@
+---
+extensions:
+  health_check:
+
+receivers:
+  prometheus/cockroachdb:
+    config:
+      global:
+        scrape_interval: 30s
+      scrape_configs:
+      - job_name: cockroachdb
+        honor_timestamps: false
+        metrics_path: /_status/vars
+        tls_config:
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        static_configs:
+          # Multiple targets are listed to cover the cases when the default
+          # HTTP port is used or when scanning for a free HTTP port starting
+          # from 29000. In the latter case 29000 will be used for SQL and 29001
+          # for HTTP.
+          - targets:
+            - "localhost:26258"
+            - "localhost:29001"
+  hostmetrics:
+    collection_interval: 10s
+    scrapers:
+      paging:
+        metrics:
+          system.paging.utilization:
+            enabled: true
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      disk:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      load:
+      memory:
+      network:
+      processes:
+
+processors:
+  batch/datadog:
+    send_batch_max_size: 1000
+    send_batch_size: 100
+    timeout: 10s
+  memory_limiter/datadog:
+    check_interval: 1s
+    limit_mib: 1024
+  {{- if .CockroachDBMetrics }}
+  filter/datadog:
+    metrics:
+      include:
+        match_type: strict
+        metric_names:
+        {{- range $key, $value := .CockroachDBMetrics }}
+        - {{ $key }}
+        {{- end }}
+  metricstransform/datadog:
+    transforms:
+    {{- range $key, $value := .CockroachDBMetrics }}
+    - include: {{ $key }}
+      match_type: strict
+      action: update
+      new_name: cockroachdb.{{ $value }}
+    {{- end }}
+  {{- end }}
+  {{- if .DatadogTags }}
+  attributes/datadog:
+    actions:
+    {{- range $key, $value := .DatadogTags }}
+    - key: "{{ $key }}"
+      value: "{{ $value }}"
+      action: upsert
+    {{- end }}
+  {{- end }}
+
+exporters:
+  datadog:
+    api:
+      key: ${env:DD_API_KEY}
+      site: ${env:DD_SITE}
+
+service:
+  pipelines:
+    {{- if .CockroachDBMetrics }}
+    metrics:
+      receivers:
+      - prometheus/cockroachdb
+      processors:
+      - memory_limiter/datadog
+      - filter/datadog
+      - batch/datadog
+      - metricstransform/datadog
+      {{- if .DatadogTags }}
+      - attributes/datadog
+      {{- end }}
+      exporters:
+      - datadog
+    {{- end }}
+    metrics/hostmetrics:
+      receivers:
+      - hostmetrics
+      processors:
+      - memory_limiter/datadog
+      - batch/datadog
+      {{- if .DatadogTags }}
+      - attributes/datadog
+      {{- end }}
+      exporters:
+      - datadog
