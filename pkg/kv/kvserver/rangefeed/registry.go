@@ -46,18 +46,23 @@ type sharedEvent struct {
 	alloc *SharedBudgetAllocation
 }
 
+// sharedEventSyncPool is a pool of reusable sharedEvent objects.
 var sharedEventSyncPool = sync.Pool{
 	New: func() interface{} {
 		return new(sharedEvent)
 	},
 }
 
-func getPooledSharedEvent(e sharedEvent) *sharedEvent {
-	ev := sharedEventSyncPool.Get().(*sharedEvent)
-	*ev = e
-	return ev
+// getPooledSharedEvent retrieves a new sharedEvent from the pool and
+// initializes it with provided values.
+func getPooledSharedEvent(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation) *sharedEvent {
+	e := sharedEventSyncPool.Get().(*sharedEvent)
+	e.event = event
+	e.alloc = alloc
+	return e
 }
 
+// putPooledSharedEvent returns sharedEvent back to the pool.
 func putPooledSharedEvent(e *sharedEvent) {
 	*e = sharedEvent{}
 	sharedEventSyncPool.Put(e)
@@ -153,7 +158,7 @@ func (r *registration) publish(
 	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
 	r.assertEvent(ctx, event)
-	e := getPooledSharedEvent(sharedEvent{event: r.maybeStripEvent(ctx, event), alloc: alloc})
+	e := getPooledSharedEvent(r.maybeStripEvent(ctx, event), alloc)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()

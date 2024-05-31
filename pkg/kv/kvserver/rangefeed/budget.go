@@ -70,18 +70,26 @@ var RangefeedBudgetsEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// budgetAllocationSyncPool a pool of reusable SharedBudgetAllocation objects.
 var budgetAllocationSyncPool = sync.Pool{
 	New: func() interface{} {
 		return new(SharedBudgetAllocation)
 	},
 }
 
-func getPooledBudgetAllocation(ba SharedBudgetAllocation) *SharedBudgetAllocation {
-	b := budgetAllocationSyncPool.Get().(*SharedBudgetAllocation)
-	*b = ba
-	return b
+// getPooledBudgetAllocation retrieves a new SharedBudgetAllocation from the
+// pool and initializes it with provided values.
+func getPooledBudgetAllocation(
+	size int64, refCount int32, feed *FeedBudget,
+) *SharedBudgetAllocation {
+	ba := budgetAllocationSyncPool.Get().(*SharedBudgetAllocation)
+	ba.size = size
+	ba.refCount = refCount
+	ba.feed = feed
+	return ba
 }
 
+// putPooledBudgetAllocation returns SharedBudgetAllocation to the pool.
 func putPooledBudgetAllocation(ba *SharedBudgetAllocation) {
 	*ba = SharedBudgetAllocation{}
 	budgetAllocationSyncPool.Put(ba)
@@ -174,7 +182,7 @@ func (f *FeedBudget) TryGet(ctx context.Context, amount int64) (*SharedBudgetAll
 	if err = f.mu.memBudget.Grow(ctx, amount); err != nil {
 		return nil, err
 	}
-	return getPooledBudgetAllocation(SharedBudgetAllocation{size: amount, refCount: 1, feed: f}), nil
+	return getPooledBudgetAllocation(amount /*size*/, 1 /*refCount*/, f /*feed*/), nil
 }
 
 // WaitAndGet waits for replenish channel to return any allocations back to the
