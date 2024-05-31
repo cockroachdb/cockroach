@@ -78,6 +78,166 @@ to fix this problem.
 
 */
 
+/*
+Design for robust flow token return in RACv2
+
+RACv1 has a lot of fragile moving parts for token return in the presence of
+gRPC stream disconnects. It also is over-eager in early-returning tokens at
+the sender, since it has to interpret the gRPC stream disconnect as the worst
+case of tokens being lost. With RACv2 we have more requirements, due to the
+repeated deduction of send-tokens for the same entry, which make the fragility
+even worse (and we will need to make code changes to the already fragile
+code). See
+https://cockroachlabs.slack.com/archives/C06UFBJ743F/p1717076603877549 for a
+long discussion with details.
+
+Since we now control the Raft code, we have the opportunity to change Raft and
+eliminate the existing fragility.
+
+As part of this design, we reduce the number of priorities used in flow
+control. We only have two token pools (elastic and regular work-class) with
+all priorities < NormalPri mapping to elastic, which limits the performance
+isolation guarantee we can make between different priorities that map to
+regular work-class. There is still value in having more than two priorities
+since on the receiving store we can better distinguish different priority
+regular work on different ranges, whose leaders are on different nodes.
+Reducing the number of priorities simplifies tracking data-structures both in
+RACv2 (the counts of entries at each priority can be an array and not a map)
+and in Raft.
+
+The new priorities are:
+pri < NormalPri : flowLowPri
+NormalPri <= pri < LockingNormalPri : flowNormalPri
+LockingNormalPri <= pri < UserHighPri : intent resolution typically flowAboveNormalPri
+UserHighPri <= pri: flowHighPri
+
+And numFlowPri is flowHighPri+1. 4 priorities will add 4 uint64's to the wire
+protocol and data-structures. With varint encoding, the wire protocol cost
+should not be significant.
+
+Raft knows nothing about flow tokens, i.e., how admission is accomplished. But
+it does track what has been admitted, and ensures liveness of this tracking.
+
+Raft state at leader for each follower in StateReplicate:
+match uint64, next uint64, admitted [numFlowPri]uint64
+Invariants:
+- (existing) match < next
+- (new) for all i: admitted[i] <= match: That is, something cannot be admitted
+   unless it is also persisted (this is slightly stronger than ACv1, but solves
+   the OOM problem too).
+
+Additional condition for pinging with MsgApps (which happen when match+1 <
+next) and for not quiescing (which additionally requires match is equal to
+lastEntryIndex):
+- exists i: admitted[i] < match
+
+When a follower transitions to StateReplicate, admitted[i] is initialized to
+match, for all i.
+
+Advancing Raft state at leader for the follower:
+
+MsgAppResp currently contains Message.Index which becomes the new Match.
+Additionally it will contain Admitted [numFlowPri]uint64. This is the latest
+index up to which admission has happened. That is, this is not incremental
+state, and just the latest state (which makes it easy to handle lossiness). It
+will be used to advance admitted.
+
+MsgApp from the leader contains the latest admitted[i] values it has.
+
+Raft state at follower:
+
+Existing state includes stableIndex, lastEntryIndex (I am not using the right
+Raft package terms, and there could be other mistakes here)
+
+- stableIndex is advanced based on MsgStorageAppendResp
+- lastEntryIndex is advanced in RawNode.Step. This happens before Ready handling in kvserver.
+
+- for async storage writes (which we enable in Raft): the MsgStorageAppend
+  includes Responses which contain both MsgStorageAppendResp for the local node
+  (this is delivered when the raftScheduler processes this range again), and
+  MsgAppResp for the leader (which is sent immediately).
+  - This early creation of MsgAppResp, before the entries to append, are
+    persisted, is reasonable since that persistence is atomic for all the
+    entries in MsgStorageAppend. In comparison, admission of the various entries
+    in MsgStorageAppend is not atomic.
+
+New raft state at follower: admitted [numFlowPri]uint64
+Invariant: for all i: admitted[i] <= stableIndex.
+
+Raft constructs MsgAppResp for (a) MsgApp pings, (b) for use when
+MsgStorageAppend has persisted. These will piggyback the latest admitted
+values known to it.
+
+Additionally, RaftInterface.AdvanceAdmitted(admitted [numFlowPri]uint64) will
+be called by kvserver in handleRaftReadyRaftMuLocked. And if advanced, this
+method will return a MsgAppResp to be sent.
+
+Life of admission:
+- MsgApp construction and sending at leader:
+  - (kvserver) deducts flow tokens corresponding to MsgApp it asks for by
+    calling RaftInterface.MakeMsgApp. This also advances next.
+  - (raft) constructs its own pinging MsgApps
+  Both kinds include Admitted, representing the leader's current knowledge.
+
+- MsgApp processing at follower:
+  - (kvserver) calls RawNode.Step with the MsgApps. lastEntryIndex is advanced.
+  - (kvserver) handleRaftReadyRaftMuLocked. Ready may contain:
+     - MsgAppResp: this will be sent.
+     - MsgStorageAppend: Processing:
+       - async storage writes: The MsgStorageAppend includes Responses which
+         contain both MsgStorageAppendResp for the local node (this is delivered
+         when the raftScheduler processes this range again), and MsgAppResp
+         which are sent when the write completes, without waiting for the
+         raftScheduler (to minimize commit latency).
+       - calls AdmitRaftEntry for the entries in raftpb.MsgStorageAppend. In
+         addition to queueing in the StoreWorkQueue, this will track (on the
+         Replica): notAdmitted [numFlowPri][]uint64, where the []uint64 is in
+         increasing entry index order. We don't bother with the term in the
+         tracking (unlike the RaftLogPosition struct in the current code). These
+         slices are appended to here, based on the entries in MsgStorageAppend.
+
+- (kvserver) Admission happens on follower:
+  - The structs corresponding to the admitted entries are queued in the
+    Replica akin to how we queue Replica.localMsgs and the raftScheduler will be
+    told to do ready processing (there may not be a Raft ready, but this is akin
+    to how handleRaftReadyRaftMuLocked does
+    deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked).
+  - In handleRaftReadyRaftMuLocked, this queue is used to remove things from
+    notAdmitted. Additionally RaftInterface is queried for stableIndex. If a
+    notAdmitted[i] is empty, admitted[i] = stableIndex, else admitted[i] =
+    notAdmitted[i][0]-1. RaftInterface.AdvanceAdmitted is called, which may
+    return a MsgAppResp.
+  - MsgAppResp is scheduled to be sent.
+
+Optimization:
+
+I don't think we can afford to construct a RaftMessageRequest containing a
+single MsgAppResp just to advance admitted. A RaftMessageRequest includes
+ReplicaDescriptors etc. that make it heavyweight.
+
+RACv1 optimizes this by having
+kvflowcontrolpb.AdmittedRaftLogEntries(range-id, pri, upto-raft-log-position,
+store-id) and piggy-backing these on any RaftMessageRequest being sent to the
+relevant node.
+
+We can consider doing a similar piggy-backing:
+
+- Say m is the raftpb.Message corresponding to the MsgAppResp that was
+  returned from RaftInterface.AdvanceAdmitted
+- Wrap it with the RangeID, and enqueue it for the leader's nodeid in the
+  RaftTransport (this will actually be much simpler than the
+  RaftTransport.kvflowControl plumbing).
+- Every RaftMessageRequest for the node will piggy-back these.
+
+Priority override:
+
+Since the admitted[i] value for every priority advances up to stableIndex
+based on the absence of entries with that priority waiting for admission
+(unlike RACv1 advancement), we can simply use the overridden priorities at
+admission time. TODO(sumeer): elaborate.
+
+*/
+
 // TODO:
 // - force-flush when there isn't quorum.
 //
