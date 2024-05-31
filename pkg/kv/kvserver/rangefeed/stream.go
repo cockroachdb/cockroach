@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -59,12 +59,14 @@ type MuxFeedStream struct {
 func NewMuxFeedStream(
 	ctx context.Context, streamID int64, rangeID roachpb.RangeID, streamMuxer *StreamMuxer,
 ) *MuxFeedStream {
-	return &MuxFeedStream{
+	m := &MuxFeedStream{
 		ctx:      ctx,
 		streamID: streamID,
 		rangeID:  rangeID,
 		muxer:    streamMuxer,
 	}
+	m.muxer.addProducer(ctx, streamID, rangeID)
+	return m
 }
 
 func (s *MuxFeedStream) Context() context.Context {
@@ -102,7 +104,8 @@ type producer struct {
 	rangeID  roachpb.RangeID
 	// TODO(wenyihu6): check if only disconnected need to be protected
 	disconnected bool
-	cleanup      func()
+	// clean up callback is needed later after removing registration goroutines
+	cleanup func()
 }
 
 // todo(wenyihu6): check for deadlock
@@ -234,7 +237,7 @@ func (m *StreamMuxer) publishEvent(
 	}
 
 	//TODO(wenyihu6): check if alloc.Use() is needed
-
+	//TODO(wenyihu6): put sharedMuxEvent in pool
 	success := m.pushBack(sharedMuxEvent{
 		streamID: streamId,
 		rangeID:  rangeID,
@@ -260,7 +263,7 @@ func (m *StreamMuxer) addProducer(ctx context.Context, streamId int64, rangeID r
 	if _, ok := m.prodsMu.prods[streamId]; ok {
 		log.Error(ctx, "stream already exists")
 	}
-	m.prodsMu.prods[streamId] = &producer{streamId: streamId, rangeID: rangeID}
+	m.prodsMu.prods[streamId] = &producer{streamId: streamId, rangeID: rangeID, cleanup: func() {}}
 }
 
 func (m *StreamMuxer) popAllConnectedProducers() (prods []*producer) {
