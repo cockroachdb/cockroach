@@ -1102,10 +1102,9 @@ func (r *raft) Step(m pb.Message) error {
 	case m.Term > r.Term:
 		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
 			force := bytes.Equal(m.Context, []byte(campaignTransfer))
-			inLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
-			// TODO(arul): make sure we don't vote if we're still supporting the
-			// leader.
-			if !force && inLease {
+			inHeartbeatLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
+			inFortifyLease := r.isSupportingFortifiedLeader()
+			if !force && (inHeartbeatLease || inFortifyLease) {
 				// If a server receives a RequestVote request within the minimum election timeout
 				// of hearing from a current leader, it does not update its term or grant its vote
 				last := r.raftLog.lastEntryID()
@@ -1938,6 +1937,9 @@ func (r *raft) promotable() bool {
 // is providing support to a fortified leader. In such cases, it should not
 // campaign or vote against the fortified leader.
 func (r *raft) isSupportingFortifiedLeader() bool {
+	if r.lead == None {
+		return false
+	}
 	supportEpoch, isSupporting := r.storeLiveness.SupportFor(r.lead)
 	runtimeAssert(supportEpoch >= r.leadEpoch,
 		"supported epoch in store liveness can't be lower than the leader's epoch supported by follower",
