@@ -6,3 +6,47 @@ CREATE OR REPLACE PROCEDURE foo() AS $$
     RAISE NOTICE 'x: %', x;
   END
 $$ LANGUAGE PLpgSQL;
+
+subtest error_detail
+
+# Regression test for #123672 - annotate "unsupported" errors with the
+# unsupported statement type.
+statement ok
+CREATE TABLE mytable (inserted_by TEXT, inserted TIMESTAMP);
+CREATE TABLE c (checked_user TEXT, checked_date TIMESTAMP);
+
+statement error pgcode 0A000 DETAIL: stmt_dyn_exec is not yet supported
+CREATE PROCEDURE test(checked_user TEXT, checked_date TIMESTAMP)
+AS $$
+DECLARE
+  c INT;
+BEGIN
+  EXECUTE 'SELECT count(*) FROM mytable WHERE inserted_by = $1 AND inserted <= $2'
+    INTO c
+    USING checked_user, checked_date;
+END;
+$$ LANGUAGE plpgsql;
+
+statement ok
+CREATE TABLE t6 (a int);
+
+statement error pgcode 0A000 DETAIL: stmt_case is not yet supported
+CREATE PROCEDURE p6(IN i int)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  INSERT INTO t6 VALUES (i);
+  CASE i
+    WHEN 6 THEN
+      COMMIT;
+    WHEN 7 THEN
+      ROLLBACK;
+    WHEN 8 THEN
+      COMMIT;
+    ELSE
+      ROLLBACK;
+  END CASE;
+END;
+$$;
+
+subtest end
