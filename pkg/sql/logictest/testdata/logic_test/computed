@@ -386,21 +386,20 @@ CREATE TABLE y (
 statement ok
 CREATE TABLE x (a INT PRIMARY KEY)
 
-statement error computed column "r" cannot reference a foreign key
+statement ok
 CREATE TABLE y (
   r INT AS (1) STORED REFERENCES x (a)
-)
-
-statement error computed column "r" cannot reference a foreign key
+);
+DROP TABLE y;
 CREATE TABLE y (
   r INT AS (1) STORED REFERENCES x
-)
-
-statement error computed column "r" cannot reference a foreign key
+);
+DROP TABLE y;
 CREATE TABLE y (
   a INT,
   r INT AS (1) STORED REFERENCES x
-)
+);
+DROP TABLE y;
 
 # Tests for computed columns that reference foreign key columns.
 subtest referencing_fks
@@ -485,36 +484,64 @@ CREATE TABLE xx (
   a INT,
   b INT,
   UNIQUE (a, b)
-)
-
-statement error computed column "y" cannot reference a foreign key
+);
+INSERT INTO xx VALUES (3,3);
 CREATE TABLE yy (
   x INT,
   y INT AS (3) STORED,
   FOREIGN KEY (x, y) REFERENCES xx (a, b)
-)
+);
+INSERT INTO yy VALUES (3);
 
-statement error computed column "y" cannot reference a foreign key
-CREATE TABLE yy (
-  x INT,
-  y INT AS (3) STORED,
-  FOREIGN KEY (y, x) REFERENCES xx (a, b)
-)
+statement error insert on table "yy" violates foreign key constraint "yy_x_y_fkey"
+INSERT INTO yy VALUES (4);
+
+statement error pq: invalid ON UPDATE action for foreign key constraint containing computed column
+CREATE TABLE uu (x INT, y INT AS (3) STORED, FOREIGN KEY (x, y) REFERENCES xx (a, b) ON UPDATE CASCADE);
+CREATE TABLE uu (x INT, y INT AS (3) STORED, FOREIGN KEY (x, y) REFERENCES xx (a, b) ON UPDATE SET NULL);
+CREATE TABLE uu (x INT, y INT AS (3) STORED, FOREIGN KEY (x, y) REFERENCES xx (a, b) ON UPDATE SET DEFAULT);
+CREATE TABLE uu (x INT, y INT AS (3) STORED, FOREIGN KEY (x, y) REFERENCES xx (a, b) ON UPDATE SET DEFAULT ON DELETE SET NULL);
+
+statement error pq: invalid ON DELETE action for foreign key constraint containing computed column
+CREATE TABLE uu (x INT, y INT AS (3) STORED, FOREIGN KEY (x, y) REFERENCES xx (a, b) ON DELETE SET NULL);
+CREATE TABLE uu (x INT, y INT AS (3) STORED, FOREIGN KEY (x, y) REFERENCES xx (a, b) ON DELETE SET DEFAULT);
 
 statement ok
-DROP TABLE xx
+CREATE TABLE uu (x INT, y INT AS (3) STORED, FOREIGN KEY (x, y) REFERENCES xx (a, b) ON DELETE CASCADE);
+
+statement ok
+DROP TABLE uu;
+DROP TABLE yy;
+DROP TABLE xx;
+
+statement ok
+CREATE TABLE aa (
+  a INT,
+  b INT,
+  UNIQUE (a, b)
+);
+INSERT INTO aa VALUES (3,3);
+CREATE TABLE bb (
+  x INT,
+  y INT AS (3) STORED,
+  FOREIGN KEY (y, x) REFERENCES aa (a, b)
+);
+INSERT INTO bb VALUES (3);
+
+statement error insert on table "bb" violates foreign key constraint "bb_y_x_fkey"
+INSERT INTO bb VALUES (4);
+
+statement ok
+DROP TABLE bb;
+DROP TABLE aa;
 
 statement ok
 CREATE TABLE y (
   r INT AS (1) STORED,
   INDEX (r)
-)
-
-statement error computed column "r" cannot reference a foreign key
-ALTER TABLE y ADD FOREIGN KEY (r) REFERENCES x (a)
-
-statement ok
-DROP TABLE y
+);
+ALTER TABLE y ADD FOREIGN KEY (r) REFERENCES x (a);
+DROP TABLE y;
 
 statement error variable sub-expressions are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (

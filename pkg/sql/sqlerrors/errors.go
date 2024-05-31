@@ -201,6 +201,20 @@ func NewUnsupportedUnvalidatedConstraintError(constraintType catconstants.Constr
 		"%v constraints cannot be marked NOT VALID", constraintType)
 }
 
+// NewInvalidActionOnComputedFKColumnError creates an error when there is an
+// attempt to have an unsupported action on a FK over a computed column.
+func NewInvalidActionOnComputedFKColumnError(onUpdateAction bool) error {
+	// Pick the 'ON UPDATE' or 'ON DELETE' keyword. If both actions are set we
+	// include 'ON UPDATE' in the error text. This is consistent with postgres.
+	keyword := "DELETE"
+	if onUpdateAction {
+		keyword = "UPDATE"
+	}
+	return pgerror.Newf(pgcode.InvalidForeignKey,
+		"invalid ON %s action for foreign key constraint containing computed column", keyword,
+	)
+}
+
 // MakeObjectAlreadyExistsError creates an error for a namespace collision
 // with an arbitrary descriptor type.
 func MakeObjectAlreadyExistsError(collidingObject *descpb.Descriptor, name string) error {

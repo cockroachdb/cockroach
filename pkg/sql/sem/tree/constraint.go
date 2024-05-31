@@ -48,6 +48,22 @@ func (node *ReferenceActions) Format(ctx *FmtCtx) {
 	}
 }
 
+// HasUpdateAction returns true if any update action is set.
+func (node *ReferenceActions) HasUpdateAction() bool {
+	// NoAction and Restrict are currently equivalent.
+	return node.Update != NoAction && node.Update != Restrict
+}
+
+// HasDisallowedActionForComputedFKCol return true if an action is set that
+// isn't compatible with an FK over computed columns.
+func (node *ReferenceActions) HasDisallowedActionForComputedFKCol() bool {
+	// We disallow any actions that modify column values. NoAction and Restrict
+	// are equivalent and always allowed. 'ON DELETE CASCADE' is also allowed
+	// since it removes the entire row instead of modifying the computed column.
+	return node.HasUpdateAction() ||
+		(node.Delete != NoAction && node.Delete != Restrict && node.Delete != Cascade)
+}
+
 // ForeignKeyReferenceActionType allows the conversion between a
 // tree.ReferenceAction and a ForeignKeyReference_Action.
 var ForeignKeyReferenceActionType = [...]ReferenceAction{

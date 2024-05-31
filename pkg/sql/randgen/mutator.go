@@ -499,10 +499,6 @@ func foreignKeyMutator(
 		var fkCols []*tree.ColumnTableDef
 		colIdx, _ := tableNameToColIdx(table.Table)
 		for _, c := range cols[colIdx] {
-			if c.Computed.Computed {
-				// We don't support FK references from computed columns (#46672).
-				continue
-			}
 			if usedCols[table.Table][c.Name] {
 				continue
 			}
@@ -612,10 +608,10 @@ func foreignKeyMutator(
 			// TODO(mjibson): Set match once #42498 is fixed.
 			var actions tree.ReferenceActions
 			if rng.Intn(2) == 0 {
-				actions.Delete = randAction(rng, table)
+				actions.Delete = randAction(rng, table, false /* onUpdate */)
 			}
 			if rng.Intn(2) == 0 {
-				actions.Update = randAction(rng, table)
+				actions.Update = randAction(rng, table, true /* onUpdate */)
 			}
 			stmts = append(stmts, &tree.AlterTable{
 				Table: table.Table.ToUnresolvedObjectName(),
@@ -637,7 +633,7 @@ func foreignKeyMutator(
 	return stmts, changed
 }
 
-func randAction(rng *rand.Rand, table *tree.CreateTable) tree.ReferenceAction {
+func randAction(rng *rand.Rand, table *tree.CreateTable, onUpdate bool) tree.ReferenceAction {
 	const highestAction = tree.Cascade
 	// Find a valid action. Depending on the random action chosen, we have
 	// to verify some validity conditions.
@@ -651,11 +647,15 @@ Loop:
 			}
 			switch action {
 			case tree.SetNull:
-				if col.Nullable.Nullability == tree.NotNull {
+				if col.Nullable.Nullability == tree.NotNull || col.IsComputed() {
 					continue Loop
 				}
 			case tree.SetDefault:
-				if col.DefaultExpr.Expr == nil && col.Nullable.Nullability == tree.NotNull {
+				if (col.DefaultExpr.Expr == nil && col.Nullable.Nullability == tree.NotNull) || col.IsComputed() {
+					continue Loop
+				}
+			case tree.Cascade:
+				if col.IsComputed() && onUpdate {
 					continue Loop
 				}
 			}

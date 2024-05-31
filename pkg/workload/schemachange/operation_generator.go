@@ -816,6 +816,15 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	if err != nil {
 		return nil, err
 	}
+	childColumnIsVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, childTable, childColumn.name)
+	if err != nil {
+		return nil, err
+	}
+	childColumnIsStoredComputed, err := og.columnIsStoredComputed(ctx, tx, childTable, childColumn.name)
+	if err != nil {
+		return nil, err
+	}
+	referenceActions := og.randReferenceActions(childColumnIsStoredComputed || childColumnIsVirtualComputed)
 
 	constraintName := tree.Name(fmt.Sprintf("%s_%s_%s_%s_fk", parentTable.Object(), parentColumn.name, childTable.Object(), childColumn.name))
 
@@ -828,10 +837,7 @@ func (og *operationGenerator) addForeignKeyConstraint(
 					Table:    *parentTable,
 					FromCols: tree.NameList{tree.Name(childColumn.name)},
 					ToCols:   tree.NameList{tree.Name(parentColumn.name)},
-					Actions: tree.ReferenceActions{
-						Update: tree.Cascade,
-						Delete: tree.Cascade,
-					},
+					Actions:  referenceActions,
 				},
 				ValidationBehavior: tree.ValidationDefault,
 			},
@@ -843,14 +849,6 @@ func (og *operationGenerator) addForeignKeyConstraint(
 		return nil, err
 	}
 	parentColumnIsVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, parentTable, parentColumn.name)
-	if err != nil {
-		return nil, err
-	}
-	childColumnIsVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, childTable, childColumn.name)
-	if err != nil {
-		return nil, err
-	}
-	childColumnIsStoredVirtual, err := og.columnIsStoredComputed(ctx, tx, childTable, childColumn.name)
 	if err != nil {
 		return nil, err
 	}
@@ -872,7 +870,6 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.ForeignKeyViolation, condition: !parentColumnHasUniqueConstraint},
 		{code: pgcode.FeatureNotSupported, condition: childColumnIsVirtualComputed},
-		{code: pgcode.FeatureNotSupported, condition: childColumnIsStoredVirtual},
 		{code: pgcode.FeatureNotSupported, condition: parentColumnIsVirtualComputed},
 		{code: pgcode.DuplicateObject, condition: constraintExists},
 		{code: pgcode.DatatypeMismatch, condition: !childColumn.typ.Equivalent(parentColumn.typ)},
@@ -3248,6 +3245,22 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 	}
 
 	return &table, &columnToReturn, nil
+}
+
+// randReferenceActions returns a ReferenceActions suitable for the column types
+// that are in the FK.
+func (og *operationGenerator) randReferenceActions(
+	childColumnIsComputed bool,
+) tree.ReferenceActions {
+	acts := tree.ReferenceActions{
+		Update: tree.Cascade,
+		Delete: tree.Cascade,
+	}
+	// Computed columns cannot be changed when an update to the parent occurs.
+	if childColumnIsComputed {
+		acts.Update = tree.NoAction
+	}
+	return acts
 }
 
 // randParentColumnForFkRelation fetches a column and table to use as the parent in a single-column foreign key relation.
