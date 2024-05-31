@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -1760,6 +1761,35 @@ var _ errors.SafeFormatter = (*ProxyFailedError)(nil)
 var _ fmt.Formatter = (*ProxyFailedError)(nil)
 var _ errors.Wrapper = (*ProxyFailedError)(nil)
 
+// KeyCollisionError represents a failed attempt to ingest the same key twice.
+type KeyCollisionError struct {
+	Key   roachpb.Key
+	Value []byte
+}
+
+// Format implements fmt.Formatter.
+func (d *KeyCollisionError) Format(s fmt.State, verb rune) {
+	errors.FormatError(d, s, verb)
+}
+
+func (d *KeyCollisionError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("ingested key collides with an existing one: %s", d.Key)
+	return nil
+}
+
+func (d *KeyCollisionError) Error() string {
+	return fmt.Sprint(d)
+}
+
+// NewKeyCollisionError constructs a KeyCollisionError, copying its input.
+func NewKeyCollisionError(key roachpb.Key, value []byte) error {
+	ret := &KeyCollisionError{
+		Key:   key.Clone(),
+		Value: slices.Clone(value),
+	}
+	return ret
+}
+
 func init() {
 	encode := func(ctx context.Context, err error) (msgPrefix string, safeDetails []string, payload proto.Message) {
 		errors.As(err, &payload) // payload = err.(proto.Message)
@@ -1818,3 +1848,4 @@ var _ errors.SafeFormatter = &MVCCHistoryMutationError{}
 var _ errors.SafeFormatter = &UnhandledRetryableError{}
 var _ errors.SafeFormatter = &ReplicaUnavailableError{}
 var _ errors.SafeFormatter = &ProxyFailedError{}
+var _ errors.SafeFormatter = &KeyCollisionError{}
