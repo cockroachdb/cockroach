@@ -1961,13 +1961,25 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
 
-	rangefeedCompleted, cleanup, err := newMuxRangeFeedCompletionWatcher(ctx, n.stopper, muxStream.Send)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	defer wg.Wait()
+	streamMuxer := rangefeed.NewStreamMuxer(muxStream)
+	err := n.stopper.RunAsyncTask(ctx, "mux rangefeed: output loop", func(ctx context.Context) {
+		defer wg.Done()
+		streamMuxer.OutputLoop(ctx)
+	})
 	if err != nil {
 		return err
 	}
-	defer cleanup()
 
-	streamMuxer := rangefeed.NewStreamMuxer(muxStream)
+	// TODO(wenyihu6): rethink how to handle mux rangefeed completion.
+	//rangefeedCompleted, cleanup, err := newMuxRangeFeedCompletionWatcher(ctx, n.stopper, muxStream.Send)
+	//if err != nil {
+	//	return err
+	//}
+	//defer cleanup()
+
 	n.metrics.NumMuxRangeFeed.Inc(1)
 	n.metrics.ActiveMuxRangeFeed.Inc(1)
 	defer n.metrics.ActiveMuxRangeFeed.Inc(-1)
@@ -2041,6 +2053,10 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 				Error: *kvpb.NewError(err),
 			})
 
+			// we can either call rangefeedCompleted in the end or pass in a stream
+			// muxer function or make the error bottom up somehower.
+			streamMuxer.PublishErrorAndDisconnectId(req.StreamID, req.RangeID, kvpb.NewError(err))
+
 			// When rangefeed completes, we must notify the client about that.
 			//
 			// NB: even though calling sink.Send() to send notification might seem
@@ -2049,7 +2065,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			// raftMu in processor) may be held. Issuing potentially blocking IO
 			// during that time is not a good idea. Thus, we shunt the notification to
 			// a dedicated goroutine.
-			rangefeedCompleted(e)
+			//rangefeedCompleted(e)
 		})
 	}
 }

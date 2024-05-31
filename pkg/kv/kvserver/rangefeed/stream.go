@@ -82,7 +82,7 @@ func (s *MuxFeedStream) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 func (s *MuxFeedStream) SendBuffered(
 	event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
-	s.muxer.publish(s.streamID, s.rangeID, event, alloc)
+	s.muxer.publishEvent(s.streamID, s.rangeID, event, alloc)
 	return nil
 }
 
@@ -105,11 +105,12 @@ type producer struct {
 	cleanup      func()
 }
 
+// todo(wenyihu6): check for deadlock
 type StreamMuxer struct {
 	wrapped  kvpb.MuxRangeFeedEventSink
 	capacity int
 	notify   chan struct{}
-	cleanup  chan int
+	cleanup  chan int64
 
 	// queue
 	queueMu struct {
@@ -131,14 +132,97 @@ func NewStreamMuxer(wrapped kvpb.MuxRangeFeedEventSink) *StreamMuxer {
 		wrapped:  wrapped,
 		capacity: defaultEventBufferCapacity,
 		notify:   make(chan struct{}, 1),
-		cleanup:  make(chan int, 10),
+		cleanup:  make(chan int64, 10),
 	}
 	muxer.queueMu.buffer = newMuxEventQueue()
 	muxer.prodsMu.prods = make(map[int64]*producer)
 	return muxer
 }
 
-func (m *StreamMuxer) publish(
+func (m *StreamMuxer) sendEventToStream(ctx context.Context, e sharedMuxEvent) (err error) {
+	// alloc could be nil but release is safe to call on nil
+	defer e.alloc.Release(ctx)
+	switch {
+	case e.event != nil:
+		return m.wrapped.Send(&kvpb.MuxRangeFeedEvent{
+			RangeFeedEvent: *e.event,
+			RangeID:        e.rangeID,
+			StreamID:       e.streamID,
+		})
+	case e.err != nil:
+		ev := &kvpb.MuxRangeFeedEvent{
+			RangeID:  e.rangeID,
+			StreamID: e.streamID,
+		}
+		ev.SetValue(&kvpb.RangeFeedError{
+			Error: *e.err,
+		})
+		return m.wrapped.Send(ev)
+	default:
+		// producers may be removed and empty event
+	}
+	return nil
+}
+func (m *StreamMuxer) OutputLoop(ctx context.Context) {
+	for {
+		select {
+		case <-m.notify:
+			event, empty, overflowedAndDone := m.popFront()
+			if empty {
+				// no more events to send
+				break
+			}
+			if overflowedAndDone {
+				// TODO(wenyihu6): rationalize overflow and done should happen before empty
+				m.cleanupProducers(ctx, newErrBufferCapacityExceeded())
+				return
+			}
+			err := m.sendEventToStream(ctx, event)
+			if err != nil {
+				m.cleanupProducers(ctx, nil)
+				return
+			}
+		case streamId := <-m.cleanup:
+			m.cleanupProducerIfExists(streamId)
+		case <-ctx.Done():
+			m.cleanupProducers(ctx, kvpb.NewError(ctx.Err()))
+			return
+			// case <-m.output.Context().Done(): check if this is needed
+		}
+	}
+}
+
+// TODO(wenyihu6): we can see if we can just forward this to forward mux rangefeed completion
+//func (m *StreamMuxer) HandleError(e *kvpb.MuxRangeFeedEvent) error {
+//	if e.Error == nil {
+//		return nil
+//	}
+//	m.PublishErrorAndDisconnectId(e.StreamID, e.RangeID, kvpb.NewError(e.Error))
+//}
+
+func (m *StreamMuxer) PublishErrorAndDisconnectId(
+	streamId int64, rangeId roachpb.RangeID, err *kvpb.Error,
+) {
+	p, ok := m.getProducerIfExists(streamId)
+	if !ok || p.isDisconnected() {
+		return
+	}
+	// check if accessing lock multiple times here is good practise
+	p.setDisconnected()
+	m.addError(sharedMuxEvent{
+		streamID: streamId,
+		rangeID:  rangeId,
+		err:      err,
+	})
+	m.cleanup <- streamId
+	// notify error enqueued
+	select {
+	case m.notify <- struct{}{}:
+	default:
+	}
+}
+
+func (m *StreamMuxer) publishEvent(
 	streamId int64,
 	rangeID roachpb.RangeID,
 	event *kvpb.RangeFeedEvent,
@@ -198,6 +282,12 @@ func (p *producer) isDisconnected() bool {
 	return !p.disconnected
 }
 
+func (p *producer) setDisconnected() {
+	p.Lock()
+	defer p.Unlock()
+	p.disconnected = true
+}
+
 func (p *producer) callback() func() {
 	p.RLock()
 	defer p.RUnlock()
@@ -234,7 +324,7 @@ func (m *StreamMuxer) cleanupProducerIfExists(streamId int64) {
 	p.callback()()
 }
 
-func (m *StreamMuxer) cleanupProducers(streamErr *kvpb.Error) {
+func (m *StreamMuxer) cleanupProducers(ctx context.Context, streamErr *kvpb.Error) {
 	m.removeAll()
 	prods := m.popAllConnectedProducers()
 	var err error
@@ -277,6 +367,14 @@ func (m *StreamMuxer) pushBack(event sharedMuxEvent) bool {
 	}
 	m.queueMu.buffer.pushBack(event)
 	return true
+}
+
+func (m *StreamMuxer) popFront() (event sharedMuxEvent, empty bool, overflowedAndDone bool) {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	event, empty = m.queueMu.buffer.popFront()
+	overflow, remains := m.queueMu.overflow, m.queueMu.buffer.len()
+	return event, empty, overflow && remains == 0
 }
 
 // TODO(wenyihu6): check if adding back to err overflow should trigger
