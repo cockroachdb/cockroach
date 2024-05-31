@@ -196,6 +196,50 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 			return handleErr(err)
 		}
 
+		// failed again:
+		// 23:46:14 test_impl.go:414: test failure #1: full stack retained in failure_1.log: (cdc.go:3802).validateMessage: topic consumer for district encountered validator error(s): topic district partition 0: saw new row timestamp 1717112771631751551.0000000000 after 1717112772130398025.0000000000 was seen (key [0, 3])
+		// ADIR=~/tmp/artifacts-backups/kafka-chaos-back-to-sync
+		// ~/tmp/ksd
+		// 		$ find ~/tmp/ksd/ -type f -name '*.after' | xargs grep -F '[0, 3]' | grep district | grep -e 1717112771631751551 -e 1717112772130398025
+
+		// node1/784/2024-05-30T23:46:22.129544646.after:{"key":"[0, 3]","offset":64542,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node1/784/2024-05-30T23:46:22.129544646.after:{"key":"[0, 3]","offset":64543,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// node1/682/2024-05-30T23:46:20.288790251.after:{"key":"[0, 3]","offset":57711,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node1/682/2024-05-30T23:46:20.288790251.after:{"key":"[0, 3]","offset":57713,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// node1/546/2024-05-30T23:46:17.665719644.after:{"key":"[0, 3]","offset":48603,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node1/546/2024-05-30T23:46:17.665719644.after:{"key":"[0, 3]","offset":48609,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// node1/653/2024-05-30T23:46:19.714983596.after:{"key":"[0, 3]","offset":55433,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node1/653/2024-05-30T23:46:19.714983596.after:{"key":"[0, 3]","offset":55434,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// node3/393/2024-05-30T23:46:22.727410479.after:{"key":"[0, 3]","offset":66822,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node3/393/2024-05-30T23:46:22.727410479.after:{"key":"[0, 3]","offset":66823,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// node3/359/2024-05-30T23:46:21.495681113.after:{"key":"[0, 3]","offset":62268,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node3/359/2024-05-30T23:46:21.495681113.after:{"key":"[0, 3]","offset":62271,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// node3/291/2024-05-30T23:46:19.107264359.after:{"key":"[0, 3]","offset":53160,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node3/291/2024-05-30T23:46:19.107264359.after:{"key":"[0, 3]","offset":53161,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// node2/342/2024-05-30T23:46:20.965629501.after:{"key":"[0, 3]","offset":59988,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node2/342/2024-05-30T23:46:20.965629501.after:{"key":"[0, 3]","offset":59989,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// node2/241/2024-05-30T23:46:14.823468502.after:{"key":"[0, 3]","offset":46325,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node2/241/2024-05-30T23:46:14.823468502.after:{"key":"[0, 3]","offset":46328,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// another offset zero here. looking at the logs we see "fail to deliver 2 messages", and looking at this file we see the first 2 messages are offset 0
+		// {"key":"[0, 3]","offset":0,"partition":0,"topic":"district","value":.., \"updated\": \"1717112722268996683.0000000000\"}"}
+		// {"key":"[0, 3]","offset":0,"partition":0,"topic":"district","value":.., \"updated\": \"1717112771631751551.0000000000\"}"} // this one i guess
+		// so how did it happen??
+
+		// node2/241/2024-05-30T23:46:12.303519065.after:{"key":"[0, 3]","offset":0,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node2/241/2024-05-30T23:46:12.303519065.after:{"key":"[0, 3]","offset":46032,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
+		// node2/274/2024-05-30T23:46:18.407261212.after:{"key":"[0, 3]","offset":50882,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
+		// node2/274/2024-05-30T23:46:18.407261212.after:{"key":"[0, 3]","offset":50884,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
+
 		// offsets should be ordered right. maybe we can catch intra batch reorderings here
 		if !k.isSortedRight(ctx, msgs) {
 			log.Errorf(ctx, `kafka messages are not sorted right. id=%d, debugfile=%s`, k.debuggingId, fh.Name())
