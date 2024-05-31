@@ -109,7 +109,6 @@ func registerOnlineRestorePerf(r registry.Registry) {
 				timeout:                3 * time.Hour,
 				suites:                 registry.Suites(registry.Nightly),
 				restoreUptoIncremental: 0,
-				skip:                   "link phase is really slow, which will cause the test to time out",
 			},
 			linkPhaseTimeout:     10 * time.Minute, // typically takes 5 minutes
 			downloadPhaseTimeout: 4 * time.Hour,    // typically takes 2 hours. Should get faster once we address #124767.
