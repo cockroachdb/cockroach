@@ -1,4 +1,3 @@
-version: '3'
 services:
   cockroach:
     image: ubuntu:xenial-20210804
