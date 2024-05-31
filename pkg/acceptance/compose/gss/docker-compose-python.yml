@@ -1,4 +1,3 @@
-version: '3'
 services:
   kdc:
     image: us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-kdc:20221214-131000
