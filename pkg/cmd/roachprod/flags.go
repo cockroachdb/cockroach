@@ -124,6 +124,8 @@ func initFlags() {
 	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
 		"maximum number of operations to execute on nodes concurrently, set to zero for infinite",
 	)
+	rootCmd.PersistentFlags().StringVarP(&config.EmailDomain, "email-domain", "",
+		config.DefaultEmailDomain, "email domain for users")
 
 	createCmd.Flags().DurationVarP(&createVMOpts.Lifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
@@ -162,7 +164,7 @@ func initFlags() {
 			providerOptsContainer[providerName].ConfigureCreateFlags(createCmd.Flags())
 
 			for _, cmd := range []*cobra.Command{
-				destroyCmd, extendCmd, listCmd, syncCmd, gcCmd,
+				destroyCmd, extendCmd, listCmd, syncCmd, gcCmd, setupSSHCmd, startCmd, pgurlCmd, adminurlCmd,
 			} {
 				providerOptsContainer[providerName].ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
 			}
@@ -446,6 +448,13 @@ func initFlags() {
 			"cluster", "", "specific virtual cluster to connect to")
 		cmd.Flags().IntVar(&sqlInstance,
 			"sql-instance", 0, "specific SQL/HTTP instance to connect to (this is a roachprod abstraction distinct from the internal instance ID)")
+	}
+
+	for _, cmd := range []*cobra.Command{startCmd, listCmd, syncCmd} {
+		cmd.Flags().StringSliceVar(&config.DNSRequiredProviders,
+			"dns-required-providers", config.DefaultDNSRequiredProviders,
+			"the cloud providers that must be active to refresh DNS entries",
+		)
 	}
 
 	grafanaAnnotationCmd.Flags().StringArrayVar(&grafanaTags,
