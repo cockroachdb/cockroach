@@ -26,7 +26,7 @@ type replicaRLockedStoreLiveness Replica
 func (r *replicaRLockedStoreLiveness) getStoreIdentifier(replicaID uint64) (slpb.StoreIdent, bool) {
 	r.mu.AssertRHeld()
 	desc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
-	if ok {
+	if !ok {
 		return slpb.StoreIdent{}, false
 	}
 	return slpb.StoreIdent{NodeID: desc.NodeID, StoreID: desc.StoreID}, true

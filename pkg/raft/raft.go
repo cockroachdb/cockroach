@@ -425,7 +425,6 @@ func newRaft(c *Config) *raft {
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
 		trk:                         trk,
-		st:                          tracker.MakeSupportTracker(&trk.Config, c.StoreLiveness),
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
@@ -436,6 +435,7 @@ func newRaft(c *Config) *raft {
 		stepDownOnRemoval:           c.StepDownOnRemoval,
 		storeLiveness:               c.StoreLiveness,
 	}
+	r.st = tracker.MakeSupportTracker(&r.trk.Config, c.StoreLiveness)
 
 	lastID := r.raftLog.lastEntryID()
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
@@ -575,6 +575,16 @@ func (r *raft) sendAppend(to uint64) {
 
 // sendFortify sends a fortify RPC to the supplied follower.
 func (r *raft) sendFortify(to uint64) {
+	if to == r.id {
+		// Avoid "message should not be self-addressed when sending".
+		// TODO(arul): we want to handle this like a leader's own MsgVote. See campaign.
+		epoch, live := r.storeLiveness.SupportFor(r.id)
+		if live {
+			r.leadEpoch = epoch
+			r.st.RecordSupport(r.id, epoch)
+		}
+		return
+	}
 	r.send(pb.Message{To: to, Type: pb.MsgFortifyLeader})
 }
 
@@ -697,9 +707,6 @@ func (r *raft) bcastAppend() {
 func (r *raft) maybeRefortify() {
 	runtimeAssert(r.state == StateLeader, "can't fortify if you're not a leader")
 	r.trk.Visit(func(id uint64, _ *tracker.Progress) {
-		if id == r.id {
-			return
-		}
 		livenessEpoch, _, isSupported := r.storeLiveness.SupportFrom(id)
 		if !isSupported {
 			// TODO(arul): should we try regardless?
@@ -728,10 +735,6 @@ func (r *raft) maybeRefortify() {
 func (r *raft) bcastFortify() {
 	runtimeAssert(r.state == StateLeader, "can't fortify if you're not a leader")
 	r.trk.Visit(func(id uint64, _ *tracker.Progress) {
-		// TODO(arul): we want to handle this like a leader's own MsgVote. See campaign.
-		if id == r.id {
-			return
-		}
 		r.sendFortify(id)
 	})
 }
@@ -794,6 +797,7 @@ func (r *raft) reset(term uint64) {
 		r.Vote = None
 	}
 	r.lead = None
+	r.leadEpoch = 0
 
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
@@ -813,6 +817,7 @@ func (r *raft) reset(term uint64) {
 			pr.Match = r.raftLog.lastIndex()
 		}
 	})
+	r.st.ResetSupport()
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
@@ -932,6 +937,7 @@ func (r *raft) becomePreCandidate() {
 	r.trk.ResetVotes()
 	r.tick = r.tickElection
 	r.lead = None
+	r.leadEpoch = 0
 	r.state = StatePreCandidate
 	r.logger.Infof("%x became pre-candidate at term %d", r.id, r.Term)
 }

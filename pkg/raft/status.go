@@ -76,6 +76,8 @@ func getStatus(r *raft) Status {
 	if s.RaftState == StateLeader {
 		s.Progress = getProgressCopy(r)
 		s.LeadSupportUntil = r.st.LeadSupportUntil()
+		// TODO(arul): remove this once we trust that it works.
+		r.logger.Warningf("LeadSupportUntil: %s", s.LeadSupportUntil)
 	}
 	s.Config = r.trk.Config.Clone()
 	return s

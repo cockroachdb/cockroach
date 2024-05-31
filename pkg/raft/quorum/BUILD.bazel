@@ -25,6 +25,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":quorum"],
     deps = [
+        "//pkg/raft/raftstoreliveness",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

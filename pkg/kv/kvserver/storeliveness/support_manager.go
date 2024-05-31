@@ -278,9 +278,9 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []slpb.Messag
 			log.Warningf(ctx, "failed to sync supporter and requester state: %v", err)
 			return
 		}
-		ssv.updateDurable()
-		rsv.updateDurable()
 	}
+	ssv.updateDurable()
+	rsv.updateDurable()
 
 	for _, resp := range resps {
 		_ = sm.transport.SendAsync(resp)

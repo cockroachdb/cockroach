@@ -215,7 +215,7 @@ func (c MajorityConfig) ComputeQSE(
 	for id := range c {
 		ts, ok := supported[id]
 		if !ok {
-			supportedUntil = append(supportedUntil, raftstoreliveness.MinExpiration)
+			supportedUntil = append(supportedUntil, raftstoreliveness.StoreLivenessExpiration{})
 		} else {
 			supportedUntil = append(supportedUntil, ts)
 		}

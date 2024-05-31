@@ -58,7 +58,7 @@ func TestComputeQSE(t *testing.T) {
 		{
 			ids:     []uint64{1, 2, 3},
 			support: map[uint64]raftstoreliveness.StoreLivenessExpiration{1: ts(10)},
-			expQSE:  raftstoreliveness.MinExpiration,
+			expQSE:  raftstoreliveness.StoreLivenessExpiration{},
 		},
 		{
 			ids:     []uint64{},

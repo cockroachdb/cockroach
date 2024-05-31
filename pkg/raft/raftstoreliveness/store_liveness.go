@@ -25,8 +25,12 @@ type StoreLivenessExpiration hlc.Timestamp
 
 var (
 	MaxExpiration = StoreLivenessExpiration(hlc.MaxTimestamp)
-	MinExpiration = StoreLivenessExpiration(hlc.MinTimestamp)
 )
+
+// String implements the fmt.Stringer interface.
+func (t StoreLivenessExpiration) String() string {
+	return hlc.Timestamp(t).String()
+}
 
 // Less returns whether the receiver is less than the parameter.
 func (t StoreLivenessExpiration) Less(s StoreLivenessExpiration) bool {

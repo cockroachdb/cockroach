@@ -40,6 +40,13 @@ func MakeSupportTracker(
 	return st
 }
 
+// ResetSupport resets the support map.
+func (st *SupportTracker) ResetSupport() {
+	for id := range st.support {
+		delete(st.support, id)
+	}
+}
+
 // RecordSupport records that the node with the given id supported this Raft
 // instance until the supplied timestamp.
 func (st *SupportTracker) RecordSupport(id uint64, epoch raftstoreliveness.StoreLivenessEpoch) {
@@ -57,9 +64,12 @@ func (st *SupportTracker) LeadSupportUntil() raftstoreliveness.StoreLivenessExpi
 	supportExpMap := make(map[uint64]raftstoreliveness.StoreLivenessExpiration)
 	for id, supportEpoch := range st.support {
 		curEpoch, curExp, ok := st.storeLiveness.SupportFrom(id)
-		if curEpoch < supportEpoch {
-			panic("supported epoch shouldn't regress in store liveness")
-		}
+		// TODO(arul): we can't actually make this assertion, as a
+		// MsgFortifyLeaderResp may beat a store liveness heartbeat back to the
+		// leader.
+		//if curEpoch < supportEpoch {
+		//	panic("supported epoch shouldn't regress in store liveness")
+		//}
 		if ok && curEpoch == supportEpoch {
 			supportExpMap[id] = curExp
 		}
