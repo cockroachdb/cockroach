@@ -1029,6 +1029,10 @@ SELECT count(*) FROM %s
 
 	numJoinRows, err := og.scanInt(ctx, tx, q)
 	if err != nil {
+		// UndefinedFunction errors mean that the column type is not comparable.
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction {
+			return false, nil
+		}
 		return false, err
 	}
 	return numJoinRows == childRows, err
