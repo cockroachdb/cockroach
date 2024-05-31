@@ -52,7 +52,7 @@ func (r *importRollbackResumer) Resume(ctx context.Context, execCtx interface{})
 		InitialBackoff: 10 * time.Second,
 		MaxBackoff:     10 * time.Minute,
 	}
-	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
+	for re := retry.Start(ctx, retryOpts); re.Next(); {
 		err := r.rollbackTable(ctx, cfg, tableID)
 		if err != nil {
 			log.Errorf(ctx, "rollback of table %d failed: %s", tableID, err.Error())

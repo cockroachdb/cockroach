@@ -832,7 +832,7 @@ func (b *SSTBatcher) addSSTable(
 				Multiplier:     2,
 				MaxRetries:     10,
 			}
-			for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+			for r := retry.Start(ctx, opts); r.Next(); {
 				log.VEventf(ctx, 4, "sending %s AddSSTable [%s,%s)", sz(len(item.sstBytes)), item.start, item.end)
 				// If this SST is "too small", the fixed costs associated with adding an
 				// SST – in terms of triggering flushes, extra compactions, etc – would

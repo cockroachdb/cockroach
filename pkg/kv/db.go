@@ -1189,8 +1189,11 @@ func IncrementValRetryable(ctx context.Context, db *DB, key roachpb.Key, inc int
 	var err error
 	var res KeyValue
 	retryOpts := base.DefaultRetryOptions()
-	retryOpts.Closer = db.Context().Stopper.ShouldQuiesce()
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	// This is likely not necessary, but adds extra safety since this methods is
+	// called from a number of places.
+	ctx, cancel := db.Context().Stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		res, err = db.Inc(ctx, key, inc)
 		if errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil)) ||
 			errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {

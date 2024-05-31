@@ -280,7 +280,7 @@ func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() err
 	// actionable issues in the operator's environment that which they might be
 	// able to resolve if we made them visible in a failure instead.
 	var err error
-	for retrier := retry.StartWithCtx(ctx, r.retryOpts); retrier.Next(); {
+	for retrier := retry.Start(ctx, r.retryOpts); retrier.Next(); {
 		err = fn()
 		if err == nil {
 			return nil

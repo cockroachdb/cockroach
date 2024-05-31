@@ -150,7 +150,7 @@ func (ls *storageImpl) Update(
 // NB: An existing liveness record is not overwritten by this method, we return
 // an error instead.
 func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error {
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+	for r := retry.Start(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// We start off at epoch=0, entrusting the initial heartbeat to increment it
 		// to epoch=1 to signal the very first time the node is up and running.
 		liveness := livenesspb.Liveness{NodeID: nodeID, Epoch: 0}

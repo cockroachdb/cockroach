@@ -491,7 +491,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 	ctx context.Context,
 ) (createAnotherSession bool) {
 	if err := r.cfg.stopper.RunAsyncTask(ctx, "refresh-instance-session", func(ctx context.Context) {
-		for i := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: time.Second * 5}); i.Next(); {
+		for i := retry.Start(ctx, retry.Options{MaxBackoff: time.Second * 5}); i.Next(); {
 			select {
 			case <-r.cfg.stopper.ShouldQuiesce():
 				return

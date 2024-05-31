@@ -432,7 +432,7 @@ func (ts *testServer) HeartbeatNodeLiveness() error {
 
 	var err error
 	ctx := context.Background()
-	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
+	for r := retry.Start(ctx, retry.Options{MaxRetries: 5}); r.Next(); {
 		if err = nl.Heartbeat(ctx, l); !errors.Is(err, liveness.ErrEpochIncremented) {
 			break
 		}

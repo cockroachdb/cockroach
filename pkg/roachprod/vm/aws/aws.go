@@ -12,6 +12,7 @@
 package aws
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -665,7 +666,7 @@ func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
 func (p *Provider) waitForIPs(
 	l *logger.Logger, names []string, regions []string, opts *ProviderOpts,
 ) error {
-	waitForIPRetry := retry.Start(retry.Options{
+	waitForIPRetry := retry.Start(context.Background(), retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
 		MaxRetries:     120, // wait a bit less than 90s for IPs
@@ -1573,13 +1574,13 @@ func (p *Provider) CreateVolume(
 		return vol, err
 	}
 
-	waitForVolumeCloser := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	waitForVolume := retry.Start(retry.Options{
+	waitForVolume := retry.Start(ctx, retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
 		MaxRetries:     10,
-		Closer:         waitForVolumeCloser,
 	})
 
 	var state []string
@@ -1593,7 +1594,7 @@ func (p *Provider) CreateVolume(
 	for waitForVolume.Next() {
 		err = p.runJSONCommand(l, args, &state)
 		if len(state) > 0 && state[0] == "available" {
-			close(waitForVolumeCloser)
+			cancel()
 		}
 	}
 

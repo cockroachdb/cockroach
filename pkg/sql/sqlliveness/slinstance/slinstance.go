@@ -214,7 +214,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 		Multiplier:     1.5,
 	}
 	everySecond := log.Every(time.Second)
-	for i, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
+	for i, r := 0, retry.Start(ctx, opts); r.Next(); {
 		// If we fail to insert the session, then reset the start time
 		// and expiration, since otherwise there is a danger of inserting
 		// an expired session.
@@ -274,7 +274,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	var err error
 	var found bool
 	// Retry until success or until the context is canceled.
-	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+	for r := retry.Start(ctx, opts); r.Next(); {
 		if found, exp, err = l.storage.Update(ctx, s.ID(), exp); err != nil {
 			if ctx.Err() != nil {
 				break

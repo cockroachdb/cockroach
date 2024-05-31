@@ -259,7 +259,7 @@ func (sc *spanConfigIngestor) flushEvents(ctx context.Context) error {
 		MaxRetries:     5,
 	}
 
-	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
+	for retrier := retry.Start(ctx, retryOpts); retrier.Next(); {
 		sessionStart, sessionExpiration := sc.session.Start(), sc.session.Expiration()
 		if sessionExpiration.IsEmpty() {
 			return errors.Errorf("sqlliveness session has expired")

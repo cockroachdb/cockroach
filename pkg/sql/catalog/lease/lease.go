@@ -179,7 +179,7 @@ func (m *Manager) WaitForNoVersion(
 	// takes longer than the lease duration.
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForNoVersion)
 	defer decAfterWait()
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	for lastCount, r := 0, retry.Start(ctx, retryOpts); r.Next(); {
 		now := m.storage.clock.Now()
 		count, err := CountLeases(ctx, m.storage.db, m.Codec(), cachedDatabaseRegions, m.settings, versions, now, true /*forAnyVersion*/)
 		if err != nil {
@@ -224,7 +224,7 @@ func (m *Manager) WaitForOneVersion(
 	// takes longer than the lease duration.
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForOneVersion)
 	defer decAfterWait()
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	for lastCount, r := 0, retry.Start(ctx, retryOpts); r.Next(); {
 		if err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			// Use the lower-level MaybeGetDescriptorByIDUnvalidated to avoid
 			// performing validation while waiting for leases to drain.
@@ -1681,9 +1681,10 @@ SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.vers
 
 		var rows []tree.Datums
 		retryOptions := base.DefaultRetryOptions()
-		retryOptions.Closer = m.stopper.ShouldQuiesce()
+		retryCtx, cancel := m.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 		// The retry is required because of errors caused by node restarts. Retry 30 times.
-		if err := retry.WithMaxAttempts(ctx, retryOptions, 30, func() error {
+		if err := retry.WithMaxAttempts(retryCtx, retryOptions, 30, func() error {
 			return m.storage.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				if err := txn.KV().SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: timeThreshold}); err != nil {
 					return err

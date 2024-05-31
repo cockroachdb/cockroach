@@ -139,7 +139,7 @@ func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clust
 		InitialBackoff: time.Second,
 		MaxBackoff:     10 * time.Minute,
 	}
-	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
+	for r := retry.Start(ctx, retryOptions); r.Next(); {
 		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			// Ensure schedule exists.
 			var sj *jobs.ScheduledJob

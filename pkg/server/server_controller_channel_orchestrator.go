@@ -346,12 +346,6 @@ func (o *channelOrchestrator) startControlledServer(
 		ctx, cancel = ctlStopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		// Stop retrying startup/initialization if we are being shut
-		// down early.
-		retryOpts := retry.Options{
-			Closer: ctlStopper.ShouldQuiesce(),
-		}
-
 		// tenantStopper is the stopper specific to one tenant server
 		// instance. We define a new tenantStopper on every attempt to
 		// instantiate the tenant server below. It is then linked to
@@ -360,7 +354,7 @@ func (o *channelOrchestrator) startControlledServer(
 		var tenantStopper *stop.Stopper
 
 		var tenantServer orchestratedServer
-		for retry := retry.StartWithCtx(ctx, retryOpts); retry.Next(); {
+		for retry := retry.Start(ctx, retry.Options{}); retry.Next(); {
 			tenantStopper = stop.NewStopper()
 
 			// Task that is solely responsible for propagating ungraceful exits.

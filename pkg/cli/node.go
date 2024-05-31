@@ -535,7 +535,7 @@ func runDecommissionNodeImpl(
 	}
 
 	prevResponse := serverpb.DecommissionStatusResponse{}
-	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+	for r := retry.Start(ctx, opts); r.Next(); {
 		req := &serverpb.DecommissionRequest{
 			NodeIDs:          nodeIDs,
 			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,

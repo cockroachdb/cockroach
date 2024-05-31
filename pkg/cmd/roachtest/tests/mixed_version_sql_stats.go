@@ -133,7 +133,7 @@ func runGetRequests(
 	}
 
 	// Now we'll wait for the flush to occur and request stats from the persisted tables.
-	r := retry.StartWithCtx(ctx, retry.Options{
+	r := retry.Start(ctx, retry.Options{
 		InitialBackoff: 10 * time.Second,
 		MaxBackoff:     30 * time.Second,
 		MaxRetries:     6, // 6 * 30s = 3m, which is well past the flush interval.

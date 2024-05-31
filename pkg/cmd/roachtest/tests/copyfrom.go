@@ -86,7 +86,7 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 	rOpts := base.DefaultRetryOptions()
 	rOpts.MaxRetries = 5
 	rOpts.MaxBackoff = 10 * time.Second
-	r := retry.StartWithCtx(ctx, rOpts)
+	r := retry.Start(ctx, rOpts)
 	succeeded := false
 	for r.Next() {
 		start = timeutil.Now()

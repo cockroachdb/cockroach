@@ -291,7 +291,7 @@ func waitForZeroReplicasOnN3(ctx context.Context, t test.Test, db *gosql.DB) {
 	deadline := timeutil.Now().Add(storeDeadTimeout + time.Minute)
 	// We don't use exponential backoff here because we don't expect it to succeed
 	// immediately.
-	for r := retry.StartWithCtx(ctx, retry.Options{
+	for r := retry.Start(ctx, retry.Options{
 		InitialBackoff: 10 * time.Second,
 		MaxBackoff:     10 * time.Second,
 	}); r.Next() && timeutil.Now().Before(deadline); {

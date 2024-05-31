@@ -196,7 +196,7 @@ func RangeLookup(
 		Multiplier:     2,
 	}
 
-	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+	for r := retry.Start(ctx, opts); r.Next(); {
 		// Determine the "Range Metadata Key" for the provided key.
 		rkey, err := addrForDir(prefetchReverse)(key)
 		if err != nil {

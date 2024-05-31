@@ -205,7 +205,7 @@ func (c *connector) dialTenantCluster(
 	var err error
 
 	isRetry := false
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		// Track the number of dial retries.
 		if isRetry && c.DialTenantRetries != nil {
 			c.DialTenantRetries.Inc(1)

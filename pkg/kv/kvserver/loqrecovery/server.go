@@ -747,7 +747,7 @@ func visitNodeWithRetry(
 	node roachpb.NodeDescriptor,
 ) error {
 	var err error
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 		addr := node.AddressForLocality(loc)
 		var conn *grpc.ClientConn
@@ -800,7 +800,7 @@ func makeVisitNode(g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context) 
 		if err != nil {
 			return err
 		}
-		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		for r := retry.Start(ctx, retryOpts); r.Next(); {
 			log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 			addr := node.AddressForLocality(loc)
 			var conn *grpc.ClientConn
