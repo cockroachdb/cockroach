@@ -305,7 +305,7 @@ func checkDMSReplicated(
 	// both tables have the same number of rows.
 	t.L().Printf("testing all data gets replicated")
 	if err := func() error {
-		for r := retry.StartWithCtx(ctx, waitForReplicationRetryOpts); r.Next(); {
+		for r := retry.Start(ctx, waitForReplicationRetryOpts); r.Next(); {
 			err := func() error {
 				var numRows int
 				if err := targetPGConn.QueryRow("SELECT count(1) FROM test_table").Scan(&numRows); err != nil {
@@ -351,7 +351,7 @@ func checkDMSReplicated(
 
 	t.L().Printf("testing all subsequent updates get replicated")
 	if err := func() error {
-		for r := retry.StartWithCtx(ctx, waitForReplicationRetryOpts); r.Next(); {
+		for r := retry.Start(ctx, waitForReplicationRetryOpts); r.Next(); {
 			err := func() error {
 				var countOfDeletedRow int
 				if err := targetPGConn.QueryRow("SELECT count(1) FROM test_table WHERE id = $1", deleteRowID).Scan(&countOfDeletedRow); err != nil {
@@ -397,7 +397,7 @@ func checkDMSNoPKTableError(ctx context.Context, t test.Test, dmsCli *dms.Client
 	}
 	t.L().Printf("testing no pk table has a table error")
 	if err := func() error {
-		for r := retry.StartWithCtx(ctx, waitForTableError); r.Next(); {
+		for r := retry.Start(ctx, waitForTableError); r.Next(); {
 			err := func() error {
 				dmsTasks, err := dmsCli.DescribeReplicationTasks(ctx, dmsDescribeTasksInput(t.BuildVersion(), "test_table_no_pk"))
 				if err != nil {
@@ -435,7 +435,7 @@ func checkFullLargeDataLoad(ctx context.Context, t test.Test, dmsCli *dms.Client
 	}
 	t.L().Printf("testing all rows from test_table_large replicate")
 	var numRows, nonUpdate = 0, 0
-	for r := retry.StartWithCtx(ctx, waitForFullLoad); r.Next(); {
+	for r := retry.Start(ctx, waitForFullLoad); r.Next(); {
 		err := func() error {
 			dmsTasks, err := dmsCli.DescribeReplicationTasks(ctx, dmsDescribeTasksInput(t.BuildVersion(), "test_table_large"))
 			if err != nil {
@@ -804,7 +804,7 @@ func setupDMSEndpointsAndTask(
 		}); err != nil {
 			return errors.Wrapf(err, "error initiating a test connection")
 		}
-		r := retry.StartWithCtx(ctx, retry.Options{
+		r := retry.Start(ctx, retry.Options{
 			InitialBackoff: 30 * time.Second,
 			MaxBackoff:     time.Minute,
 			MaxRetries:     10,
@@ -876,7 +876,7 @@ func setupDMSEndpointsAndTask(
 		}
 
 		t.L().Printf("starting replication task")
-		r := retry.StartWithCtx(ctx, retry.Options{
+		r := retry.Start(ctx, retry.Options{
 			InitialBackoff: 10 * time.Second,
 			MaxBackoff:     20 * time.Second,
 			MaxRetries:     10,
@@ -910,7 +910,7 @@ func dmsTaskStatusChecker(
 	ctx context.Context, dmsCli *dms.Client, input *dms.DescribeReplicationTasksInput, status string,
 ) error {
 	closer := make(chan struct{})
-	r := retry.StartWithCtx(ctx, retry.Options{
+	r := retry.Start(ctx, retry.Options{
 		InitialBackoff: 10 * time.Second,
 		MaxBackoff:     30 * time.Second,
 		Closer:         closer,
@@ -1141,7 +1141,7 @@ func tearDownRDSInstances(ctx context.Context, t test.Test, rdsCli *rds.Client) 
 				// group but the cluster takes a while to wind down. Ideally, we wait
 				// for the cluster to get deleted. However, there is no provided
 				// NewDBClusterDeletedWaiter, so we just have to retry it by hand.
-				r := retry.StartWithCtx(ctx, retry.Options{
+				r := retry.Start(ctx, retry.Options{
 					InitialBackoff: 30 * time.Second,
 					MaxBackoff:     time.Minute,
 					MaxRetries:     60,

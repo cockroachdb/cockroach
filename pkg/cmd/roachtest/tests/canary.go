@@ -103,7 +103,7 @@ func repeatRunE(
 	args ...string,
 ) error {
 	var lastError error
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
+	for attempt, r := 0, retry.Start(ctx, canaryRetryOptions); r.Next(); {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -136,7 +136,7 @@ func repeatRunWithDetailsSingleNode(
 		lastResult install.RunResultDetails
 		lastError  error
 	)
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
+	for attempt, r := 0, retry.Start(ctx, canaryRetryOptions); r.Next(); {
 		if ctx.Err() != nil {
 			return lastResult, ctx.Err()
 		}
@@ -165,7 +165,7 @@ func repeatGitCloneE(
 	node option.NodeListOption,
 ) error {
 	var lastError error
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
+	for attempt, r := 0, retry.Start(ctx, canaryRetryOptions); r.Next(); {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -218,7 +218,7 @@ func repeatGetLatestTag(
 		return i
 	}
 	var lastError error
-	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
+	for attempt, r := 0, retry.Start(ctx, canaryRetryOptions); r.Next(); {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}

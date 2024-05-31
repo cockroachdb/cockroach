@@ -164,7 +164,7 @@ func (j *jobMonitor) updateSchedule(ctx context.Context, cronExpr string) {
 		InitialBackoff: time.Second,
 		MaxBackoff:     10 * time.Minute,
 	}
-	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
+	for r := retry.Start(ctx, retryOptions); r.Next(); {
 		if err = j.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			// We check if we can get load the schedule, if the schedule cannot be
 			// loaded because it's not found, we recreate the schedule.

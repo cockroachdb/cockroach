@@ -1426,7 +1426,7 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	}
 
 	notReplicated := true
-	for r := retry.Start(opts); r.Next() && notReplicated; {
+	for r := retry.Start(context.Background(), opts); r.Next() && notReplicated; {
 		notReplicated = false
 		for _, s := range tc.Servers {
 			err := s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
@@ -1777,7 +1777,7 @@ func (tc *TestCluster) RestartServerWithInspect(
 	return timeutil.RunWithTimeout(
 		ctx, "check-conn", 15*time.Second,
 		func(ctx context.Context) error {
-			r := retry.StartWithCtx(ctx, retry.Options{
+			r := retry.Start(ctx, retry.Options{
 				InitialBackoff: 1 * time.Millisecond,
 				MaxBackoff:     100 * time.Millisecond,
 			})

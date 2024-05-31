@@ -114,7 +114,7 @@ func (h *httpStorage) openStreamAt(
 		headers = map[string]string{"Range": fmt.Sprintf("bytes=%d-", pos)}
 	}
 
-	for attempt, retries := 0, retry.StartWithCtx(ctx, cloud.HTTPRetryOptions); retries.Next(); attempt++ {
+	for attempt, retries := 0, retry.Start(ctx, cloud.HTTPRetryOptions); retries.Next(); attempt++ {
 		resp, err := h.req(ctx, "GET", url, nil, headers)
 		if err == nil {
 			return resp, err

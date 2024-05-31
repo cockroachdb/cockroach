@@ -592,7 +592,7 @@ func (r *registration) waitForCaughtUp(ctx context.Context) error {
 		MaxBackoff:     10 * time.Second,
 		MaxRetries:     50,
 	}
-	for re := retry.StartWithCtx(ctx, opts); re.Next(); {
+	for re := retry.Start(ctx, opts); re.Next(); {
 		r.mu.Lock()
 		caughtUp := len(r.buf) == 0 && r.mu.caughtUp
 		r.mu.Unlock()

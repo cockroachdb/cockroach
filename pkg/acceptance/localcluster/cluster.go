@@ -690,7 +690,7 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		Multiplier:     2,
 		Closer:         closer,
 	}
-	for r := retry.Start(opts); r.Next(); {
+	for r := retry.Start(ctx, opts); r.Next(); {
 		var pid int
 		n.Lock()
 		if n.cmd != nil {

@@ -122,7 +122,7 @@ func CheckTwoVersionInvariant(
 	decAfterWait := descsCol.leased.lm.IncGaugeAfterLeaseDuration(lease.GaugeWaitForTwoVersionViolation)
 	defer decAfterWait()
 	// Wait until all older version leases have been released or expired.
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+	for r := retry.Start(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// Use the current clock time.
 		now := clock.Now()
 		count, err := lease.CountLeases(ctx, db, codec, regions, settings, withNewVersion, now, false /*forAnyVersion*/)

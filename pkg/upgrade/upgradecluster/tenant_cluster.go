@@ -292,7 +292,7 @@ func (t *TenantCluster) UntilClusterStable(ctx context.Context, fn func() error)
 
 	// TODO(ajstorm): this could use a test to validate that the retry behavior
 	//  does what we expect. I've tested it manually in the debugger for now.
-	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
+	for retrier := retry.Start(ctx, retryOpts); retrier.Next(); {
 		if err := fn(); err != nil {
 			return err
 		}

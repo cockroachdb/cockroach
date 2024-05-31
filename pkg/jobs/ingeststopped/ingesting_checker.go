@@ -37,7 +37,7 @@ func WaitForNoIngestingNodes(
 	ctx, sp := tracing.ChildSpan(ctx, "WaitForNoIngestingNodes")
 	defer sp.Finish()
 
-	retries := retry.StartWithCtx(ctx, retry.Options{
+	retries := retry.Start(ctx, retry.Options{
 		InitialBackoff: time.Second,
 		MaxBackoff:     time.Second * 10,
 	})

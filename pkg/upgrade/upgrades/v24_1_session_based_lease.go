@@ -86,7 +86,7 @@ SELECT
 FROM
 	expected AS e, current AS c;
 `
-	r := retry.StartWithCtx(ctx, retry.Options{
+	r := retry.Start(ctx, retry.Options{
 		InitialBackoff: time.Millisecond * 500,
 		Multiplier:     2,
 		MaxBackoff:     time.Second * 10,
