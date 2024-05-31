@@ -802,9 +802,6 @@ show_backup_stmt ::=
 	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder opt_with_show_backup_connection_options_list
 
 show_columns_stmt ::=
@@ -1984,9 +1981,6 @@ var_value ::=
 
 show_backup_details ::=
 	'SCHEMAS'
-	| 'FILES'
-	| 'RANGES'
-	| 'VALIDATE'
 
 opt_with_show_backup_options ::=
 	'WITH' show_backup_options_list
