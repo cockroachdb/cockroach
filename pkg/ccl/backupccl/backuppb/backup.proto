@@ -55,6 +55,8 @@ message BackupManifest {
     // ApproximatePhysicalSize is the approximate size of the physical bytes in
     // compressed SST form.
     uint64 approximate_physical_size = 11;
+
+    bool has_range_keys = 12;
   }
 
   message DescriptorRevision {

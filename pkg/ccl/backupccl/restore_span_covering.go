@@ -346,6 +346,8 @@ func generateAndSendImportSpans(
 					BackupFileEntryCounts:   f.EntryCounts,
 					BackingFileSize:         f.BackingFileSize,
 					ApproximatePhysicalSize: f.ApproximatePhysicalSize,
+					Layer:                   int32(layer),
+					HasRangeKeys:            f.HasRangeKeys,
 				}
 				if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
 					fileSpec.Dir = dir
