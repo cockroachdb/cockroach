@@ -125,6 +125,25 @@ func (rn *RawNode) Ready() Ready {
 	return rd
 }
 
+// EntriesReady returns a set of node IDs in StateReplicate for which there is
+// outstanding replication work ready.
+//
+// The typical usage is:
+//
+//	for id := range rn.EntriesReady() {
+//		for rn.SendAppend(id) { }
+//	}
+//	rd := rn.Ready()
+//	... process the Ready ...
+//
+// This method should be used when Config.EnableLazyAppends is true.
+//
+// TODO(pav-kv): tracking replication readiness and Inflights will be superseded
+// by the "send queue" and "token tracker" in Admission Control.
+func (rn *RawNode) EntriesReady() map[uint64]struct{} {
+	return rn.raft.entriesReady
+}
+
 // SendAppend sends a log replication (MsgApp) message to a particular node. The
 // message will be available via next Ready.
 //
@@ -481,22 +500,7 @@ func (rn *RawNode) HasReady() bool {
 	if r.raftLog.hasNextUnstableEnts() || r.raftLog.hasNextCommittedEnts(rn.applyUnstableEntries()) {
 		return true
 	}
-
-	if r.enableLazyAppends {
-		ready := false
-		// TODO(pav-kv): track the set of ready streams instead of scanning all
-		// peers on each Ready iteration.
-		r.trk.Visit(func(id uint64, pr *tracker.Progress) {
-			if id != r.id && pr.StateReplicateReady(r.raftLog.lastIndex()) {
-				ready = true
-			}
-		})
-		if ready {
-			return true
-		}
-	}
-
-	return false
+	return len(r.entriesReady) != 0
 }
 
 // Advance notifies the RawNode that the application has applied and saved progress in the
