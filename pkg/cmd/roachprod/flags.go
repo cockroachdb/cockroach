@@ -115,6 +115,8 @@ func initFlags() {
 	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
 		"maximum number of operations to execute on nodes concurrently, set to zero for infinite",
 	)
+	rootCmd.PersistentFlags().BoolVarP(&config.FastDNS, "fast-dns", "",
+		term.IsTerminal(int(os.Stdout.Fd())), "enable fast DNS resolution via the standard Go net package")
 	rootCmd.PersistentFlags().StringVarP(&config.EmailDomain, "email-domain", "",
 		config.DefaultEmailDomain, "email domain for users")
 
