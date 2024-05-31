@@ -54,14 +54,9 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 	// ready to send entries. Today this can be done by exposing a set of IDs in
 	// StateReplicate with Next <= raftLog.lastIndex && !Inflights.Full().
 	if n.Config.EnableLazyAppends {
-		s := n.Status()
-		ids := maps.Keys(s.Progress)
+		ids := maps.Keys(n.EntriesReady())
 		slices.Sort(ids)
 		for _, id := range ids {
-			pr := s.Progress[id]
-			if !pr.StateReplicateReady(^uint64(0)) {
-				continue
-			}
 			for n.SendAppend(id) {
 			}
 		}

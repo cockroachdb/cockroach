@@ -125,6 +125,25 @@ func (rn *RawNode) Ready() Ready {
 	return rd
 }
 
+// EntriesReady returns a set of node IDs in StateReplicate for which there is
+// outstanding replication work.
+//
+// The typical usage is:
+//
+//	for id := range rn.EntriesReady() {
+//		for rn.SendAppend(id) { }
+//	}
+//	rd := rn.Ready()
+//	... process the Ready ...
+//
+// This method should be used when Config.EnableLazyAppends is true.
+//
+// TODO(pav-kv): tracking replication readiness, and this method, will be
+// superseded by the "send queue" in Admission Control.
+func (rn *RawNode) EntriesReady() map[uint64]struct{} {
+	return rn.raft.entriesReady
+}
+
 // SendAppend sends a log replication (MsgApp) message to a particular node. The
 // message will be available via next Ready.
 //
