@@ -719,9 +719,12 @@ func (r *raft) maybeRefortify() {
 			r.sendFortify(id)
 			return
 		}
-		runtimeAssert(fortifiedEpoch <= livenessEpoch,
-			"store liveness epoch can't be less than an already fortified epoch",
-		)
+		// TODO(arul): we can't actually make this assertion, as a
+		// MsgFortifyLeaderResp may beat a store liveness heartbeat back to the
+		// leader.
+		//runtimeAssert(fortifiedEpoch <= livenessEpoch,
+		//	"store liveness epoch can't be less than an already fortified epoch",
+		//)
 		if fortifiedEpoch != livenessEpoch {
 			// Support from the fortified epoch has been withdrawn, however, the
 			// peer's store is currently providing support at a higher epoch. Try to
