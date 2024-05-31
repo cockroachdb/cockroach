@@ -1603,8 +1603,19 @@ func (e *RefreshFailedError) Type() ErrorDetailType {
 var _ ErrorDetailInterface = &RefreshFailedError{}
 
 func (e *InsufficientSpaceError) Error() string {
-	return fmt.Sprintf("store %d has insufficient remaining capacity to %s (remaining: %s / %.1f%%, min required: %.1f%%)",
-		e.StoreID, e.Op, humanizeutil.IBytes(e.Available), float64(e.Available)/float64(e.Capacity)*100, e.Required*100)
+	return fmt.Sprint(e)
+}
+
+// Format implements fmt.Formatter.
+func (e *InsufficientSpaceError) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+// SafeFormatError implements errors.SafeFormatter.
+func (e *InsufficientSpaceError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("store %d has insufficient remaining capacity to %s (remaining: %s / %.1f%%, min required: %.1f%%)",
+		e.StoreID, redact.SafeString(e.Op), humanizeutil.IBytes(e.Available), float64(e.Available)/float64(e.Capacity)*100, e.Required*100)
+	return nil
 }
 
 // NewNotLeaseHolderError returns a NotLeaseHolderError initialized with the
