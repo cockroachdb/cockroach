@@ -617,10 +617,10 @@ func runRestore(
 			}
 		}
 		if runWorkload {
-			// Run the workload for at most 10 minutes.
+			// Run the workload for at most 5 minutes.
 			testRuntime := timeutil.Since(testStartTime)
 			workloadDuration := sp.timeout - (testRuntime + time.Minute)
-			maxWorkloadDuration := time.Minute * 10
+			maxWorkloadDuration := time.Minute * 5
 			if workloadDuration > maxWorkloadDuration {
 				workloadDuration = maxWorkloadDuration
 			}
