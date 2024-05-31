@@ -40,6 +40,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/multitenant",
+        "//pkg/obs/logstream",
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
         "//pkg/security/username",

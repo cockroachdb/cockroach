@@ -14,7 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/logstream"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
 )
@@ -63,4 +65,14 @@ func maybeLogStateChangeStructured(ctx context.Context, job *Job, status Status,
 	}
 
 	log.Structured(ctx, log.StructuredMeta{EventType: log.JOB_STATE_CHANGE}, out)
+}
+
+func JobStateChangeProcessor(ctx context.Context, j *JobStateChange) error {
+	// TODO [kyle.wong] CRDB-38479: Persist job state changes
+	return nil
+}
+
+func InitJobStateLogProcessor(ctx context.Context, stopper *stop.Stopper) {
+	processor := logstream.NewStructuredLogProcessor[*JobStateChange](JobStateChangeProcessor)
+	logstream.RegisterProcessor(ctx, stopper, log.JOB_STATE_CHANGE, processor)
 }
