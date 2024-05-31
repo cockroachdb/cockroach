@@ -288,6 +288,8 @@ type streamIngestionProcessor struct {
 	// backupDataProcessors' trace recording.
 	agg      *bulkutil.TracingAggregator
 	aggTimer timeutil.Timer
+
+	recentStats ingestProcStats
 }
 
 // PartitionEvent augments a normal event with the partition it came from.
@@ -510,9 +512,21 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 	}
 
 	select {
-	case progressUpdate, ok := <-sip.checkpointCh:
+	case latestResolvedSpans, ok := <-sip.checkpointCh:
 		if ok {
-			progressBytes, err := protoutil.Marshal(progressUpdate)
+			sip.recentStats.Lock()
+			defer func () {
+				sip.Reset()
+				sip.recentStats.Unlock()
+			}()
+
+			processorProgressUpdate := streampb.IngestionProcessorProgress{
+				SQLInstanceID: int32(sip.flowCtx.NodeID.SQLInstanceID()),
+				ResolvedSpans: latestResolvedSpans,
+				LowWater:      sip.recentStats.LowWaterMark,
+				RecentSplits: sip.recentStats.SplitCount,
+			}
+			progressBytes, err := protoutil.Marshal(&processorProgressUpdate)
 			if err != nil {
 				sip.MoveToDrainingAndLogError(err)
 				return nil, sip.DrainHelper()
@@ -874,6 +888,9 @@ func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	}
 	log.Infof(ctx, "replicating split at %s", roachpb.Key(rekey).String())
 	expiration := kvDB.Clock().Now().AddDuration(time.Hour)
+	sip.recentStats.Lock()
+	sip.recentStats.SplitCount++
+	sip.recentStats.Unlock()
 	return kvDB.AdminSplit(ctx, rekey, expiration)
 }
 
@@ -949,7 +966,11 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) erro
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
 	}
+	sip.recentStats.Lock()
+	defer sip.recentStats.Unlock()
+	sip.recentStats.LowWaterMark = sip.frontier.Frontier()
 
+	// TODO (msbutler): delete these metrics. they are meaningless.
 	sip.metrics.EarliestDataCheckpointSpan.Update(lowestTimestamp.GoTime().UnixNano())
 	sip.metrics.LatestDataCheckpointSpan.Update(highestTimestamp.GoTime().UnixNano())
 	sip.metrics.ResolvedEvents.Inc(1)
