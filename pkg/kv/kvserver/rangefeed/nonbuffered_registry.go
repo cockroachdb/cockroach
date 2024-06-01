@@ -273,6 +273,7 @@ func (r *nonBufferedRegistration) publish(
 		return
 	}
 
+	// should we check for disconnected here? -> we need a way to stop writes once disconnected
 	r.stream.SendBuffered(r.maybeStripEvent(ctx, event), alloc)
 }
 
