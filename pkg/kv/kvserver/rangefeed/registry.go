@@ -135,6 +135,12 @@ func newRegistration(
 	return r
 }
 
+var _ filterable = (*registration)(nil)
+
+func (r *registration) needsPrev() bool {
+	return r.withDiff
+}
+
 // publish attempts to send a single event to the output buffer for this
 // registration. If the output buffer is full, the overflowed flag is set,
 // indicating that live events were lost and a catch-up scan should be initiated.
@@ -431,7 +437,7 @@ func (reg *registry) Len() int {
 // NewFilter returns a operation filter reflecting the registrations
 // in the registry.
 func (reg *registry) NewFilter() *Filter {
-	return newFilterFromRegistry(reg)
+	return newFilterFromRegistry(reg.tree)
 }
 
 // Register adds the provided registration to the registry.
@@ -530,9 +536,6 @@ func (reg *registry) DisconnectWithErr(ctx context.Context, span roachpb.Span, p
 		return true /* disconned */, pErr
 	})
 }
-
-// all is a span that overlaps with all registrations.
-var all = roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}
 
 // forOverlappingRegs calls the provided function on each registration that
 // overlaps the span. If the function returns true for a given registration
