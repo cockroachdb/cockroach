@@ -233,8 +233,52 @@ Priority override:
 
 Since the admitted[i] value for every priority advances up to stableIndex
 based on the absence of entries with that priority waiting for admission
-(unlike RACv1 advancement), we can simply use the overridden priorities at
-admission time. TODO(sumeer): elaborate.
+(unlike RACv1 advancement), there is no risk that a difference in belief in
+the priority of index j at the leader and the follower will result in
+permanent leakage of tokens corresponding to index j. Eventually admitted[i]
+for all priorities i will advance to j.
+
+We observe that the probability of priority mismatch is very low. The leader
+when sending index j must be sending it for the first time since the
+transition of this follower to StateReplicate, and given the ordered gRPC
+stream used for communication, the likelihood that an old MsgApp containing
+index j is received after whatever was needed to transition into
+StateReplicate is very unlikely:
+
+- if the follower was in StateProbe and transitioned to StateReplicate with a
+  next index k < j, then k must have been lost, and the follower will discard
+  everything until it sees index k again. This means any old j that was not lost
+  will also be discarded.
+
+- if the follower was in StateSnapshot and transitioned to StateReplicate with
+  a next index k < j, then j must have never been sent earlier, since there was
+  an index < k that had been truncated from the log.
+
+Say such mismatch does happen. We consider two cases, via an example,
+involving raft entry at index 3.
+
+Case A: leader sent as low pri (elastic) and follower sees high pri (regular)
+
+We will represent this as (3, L) at leader and (3, H) at follower.
+
+Say the follower saw (2, L) and has not admitted it yet. But it admits (3, H).
+It will have Admitted[H]=4, Admitted[L]=1. So the elastic tokens for 3 will
+not be returned to the leader even though 3 has been admitted. This is
+considered ok since the overload is severe enough to not yet admit (2, L), so
+better not to return elastic tokens for (3, L).
+
+Say the follower saw (4, L) and has admitted it but not yet admitted (3, H).
+This could cause Admitted[H]=2, Admitted[L]=4, causing elastic tokens to be
+returned for 3 before it has been admitted. This can't actually happen since
+for the same raft group, (3, H) will be admitted before (4, L).
+
+Case B: leader sent as high pri (regular) and follower sees low pri (elastic)
+
+Say the follower admitted (2, H). So Admitted[H] >= 3. Even though (3, L) is
+still waiting to be admitted, the regular tokens for 3 at the leader will be
+returned. This is desirable since it is possible (3, H) would also have been
+admitted, and it is better to be optimistic for regular work since it
+corresponds to user facing work.
 
 */
 
@@ -479,7 +523,7 @@ type RaftInterface interface {
 	// FollowerState returns the current state of a follower. The value of match
 	// and next are populated iff in StateReplicate. All entries >= next have
 	// not had MsgApps constructed during the lifetime of this StateReplicate
-	// (they may have been constructed previously)
+	// (they may have been constructed previously).
 	//
 	// When a follower transitions from {StateProbe,StateSnapshot} =>
 	// StateReplicate, we start trying to send MsgApps. We should
@@ -495,7 +539,7 @@ type RaftInterface interface {
 	// (a), we plan to remove follower pausing. So the v2 code will be
 	// simplified.
 	FollowerState(
-		replicaID roachpb.ReplicaID) (state tracker.StateType, match uint64, next uint64)
+		replicaID roachpb.ReplicaID) FollowerStateInfo
 	FollowerTransportConnected(storeID roachpb.StoreID) bool
 	// LastEntryIndex is the highest index assigned in the log.
 	LastEntryIndex() uint64
@@ -523,16 +567,34 @@ type Scheduler interface {
 	ScheduleControllerEvent(rangeID roachpb.RangeID)
 }
 
-// TODO: resume here ***
+type FollowerStateInfo struct {
+	State tracker.StateType
+
+	// Remaining only populated in StateReplicate
+	Match    uint64
+	Next     uint64
+	Admitted [NumRaftPriorities]uint64
+}
+
+type RaftPriority uint8
+
+const (
+	RaftLowPri RaftPriority = iota
+	RaftNormalPri
+	RaftAboveNormalPri
+	RaftHighPri
+	NumRaftPriorities
+)
 
 // MessageSender abstracts Replica.sendRaftMessage. The context used is always
 // Replica.raftCtx, so we do not need to pass it.
 //
-// REQUIRES: msg is a MsgApp. The follower is a member and is in StateReplicate.
+// REQUIRES: msg is a MsgApp.
 type MessageSender interface {
 	// SendRaftMessage ...
 	//
 	// priorityOverride can be kvserverpb.PriorityNotOverriddenForFlowControl
+	// or kvserverpb.NotSubjectToACForFlowControl
 	//
 	// Implementation:
 	//
@@ -541,17 +603,23 @@ type MessageSender interface {
 	// handleRaftReadyRaftMuLocked. By then we have no access to the wrapper
 	// that is RaftMessageRequest.
 	//
-	// We will also be mediating Raft doing retries. If it is retrying and
-	// previously we had sent index i with one priority override and now send
-	// with a different priority override, we don't want to change the tracker.
-	// Also, we don't know which of these messages made it to the other side, so
-	// when the tokens are returned there is ambiguity.
+	// Due to multiple transitions into and out of StateReplicate, the same
+	// entry could be sent to the follower with different priority overrides.
+	// Only the last send is being tracked in the tracker, with the priority
+	// override used in that send. The follower will track based on the priority
+	// override in the entry that it appended. These can differ, but it does not
+	// matter. See discussion about priority override in "Design for robust flow
+	// token return in RACv2".
+	//
+	// TODO: delete this remaining stale comment:
 	//
 	// Solution:
-	// The sender will only track the original priority in tracker. The receiver will
-	// know both the original and overridden priority. Will replace the second byte in entry
-	// with the overridden priority before handing to stepRaftGroup. RaftAdmissionMeta has the
-	// original. Will use the overridden one to admit and then the original to return tokens.
+	//
+	// The sender will only track the original priority in tracker. The receiver
+	// will know both the original and overridden priority. Will replace the
+	// second byte in entry with the overridden priority before handing to
+	// stepRaftGroup. RaftAdmissionMeta has the original. Will use the
+	// overridden one to admit and then the original to return tokens.
 	//
 	// Indices 3E, 4E, 5E, 6R, where E is elastic and R is regular. 5E, 6R sent
 	// with 5R', 6R. Wnen 5R' returned, will also return 3E, 4E. So there is
@@ -602,8 +670,10 @@ const NoReplicaID roachpb.ReplicaID = 0
 type ReplicaSet map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
 
 type RangeControllerImpl struct {
-	opts        RangeControllerOptions
-	replicaSet  ReplicaSet
+	opts       RangeControllerOptions
+	replicaSet ReplicaSet
+	// leaseholder can be NoReplicaID or not be in ReplicaSet, i.e., it is
+	// eventually consistent with the set of replicas.
 	leaseholder roachpb.ReplicaID
 
 	// State for waiters. When anything in voterSets changes, voterSetRefreshCh
@@ -628,6 +698,8 @@ type voterStateForWaiters struct {
 }
 
 var _ RangeController = &RangeControllerImpl{}
+
+// TODO: resume pass here ***
 
 func NewRangeControllerImpl(
 	o RangeControllerOptions, init RangeControllerInitState,
@@ -802,7 +874,9 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		//
 		// TODO: this is no longer nextUB. Also use match, since it may have
 		// moved past the indexToSend.
-		state, _, nextUB := rc.opts.RaftInterface.FollowerState(r)
+		info := rc.opts.RaftInterface.FollowerState(r)
+		state := info.State
+		nextUB := info.Next
 		switch state {
 		case tracker.StateProbe:
 			if rs.replicaSendStream != nil {
@@ -1062,7 +1136,9 @@ func NewReplicaState(parent *RangeControllerImpl, desc roachpb.ReplicaDescriptor
 		replicaSendStream: nil,
 	}
 	// TODO: this is no longer nextUB.
-	state, _, nextUB := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
+	info := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
+	state := info.State
+	nextUB := info.Next
 	if state == tracker.StateReplicate {
 		rs.createReplicaSendStream(nextUB)
 	}

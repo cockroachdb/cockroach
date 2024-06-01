@@ -19,6 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// TODO: track only NumRaftPriorities.
+// TODO: remove the Term from the tracking.
+// TODO: remove sendTokenWC.
+
 // Tracker tracks flow token deductions for a replicaSendStream. Tokens are
 // deducted for an in-flight log entry (identified by raft log position), with
 // a given admissionpb.WorkPriority.
