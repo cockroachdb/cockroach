@@ -126,21 +126,22 @@ func (rn *RawNode) Ready() Ready {
 }
 
 // EntriesReady returns a set of node IDs in StateReplicate for which there is
-// outstanding replication work.
+// outstanding replication work. For each of these IDs, it provides a handle to
+// the in-flight tracker which is used for rate limiting.
 //
 // The typical usage is:
 //
-//	for id := range rn.EntriesReady() {
-//		for rn.SendAppend(id) { }
+//	for id, tracker := range rn.EntriesReady() {
+//		for !tracker.Full() && rn.SendAppend(id) { }
 //	}
 //	rd := rn.Ready()
 //	... process the Ready ...
 //
 // This method should be used when Config.EnableLazyAppends is true.
 //
-// TODO(pav-kv): tracking replication readiness, and this method, will be
-// superseded by the "send queue" in Admission Control.
-func (rn *RawNode) EntriesReady() map[uint64]struct{} {
+// TODO(pav-kv): tracking replication readiness and Inflights will be superseded
+// by the "send queue" and "token tracker" in Admission Control.
+func (rn *RawNode) EntriesReady() map[uint64]*tracker.Inflights {
 	return rn.raft.entriesReady
 }
 
@@ -500,21 +501,11 @@ func (rn *RawNode) HasReady() bool {
 	if r.raftLog.hasNextUnstableEnts() || r.raftLog.hasNextCommittedEnts(rn.applyUnstableEntries()) {
 		return true
 	}
-
-	if r.enableLazyAppends {
-		ready := false
-		// TODO(pav-kv): track the set of ready streams instead of scanning all
-		// peers on each Ready iteration.
-		r.trk.Visit(func(id uint64, pr *tracker.Progress) {
-			if id != r.id && pr.StateReplicateReady(r.raftLog.lastIndex()) {
-				ready = true
-			}
-		})
-		if ready {
+	for _, tr := range r.entriesReady {
+		if !tr.Full() {
 			return true
 		}
 	}
-
 	return false
 }
 

@@ -349,7 +349,7 @@ type raft struct {
 	// trivial because Progress does not know about raftLog.
 	// TODO(pav-kv): move this out of raft, and integrate with Admission Control.
 	// This is one of the signals input into AC decisions.
-	entriesReady map[uint64]struct{}
+	entriesReady map[uint64]*tracker.Inflights
 
 	state StateType
 
@@ -459,7 +459,7 @@ func newRaft(c *Config) *raft {
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
 		trk:                         tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
-		entriesReady:                map[uint64]struct{}{},
+		entriesReady:                map[uint64]*tracker.Inflights{},
 		enableLazyAppends:           c.EnableLazyAppends,
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
@@ -625,7 +625,7 @@ func (r *raft) updateEntriesReady(id uint64, pr *tracker.Progress) {
 			delete(r.entriesReady, id)
 		}
 	} else if pr.Next <= r.raftLog.lastIndex() {
-		r.entriesReady[id] = struct{}{}
+		r.entriesReady[id] = pr.Inflights
 	}
 }
 
