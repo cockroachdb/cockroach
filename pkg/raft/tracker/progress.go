@@ -337,6 +337,12 @@ func (pr *Progress) ShouldSendMsgApp(last, commit uint64) MsgAppType {
 	}
 }
 
+// StateReplicateReady returns true if there is outstanding replication work
+// ready to be sent to this peer.
+func (pr *Progress) StateReplicateReady(last uint64) bool {
+	return pr.State == StateReplicate && pr.Next <= last && !pr.Inflights.Full()
+}
+
 func (pr *Progress) String() string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "%s match=%d next=%d", pr.State, pr.Match, pr.Next)

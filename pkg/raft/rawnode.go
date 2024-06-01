@@ -481,6 +481,21 @@ func (rn *RawNode) HasReady() bool {
 	if r.raftLog.hasNextUnstableEnts() || r.raftLog.hasNextCommittedEnts(rn.applyUnstableEntries()) {
 		return true
 	}
+
+	if r.enableLazyAppends {
+		ready := false
+		// TODO(pav-kv): track the set of ready streams instead of scanning all
+		// peers on each Ready iteration.
+		r.trk.Visit(func(id uint64, pr *tracker.Progress) {
+			if id != r.id && pr.StateReplicateReady(r.raftLog.lastIndex()) {
+				ready = true
+			}
+		})
+		if ready {
+			return true
+		}
+	}
+
 	return false
 }
 

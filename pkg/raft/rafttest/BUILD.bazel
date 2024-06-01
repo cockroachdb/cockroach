@@ -38,6 +38,7 @@ go_library(
         "//pkg/raft/tracker",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//maps",
     ],
 )
 
