@@ -43,6 +43,11 @@ var sharedEventSyncPool = sync.Pool{
 	},
 }
 
+func newPooledSharedEvent() *sharedEvent {
+	ev := sharedEventSyncPool.Get().(*sharedEvent)
+	return ev
+}
+
 func getPooledSharedEvent(e sharedEvent) *sharedEvent {
 	ev := sharedEventSyncPool.Get().(*sharedEvent)
 	*ev = e
@@ -336,12 +341,9 @@ func (r *registration) outputLoop(ctx context.Context) error {
 
 		select {
 		case nextEvent := <-r.buf:
-			err := r.stream.SendBuffered(nextEvent.event, nextEvent.alloc)
+			r.stream.SendBuffered(nextEvent.event, nextEvent.alloc)
 			//nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
-			if err != nil {
-				return err
-			}
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-r.stream.Context().Done():
@@ -437,7 +439,7 @@ func (reg *registry) Len() int {
 // NewFilter returns a operation filter reflecting the registrations
 // in the registry.
 func (reg *registry) NewFilter() *Filter {
-	return newFilterFromRegistry(reg.tree)
+	return newFilterFromRegistryTree(reg.tree)
 }
 
 // Register adds the provided registration to the registry.

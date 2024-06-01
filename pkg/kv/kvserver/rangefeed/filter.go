@@ -28,7 +28,7 @@ type filterable interface {
 	needsPrev() bool
 }
 
-func newFilterFromRegistry(tree interval.Tree) *Filter {
+func newFilterFromRegistryTree(tree interval.Tree) *Filter {
 	f := &Filter{
 		needPrevVals: interval.NewRangeList(),
 		needVals:     interval.NewRangeList(),
