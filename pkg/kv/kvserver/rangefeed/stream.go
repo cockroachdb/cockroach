@@ -21,8 +21,9 @@ import (
 
 type BufferedStream interface {
 	Context() context.Context
-	SendBuffered(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation) error
+	SendBuffered(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
 	SendUnbuffered(event *kvpb.RangeFeedEvent) error
+	SendError(err *kvpb.Error)
 }
 
 type LockedRangefeedStreamAdapter struct {
@@ -44,9 +45,14 @@ func (s *LockedRangefeedStreamAdapter) SendUnbuffered(e *kvpb.RangeFeedEvent) er
 
 func (s *LockedRangefeedStreamAdapter) SendBuffered(
 	event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
-) error {
+) {
 	alloc.Release(context.Background())
-	return s.SendUnbuffered(event)
+	_ = s.SendUnbuffered(event)
+	return
+}
+
+func (s *LockedRangefeedStreamAdapter) SendError(_ *kvpb.Error) {
+	return
 }
 
 type MuxFeedStream struct {
@@ -81,11 +87,12 @@ func (s *MuxFeedStream) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	})
 }
 
-func (s *MuxFeedStream) SendBuffered(
-	event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
-) error {
+func (s *MuxFeedStream) SendBuffered(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation) {
 	s.muxer.publishEvent(s.streamID, s.rangeID, event, alloc)
-	return nil
+}
+
+func (s *MuxFeedStream) SendError(err *kvpb.Error) {
+	s.muxer.PublishErrorAndDisconnectId(s.streamID, s.rangeID, err)
 }
 
 var _ BufferedStream = (*MuxFeedStream)(nil)
