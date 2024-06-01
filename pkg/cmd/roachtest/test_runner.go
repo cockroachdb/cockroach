@@ -752,6 +752,8 @@ func (r *testRunner) runWorker(
 			c.Save(ctx, "cluster saved since --debug-always set", l)
 		}
 
+		wStatus.SetCluster(c)
+
 		// Prepare the test's logger. Always set this up with real files, using a
 		// temp dir if necessary. This simplifies testing.
 		artifactsRootDir := lopt.artifactsDir
@@ -874,7 +876,6 @@ func (r *testRunner) runWorker(
 
 				c.goCoverDir = t.GoCoverArtifactsDir()
 
-				wStatus.SetCluster(c)
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
 
@@ -1277,7 +1278,7 @@ func (r *testRunner) runTest(
 
 		// We still want to run the post-test assertions even if the test timed out as it
 		// might provide useful information about the health of the nodes. Any assertion failures
-		// will will be recorded against, and eventually fail, the test.
+		// will be recorded against, and eventually fail, the test.
 		if err := r.postTestAssertions(ctx, t, c, 10*time.Minute); err != nil {
 			l.Printf("error during post test assertions: %v; see test-post-assertions.log for details", err)
 		}
