@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,7 +34,6 @@ type nonBufferedRegistration struct {
 	keys             interval.Range
 	withFiltering    bool
 	stream           BufferedStream
-	done             *future.ErrorFuture
 	mu               struct {
 		sync.Locker
 		disconnected        bool
@@ -58,8 +56,6 @@ func newNonBufferedRegistration(
 	bufferSz int,
 	metrics *Metrics,
 	stream BufferedStream,
-	unregisterFn func(),
-	done *future.ErrorFuture,
 ) nonBufferedRegistration {
 	r := nonBufferedRegistration{
 		span:             span,
@@ -68,7 +64,6 @@ func newNonBufferedRegistration(
 		withDiff:         withDiff,
 		metrics:          metrics,
 		stream:           stream,
-		done:             done,
 	}
 	r.mu.Locker = &syncutil.Mutex{}
 	r.mu.catchUpBuf = make(chan *sharedEvent, bufferSz)
@@ -79,7 +74,7 @@ func newNonBufferedRegistration(
 var _ interval.Interface = (*nonBufferedRegistration)(nil)
 var _ filterable = (*nonBufferedRegistration)(nil)
 
-func (r *nonBufferedRegistration) disconnect(pErr *kvpb.Error) {
+func (r *nonBufferedRegistration) cleanup() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.disconnected {
@@ -95,8 +90,19 @@ func (r *nonBufferedRegistration) disconnect(pErr *kvpb.Error) {
 
 	if r.mu.catchUpScanCancelFn != nil {
 		r.mu.catchUpScanCancelFn()
+		r.mu.catchUpScanCancelFn = nil
 	}
 
+	// drain catch up buffer
+
+	// TODO(wenyihu6): find a better home for this draining process
+	r.drainCatchUpBufferRLocked()
+}
+
+func (r *nonBufferedRegistration) String() string {
+	return fmt.Sprintf("[%s @ %s+]", r.span, r.catchUpTimestamp)
+}
+func (r *nonBufferedRegistration) disconnect(pErr *kvpb.Error) {
 	//r.discardCatchUpBuffer(ctx) clean up in catch up buffer in the end im
 	//worried that writes happen concurrently as we send disconnect error to node
 	//level muxer
@@ -105,9 +111,9 @@ func (r *nonBufferedRegistration) disconnect(pErr *kvpb.Error) {
 
 	// signal node level stream to start rejecting messages from r
 	// TODO(wenyihu6): decide how we want to tear down
+	r.cleanup()
 	r.stream.SendError(pErr)
 	// need a way to drain catch up buffer
-	r.done.Set(pErr.GoError())
 }
 
 func (r *nonBufferedRegistration) detachCatchUpIter() *CatchUpIterator {
@@ -129,6 +135,7 @@ func (r *nonBufferedRegistration) drainAndPublishCatchUpBuffer(ctx context.Conte
 		case <-ctx.Done(): // watch catch up scan cancel context
 			return ctx.Err()
 		default:
+			// catch up buffer drained already possibly disconnected before this happens
 			return nil
 		}
 	}
@@ -137,14 +144,15 @@ func (r *nonBufferedRegistration) drainAndPublishCatchUpBuffer(ctx context.Conte
 // node level error needs a way to go to producer level and drain catch up
 // buffer as well and signal registration level.
 // drainCatchUpBuffer in the very end
-func (r *nonBufferedRegistration) drainCatchUpBuffer(ctx context.Context) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *nonBufferedRegistration) drainCatchUpBufferRLocked() {
+	if r.mu.catchUpBuf == nil {
+		return
+	}
 	func() {
 		for {
 			select {
 			case e := <-r.mu.catchUpBuf:
-				e.alloc.Release(ctx)
+				e.alloc.Release(context.Background())
 				putPooledSharedEvent(e)
 			default:
 				return
@@ -159,6 +167,8 @@ func (r *nonBufferedRegistration) drainCatchUpBuffer(ctx context.Context) {
 func (r *nonBufferedRegistration) publishCatchUpBuffer(ctx context.Context) error {
 	// TODO(wenyihu6): check how we can do it less pessimistic and without holding
 	// lock to avoid unnecessary blocking during publish
+	//
+	// possible that we are already disconnected and catch up buffer would just be nil here
 	if err := r.drainAndPublishCatchUpBuffer(ctx); err != nil {
 		return err
 	}
@@ -286,13 +296,15 @@ func (r *nonBufferedRegistration) catchUpScan(ctx context.Context) error {
 	start := timeutil.Now()
 	defer func() {
 		catchUpIter.Close()
+		// TODO(wenyihu6): check if we should include publish time in metrics
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
 	err := catchUpIter.CatchUpScan(ctx, r.stream.SendUnbuffered, r.withDiff, r.withFiltering)
 
-	if err != nil {
-		err = errors.Wrap(err, "catch-up scan failed")
+	// if context is cancelled
+	if err != nil || ctx.Err() != nil {
+		err = errors.Wrap(errors.CombineErrors(err, ctx.Err()), "catch-up scan failed")
 		log.Errorf(ctx, "%v", err)
 		return err
 	}
@@ -423,9 +435,6 @@ func (reg *nonBufferedRegistry) Unregister(ctx context.Context, r *nonBufferedRe
 	if err := reg.tree.Delete(r, false /* fast */); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-
-	// TODO(wenyihu6): find a better home for this draining process
-	r.drainCatchUpBuffer(ctx)
 }
 
 // DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.

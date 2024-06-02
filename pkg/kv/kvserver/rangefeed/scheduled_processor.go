@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -117,11 +116,14 @@ func (p *ScheduledProcessor) Start(
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue.
 	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+		rtsIter, err := rtsIterFunc()
+		if err != nil {
+			return err
+		}
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		// TODO(oleg): we need to cap number of tasks that we can fire up across
 		// all feeds as they could potentially generate O(n) tasks during start.
-		err := stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
+		err = stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
 			initScan.Cancel()
 			p.scheduler.StopProcessor()
@@ -307,26 +309,25 @@ func (p *ScheduledProcessor) Register(
 	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
-	stream BufferedStream,
+	stream StreamSink,
 	disconnectFn func(),
-	done *future.ErrorFuture,
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
+	streamSink := stream.StreamMuxer.Register(stream.StreamID, stream.RangeID)
 	r := newNonBufferedRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
-		p.Config.EventChanCap, p.Metrics, stream, disconnectFn, done,
-	)
+		p.Config.EventChanCap, p.Metrics, streamSink)
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
 		if p.stopping {
 			return nil
 		}
 		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
-			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
+			log.Fatalf(ctx, "registration %v not in Processor's key range %v", r, p.Span)
 		}
 
 		// Add the new registration to the registry.
@@ -345,23 +346,22 @@ func (p *ScheduledProcessor) Register(
 		// make sure disconnect invoke this might disconnect
 
 		// Run an output loop for the registry.
-		runOutputLoop := func(ctx context.Context) {
+		stream.StreamMuxer.AddRangefeedCleanUpCallback(stream.StreamID, func() {
+			r.cleanup()
+			if p.unregisterClient(&r) {
+				if disconnectFn != nil {
+					disconnectFn()
+				}
+			}
+		})
+		runCatchupScan := func(ctx context.Context) {
 			err := r.runCatchupScan(ctx)
 			if err != nil {
 				r.disconnect(kvpb.NewError(err))
-				if p.unregisterClient(&r) {
-					// unreg callback is set by replica to tear down processors that have
-					// zero registrations left and to update event filters.
-					// save this here as unregister?
-					//// TODO(wenyihu6): rationalize shutdown logic again especially how this connects with producer and node level muxer
-					//if r.unreg != nil {
-					//	r.unreg()
-					//}
-				}
 			}
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
-		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
+		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: catch up scan", runCatchupScan); err != nil {
 			// If we can't schedule internally, processor is already stopped which
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.

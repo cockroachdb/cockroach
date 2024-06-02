@@ -297,7 +297,6 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/envutil",
-        "//pkg/util/future",
         "//pkg/util/goschedstats",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",

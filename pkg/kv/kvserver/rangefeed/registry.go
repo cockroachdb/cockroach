@@ -120,7 +120,6 @@ func newRegistration(
 	metrics *Metrics,
 	stream BufferedStream,
 	unregisterFn func(),
-	done *future.ErrorFuture,
 ) registration {
 	r := registration{
 		span:             span,
@@ -129,7 +128,6 @@ func newRegistration(
 		withFiltering:    withFiltering,
 		metrics:          metrics,
 		stream:           stream,
-		done:             done,
 		unreg:            unregisterFn,
 		buf:              make(chan *sharedEvent, bufferSz),
 		blockWhenFull:    blockWhenFull,
@@ -290,7 +288,7 @@ func (r *registration) maybeStripEvent(
 // disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
-func (r *registration) disconnect(pErr *kvpb.Error) {
+func (r *registration) disconnect(_ *kvpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.mu.disconnected {
@@ -302,7 +300,6 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 			r.mu.outputLoopCancelFn()
 		}
 		r.mu.disconnected = true
-		r.done.Set(pErr.GoError())
 	}
 }
 
@@ -346,8 +343,8 @@ func (r *registration) outputLoop(ctx context.Context) error {
 			putPooledSharedEvent(nextEvent)
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-r.stream.Context().Done():
-			return r.stream.Context().Err()
+			//case <-r.stream.Context().Done():
+			//	return r.stream.Context().Err()
 		}
 	}
 }
