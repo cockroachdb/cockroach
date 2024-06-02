@@ -365,8 +365,10 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 	for _, node := range c.VMs {
 		if _, ok := promhelperclient.SupportedPromProjects[node.Project]; ok &&
 			node.Provider == gce.ProviderName {
-			_ = promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
-				c.Name, false, l)
+			if err := promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
+				c.Name, false, l); err != nil {
+				l.Errorf("Failed to delete the cluster config: %v", err)
+			}
 			break
 		}
 	}
