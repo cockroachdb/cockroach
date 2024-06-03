@@ -925,7 +925,6 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/seccomp/libseccomp-golang/com_github_seccomp_libseccomp_golang-v0.9.2-0.20220502022130-f33da4d89646.zip": "6bbc0328826c9240ee9c08a59010b49d79d0d1264599811b6ac19f0d97494beb",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sectioneight/md-to-godoc/com_github_sectioneight_md_to_godoc-v0.0.0-20161108233149-55e43be6c335.zip": "8b605818df307b414d0a680f147f0baeb37c9166df9e111ede5531cf50124203",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/securego/gosec/com_github_securego_gosec-v0.0.0-20200203094520-d13bb6d2420c.zip": "e0adea3cd40ba9d690b8054ff1341cf7d035084f50273a4f7bbac803fec3453a",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/segmentio/kafka-go/com_github_segmentio_kafka_go-v0.2.0.zip": "b2a88eb5b65fbb75dac0ba5e721cd2cb8e39275d1702a0f97e3c4807d78e8b48",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sergi/go-diff/com_github_sergi_go_diff-v1.0.0.zip": "287218ffcd136dbb28ce99a2f162048d8dfa6f97b524c17797964aacde2f8f52",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shirou/gopsutil/v3/com_github_shirou_gopsutil_v3-v3.21.12.zip": "ea6f8b430cee40870d8d454aaa5d4c22e84d217a2548a3f755b91a96b1c67a88",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shopspring/decimal/com_github_shopspring_decimal-v1.2.0.zip": "65c34c248e7f736cadf03a7caa0c0870d15499eb593f933fe106c96c2b7699a7",

@@ -7942,11 +7942,9 @@ def go_deps():
         name = "com_github_segmentio_kafka_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/segmentio/kafka-go",
-        sha256 = "b2a88eb5b65fbb75dac0ba5e721cd2cb8e39275d1702a0f97e3c4807d78e8b48",
-        strip_prefix = "github.com/segmentio/kafka-go@v0.2.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/segmentio/kafka-go/com_github_segmentio_kafka_go-v0.2.0.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:IqziR4pA3vrZq7YdRxaT3w1/5fvIH5qpCwstUanQQB0=",
+        version = "v0.4.47",
     )
     go_repository(
         name = "com_github_sergi_go_diff",
