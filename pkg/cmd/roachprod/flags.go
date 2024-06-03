@@ -203,10 +203,12 @@ func initFlags() {
 
 	pgurlCmd.Flags().BoolVar(&external,
 		"external", false, "return pgurls for external connections")
-	pgurlCmd.Flags().StringVar(&pgurlCertsDir,
-		"certs-dir", install.CockroachNodeCertsDir, "cert dir to use for secure connections")
+	for _, cmd := range []*cobra.Command{pgurlCmd, loadBalancerPGUrl} {
+		cmd.Flags().StringVar(&pgurlCertsDir,
+			"certs-dir", install.CockroachNodeCertsDir, "cert dir to use for secure connections")
+	}
 
-	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd} {
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, loadBalancerPGUrl} {
 		cmd.Flags().StringVar(&authMode,
 			"auth-mode", defaultAuthMode, fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(pgAuthModes)))
 	}
@@ -435,7 +437,7 @@ func initFlags() {
 		cmd.Flags().StringVarP(&config.Binary,
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
-	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, loadBalanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd, updateTargetsCmd} {
+	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, createLoadBalancerCmd, sqlCmd, pgurlCmd, loadBalancerPGUrl, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd, updateTargetsCmd} {
 		// TODO(renato): remove --secure once the default of secure
 		// clusters has existed in roachprod long enough.
 		cmd.Flags().BoolVar(&secure,
@@ -443,7 +445,7 @@ func initFlags() {
 		cmd.Flags().BoolVar(&insecure,
 			"insecure", insecure, "use an insecure cluster")
 	}
-	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd, loadBalanceCmd, jaegerStartCmd} {
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd, createLoadBalancerCmd, loadBalancerPGUrl, loadBalancerIP, jaegerStartCmd} {
 		cmd.Flags().StringVar(&virtualClusterName,
 			"cluster", "", "specific virtual cluster to connect to")
 		cmd.Flags().IntVar(&sqlInstance,
