@@ -17,6 +17,7 @@
 package sql
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -592,9 +593,11 @@ func (ts *txnState) finishTxn(ev txnEventType, advance advanceCode) error {
 func cleanupAndFinishOnError(args fsm.Args) error {
 	ts := args.Extended.(*txnState)
 	func() {
+		ctx, cancel := context.WithTimeout(ts.Ctx, 100*time.Millisecond)
+		defer cancel()
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
-		_ = ts.mu.txn.Rollback(ts.Ctx)
+		_ = ts.mu.txn.Rollback(ctx)
 	}()
 	finishedTxnID, _ := ts.finishSQLTxn()
 	ts.setAdvanceInfo(
