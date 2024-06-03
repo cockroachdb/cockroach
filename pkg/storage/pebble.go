@@ -873,8 +873,15 @@ type engineConfig struct {
 	// env holds the initialized virtual filesystem that the Engine should use.
 	env *fs.Env
 	// maxSize is used for calculating free space and making rebalancing
-	// decisions. Zero indicates that there is no maximum size.
+	// decisions, assuming maxPercent is not present. Zero indicates that there is no
+	// absolute maximum size; there could still be a maxPercent. If both maxSize
+	// and maxPercent are set, maxPercent is used.
 	maxSize int64
+	// maxPercent is used for calculating free space and making rebalancing
+	// decisions; it is the maximum percent of disk capacity that will be used,
+	// expressed as a float between 0 and 1. Zero indicates that there is no maximum
+	// size (assuming maxSize is also zero).
+	maxPercent float64
 	// If true, creating the instance fails if the target directory does not hold
 	// an initialized instance.
 	//
@@ -1996,7 +2003,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// If no size limitation have been placed on the store size or if the
 	// limitation is greater than what's available, just return the actual
 	// totals.
-	if p.cfg.maxSize == 0 || p.cfg.maxSize >= fsuTotal || p.cfg.env.Dir == "" {
+	if ((p.cfg.maxSize == 0 || p.cfg.maxSize >= fsuTotal) && p.cfg.maxPercent == 0) || p.cfg.env.Dir == "" {
 		return roachpb.StoreCapacity{
 			Capacity:  fsuTotal,
 			Available: fsuAvail,
@@ -2004,7 +2011,12 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 		}, nil
 	}
 
-	available := p.cfg.maxSize - totalUsedBytes
+	maxSize := p.cfg.maxSize
+	if p.cfg.maxPercent != 0 {
+		maxSize = int64(float64(fsuTotal) * p.cfg.maxPercent)
+	}
+
+	available := maxSize - totalUsedBytes
 	if available > fsuAvail {
 		available = fsuAvail
 	}
@@ -2013,7 +2025,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	}
 
 	return roachpb.StoreCapacity{
-		Capacity:  p.cfg.maxSize,
+		Capacity:  maxSize,
 		Available: available,
 		Used:      totalUsedBytes,
 	}, nil

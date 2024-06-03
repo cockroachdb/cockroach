@@ -830,9 +830,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return Engines{}, errors.Wrap(err, "creating disk monitor")
 			}
 
-			detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
-
-			addCfgOpt(storage.MaxSize(sizeInBytes))
+			if spec.Size.Percent > 0 {
+				detail(redact.Sprintf("store %d: max size %s (calculated from %.2f percent of total), max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), spec.Size.Percent, openFileLimitPerStore))
+				addCfgOpt(storage.MaxPercent(float64(spec.Size.Percent) / 100))
+			} else {
+				detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
+				addCfgOpt(storage.MaxSize(sizeInBytes))
+			}
 			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec, du)))
 			addCfgOpt(storage.Caches(pebbleCache, tableCache))
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.

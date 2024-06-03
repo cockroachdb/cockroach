@@ -93,9 +93,23 @@ func Attributes(attrs roachpb.Attributes) ConfigOption {
 
 // MaxSize sets the intended maximum store size. MaxSize is used for
 // calculating free space and making rebalancing decisions.
+//
+// NB: MaxPercent takes precedence over MaxSize.
 func MaxSize(size int64) ConfigOption {
 	return func(cfg *engineConfig) error {
 		cfg.maxSize = size
+		return nil
+	}
+}
+
+// MaxPercent sets the maximum percent of disk capacity that will be used.
+// MaxPercent is used for calculating free space and making rebalancing
+// decisions. Not supported for in-memory file systems.
+//
+// NB: MaxPercent takes precedence over MaxSize.
+func MaxPercent(pct float64) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.maxPercent = pct
 		return nil
 	}
 }
