@@ -3465,6 +3465,54 @@ project
  └── projections
       └── xy.x:8 [as=x:12, outer=(8)]
 
+# Regression test for #122853 - remove the rowNum column from the transformed
+# expression.
+norm expect=TryDecorrelateLimit disable=PushLimitIntoProject
+SELECT *, foo, xy.crdb_internal_mvcc_timestamp, xy.tableoid FROM xy
+INNER JOIN LATERAL (SELECT *, v+y AS foo FROM uv LIMIT 3)
+ON x=u
+----
+project
+ ├── columns: x:1!null y:2 u:5!null v:6 foo:9 foo:9 crdb_internal_mvcc_timestamp:3 tableoid:4
+ ├── immutable
+ ├── key: (5)
+ ├── fd: (1)-->(2-4), (5)-->(6), (2,6)-->(9), (1)==(5), (5)==(1)
+ └── select
+      ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4 u:5!null v:6 foo:9 row_num:10!null
+      ├── immutable
+      ├── key: (5)
+      ├── fd: (1)-->(2-4), (5)-->(6,10), (2,6)-->(9), (1)==(5), (5)==(1)
+      ├── window partition=(1)
+      │    ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4 u:5!null v:6 foo:9 row_num:10
+      │    ├── immutable
+      │    ├── key: (1,5)
+      │    ├── fd: (1)-->(2-4), (5)-->(6), (2,6)-->(9)
+      │    ├── project
+      │    │    ├── columns: foo:9 x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4 u:5!null v:6
+      │    │    ├── immutable
+      │    │    ├── key: (1,5)
+      │    │    ├── fd: (1)-->(2-4), (5)-->(6), (2,6)-->(9)
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4 u:5!null v:6
+      │    │    │    ├── key: (1,5)
+      │    │    │    ├── fd: (1)-->(2-4), (5)-->(6)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:1!null y:2 xy.crdb_internal_mvcc_timestamp:3 xy.tableoid:4
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    └── fd: (1)-->(2-4)
+      │    │    │    ├── scan uv
+      │    │    │    │    ├── columns: u:5!null v:6
+      │    │    │    │    ├── key: (5)
+      │    │    │    │    └── fd: (5)-->(6)
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── v:6 + y:2 [as=foo:9, outer=(2,6), immutable]
+      │    └── windows
+      │         └── row-number [as=row_num:10]
+      └── filters
+           ├── x:1 = u:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           └── row_num:10 <= 3 [outer=(10), constraints=(/10: (/NULL - /3]; tight)]
+
 # --------------------------------------------------
 # TryDecorrelateMax1Row
 # --------------------------------------------------
