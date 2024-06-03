@@ -2124,7 +2124,7 @@ func shouldCampaignOnWake(
 	// ranges). We do want to check the liveness entry for other expiration
 	// leases, since in the case of a dead leader it allows us to campaign
 	// immediately without waiting out the election timeout.
-	if requiresExpirationLease {
+	if requiresExpirationLease || true {
 		return false
 	}
 	// Determine if we think the leader is alive, if we don't have the leader

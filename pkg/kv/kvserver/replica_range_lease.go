@@ -376,6 +376,9 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			reqLease.Expiration = &hlc.Timestamp{}
 			*reqLease.Expiration = status.Now.ToTimestamp().Add(int64(p.repl.store.cfg.RangeLeaseDuration), 0)
 		} else {
+			if raftStatus.Lead == raft.None {
+				p.repl.maybeUnquiesceLocked(true /* wakeLeader */, true /* mayCampaign */)
+			}
 			llHandle.resolve(kvpb.NewError(&kvpb.LeaseRejectedError{
 				Existing:  status.Lease,
 				Requested: reqLease,
