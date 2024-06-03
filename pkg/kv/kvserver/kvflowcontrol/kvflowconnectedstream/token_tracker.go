@@ -21,7 +21,9 @@ import (
 
 // TODO: track only NumRaftPriorities.
 // TODO: remove the Term from the tracking.
-// TODO: remove sendTokenWC.
+//
+// TODO: replace sendTokenWC with originalPri. And keep the trackedM with the
+// inherited priority. The original will be used for returning eval tokens.
 
 // Tracker tracks flow token deductions for a replicaSendStream. Tokens are
 // deducted for an in-flight log entry (identified by raft log position), with
