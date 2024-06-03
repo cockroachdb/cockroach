@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	circuit2 "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -229,6 +230,23 @@ func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionCl
 	// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
 	// not be done by the time `Health` is called since GRPCDialNode is async.
 	return n.rpcContext.GRPCDialNode(addr.String(), nodeID, class).Health()
+}
+
+// ConnHealthTryDialInstance returns nil if we have an open connection of the
+// rpc.DefaultClass to the given sqlinstance that succeeded on its most recent
+// heartbeat. If no healthy connection is found, it will attempt to dial the
+// instance.
+func (n *Dialer) ConnHealthTryDialInstance(instanceInfo sqlinstance.InstanceInfo) error {
+	if n == nil {
+		return errors.New("no node dialer configured")
+	}
+	addr := instanceInfo.InstanceRPCAddr
+	id := instanceInfo.InstanceID
+	if err := n.rpcContext.ConnHealth(
+		addr, roachpb.NodeID(id), rpc.DefaultClass); err == nil {
+		return nil
+	}
+	return n.rpcContext.GRPCDialPod(addr, id, rpc.DefaultClass).Health()
 }
 
 // GetCircuitBreaker retrieves the circuit breaker for connections to the
