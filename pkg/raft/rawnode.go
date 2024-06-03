@@ -126,13 +126,12 @@ func (rn *RawNode) Ready() Ready {
 }
 
 // EntriesReady returns a set of node IDs in StateReplicate for which there is
-// outstanding replication work. For each of these IDs, it provides a handle to
-// the in-flight tracker which is used for rate limiting.
+// outstanding replication work ready.
 //
 // The typical usage is:
 //
-//	for id, tracker := range rn.EntriesReady() {
-//		for !tracker.Full() && rn.SendAppend(id) { }
+//	for id := range rn.EntriesReady() {
+//		for rn.SendAppend(id) { }
 //	}
 //	rd := rn.Ready()
 //	... process the Ready ...
@@ -141,7 +140,7 @@ func (rn *RawNode) Ready() Ready {
 //
 // TODO(pav-kv): tracking replication readiness and Inflights will be superseded
 // by the "send queue" and "token tracker" in Admission Control.
-func (rn *RawNode) EntriesReady() map[uint64]*tracker.Inflights {
+func (rn *RawNode) EntriesReady() map[uint64]struct{} {
 	return rn.raft.entriesReady
 }
 
@@ -501,12 +500,7 @@ func (rn *RawNode) HasReady() bool {
 	if r.raftLog.hasNextUnstableEnts() || r.raftLog.hasNextCommittedEnts(rn.applyUnstableEntries()) {
 		return true
 	}
-	for _, tr := range r.entriesReady {
-		if !tr.Full() {
-			return true
-		}
-	}
-	return false
+	return len(r.entriesReady) != 0
 }
 
 // Advance notifies the RawNode that the application has applied and saved progress in the

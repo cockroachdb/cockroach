@@ -330,11 +330,12 @@ type raft struct {
 
 	trk tracker.ProgressTracker
 	// entriesReady contains all followers in StateReplicate to which there are
-	// any unsent entries. It is used only in StateLeader.
+	// any unsent entries, ready to be sent. It is used only in StateLeader.
 	//
-	// Invariant: entriesReady[id] == true iff
-	//	- trk.Progress[id].State == StateReplicate, and
-	//	- trk.Progress[id].Next <= raftLog.lastIndex()
+	// Invariant: entriesReady[id] == true iff for trk.Progress[id]:
+	//	- State == StateReplicate &&
+	//	- Next <= raftLog.lastIndex() &&
+	//	- !Inflights.Full()
 	//
 	// The exhaustive list of places where this needs to be updated:
 	//	- in reset() and becomeLeader(), when we switch to/from StateLeader
@@ -349,7 +350,7 @@ type raft struct {
 	// trivial because Progress does not know about raftLog.
 	// TODO(pav-kv): move this out of raft, and integrate with Admission Control.
 	// This is one of the signals input into AC decisions.
-	entriesReady map[uint64]*tracker.Inflights
+	entriesReady map[uint64]struct{}
 
 	state StateType
 
@@ -459,7 +460,7 @@ func newRaft(c *Config) *raft {
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
 		trk:                         tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
-		entriesReady:                map[uint64]*tracker.Inflights{},
+		entriesReady:                map[uint64]struct{}{},
 		enableLazyAppends:           c.EnableLazyAppends,
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
@@ -620,12 +621,13 @@ func (r *raft) updateEntriesReady(id uint64, pr *tracker.Progress) {
 	if id == r.id || pr.State != tracker.StateReplicate {
 		return
 	}
+	isReady := pr.Next <= r.raftLog.lastIndex() && !pr.Inflights.Full()
 	if _, wasReady := r.entriesReady[id]; wasReady {
-		if pr.Next > r.raftLog.lastIndex() {
+		if !isReady {
 			delete(r.entriesReady, id)
 		}
-	} else if pr.Next <= r.raftLog.lastIndex() {
-		r.entriesReady[id] = pr.Inflights
+	} else if isReady {
+		r.entriesReady[id] = struct{}{}
 	}
 }
 

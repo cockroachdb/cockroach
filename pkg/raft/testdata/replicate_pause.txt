@@ -133,7 +133,6 @@ stabilize 1
   Messages:
   1->2 MsgHeartbeat Term:1 Log:0/0 Commit:17
   1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
-  1->3 MsgApp Term:1 Log:1/14 Commit:17
 
 stabilize 2 3
 ----
@@ -141,8 +140,6 @@ stabilize 2 3
   1->2 MsgHeartbeat Term:1 Log:0/0 Commit:17
 > 3 receiving messages
   1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
-  1->3 MsgApp Term:1 Log:1/14 Commit:17
-  DEBUG 3 [logterm: 0, index: 14] rejected MsgApp [logterm: 1, index: 14] from 1
 > 2 handling Ready
   Ready MustSync=false:
   Messages:
@@ -151,7 +148,6 @@ stabilize 2 3
   Ready MustSync=false:
   Messages:
   3->1 MsgHeartbeatResp Term:1 Log:0/0
-  3->1 MsgAppResp Term:1 Log:1/14 Rejected (Hint: 11)
 
 # After handling heartbeat responses, node 1 sends an empty MsgApp to a
 # throttled node 3 because it hasn't yet replied to a single MsgApp, and the
@@ -161,21 +157,10 @@ stabilize 1
 > 1 receiving messages
   2->1 MsgHeartbeatResp Term:1 Log:0/0
   3->1 MsgHeartbeatResp Term:1 Log:0/0
-  3->1 MsgAppResp Term:1 Log:1/14 Rejected (Hint: 11)
-  DEBUG 1 received MsgAppResp(rejected, hint: (index 11, term 1)) from 3 for index 14
-  DEBUG 1 decreased progress of 3 to [StateReplicate match=11 next=12 paused inflight=1[full]]
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
   1->3 MsgApp Term:1 Log:1/14 Commit:17
-  1->3 MsgApp Term:1 Log:1/11 Commit:17 Entries:[
-    1/12 EntryNormal "prop_1_12"
-    1/13 EntryNormal "prop_1_13"
-    1/14 EntryNormal "prop_1_14"
-    1/15 EntryNormal "prop_1_15"
-    1/16 EntryNormal "prop_1_16"
-    1/17 EntryNormal "prop_1_17"
-  ]
 
 # Node 3 finally receives a MsgApp, but there was a gap, so it rejects it.
 stabilize 3
@@ -183,34 +168,10 @@ stabilize 3
 > 3 receiving messages
   1->3 MsgApp Term:1 Log:1/14 Commit:17
   DEBUG 3 [logterm: 0, index: 14] rejected MsgApp [logterm: 1, index: 14] from 1
-  1->3 MsgApp Term:1 Log:1/11 Commit:17 Entries:[
-    1/12 EntryNormal "prop_1_12"
-    1/13 EntryNormal "prop_1_13"
-    1/14 EntryNormal "prop_1_14"
-    1/15 EntryNormal "prop_1_15"
-    1/16 EntryNormal "prop_1_16"
-    1/17 EntryNormal "prop_1_17"
-  ]
 > 3 handling Ready
-  Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:17
-  Entries:
-  1/12 EntryNormal "prop_1_12"
-  1/13 EntryNormal "prop_1_13"
-  1/14 EntryNormal "prop_1_14"
-  1/15 EntryNormal "prop_1_15"
-  1/16 EntryNormal "prop_1_16"
-  1/17 EntryNormal "prop_1_17"
-  CommittedEntries:
-  1/12 EntryNormal "prop_1_12"
-  1/13 EntryNormal "prop_1_13"
-  1/14 EntryNormal "prop_1_14"
-  1/15 EntryNormal "prop_1_15"
-  1/16 EntryNormal "prop_1_16"
-  1/17 EntryNormal "prop_1_17"
+  Ready MustSync=false:
   Messages:
   3->1 MsgAppResp Term:1 Log:1/14 Rejected (Hint: 11)
-  3->1 MsgAppResp Term:1 Log:0/17
 
 log-level none
 ----
