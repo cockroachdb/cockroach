@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -194,6 +195,28 @@ func (ds *DistSender) RangeFeed(
 			StartAfter: startAfter,
 		})
 	}
+	return ds.RangeFeedSpans(ctx, timedSpans, eventCh, opts...)
+}
+
+// RangeFeedFromFrontier is similar to RangeFeed but can initialize each
+// rangefeed at the timestamp passed by the span frontier.
+func (ds *DistSender) RangeFeedFromFrontier(
+	ctx context.Context,
+	frontier span.Frontier,
+	eventCh chan<- RangeFeedMessage,
+	opts ...RangeFeedOption,
+) error {
+	timedSpans := make([]SpanTimePair, 0, frontier.Len())
+	frontier.Entries(
+		func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+			timedSpans = append(timedSpans, SpanTimePair{
+				// Clone the span as the rangefeed progress tracker will manipulate the
+				// original frontier.
+				Span:       sp.Clone(),
+				StartAfter: ts,
+			})
+			return false
+		})
 	return ds.RangeFeedSpans(ctx, timedSpans, eventCh, opts...)
 }
 

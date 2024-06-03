@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -38,6 +39,12 @@ type mockClient struct {
 		ctx context.Context,
 		spans []roachpb.Span,
 		startFrom hlc.Timestamp,
+		eventC chan<- kvcoord.RangeFeedMessage,
+	) error
+
+	rangeFeedFromFrontier func(
+		ctx context.Context,
+		frontier span.Frontier,
 		eventC chan<- kvcoord.RangeFeedMessage,
 	) error
 
@@ -59,6 +66,15 @@ func (m *mockClient) RangeFeed(
 	opts ...kvcoord.RangeFeedOption,
 ) error {
 	return m.rangefeed(ctx, spans, startFrom, eventC)
+}
+
+func (m *mockClient) RangeFeedFromFrontier(
+	ctx context.Context,
+	frontier span.Frontier,
+	eventC chan<- kvcoord.RangeFeedMessage,
+	opts ...kvcoord.RangeFeedOption,
+) error {
+	return m.rangeFeedFromFrontier(ctx, frontier, eventC)
 }
 
 func (m *mockClient) Scan(
@@ -414,6 +430,118 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		require.True(t, done)
 		require.Equal(t, 5, runs)
+	})
+	// This subtest restarts a rangefeed several times from a frontier and asserts
+	// that each emitted checkpoint pushes the initialised frontier forward.
+	t.Run("resume rangefeed from frontier", func(t *testing.T) {
+		stopper := stop.NewStopper()
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+
+		rand, _ := randutil.NewTestRand()
+
+		s := func(s, e string) roachpb.Span {
+			return roachpb.Span{Key: roachpb.Key(s), EndKey: roachpb.Key(e)}
+		}
+
+		spans := []roachpb.Span{
+			s("a", "c"), s("c", "f"), s("f", "g"), s("g", "z"),
+		}
+		fullSpan := roachpb.Span{Key: spans[0].Key, EndKey: spans[len(spans)-1].EndKey}
+
+		getRandomSpan := func() roachpb.Span {
+			return spans[rand.Intn(len(spans))]
+		}
+
+		getSpanTimestamp := func(frontier span.Frontier, given roachpb.Span) hlc.Timestamp {
+			maxTS := hlc.MinTimestamp
+			frontier.SpanEntries(given, func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+				if maxTS.Less(ts) {
+					maxTS = ts
+				}
+				return span.ContinueMatch
+			})
+			return maxTS
+		}
+
+		frontier, err := span.MakeFrontier(spans...)
+		require.NoError(t, err)
+
+		// NB: in this mocked implementation of rangeedFromFrontier, we read from
+		// the frontier while processEvents updates it. To avoid a race, we use a
+		// concurrent frontier.
+		externalFrontier := span.MakeConcurrentFrontier(frontier)
+		defer externalFrontier.Release()
+
+		done := make(chan struct{})
+		mc := mockClient{
+			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
+				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), config rangefeed.ScanConfig,
+			) error {
+				t.Error("this should not be called")
+				return nil
+			},
+			rangeFeedFromFrontier: func(
+				ctx context.Context, internalFrontier span.Frontier, eventC chan<- kvcoord.RangeFeedMessage,
+			) error {
+				for i := 0; i < 5; i++ {
+					sp := getRandomSpan()
+					ts := getSpanTimestamp(internalFrontier, sp)
+
+					for j := 0; j < i+1; j++ {
+						// Ensure we always forward a timestamp for a given span.
+						ts = ts.Next()
+					}
+					eventC <- kvcoord.RangeFeedMessage{
+						RangeFeedEvent: &kvpb.RangeFeedEvent{
+							Checkpoint: &kvpb.RangeFeedCheckpoint{
+								Span:       sp,
+								ResolvedTS: ts,
+							},
+						}}
+				}
+				done <- struct{}{}
+				<-ctx.Done()
+				return ctx.Err()
+			},
+		}
+		f := rangefeed.NewFactoryWithDB(stopper, &mc, nil /* knobs */)
+		onValue := func(ctx context.Context, value *kvpb.RangeFeedValue) {}
+		for i := 0; i < 5; i++ {
+			var observedUpdates int
+			// Make a copy of the externalFrontier, which the rangefeed will update in place.
+			initFrontier, err := span.MakeFrontier(fullSpan)
+			require.NoError(t, err)
+
+			externalFrontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+				_, err := initFrontier.Forward(sp, ts)
+				require.NoError(t, err)
+				return span.ContinueMatch
+			})
+			require.NoError(t, err)
+
+			onCheckpoint := func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
+				// Ensure the checkpoint timestamp is always greater than the initial timestamp.
+				initFrontier.SpanEntries(checkpoint.Span, func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+					require.True(t, ts.Less(checkpoint.ResolvedTS), "checkpoint %s", checkpoint)
+					return span.ContinueMatch
+				})
+				observedUpdates++
+			}
+
+			r := f.New("foo", hlc.Timestamp{}, onValue, rangefeed.WithOnCheckpoint(onCheckpoint))
+
+			err = r.StartFromFrontier(ctx, externalFrontier)
+			require.NoError(t, err)
+			<-done
+			r.Close()
+
+			// Sanity check that udpates were observed.
+			require.Greater(t, observedUpdates, 0)
+
+			// Assert the external frontier advanced.
+			require.NotEqual(t, externalFrontier.String(), initFrontier.String())
+		}
 	})
 }
 
