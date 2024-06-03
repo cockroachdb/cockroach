@@ -873,8 +873,8 @@ type engineConfig struct {
 	// env holds the initialized virtual filesystem that the Engine should use.
 	env *fs.Env
 	// maxSize is used for calculating free space and making rebalancing
-	// decisions. Zero indicates that there is no maximum size.
-	maxSize int64
+	// decisions. The zero value indicates that there is no absolute maximum size.
+	maxSize storeSize
 	// If true, creating the instance fails if the target directory does not hold
 	// an initialized instance.
 	//
@@ -1919,8 +1919,8 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 		// part of the actual file system here can throw off allocator
 		// rebalancing in a hard-to-trace manner. See #7050.
 		return roachpb.StoreCapacity{
-			Capacity:  p.cfg.maxSize,
-			Available: p.cfg.maxSize,
+			Capacity:  p.cfg.maxSize.bytes,
+			Available: p.cfg.maxSize.bytes,
 		}, nil
 	} else if err != nil {
 		return roachpb.StoreCapacity{}, err
@@ -1996,7 +1996,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// If no size limitation have been placed on the store size or if the
 	// limitation is greater than what's available, just return the actual
 	// totals.
-	if p.cfg.maxSize == 0 || p.cfg.maxSize >= fsuTotal || p.cfg.env.Dir == "" {
+	if ((p.cfg.maxSize.bytes == 0 || p.cfg.maxSize.bytes >= fsuTotal) && p.cfg.maxSize.percent == 0) || p.cfg.env.Dir == "" {
 		return roachpb.StoreCapacity{
 			Capacity:  fsuTotal,
 			Available: fsuAvail,
@@ -2004,7 +2004,12 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 		}, nil
 	}
 
-	available := p.cfg.maxSize - totalUsedBytes
+	maxSize := p.cfg.maxSize.bytes
+	if p.cfg.maxSize.percent != 0 {
+		maxSize = int64(float64(fsuTotal) * p.cfg.maxSize.percent)
+	}
+
+	available := maxSize - totalUsedBytes
 	if available > fsuAvail {
 		available = fsuAvail
 	}
@@ -2013,7 +2018,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	}
 
 	return roachpb.StoreCapacity{
-		Capacity:  p.cfg.maxSize,
+		Capacity:  maxSize,
 		Available: available,
 		Used:      totalUsedBytes,
 	}, nil

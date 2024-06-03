@@ -91,9 +91,34 @@ func Attributes(attrs roachpb.Attributes) ConfigOption {
 	}
 }
 
-// MaxSize sets the intended maximum store size. MaxSize is used for
-// calculating free space and making rebalancing decisions.
-func MaxSize(size int64) ConfigOption {
+// storeSize configures the maximum allowable size for a store.
+// Can be specified either as a percentage of total capacity or
+// an absolute byte size; if both are specified, the percentage takes
+// precedence.
+type storeSize struct {
+	bytes   int64
+	percent float64
+}
+
+// MaxSizeBytes ets the intended maximum store size as an absolute byte
+// value. MaxSizeBytes is used for calculating free space and making rebalancing
+// decisions.
+func MaxSizeBytes(size int64) ConfigOption {
+	return maxSize(storeSize{bytes: size})
+}
+
+// MaxSizePercent ets the intended maximum store size as the specified percentage
+// of total capacity. MaxSizePercent is used for calculating free space and making
+// rebalancing decisions.
+func MaxSizePercent(percent float64) ConfigOption {
+	return maxSize(storeSize{percent: percent})
+}
+
+// maxSize sets the intended maximum store size. MaxSize is used for
+// calculating free space and making rebalancing decisions. Either an
+// absolute size or a percentage of total capacity can be specified;
+// if both are specified, the percentage is used.
+func maxSize(size storeSize) ConfigOption {
 	return func(cfg *engineConfig) error {
 		cfg.maxSize = size
 		return nil

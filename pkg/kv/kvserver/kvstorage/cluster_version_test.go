@@ -114,7 +114,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 		st := cluster.MakeTestingClusterSettingsWithVersions(binV, minV, false /* initializeVersion */)
 		eng, err := storage.Open(
 			ctx, storage.InMemory(), st,
-			storage.ForTesting, storage.MaxSize(1<<20),
+			storage.ForTesting, storage.MaxSizeBytes(1<<20),
 		)
 		if err != nil {
 			t.Fatal(err)
