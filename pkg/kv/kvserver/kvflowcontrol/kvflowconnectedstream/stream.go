@@ -229,7 +229,10 @@ We can consider doing a similar piggy-backing:
   RaftTransport.kvflowControl plumbing).
 - Every RaftMessageRequest for the node will piggy-back these.
 
-Priority override:
+Priority override/inheritance:
+
+See https://docs.google.com/document/d/1Qf6uteFRlbScLdWIrTfqgbrKRHfUsoMGatRLWYQgAi8/edit#bookmark=id.69inkdboirw0
+for the high-level design.
 
 Since the admitted[i] value for every priority advances up to stableIndex
 based on the absence of entries with that priority waiting for admission
@@ -1229,6 +1232,22 @@ type replicaSendStream struct {
 		nextRaftIndex uint64
 
 		// Approximate stats for send-queue. For indices < nextRaftIndexInitial.
+		//
+		// TODO: don't need approx priority of < nextRaftIndexInitial, since
+		// not consuming eval tokens for those. Priority inheritance is a
+		// fairness device for eval tokens. approxMeanSizeBytes is only useful
+		// to figure out how much to grab in deductedForScheduler.tokens.
+		//
+		// TODO: two cases for deductedForScheduler.pri, which should be changed to
+		// workClass:
+		// - grabbed regular tokens: must have regular work waiting. Use the
+		//   highest pri in priorityCount for the decision for the override.
+		//
+		// - grabbed elastic tokens: may have regular work that will be sent.
+		//   Unilaterally use regular tokens for those. The message is sent
+		//   with no priority override. Since elastic tokens were available
+		//   recently it is highly probable that regular tokens are also
+		//   available.
 		approxMaxPriority   admissionpb.WorkPriority
 		approxMeanSizeBytes kvflowcontrol.Tokens
 
