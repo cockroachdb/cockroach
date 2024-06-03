@@ -589,6 +589,10 @@ const (
 	NumRaftPriorities
 )
 
+// TODO: implement the correct priority mapping.
+func (rp RaftPriority) ToWorkPriority() admissionpb.WorkPriority
+func WorkPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority
+
 // MessageSender abstracts Replica.sendRaftMessage. The context used is always
 // Replica.raftCtx, so we do not need to pass it.
 //
@@ -1351,8 +1355,9 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndSent(state entryFlowControl
 	if !state.usesFlowControl {
 		return
 	}
-	rss.tracker.Track(context.TODO(), state.priority, admissionpb.WorkClassFromPri(state.priority),
-		state.tokens, state.pos)
+	// TODO: Use the correct mapped state.priority (admissionpb.WorkPriority) to RaftPriority.
+	rss.tracker.Track(context.TODO(), state.pos.Index, RaftPriority(state.priority), RaftPriority(state.priority),
+		state.tokens)
 	rss.parent.evalTokenCounter.Deduct(
 		context.TODO(), admissionpb.WorkClassFromPri(state.priority), state.tokens)
 }
@@ -1449,9 +1454,12 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 				rss.parent.sendTokenCounter.Deduct(context.TODO(), wc, -remainingTokens)
 				remainingTokens = 0
 			}
+
 		}
-		rss.tracker.Track(context.TODO(), entryFCState.priority, wc, entryFCState.tokens,
-			kvflowcontrolpb.RaftLogPosition{Term: entry.Term, Index: entry.Index})
+		// TODO: Use the correct mapped entryFCState.priority
+		// (admissionpb.WorkPriority) to RaftPriority and WorkClass.
+		rss.tracker.Track(context.TODO(),
+			entry.Index, RaftPriority(entryFCState.priority), RaftPriority(wc), entryFCState.tokens)
 	}
 	rss.parent.parent.opts.MessageSender.SendRaftMessage(context.TODO(), priAlreadyDeducted, msg)
 	rss.sendQueue.deductedForScheduler.tokens = remainingTokens
@@ -1574,9 +1582,9 @@ func (rss *replicaSendStream) changeToStateSnapshot() {
 	// These may not have been received by the replica and will not get resent
 	// by Raft, so we have no guarantee those tokens will be returned. So return
 	// all tokens in the tracker.
-	rss.tracker.UntrackAll(context.TODO(), func(
-		pri admissionpb.WorkPriority, sendTokenWC admissionpb.WorkClass, tokens kvflowcontrol.Tokens) {
-		rss.parent.sendTokenCounter.Return(context.TODO(), sendTokenWC, tokens)
+	rss.tracker.UntrackAll(func(
+		index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens) {
+		rss.parent.sendTokenCounter.Return(context.TODO(), admissionpb.WorkClassFromPri(originalPri.ToWorkPriority()), tokens)
 	})
 	// For the same reason, return all eval tokens deducted.
 	for wc := range rss.eval.tokensDeducted {
@@ -1685,13 +1693,14 @@ func (rss *replicaSendStream) flowTokensReturn(
 	pri admissionpb.WorkPriority, upto kvflowcontrolpb.RaftLogPosition,
 ) kvflowcontrol.Tokens {
 	wc := admissionpb.WorkClassFromPri(pri)
-	rss.tracker.Untrack(context.TODO(), pri, upto,
-		func(index uint64, sendTokenWC admissionpb.WorkClass, tokens kvflowcontrol.Tokens) {
+	rss.tracker.Untrack(WorkPriorityToRaftPriority(pri), upto.Index,
+		func(index uint64, originalPri RaftPriority, tokens kvflowcontrol.Tokens) {
 			if index >= rss.nextRaftIndexInitial {
 				rss.eval.tokensDeducted[wc] -= tokens
 				rss.parent.evalTokenCounter.Return(context.TODO(), wc, tokens)
 			}
-			rss.parent.sendTokenCounter.Return(context.TODO(), sendTokenWC, tokens)
+			rss.parent.sendTokenCounter.Return(context.TODO(),
+				admissionpb.WorkClassFromPri(originalPri.ToWorkPriority()), tokens)
 		})
 	return 0
 }

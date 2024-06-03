@@ -14,23 +14,14 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// TODO: track only NumRaftPriorities.
-// TODO: remove the Term from the tracking.
-//
-// TODO: replace sendTokenWC with originalPri. And keep the trackedM with the
-// inherited priority. The original will be used for returning eval tokens.
-
 // Tracker tracks flow token deductions for a replicaSendStream. Tokens are
-// deducted for an in-flight log entry (identified by raft log position), with
-// a given admissionpb.WorkPriority.
+// deducted for an in-flight log entry (identified by raft index position),
+// with a given RaftPriority.
 type Tracker struct {
-	// TODO: change this to an array NumRaftPriorities.
-	trackedM map[admissionpb.WorkPriority][]tracked
+	tracked [NumRaftPriorities][]tracked
 
 	stream kvflowcontrol.Stream // used for logging only
 }
@@ -39,124 +30,89 @@ type Tracker struct {
 // raft log position (typically where the proposed command is expected to end
 // up).
 type tracked struct {
-	tokens      kvflowcontrol.Tokens
-	sendTokenWC admissionpb.WorkClass
-	position    kvflowcontrolpb.RaftLogPosition
+	tokens                    kvflowcontrol.Tokens
+	originalPri, inheritedPri RaftPriority
+	index                     uint64
 }
 
 // Init constructs a new Tracker with the given lower bound raft log position
 // (below which we're not allowed to deduct tokens).
 func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
 	*dt = Tracker{
-		trackedM: make(map[admissionpb.WorkPriority][]tracked),
-		stream:   stream,
+		tracked: [NumRaftPriorities][]tracked{},
+		stream:  stream,
 	}
 }
 
-func (dt *Tracker) TrackNew(
-	index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens,
-) {
-	// TODO:
-}
-
-func (dt *Tracker) UntrackNew(
-	inheritedPri RaftPriority,
-	uptoIndex uint64,
-	f func(index uint64, originalPri RaftPriority, tokens kvflowcontrol.Tokens),
-) {
-	// TODO:
-}
-
-func (dt *Tracker) UntrackAllNew(
-	f func(index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens),
-) {
-	// TODO:
-}
-
-// Track token deductions of the given priority with the given raft log
-// position.
-//
-// sendTokenWC is not necessarily derived from pri. It is the wc from which
-// send-tokens were deducted. Eval tokens are always deducted from the
-// WorkClass derived from pri.
+// Track token deductions of the given priority with the given raft log index.
+// originalPri is used to return eval tokens, while inheritedPri is used to
+// return send tokens.
 func (dt *Tracker) Track(
 	ctx context.Context,
-	pri admissionpb.WorkPriority,
-	sendTokenWC admissionpb.WorkClass,
+	index uint64,
+	inheritedPri RaftPriority,
+	originalPri RaftPriority,
 	tokens kvflowcontrol.Tokens,
-	pos kvflowcontrolpb.RaftLogPosition,
 ) bool {
-	if len(dt.trackedM[pri]) >= 1 {
-		last := dt.trackedM[pri][len(dt.trackedM[pri])-1]
-		if !last.position.Less(pos) {
-			log.Fatalf(ctx, "expected in order tracked log positions (%s < %s)",
-				last.position, pos)
+	if len(dt.tracked[inheritedPri]) >= 1 {
+		last := dt.tracked[inheritedPri][len(dt.tracked[inheritedPri])-1]
+		if last.index >= index {
+			log.Fatalf(ctx, "expected in order tracked log indexes (%d < %d)",
+				last.index, index)
 			return false
 		}
 	}
-	// TODO(irfansharif,aaditya): The tracked instances here make up about ~0.4%
-	// of allocations under kv0/enc=false/nodes=3/cpu=9. Maybe clean it up as
-	// part of #104154, by using a sync.Pool perhaps.
-	dt.trackedM[pri] = append(dt.trackedM[pri], tracked{
-		tokens:      tokens,
-		sendTokenWC: sendTokenWC,
-		position:    pos,
+
+	dt.tracked[inheritedPri] = append(dt.tracked[inheritedPri], tracked{
+		tokens:       tokens,
+		originalPri:  originalPri,
+		inheritedPri: inheritedPri,
+		index:        index,
 	})
+
 	if log.V(1) {
-		log.Infof(ctx, "tracking %s flow control tokens for pri=%s stream=%s pos=%s",
-			tokens, pri, dt.stream, pos)
+		log.Infof(ctx, "tracking %s flow control tokens for pri=%s stream=%s index=%d",
+			tokens, inheritedPri, dt.stream, index)
 	}
 	return true
 }
 
-// Untrack all token deductions of the given priority that have log positions
-// less than or equal to the one provided.
+// Untrack all token deductions of the given priority that have indexes less
+// than or equal to the one provided.
 func (dt *Tracker) Untrack(
-	ctx context.Context,
-	pri admissionpb.WorkPriority,
-	upto kvflowcontrolpb.RaftLogPosition,
-	f func(index uint64, sendTokenWC admissionpb.WorkClass, tokens kvflowcontrol.Tokens),
+	inheritedPri RaftPriority,
+	uptoIndex uint64,
+	f func(index uint64, originalPri RaftPriority, tokens kvflowcontrol.Tokens),
 ) {
 	if dt == nil {
-		return
-	}
-	if _, ok := dt.trackedM[pri]; !ok {
 		return
 	}
 
 	var untracked int
 	for {
-		if untracked == len(dt.trackedM[pri]) {
+		if untracked == len(dt.tracked[inheritedPri]) {
 			break
 		}
-		deduction := dt.trackedM[pri][untracked]
-		if !deduction.position.LessEq(upto) {
+		deduction := dt.tracked[inheritedPri][untracked]
+		if deduction.index > uptoIndex {
 			break
 		}
-		f(deduction.position.Index, deduction.sendTokenWC, deduction.tokens)
+		f(deduction.index, deduction.originalPri, deduction.tokens)
 		untracked += 1
 	}
 
-	dt.trackedM[pri] = dt.trackedM[pri][untracked:]
-	if len(dt.trackedM[pri]) == 0 {
-		delete(dt.trackedM, pri)
-	}
+	dt.tracked[inheritedPri] = dt.tracked[inheritedPri][untracked:]
 }
 
 // UntrackAll iterates through all tracked token deductions, invoking the
-// provided callback with the sum of all tokens at a per-priority level, and
-// untracking.
+// provided callback each deduction and untracking.
 func (dt *Tracker) UntrackAll(
-	_ context.Context,
-	f func(
-		pri admissionpb.WorkPriority, sendTokenWC admissionpb.WorkClass, tokens kvflowcontrol.Tokens),
+	f func(index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens),
 ) {
-	for pri, deductions := range dt.trackedM {
-		var tokens [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
+	for _, deductions := range dt.tracked {
 		for _, deduction := range deductions {
-			tokens[deduction.sendTokenWC] += deduction.tokens
+			f(deduction.index, deduction.inheritedPri, deduction.originalPri, deduction.tokens)
 		}
-		f(pri, admissionpb.RegularWorkClass, tokens[admissionpb.RegularWorkClass])
-		f(pri, admissionpb.ElasticWorkClass, tokens[admissionpb.ElasticWorkClass])
 	}
+	dt.tracked = [NumRaftPriorities][]tracked{}
 }
