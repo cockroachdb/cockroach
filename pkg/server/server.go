@@ -445,9 +445,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		clientTestingKnobs = *kvKnobs.(*kvcoord.ClientTestingKnobs)
 	}
 	retryOpts := cfg.RetryOptions
-	if retryOpts == (retry.Options{}) {
-		retryOpts = base.DefaultRetryOptions()
-	}
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSenderCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:         cfg.AmbientCtx,

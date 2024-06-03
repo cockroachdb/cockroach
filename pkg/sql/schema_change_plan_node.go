@@ -15,7 +15,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -142,7 +141,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 	// Wait for the descriptor to no longer be claimed by a schema change.
 	start := timeutil.Now()
 	logEvery := log.Every(10 * time.Second)
-	for r := retry.Start(ctx, base.DefaultRetryOptions()); r.Next(); {
+	for r := retry.Start(ctx, retry.Options{}); r.Next(); {
 		now := p.ExecCfg().Clock.Now()
 		var isBlocked bool
 		var blockingJobIDs []catpb.JobID

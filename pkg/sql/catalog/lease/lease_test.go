@@ -2725,7 +2725,7 @@ func TestHistoricalDescriptorAcquire(t *testing.T) {
 	// recent version with the name column before doing so.
 	cachedDatabaseRegions, err := regions.NewCachedDatabaseRegions(ctx, s.DB(), s.LeaseManager().(*lease.Manager))
 	require.NoError(t, err)
-	_, err = s.LeaseManager().(*lease.Manager).WaitForOneVersion(ctx, tableID.Load().(descpb.ID), cachedDatabaseRegions, base.DefaultRetryOptions())
+	_, err = s.LeaseManager().(*lease.Manager).WaitForOneVersion(ctx, tableID.Load().(descpb.ID), cachedDatabaseRegions, retry.Options{})
 	require.NoError(t, err, "Failed to wait for one version of descriptor: %s", err)
 	acquiredDescriptor, err := s.LeaseManager().(*lease.Manager).Acquire(ctx, ts1, tableID.Load().(descpb.ID))
 	assert.NoError(t, err)

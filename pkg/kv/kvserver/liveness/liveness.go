@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -379,7 +378,7 @@ func (nl *NodeLiveness) SetDraining(
 	ctx = nl.ambientCtx.AnnotateCtx(ctx)
 	retryCtx, cancel := nl.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
-	for r := retry.Start(retryCtx, base.DefaultRetryOptions()); r.Next(); {
+	for r := retry.Start(retryCtx, retry.Options{}); r.Next(); {
 		oldLivenessRec, ok := nl.cache.self()
 		if !ok {
 			// There was a cache miss, let's now fetch the record from KV
@@ -1065,9 +1064,7 @@ func (nl *NodeLiveness) updateLiveness(
 	if err := nl.verifyDiskHealth(ctx); err != nil {
 		return Record{}, err
 	}
-	retryOpts := base.DefaultRetryOptions()
-	retryOpts.Closer = nl.stopper.ShouldQuiesce()
-	for r := retry.Start(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retry.Options{}); r.Next(); {
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {

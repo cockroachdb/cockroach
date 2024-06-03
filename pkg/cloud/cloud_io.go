@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -136,7 +135,7 @@ func DelayedRetry(
 	ctx, sp := tracing.ChildSpan(ctx, fmt.Sprintf("cloud.DelayedRetry.%s", opName))
 	defer sp.Finish()
 
-	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), MaxDelayedRetryAttempts, func() error {
+	return retry.WithMaxAttempts(ctx, retry.Options{}, MaxDelayedRetryAttempts, func() error {
 		err := fn()
 		if err == nil {
 			return nil

@@ -1680,11 +1680,10 @@ SELECT COALESCE(l."descID", s."desc_id") as "descID", COALESCE(l.version, s.vers
 		sqlQuery := fmt.Sprintf(query, instanceID)
 
 		var rows []tree.Datums
-		retryOptions := base.DefaultRetryOptions()
 		retryCtx, cancel := m.stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 		// The retry is required because of errors caused by node restarts. Retry 30 times.
-		if err := retry.WithMaxAttempts(retryCtx, retryOptions, 30, func() error {
+		if err := retry.WithMaxAttempts(retryCtx, retry.Options{}, 30, func() error {
 			return m.storage.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				if err := txn.KV().SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: timeThreshold}); err != nil {
 					return err

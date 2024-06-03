@@ -18,7 +18,6 @@ import (
 	"path"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -164,13 +163,11 @@ func newConfluentSchemaRegistry(
 		return nil, err
 	}
 
-	retryOpts := base.DefaultRetryOptions()
-	retryOpts.MaxRetries = 5
 	reg := schemaRegistryWithCache{
 		base: &confluentSchemaRegistry{
 			baseURL:    u,
 			client:     httpClient,
-			retryOpts:  retryOpts,
+			retryOpts:  retry.Options{MaxRetries: 5},
 			sliMetrics: sliMetrics,
 		},
 		cache: src,

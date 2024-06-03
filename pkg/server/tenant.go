@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1158,7 +1159,7 @@ func makeTenantSQLServerArgs(
 	if dsKnobsP, ok := baseCfg.TestingKnobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {
 		dsKnobs = *dsKnobsP
 	}
-	rpcRetryOptions := base.DefaultRetryOptions()
+	rpcRetryOptions := retry.Options{}
 
 	tcCfg := kvtenant.ConnectorConfig{
 		TenantID:          sqlCfg.TenantID,

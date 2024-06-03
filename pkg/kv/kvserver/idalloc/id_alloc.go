@@ -14,7 +14,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -106,7 +105,7 @@ func (ia *Allocator) start() {
 		for {
 			var newValue int64
 			var err error
-			for r := retry.Start(ctx, base.DefaultRetryOptions()); r.Next(); {
+			for r := retry.Start(ctx, retry.Options{}); r.Next(); {
 				if stopperErr := ia.opts.Stopper.RunTask(ctx, "idalloc: allocating block",
 					func(ctx context.Context) {
 						newValue, err = ia.opts.Incrementer(ctx, ia.opts.Key, ia.opts.BlockSize)

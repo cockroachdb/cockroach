@@ -14,7 +14,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -50,7 +49,7 @@ func getFileWithRetry(
 	var f ioctx.ReadCloserCtx
 	var sz int64
 	const maxAttempts = 3
-	if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+	if err := retry.WithMaxAttempts(ctx, retry.Options{}, maxAttempts, func() error {
 		var err error
 		f, sz, err = e.ReadFile(ctx, basename, cloud.ReadOptions{})
 		return err

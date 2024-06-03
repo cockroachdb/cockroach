@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -155,12 +154,12 @@ func (m *Manager) PublishMultiple(
 ) (map[descpb.ID]catalog.Descriptor, error) {
 	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
-	for r := retry.Start(ctx, base.DefaultRetryOptions()); r.Next(); {
+	for r := retry.Start(ctx, retry.Options{}); r.Next(); {
 		// Wait until there are no unexpired leases on the previous versions
 		// of the descriptors.
 		expectedVersions := make(map[descpb.ID]descpb.DescriptorVersion)
 		for _, id := range ids {
-			expected, err := m.WaitForOneVersion(ctx, id, nil, base.DefaultRetryOptions())
+			expected, err := m.WaitForOneVersion(ctx, id, nil, retry.Options{})
 			if err != nil {
 				return nil, err
 			}

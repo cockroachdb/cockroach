@@ -642,8 +642,7 @@ func asyncWriteToOtelAndSystemEventsTable(
 			// non-retriable errors on the cluster during the table write.
 			// (retriable errors are already processed automatically
 			// by db.Txn)
-			retryOpts := base.DefaultRetryOptions()
-			retryOpts.MaxRetries = int(maxAttempts)
+			retryOpts := retry.Options{MaxRetries: int(maxAttempts)}
 			for r := retry.Start(ctx, retryOpts); r.Next(); {
 				// Don't try too long to write if the system table is unavailable.
 				if err := timeutil.RunWithTimeout(ctx, "record-events", perAttemptTimeout, func(ctx context.Context) error {

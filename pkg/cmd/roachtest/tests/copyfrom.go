@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -83,9 +82,7 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 	var start time.Time
 	var det install.RunResultDetails
 
-	rOpts := base.DefaultRetryOptions()
-	rOpts.MaxRetries = 5
-	rOpts.MaxBackoff = 10 * time.Second
+	rOpts := retry.Options{MaxRetries: 5, MaxBackoff: 10 * time.Second}
 	r := retry.Start(ctx, rOpts)
 	succeeded := false
 	for r.Next() {

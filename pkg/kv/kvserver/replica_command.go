@@ -18,7 +18,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -651,14 +650,9 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 	ctx context.Context, updateDesc func(*roachpb.RangeDescriptor) error,
 ) *kvpb.Error {
 	// Retry forever as long as we see errors we know will resolve.
-	retryOpts := base.DefaultRetryOptions()
-	// Randomize quite a lot just in case someone else also interferes with us
-	// in a retry loop. Note that this is speculative; there wasn't an incident
-	// that suggested this.
-	retryOpts.RandomizationFactor = 0.5
 	var lastErr error
 	splitRetryLogLimiter := log.Every(10 * time.Second)
-	for retryable := retry.Start(ctx, retryOpts); retryable.Next(); {
+	for retryable := retry.Start(ctx, retry.Options{}); retryable.Next(); {
 		// The replica may have been destroyed since the start of the retry loop.
 		// We need to explicitly check this condition. Having a valid lease, as we
 		// verify below, does not imply that the range still exists: even after a

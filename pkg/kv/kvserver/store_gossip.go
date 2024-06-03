@@ -16,7 +16,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -126,10 +125,9 @@ func (s *Store) startGossip() {
 				// temporarily fail (e.g. because node liveness hasn't initialized yet
 				// making it impossible to get an epoch-based range lease), in which
 				// case we want to retry quickly.
-				retryOptions := base.DefaultRetryOptions()
 				retryCtx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
 				defer cancel()
-				for r := retry.Start(retryCtx, retryOptions); r.Next(); {
+				for r := retry.Start(retryCtx, retry.Options{}); r.Next(); {
 					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key)); repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {

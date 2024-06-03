@@ -11,7 +11,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",

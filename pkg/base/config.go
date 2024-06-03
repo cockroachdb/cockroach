@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -756,18 +755,6 @@ func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal t
 // gossips it.
 func (cfg RaftConfig) SentinelGossipTTL() time.Duration {
 	return cfg.RangeLeaseDuration
-}
-
-// DefaultRetryOptions should be used for retrying most
-// network-dependent operations.
-func DefaultRetryOptions() retry.Options {
-	// TODO(bdarnell): This should vary with network latency.
-	// Derive the retry options from a configured or measured
-	// estimate of latency.
-	return retry.Options{
-		InitialBackoff: 50 * time.Millisecond,
-		MaxBackoff:     1 * time.Second,
-	}
 }
 
 // maxInflightBytesFrom returns the minimal value for RaftMaxInflightBytes

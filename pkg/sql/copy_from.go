@@ -20,7 +20,6 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1128,8 +1127,7 @@ func (c *copyMachine) doneWithRows(ctx context.Context) error {
 func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 	var err error
 
-	rOpts := base.DefaultRetryOptions()
-	rOpts.MaxRetries = int(c.p.SessionData().CopyNumRetriesPerBatch)
+	rOpts := retry.Options{MaxRetries: int(c.p.SessionData().CopyNumRetriesPerBatch)}
 	if rOpts.MaxRetries < 1 {
 		// MaxRetries == 0 means infinite number of attempts, and although
 		// CopyNumRetriesPerBatch should always be a positive number, let's be

@@ -297,7 +297,6 @@ func (s storage) release(
 	ctx context.Context, stopper *stop.Stopper, lease *storedLease,
 ) (released bool) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	retryOptions := base.DefaultRetryOptions()
 	retryCtx, cancel := stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 
@@ -322,7 +321,7 @@ func (s storage) release(
 	}()
 	// This transaction is idempotent; the retry was put in place because of
 	// NodeUnavailableErrors.
-	for r := retry.Start(retryCtx, retryOptions); r.Next(); {
+	for r := retry.Start(retryCtx, retry.Options{}); r.Next(); {
 		log.VEventf(ctx, 2, "storage releasing lease %+v", lease)
 		instanceID := s.nodeIDContainer.SQLInstanceID()
 		if instanceID == 0 {

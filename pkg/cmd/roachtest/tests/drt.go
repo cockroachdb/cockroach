@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -203,8 +202,7 @@ func (ep *tpccChaosEventProcessor) checkMetrics(
 func (ep *tpccChaosEventProcessor) queryPrometheus(
 	ctx context.Context, l *logger.Logger, q string, ts time.Time,
 ) (val model.Value, err error) {
-	rOpts := base.DefaultRetryOptions()
-	rOpts.MaxRetries = 5
+	rOpts := retry.Options{MaxRetries: 5}
 	var warnings promv1.Warnings
 	for r := retry.Start(ctx, rOpts); r.Next(); {
 		val, warnings, err = ep.promClient.Query(

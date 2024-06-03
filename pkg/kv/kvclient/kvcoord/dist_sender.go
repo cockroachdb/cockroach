@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -838,7 +837,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
 	ds.routeToLeaseholderFirst = cfg.TestingKnobs.RouteToLeaseholderFirst || metamorphicRouteToLeaseholderFirst
 	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
-	ds.rpcRetryOptions = base.DefaultRetryOptions()
+	ds.rpcRetryOptions = retry.Options{}
 	// TODO(arul): The rpcRetryOptions passed in here from server/tenant don't
 	// set a max retries limit. Should they?
 	if cfg.RPCRetryOptions != nil {

@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -239,9 +238,7 @@ func writeToRangeLogTable(
 		asyncCtx, stopCancel := stopper.WithCancelOnQuiesce(asyncCtx)
 
 		const perAttemptTimeout = 20 * time.Second
-		const maxAttempts = 3
-		retryOpts := base.DefaultRetryOptions()
-		retryOpts.MaxRetries = maxAttempts
+		retryOpts := retry.Options{MaxRetries: 3}
 
 		if err := stopper.RunAsyncTask(
 			asyncCtx, "rangelog-async", func(ctx context.Context) {
