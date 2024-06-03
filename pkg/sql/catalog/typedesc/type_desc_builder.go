@@ -156,6 +156,12 @@ func (tdb *typeDescriptorBuilder) StripDanglingBackReferences(
 func (tdb *typeDescriptorBuilder) StripNonExistentRoles(
 	roleExists func(role username.SQLUsername) bool,
 ) error {
+	// If the owner doesn't exist, change the owner to admin.
+	if !roleExists(tdb.maybeModified.GetPrivileges().Owner()) {
+		tdb.maybeModified.Privileges.OwnerProto = username.AdminRoleName().EncodeProto()
+		tdb.changes.Add(catalog.StrippedNonExistentRoles)
+	}
+	// Remove any non-existent roles from the privileges.
 	newPrivs := make([]catpb.UserPrivileges, 0, len(tdb.maybeModified.Privileges.Users))
 	for _, priv := range tdb.maybeModified.Privileges.Users {
 		exists := roleExists(priv.UserProto.Decode())

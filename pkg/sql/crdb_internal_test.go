@@ -484,12 +484,16 @@ SELECT
 			'cockroach.sql.sqlbase.Descriptor',
 			json_set(
 				json_set(
-					crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false),
-					ARRAY['table', 'mutationJobs'],
-					jsonb_build_array(jsonb_build_object('job_id', 123456, 'mutation_id', 1))
+					json_set(
+						crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false),
+						ARRAY['table', 'mutationJobs'],
+						jsonb_build_array(jsonb_build_object('job_id', 123456, 'mutation_id', 1))
+					),
+					ARRAY['table', 'mutations'],
+					jsonb_build_array(jsonb_build_object('mutation_id', 1))
 				),
-				ARRAY['table', 'mutations'],
-				jsonb_build_array(jsonb_build_object('mutation_id', 1))
+				ARRAY['table', 'privileges', 'ownerProto'],
+				to_json('dropped_user')
 			)
 		),
 		true
@@ -520,6 +524,9 @@ UPDATE system.namespace SET id = %d WHERE id = %d;
 		},
 		{fmt.Sprintf("%d", tableNoJobID), "defaultdb", "public", "nojob",
 			fmt.Sprintf(`relation "nojob" (%d): mutation in state UNKNOWN, direction NONE, and no column/index descriptor`, tableNoJobID),
+		},
+		{fmt.Sprintf("%d", tableNoJobID), "defaultdb", "public", "nojob",
+			fmt.Sprintf(`descriptor "nojob" (%d) is owned by a role "dropped_user" that doesn't exist`, tableNoJobID),
 		},
 		{fmt.Sprintf("%d", tableNoJobID), "defaultdb", "public", "nojob", `mutation job 123456: job not found`},
 		{fmt.Sprintf("%d", schemaID), fmt.Sprintf("[%d]", databaseID), "public", "",
