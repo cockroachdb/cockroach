@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import React from "react";
+import throttle from "lodash/throttle";
+
 import {
   CanvasHeight,
   CanvasWidth,
@@ -22,7 +24,7 @@ import {
   KeyVisualizerProps,
   SampleBucket,
 } from "src/views/keyVisualizer/interfaces";
-import { throttle } from "lodash";
+
 import { getRequestsAsNumber } from ".";
 
 function drawBucket(
@@ -149,10 +151,10 @@ export default class KeyVisualizer extends React.PureComponent<
 > {
   canvasRef: React.RefObject<HTMLCanvasElement>;
   ctx: CanvasRenderingContext2D;
-  xPanOffset: number = 0;
-  yPanOffset: number = 0;
-  xZoomFactor: number = 1;
-  yZoomFactor: number = 1;
+  xPanOffset = 0;
+  yPanOffset = 0;
+  xZoomFactor = 1;
+  yZoomFactor = 1;
   throttledHandler: (e: React.MouseEvent) => void;
 
   state = {

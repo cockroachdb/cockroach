@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { fetchData } from "src/api";
 
 const SESSIONS_PATH = "_status/sessions";

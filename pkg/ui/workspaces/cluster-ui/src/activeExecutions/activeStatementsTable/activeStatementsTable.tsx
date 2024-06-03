@@ -10,6 +10,8 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
+import { Tooltip } from "@cockroachlabs/ui-components";
+
 import { isSelectedColumn } from "../../columnsSelector/utils";
 import { ColumnDescriptor } from "../../sortedtable";
 import {
@@ -19,7 +21,6 @@ import {
   getLabel,
 } from "../execTableCommon";
 import { ActiveStatement } from "../types";
-import { Tooltip } from "@cockroachlabs/ui-components";
 import { limitText } from "../../util";
 
 export function makeActiveStatementsColumns(

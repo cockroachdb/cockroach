@@ -11,12 +11,14 @@
 // SQLStringer is an interface that can be implemented by types to customize how
 // they are formatted into SQL by Format.
 export interface SQLStringer {
-  SQLString: () => string;
+  sqlString: () => string;
 }
 
-function isSQLStringer(s: any): s is SQLStringer {
+export type SqlFormatArg = string | number | SQLStringer;
+
+function isSQLStringer(s: unknown): s is SQLStringer {
   // Check that s is not null/undefined (truthy) and has SQLString implemented.
-  return s && (s as SQLStringer).SQLString !== undefined;
+  return s && (s as SQLStringer).sqlString !== undefined;
 }
 
 // TODO(thomas): @knz says: the quoting rules for usernames are different from
@@ -32,7 +34,7 @@ export class Identifier implements SQLStringer {
   }
 
   // SQLString implements the SQLStringer interface.
-  SQLString = (): string => {
+  sqlString = (): string => {
     return QuoteIdentifier(this.i);
   };
 }
@@ -47,8 +49,8 @@ export class QualifiedIdentifier implements SQLStringer {
   }
 
   // SQLString implements the SQLStringer interface.
-  SQLString = (): string => {
-    const quotedParts = this.qi.map(iden => new Identifier(iden).SQLString());
+  sqlString = (): string => {
+    const quotedParts = this.qi.map(iden => new Identifier(iden).sqlString());
     return quotedParts.join(".");
   };
 }
@@ -66,7 +68,7 @@ export class SQL implements SQLStringer {
   }
 
   // SQLString implements the SQLStringer interface.
-  SQLString = (): string => {
+  sqlString = (): string => {
     return this.sql;
   };
 }
@@ -157,7 +159,7 @@ function parseArgIdx(s: string, i: number): [number, number] {
 // - if args[i] is a string type, it is quoted as a literal (pq.QuoteLiteral)
 // - if args[i] is an integer type, it is formatted as %d
 // - otherwise, panic with an error
-export function Format(format: string, args?: any[]): string {
+export function Format(format: string, args?: SqlFormatArg[]): string {
   let resultString = "";
   // The loop structure here is adapted from the stdlib fmt.Sprintf code, but
   // heavily simplified because we don't have to support different verbs, only
@@ -220,11 +222,11 @@ export function Format(format: string, args?: any[]): string {
 // Join concatenates the given elements with the given separator, formatting each element per Format.
 // A type parameter is used here as we typically expect to see a slice of a concrete type passed as `args`
 // and using one avoids the need to convert the slice.
-export function Join<Type>(args: Type[], sep: SQL): SQL {
+export function Join<Type extends SqlFormatArg>(args: Type[], sep: SQL): SQL {
   let b = "";
   for (let i = 0; i < args.length; i++) {
     if (i > 0) {
-      b += sep.SQLString();
+      b += sep.sqlString();
     }
     let errString: string;
     [b, errString] = writeFormattedArg(args[i], b);
@@ -235,9 +237,9 @@ export function Join<Type>(args: Type[], sep: SQL): SQL {
   return new SQL(b);
 }
 
-function writeFormattedArg(arg: any, b: string): [string, string] {
+function writeFormattedArg(arg: SqlFormatArg, b: string): [string, string] {
   if (isSQLStringer(arg)) {
-    b += arg.SQLString();
+    b += arg.sqlString();
     return [b, ""];
   }
   const type = typeof arg;

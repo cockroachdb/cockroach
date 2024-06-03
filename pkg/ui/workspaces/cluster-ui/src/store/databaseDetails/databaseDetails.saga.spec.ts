@@ -17,23 +17,27 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
+
+import { indexUnusedDuration } from "src/util/constants";
+
 import {
   DatabaseDetailsReqParams,
   DatabaseDetailsResponse,
   getDatabaseDetails,
   SqlApiResponse,
 } from "../../api";
-import ZoneConfig = cockroach.config.zonepb.ZoneConfig;
-import ZoneConfigurationLevel = cockroach.server.serverpb.ZoneConfigurationLevel;
-import {
-  refreshDatabaseDetailsSaga,
-  requestDatabaseDetailsSaga,
-} from "./databaseDetails.saga";
+
 import {
   KeyedDatabaseDetailsState,
   databaseDetailsReducer,
 } from "./databaseDetails.reducer";
-import { indexUnusedDuration } from "src/util/constants";
+import {
+  refreshDatabaseDetailsSaga,
+  requestDatabaseDetailsSaga,
+} from "./databaseDetails.saga";
+
+import ZoneConfig = cockroach.config.zonepb.ZoneConfig;
+import ZoneConfigurationLevel = cockroach.server.serverpb.ZoneConfigurationLevel;
 const { actions, reducer } = databaseDetailsReducer;
 
 describe("DatabaseDetails sagas", () => {

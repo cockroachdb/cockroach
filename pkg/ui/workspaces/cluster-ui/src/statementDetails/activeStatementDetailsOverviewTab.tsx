@@ -12,6 +12,9 @@ import React from "react";
 import classNames from "classnames/bind";
 import { Link } from "react-router-dom";
 import { Col, Row } from "antd";
+
+import "antd/lib/col/style";
+import "antd/lib/row/style";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
   ActiveStatement,
@@ -20,15 +23,13 @@ import {
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 import { StatusIcon } from "src/activeExecutions/statusIcon";
 import { DATE_FORMAT_24_TZ, Duration } from "src/util";
-
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 
-const summaryCardStylesCx = classNames.bind(summaryCardStyles);
+import { Timestamp } from "../timestamp";
 
 import styles from "./statementDetails.module.scss";
-import { Timestamp } from "../timestamp";
+
+const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 const cx = classNames.bind(styles);
 
 type Props = {

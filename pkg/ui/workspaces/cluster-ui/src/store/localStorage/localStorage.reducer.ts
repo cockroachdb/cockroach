@@ -9,15 +9,17 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME } from "../utils";
+
 import { defaultFilters, Filters } from "src/queryFilter/";
-import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
 import { WorkloadInsightEventFilters } from "src/insights";
 import {
   SqlStatsSortType,
   DEFAULT_STATS_REQ_OPTIONS,
 } from "src/api/statementsApi";
 import { ViewMode } from "src/databaseDetailsPage/types";
+
+import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
+import { DOMAIN_NAME } from "../utils";
 
 type SortSetting = {
   ascending: boolean;

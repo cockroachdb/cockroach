@@ -8,24 +8,23 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Pick } from "src/util/pick";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
-import { AdminUIState } from "src/redux/state";
-import { LocalSetting } from "src/redux/localsettings";
-import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
-
 import { createSelector } from "reselect";
-import {
-  SessionsResponseMessage,
-  StatementsResponseMessage,
-} from "src/util/api";
-
 import {
   defaultFilters,
   Filters,
   SessionsPage,
 } from "@cockroachlabs/cluster-ui";
+
+import { Pick } from "src/util/pick";
+import { AdminUIState } from "src/redux/state";
+import { LocalSetting } from "src/redux/localsettings";
+import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
+import {
+  SessionsResponseMessage,
+  StatementsResponseMessage,
+} from "src/util/api";
 import {
   terminateQueryAction,
   terminateSessionAction,

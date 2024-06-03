@@ -8,12 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import {keys} from "d3";
+import map from "lodash/map";
+import flatMap from "lodash/flatMap";
 import Long from "long";
 import { expectSaga, testSaga } from "redux-saga-test-plan";
 import * as matchers from "redux-saga-test-plan/matchers";
-
 import { call, put, delay } from "redux-saga/effects";
+
 import { queryTimeSeries, TimeSeriesQueryRequestMessage } from "src/util/api";
 import * as protos from "src/js/protos";
 
@@ -83,7 +85,7 @@ describe("metrics reducer", function () {
       );
       expect(state.queries).toBeDefined();
       expect(state.queries[componentID]).toBeDefined();
-      expect(_.keys(state.queries).length).toBe(1);
+      expect(keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].nextRequest).toEqual(request);
       expect(state.queries[componentID].data).toBeUndefined();
       expect(state.queries[componentID].error).toBeUndefined();
@@ -112,7 +114,7 @@ describe("metrics reducer", function () {
       );
       expect(state.queries).toBeDefined();
       expect(state.queries[componentID]).toBeDefined();
-      expect(_.keys(state.queries).length).toBe(1);
+      expect(keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].data).toBeUndefined();
       expect(state.queries[componentID].request).toBeUndefined();
       expect(state.queries[componentID].nextRequest).toBeUndefined();
@@ -147,7 +149,7 @@ describe("metrics reducer", function () {
       );
       expect(state.queries).toBeDefined();
       expect(state.queries[componentID]).toBeDefined();
-      expect(_.keys(state.queries).length).toBe(1);
+      expect(keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].data).toEqual(response);
       expect(state.queries[componentID].request).toEqual(request);
       expect(state.queries[componentID].error).toBeUndefined();
@@ -161,7 +163,7 @@ describe("metrics reducer", function () {
       );
       expect(state.queries).toBeDefined();
       expect(state.queries[componentID]).toBeDefined();
-      expect(_.keys(state.queries).length).toBe(1);
+      expect(keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].error).toEqual(error);
       expect(state.queries[componentID].request).toBeUndefined();
       expect(state.queries[componentID].data).toBeUndefined();
@@ -190,7 +192,7 @@ describe("metrics reducer", function () {
       return new protos.cockroach.ts.tspb.TimeSeriesQueryRequest({
         start_nanos: ts[0],
         end_nanos: ts[1],
-        queries: _.map(names, s => {
+        queries: map(names, s => {
           return {
             name: s,
           };
@@ -313,7 +315,7 @@ describe("metrics reducer", function () {
         ];
 
         // Mix the requests together and send the combined request set.
-        const mixedRequests = _.flatMap(shortRequests, (short, i) => [
+        const mixedRequests = flatMap(shortRequests, (short, i) => [
           short,
           longRequests[i],
         ]);
@@ -363,7 +365,7 @@ describe("metrics reducer", function () {
         // Return a valid response.
         const response = createResponse(expectedRequest.queries);
         // Generate the expected put effects to be generated after receiving the response.
-        const expectedEffects = _.map(requests, req =>
+        const expectedEffects = map(requests, req =>
           metrics.receiveMetrics(
             req.id,
             req.data,
@@ -396,7 +398,7 @@ describe("metrics reducer", function () {
         // Return an error response.
         const err = new Error("network error");
         // Generate the expected put effects to be generated after receiving the response.
-        const expectedEffects = _.map(requests, req =>
+        const expectedEffects = map(requests, req =>
           metrics.errorMetrics(req.id, err),
         );
 

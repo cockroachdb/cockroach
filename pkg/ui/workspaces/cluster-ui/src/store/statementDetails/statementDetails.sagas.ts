@@ -10,14 +10,16 @@
 
 import { PayloadAction } from "@reduxjs/toolkit";
 import { all, call, put, takeLatest } from "redux-saga/effects";
+
 import {
   ErrorWithKey,
   getStatementDetails,
   StatementDetailsRequest,
   StatementDetailsResponseWithKey,
 } from "src/api/statementsApi";
-import { actions as sqlDetailsStatsActions } from "./statementDetails.reducer";
 import { generateStmtDetailsToID } from "src/util/appStats";
+
+import { actions as sqlDetailsStatsActions } from "./statementDetails.reducer";
 
 export function* refreshSQLDetailsStatsSaga(
   action: PayloadAction<StatementDetailsRequest>,

@@ -10,6 +10,7 @@
 
 import React from "react";
 import classNames from "classnames/bind";
+
 import styles from "./workloadInsights/util/workloadInsights.module.scss";
 
 const cx = classNames.bind(styles);

@@ -12,6 +12,7 @@ import { Modal, Button } from "antd";
 import "antd/lib/modal/style";
 import "antd/lib/button/style";
 import React, { Fragment } from "react";
+
 import "./styles.styl";
 import type { ModalProps } from "antd/lib/modal";
 

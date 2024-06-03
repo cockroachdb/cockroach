@@ -15,18 +15,17 @@ import "antd/lib/row/style";
 import "antd/lib/tabs/style";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert, Text } from "@cockroachlabs/ui-components";
-import { Anchor } from "src/anchor";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import { isNil } from "lodash";
+import isNil from "lodash/isNil";
 import Long from "long";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
-import { BarGraphTimeSeries, XScale } from "../graphs/bargraph";
-import { AxisUnits } from "../graphs";
 import { AlignedData, Options } from "uplot";
+import moment from "moment-timezone";
 
+import { Anchor } from "src/anchor";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
   appAttr,
   appNamesAttr,
@@ -46,16 +45,14 @@ import {
 import { getValidErrorsList, Loading } from "src/loading";
 import { Button } from "src/button";
 import { SqlBox, SqlBoxSize } from "src/sql";
-import { PlanDetails } from "./planDetails";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { DiagnosticsView } from "./diagnostics/diagnosticsView";
-import insightTableStyles from "../insightsTable/insightsTable.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
-import styles from "./statementDetails.module.scss";
 import { commonStyles } from "src/common";
-import { UIConfigState } from "../store";
 import { StatementDetailsRequest } from "src/api/statementsApi";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+
+import { UIConfigState } from "../store";
 import {
   getValidOption,
   TimeScale,
@@ -68,17 +65,7 @@ import {
   ActivateDiagnosticsModalRef,
   ActivateStatementDiagnosticsModal,
 } from "../statementsDiagnostics";
-import {
-  generateContentionTimeseries,
-  generateExecCountTimeseries,
-  generateExecRetriesTimeseries,
-  generateExecuteAndPlanningTimeseries,
-  generateRowsProcessedTimeseries,
-  generateCPUTimeseries,
-  generateClientWaitTimeseries,
-} from "./timeseriesUtils";
 import { Delayed } from "../delayed";
-import moment from "moment-timezone";
 import {
   InsertStmtDiagnosticRequest,
   InsightRecommendation,
@@ -95,10 +82,25 @@ import {
   makeInsightsColumns,
 } from "../insightsTable/insightsTable";
 import { CockroachCloudContext } from "../contexts";
-import { filterByTimeScale } from "./diagnostics/diagnosticsUtils";
 import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 import { Timestamp } from "../timestamp";
-import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
+import insightTableStyles from "../insightsTable/insightsTable.module.scss";
+import { AxisUnits } from "../graphs";
+import { BarGraphTimeSeries, XScale } from "../graphs/bargraph";
+
+import { filterByTimeScale } from "./diagnostics/diagnosticsUtils";
+import {
+  generateContentionTimeseries,
+  generateExecCountTimeseries,
+  generateExecRetriesTimeseries,
+  generateExecuteAndPlanningTimeseries,
+  generateRowsProcessedTimeseries,
+  generateCPUTimeseries,
+  generateClientWaitTimeseries,
+} from "./timeseriesUtils";
+import styles from "./statementDetails.module.scss";
+import { DiagnosticsView } from "./diagnostics/diagnosticsView";
+import { PlanDetails } from "./planDetails";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -531,7 +533,7 @@ export class StatementDetails extends React.Component<
             <Col className="gutter-row" span={24}>
               <SqlBox
                 value={this.state.formattedQuery}
-                size={SqlBoxSize.custom}
+                size={SqlBoxSize.CUSTOM}
                 format={true}
               />
             </Col>
@@ -567,16 +569,16 @@ export class StatementDetails extends React.Component<
     const { nodeRegions, isTenant, statementFingerprintInsights } = this.props;
     const { stats } = this.props.statementDetails.statement;
     const {
-      app_names,
+      app_names: appNames,
       databases,
-      fingerprint_id,
-      full_scan_count,
-      vec_count,
-      total_count,
-      implicit_txn,
+      fingerprint_id: fingerprintId,
+      full_scan_count: fullScanCount,
+      vec_count: vecCount,
+      total_count: totalCount,
+      implicit_txn: implicitTxn,
     } = this.props.statementDetails.statement.metadata;
-    const { statement_statistics_per_aggregated_ts } =
-      this.props.statementDetails;
+    const statementStatisticsPerAggregatedTs =
+      this.props.statementDetails.statement_statistics_per_aggregated_ts;
 
     const nodes: string[] = unique(
       (stats.nodes || []).map(node => node.toString()),
@@ -611,13 +613,13 @@ export class StatementDetails extends React.Component<
       <Text className={cx("app-name", "app-name__unset")}>(unset)</Text>
     );
 
-    const statsPerAggregatedTs = statement_statistics_per_aggregated_ts.sort(
+    const statsPerAggregatedTs = statementStatisticsPerAggregatedTs.sort(
       (a, b) =>
         a.aggregated_ts.seconds < b.aggregated_ts.seconds
           ? -1
           : a.aggregated_ts.seconds > b.aggregated_ts.seconds
-          ? 1
-          : 0,
+            ? 1
+            : 0,
     );
 
     const executionAndPlanningTimeseries: AlignedData =
@@ -731,7 +733,7 @@ export class StatementDetails extends React.Component<
             <Col className="gutter-row" span={24}>
               <SqlBox
                 value={this.state.formattedQuery}
-                size={SqlBoxSize.custom}
+                size={SqlBoxSize.CUSTOM}
                 format={true}
               />
             </Col>
@@ -756,13 +758,13 @@ export class StatementDetails extends React.Component<
                 <SummaryCardItem
                   label="Application Name"
                   value={intersperse<ReactNode>(
-                    app_names.map(a => <AppLink app={a} key={a} />),
+                    appNames.map(a => <AppLink app={a} key={a} />),
                     ", ",
                   )}
                 />
                 <SummaryCardItem
                   label="Fingerprint ID"
-                  value={FixFingerprintHexValue(fingerprint_id)}
+                  value={FixFingerprintHexValue(fingerprintId)}
                 />
               </SummaryCard>
             </Col>
@@ -774,15 +776,15 @@ export class StatementDetails extends React.Component<
                 />
                 <SummaryCardItem
                   label="Full scan?"
-                  value={RenderCount(full_scan_count, total_count)}
+                  value={RenderCount(fullScanCount, totalCount)}
                 />
                 <SummaryCardItem
                   label="Vectorized execution?"
-                  value={RenderCount(vec_count, total_count)}
+                  value={RenderCount(vecCount, totalCount)}
                 />
                 <SummaryCardItem
                   label="Transaction type"
-                  value={renderTransactionType(implicit_txn)}
+                  value={renderTransactionType(implicitTxn)}
                 />
                 <SummaryCardItem label="Last execution time" value={lastExec} />
               </SummaryCard>
@@ -967,8 +969,10 @@ export class StatementDetails extends React.Component<
     if (!hasData) {
       return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
     }
-    const { statement_statistics_per_plan_hash } = this.props.statementDetails;
-    const { formatted_query } = this.props.statementDetails.statement.metadata;
+    const statementStatisticsPerPlanHash =
+      this.props.statementDetails.statement_statistics_per_plan_hash;
+    const formattedQuery =
+      this.props.statementDetails.statement.metadata.formatted_query;
     return (
       <>
         <PageConfig>
@@ -993,8 +997,8 @@ export class StatementDetails extends React.Component<
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
               <SqlBox
-                value={formatted_query}
-                size={SqlBoxSize.custom}
+                value={formattedQuery}
+                size={SqlBoxSize.CUSTOM}
                 format={true}
               />
             </Col>
@@ -1002,7 +1006,7 @@ export class StatementDetails extends React.Component<
           <p className={summaryCardStylesCx("summary--card__divider")} />
           <PlanDetails
             statementFingerprintID={this.props.statementFingerprintID}
-            plans={statement_statistics_per_plan_hash}
+            plans={statementStatisticsPerPlanHash}
             hasAdminRole={this.props.hasAdminRole}
           />
         </section>

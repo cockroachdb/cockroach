@@ -8,10 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { join } from "path";
+
 import { Route, Switch, useHistory, useRouteMatch } from "react-router-dom";
 import React, { useEffect } from "react";
+
 import SnapshotPage from "src/views/tracez_v2/snapshotPage";
-import { join } from "path";
 import { getDataFromServer } from "src/util/dataFromServer";
 
 const NodePicker: React.FC = () => {

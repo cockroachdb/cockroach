@@ -8,6 +8,23 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import React, { useContext } from "react";
+import { Moment } from "moment-timezone";
+import { Tooltip } from "antd";
+import "antd/lib/tooltip/style";
+import classNames from "classnames/bind";
+import { Link } from "react-router-dom";
+import { Search as IndexIcon } from "@cockroachlabs/icons";
+
+import * as format from "../util/format";
+import IdxRecAction from "../insights/indexActionBtn";
+import { QuoteIdentifier } from "../api/safesql";
+import { Anchor } from "../anchor";
+import { CircleFilled } from "../icon";
+import { Breadcrumbs } from "../breadcrumbs";
+import { CaretRight } from "../icon/caretRight";
+import { CockroachCloudContext } from "../contexts";
+import { sqlApiErrorMessage } from "../api";
 import {
   DATE_FORMAT,
   DATE_FORMAT_24_TZ,
@@ -18,24 +35,9 @@ import {
   performanceTuningRecipes,
 } from "../util";
 import { Timestamp } from "../timestamp";
-import React, { useContext } from "react";
-import { Moment } from "moment-timezone";
-import { DatabaseTablePageDataDetails, IndexStat } from "./databaseTablePage";
-import { CircleFilled } from "../icon";
-import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
-import { Anchor } from "../anchor";
-import classNames from "classnames/bind";
+
 import styles from "./databaseTablePage.module.scss";
-import { QuoteIdentifier } from "../api/safesql";
-import IdxRecAction from "../insights/indexActionBtn";
-import * as format from "../util/format";
-import { Link } from "react-router-dom";
-import { Search as IndexIcon } from "@cockroachlabs/icons";
-import { Breadcrumbs } from "../breadcrumbs";
-import { CaretRight } from "../icon/caretRight";
-import { CockroachCloudContext } from "../contexts";
-import { sqlApiErrorMessage } from "../api";
+import { DatabaseTablePageDataDetails, IndexStat } from "./databaseTablePage";
 const cx = classNames.bind(styles);
 
 export const NameCell = ({

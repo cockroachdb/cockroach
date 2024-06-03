@@ -13,6 +13,8 @@ import moment from "moment-timezone";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
+import classNames from "classnames/bind";
+
 import { JobsRequest, JobsResponse } from "src/api/jobsApi";
 import { RequestState } from "src/api/types";
 import { Delayed } from "src/delayed";
@@ -26,7 +28,10 @@ import ColumnsSelector, {
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { DATE_FORMAT_24_TZ, syncHistory, TimestampToMoment } from "src/util";
-import { jobsColumnLabels, JobsTable, makeJobsColumns } from "./jobsTable";
+import { commonStyles } from "src/common";
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+
+import styles from "../jobs.module.scss";
 import {
   showOptions,
   statusOptions,
@@ -35,12 +40,9 @@ import {
   defaultRequestOptions,
   isValidJobType,
 } from "../util";
-
-import { commonStyles } from "src/common";
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import styles from "../jobs.module.scss";
-import classNames from "classnames/bind";
 import { Timestamp } from "../../timestamp";
+
+import { jobsColumnLabels, JobsTable, makeJobsColumns } from "./jobsTable";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

@@ -8,9 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { merge } from "lodash";
+import merge from "lodash/merge";
 import uPlot, { Options, Band, AlignedData } from "uplot";
+
 import { AxisUnits, AxisDomain } from "../utils/domain";
+
 import { barTooltipPlugin } from "./plugins";
 
 const seriesPalette = [

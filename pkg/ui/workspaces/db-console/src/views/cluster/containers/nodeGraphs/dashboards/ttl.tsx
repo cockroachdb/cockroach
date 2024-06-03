@@ -9,11 +9,11 @@
 // licenses/APL.txt.
 
 import React from "react";
-import _ from "lodash";
+import map from "lodash/map";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
-import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import { GraphDashboardProps } from "./dashboardUtils";
 
@@ -72,7 +72,7 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="latency" units={AxisUnits.Duration}>
-        {_.map(percentiles, p => (
+        {map(percentiles, p => (
           <>
             <Metric
               name={`cr.node.jobs.row_level_ttl.select_duration-${p}`}

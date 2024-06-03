@@ -10,6 +10,8 @@
 
 import { all, fork } from "redux-saga/effects";
 
+import { timeScaleSaga } from "src/redux/timeScale";
+
 import { queryMetricsSaga } from "./metrics";
 import { localSettingsSaga } from "./localsettings";
 import { customAnalyticsSaga } from "./customAnalytics";
@@ -18,7 +20,6 @@ import { analyticsSaga } from "./analyticsSagas";
 import { sessionsSaga } from "./sessions";
 import { sqlStatsSaga } from "./sqlStats";
 import { indexUsageStatsSaga } from "./indexUsageStats";
-import { timeScaleSaga } from "src/redux/timeScale";
 import { jobsSaga } from "./jobs/jobsSagas";
 
 export default function* rootSaga() {

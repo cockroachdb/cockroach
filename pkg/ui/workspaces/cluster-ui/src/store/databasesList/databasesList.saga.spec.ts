@@ -15,7 +15,9 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
+
 import { DatabasesListResponse, getDatabasesList } from "../../api";
+
 import {
   refreshDatabasesListSaga,
   requestDatabasesListSaga,

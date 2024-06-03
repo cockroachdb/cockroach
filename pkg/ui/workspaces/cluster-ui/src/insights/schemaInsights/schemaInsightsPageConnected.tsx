@@ -10,6 +10,8 @@
 
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
+
 import {
   actions,
   selectSchemaInsights,
@@ -21,18 +23,19 @@ import {
   selectSortSetting,
 } from "src/store/schemaInsights";
 import { AppState, uiConfigActions } from "src/store";
+import { SortSetting } from "src/sortedtable";
+import { selectDropUnusedIndexDuration } from "src/store/clusterSettings/clusterSettings.selectors";
+
+import { SchemaInsightEventFilters } from "../types";
+import { actions as localStorageActions } from "../../store/localStorage";
+import { selectHasAdminRole } from "../../store/uiConfig";
+import { actions as analyticsActions } from "../../store/analytics";
+
 import {
   SchemaInsightsView,
   SchemaInsightsViewDispatchProps,
   SchemaInsightsViewStateProps,
 } from "./schemaInsightsView";
-import { SchemaInsightEventFilters } from "../types";
-import { SortSetting } from "src/sortedtable";
-import { actions as localStorageActions } from "../../store/localStorage";
-import { Dispatch } from "redux";
-import { selectHasAdminRole } from "../../store/uiConfig";
-import { actions as analyticsActions } from "../../store/analytics";
-import { selectDropUnusedIndexDuration } from "src/store/clusterSettings/clusterSettings.selectors";
 
 const mapStateToProps = (
   state: AppState,

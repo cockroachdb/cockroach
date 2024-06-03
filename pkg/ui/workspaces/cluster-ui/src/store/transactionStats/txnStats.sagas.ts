@@ -10,10 +10,12 @@
 
 import { PayloadAction } from "@reduxjs/toolkit";
 import { all, call, put, takeLatest } from "redux-saga/effects";
+
 import {
   getFlushedTxnStatsApi,
   StatementsRequest,
 } from "src/api/statementsApi";
+
 import { actions as txnStatsActions } from "./txnStats.reducer";
 
 export function* refreshTxnStatsSaga(

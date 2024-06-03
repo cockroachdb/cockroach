@@ -11,13 +11,16 @@
 import { expectSaga } from "redux-saga-test-plan";
 import { throwError } from "redux-saga-test-plan/providers";
 import { call } from "redux-saga/effects";
+import moment from "moment-timezone";
+
 import {
   createDiagnosticsReportSaga,
   requestStatementsDiagnosticsSaga,
   cancelDiagnosticsReportSaga,
   StatementDiagnosticsState,
+  actions,
+  reducer,
 } from "src/store/statementDiagnostics";
-import { actions, reducer } from "src/store/statementDiagnostics";
 import {
   createStatementDiagnosticsReport,
   cancelStatementDiagnosticsReport,
@@ -28,7 +31,6 @@ import {
   CancelStmtDiagnosticRequest,
   CancelStmtDiagnosticResponse,
 } from "src/api/statementDiagnosticsApi";
-import moment from "moment-timezone";
 
 describe("statementsDiagnostics sagas", () => {
   describe("createDiagnosticsReportSaga", () => {

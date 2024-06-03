@@ -8,6 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import moment from "moment-timezone";
+import Long from "long";
+
+import { TimestampToMoment } from "../util";
+
 import {
   ActiveStatementPhase,
   SessionsResponse,
@@ -18,10 +24,6 @@ import {
   ActiveTransactionFilters,
   ExecutionStatus,
 } from "./types";
-import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import moment from "moment-timezone";
-import { TimestampToMoment } from "../util";
-import Long from "long";
 import {
   getActiveExecutionsFromSessions,
   getAppsFromActiveExecutions,

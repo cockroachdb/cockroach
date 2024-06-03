@@ -10,6 +10,8 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import React from "react";
+import classNames from "classnames/bind";
+
 import { Anchor } from "src/anchor";
 import { EmptyTable } from "src/empty";
 import {
@@ -29,11 +31,10 @@ import {
 import { DATE_WITH_SECONDS_FORMAT } from "src/util/format";
 
 import { HighwaterTimestamp, JobStatusCell } from "../util";
-import { JobDescriptionCell } from "./jobDescriptionCell";
-
 import styles from "../jobs.module.scss";
-import classNames from "classnames/bind";
 import { Timestamp, Timezone } from "../../timestamp";
+
+import { JobDescriptionCell } from "./jobDescriptionCell";
 const cx = classNames.bind(styles);
 
 type Job = cockroach.server.serverpb.IJobResponse;
@@ -48,7 +49,7 @@ interface JobsTableProps {
   visibleColumns: ColumnDescriptor<Job>[];
 }
 
-export const jobsColumnLabels: any = {
+export const jobsColumnLabels: { [key: string]: string } = {
   description: "Description",
   status: "Status",
   jobId: "Job ID",

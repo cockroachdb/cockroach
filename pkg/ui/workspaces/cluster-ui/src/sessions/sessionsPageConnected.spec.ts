@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import assert from "assert";
+
 import fetchMock from "jest-fetch-mock";
 import { applyMiddleware, createStore, Store } from "redux";
 import createSagaMiddleware from "redux-saga";

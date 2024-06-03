@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+
 import { AdminUIState } from "src/redux/state";
 
 export const selectHasViewActivityRedactedRole = createSelector(

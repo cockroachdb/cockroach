@@ -10,11 +10,13 @@
 
 import React from "react";
 import { expect } from "chai";
-import { indexUnusedDuration } from "../util";
 import * as H from "history";
 import { shallow } from "enzyme";
-import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
+
+import { indexUnusedDuration } from "../util";
 import { util } from "../index";
+
+import { DatabaseTablePage, DatabaseTablePageProps } from "./databaseTablePage";
 
 describe("DatabaseTablePage", () => {
   const history = H.createHashHistory();

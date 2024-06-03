@@ -9,8 +9,10 @@
 // licenses/APL.txt.
 
 import React, { useState } from "react";
+
 import { ColumnDescriptor, SortedTable, SortSetting } from "src/sortedtable";
 import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT, Duration } from "src/util";
+
 import { ContentionDetails, ContentionEvent, InsightExecEnum } from "../types";
 import {
   insightsTableTitles,

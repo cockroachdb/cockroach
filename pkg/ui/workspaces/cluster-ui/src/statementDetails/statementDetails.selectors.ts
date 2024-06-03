@@ -11,6 +11,9 @@
 import Long from "long";
 import { createSelector } from "@reduxjs/toolkit";
 import { RouteComponentProps } from "react-router-dom";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import moment from "moment-timezone";
+
 import { AppState } from "../store";
 import {
   appNamesAttr,
@@ -19,10 +22,8 @@ import {
   queryByName,
   generateStmtDetailsToID,
 } from "../util";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 import { selectTimeScale } from "../store/utils/selectors";
-import moment from "moment-timezone";
 
 type StatementDetailsResponseMessage =
   cockroach.server.serverpb.StatementDetailsResponse;

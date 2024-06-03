@@ -10,16 +10,12 @@
 
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
+import long from "long";
 
 import { AppState, uiConfigActions } from "src/store";
-import {
-  JobDetailsStateProps,
-  JobDetailsDispatchProps,
-  JobDetails,
-} from "./jobDetails";
 import { JobRequest, JobResponse } from "src/api/jobsApi";
 import { actions as jobActions } from "src/store/jobDetails";
-import { selectID } from "../../selectors";
 import {
   ListJobProfilerExecutionDetailsRequest,
   createInitialState,
@@ -29,9 +25,15 @@ import {
   initialState,
   actions as jobProfilerActions,
 } from "src/store/jobs/jobProfiler.reducer";
-import { Dispatch } from "redux";
-import long from "long";
 import { selectHasAdminRole } from "src/store/uiConfig";
+
+import { selectID } from "../../selectors";
+
+import {
+  JobDetailsStateProps,
+  JobDetailsDispatchProps,
+  JobDetails,
+} from "./jobDetails";
 
 const emptyState = createInitialState<JobResponse>();
 

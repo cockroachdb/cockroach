@@ -8,19 +8,30 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import Long from "long";
 import moment from "moment-timezone";
 import React from "react";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
+import {
+  util,
+  TimeWindow,
+  TimeScale,
+  findClosestTimeScale,
+  defaultTimeScaleOptions,
+} from "@cockroachlabs/cluster-ui";
+import { History } from "history";
+import isNil from "lodash/isNil";
+import map from "lodash/map";
+import isEqual from "lodash/isEqual";
+import isObject from "lodash/isObject";
+
 import * as protos from "src/js/protos";
 import {
   MetricsQuery,
   requestMetrics as requestMetricsAction,
 } from "src/redux/metrics";
 import { AdminUIState } from "src/redux/state";
-import { util } from "@cockroachlabs/cluster-ui";
 import { findChildrenOfType } from "src/util/find";
 import {
   Metric,
@@ -29,19 +40,13 @@ import {
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import { PayloadAction } from "src/interfaces/action";
-import {
-  TimeWindow,
-  TimeScale,
-  findClosestTimeScale,
-  defaultTimeScaleOptions,
-} from "@cockroachlabs/cluster-ui";
-import { History } from "history";
 import { refreshSettings } from "src/redux/apiReducers";
 import { adjustTimeScale, selectMetricsTime } from "src/redux/timeScale";
 import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
 } from "src/redux/clusterSettings";
+
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -56,7 +61,7 @@ function queryFromProps(
   let downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
 
   // Compute derivative function.
-  if (!_.isNil(metricProps.derivative)) {
+  if (!isNil(metricProps.derivative)) {
     derivative = metricProps.derivative;
   } else if (metricProps.rate) {
     derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.DERIVATIVE;
@@ -66,7 +71,7 @@ function queryFromProps(
         .NON_NEGATIVE_DERIVATIVE;
   }
   // Compute downsample function.
-  if (!_.isNil(metricProps.downsampler)) {
+  if (!isNil(metricProps.downsampler)) {
     downsampler = metricProps.downsampler;
   } else if (metricProps.downsampleMax) {
     downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
@@ -74,7 +79,7 @@ function queryFromProps(
     downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MIN;
   }
   // Compute aggregation function.
-  if (!_.isNil(metricProps.aggregator)) {
+  if (!isNil(metricProps.aggregator)) {
     sourceAggregator = metricProps.aggregator;
   } else if (metricProps.aggregateMax) {
     sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
@@ -170,7 +175,7 @@ class MetricsDataProvider extends React.Component<
         Metric,
       );
       // Construct a query for each found selector child.
-      return _.map(selectors, s => queryFromProps(s.props, child.props));
+      return map(selectors, s => queryFromProps(s.props, child.props));
     },
   );
 
@@ -201,7 +206,7 @@ class MetricsDataProvider extends React.Component<
     }
     const { metrics, requestMetrics, id } = props;
     const nextRequest = metrics && metrics.nextRequest;
-    if (!nextRequest || !_.isEqual(nextRequest, request)) {
+    if (!nextRequest || !isEqual(nextRequest, request)) {
       requestMetrics(id, request);
     }
   }
@@ -225,7 +230,7 @@ class MetricsDataProvider extends React.Component<
       if (
         data &&
         request &&
-        _.isEqual(request.queries, this.requestMessage(this.props).queries)
+        isEqual(request.queries, this.requestMessage(this.props).queries)
       ) {
         return data;
       }
@@ -259,7 +264,7 @@ const timeInfoSelector = createSelector(
   selectResolution30mStorageTTL,
   selectMetricsTime,
   (sTTL, mTTL, metricsTime) => {
-    if (!_.isObject(metricsTime.currentWindow)) {
+    if (!isObject(metricsTime.currentWindow)) {
       return null;
     }
     const { start: startMoment, end: endMoment } = metricsTime.currentWindow;

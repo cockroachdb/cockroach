@@ -9,11 +9,13 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME } from "../utils";
-import { StatementsRequest } from "src/api/statementsApi";
 import moment from "moment-timezone";
-import { StatementsResponse } from "../sqlStats";
+
+import { StatementsRequest } from "src/api/statementsApi";
 import { createInitialState, RequestState } from "src/api/types";
+
+import { StatementsResponse } from "../sqlStats";
+import { DOMAIN_NAME } from "../utils";
 
 // Note that we request transactions from the
 // statements api, hence the StatementsResponse type here.

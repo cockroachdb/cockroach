@@ -7,6 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
+
 import { Tooltip, Anchor } from "src/components";
 import {
   howAreCapacityMetricsCalculatedOverview,

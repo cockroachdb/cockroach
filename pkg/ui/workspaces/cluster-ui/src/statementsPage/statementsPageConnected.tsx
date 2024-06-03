@@ -22,7 +22,29 @@ import {
 } from "src/store/localStorage";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as databasesListActions } from "src/store/databasesList";
-import { actions as nodesActions } from "../store/nodes";
+import { StatementsRequest } from "src/api/statementsApi";
+
+import {
+  actions as nodesActions,
+  nodeRegionsByIDSelector,
+} from "../store/nodes";
+import {
+  selectTimeScale,
+  selectStmtsPageLimit,
+  selectStmtsPageReqSort,
+} from "../store/utils/selectors";
+import {
+  selectIsTenant,
+  selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
+} from "../store/uiConfig";
+import { TimeScale } from "../timeScaleDropdown";
+import {
+  InsertStmtDiagnosticRequest,
+  StatementDiagnosticsReport,
+  SqlStatsSortType,
+} from "../api";
+
 import {
   StatementsPageDispatchProps,
   StatementsPageStateProps,
@@ -36,19 +58,6 @@ import {
   selectRequestTime,
 } from "./statementsPage.selectors";
 import {
-  selectTimeScale,
-  selectStmtsPageLimit,
-  selectStmtsPageReqSort,
-} from "../store/utils/selectors";
-import {
-  selectIsTenant,
-  selectHasViewActivityRedactedRole,
-  selectHasAdminRole,
-} from "../store/uiConfig";
-import { nodeRegionsByIDSelector } from "../store/nodes";
-import { StatementsRequest } from "src/api/statementsApi";
-import { TimeScale } from "../timeScaleDropdown";
-import {
   StatementsPageRoot,
   StatementsPageRootProps,
 } from "./statementsPageRoot";
@@ -60,11 +69,6 @@ import {
   mapDispatchToActiveStatementsPageProps,
   mapStateToActiveStatementsPageProps,
 } from "./activeStatementsPage.selectors";
-import {
-  InsertStmtDiagnosticRequest,
-  StatementDiagnosticsReport,
-  SqlStatsSortType,
-} from "../api";
 
 type StateProps = {
   fingerprintsPageProps: StatementsPageStateProps & RouteComponentProps;

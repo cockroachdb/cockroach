@@ -11,9 +11,11 @@
 import React from "react";
 import classnames from "classnames/bind";
 import { Heading, Text, Button } from "@cockroachlabs/ui-components";
-import styles from "./emptyPanel.module.scss";
+
 import { Anchor } from "../../anchor";
 import heroBannerLp from "../../assets/heroBannerLp.png";
+
+import styles from "./emptyPanel.module.scss";
 
 const cx = classnames.bind(styles);
 

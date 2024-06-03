@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 import Long from "long";
-
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { NodeLivenessStatus } from "./nodeLivenessStatus";
 
 export const getLivenessResponse =

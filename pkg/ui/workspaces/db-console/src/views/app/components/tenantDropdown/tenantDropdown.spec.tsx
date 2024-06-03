@@ -7,11 +7,13 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import { getCookieValue } from "src/redux/cookies";
 import React from "react";
-import TenantDropdown from "./tenantDropdown";
 import { shallow } from "enzyme";
 import fetchMock from "fetch-mock";
+
+import { getCookieValue } from "src/redux/cookies";
+
+import TenantDropdown from "./tenantDropdown";
 
 jest.mock("src/redux/cookies", () => ({
   getCookieValue: jest.fn(),

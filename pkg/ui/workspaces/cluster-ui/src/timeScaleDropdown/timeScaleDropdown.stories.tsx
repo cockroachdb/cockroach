@@ -10,9 +10,10 @@
 
 import React, { useState } from "react";
 import { storiesOf } from "@storybook/react";
+import moment from "moment-timezone";
+
 import { TimeScaleDropdown } from "./timeScaleDropdown";
 import { defaultTimeScaleOptions, defaultTimeScaleSelected } from "./utils";
-import moment from "moment-timezone";
 
 export function TimeScaleDropdownWrapper({
   initialTimeScale = defaultTimeScaleSelected,

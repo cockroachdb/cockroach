@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
-import { propsToQueryString, queryByName } from "./query";
 import { Location } from "history";
+
+import { propsToQueryString, queryByName } from "./query";
 
 const location: Location = {
   pathname: "/debug/chart",
@@ -36,11 +37,11 @@ describe("Query utils", () => {
     });
 
     it("skips entries with nullish values", () => {
-      const obj = {
+      const obj: { [key: string]: unknown } = {
         start: 100,
         end: 200,
-        strParam: null as any,
-        hello: undefined as any,
+        strParam: null,
+        hello: undefined,
       };
       const expected = "start=100&end=200";
       const res = propsToQueryString(obj);

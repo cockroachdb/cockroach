@@ -10,19 +10,20 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { AlignedData } from "uplot";
+
 import { longToInt, TimestampToNumber } from "../util";
 
-type statementStatisticsPerAggregatedTs =
+type StatementStatisticsPerAggregatedTs =
   cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByAggregatedTs;
 
 export function generateExecuteAndPlanningTimeseries(
-  stats: statementStatisticsPerAggregatedTs[],
+  stats: StatementStatisticsPerAggregatedTs[],
 ): AlignedData {
   const ts: Array<number> = [];
   const execution: Array<number> = [];
   const planning: Array<number> = [];
 
-  stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
+  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
     ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
     execution.push(stat.stats.run_lat.mean * 1e9);
     planning.push(stat.stats.plan_lat.mean * 1e9);
@@ -32,12 +33,12 @@ export function generateExecuteAndPlanningTimeseries(
 }
 
 export function generateClientWaitTimeseries(
-  stats: statementStatisticsPerAggregatedTs[],
+  stats: StatementStatisticsPerAggregatedTs[],
 ): AlignedData {
   const ts: Array<number> = [];
   const clientWait: Array<number> = [];
 
-  stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
+  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
     ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
     clientWait.push(stat.stats.idle_lat.mean * 1e9);
   });
@@ -46,13 +47,13 @@ export function generateClientWaitTimeseries(
 }
 
 export function generateRowsProcessedTimeseries(
-  stats: statementStatisticsPerAggregatedTs[],
+  stats: StatementStatisticsPerAggregatedTs[],
 ): AlignedData {
   const ts: Array<number> = [];
   const read: Array<number> = [];
   const written: Array<number> = [];
 
-  stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
+  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
     ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
     read.push(stat.stats.rows_read?.mean);
     written.push(stat.stats.rows_written?.mean);
@@ -62,12 +63,12 @@ export function generateRowsProcessedTimeseries(
 }
 
 export function generateExecRetriesTimeseries(
-  stats: statementStatisticsPerAggregatedTs[],
+  stats: StatementStatisticsPerAggregatedTs[],
 ): AlignedData {
   const ts: Array<number> = [];
   const retries: Array<number> = [];
 
-  stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
+  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
     ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
 
     const totalCountBarChart = longToInt(stat.stats.count);
@@ -79,12 +80,12 @@ export function generateExecRetriesTimeseries(
 }
 
 export function generateExecCountTimeseries(
-  stats: statementStatisticsPerAggregatedTs[],
+  stats: StatementStatisticsPerAggregatedTs[],
 ): AlignedData {
   const ts: Array<number> = [];
   const count: Array<number> = [];
 
-  stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
+  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
     ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
     count.push(longToInt(stat.stats.count));
   });
@@ -93,12 +94,12 @@ export function generateExecCountTimeseries(
 }
 
 export function generateContentionTimeseries(
-  stats: statementStatisticsPerAggregatedTs[],
+  stats: StatementStatisticsPerAggregatedTs[],
 ): AlignedData {
   const ts: Array<number> = [];
   const count: Array<number> = [];
 
-  stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
+  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
     ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
     count.push(stat.stats.exec_stats.contention_time.mean * 1e9);
   });
@@ -107,12 +108,12 @@ export function generateContentionTimeseries(
 }
 
 export function generateCPUTimeseries(
-  stats: statementStatisticsPerAggregatedTs[],
+  stats: StatementStatisticsPerAggregatedTs[],
 ): AlignedData {
   const ts: Array<number> = [];
   const count: Array<number> = [];
 
-  stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
+  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
     if (stat.stats.exec_stats.cpu_sql_nanos) {
       ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
       count.push(stat.stats.exec_stats.cpu_sql_nanos.mean);

@@ -8,22 +8,27 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import React, { Fragment } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Loading, util } from "@cockroachlabs/cluster-ui";
+import map from "lodash/map";
+import isEqual from "lodash/isEqual";
+import isEmpty from "lodash/isEmpty";
+import join from "lodash/join";
+import sortBy from "lodash/sortBy";
+import isNaN from "lodash/isNaN";
 
-import * as protos from "src/js/protos";
+import { BackToAdvanceDebug } from "src/views/reports/containers/util";
+import { getMatchParamByName } from "src/util/query";
+import { nodeIDAttr } from "src/util/constants";
+import { AdminUIState } from "src/redux/state";
 import {
   certificatesRequestKey,
   refreshCertificates,
 } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
-import { nodeIDAttr } from "src/util/constants";
-import { Loading, util } from "@cockroachlabs/cluster-ui";
-import { getMatchParamByName } from "src/util/query";
-import { BackToAdvanceDebug } from "src/views/reports/containers/util";
+import * as protos from "src/js/protos";
 
 interface CertificatesOwnProps {
   certificates: protos.cockroach.server.serverpb.CertificatesResponse;
@@ -62,14 +67,14 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
   }
 
   componentDidUpdate(prevProps: CertificatesProps) {
-    if (!_.isEqual(this.props.location, prevProps.location)) {
+    if (!isEqual(this.props.location, prevProps.location)) {
       this.refresh(this.props);
     }
   }
 
-  renderSimpleRow(header: string, value: string, title: string = "") {
+  renderSimpleRow(header: string, value: string, title = "") {
     let realTitle = title;
-    if (_.isEmpty(realTitle)) {
+    if (isEmpty(realTitle)) {
       realTitle = value;
     }
     return (
@@ -90,12 +95,10 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
         <th className="certs-table__cell certs-table__cell--header">
           {header}
         </th>
-        <td className="certs-table__cell" title={_.join(values, "\n")}>
+        <td className="certs-table__cell" title={join(values, "\n")}>
           <ul className="certs-entries-list">
-            {_.chain(values)
-              .sort()
-              .map((value, key) => <li key={key}>{value}</li>)
-              .value()}
+            {sortBy(values)
+              .map((value, key) => <li key={key}>{value}</li>)}
           </ul>
         </td>
       </tr>
@@ -163,7 +166,7 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
       <table key={key} className="certs-table">
         <tbody>
           {this.renderSimpleRow("Type", certType)}
-          {_.map(cert.fields, (fields, id) => {
+          {map(cert.fields, (fields, id) => {
             const result = this.renderFields(fields, id);
             if (id > 0) {
               result.unshift(emptyRow);
@@ -179,7 +182,7 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     const { certificates, match } = this.props;
     const nodeId = getMatchParamByName(match, nodeIDAttr);
 
-    if (_.isEmpty(certificates.certificates)) {
+    if (isEmpty(certificates.certificates)) {
       return (
         <h2 className="base-heading">
           No certificates were found on node {nodeId}.
@@ -188,7 +191,7 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     }
 
     let header: string = null;
-    if (_.isNaN(parseInt(nodeId, 10))) {
+    if (isNaN(parseInt(nodeId, 10))) {
       header = "Local Node";
     } else {
       header = `Node ${nodeId}`;
@@ -197,7 +200,7 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
     return (
       <Fragment>
         <h2 className="base-heading">{header} certificates</h2>
-        {_.map(certificates.certificates, (cert, key) =>
+        {map(certificates.certificates, (cert, key) =>
           this.renderCert(cert, key),
         )}
       </Fragment>

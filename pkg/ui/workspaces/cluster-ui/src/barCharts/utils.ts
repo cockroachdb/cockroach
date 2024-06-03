@@ -10,6 +10,7 @@
 
 import { format as d3Format } from "d3-format";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+
 import { TransactionInfo } from "../transactionsTable";
 
 type StatementStatistics =

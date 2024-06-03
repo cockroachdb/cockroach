@@ -25,8 +25,10 @@ import {
   createStore,
   Store,
 } from "redux";
-import { ConnectedStatementsPage } from "./statementsPageConnected";
+
 import { AppState, rootReducer, sagas } from "src/store";
+
+import { ConnectedStatementsPage } from "./statementsPageConnected";
 
 const history = createMemoryHistory();
 const routerReducer = connectRouter(history);
@@ -39,8 +41,8 @@ const store: Store<AppState> = createStore(
   }),
   compose(
     applyMiddleware(sagaMiddleware, routerMiddleware(history)),
-    (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
-      (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+    window.__REDUX_DEVTOOLS_EXTENSION__ &&
+      window.__REDUX_DEVTOOLS_EXTENSION__(),
   ),
 );
 

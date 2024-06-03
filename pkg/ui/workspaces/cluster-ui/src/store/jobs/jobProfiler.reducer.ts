@@ -9,14 +9,16 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME, noopReducer } from "../utils";
 import moment from "moment-timezone";
+
 import { createInitialState, RequestState } from "src/api/types";
 import {
   CollectExecutionDetailsRequest,
   ListJobProfilerExecutionDetailsRequest,
   ListJobProfilerExecutionDetailsResponse,
 } from "src/api";
+
+import { DOMAIN_NAME, noopReducer } from "../utils";
 
 export type JobProfilerExecutionDetailFilesState =
   RequestState<ListJobProfilerExecutionDetailsResponse>;

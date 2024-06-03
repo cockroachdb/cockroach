@@ -10,31 +10,34 @@
 
 import React, { useEffect, useState } from "react";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import { Button } from "src/button";
 import Helmet from "react-helmet";
-import { commonStyles } from "src/common";
 import classNames from "classnames/bind";
 import { useHistory, match } from "react-router-dom";
 import { Col, Row, Tabs } from "antd";
-import { ActiveStatementDetailsOverviewTab } from "./activeStatementDetailsOverviewTab";
+
+import { commonStyles } from "src/common";
+import { Button } from "src/button";
+import "antd/lib/tabs/style";
+import "antd/lib/col/style";
+import "antd/lib/row/style";
 import { SqlBox, SqlBoxSize } from "src/sql/box";
-import { getExplainPlanFromGist } from "../api/decodePlanGistApi";
 import { getMatchParamByName } from "src/util/query";
-import { executionIdAttr } from "../util";
 import {
   ActiveStatement,
   ExecutionContentionDetails,
 } from "src/activeExecutions";
 
-import "antd/lib/tabs/style";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
-import styles from "./statementDetails.module.scss";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
-import { Insights } from "./planDetails";
 import { getIdxRecommendationsFromExecution } from "../api/idxRecForStatementApi";
 import { SortSetting } from "../sortedtable";
+import { executionIdAttr } from "../util";
+import { getExplainPlanFromGist } from "../api/decodePlanGistApi";
+
+import { ActiveStatementDetailsOverviewTab } from "./activeStatementDetailsOverviewTab";
+import { Insights } from "./planDetails";
+import styles from "./statementDetails.module.scss";
+
 const cx = classNames.bind(styles);
 
 export type ActiveStatementDetailsStateProps = {
@@ -142,7 +145,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
           <Col className="gutter-row" span={24}>
             <SqlBox
               value={statement?.query || "SQL Execution not found."}
-              size={SqlBoxSize.custom}
+              size={SqlBoxSize.CUSTOM}
             />
           </Col>
         </Row>
@@ -176,7 +179,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
               >
                 <SqlBox
                   value={explainPlanState.explainPlan || "Not available."}
-                  size={SqlBoxSize.custom}
+                  size={SqlBoxSize.CUSTOM}
                 />
                 {hasInsights && (
                   <Insights

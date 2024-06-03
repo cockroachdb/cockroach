@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
+
 import {
   filterStatementInsights,
   filterTransactionInsights,
@@ -454,12 +455,12 @@ describe("test workload insights utils", () => {
     const createTestCases = (execType: InsightExecEnum) => [
       {
         problem: "FailedExecution",
-        causes: [InsightNameEnum.failedExecution],
+        causes: [InsightNameEnum.FAILED_EXECUTION],
         expectedInsights: [failedExecutionInsight(execType)],
       },
       {
         problem: "SlowExecution",
-        causes: [InsightNameEnum.failedExecution],
+        causes: [InsightNameEnum.FAILED_EXECUTION],
         expectedInsights: [failedExecutionInsight(execType)],
       },
       {
@@ -470,10 +471,10 @@ describe("test workload insights utils", () => {
       {
         problem: "SlowExecution",
         causes: [
-          InsightNameEnum.planRegression,
-          InsightNameEnum.suboptimalPlan,
-          InsightNameEnum.highRetryCount,
-          InsightNameEnum.highContention,
+          InsightNameEnum.PLAN_REGRESSION,
+          InsightNameEnum.SUBOPTIMAL_PLAN,
+          InsightNameEnum.HIGH_RETRY_COUNT,
+          InsightNameEnum.HIGH_CONTENTION,
         ],
         expectedInsights: [
           planRegressionInsight(execType),
@@ -484,7 +485,7 @@ describe("test workload insights utils", () => {
       },
       {
         problem: "random",
-        causes: [InsightNameEnum.failedExecution],
+        causes: [InsightNameEnum.FAILED_EXECUTION],
         expectedInsights: [],
       },
     ];

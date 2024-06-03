@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { Link } from "react-router-dom";
+
 import {
   ColumnDescriptor,
   ISortedTablePagination,
@@ -24,15 +26,15 @@ import {
   TransactionStatus,
   TxnInsightEvent,
 } from "src/insights";
+import { Badge } from "src/badge";
+
 import {
   InsightCell,
   insightsTableTitles,
   QueriesCell,
   TransactionDetailsLink,
 } from "../util";
-import { Link } from "react-router-dom";
 import { TimeScale } from "../../../timeScaleDropdown";
-import { Badge } from "src/badge";
 import { Timestamp } from "../../../timestamp";
 
 function txnStatusToString(status: TransactionStatus) {

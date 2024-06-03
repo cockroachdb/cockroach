@@ -15,24 +15,25 @@ import { Tabs } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
 import "antd/lib/tabs/style";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import { Button } from "src/button";
 import { getMatchParamByName } from "src/util/query";
 import { TxnInsightDetailsRequest, TxnInsightDetailsReqErrs } from "src/api";
+import { commonStyles } from "src/common";
+import { idAttr, insights } from "src/util";
+import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
+import { Anchor } from "src/anchor";
+
+import { TimeScale } from "../../timeScaleDropdown";
 import {
   InsightNameEnum,
   StmtFailureCodesStr,
   TxnInsightDetails,
 } from "../types";
 
-import { commonStyles } from "src/common";
-import { TimeScale } from "../../timeScaleDropdown";
-import { idAttr } from "src/util";
-import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetailsOverviewTab";
 import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsStmtsTab";
-import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
-import { InlineAlert } from "@cockroachlabs/ui-components";
-import { insights } from "src/util";
-import { Anchor } from "src/anchor";
+import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetailsOverviewTab";
 
 export interface TransactionInsightDetailsStateProps {
   insightDetails: TxnInsightDetails;
@@ -51,7 +52,7 @@ export interface TransactionInsightDetailsDispatchProps {
 export type TransactionInsightDetailsProps =
   TransactionInsightDetailsStateProps &
     TransactionInsightDetailsDispatchProps &
-    RouteComponentProps<unknown>;
+    RouteComponentProps;
 
 enum TabKeysEnum {
   OVERVIEW = "overview",
@@ -97,7 +98,7 @@ export const TransactionInsightDetails: React.FC<
       contentionInfo != null ||
       (txnDetails != null &&
         txnDetails.insights.find(
-          i => i.name === InsightNameEnum.highContention,
+          i => i.name === InsightNameEnum.HIGH_CONTENTION,
         ) == null &&
         txnDetails.errorCode !== StmtFailureCodesStr.RETRY_SERIALIZABLE);
 

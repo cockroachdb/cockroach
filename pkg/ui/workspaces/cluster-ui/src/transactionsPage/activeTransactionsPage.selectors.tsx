@@ -18,6 +18,7 @@ import {
   SortSetting,
   analyticsActions,
 } from "src";
+
 import {
   selectAppName,
   selectActiveTransactions,
@@ -28,9 +29,10 @@ import {
   actions as localStorageActions,
 } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
-import { localStorageSelector } from "../store/utils/selectors";
 import { selectIsTenant } from "src/store/uiConfig";
 import { selectIsAutoRefreshEnabled } from "src/statementsPage/activeStatementsPage.selectors";
+
+import { localStorageSelector } from "../store/utils/selectors";
 
 export const selectSortSetting = (state: AppState): SortSetting =>
   localStorageSelector(state)["sortSetting/ActiveTransactionsPage"];

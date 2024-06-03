@@ -17,6 +17,9 @@ import "antd/lib/tabs/style";
 import Long from "long";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
+import classNames from "classnames/bind";
+import moment from "moment-timezone";
+
 import { JobRequest, JobResponse } from "src/api/jobsApi";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
@@ -28,17 +31,14 @@ import {
   getMatchParamByName,
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
 } from "src/util";
-
 import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
 import { JobStatusCell } from "src/jobs/util/jobStatusCell";
-import { isTerminalState } from "../util/jobOptions";
-
 import { commonStyles } from "src/common";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import jobStyles from "src/jobs/jobs.module.scss";
+import { CockroachCloudContext } from "src/contexts";
+import { UIConfigState } from "src/store";
 
-import classNames from "classnames/bind";
-import { Timestamp } from "../../timestamp";
 import {
   GetJobProfilerExecutionDetailRequest,
   GetJobProfilerExecutionDetailResponse,
@@ -46,11 +46,10 @@ import {
   ListJobProfilerExecutionDetailsResponse,
   RequestState,
 } from "../../api";
-import moment from "moment-timezone";
-import { CockroachCloudContext } from "src/contexts";
+import { Timestamp } from "../../timestamp";
+import { isTerminalState } from "../util/jobOptions";
+
 import { JobProfilerView } from "./jobProfilerView";
-import long from "long";
-import { UIConfigState } from "src/store";
 
 const { TabPane } = Tabs;
 
@@ -78,7 +77,7 @@ export interface JobDetailsDispatchProps {
   refreshExecutionDetailFiles: (
     req: ListJobProfilerExecutionDetailsRequest,
   ) => void;
-  onRequestExecutionDetails: (jobID: long) => void;
+  onRequestExecutionDetails: (jobID: Long) => void;
   refreshUserSQLRoles: () => void;
 }
 
@@ -88,7 +87,7 @@ export interface JobDetailsState {
 
 export type JobDetailsProps = JobDetailsStateProps &
   JobDetailsDispatchProps &
-  RouteComponentProps<unknown>;
+  RouteComponentProps;
 
 export class JobDetails extends React.Component<
   JobDetailsProps,
@@ -300,7 +299,7 @@ export class JobDetails extends React.Component<
                     <Col className="gutter-row" span={24}>
                       <SqlBox
                         value={job?.description ?? "Job not found."}
-                        size={SqlBoxSize.custom}
+                        size={SqlBoxSize.CUSTOM}
                         format={true}
                       />
                     </Col>

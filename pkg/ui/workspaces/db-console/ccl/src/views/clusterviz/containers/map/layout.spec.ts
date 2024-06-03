@@ -8,6 +8,7 @@
 
 import { LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
+
 import { renderAsMap } from "./layout";
 
 const locationTree: LocationTree = {

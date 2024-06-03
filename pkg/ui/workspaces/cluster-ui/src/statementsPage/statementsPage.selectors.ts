@@ -10,8 +10,9 @@
 
 import { createSelector } from "reselect";
 
-import { localStorageSelector } from "../store/utils/selectors";
 import { databasesListSelector } from "src/store/databasesList/databasesList.selectors";
+
+import { localStorageSelector } from "../store/utils/selectors";
 
 // selectDatabases returns the array of all databases in the cluster.
 export const selectDatabases = createSelector(databasesListSelector, state => {

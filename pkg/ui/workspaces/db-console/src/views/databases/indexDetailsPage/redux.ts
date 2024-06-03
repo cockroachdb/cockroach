@@ -13,8 +13,9 @@ import {
   util,
   RecommendationType as RecType,
 } from "@cockroachlabs/cluster-ui";
-import { AdminUIState } from "src/redux/state";
 import { RouteComponentProps } from "react-router";
+
+import { AdminUIState } from "src/redux/state";
 import { getMatchParamByName } from "src/util/query";
 import {
   databaseNameAttr,
@@ -29,7 +30,6 @@ import {
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { longToInt } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
-import TableIndexStatsRequest = cockroach.server.serverpb.TableIndexStatsRequest;
 import {
   selectHasViewActivityRedactedRole,
   selectHasAdminRole,
@@ -37,6 +37,8 @@ import {
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
+
+import TableIndexStatsRequest = cockroach.server.serverpb.TableIndexStatsRequest;
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 export const mapStateToProps = (

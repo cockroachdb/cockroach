@@ -11,6 +11,8 @@ import { connect } from "react-redux";
 import { Link } from "react-router-dom";
 import classNames from "classnames";
 
+import nodeMapScreenshot from "assets/nodeMapSteps/3-seeMap.png";
+import questionMap from "assets/questionMap.svg";
 import { allNodesHaveLocality } from "src/util/localities";
 import {
   instructionsBoxCollapsedSelector,
@@ -20,8 +22,6 @@ import { AdminUIState, AppDispatch } from "src/redux/state";
 import { nodeStatusesSelector } from "src/redux/nodes";
 import { LocalityTier } from "src/redux/localities";
 import * as docsURL from "src/util/docs";
-import nodeMapScreenshot from "assets/nodeMapSteps/3-seeMap.png";
-import questionMap from "assets/questionMap.svg";
 import "./instructionsBox.styl";
 
 interface InstructionsBoxProps {

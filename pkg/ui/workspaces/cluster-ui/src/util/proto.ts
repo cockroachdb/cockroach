@@ -7,9 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
-import _ from "lodash";
-
+import has from "lodash/has";
+import sumBy from "lodash/sumBy";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 export type INodeStatus = cockroach.server.status.statuspb.INodeStatus;
@@ -28,7 +27,7 @@ export function rollupStoreMetrics(ns: INodeStatus): StatusMetrics {
     .map(ss => ss.metrics)
     .reduce((acc, i) => {
       for (const k in i) {
-        acc[k] = _.has(acc, k) ? acc[k] + i[k] : i[k];
+        acc[k] = has(acc, k) ? acc[k] + i[k] : i[k];
       }
       return acc;
     }, ns.metrics);
@@ -103,7 +102,7 @@ export function BytesUsed(s: INodeStatus): number {
   if (usedCapacity !== 0) {
     return usedCapacity;
   }
-  return _.sumBy(aggregateByteKeys, (key: string) => {
+  return sumBy(aggregateByteKeys, (key: string) => {
     return s.metrics[key];
   });
 }

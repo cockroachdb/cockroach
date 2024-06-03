@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import React from "react";
+
 import { EmptyTable, EmptyTableProps } from "src/empty";
 import { Anchor } from "src/anchor";
 import { insights } from "src/util";

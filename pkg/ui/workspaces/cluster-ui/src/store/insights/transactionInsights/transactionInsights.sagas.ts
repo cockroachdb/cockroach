@@ -9,10 +9,11 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
+import { PayloadAction } from "@reduxjs/toolkit";
+
+import { getTxnInsightsApi, TxnInsightsRequest } from "src/api/txnInsightsApi";
 
 import { actions as txnActions } from "../transactionInsights/transactionInsights.reducer";
-import { getTxnInsightsApi, TxnInsightsRequest } from "src/api/txnInsightsApi";
-import { PayloadAction } from "@reduxjs/toolkit";
 
 export function* refreshTransactionInsightsSaga(
   action?: PayloadAction<TxnInsightsRequest>,

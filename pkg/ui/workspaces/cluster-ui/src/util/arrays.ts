@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import Long from "long";
+
 import { longToInt } from "./fixLong";
 
 // Remove duplicates and return an array with unique elements.

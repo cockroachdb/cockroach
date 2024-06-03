@@ -9,9 +9,11 @@
 // licenses/APL.txt.
 
 import { shallow } from "enzyme";
-import _ from "lodash";
+import map from "lodash/map";
+import noop from "lodash/noop";
 import Long from "long";
 import React, { Fragment } from "react";
+
 import * as protos from "src/js/protos";
 import { MetricsQuery, requestMetrics } from "src/redux/metrics";
 import {
@@ -42,7 +44,7 @@ function makeDataProvider(
   metrics: MetricsQuery,
   timeInfo: QueryTimeInfo,
   rm: typeof requestMetrics,
-  refreshNodeSettings: typeof refreshSettings = _.noop as typeof refreshSettings,
+  refreshNodeSettings: typeof refreshSettings = noop as typeof refreshSettings,
 ) {
   return shallow(
     <MetricsDataProvider
@@ -120,7 +122,7 @@ function makeMetricsQuery(
 ): MetricsQuery {
   const request = makeMetricsRequest(timeSpan, sources, tenantSource);
   const data = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
-    results: _.map(request.queries, q => {
+    results: map(request.queries, q => {
       return {
         query: q,
         datapoints: [],
@@ -270,7 +272,7 @@ describe("<MetricsDataProvider>", function () {
             metrics={null}
             timeInfo={timespan1}
             requestMetrics={spy}
-            refreshNodeSettings={_.noop as typeof refreshSettings}
+            refreshNodeSettings={noop as typeof refreshSettings}
           >
             <Fragment>
               <TextGraph>

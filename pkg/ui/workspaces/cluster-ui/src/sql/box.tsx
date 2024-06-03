@@ -9,17 +9,19 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Highlight } from "./highlight";
 import classNames from "classnames/bind";
 
-import styles from "./sqlhighlight.module.scss";
-import { api as clusterUiApi } from "../index";
 import { FormatQuery } from "src/util";
 
+import { api as clusterUiApi } from "../index";
+
+import { Highlight } from "./highlight";
+import styles from "./sqlhighlight.module.scss";
+
 export enum SqlBoxSize {
-  small = "small",
-  large = "large",
-  custom = "custom",
+  SMALL = "small",
+  LARGE = "large",
+  CUSTOM = "custom",
 }
 
 export interface SqlBoxProps {

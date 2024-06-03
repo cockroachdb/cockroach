@@ -9,8 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { viewAttr, tabAttr } from "src/util";
 import { useHistory, useLocation } from "react-router-dom";
+
+import { viewAttr, tabAttr } from "src/util";
 import { queryByName } from "src/util/query";
 import {
   SelectWithDescription,
