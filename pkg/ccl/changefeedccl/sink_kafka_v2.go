@@ -428,7 +428,7 @@ func makeKafkaSinkV2(ctx context.Context,
 	// node3/397/2024-06-03T13:50:13.539163516.after:{"key":"[15, 10]","offset":84106,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422607448984688.0000000000\"}"}
 
 	// next try:
-	// kafkaCfg.Producer.Flush.Frequency = time.Millisecond
+	kafkaCfg.Producer.Flush.Frequency = time.Microsecond
 
 	topicNamer, err := MakeTopicNamer(
 		targets,
