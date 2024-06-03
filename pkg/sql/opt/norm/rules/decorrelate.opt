@@ -648,21 +648,27 @@
     $private:*
 )
 =>
-(Select
-    ((OpName)
-        $left
-        (Window
-            $input
-            (Let
-                ($rowNum $rowNumCol):(MakeRowNumberWindowFunc)
-                $rowNum
+(Project
+    # Needed to project away the rowNum column.
+    (Select
+        ((OpName)
+            $left
+            (Window
+                $input
+                (Let
+                    ($rowNum $rowNumCol):(MakeRowNumberWindowFunc
+                    )
+                    $rowNum
+                )
+                (MakeWindowPrivate (MakeEmptyColSet) $ordering)
             )
-            (MakeWindowPrivate (MakeEmptyColSet) $ordering)
+            $on
+            $private
         )
-        $on
-        $private
+        (LimitToRowNumberFilter $limit $rowNumCol)
     )
-    (LimitToRowNumberFilter $limit $rowNumCol)
+    []
+    (OutputCols2 $left $right)
 )
 
 # TryDecorrelateProjectSet "pushes down" an InnerJoinApply operator into a
