@@ -260,12 +260,21 @@ func newUndefinedOpclassError(opclass tree.Name) error {
 
 // checkColumnAccessibilityForIndex validate that any columns that are explicitly referenced in a column for storage or
 // as a key are either accessible and not system columns.
-func checkColumnAccessibilityForIndex(colName string, column *scpb.Column, store bool) {
+func checkColumnAccessibilityForIndex(
+	colName string, column *scpb.Column, columnType *scpb.ColumnType, store bool,
+) {
 	if column.IsInaccessible {
 		panic(pgerror.Newf(
 			pgcode.UndefinedColumn,
 			"column %q is inaccessible and cannot be referenced",
 			colName))
+	}
+
+	if columnType.IsVirtual && store {
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"index cannot store virtual column %v", colName,
+		))
 	}
 
 	if column.IsSystemColumn {
@@ -545,7 +554,7 @@ func addColumnsForSecondaryIndex(
 		}
 	}
 	for _, storingNode := range n.Storing {
-		colName := storingNode.String()
+		colName := storingNode.Normalize()
 		if _, found := columnRefs[colName]; found {
 			panic(sqlerrors.NewColumnAlreadyExistsInIndexError(string(n.Name), colName))
 		}
@@ -574,7 +583,7 @@ func addColumnsForSecondaryIndex(
 		columnElem := mustRetrieveColumnElem(b, tableID, colID)
 		// Column should be accessible.
 		if columnNode.Expr == nil {
-			checkColumnAccessibilityForIndex(string(colName), columnElem, false)
+			checkColumnAccessibilityForIndex(string(colName), columnElem, columnTypeElem, false)
 		}
 		keyColNames[i] = string(colName)
 		idxSpec.columns = append(idxSpec.columns, &scpb.IndexColumn{
@@ -633,7 +642,8 @@ func addColumnsForSecondaryIndex(
 			RequiredPrivilege: privilege.CREATE,
 		})
 		_, _, column := scpb.FindColumn(colElts)
-		checkColumnAccessibilityForIndex(storingNode.String(), column, true)
+		columnTypeElem := mustRetrieveColumnTypeElem(b, tableID, column.ColumnID)
+		checkColumnAccessibilityForIndex(storingNode.String(), column, columnTypeElem, true)
 		c := &scpb.IndexColumn{
 			TableID:       idxSpec.secondary.TableID,
 			IndexID:       idxSpec.secondary.IndexID,
