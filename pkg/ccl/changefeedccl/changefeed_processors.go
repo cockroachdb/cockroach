@@ -399,7 +399,10 @@ func (ca *changeAggregator) startKVFeed(
 	opts changefeedbase.StatementOptions,
 ) (kvevent.Reader, chan struct{}, chan error, error) {
 	cfg := ca.flowCtx.Cfg
-	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", memLimit, parentMemMon, false /* longLiving */)
+	// CDC DistSQL flows are long-living, so we mark the memory monitors
+	// accordingly.
+	const longLiving = true
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", memLimit, parentMemMon, longLiving)
 	kvFeedMemMon.StartNoReserved(ctx, parentMemMon)
 	buf := kvevent.NewThrottlingBuffer(
 		kvevent.NewMemBuffer(kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
