@@ -5,17 +5,49 @@ new-cluster name=s1
 
 exec-sql
 CREATE DATABASE d;
-CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
-CREATE TABLE d.t1 (x d.greeting);
-INSERT INTO d.t1 VALUES ('hello'), ('howdy');
-CREATE TABLE d.t2 (x d.greeting[]);
-INSERT INTO d.t2 VALUES (ARRAY['howdy']), (ARRAY['hi']);
+----
 
+exec-sql
+CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+----
+
+exec-sql
+CREATE TABLE d.t1 (x d.greeting);
+----
+
+exec-sql
+INSERT INTO d.t1 VALUES ('hello'), ('howdy');
+----
+
+exec-sql
+CREATE TABLE d.t2 (x d.greeting[]);
+----
+
+exec-sql
+INSERT INTO d.t2 VALUES (ARRAY['howdy']), (ARRAY['hi']);
+----
+
+exec-sql
 CREATE DATABASE d2;
+----
+
+exec-sql
 CREATE TYPE d2.farewell AS ENUM ('bye', 'cya');
+----
+
+exec-sql
 CREATE TABLE d2.t1 (x d2.farewell);
+----
+
+exec-sql
 INSERT INTO d2.t1 VALUES ('bye'), ('cya');
+----
+
+exec-sql
 CREATE TABLE d2.t2 (x d2.farewell[]);
+----
+
+exec-sql
 INSERT INTO d2.t2 VALUES (ARRAY['bye']), (ARRAY['cya']);
 ----
 
@@ -112,12 +144,33 @@ new-cluster name=s
 
 exec-sql
 CREATE DATABASE d;
+----
+
+exec-sql
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
+----
+
+exec-sql
 CREATE TYPE d.farewell AS ENUM ('bye', 'cya');
+----
+
+exec-sql
 CREATE TABLE d.t1 (x d.greeting);
+----
+
+exec-sql
 INSERT INTO d.t1 VALUES ('hello'), ('howdy');
+----
+
+exec-sql
 CREATE TABLE d.t2 (x d.greeting[]);
+----
+
+exec-sql
 INSERT INTO d.t2 VALUES (ARRAY['howdy']), (ARRAY['hi']);
+----
+
+exec-sql
 CREATE TABLE d.expr (
 	x d.greeting,
   y d.greeting DEFAULT 'hello',

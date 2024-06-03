@@ -1,22 +1,48 @@
 # Test backing up and restoring a database with procedures.
-skip issue-num=122353
 new-cluster name=s
 ----
 
 exec-sql
 CREATE DATABASE db1;
+----
+
+exec-sql
 USE db1;
+----
+
+exec-sql
 CREATE SCHEMA sc1;
+----
+
+exec-sql
 CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql
 CREATE TYPE sc1.enum1 AS ENUM('Good');
+----
+
+exec-sql
 CREATE SEQUENCE sc1.sq1;
+----
+
+exec-sql
 CREATE PROCEDURE sc1.p1(a sc1.enum1) LANGUAGE SQL AS $$
   SELECT a FROM sc1.tbl1;
   SELECT 'Good'::sc1.enum1;
   SELECT nextval('sc1.sq1');
 $$;
+----
+
+exec-sql
 CREATE SCHEMA sc2;
+----
+
+exec-sql
 CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
+----
+
+exec-sql
 CREATE PROCEDURE sc2.p2(i INT) LANGUAGE SQL AS $$
   INSERT INTO sc2.tbl2 VALUES (i)
 $$;
@@ -165,18 +191,45 @@ new-cluster name=s1
 
 exec-sql cluster=s1
 CREATE DATABASE db1;
+----
+
+exec-sql cluster=s1
 USE db1;
+----
+
+exec-sql cluster=s1
 CREATE SCHEMA sc1;
+----
+
+exec-sql cluster=s1
 CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql cluster=s1
 CREATE TYPE sc1.enum1 AS ENUM('Good');
+----
+
+exec-sql cluster=s1
 CREATE SEQUENCE sc1.sq1;
+----
+
+exec-sql cluster=s1
 CREATE PROCEDURE sc1.p1(a sc1.enum1) LANGUAGE SQL AS $$
   SELECT a FROM sc1.tbl1;
   SELECT 'Good'::sc1.enum1;
   SELECT nextval('sc1.sq1');
 $$;
+----
+
+exec-sql cluster=s1
 CREATE SCHEMA sc2;
+----
+
+exec-sql cluster=s1
 CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
+----
+
+exec-sql cluster=s1
 CREATE PROCEDURE sc2.p2(i INT) LANGUAGE SQL AS $$
   INSERT INTO sc2.tbl2 VALUES (i)
 $$;
@@ -320,8 +373,17 @@ new-cluster name=s3
 
 exec-sql cluster=s3
 CREATE DATABASE db1;
+----
+
+exec-sql cluster=s3
 CREATE SCHEMA sc1;
+----
+
+exec-sql cluster=s3
 CREATE TABLE sc1.t(a INT PRIMARY KEY);
+----
+
+exec-sql cluster=s3
 CREATE PROCEDURE sc1.p() LANGUAGE SQL AS $$ SELECT 1 $$;
 ----
 
