@@ -751,7 +751,7 @@ type Pebble struct {
 	auxDir       string
 	ballastPath  string
 	ballastSize  int64
-	maxSize      int64
+	maxSize      base.StoreSize
 	attrs        roachpb.Attributes
 	properties   roachpb.StoreProperties
 	settings     *cluster.Settings
@@ -1686,8 +1686,8 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 		// part of the actual file system here can throw off allocator
 		// rebalancing in a hard-to-trace manner. See #7050.
 		return roachpb.StoreCapacity{
-			Capacity:  p.maxSize,
-			Available: p.maxSize,
+			Capacity:  p.maxSize.Bytes,
+			Available: p.maxSize.Bytes,
 		}, nil
 	} else if err != nil {
 		return roachpb.StoreCapacity{}, err
@@ -1763,7 +1763,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	// If no size limitation have been placed on the store size or if the
 	// limitation is greater than what's available, just return the actual
 	// totals.
-	if p.maxSize == 0 || p.maxSize >= fsuTotal || p.path == "" {
+	if ((p.maxSize.Bytes == 0 || p.maxSize.Bytes >= fsuTotal) && p.maxSize.Percent == 0) || p.path == "" {
 		return roachpb.StoreCapacity{
 			Capacity:  fsuTotal,
 			Available: fsuAvail,
@@ -1771,7 +1771,12 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 		}, nil
 	}
 
-	available := p.maxSize - totalUsedBytes
+	maxSize := p.maxSize.Bytes
+	if p.maxSize.Percent != 0 {
+		maxSize = int64(float64(fsuTotal) * p.maxSize.Percent)
+	}
+
+	available := maxSize - totalUsedBytes
 	if available > fsuAvail {
 		available = fsuAvail
 	}
@@ -1780,7 +1785,7 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	}
 
 	return roachpb.StoreCapacity{
-		Capacity:  p.maxSize,
+		Capacity:  maxSize,
 		Available: available,
 		Used:      totalUsedBytes,
 	}, nil

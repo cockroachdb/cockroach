@@ -136,7 +136,7 @@ func (registry *stickyVFSRegistryImpl) Open(
 	options := []storage.ConfigOption{
 		storage.Attributes(spec.Attributes),
 		storage.CacheSize(cfg.CacheSize),
-		storage.MaxSize(spec.Size.InBytes),
+		storage.MaxSizeBytes(spec.Size.InBytes),
 		storage.EncryptionAtRest(spec.EncryptionOptions),
 		storage.ForStickyEngineTesting,
 	}
