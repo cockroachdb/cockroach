@@ -389,3 +389,52 @@ func verifyOrder(t *testing.T, queue *MultiQueue, tasks ...*Task) {
 		queue.Release(found)
 	}
 }
+
+// TestMultiQueueUpdateConcurrencLimit tests the correctness of remaining
+// runs after concurrency limit update.
+func TestMultiQueueUpdateConcurrencLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	queue := NewMultiQueue(1)
+	// Grow the concurrency limit.
+	queue.UpdateConcurrencyLimit(5)
+	require.Equal(t, 5, queue.remainingRuns)
+	// Shrink the concurrency limit.
+	queue.UpdateConcurrencyLimit(2)
+	require.Equal(t, 2, queue.remainingRuns)
+	// Decrease the remaining runs.
+	_, _ = queue.Add(1, 1, -1)
+	_, _ = queue.Add(2, 1, -1)
+	// Shrink the limit gain, make sure the remainingRuns is non-negative.
+	queue.UpdateConcurrencyLimit(1)
+	require.Equal(t, 0, queue.remainingRuns)
+	// Test the edge case of increasing concurrency limits from 0.
+	// Tasks should be able to execute after limit adjustments.
+	queue = NewMultiQueue(0)
+	a1, _ := queue.Add(1, 4.0, -1)
+	a2, _ := queue.Add(1, 3.0, -1)
+	queue.UpdateConcurrencyLimit(1)
+	verifyOrder(t, queue, a1, a2)
+	// Test the edge case of decreasing concurrency limit and cancel
+	// task will not increase remaining runs beyond the limit.
+	queue = NewMultiQueue(2)
+	a1, _ = queue.Add(1, 4.0, -1)
+	require.Equal(t, 1, queue.remainingRuns)
+	queue.updateConcurrencyLimitLocked(1)
+	permit := <-a1.GetWaitChan()
+	queue.Cancel(a1)
+	queue.Release(permit)
+	require.Equal(t, 1, queue.remainingRuns)
+	// Test the case of updating concurrency limit to 0
+	// to freeze the queue.
+	queue = NewMultiQueue(2)
+	queue.UpdateConcurrencyLimit(0)
+	require.Equal(t, 1, queue.QueueLen())
+	require.Equal(t, 0, queue.remainingRuns)
+	// Queue is frozen adding a new task will not
+	// trigger execution due to no remaining runs left.
+	_, err := queue.Add(1, 1, 1)
+	require.Equal(t, 2, queue.QueueLen())
+	require.NoError(t, err)
+	require.Equal(t, 0, queue.AvailableLen())
+}
