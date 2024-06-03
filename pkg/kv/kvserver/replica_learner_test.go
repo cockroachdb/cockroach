@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -255,7 +254,7 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(
 		t, 3, base.TestClusterArgs{
-			ServerArgs:      base.TestServerArgs{Knobs: knobs, SnapshotSendLimit: 1},
+			ServerArgs:      base.TestServerArgs{Knobs: knobs},
 			ReplicationMode: base.ReplicationManual,
 		},
 	)
@@ -264,10 +263,11 @@ func TestAddReplicaWithReceiverThrottling(t *testing.T) {
 
 	// Disable delegating snapshots to different senders, which would otherwise
 	// fail this test as snapshots could queue on different stores.
-	settings := cluster.MakeTestingClusterSettings()
+	settings := tc.Servers[0].ClusterSettings()
 	sv := &settings.SV
 	kvserver.NumDelegateLimit.Override(ctx, sv, 0)
-
+	// Set snapshot send concurrency to 1.
+	kvserver.SnapshotSendLimit.Override(ctx, sv, 1)
 	scratch := tc.ScratchRange(t)
 	replicationChange := make(chan error, 2)
 	g := ctxgroup.WithContext(ctx)
@@ -1529,11 +1529,14 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 		return false
 	}
 	tc = testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{Knobs: knobs, SnapshotSendLimit: 1},
+		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-
+	settings := tc.Servers[0].ClusterSettings()
+	sv := &settings.SV
+	// Set snapshot send concurrency to 1.
+	kvserver.SnapshotSendLimit.Override(ctx, sv, 1)
 	scratchStartKey := tc.ScratchRange(t)
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 

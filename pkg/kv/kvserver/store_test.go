@@ -3443,11 +3443,11 @@ func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tsc := TestStoreConfig(nil)
-	// Set the concurrency to 1 explicitly, in case the default ever changes.
-	tsc.SnapshotApplyLimit = 1
 	tc := testContext{}
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	s := tc.store
+	// Set the concurrency to 1 explicitly, in case the default ever changes.
+	s.snapshotApplyQueue.UpdateConcurrencyLimit(1)
 	snapshotReservationQueueTimeoutFraction.Override(ctx, &s.ClusterSettings().SV, timeoutFrac)
 
 	var done int64
