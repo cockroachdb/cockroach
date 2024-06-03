@@ -176,6 +176,7 @@ func NewDistSQLPlanner(
 	stopper *stop.Stopper,
 	isAvailable func(base.SQLInstanceID) bool,
 	connHealthCheckerSystem func(roachpb.NodeID, rpc.ConnectionClass) error, // will only be used by the system tenant
+	instanceConnHealthChecker func(base.SQLInstanceID, string) error,
 	sqlInstanceDialer *nodedialer.Dialer,
 	codec keys.SQLCodec,
 	sqlAddressResolver sqlinstance.AddressResolver,
@@ -189,9 +190,10 @@ func NewDistSQLPlanner(
 		gossip:               gw,
 		sqlInstanceDialer:    sqlInstanceDialer,
 		nodeHealth: distSQLNodeHealth{
-			gossip:      gw,
-			connHealth:  connHealthCheckerSystem,
-			isAvailable: isAvailable,
+			gossip:             gw,
+			connHealthSystem:   connHealthCheckerSystem,
+			connHealthInstance: instanceConnHealthChecker,
+			isAvailable:        isAvailable,
 		},
 		distSender:         distSender,
 		nodeDescs:          nodeDescs,
@@ -231,6 +233,8 @@ func (dsp *DistSQLPlanner) GetAllInstancesByLocality(
 	if err != nil {
 		return nil, err
 	}
+	all, _ = dsp.filterUnhealthyInstances(all, nil /* nodeStatusesCache */)
+
 	log.VEventf(ctx, 2, "resolved sql instances: %v", all)
 	var pos int
 	for _, n := range all {
@@ -1244,23 +1248,24 @@ func MakeSpanPartitionWithRangeCount(
 }
 
 type distSQLNodeHealth struct {
-	gossip      gossip.OptionalGossip
-	isAvailable func(base.SQLInstanceID) bool
-	connHealth  func(roachpb.NodeID, rpc.ConnectionClass) error
+	gossip             gossip.OptionalGossip
+	isAvailable        func(base.SQLInstanceID) bool
+	connHealthSystem   func(roachpb.NodeID, rpc.ConnectionClass) error
+	connHealthInstance func(base.SQLInstanceID, string) error
 }
 
 func (h *distSQLNodeHealth) checkSystem(
 	ctx context.Context, sqlInstanceID base.SQLInstanceID,
 ) error {
 	{
-		// NB: as of #22658, ConnHealth does not work as expected; see the
+		// NB: as of #22658, connHealthSystem does not work as expected; see the
 		// comment within. We still keep this code for now because in
 		// practice, once the node is down it will prevent using this node
 		// 90% of the time (it gets used around once per second as an
 		// artifact of rpcContext's reconnection mechanism at the time of
 		// writing). This is better than having it used in 100% of cases
 		// (until the liveness check below kicks in).
-		if err := h.connHealth(roachpb.NodeID(sqlInstanceID), rpc.DefaultClass); err != nil {
+		if err := h.connHealthSystem(roachpb.NodeID(sqlInstanceID), rpc.DefaultClass); err != nil {
 			// This host isn't known to be healthy. Don't use it (use the gateway
 			// instead). Note: this can never happen for our sqlInstanceID (which
 			// always has its address in the nodeMap).
@@ -1556,6 +1561,29 @@ func (dsp *DistSQLPlanner) deprecatedHealthySQLInstanceIDForKVNodeIDSystem(
 	return sqlInstanceID, reason
 }
 
+// checkInstanceHealth returns the instance health status by dialing the node.
+// It also caches the result to avoid redialing for a query.
+func (dsp *DistSQLPlanner) checkInstanceHealth(
+	instanceID base.SQLInstanceID,
+	instanceRPCAddr string,
+	nodeStatusesCache map[base.SQLInstanceID]NodeStatus,
+) NodeStatus {
+	if nodeStatusesCache != nil {
+		if status, ok := nodeStatusesCache[instanceID]; ok {
+			return status
+		}
+	}
+	status := NodeOK
+	if err := dsp.nodeHealth.connHealthInstance(instanceID, instanceRPCAddr); err != nil {
+		status = NodeUnhealthy
+	}
+
+	if nodeStatusesCache != nil {
+		nodeStatusesCache[instanceID] = status
+	}
+	return status
+}
+
 // healthySQLInstanceIDForKVNodeHostedInstanceResolver returns the SQL instance
 // ID for an instance that is hosted in the process of a KV node. Currently SQL
 // instances that run in KV node processes have IDs fixed to be equal to the KV
@@ -1566,27 +1594,30 @@ func (dsp *DistSQLPlanner) deprecatedHealthySQLInstanceIDForKVNodeIDSystem(
 //
 // If the given node is not healthy, the gateway node is returned.
 func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeHostedInstanceResolver(
-	ctx context.Context,
+	ctx context.Context, planCtx *PlanningCtx,
 ) func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
-	allHealthy, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
+	allInstances, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		log.Warningf(ctx, "could not get all instances: %v", err)
 		return dsp.alwaysUseGatewayWithReason(SpanPartitionReason_GATEWAY_ON_ERROR)
 	}
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "healthy SQL instances available for distributed planning: %v", allHealthy)
+		log.VEventf(ctx, 2, "healthy SQL instances available for distributed planning: %v", allInstances)
 	}
 
-	healthyNodes := make(map[base.SQLInstanceID]struct{}, len(allHealthy))
-	for _, n := range allHealthy {
-		healthyNodes[n.InstanceID] = struct{}{}
+	instances := make(map[base.SQLInstanceID]sqlinstance.InstanceInfo, len(allInstances))
+	for _, n := range allInstances {
+		instances[n.InstanceID] = n
 	}
 
 	return func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
 		sqlInstance := base.SQLInstanceID(nodeID)
-		if _, ok := healthyNodes[sqlInstance]; ok {
-			return sqlInstance, SpanPartitionReason_TARGET_HEALTHY
+		if n, ok := instances[sqlInstance]; ok {
+			if status := dsp.checkInstanceHealth(
+				sqlInstance, n.InstanceRPCAddr, planCtx.nodeStatuses); status == NodeOK {
+				return sqlInstance, SpanPartitionReason_TARGET_HEALTHY
+			}
 		}
 		log.VWarningf(ctx, 1, "not planning on node %d", sqlInstance)
 		return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY
@@ -1637,6 +1668,23 @@ func (dsp *DistSQLPlanner) shouldPickGateway(
 	return partitionsOnGateway < bias*averageDistributionOnNonGatewayInstances
 }
 
+// filterUnhealthyInstances dials the instances and filters out unhealthy
+// instances.
+func (dsp *DistSQLPlanner) filterUnhealthyInstances(
+	instances []sqlinstance.InstanceInfo, nodeStatusesCache map[base.SQLInstanceID]NodeStatus,
+) (healthyInstances []sqlinstance.InstanceInfo, unhealthyInstances []sqlinstance.InstanceInfo) {
+	healthyInstances = make([]sqlinstance.InstanceInfo, 0, len(instances))
+	for _, n := range instances {
+		if status := dsp.checkInstanceHealth(
+			n.InstanceID, n.InstanceRPCAddr, nodeStatusesCache); status == NodeOK {
+			healthyInstances = append(healthyInstances, n)
+		} else {
+			unhealthyInstances = append(unhealthyInstances, n)
+		}
+	}
+	return healthyInstances, unhealthyInstances
+}
+
 // makeInstanceResolver returns a function that can choose the SQL instance ID
 // for a provided KV node ID.
 func (dsp *DistSQLPlanner) makeInstanceResolver(
@@ -1647,14 +1695,17 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 
 	var mixedProcessSameNodeResolver func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason)
 	if mixedProcessMode {
-		mixedProcessSameNodeResolver = dsp.healthySQLInstanceIDForKVNodeHostedInstanceResolver(ctx)
+		mixedProcessSameNodeResolver = dsp.healthySQLInstanceIDForKVNodeHostedInstanceResolver(ctx, planCtx)
 	}
 
 	if mixedProcessMode && locFilter.Empty() {
 		return mixedProcessSameNodeResolver, nil
 	}
 
-	// GetAllInstances only returns healthy instances.
+	// GetAllInstances returns mostly healthy nodes, except those that have
+	// recently gone down and not yet been updated in the sql_instances cache. The
+	// filtering out of these nodes is deferred to the resolver using the
+	// filterUnhealthyInstances function.
 	instances, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		return nil, err
@@ -1705,10 +1756,25 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 		log.VEventf(ctx, 2, "healthy SQL instances available for distributed planning: %v", instances)
 	}
 
+	filterUnhealthyInstances := func() []sqlinstance.InstanceInfo {
+		// Instances that have gone down might still be present in the sql_instances
+		// cache. Therefore, we filter out these unhealthy nodes by dialing them.
+		healthy, unhealthy := dsp.filterUnhealthyInstances(instances, planCtx.nodeStatuses)
+		if len(unhealthy) != 0 && log.ExpensiveLogEnabled(ctx, 2) {
+			log.Eventf(ctx, "not planning on unhealthy instances : %v", unhealthy)
+		}
+		return healthy
+	}
+
 	// If we were able to determine the locality information for at least some
 	// instances, use the locality-aware resolver.
 	if instancesHaveLocality {
 		resolver := func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
+			instances = filterUnhealthyInstances()
+			if len(instances) == 0 {
+				log.Eventf(ctx, "no healthy sql instances available for planning, using the gateway")
+				return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_ON_ERROR
+			}
 			// Lookup the node localities to compare to the instance localities.
 			nodeDesc, err := dsp.nodeDescs.GetNodeDescriptor(nodeID)
 			if err != nil {
@@ -1769,6 +1835,12 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 	})
 	var i int
 	resolver := func(roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
+		instances := filterUnhealthyInstances()
+		if len(instances) == 0 {
+			log.Eventf(ctx, "no healthy sql instances available for planning, only using the gateway")
+			return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_ON_ERROR
+		}
+
 		id := instances[i%len(instances)].InstanceID
 		i++
 		return id, SpanPartitionReason_ROUND_ROBIN

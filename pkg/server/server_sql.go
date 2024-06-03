@@ -1021,6 +1021,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			isAvailable,
 			cfg.kvNodeDialer.ConnHealthTryDial, // only used by system tenant
+			cfg.sqlInstanceDialer.ConnHealthTryDialInstance,
 			cfg.sqlInstanceDialer,
 			codec,
 			cfg.sqlInstanceReader,
