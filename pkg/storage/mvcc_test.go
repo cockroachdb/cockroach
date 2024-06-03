@@ -3789,7 +3789,7 @@ func generateBytes(rng *rand.Rand, min int, max int) []byte {
 
 func createEngWithSeparatedIntents(t *testing.T) Engine {
 	eng, err := Open(context.Background(), InMemory(),
-		cluster.MakeTestingClusterSettings(), MaxSize(1<<20))
+		cluster.MakeTestingClusterSettings(), MaxSizeBytes(1<<20))
 	require.NoError(t, err)
 	return eng
 }

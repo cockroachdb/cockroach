@@ -50,7 +50,7 @@ func TestCachedSettingsStoreAndLoad(t *testing.T) {
 	ctx := context.Background()
 	engine, err := storage.Open(ctx, storage.InMemory(),
 		cluster.MakeClusterSettings(),
-		storage.MaxSize(512<<20 /* 512 MiB */),
+		storage.MaxSizeBytes(512<<20 /* 512 MiB */),
 		storage.ForTesting)
 	require.NoError(t, err)
 	defer engine.Close()

@@ -52,7 +52,7 @@ func InMemFromFS(
 func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
 	eng, err := Open(
 		context.Background(), InMemory(), cluster.MakeTestingClusterSettings(),
-		ForTesting, MaxSize(1<<20), CombineOptions(opts...),
+		ForTesting, MaxSizeBytes(1<<20), CombineOptions(opts...),
 	)
 	if err != nil {
 		panic(err)

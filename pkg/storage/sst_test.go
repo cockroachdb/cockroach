@@ -68,7 +68,7 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 	sstWriter.Close()
 
 	ctx := context.Background()
-	engine, err := Open(context.Background(), InMemory(), cs, MaxSize(1<<20))
+	engine, err := Open(context.Background(), InMemory(), cs, MaxSizeBytes(1<<20))
 	if err != nil {
 		t.Fatal(err)
 	}
