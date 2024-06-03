@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path"
-	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -91,8 +90,7 @@ type kafkaSinkClient struct {
 
 	lastMetadataRefresh time.Time
 
-	debuggingId   int64
-	didFirstFlush bool
+	debuggingId int64
 }
 
 // Close implements SinkClient.
@@ -103,29 +101,8 @@ func (k *kafkaSinkClient) Close() error {
 	return k.client.Close()
 }
 
-func (k *kafkaSinkClient) isSortedRight(ctx context.Context, msgs []*sarama.ProducerMessage) bool {
-	// split by topic & partition
-	topicParts := make(map[string][]*sarama.ProducerMessage)
-	for _, m := range msgs {
-		if k.didFirstFlush && m.Offset == 0 { // first offset can actually be zero
-			log.Infof(ctx, `kafka message has offset 0: %v (id=%d)`, m, k.debuggingId)
-		}
-		topicParts[m.Topic+strconv.Itoa(int(m.Partition))] = append(topicParts[m.Topic+strconv.Itoa(int(m.Partition))], m)
-	}
-	for _, msgs := range topicParts {
-		if !slices.IsSortedFunc(msgs, func(a, b *sarama.ProducerMessage) int { return int(a.Offset - b.Offset) }) {
-			log.Infof(ctx, `kafka messages are not sorted right. id=%d %#+v`, k.debuggingId, msgs)
-			return false
-		}
-	}
-	return true
-}
-
 // Flush implements SinkClient. Does not retry -- retries will be handled by ParallelIO.
 func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
-	defer func() {
-		k.didFirstFlush = true
-	}()
 	msgs := payload.([]*sarama.ProducerMessage)
 	defer log.Infof(ctx, `flushed %d messages to kafka (id=%d, err=%v)`, len(msgs), k.debuggingId, retErr)
 
@@ -184,16 +161,13 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 				// recurse
 				return errors.Join(flushMsgs(a), flushMsgs(b))
 			}
-			// offsets should be ordered right. maybe we can catch intra batch reorderings here
-			if !k.isSortedRight(ctx, msgs) {
-				log.Errorf(ctx, `kafka messages are not sorted right. id=%d, debugfile=%s`, k.debuggingId, fh.Name())
-			}
 
 			return err
 		}
 
 		// failed again:
-		// 23:46:14 test_impl.go:414: test failure #1: full stack retained in failure_1.log: (cdc.go:3802).validateMessage: topic consumer for district encountered validator error(s): topic district partition 0: saw new row timestamp 1717112771631751551.0000000000 after 1717112772130398025.0000000000 was seen (key [0, 3])
+		// 23:46:14 test_impl.go:414: test failure #1: full stack retained in failure_1.log: (cdc.go:3802).validateMessage: topic consumer for district encountered validator error(s):
+		// topic district partition 0: saw new row timestamp 1717112771631751551.0000000000 after 1717112772130398025.0000000000 was seen (key [0, 3])
 		// ADIR=~/tmp/artifacts-backups/kafka-chaos-back-to-sync
 		// ~/tmp/ksd
 		// 		$ find ~/tmp/ksd/ -type f -name '*.after' | xargs grep -F '[0, 3]' | grep district | grep -e 1717112771631751551 -e 1717112772130398025
@@ -237,21 +211,16 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 		// node2/274/2024-05-30T23:46:18.407261212.after:{"key":"[0, 3]","offset":50884,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
 
 		// this still hits the issue
-		// if err := k.producer.SendMessages(msgs); err != nil {
-		// 	return handleErr(err)
+		if err := k.producer.SendMessages(msgs); err != nil {
+			return handleErr(err)
+		}
+
+		// // if we send them one at a time that should not hit it. but that's not a really tenable solution. but lets try it
+		// for _, m := range msgs {
+		// 	if _, _, err := k.producer.SendMessage(m); err != nil {
+		// 		return handleErr(err)
+		// 	}
 		// }
-
-		// if we send them one at a time that should not hit it. but that's not a really tenable solution. but lets try it
-		for _, m := range msgs {
-			if _, _, err := k.producer.SendMessage(m); err != nil {
-				return handleErr(err)
-			}
-		}
-
-		// offsets should be ordered right. maybe we can catch intra batch reorderings here
-		if !k.isSortedRight(ctx, msgs) {
-			log.Errorf(ctx, `kafka messages are not sorted right. id=%d, debugfile=%s`, k.debuggingId, fh.Name())
-		}
 
 		// trk := tracker{pendingIDs: make(map[int]struct{})}
 		// for _, m := range msgs {
@@ -433,7 +402,33 @@ func makeKafkaSinkV2(ctx context.Context,
 	// kafkaCfg.Producer.Flush.Messages = 0
 
 	// trying one by one. see Flush()
-	kafkaCfg.Producer.Flush.MaxMessages = 1
+	// kafkaCfg.Producer.Flush.MaxMessages = 1
+
+	// but with this set and still using SendMessages(), we expect to see the issue more frequently. since num sarama batches per messageBatch will be > 1
+	// kafkaCfg.Producer.Flush.MaxMessages = 1
+	// didnt see it more frequently but still saw it :shrug:
+	// 13:50:12 test_impl.go:414: test failure #1: full stack retained in failure_1.log: (cdc.go:3805).validateMessage: topic consumer for district encountered validator error(s):
+	// topic district partition 0: saw new row timestamp 1717422587821883071.0000000000 after 1717422607448984688.0000000000 was seen (key [15, 10])
+
+	// $ find ~/tmp/ksd/ -type f -name '*.after' | xargs grep -F '[15, 10]' | grep district | grep -e 1717422587821883071.0000000000 -e 1717422607448984688.0000000000
+	// node1/856/2024-06-03T13:50:14.334392912.after:{"key":"[15, 10]","offset":86357,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422587821883071.0000000000\"}"}
+	// node1/856/2024-06-03T13:50:14.334392912.after:{"key":"[15, 10]","offset":86359,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422607448984688.0000000000\"}"}
+
+	// node1/886/2024-06-03T13:50:15.029747069.after:{"key":"[15, 10]","offset":88436,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422587821883071.0000000000\"}"}
+	// node1/886/2024-06-03T13:50:15.029747069.after:{"key":"[15, 10]","offset":88445,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422607448984688.0000000000\"}"}
+
+	// right here we see A B, A failed, B went through, then A B emitted again as a retry.
+	// can also see that this is a batch that failed because the same sink tried it twice. as opposed to the other instances where it succeeded but was caught in the crossfire of other errors
+	// node1/787/2024-06-03T13:50:09.615816229.after:{"key":"[15, 10]","offset":0,    "partition":0,"topic":"district","value":"{, \"updated\": \"1717422587821883071.0000000000\"}"}
+	// node1/787/2024-06-03T13:50:09.615816229.after:{"key":"[15, 10]","offset":81228,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422607448984688.0000000000\"}"}
+	// node1/787/2024-06-03T13:50:12.221470166.after:{"key":"[15, 10]","offset":81722,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422587821883071.0000000000\"}"}
+	// node1/787/2024-06-03T13:50:12.221470166.after:{"key":"[15, 10]","offset":81724,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422607448984688.0000000000\"}"}
+
+	// node3/397/2024-06-03T13:50:13.539163516.after:{"key":"[15, 10]","offset":84098,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422587821883071.0000000000\"}"}
+	// node3/397/2024-06-03T13:50:13.539163516.after:{"key":"[15, 10]","offset":84106,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422607448984688.0000000000\"}"}
+
+	// next try:
+	// kafkaCfg.Producer.Flush.Frequency = time.Millisecond
 
 	topicNamer, err := MakeTopicNamer(
 		targets,
