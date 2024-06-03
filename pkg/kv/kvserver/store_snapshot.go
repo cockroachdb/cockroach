@@ -1677,7 +1677,7 @@ func SendEmptySnapshot(
 		storage.InMemory(),
 		cluster.MakeClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */),
-		storage.MaxSize(512<<20 /* 512 MiB */))
+		storage.MaxSizeBytes(512<<20 /* 512 MiB */))
 	if err != nil {
 		return err
 	}

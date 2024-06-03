@@ -799,7 +799,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			addCfgOpt(storage.MaxSize(sizeInBytes))
+			addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
 			addCfgOpt(storage.CacheSize(cfg.CacheSize))
 			addCfgOpt(storage.RemoteStorageFactory(cfg.EarlyBootExternalStorageAccessor))
 
@@ -821,9 +821,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
-			detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
-
-			addCfgOpt(storage.MaxSize(sizeInBytes))
+			if spec.Size.Percent > 0 {
+				detail(redact.Sprintf("store %d: max size %s (calculated from %.2f percent of total), max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), spec.Size.Percent, openFileLimitPerStore))
+				addCfgOpt(storage.MaxSizePercent(spec.Size.Percent / 100))
+			} else {
+				detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
+				addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
+			}
 			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec, du)))
 			addCfgOpt(storage.Caches(pebbleCache, tableCache))
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
