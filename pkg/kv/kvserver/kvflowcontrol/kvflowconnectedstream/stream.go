@@ -16,8 +16,6 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -286,16 +284,20 @@ corresponds to user facing work.
 */
 
 // TODO:
-// - force-flush when there isn't quorum.
+//
+// - force-flush when there isn't quorum with no send-queue but there is a
+//   quorum with replicaSendStream in StateReplicate.
 //
 // - delay force-flush slightly (say 1s) since there could be a transient
 //   transition to StateProbe and back to StateReplicate due to a single
-//   MsgApp drop. Should we delay the closing of the replicaSendStream since
-//   it has all the interesting stats. It also has tokens that we should be
-//   wary of returning -- we will have to return the tokens anyway since the
-//   MsgApp drop must be due to a TransportDisconnected. This is a regression
-//   in indexToSend. We won't have approx stats for this regression, but so be
-//   it.
+//   MsgApp drop. Related to this, should we delay the closing of the
+//   replicaSendStream since it has all the interesting stats? It also has
+//   tokens that we don't really need to return due to a transient transition
+//   to StateProbe and back. A regression in indexToSend necessarily means a
+//   MsgApp was dropped. There may be eval.tokensDeducted for these, but if
+//   so, they are in the tracker -- we could simply remove them from the
+//   tracker, and continue with perfect accounting. So the answer to the
+//   question above is yes.
 //
 // - While in StateReplicate, send-queue could have some elements popped
 //   (indexToSend advanced) because there could have been some inflight
@@ -304,7 +306,12 @@ corresponds to user facing work.
 //   past indexToSend). To handle this we need to do the same approx stats
 //   thing we do when transitioning from StateSnapshot => StateReplicate (we
 //   are still holding tokens unlike StateSnapshot and we can keep some of
-//   them since the transport did not break.
+//   them since the transport did not break. We've popped some things from the
+//   send-queue, so we can keep the tracker state unchanged, but what about
+//   eval.tokensDeducted, which includes the tokens in the send-queue -- if
+//   the indices popped < nextRaftInitialIndex, they are not in
+//   tokensDeducted. This will be the common case, since old inflight MsgApps
+//   should not be showing up for >= nextRaftIndexInitial.
 //
 // - If we miss a transition out of StateReplicate and back, Match will not
 //   regress, but Next can regress. This is similar to us ignoring a
@@ -331,7 +338,7 @@ corresponds to user facing work.
 // on the other side since it could cause an OOM. Also, a force-flush on range
 // r1 to s3 because of a lack of quorum could consume all the tokens for s3
 // that are needed by range r2 -- this is not a problem by itself since we are
-// not trying to inter-range isolation.
+// not trying to do inter-range isolation.
 //
 // In ACv1, when a node rejoins, we send it entries saying they are subject to
 // AC, but don't track them on the sender, so they will logically queue. So
@@ -450,7 +457,8 @@ type RangeController interface {
 	// TODO: remove this after "Design for robust flow token return in RACv2"
 	// discussed above is finalized. All the complicated transport handling
 	// will go away.
-	TransportDisconnected(replica roachpb.ReplicaID)
+	// TransportDisconnected(replica roachpb.ReplicaID)
+
 	// Close the controller, since no longer the leader. Called from
 	// handleRaftReadyRaftMuLocked. It can be called concurrently with
 	// WaitForEval. WaitForEval should unblock and return without an error,
@@ -543,7 +551,8 @@ type RaftInterface interface {
 	// simplified.
 	FollowerState(
 		replicaID roachpb.ReplicaID) FollowerStateInfo
-	FollowerTransportConnected(storeID roachpb.StoreID) bool
+	// FollowerTransportConnected(storeID roachpb.StoreID) bool
+
 	// LastEntryIndex is the highest index assigned in the log.
 	LastEntryIndex() uint64
 	// MakeMsgApp is used to construct a MsgApp for entries in [start, end).
@@ -573,9 +582,11 @@ type Scheduler interface {
 type FollowerStateInfo struct {
 	State tracker.StateType
 
-	// Remaining only populated in StateReplicate
-	Match    uint64
-	Next     uint64
+	// Remaining only populated in StateReplicate.
+	// (Match, Next) is in-flight.
+	Match uint64
+	Next  uint64
+	// Invariant: Admitted[i] <= Match.
 	Admitted [NumRaftPriorities]uint64
 }
 
@@ -587,11 +598,38 @@ const (
 	RaftAboveNormalPri
 	RaftHighPri
 	NumRaftPriorities
+
+	// The following are not real priorities, but will be encoded in a byte in
+	// the entry encoding.
+	//
+	// TODO: move these elsewhere. Currently kvserverpb defines these using admissionpb,
+	// but that is obsolete.
+
+	NotSubjectToACForFlowControl        RaftPriority = math.MaxUint8 - 1
+	PriorityNotOverriddenForFlowControl RaftPriority = math.MaxUint8
 )
 
-// TODO: implement the correct priority mapping.
-func (rp RaftPriority) ToWorkPriority() admissionpb.WorkPriority
-func WorkPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority
+func admissionPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority {
+	// TODO:
+
+	// The new priorities are:
+	// pri < NormalPri : RaftLowPri
+	// NormalPri <= pri < LockingNormalPri : RaftNormalPri
+	// LockingNormalPri <= pri < UserHighPri : intent resolution typically RaftAboveNormalPri
+	// UserHighPri <= pri: RaftHighPri
+	return RaftHighPri
+}
+
+func workClassFromRaftPriority(pri RaftPriority) admissionpb.WorkClass {
+	switch pri {
+	case RaftLowPri:
+		return admissionpb.ElasticWorkClass
+	case RaftNormalPri, RaftAboveNormalPri, RaftHighPri:
+		return admissionpb.RegularWorkClass
+	default:
+		panic("")
+	}
+}
 
 // MessageSender abstracts Replica.sendRaftMessage. The context used is always
 // Replica.raftCtx, so we do not need to pass it.
@@ -600,15 +638,18 @@ func WorkPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority
 type MessageSender interface {
 	// SendRaftMessage ...
 	//
-	// priorityOverride can be kvserverpb.PriorityNotOverriddenForFlowControl
-	// or kvserverpb.NotSubjectToACForFlowControl
+	// priorityOverride can be PriorityNotOverriddenForFlowControl or
+	// NotSubjectToACForFlowControl
 	//
 	// Implementation:
 	//
 	// On the receiver Replica.stepRaftGroup is called with
 	// kvserverpb.RaftMessageRequest. And we do the AdmitRaftEntry call in
 	// handleRaftReadyRaftMuLocked. By then we have no access to the wrapper
-	// that is RaftMessageRequest.
+	// that is RaftMessageRequest. So before calling RawNode.Step we will
+	// replace the byte in the encoding if NotSubjectToACForFlowControl or
+	// there is an override. In this setup, the priority encoded in
+	// RaftAdmissionMeta is unnecessary.
 	//
 	// Due to multiple transitions into and out of StateReplicate, the same
 	// entry could be sent to the follower with different priority overrides.
@@ -617,32 +658,8 @@ type MessageSender interface {
 	// override in the entry that it appended. These can differ, but it does not
 	// matter. See discussion about priority override in "Design for robust flow
 	// token return in RACv2".
-	//
-	// TODO: delete this remaining stale comment:
-	//
-	// Solution:
-	//
-	// The sender will only track the original priority in tracker. The receiver
-	// will know both the original and overridden priority. Will replace the
-	// second byte in entry with the overridden priority before handing to
-	// stepRaftGroup. RaftAdmissionMeta has the original. Will use the
-	// overridden one to admit and then the original to return tokens.
-	//
-	// Indices 3E, 4E, 5E, 6R, where E is elastic and R is regular. 5E, 6R sent
-	// with 5R', 6R. Wnen 5R' returned, will also return 3E, 4E. So there is
-	// some early return here. But this is ok since we only have 8MB of elastic
-	// outstanding (across all ranges) so the send-q will be the one with most
-	// of the elastic bytes. Indices 3E, 4E, 5E, ..., 99E, 100R Send-q is 5E to
-	// 100R. Then we can send all of these using R.
-	//
-	// We need to send the receiver the overridden-priority and not just the
-	// original priority since if we consumed regular tokens for elastic work
-	// due to override, we want that elastic work admitted with that overridden
-	// priority so that the tokens are returned in a timely manner. If they are
-	// not returned in a timely manner, another range could suffer which is
-	// waiting on the regular tokens.
 	SendRaftMessage(
-		ctx context.Context, priorityOverride admissionpb.WorkPriority, msg raftpb.Message)
+		ctx context.Context, priorityOverride RaftPriority, msg raftpb.Message)
 }
 
 type RangeControllerOptions struct {
@@ -706,8 +723,6 @@ type voterStateForWaiters struct {
 
 var _ RangeController = &RangeControllerImpl{}
 
-// TODO: resume pass here ***
-
 func NewRangeControllerImpl(
 	o RangeControllerOptions, init RangeControllerInitState,
 ) *RangeControllerImpl {
@@ -750,9 +765,6 @@ func (rc *RangeControllerImpl) updateReplicaSetAndMap(newSet ReplicaSet) {
 
 // replicaSet, replicaMap, leaseholder are up-to-date.
 func (rc *RangeControllerImpl) updateVoterSets() {
-	// TODO: some callers of updateVoterSets should first figure out if anything
-	// has changed in the voters.
-
 	setCount := 1
 	for _, r := range rc.replicaSet {
 		isOld := r.IsVoterOldConfig()
@@ -778,10 +790,11 @@ func (rc *RangeControllerImpl) updateVoterSets() {
 		// Is a voter.
 		rs := rc.replicaMap[r.ReplicaID]
 		vsfw := voterStateForWaiters{
-			replicaID:        r.ReplicaID,
-			isLeader:         r.ReplicaID == rc.opts.LocalReplicaID,
-			isLeaseHolder:    r.ReplicaID == rc.leaseholder,
-			isStateReplicate: rs.replicaSendStream != nil && rs.replicaSendStream.connectedState.isStateReplicate(),
+			replicaID:     r.ReplicaID,
+			isLeader:      r.ReplicaID == rc.opts.LocalReplicaID,
+			isLeaseHolder: r.ReplicaID == rc.leaseholder,
+			isStateReplicate: rs.replicaSendStream != nil &&
+				rs.replicaSendStream.connectedState.shouldWaitForElasticEvalTokens(),
 			evalTokenCounter: rs.evalTokenCounter,
 		}
 		if isOld {
@@ -876,41 +889,41 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		//   but there are also transitions from StateProbe => StateSnapshot (TODO: confirm) on
 		//   receiving a MsgAppResp with a Match that is too far in the past.
 		//
-		// Transport connected => disconnected transitions will always be communicated via
-		// TransportDisconnected, but the reverse transition is not.
-		//
-		// TODO: this is no longer nextUB. Also use match, since it may have
-		// moved past the indexToSend.
+		// In general, we need to be prepared to deal with anything returned
+		// by FollowerState.
 		info := rc.opts.RaftInterface.FollowerState(r)
 		state := info.State
-		nextUB := info.Next
 		switch state {
 		case tracker.StateProbe:
 			if rs.replicaSendStream != nil {
+				// TODO: delay this by 1 sec.
 				rs.replicaSendStream.close()
 				rs.replicaSendStream = nil
 			}
 		case tracker.StateReplicate:
 			if rs.replicaSendStream == nil {
-				rs.createReplicaSendStream(nextUB)
+				rs.createReplicaSendStream(info.Next)
 			} else {
-				// replicaSendStream already exists, but may be in state snapshot or
-				// replicateSoftDisconnected
+				// replicaSendStream already exists.
 				switch rs.replicaSendStream.connectedState {
-				case replicateConnected: // Nothing to do.
-				case replicateSoftDisconnected:
-					isConnected := rs.parent.opts.RaftInterface.FollowerTransportConnected(rs.desc.StoreID)
-					if isConnected {
-						rs.replicaSendStream.changeConnectedStateInStateReplicate(isConnected)
-					}
+				case replicate:
+					rs.replicaSendStream.makeConsistentInStateReplicate(info)
+				case probeRecentlyReplicate:
+					rs.replicaSendStream.makeConsistentWhenProbeToReplicate(info.Next)
 				case snapshot:
-					isConnected := rs.parent.opts.RaftInterface.FollowerTransportConnected(rs.desc.StoreID)
-					rs.replicaSendStream.changeToStateReplicate(isConnected, nextUB)
+					rs.replicaSendStream.makeConsistentWhenProbeToReplicate(info.Next)
 				}
 			}
 		case tracker.StateSnapshot:
-			if rs.replicaSendStream != nil && rs.replicaSendStream.connectedState != snapshot {
-				rs.replicaSendStream.changeToStateSnapshot()
+			if rs.replicaSendStream != nil {
+				switch rs.replicaSendStream.connectedState {
+				case replicate:
+					rs.replicaSendStream.changeToStateSnapshot()
+				case probeRecentlyReplicate:
+					rs.replicaSendStream.close()
+					rs.replicaSendStream = nil
+				case snapshot:
+				}
 			}
 		}
 	}
@@ -927,7 +940,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	msgApps := ready.RetransmitMsgApps()
 	for i := range msgApps {
 		rc.opts.MessageSender.SendRaftMessage(
-			context.TODO(), admissionpb.WorkPriority(kvserverpb.PriorityNotOverriddenForFlowControl), msgApps[i])
+			context.TODO(), PriorityNotOverriddenForFlowControl, msgApps[i])
 	}
 
 	entries := ready.Entries()
@@ -948,7 +961,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 				if !entryFCState.usesFlowControl {
 					continue
 				}
-				wc := admissionpb.WorkClassFromPri(entryFCState.priority)
+				wc := workClassFromRaftPriority(entryFCState.originalPri)
 				rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
 				rs.replicaSendStream.advanceNextRaftIndexAndSent(entryFCState)
 			}
@@ -957,7 +970,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		if rs.replicaSendStream == nil {
 			continue
 		}
-		if rs.replicaSendStream.connectedState != snapshot && rs.replicaSendStream.isEmptySendQueue() {
+		if rs.replicaSendStream.connectedState == replicate && rs.replicaSendStream.isEmptySendQueue() {
 			// Consider sending.
 			// If leaseholder just send. If the leaseholder has a send-queue we won't be in this
 			// path, but a force-flush must be ongoing.
@@ -968,7 +981,6 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 			toIsFinalized := false
 			for i := range entries {
 				entryFCState := getFlowControlState(entries[i])
-				wc := admissionpb.WorkClassFromPri(entryFCState.priority)
 				if toIsFinalized {
 					if entries[i].Index == to && !entryFCState.usesFlowControl {
 						// Include additional entries that are not subject to AC, since we
@@ -980,6 +992,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 					continue
 				}
 				// INVARIANT: !toIsFinalized.
+				wc := workClassFromRaftPriority(entryFCState.originalPri)
 				send := false
 				if isLeaseholder {
 					if entryFCState.usesFlowControl {
@@ -1019,7 +1032,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 					panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
 				}
 				rc.opts.MessageSender.SendRaftMessage(
-					context.TODO(), kvserverpb.PriorityNotOverriddenForFlowControl, msg)
+					context.TODO(), PriorityNotOverriddenForFlowControl, msg)
 			}
 			// Else nothing to send.
 		} else {
@@ -1034,13 +1047,13 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 }
 
 type entryFlowControlState struct {
-	pos kvflowcontrolpb.RaftLogPosition
-	// usesFlowControl can be false for entries that don't use flow control.
-	// This can happen if RAC is partly disabled e.g. disabled for regular work,
-	// or for conf changes. In the former case the send-queue will also be
+	index uint64
+	// usesFlowControl is false for entries that don't use flow control. This
+	// can happen if RAC is partly disabled e.g. disabled for regular work, or
+	// for conf changes. In the former case the send-queue will also be
 	// disabled (i.e., equivalent to RACv1).
 	usesFlowControl bool
-	priority        admissionpb.WorkPriority
+	originalPri     RaftPriority
 	tokens          kvflowcontrol.Tokens
 }
 
@@ -1048,12 +1061,9 @@ func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
 	// TODO: change the payload encoding and parsing, and delegate the priority
 	// parsing to that.
 	return entryFlowControlState{
-		pos: kvflowcontrolpb.RaftLogPosition{
-			Term:  entry.Term,
-			Index: entry.Index,
-		},
-		usesFlowControl: false,                 // TODO:
-		priority:        admissionpb.NormalPri, // TODO:
+		index:           entry.Index,
+		usesFlowControl: false,         // TODO:
+		originalPri:     RaftNormalPri, // TODO:
 		tokens:          kvflowcontrol.Tokens(len(entry.Data)),
 	}
 }
@@ -1104,14 +1114,6 @@ func (rc *RangeControllerImpl) SetLeaseholder(replica roachpb.ReplicaID) {
 	}
 }
 
-func (rc *RangeControllerImpl) TransportDisconnected(replica roachpb.ReplicaID) {
-	rs, ok := rc.replicaMap[replica]
-	if ok && rs.replicaSendStream != nil && rs.replicaSendStream.connectedState == replicateConnected {
-		rs.replicaSendStream.changeConnectedStateInStateReplicate(false)
-		// TODO: the callee isn't returning tokens in tracker. Fix it.
-	}
-}
-
 func (rc *RangeControllerImpl) Close() {
 	close(rc.voterSetRefreshCh)
 	rc.voterSetRefreshCh = nil
@@ -1142,21 +1144,16 @@ func NewReplicaState(parent *RangeControllerImpl, desc roachpb.ReplicaDescriptor
 		desc:              desc,
 		replicaSendStream: nil,
 	}
-	// TODO: this is no longer nextUB.
 	info := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
-	state := info.State
-	nextUB := info.Next
-	if state == tracker.StateReplicate {
-		rs.createReplicaSendStream(nextUB)
+	if info.State == tracker.StateReplicate {
+		rs.createReplicaSendStream(info.Next)
 	}
 	return rs
 }
 
-func (rs *replicaState) createReplicaSendStream(nextUpperBound uint64) {
-	isConnected := rs.parent.opts.RaftInterface.FollowerTransportConnected(rs.desc.StoreID)
+func (rs *replicaState) createReplicaSendStream(indexToSend uint64) {
 	rss := newReplicaSendStream(rs, replicaSendStreamInitState{
-		isConnected:   isConnected,
-		indexToSend:   nextUpperBound,
+		indexToSend:   indexToSend,
 		nextRaftIndex: rs.parent.opts.RaftInterface.LastEntryIndex() + 1,
 		// TODO: these need to be based on some history observed by RangeControllerImpl.
 		approxMaxPriority:   admissionpb.NormalPri,
@@ -1166,8 +1163,7 @@ func (rs *replicaState) createReplicaSendStream(nextUpperBound uint64) {
 	if rs.parent.leaseholder == rs.desc.ReplicaID && !rss.isEmptySendQueue() {
 		rss.scheduleForceFlush()
 	}
-	// TODO: need to do something here like changeToStateReplicate, in that we
-	// should try to grab tokens, and then try to schedule on raftScheduler.
+	rss.startProcessingSendQueue()
 }
 
 func (rs *replicaState) close() {
@@ -1176,40 +1172,17 @@ func (rs *replicaState) close() {
 	}
 }
 
-// TODO: update.
-//
-// replicaSendStream is the state for replicas in StateReplicate. We need to maintain
-// a send-queue for them. We may return some tokens if a connection breaks but
-// still want to keep them in StateReplicate? For elastic work this may not be
-// great? Well, we can close the ch, and replace it with a new channel.
-// We should keep the state of priority etc. in the send-queue. Yes, this is principled.
-//
-// If Entries pop out and we have not checked whether the stream is connected, we may
-// not construct MsgApps, even though the RaftTransport has some buffering. And the
-// RaftTransport may reconnect before the next ready/tick. So it is good to have some
-// buffer. Consider sending until it returns false, even if the transport is closed.
-// Then consider the stream truly disconnected.
-//
-// So this is a replica-stream. Soft-down when disconnect notified. Up when
-// known to be connected. Hard-down if soft-down and send returns false. If we
-// stop evaluating because have to wait for hard-down then we have a problem
-// in that may never feed something to switch to hard-down. Circuit-breaker also exists!
-//
-// So keep feeding until hard-down. And remove from elastic wait when soft-down.
-// If circuit-breaker does not trip too bad. When soft-down, those messages not
-// subject to AC since not tracking them on the sender.
-//
-// **what is the channel situation in soft-down** Close and replace channel.
-//
-// TODO: replicaSendStream could also encompass StateSnapshot, when transitioned
-// from StateReplicate to StateSnapshot. The problem is that indexToSend can
-// will need to advance. We also want to eventually use the mediation of
-// tracker on when to send snapshot. So overall we should encompass
-// StateSnapshot.
-//
-// "breaker will open in 3-6 seconds after no more TCP packets are flowing. If
-// we assume 6 seconds, then that is ~1600 messages/second."
-// Why does soft-disconnected matter at all.
+// replicaSendStream is the state for a replica in one of the connectedState
+// states (see comment where connectedState is declared). We maintain a
+// send-queue for the replica. We may track token deductions in states
+// replicate and probeRecentlyReplicate. On a transition to state snapshot we
+// immediately return all tokens since holding onto these can affect other
+// ranges. The justification for not immediately returning all tokens in
+// probeRecentlyReplicate is that such a transition will (a) typically happen
+// due to lossiness that affects all ranges replicating to that store, (b)
+// this is a very transient state. Any immediate returning of tokens can cause
+// more overload, so we want to be generally narrow in the conditions when we
+// resort to it.
 type replicaSendStream struct {
 	parent *replicaState
 	// TODO: synchronization.
@@ -1217,13 +1190,13 @@ type replicaSendStream struct {
 
 	connectedState connectedState
 
-	// indexToSendInitial is the indexToSend when this transitioned to
-	// StateReplicate. Only indices >= indexToSendInitial are tracked.
+	// indexToSendInitial is the indexToSend when this replica was observed to
+	// transition to StateReplicate. Only indices >= indexToSendInitial can be
+	// in tracker.
 	indexToSendInitial uint64
-	// Only the tracker works in terms of kvflowcontrolpb.RaftLogPosition, which
-	// contains both the term and index, since it needs to be able to ignore
-	// stale messages. The rest of the data-structures in replicaSendStream only
-	// need to track the index and not the term.
+	// tracker contains entries that have been sent, and have had send-tokens
+	// deducted (and will have had eval-tokens deducted iff index >=
+	// nextRaftIndexInitial)
 	tracker Tracker
 
 	// nextRaftIndexInitial is the value of nextRaftIndex when this transitioned
@@ -1232,36 +1205,35 @@ type replicaSendStream struct {
 
 	sendQueue struct {
 		// State of send-queue. [indexToSend, nextRaftIndex) have not been sent.
+		// indexToSend == FollowerStateInfo.Next
 		indexToSend   uint64
 		nextRaftIndex uint64
 
 		// Approximate stats for send-queue. For indices < nextRaftIndexInitial.
 		//
-		// TODO: don't need approx priority of < nextRaftIndexInitial, since
-		// not consuming eval tokens for those. Priority inheritance is a
-		// fairness device for eval tokens. approxMeanSizeBytes is only useful
-		// to figure out how much to grab in deductedForScheduler.tokens.
+		// An approx-max-priority is not needed for priority inheritance,
+		// since the entries in < nextRaftIndexInitial, are not consuming eval
+		// tokens, and priority inheritance is a fairness device for eval
+		// tokens. However, it could serve a rudimentary function when
+		// nextRaftIndex == nextRaftIndexInitial, so there are no precise
+		// stats, and we need to grab some tokens in
+		// deductedForScheduler.tokens. For now, we chose to only grab elastic
+		// tokens in this case. If there is regular work waiting, it may have
+		// to wait longer, but this is a backlog case, so it is fine (we are
+		// not sacrificing quorum on the range, or preventing new regular work
+		// from evaluating).
 		//
-		// TODO: two cases for deductedForScheduler.pri, which should be changed to
-		// workClass:
-		// - grabbed regular tokens: must have regular work waiting. Use the
-		//   highest pri in priorityCount for the decision for the override.
-		//
-		// - grabbed elastic tokens: may have regular work that will be sent.
-		//   Unilaterally use regular tokens for those. The message is sent
-		//   with no priority override. Since elastic tokens were available
-		//   recently it is highly probable that regular tokens are also
-		//   available.
-		approxMaxPriority   admissionpb.WorkPriority
+		// approxMeanSizeBytes is useful since it guides how many bytes to
+		// grab in deductedForScheduler.tokens.
 		approxMeanSizeBytes kvflowcontrol.Tokens
 
 		// Precise stats for send-queue. For indices >= nextRaftIndexInitial.
-		priorityCount map[admissionpb.WorkPriority]int64
+		priorityCount [NumRaftPriorities]int64
 		// sizeSum is only for entries subject to AC.
 		sizeSum kvflowcontrol.Tokens
 
 		// watcherHandleID, deductedForScheduler, forceFlushScheduled are only
-		// relevant when connectedState != snapshot, and the send-queue is
+		// relevant when connectedState == replicate, and the send-queue is
 		// non-empty.
 		//
 		// If watcherHandleID != InvalidStoreStreamSendTokenHandleID, i.e., we have
@@ -1270,16 +1242,26 @@ type replicaSendStream struct {
 		//
 		// If watcherHandleID == InvalidStoreStreamSendTokenHandleID, we have
 		// either deducted some tokens that we have not used, i.e.,
-		// deductedForScheduler.tokens > 0, or forceFlushScheduled (i.e., we don't
-		// need tokens). Both can be true, i.e. deductedForScheduler.tokens > 0
-		// and forceFlushScheduled. In this case, we are waiting to be scheduled
-		// in the raftScheduler to do the sending.
-		watcherHandleID      StoreStreamSendTokenHandleID
+		// deductedForScheduler.tokens > 0, or forceFlushScheduled (i.e., we
+		// don't need tokens). Both cannot be true. In this case, we are
+		// waiting to be scheduled in the raftScheduler to do the sending.
+		watcherHandleID StoreStreamSendTokenHandleID
+		// Two cases for deductedForScheduler.wc.
+		// - grabbed regular tokens: must have regular work waiting. Use the
+		//   highest pri in priorityCount for the decision for the override.
+		//   TODO: when indexToSend jumps ahead, we should immediately return
+		//   any regular tokens in deductedForScheduler and watch again, so that
+		//   this invariant is satisfied.
+		//
+		// - grabbed elastic tokens: may have regular work that will be sent.
+		//   Unilaterally use regular tokens for those. The message is sent
+		//   with no priority override. Since elastic tokens were available
+		//   recently it is highly probable that regular tokens are also
+		//   available.
 		deductedForScheduler struct {
-			pri    admissionpb.WorkPriority
+			wc     admissionpb.WorkClass
 			tokens kvflowcontrol.Tokens
 		}
-		// Only relevant when connectedState != snapshot.
 		forceFlushScheduled bool
 	}
 	// Eval state.
@@ -1294,7 +1276,6 @@ type replicaSendStream struct {
 
 // Initial state provided to constructor of replicaSendStream.
 type replicaSendStreamInitState struct {
-	isConnected bool
 	// [indexToSend, nextRaftIndex) are known to the (local) leader and need to
 	// be sent to this replica. This is the initial send-queue.
 	//
@@ -1312,20 +1293,15 @@ func newReplicaSendStream(
 	parent *replicaState, init replicaSendStreamInitState,
 ) *replicaSendStream {
 	// Must be in StateReplicate on creation.
-	connectedState := replicateConnected
-	if !init.isConnected {
-		connectedState = replicateSoftDisconnected
-	}
 	rss := &replicaSendStream{
 		parent:               parent,
-		connectedState:       connectedState,
+		connectedState:       replicate,
 		indexToSendInitial:   init.indexToSend,
 		nextRaftIndexInitial: init.nextRaftIndex,
 	}
 	rss.tracker.Init(parent.stream)
 	rss.sendQueue.indexToSend = init.indexToSend
 	rss.sendQueue.nextRaftIndex = init.nextRaftIndex
-	rss.sendQueue.approxMaxPriority = init.approxMaxPriority
 	rss.sendQueue.approxMeanSizeBytes = init.approxMeanSizeBytes
 	rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
 	return rss
@@ -1339,15 +1315,16 @@ func (rss *replicaSendStream) close() {
 	rss.closed = true
 }
 
-// An entry is being sent that was never in the send-queue.
+// An entry is being sent that was never in the send-queue. So the send-queue
+// must be empty.
 func (rss *replicaSendStream) advanceNextRaftIndexAndSent(state entryFlowControlState) {
-	if rss.connectedState == snapshot {
+	if rss.connectedState != replicate {
 		panic("")
 	}
-	if state.pos.Index != rss.sendQueue.indexToSend {
+	if state.index != rss.sendQueue.indexToSend {
 		panic("")
 	}
-	if state.pos.Index != rss.sendQueue.nextRaftIndex {
+	if state.index != rss.sendQueue.nextRaftIndex {
 		panic("")
 	}
 	rss.sendQueue.indexToSend++
@@ -1355,11 +1332,11 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndSent(state entryFlowControl
 	if !state.usesFlowControl {
 		return
 	}
-	// TODO: Use the correct mapped state.priority (admissionpb.WorkPriority) to RaftPriority.
-	rss.tracker.Track(context.TODO(), state.pos.Index, RaftPriority(state.priority), RaftPriority(state.priority),
-		state.tokens)
+	// inheritedPri and originalPri are the same for an entry that was never
+	// queued.
+	rss.tracker.Track(context.TODO(), state.index, state.originalPri, state.originalPri, state.tokens)
 	rss.parent.evalTokenCounter.Deduct(
-		context.TODO(), admissionpb.WorkClassFromPri(state.priority), state.tokens)
+		context.TODO(), workClassFromRaftPriority(state.originalPri), state.tokens)
 }
 
 func (rss *replicaSendStream) scheduleForceFlush() {
@@ -1367,13 +1344,25 @@ func (rss *replicaSendStream) scheduleForceFlush() {
 		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
 		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
 	}
+	rss.returnDeductedFromSchedulerTokens()
 	rss.sendQueue.forceFlushScheduled = true
 	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 }
 
+// REQUIRES: !rss.closed
 func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
-	// 5MB.
-	const MaxBytesToSend kvflowcontrol.Tokens = 5 << 20
+	if !rss.sendQueue.forceFlushScheduled && rss.sendQueue.deductedForScheduler.tokens == 0 {
+		return
+	}
+	// 4MB. Don't want to hog the scheduler thread for too long.
+	//
+	// Also, if have regular tokens and one of the early queued entries is the
+	// one causing the priority override to regular, and the rest are elastic,
+	// will bound how much elastic we upgrade/inherit to regular. Note, we can
+	// also handle this algorithmically, by not sending the elastic entries,
+	// but we've already pulled them out using MakeMsgApp, so we don't want to
+	// waste the likely storage read.
+	const MaxBytesToSend kvflowcontrol.Tokens = 4 << 20
 	bytesToSend := MaxBytesToSend
 	if !rss.sendQueue.forceFlushScheduled {
 		bytesToSend = rss.sendQueue.deductedForScheduler.tokens
@@ -1381,7 +1370,7 @@ func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
 	if bytesToSend == 0 {
 		return false
 	}
-	// TODO: use configuration of a limit on max inflight entries.
+	// TODO(sumeer): use configuration of a limit on max inflight entries.
 	msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgApp(
 		rss.parent.desc.ReplicaID, rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex,
 		int64(bytesToSend), math.MaxInt64)
@@ -1407,29 +1396,35 @@ func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
 	} else {
 		pri := rss.queuePriority()
 		rss.sendQueue.watcherHandleID = rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
-			rss.parent.sendTokenCounter, admissionpb.WorkClassFromPri(pri), rss)
+			rss.parent.sendTokenCounter, workClassFromRaftPriority(pri), rss)
 		return false
 	}
 }
 
-func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
-	remainingTokens := rss.sendQueue.deductedForScheduler.tokens
-	priAlreadyDeducted := kvserverpb.PriorityNotOverriddenForFlowControl
-	noRemainingTokens := false
-	if remainingTokens > 0 {
-		priAlreadyDeducted = rss.sendQueue.deductedForScheduler.pri
-	} else {
-		noRemainingTokens = true
-	}
-	wcAlreadyDeducted := admissionpb.WorkClassFromPri(priAlreadyDeducted)
-	// It is possible that the Notify raced with an enqueue (or scheduled with
-	// an enqueue) and the send-queue has some regular work now, and the
-	// priAlreadyDeducted was of a lower priority corresponding to elastic work.
-	// We just consume these tokens and apply the override corresponding to
-	// priAlreadyDeducted. It is considered harmless for regular work to consume
-	// elastic tokens. If that delays their logical admission, it will not harm
-	// later arriving regular work, that will use regular tokens.
+// TODO: rename overridden to inherited.
 
+func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
+	priOverride := PriorityNotOverriddenForFlowControl
+	var remainingTokens [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
+	trackEntries := true
+	if rss.sendQueue.forceFlushScheduled {
+		priOverride = NotSubjectToACForFlowControl
+		trackEntries = false
+	} else {
+		// Only inherit/override the priority if have regular tokens. If have
+		// elastic tokens, will not override.
+		if rss.sendQueue.deductedForScheduler.tokens > 0 &&
+			rss.sendQueue.deductedForScheduler.wc == admissionpb.RegularWorkClass {
+			priOverride = rss.queuePriority()
+			if workClassFromRaftPriority(priOverride) == admissionpb.ElasticWorkClass {
+				panic("")
+			}
+			remainingTokens[admissionpb.RegularWorkClass] = rss.sendQueue.deductedForScheduler.tokens
+		} else {
+			remainingTokens[admissionpb.ElasticWorkClass] = rss.sendQueue.deductedForScheduler.tokens
+		}
+		rss.sendQueue.deductedForScheduler.tokens = 0
+	}
 	for _, entry := range msg.Entries {
 		if rss.sendQueue.indexToSend != entry.Index {
 			panic("")
@@ -1440,69 +1435,71 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 			continue
 		}
 		rss.sendQueue.sizeSum -= entryFCState.tokens
-		rss.sendQueue.priorityCount[entryFCState.priority]--
-		wc := wcAlreadyDeducted
-		if priAlreadyDeducted == kvserverpb.PriorityNotOverriddenForFlowControl {
-			wc = admissionpb.WorkClassFromPri(entryFCState.priority)
-		}
-		if noRemainingTokens {
-			rss.parent.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
-		} else {
-			remainingTokens -= entryFCState.tokens
-			if remainingTokens <= 0 {
-				noRemainingTokens = true
-				rss.parent.sendTokenCounter.Deduct(context.TODO(), wc, -remainingTokens)
-				remainingTokens = 0
+		rss.sendQueue.priorityCount[entryFCState.originalPri]--
+		originalEntryWC := workClassFromRaftPriority(entryFCState.originalPri)
+		inheritedPri := entryFCState.originalPri
+		switch priOverride {
+		case NotSubjectToACForFlowControl:
+			// Don't touch remaining tokens, and return the eval tokens.
+			if entryFCState.index >= rss.nextRaftIndexInitial {
+				rss.eval.tokensDeducted[originalEntryWC] -=
+					entryFCState.tokens
+				rss.parent.evalTokenCounter.Return(
+					context.TODO(), originalEntryWC, entryFCState.tokens)
 			}
-
+		case PriorityNotOverriddenForFlowControl:
+			remainingTokens[originalEntryWC] -= entryFCState.tokens
+		default:
+			inheritedPri = priOverride
+			remainingTokens[admissionpb.RegularWorkClass] -= entryFCState.tokens
 		}
-		// TODO: Use the correct mapped entryFCState.priority
-		// (admissionpb.WorkPriority) to RaftPriority and WorkClass.
-		rss.tracker.Track(context.TODO(),
-			entry.Index, RaftPriority(entryFCState.priority), RaftPriority(wc), entryFCState.tokens)
+		if trackEntries {
+			rss.tracker.Track(
+				context.TODO(), entryFCState.index, inheritedPri, entryFCState.originalPri, entryFCState.tokens)
+		}
 	}
-	rss.parent.parent.opts.MessageSender.SendRaftMessage(context.TODO(), priAlreadyDeducted, msg)
-	rss.sendQueue.deductedForScheduler.tokens = remainingTokens
-	if remainingTokens == 0 {
-		rss.sendQueue.deductedForScheduler.pri = kvserverpb.PriorityNotOverriddenForFlowControl
+	for i := range remainingTokens {
+		if remainingTokens[i] > 0 {
+			rss.sendQueue.deductedForScheduler.tokens = remainingTokens[i]
+		} else if remainingTokens[i] < 0 {
+			// Deduct
+			rss.parent.sendTokenCounter.Deduct(
+				context.TODO(), admissionpb.WorkClass(i), -remainingTokens[i])
+		}
 	}
+	rss.parent.parent.opts.MessageSender.SendRaftMessage(context.TODO(), priOverride, msg)
+
 }
 
 func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowControlState) {
-	if entry.pos.Index != rss.sendQueue.nextRaftIndex {
+	if entry.index != rss.sendQueue.nextRaftIndex {
 		panic("")
 	}
 	wasEmpty := rss.isEmptySendQueue()
 	rss.sendQueue.nextRaftIndex++
 	if entry.usesFlowControl {
 		rss.sendQueue.sizeSum += entry.tokens
-		var priority admissionpb.WorkPriority
+		var existingSendQWC admissionpb.WorkClass
 		if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
 			// May need to update it.
-			priority = rss.queuePriority()
+			existingSendQWC = workClassFromRaftPriority(rss.queuePriority())
 		}
-		rss.sendQueue.priorityCount[entry.priority]++
-		if rss.connectedState == snapshot {
+		rss.sendQueue.priorityCount[entry.originalPri]++
+		if rss.connectedState != snapshot {
 			// Do not deduct eval-tokens in StateSnapshot, since there is no
-			// guarantee these will be returned.
+			// guarantee when these will be returned. In
+			// probeRecentlyReplicate, we continue deducting, since it is
+			// short-lived.
 			return
 		}
-		wcChanged := false
-		entryWC := admissionpb.WorkClassFromPri(entry.priority)
-		if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID &&
-			entry.priority > priority {
-			existingWC := admissionpb.WorkClassFromPri(priority)
-			if existingWC != entryWC {
-				wcChanged = true
-			}
-		}
+		entryWC := workClassFromRaftPriority(entry.originalPri)
 		rss.eval.tokensDeducted[entryWC] += entry.tokens
 		rss.parent.evalTokenCounter.Deduct(context.TODO(), entryWC, entry.tokens)
 		if wasEmpty {
 			// Register notification.
 			rss.sendQueue.watcherHandleID = rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
 				rss.parent.sendTokenCounter, entryWC, rss)
-		} else if wcChanged {
+		} else if entryWC != existingSendQWC {
 			// Update notification
 			rss.parent.parent.opts.SendTokensWatcher.UpdateHandle(rss.sendQueue.watcherHandleID, entryWC)
 		}
@@ -1512,19 +1509,19 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowContr
 // Notify implements TokenAvailableNotification.
 func (rss *replicaSendStream) Notify() {
 	// TODO: concurrency. raftMu is not held, and not being called from raftScheduler.
-	if rss.closed || rss.connectedState == snapshot {
+	if rss.closed || rss.connectedState != replicate || rss.sendQueue.forceFlushScheduled {
 		// Must have canceled the handle and the cancellation raced with the
 		// notification.
 		return
 	}
 	pri := rss.queuePriority()
-	wc := admissionpb.WorkClassFromPri(pri)
+	wc := workClassFromRaftPriority(pri)
 	queueSize := rss.queueSize()
 	tokens := rss.parent.sendTokenCounter.TryDeduct(context.TODO(), wc, queueSize)
 	if tokens > 0 {
 		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
 		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
-		rss.sendQueue.deductedForScheduler.pri = pri
+		rss.sendQueue.deductedForScheduler.wc = wc
 		rss.sendQueue.deductedForScheduler.tokens = tokens
 		rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 	}
@@ -1535,15 +1532,10 @@ func (rss *replicaSendStream) isEmptySendQueue() bool {
 }
 
 // REQUIRES: send-queue is not empty.
-func (rss *replicaSendStream) queuePriority() admissionpb.WorkPriority {
-	initialized := false
-	var maxPri admissionpb.WorkPriority
-	if rss.sendQueue.indexToSend < rss.nextRaftIndexInitial {
-		maxPri = rss.sendQueue.approxMaxPriority
-		initialized = true
-	}
-	for pri, count := range rss.sendQueue.priorityCount {
-		if count > 0 && (!initialized || pri > maxPri) {
+func (rss *replicaSendStream) queuePriority() RaftPriority {
+	maxPri := RaftLowPri
+	for pri := RaftLowPri + 1; pri < NumRaftPriorities; pri++ {
+		if rss.sendQueue.priorityCount[pri] > 0 {
 			maxPri = pri
 		}
 	}
@@ -1561,21 +1553,6 @@ func (rss *replicaSendStream) queueSize() kvflowcontrol.Tokens {
 	return size
 }
 
-func (rss *replicaSendStream) changeConnectedStateInStateReplicate(isConnected bool) {
-	if isConnected {
-		if rss.connectedState != replicateSoftDisconnected {
-			panic("")
-		}
-		rss.connectedState = replicateConnected
-	}
-	if !isConnected {
-		if rss.connectedState != replicateConnected {
-			panic("")
-		}
-		rss.connectedState = replicateSoftDisconnected
-	}
-}
-
 func (rss *replicaSendStream) changeToStateSnapshot() {
 	rss.connectedState = snapshot
 	// The tracker must only contain entries in < rss.sendQueue.indexToSend.
@@ -1584,7 +1561,7 @@ func (rss *replicaSendStream) changeToStateSnapshot() {
 	// all tokens in the tracker.
 	rss.tracker.UntrackAll(func(
 		index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens) {
-		rss.parent.sendTokenCounter.Return(context.TODO(), admissionpb.WorkClassFromPri(originalPri.ToWorkPriority()), tokens)
+		rss.parent.sendTokenCounter.Return(context.TODO(), workClassFromRaftPriority(inheritedPri), tokens)
 	})
 	// For the same reason, return all eval tokens deducted.
 	for wc := range rss.eval.tokensDeducted {
@@ -1603,13 +1580,110 @@ func (rss *replicaSendStream) changeToStateSnapshot() {
 
 func (rss *replicaSendStream) returnDeductedFromSchedulerTokens() {
 	if rss.sendQueue.deductedForScheduler.tokens > 0 {
-		wc := admissionpb.WorkClassFromPri(rss.sendQueue.deductedForScheduler.pri)
-		rss.parent.sendTokenCounter.Return(context.TODO(), wc, rss.sendQueue.deductedForScheduler.tokens)
+		rss.parent.sendTokenCounter.Return(
+			context.TODO(), rss.sendQueue.deductedForScheduler.wc, rss.sendQueue.deductedForScheduler.tokens)
 		rss.sendQueue.deductedForScheduler.tokens = 0
 	}
 }
 
-func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSend uint64) {
+// The replica is in StateReplicate, and has the provided info. It's previous state may
+// have been any state (include replicate). Make the state consistent with info. Note that
+// even in the previous state was replicate, we may not have seen all state transitions,
+// or even if we see all state transitions, info.Match can jump ahead of indexToSend, because
+// of old MsgApps arriving at the replica. So everything needs to be fixed up.
+func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateInfo) {
+	switch rss.connectedState {
+	case replicate:
+		if info.Match >= rss.sendQueue.indexToSend {
+			// Some things got popped without us sending. Must be old
+			// MsgAppResp. Next cannot have moved past Match, since Next used
+			// to be equal to indexToSend.
+			if info.Next != info.Match+1 {
+				panic("")
+			}
+			rss.makeConsistentWhenUnexpectedPop(info.Next)
+		} else if info.Next == rss.sendQueue.indexToSend {
+			// Everything is as expected.
+		} else if info.Next > rss.sendQueue.indexToSend {
+			// In pull-mode this can never happen. We've already covered the
+			// case where Next moves ahead along with Match earlier.
+			panic("")
+		} else {
+			// info.Next < rss.sendQueue.indexToSend.
+			// Must have transitioned to StateProbe and back.
+			if info.Next != info.Match+1 {
+				panic("")
+			}
+			rss.makeConsistentWhenProbeToReplicate(info.Next)
+		}
+	case probeRecentlyReplicate:
+		// Returned from StateProbe => StateReplicate.
+		if info.Next != info.Match+1 {
+			panic("")
+		}
+		rss.makeConsistentWhenProbeToReplicate(info.Next)
+	case snapshot:
+		// Returned from StateSnapshot => StateReplicate
+		if info.Next != info.Match+1 {
+			panic("")
+		}
+		rss.makeConsistentWhenSnapshotToReplicate(info.Next)
+	}
+	rss.returnTokensUsingAdmitted(info.Admitted)
+}
+
+func (rss *replicaSendStream) makeConsistentWhenUnexpectedPop(indexToSend uint64) {
+	// TODO:
+}
+
+func (rss *replicaSendStream) makeConsistentWhenProbeToReplicate(indexToSend uint64) {
+	if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
+		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
+		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
+	}
+	rss.returnDeductedFromSchedulerTokens()
+	rss.sendQueue.forceFlushScheduled = false
+
+	if indexToSend == rss.sendQueue.indexToSend {
+		// Queue state is already correct.
+		rss.startProcessingSendQueue()
+		return
+	}
+	if indexToSend > rss.sendQueue.indexToSend {
+		panic("")
+	}
+	// INVARIANT: indexToSend < rss.sendQueue.indexToSend.
+
+	// A regression in indexToSend necessarily means a MsgApp constructed by
+	// this replicaSendStream was dropped. There may be eval.tokensDeducted
+	// for these, but if so, they must be in the tracker -- we could simply remove
+	// them from the tracker, and continue with perfect stats accounting.
+	//
+	// TODO(sumeer): think through if the above statement is sound. If not, we
+	// can always resort to the worst-case behavior.
+	if indexToSend < rss.indexToSendInitial {
+		panic("did not construct MsgApp in this replicaSendStream")
+	}
+	rss.tracker.UntrackAll(
+		func(index uint64, inheritedPri RaftPriority, originalPri RaftPriority,
+			tokens kvflowcontrol.Tokens) {
+			if index >= indexToSend {
+				rss.sendQueue.priorityCount[originalPri]++
+				rss.sendQueue.sizeSum += tokens
+			}
+			inheritedWC := workClassFromRaftPriority(inheritedPri)
+			if index >= rss.nextRaftIndexInitial {
+				originalWC := workClassFromRaftPriority(originalPri)
+				rss.eval.tokensDeducted[originalWC] -= tokens
+				rss.parent.evalTokenCounter.Return(context.TODO(), originalWC, tokens)
+			}
+			rss.parent.sendTokenCounter.Return(context.TODO(), inheritedWC, tokens)
+
+		})
+	rss.sendQueue.indexToSend = indexToSend
+}
+
+func (rss *replicaSendStream) makeConsistentWhenSnapshotToReplicate(indexToSend uint64) {
 	if rss.sendQueue.nextRaftIndex < indexToSend {
 		panic("")
 	}
@@ -1619,11 +1693,7 @@ func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSe
 	if rss.connectedState != snapshot {
 		panic("")
 	}
-	state := replicateConnected
-	if !isConnected {
-		state = replicateSoftDisconnected
-	}
-	rss.connectedState = state
+	rss.connectedState = replicate
 	// INVARIANT: rss.sendQueue.indexToSend <= indexToSend <=
 	// rss.sendQueue.nextRaftIndex. Typically, both will be <, since we
 	// transitioned to StateSnapshot since rss.sendQueue.indexToSend was
@@ -1632,7 +1702,7 @@ func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSe
 	// send-queue.
 
 	// NB: the tracker entries have already been returned in
-	// changeToStateSnapshot. And so have the eval tokens. We have partially or
+	// changeToStateSnapshot. And so have the eval tokens. We have close to
 	// fully emptied the send-queue and we don't want to iterate over the
 	// remaining members to precisely figure out what to deduct from
 	// eval-tokens, since that may require reading from storage.
@@ -1640,12 +1710,8 @@ func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSe
 	rss.indexToSendInitial = indexToSend
 	rss.sendQueue.indexToSend = indexToSend
 	totalCount := int64(0)
-	var maxPri admissionpb.WorkPriority
 	for pri, count := range rss.sendQueue.priorityCount {
 		if count > 0 {
-			if totalCount == 0 || pri > maxPri {
-				maxPri = pri
-			}
 			totalCount += count
 			rss.sendQueue.priorityCount[pri] = 0
 		}
@@ -1656,109 +1722,96 @@ func (rss *replicaSendStream) changeToStateReplicate(isConnected bool, indexToSe
 	}
 	if rss.nextRaftIndexInitial > rss.sendQueue.indexToSend {
 		// The approx stats are still relevant.
-		if rss.sendQueue.approxMaxPriority > maxPri {
-			maxPri = rss.sendQueue.approxMaxPriority
-		}
 		if totalCount == 0 {
 			meanSizeBytes = rss.sendQueue.approxMeanSizeBytes
 		} else {
 			meanSizeBytes = kvflowcontrol.Tokens(0.9*float64(meanSizeBytes) + 0.1*float64(rss.sendQueue.approxMeanSizeBytes))
 		}
 	}
-	rss.sendQueue.approxMaxPriority = maxPri
 	rss.sendQueue.approxMeanSizeBytes = meanSizeBytes
 	rss.sendQueue.sizeSum = 0
 	rss.nextRaftIndexInitial = rss.sendQueue.nextRaftIndex
+	rss.startProcessingSendQueue()
+}
+
+func (rss *replicaSendStream) startProcessingSendQueue() {
 	if !rss.isEmptySendQueue() {
 		rss.Notify()
 		if rss.sendQueue.deductedForScheduler.tokens == 0 {
 			// Weren't able to deduct any tokens.
 			rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
-				rss.parent.sendTokenCounter, admissionpb.WorkClassFromPri(maxPri), rss)
+				rss.parent.sendTokenCounter, admissionpb.ElasticWorkClass, rss)
 		} else {
 			scheduleAgain := rss.scheduled()
 			if scheduleAgain {
 				rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 			} else {
 				rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
-					rss.parent.sendTokenCounter, admissionpb.WorkClassFromPri(maxPri), rss)
+					rss.parent.sendTokenCounter, admissionpb.ElasticWorkClass, rss)
 			}
 		}
 	}
 }
 
-// Message is received to return flow tokens for pri, for all positions <= upto.
-// Return send-tokens and eval-tokens.
-func (rss *replicaSendStream) flowTokensReturn(
-	pri admissionpb.WorkPriority, upto kvflowcontrolpb.RaftLogPosition,
-) kvflowcontrol.Tokens {
-	wc := admissionpb.WorkClassFromPri(pri)
-	rss.tracker.Untrack(WorkPriorityToRaftPriority(pri), upto.Index,
+func (rss *replicaSendStream) returnTokensUsingAdmitted(admitted [NumRaftPriorities]uint64) {
+	for pri, uptoIndex := range admitted {
+		rss.returnTokensForPri(RaftPriority(pri), uptoIndex)
+	}
+}
+
+func (rss *replicaSendStream) returnTokensForPri(pri RaftPriority, uptoIndex uint64) {
+	rss.tracker.Untrack(pri, uptoIndex,
 		func(index uint64, originalPri RaftPriority, tokens kvflowcontrol.Tokens) {
+			wc := workClassFromRaftPriority(pri)
 			if index >= rss.nextRaftIndexInitial {
-				rss.eval.tokensDeducted[wc] -= tokens
-				rss.parent.evalTokenCounter.Return(context.TODO(), wc, tokens)
+				originalWC := workClassFromRaftPriority(originalPri)
+				rss.eval.tokensDeducted[originalWC] -= tokens
+				rss.parent.evalTokenCounter.Return(context.TODO(), originalWC, tokens)
 			}
-			rss.parent.sendTokenCounter.Return(context.TODO(),
-				admissionpb.WorkClassFromPri(originalPri.ToWorkPriority()), tokens)
+			rss.parent.sendTokenCounter.Return(context.TODO(), wc, tokens)
 		})
-	return 0
 }
 
 type connectedState uint32
 
-// Additional connectivity state in StateReplicate.
+// Local replicas are always in state replicate.
 //
-// Local replicas are always in state connected.
+// Initial state for a replicaSendStream is always replicate, since it is
+// created in StateReplicate. We don't care about whether the transport is
+// connected or disconnected, since there is buffering capacity in the
+// RaftTransport, which allows for some buffering and immediate sending when
+// the RaftTransport stream reconnects (which may happen before the next
+// HandleRaftEvent), which is desirable.
 //
-// Initial state for a replicaSendStream is either connected or
-// softDisconnected, depending on whether FollowerTransportConnected returns
-// true or false. Transport stream closure is immediately notified
-// (TransportDisconnected), but the reconnection is only learnt about when
-// polling FollowerTransportConnected (which happens in a HandleRaftEvent).
-// The transport stream closure transitions connected => softDisconnected.
-// FollowerTransportConnected polling transitions from softDisconnected state
-// to connected. In softDisconnected state, and if the send-queue was already
-// empty, we continue to send MsgApps if send-tokens are available, since
-// there is buffering capacity in the RaftTransport, which allows for some
-// buffering and immediate sending when the RaftTransport reconnects (which
-// may happen before the next HandleRaftEvent), which is desirable.
-// Unfortunately we cannot do any flow token accounting in this state, since
-// those tokens may be lossy. The first false return value from
-// SendRaftMessage in softDisconnected will also trigger a notification to
-// Raft that the replica is unreachable (see Replica.sendRaftMessage calling
-// Replica.addUnreachableRemoteReplica), and that raftpb.MsgUnreachable will
-// cause the transition out of StateReplicate to StateProbe. The false return
-// value happens either when the (generous) RaftTransport buffer is full, or
-// when the circuit breaker opens. The circuit breaker opens 3-6s after no
-// more TCP packets are flowing, so we can send about 6s of messages without
-// flow control accounting, which is considered acceptable.
+// The first false return value from SendRaftMessage will trigger a
+// notification to Raft that the replica is unreachable (see
+// Replica.sendRaftMessage calling Replica.addUnreachableRemoteReplica), and
+// that raftpb.MsgUnreachable will cause the transition out of StateReplicate
+// to StateProbe. The false return value happens either when the (generous)
+// RaftTransport buffer is full, or when the circuit breaker opens. The
+// circuit breaker opens 3-6s after no more TCP packets are flowing.
 //
-// In state softDisconnected, we do not wait on eval tokens for this stream
-// for elastic work. If we waited for eval tokens and the eval tokens are
-// negative due to some other replica, we may not evaluate new work, which
-// means we would not call SendRaftMessage hence never triggering the
-// transition to StateProbe. That would unnecessarily stop elastic work when a
-// node is down. The transition to StateProbe will happen anyway.
+// A single transient message drop, and nack, can also cause a transition to
+// StateProbe. At this layer we don't bother distinguishing on why this
+// transition happened and first transition to probeRecentlyReplicate. We stay
+// in this state for 1 second, and then close the replicaSendStream.
 //
-// We call this state softDisconnected since MsgApps are still being generated.
+// The only difference in behavior between replicate and
+// probeRecentlyReplicate is that we don't try to construct MsgApps in the
+// latter.
 //
-// Initial states: {connected, softDisconnected}
+// Initial states: replicate
 // State transitions:
 //
-//	connected => softDisconnected
-//	softDisconnected => connected
-//	* => replicaSendStream closed
-//
-// Why do we return tokens early?
-
-// TODO: get rid of replicateSoftDisconnected.
+//	replicate <=> {probeRecentlyReplicate, snapshot}
+//	snapshot => replicaSendStream closed (when observe StateProbe)
+//	probeRecentlyReplicate => replicaSendStream closed (after short delay)
 const (
-	replicateConnected connectedState = iota
-	replicateSoftDisconnected
+	replicate connectedState = iota
+	probeRecentlyReplicate
 	snapshot
 )
 
-func (cs connectedState) isStateReplicate() bool {
-	return cs == replicateConnected || cs == replicateSoftDisconnected
+func (cs connectedState) shouldWaitForElasticEvalTokens() bool {
+	return cs == replicate || cs == probeRecentlyReplicate
 }
