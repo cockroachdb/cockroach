@@ -566,8 +566,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if ck := c.AsCheck(); ck != nil {
 				if err := validateCheckInTxn(
-					params.ctx, params.p.InternalSQLTxn(), &params.p.semaCtx,
-					params.p.SessionData(), n.tableDesc, ck,
+					params.ctx, params.p.InternalSQLTxn(), params.p.EvalContext(),
+					&params.p.semaCtx, params.p.SessionData(), n.tableDesc, ck,
 				); err != nil {
 					return err
 				}

@@ -323,7 +323,8 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 		}
 
 		// Run the plan.
-		err = runPlanInsidePlan(ctx, g.p.RunParams(ctx), plan.(*planComponents), w, g, stmtForDistSQLDiagram)
+		params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
+		err = runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram)
 		if err != nil {
 			return err
 		}

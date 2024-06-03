@@ -626,8 +626,9 @@ func (f *FlowBase) MemUsage() int64 {
 func (f *FlowBase) Cancel() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.mu.status == flowFinished {
-		// The Flow is already done, nothing to cancel.
+	if f.mu.status == flowFinished || f.mu.ctxCancel == nil {
+		// The Flow is already done, nothing to cancel. ctxCancel can be nil in
+		// some tests.
 		return
 	}
 	f.mu.ctxCancel()
