@@ -8,6 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import { IndexUsageStatistic, recommendDropUnusedIndex } from "../insights";
+import { getLogger, indexUnusedDuration } from "../util";
+
+import { Format, Identifier, Join, SQL } from "./safesql";
+import { fromHexString, withTimeout } from "./util";
 import {
   combineQueryErrors,
   executeInternalSql,
@@ -22,12 +30,6 @@ import {
   SqlTxnResult,
   txnResultIsEmpty,
 } from "./sqlApi";
-import moment from "moment-timezone";
-import { fromHexString, withTimeout } from "./util";
-import { Format, Identifier, Join, SQL } from "./safesql";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { IndexUsageStatistic, recommendDropUnusedIndex } from "../insights";
-import { getLogger, indexUnusedDuration } from "../util";
 
 const { ZoneConfig } = cockroach.config.zonepb;
 const { ZoneConfigurationLevel } = cockroach.server.serverpb;
@@ -92,20 +94,20 @@ const getTableId: TableDetailsQuery<TableIdRow> = {
     );
     return {
       sql: `SELECT $1::regclass::oid as table_id`,
-      arguments: [escFullTableName.SQLString()],
+      arguments: [escFullTableName.sqlString()],
     };
   },
   addToTableDetail: (
-    txn_result: SqlTxnResult<TableIdRow>,
+    txnResult: SqlTxnResult<TableIdRow>,
     resp: TableDetailsResponse,
   ) => {
-    if (!txnResultIsEmpty(txn_result)) {
-      resp.idResp.table_id = txn_result.rows[0].table_id;
+    if (!txnResultIsEmpty(txnResult)) {
+      resp.idResp.table_id = txnResult.rows[0].table_id;
     } else {
-      txn_result.error = new Error("fetchTableId: unexpected empty results");
+      txnResult.error = new Error("fetchTableId: unexpected empty results");
     }
-    if (txn_result.error) {
-      resp.idResp.error = txn_result.error;
+    if (txnResult.error) {
+      resp.idResp.error = txnResult.error;
     }
   },
 };
@@ -126,17 +128,16 @@ const getTableCreateStatement: TableDetailsQuery<TableCreateStatementRow> = {
     };
   },
   addToTableDetail: (
-    txn_result: SqlTxnResult<TableCreateStatementRow>,
+    txnResult: SqlTxnResult<TableCreateStatementRow>,
     resp: TableDetailsResponse,
   ) => {
-    if (txn_result.error) {
-      resp.createStmtResp.error = txn_result.error;
+    if (txnResult.error) {
+      resp.createStmtResp.error = txnResult.error;
     }
-    if (!txnResultIsEmpty(txn_result)) {
-      resp.createStmtResp.create_statement =
-        txn_result.rows[0].create_statement;
-    } else if (!txn_result.error) {
-      txn_result.error = new Error(
+    if (!txnResultIsEmpty(txnResult)) {
+      resp.createStmtResp.create_statement = txnResult.rows[0].create_statement;
+    } else if (!txnResult.error) {
+      txnResult.error = new Error(
         "getTableCreateStatement: unexpected empty results",
       );
     }
@@ -168,14 +169,14 @@ const getTableGrants: TableDetailsQuery<TableGrantsRow> = {
     };
   },
   addToTableDetail: (
-    txn_result: SqlTxnResult<TableGrantsRow>,
+    txnResult: SqlTxnResult<TableGrantsRow>,
     resp: TableDetailsResponse,
   ) => {
-    if (!txnResultIsEmpty(txn_result)) {
-      resp.grantsResp.grants = txn_result.rows;
+    if (!txnResultIsEmpty(txnResult)) {
+      resp.grantsResp.grants = txnResult.rows;
     }
-    if (txn_result.error) {
-      resp.grantsResp.error = txn_result.error;
+    if (txnResult.error) {
+      resp.grantsResp.error = txnResult.error;
     }
   },
 };
@@ -206,15 +207,15 @@ const getTableSchemaDetails: TableDetailsQuery<TableSchemaDetailsRow> = {
     };
   },
   addToTableDetail: (
-    txn_result: SqlTxnResult<TableSchemaDetailsRow>,
+    txnResult: SqlTxnResult<TableSchemaDetailsRow>,
     resp: TableDetailsResponse,
   ) => {
-    if (!txnResultIsEmpty(txn_result)) {
-      resp.schemaDetails.columns = txn_result.rows[0].columns;
-      resp.schemaDetails.indexes = txn_result.rows[0].indexes;
+    if (!txnResultIsEmpty(txnResult)) {
+      resp.schemaDetails.columns = txnResult.rows[0].columns;
+      resp.schemaDetails.indexes = txnResult.rows[0].indexes;
     }
-    if (txn_result.error) {
-      resp.schemaDetails.error = txn_result.error;
+    if (txnResult.error) {
+      resp.schemaDetails.error = txnResult.error;
     }
   },
 };
@@ -242,15 +243,15 @@ const getTableZoneConfigStmt: TableDetailsQuery<TableZoneConfigStatementRow> = {
     };
   },
   addToTableDetail: (
-    txn_result: SqlTxnResult<TableZoneConfigStatementRow>,
+    txnResult: SqlTxnResult<TableZoneConfigStatementRow>,
     resp: TableDetailsResponse,
   ) => {
-    if (!txnResultIsEmpty(txn_result)) {
+    if (!txnResultIsEmpty(txnResult)) {
       resp.zoneConfigResp.configure_zone_statement =
-        txn_result.rows[0].raw_config_sql;
+        txnResult.rows[0].raw_config_sql;
     }
-    if (txn_result.error) {
-      resp.zoneConfigResp.error = txn_result.error;
+    if (txnResult.error) {
+      resp.zoneConfigResp.error = txnResult.error;
     }
   },
 };
@@ -270,17 +271,17 @@ const getTableZoneConfig: TableDetailsQuery<TableZoneConfigRow> = {
       sql: `SELECT 
       encode(crdb_internal.get_zone_config((SELECT crdb_internal.get_database_id($1))), 'hex') as database_zone_config_hex_string,
       encode(crdb_internal.get_zone_config((SELECT $2::regclass::int)), 'hex') as table_zone_config_hex_string`,
-      arguments: [dbName, escFullTableName.SQLString()],
+      arguments: [dbName, escFullTableName.sqlString()],
     };
   },
   addToTableDetail: (
-    txn_result: SqlTxnResult<TableZoneConfigRow>,
+    txnResult: SqlTxnResult<TableZoneConfigRow>,
     resp: TableDetailsResponse,
   ) => {
-    if (!txnResultIsEmpty(txn_result)) {
+    if (!txnResultIsEmpty(txnResult)) {
       let hexString = "";
       let configLevel = ZoneConfigurationLevel.CLUSTER;
-      const row = txn_result.rows[0];
+      const row = txnResult.rows[0];
       // Check that database_zone_config_bytes is not null
       // and not empty.
       if (
@@ -325,8 +326,8 @@ const getTableZoneConfig: TableDetailsQuery<TableZoneConfigRow> = {
         resp.zoneConfigResp.zone_config_level = ZoneConfigurationLevel.UNKNOWN;
       }
     }
-    if (txn_result.error) {
-      resp.zoneConfigResp.error = txn_result.error;
+    if (txnResult.error) {
+      resp.zoneConfigResp.error = txnResult.error;
     }
   },
 };
@@ -350,15 +351,15 @@ const getTableHeuristicsDetails: TableDetailsQuery<TableHeuristicDetailsRow> = {
     };
   },
   addToTableDetail: (
-    txn_result: SqlTxnResult<TableHeuristicDetailsRow>,
+    txnResult: SqlTxnResult<TableHeuristicDetailsRow>,
     resp: TableDetailsResponse,
   ) => {
-    if (!txnResultIsEmpty(txn_result)) {
+    if (!txnResultIsEmpty(txnResult)) {
       resp.heuristicsDetails.stats_last_created_at =
-        txn_result.rows[0].stats_last_created_at;
+        txnResult.rows[0].stats_last_created_at;
     }
-    if (txn_result.error) {
-      resp.heuristicsDetails.error = txn_result.error;
+    if (txnResult.error) {
+      resp.heuristicsDetails.error = txnResult.error;
     }
   },
 };
@@ -395,24 +396,24 @@ const getTableSpanStats: TableDetailsQuery<TableSpanStatsRow> = {
             FROM crdb_internal.tenant_span_stats(
                 (SELECT crdb_internal.get_database_id($1)), 
                 (SELECT $2::regclass::int))`,
-      arguments: [dbName, escFullTableName.SQLString()],
+      arguments: [dbName, escFullTableName.sqlString()],
     };
   },
   addToTableDetail: (
-    txn_result: SqlTxnResult<TableSpanStatsRow>,
+    txnResult: SqlTxnResult<TableSpanStatsRow>,
     resp: TableDetailsResponse,
   ) => {
-    if (txn_result && txn_result.error) {
-      resp.stats.spanStats.error = txn_result.error;
+    if (txnResult && txnResult.error) {
+      resp.stats.spanStats.error = txnResult.error;
     }
-    if (txnResultIsEmpty(txn_result)) {
+    if (txnResultIsEmpty(txnResult)) {
       return;
     }
-    if (txn_result.rows.length === 1) {
-      resp.stats.spanStats = txn_result.rows[0];
+    if (txnResult.rows.length === 1) {
+      resp.stats.spanStats = txnResult.rows[0];
     } else {
       resp.stats.spanStats.error = new Error(
-        `getTableSpanStats: unexpected number of rows (expected 1, got ${txn_result.rows.length})`,
+        `getTableSpanStats: unexpected number of rows (expected 1, got ${txnResult.rows.length})`,
       );
     }
   },
@@ -458,17 +459,17 @@ const getTableReplicaStoreIDs: TableDetailsQuery<TableReplicasRow> = {
     };
   },
   addToTableDetail: (
-    txn_result: SqlTxnResult<TableReplicasRow>,
+    txnResult: SqlTxnResult<TableReplicasRow>,
     resp: TableDetailsResponse,
   ) => {
-    if (txn_result.error) {
-      resp.stats.replicaData.error = txn_result.error;
+    if (txnResult.error) {
+      resp.stats.replicaData.error = txnResult.error;
     }
 
     // TODO #118957 (xinhaoz) Store IDs and node IDs cannot be used interchangeably.
-    resp.stats.replicaData.storeIDs = txn_result?.rows[0]?.store_ids ?? [];
+    resp.stats.replicaData.storeIDs = txnResult?.rows[0]?.store_ids ?? [];
     resp.stats.replicaData.replicaCount =
-      txn_result?.rows[0]?.replica_count ?? 0;
+      txnResult?.rows[0]?.replica_count ?? 0;
   },
 };
 
@@ -505,18 +506,18 @@ const getTableIndexUsageStats: TableDetailsQuery<IndexUsageStatistic> = {
                ORDER BY total_reads DESC`,
         [new Identifier(dbName)],
       ),
-      arguments: [escFullTableName.SQLString(), dbName],
+      arguments: [escFullTableName.sqlString(), dbName],
     };
   },
   addToTableDetail: (
-    txn_result: SqlTxnResult<IndexUsageStatistic>,
+    txnResult: SqlTxnResult<IndexUsageStatistic>,
     resp: TableDetailsResponse,
   ) => {
-    resp.stats.indexStats.has_index_recommendations = txn_result.rows?.some(
+    resp.stats.indexStats.has_index_recommendations = txnResult.rows?.some(
       row => recommendDropUnusedIndex(row),
     );
-    if (txn_result.error) {
-      resp.stats.indexStats.error = txn_result.error;
+    if (txnResult.error) {
+      resp.stats.indexStats.error = txnResult.error;
     }
   },
 };
@@ -609,13 +610,13 @@ async function fetchTableDetails(
   );
   const resp = await executeInternalSql<TableDetailsRow>(req);
   const errs: Error[] = [];
-  resp.execution.txn_results.forEach(txn_result => {
-    if (txn_result.error) {
-      errs.push(txn_result.error);
+  resp.execution.txn_results.forEach(txnResult => {
+    if (txnResult.error) {
+      errs.push(txnResult.error);
     }
     const query: TableDetailsQuery<TableDetailsRow> =
-      tableDetailQueries[txn_result.statement - 1];
-    query.addToTableDetail(txn_result, detailsResponse);
+      tableDetailQueries[txnResult.statement - 1];
+    query.addToTableDetail(txnResult, detailsResponse);
   });
   if (resp.error) {
     detailsResponse.error = resp.error;

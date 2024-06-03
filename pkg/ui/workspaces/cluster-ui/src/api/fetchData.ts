@@ -9,7 +9,9 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { RequestError } from "../util";
+
 import { withBasePath } from "./basePath";
 
 interface ProtoBuilder<
@@ -30,9 +32,9 @@ export function toArrayBuffer(encodedRequest: Uint8Array): ArrayBuffer {
 }
 
 /**
- * @param RespBuilder expects protobuf stub class to build decode response;
+ * @param respBuilder expects protobuf stub class to build decode response;
  * @param path relative URL path for requested resource;
- * @param ReqBuilder expects protobuf stub to encode request payload. It has to be
+ * @param reqBuilder expects protobuf stub to encode request payload. It has to be
  * class type, not instance;
  * @param reqPayload is request payload object;
  * @param timeout is the timeout for the request (optional),
@@ -41,10 +43,10 @@ export function toArrayBuffer(encodedRequest: Uint8Array): ArrayBuffer {
  * e.g. "1M" (1 minute), default value "30S" (30 seconds);
  **/
 export const fetchData = <P extends ProtoBuilder<P>, T extends ProtoBuilder<T>>(
-  RespBuilder: T,
+  respBuilder: T,
   path: string,
-  ReqBuilder?: P,
-  reqPayload?: FirstConstructorParameter<P>,
+  reqBuilder?: P,
+  reqPayload?: ConstructorParameters<P>[0],
   timeout?: string,
 ): Promise<InstanceType<T>> => {
   const grpcTimeout = timeout || "30S";
@@ -58,7 +60,7 @@ export const fetchData = <P extends ProtoBuilder<P>, T extends ProtoBuilder<T>>(
   };
 
   if (reqPayload) {
-    const encodedRequest = ReqBuilder.encode(reqPayload).finish();
+    const encodedRequest = reqBuilder.encode(reqPayload).finish();
     params.method = "POST";
     params.body = toArrayBuffer(encodedRequest);
   }
@@ -86,7 +88,7 @@ export const fetchData = <P extends ProtoBuilder<P>, T extends ProtoBuilder<T>>(
       }
       return response.arrayBuffer();
     })
-    .then(buffer => RespBuilder.decode(new Uint8Array(buffer)));
+    .then(buffer => respBuilder.decode(new Uint8Array(buffer)));
 };
 
 /**

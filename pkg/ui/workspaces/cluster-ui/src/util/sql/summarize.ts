@@ -7,8 +7,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
+import startsWith from "lodash/startsWith";
+import toLower from "lodash/toLower";
 
-import _ from "lodash";
 import { shortStatement } from "../../statementsTable";
 
 export interface StatementSummary {
@@ -31,7 +32,7 @@ const keywords: { [key: string]: RegExp } = {
 // of the query.
 export function summarize(statement: string): StatementSummary {
   for (const keyword in keywords) {
-    if (_.startsWith(_.toLower(statement), _.toLower(keyword))) {
+    if (startsWith(toLower(statement), toLower(keyword))) {
       const tablePattern = keywords[keyword];
       const tableMatch = tablePattern.exec(statement);
       if (!tableMatch) {

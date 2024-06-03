@@ -8,35 +8,28 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { AppState } from "../store";
 import { withRouter } from "react-router-dom";
-import {
-  DatabasesPage,
-  DatabasesPageActions,
-  DatabasesPageData,
-} from "./databasesPage";
 import { connect } from "react-redux";
+import { Dispatch } from "redux";
+
+import { selectIsTenant } from "../store/uiConfig";
+import {
+  actions as nodesActions,
+  nodeRegionsByIDSelector,
+} from "../store/nodes";
 import {
   databasesListSelector,
   selectDatabasesFilters,
   selectDatabasesSearch,
   selectDatabasesSortSetting,
 } from "../store/databasesList/databasesList.selectors";
-import {
-  actions as nodesActions,
-  nodeRegionsByIDSelector,
-} from "../store/nodes";
-import { selectIsTenant } from "../store/uiConfig";
-import { Dispatch } from "redux";
+import { AppState } from "../store";
 import { actions as clusterSettingsActions } from "../store/clusterSettings";
 import { actions as databasesListActions } from "../store/databasesList";
 import {
   databaseDetailsReducer,
   databaseDetailsSpanStatsReducer,
 } from "../store/databaseDetails";
-const databaseDetailsActions = databaseDetailsReducer.actions;
-const databaseDetailsSpanStatsActions = databaseDetailsSpanStatsReducer.actions;
-
 import {
   actions as localStorageActions,
   LocalStorageKeys,
@@ -49,6 +42,15 @@ import {
   selectIndexRecommendationsEnabled,
 } from "../store/clusterSettings/clusterSettings.selectors";
 import { deriveDatabaseDetailsMemoized } from "../databases";
+
+import {
+  DatabasesPage,
+  DatabasesPageActions,
+  DatabasesPageData,
+} from "./databasesPage";
+
+const databaseDetailsActions = databaseDetailsReducer.actions;
+const databaseDetailsSpanStatsActions = databaseDetailsSpanStatsReducer.actions;
 
 const mapStateToProps = (state: AppState): DatabasesPageData => {
   const databasesListState = databasesListSelector(state);
@@ -151,6 +153,6 @@ const mapDispatchToProps = (dispatch: Dispatch): DatabasesPageActions => ({
   },
 });
 
-export const ConnectedDatabasesPage = withRouter<any, any>(
+export const ConnectedDatabasesPage = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(DatabasesPage),
 );

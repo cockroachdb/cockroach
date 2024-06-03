@@ -9,12 +9,14 @@
 // licenses/APL.txt.
 
 import React from "react";
+import classnames from "classnames/bind";
 import { Table as AntTable, ConfigProvider } from "antd";
 import "antd/lib/table/style";
 import "antd/lib/config-provider/style";
-import type { ColumnProps } from "antd/lib/table";
-import classnames from "classnames/bind";
+
 import styles from "./table.module.scss";
+
+import type { ColumnProps } from "antd/lib/table";
 
 export type ColumnsConfig<T> = Array<ColumnProps<T>>;
 
@@ -30,8 +32,9 @@ export interface TableProps<T> {
 
 const cx = classnames.bind(styles);
 
-const customizeRenderEmpty = (node: React.ReactNode) => () =>
-  <div className={cx("empty-table__message")}>{node}</div>;
+const customizeRenderEmpty = (node: React.ReactNode) => () => (
+  <div className={cx("empty-table__message")}>{node}</div>
+);
 
 export function Table<T>(props: TableProps<T>): React.ReactElement {
   const {

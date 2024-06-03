@@ -10,15 +10,15 @@
 
 import React from "react";
 import { storiesOf } from "@storybook/react";
-import _ from "lodash";
+import random from "lodash/random";
+import * as H from "history";
 
 import { withBackground, withRouterProvider } from "src/storybook/decorators";
 import { randomName } from "src/storybook/fixtures";
-import { DatabasesPage, DatabasesPageProps } from "./databasesPage";
-
-import * as H from "history";
 import { defaultFilters } from "src/queryFilter";
 import { indexUnusedDuration } from "src/util/constants";
+
+import { DatabasesPage, DatabasesPageProps } from "./databasesPage";
 const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabasesPageProps = {
@@ -113,9 +113,9 @@ const withData: DatabasesPageProps = {
       spanStatsRequestError: undefined,
       spanStatsQueryError: undefined,
       name: randomName(),
-      sizeInBytes: _.random(1000.0) * 1024 ** _.random(1, 2),
-      tableCount: _.random(5, 100),
-      rangeCount: _.random(50, 500),
+      sizeInBytes: random(1000.0) * 1024 ** random(1, 2),
+      tableCount: random(5, 100),
+      rangeCount: random(50, 500),
       nodesByRegionString:
         "gcp-europe-west1(n8), gcp-us-east1(n1), gcp-us-west1(n6)",
       numIndexRecommendations: 0,

@@ -12,6 +12,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import moment from "moment-timezone";
 import { Button } from "@cockroachlabs/ui-components";
+
 import { cockroach } from "src/js/protos";
 import { getHotRanges } from "src/util/api";
 
@@ -48,7 +49,6 @@ const HotRanges = (props: HotRangesProps) => {
     });
     // Avoid dispatching request when `hotRanges` list is updated.
     // This effect should be triggered only when pageToken is changed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageToken]);
 
   useEffect(() => {

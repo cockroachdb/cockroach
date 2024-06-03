@@ -10,6 +10,9 @@
 
 import React from "react";
 import { storiesOf, DecoratorFn } from "@storybook/react";
+import Long from "long";
+
+import statementsPagePropsFixture from "src/statementsPage/statementsPage.fixture";
 
 import {
   countBarChart,
@@ -19,8 +22,6 @@ import {
   networkBytesBarChart,
   retryBarChart,
 } from "./barCharts";
-import statementsPagePropsFixture from "src/statementsPage/statementsPage.fixture";
-import Long from "long";
 
 const statements =
   statementsPagePropsFixture.statementsResponse.data.statements;

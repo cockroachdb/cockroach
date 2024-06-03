@@ -13,17 +13,9 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Moment } from "moment-timezone";
-import _ from "lodash";
-
-import { AdminUIState } from "src/redux/state";
-import { nodesSummarySelector } from "src/redux/nodes";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { cockroach } from "src/js/protos";
-import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
-import { LocalSetting } from "src/redux/localsettings";
-
-import "./decommissionedNodeHistory.styl";
-import { Text } from "src/components";
+import flow from "lodash/flow";
+import orderBy from "lodash/orderBy";
+import map from "lodash/map";
 import {
   ColumnsConfig,
   Table,
@@ -32,7 +24,19 @@ import {
   Timestamp,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
+
+import { AdminUIState } from "src/redux/state";
+import { nodesSummarySelector } from "src/redux/nodes";
+import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
+import { cockroach } from "src/js/protos";
+import { LocalSetting } from "src/redux/localsettings";
+import { Text } from "src/components";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
+
+import "./decommissionedNodeHistory.styl";
+
+import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
+import ILiveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
 
 const decommissionedNodesSortSetting = new LocalSetting<
   AdminUIState,
@@ -150,17 +154,14 @@ const decommissionedNodesTableData = createSelector(
       return liveness?.membership === MembershipStatus.DECOMMISSIONED;
     });
 
-    const data = _.chain(decommissionedNodes)
-      .orderBy([liveness => getDecommissionedTime(liveness.node_id)], ["desc"])
-      .map((liveness, idx: number) => {
-        const { node_id } = liveness;
-        return {
-          key: `${idx}`,
-          nodeId: node_id,
-          decommissionedDate: getDecommissionedTime(node_id),
-        };
-      })
-      .value();
+    const data = flow(
+      (liveness: ILiveness[]) => orderBy(liveness, [l => getDecommissionedTime(l.node_id)], ["desc"]),
+      (liveness: ILiveness[]) => map(liveness, (l, idx: number) => ({
+        key: `${idx}`,
+        nodeId: l.node_id,
+        decommissionedDate: getDecommissionedTime(l.node_id),
+      }))
+    )(decommissionedNodes)
 
     return data;
   },

@@ -16,18 +16,20 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import Long from "long";
+import moment from "moment-timezone";
 
 import { getCombinedStatements } from "src/api/statementsApi";
 import { resetSQLStats } from "src/api/sqlStatsApi";
+
+import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
+
 import {
   refreshSQLStatsSaga,
   requestSQLStatsSaga,
   resetSQLStatsSaga,
 } from "./sqlStats.sagas";
 import { actions, reducer, SQLStatsState } from "./sqlStats.reducer";
-import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
-import Long from "long";
-import moment from "moment-timezone";
 
 const lastUpdated = moment();
 

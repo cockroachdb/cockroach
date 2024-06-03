@@ -11,9 +11,10 @@
 /* eslint-disable react/jsx-key */
 import React from "react";
 import { storiesOf } from "@storybook/react";
+import { CaretDown } from "@cockroachlabs/icons";
 
 import { Button, ButtonProps } from "src/button";
-import { CaretDown } from "@cockroachlabs/icons";
+
 import { Text, TextTypes } from "../text";
 
 const sizes: ButtonProps["size"][] = ["default", "small"];

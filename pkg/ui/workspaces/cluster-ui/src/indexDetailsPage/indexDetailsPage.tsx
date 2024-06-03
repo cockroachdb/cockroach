@@ -10,26 +10,30 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import { flatMap } from "lodash";
+import flatMap from "lodash/flatMap";
+import { Caution, Search as IndexIcon } from "@cockroachlabs/icons";
+import moment, { Moment } from "moment-timezone";
+import { Heading } from "@cockroachlabs/ui-components";
+import { Col, Row, Tooltip } from "antd";
+import "antd/lib/col/style";
+import "antd/lib/row/style";
+import "antd/lib/tooltip/style";
+
+import { Loading } from "src/loading";
+import { Timestamp } from "src/timestamp";
 import {
   ISortedTablePagination,
   SortedTable,
   SortSetting,
 } from "src/sortedtable";
-
-import styles from "./indexDetailsPage.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
+import { SqlBox, SqlBoxSize } from "src/sql";
+import { PageConfig, PageConfigItem } from "src/pageConfig";
+import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
+
 import { CaretRight } from "../icon/caretRight";
 import { BreadcrumbItem, Breadcrumbs } from "../breadcrumbs";
-import { Caution, Search as IndexIcon } from "@cockroachlabs/icons";
-import { SqlBox, SqlBoxSize } from "src/sql";
-import { Col, Row, Tooltip } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
-import "antd/lib/tooltip/style";
 import { SummaryCard } from "../summaryCard";
-import moment, { Moment } from "moment-timezone";
-import { Heading } from "@cockroachlabs/ui-components";
 import { Anchor } from "../anchor";
 import {
   calculateTotalWorkload,
@@ -56,9 +60,8 @@ import { UIConfigState } from "../store";
 import statementsStyles from "../statementsPage/statementsPage.module.scss";
 import { Pagination } from "../pagination";
 import { TableStatistics } from "../tableStatistics";
-import { EmptyStatementsPlaceholder } from "../statementsPage/emptyStatementsPlaceholder";
-import { StatementViewType } from "../statementsPage/statementPageTypes";
-import { PageConfig, PageConfigItem } from "src/pageConfig";
+import LoadingError from "../sqlActivity/errorComponent";
+import { filterStatementsData } from "../sqlActivity/util";
 import {
   TimeScale,
   timeScale1hMinOptions,
@@ -72,10 +75,10 @@ import {
   Filters,
 } from "../queryFilter";
 import { commonStyles } from "../common";
-import { Loading, Timestamp } from "src";
-import LoadingError from "../sqlActivity/errorComponent";
-import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
-import { filterStatementsData } from "../sqlActivity/util";
+import { EmptyStatementsPlaceholder } from "../statementsPage/emptyStatementsPlaceholder";
+import { StatementViewType } from "../statementsPage/statementPageTypes";
+
+import styles from "./indexDetailsPage.module.scss";
 
 const cx = classNames.bind(styles);
 const stmtCx = classNames.bind(statementsStyles);
@@ -514,7 +517,7 @@ export class IndexDetailsPage extends React.Component<
               <Col className="gutter-row" span={18}>
                 <SqlBox
                   value={this.props.details.createStatement}
-                  size={SqlBoxSize.custom}
+                  size={SqlBoxSize.CUSTOM}
                 />
               </Col>
             </Row>

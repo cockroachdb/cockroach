@@ -9,10 +9,12 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+
 import { AppState } from "src/store/reducers";
 import { localStorageSelector } from "src/store/utils/selectors";
 import { TxnInsightEvent } from "src/insights";
 import { selectTransactionFingerprintID } from "src/selectors/common";
+
 import { FixFingerprintHexValue } from "../../../util";
 
 export const selectTransactionInsights = (state: AppState): TxnInsightEvent[] =>

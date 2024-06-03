@@ -11,9 +11,11 @@
 import moment from "moment-timezone";
 import Long from "long";
 import { createMemoryHistory } from "history";
-import { noop } from "lodash";
-import { StatementDetailsProps } from "./statementDetails";
+import noop from "lodash/noop";
+
 import { StatementDetailsResponse } from "../api";
+
+import { StatementDetailsProps } from "./statementDetails";
 
 const lastUpdated = moment("Nov 28 2022 01:30:00 GMT");
 
@@ -711,7 +713,7 @@ const statementDetailsData: StatementDetailsResponse = {
         plan_gists: ["AgH6////nxkAAA4AAAAGBg=="],
       },
       explain_plan: "• virtual table\n  table: @primary",
-      plan_hash: new Long(14192395335876201826),
+      plan_hash: Long.fromString("14192395335876201826"),
     },
     {
       stats: {
@@ -814,7 +816,7 @@ const statementDetailsData: StatementDetailsResponse = {
         plan_gists: ["Ah0GAg=="],
       },
       explain_plan: "• virtual table\n  table: @primary\nFULL SCAN",
-      plan_hash: new Long(14192395335876212345),
+      plan_hash: Long.fromString("14192395335876212345"),
     },
   ],
   internal_app_name_prefix: "$ internal",

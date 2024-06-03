@@ -9,17 +9,17 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
+import { AvailableDiscCapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
 import {
   GraphDashboardProps,
   nodeDisplayName,
   storeIDsForNode,
 } from "./dashboardUtils";
-import { AvailableDiscCapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
-import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 // TODO(vilterp): tooltips
 

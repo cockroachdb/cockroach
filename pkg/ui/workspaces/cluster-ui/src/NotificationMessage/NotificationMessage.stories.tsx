@@ -11,6 +11,7 @@
 import React, { FunctionComponent, ReactNode } from "react";
 
 import { NotificationProps, generateNotificationProps } from "../Notifications";
+
 import { NotificationMessage } from "./index";
 
 type ReactProps = {

@@ -7,15 +7,16 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
-import _ from "lodash";
 import Long from "long";
 import moment from "moment-timezone";
+import * as protosccl from "@cockroachlabs/crdb-protobuf-client-ccl";
+import { util } from "@cockroachlabs/cluster-ui";
+import isEmpty from "lodash/isEmpty";
 
 import * as protos from "src/js/protos";
-import * as protosccl from "@cockroachlabs/crdb-protobuf-client-ccl";
 import { EncryptionStatusProps } from "oss/src/views/reports/containers/stores/encryption";
-import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
+
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 
@@ -139,7 +140,7 @@ export default class EncryptionStatus {
   getEncryptionRows() {
     const { store } = this.props;
     const rawStatus = store.encryption_status;
-    if (_.isEmpty(rawStatus)) {
+    if (isEmpty(rawStatus)) {
       return [this.renderSimpleRow("Encryption status", "Not encrypted")];
     }
 

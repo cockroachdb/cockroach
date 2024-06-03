@@ -12,20 +12,6 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
-  createSelectorForCachedDataField,
-  refreshNodes,
-  refreshTxns,
-  refreshUserSQLRoles,
-} from "src/redux/apiReducers";
-import { resetSQLStatsAction } from "src/redux/sqlStats";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState } from "src/redux/state";
-import { selectHasAdminRole } from "src/redux/user";
-import { StatementsResponseMessage } from "src/util/api";
-
-import { PrintTime } from "src/views/reports/containers/range/print";
-
-import {
   Filters,
   defaultFilters,
   util,
@@ -37,16 +23,30 @@ import {
   TransactionsPageRootProps,
   api,
 } from "@cockroachlabs/cluster-ui";
+import { bindActionCreators } from "redux";
+
+import {
+  createSelectorForCachedDataField,
+  refreshNodes,
+  refreshTxns,
+  refreshUserSQLRoles,
+} from "src/redux/apiReducers";
+import { resetSQLStatsAction } from "src/redux/sqlStats";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { AdminUIState } from "src/redux/state";
+import { selectHasAdminRole } from "src/redux/user";
+import { StatementsResponseMessage } from "src/util/api";
+import { PrintTime } from "src/views/reports/containers/range/print";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
-import { bindActionCreators } from "redux";
+import { selectTimeScale } from "src/redux/timeScale";
+import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
+
 import {
   activeTransactionsPageActionCreators,
   mapStateToActiveTransactionsPageProps,
 } from "./activeTransactionsSelectors";
-import { selectTimeScale } from "src/redux/timeScale";
-import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
 
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.

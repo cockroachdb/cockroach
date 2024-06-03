@@ -10,12 +10,15 @@
 
 import React from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { ExecutionType, ActiveExecution } from "./types";
-import { ColumnDescriptor } from "src/sortedtable";
 import { Link } from "react-router-dom";
+
+import { ColumnDescriptor } from "src/sortedtable";
 import { capitalize, DATE_FORMAT, Duration } from "src/util";
-import { StatusIcon } from "./statusIcon";
+
 import { Timestamp, Timezone } from "../timestamp";
+
+import { StatusIcon } from "./statusIcon";
+import { ExecutionType, ActiveExecution } from "./types";
 
 export type ExecutionsColumn =
   | "applicationName"

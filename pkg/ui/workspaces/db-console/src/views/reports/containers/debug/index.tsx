@@ -8,28 +8,29 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import isNil from "lodash/isNil";
 import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
+import { connect, useSelector } from "react-redux";
 
 import { getDataFromServer } from "src/util/dataFromServer";
 import DebugAnnotation from "src/views/shared/components/debugAnnotation";
 import InfoBox from "src/views/shared/components/infoBox";
 import LicenseType from "src/views/shared/components/licenseType";
-import {
-  PanelSection,
-  PanelTitle,
-  PanelPair,
-  Panel,
-} from "src/views/shared/components/panelSection";
-import "./debug.styl";
-import { connect, useSelector } from "react-redux";
 import { AdminUIState, featureFlagSelector } from "src/redux/state";
 import { nodeIDsStringifiedSelector } from "src/redux/nodes";
 import { refreshNodes, refreshUserSQLRoles } from "src/redux/apiReducers";
 import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import { getCookieValue, setCookie } from "src/redux/cookies";
 import { InlineAlert } from "src/components";
+import {
+  PanelSection,
+  PanelTitle,
+  PanelPair,
+  Panel,
+} from "src/views/shared/components/panelSection";
+
+import "./debug.styl";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
@@ -61,7 +62,7 @@ export function DebugTableLink(props: {
         </a>
       </td>
       <td className="debug-inner-table__cell--notes">
-        {_.isNil(props.note) ? urlWithParams : props.note}
+        {isNil(props.note) ? urlWithParams : props.note}
       </td>
     </tr>
   );

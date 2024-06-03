@@ -9,20 +9,22 @@
 // licenses/APL.txt.
 
 import React, { useCallback, useState } from "react";
-import { StatisticType } from "../statsTableUtil/statsTableUtil";
 import classNames from "classnames/bind";
-import styles from "./sqlActivity.module.scss";
+
+import { StatisticType } from "../statsTableUtil/statsTableUtil";
 import { Modal } from "../modal";
 import { Text } from "../text";
 
+import styles from "./sqlActivity.module.scss";
+
 const cx = classNames.bind(styles);
 
-interface clearStatsProps {
+interface ClearStatsProps {
   resetSQLStats: () => void;
   tooltipType: StatisticType;
 }
 
-const ClearStats = (props: clearStatsProps): React.ReactElement => {
+const ClearStats = (props: ClearStatsProps): React.ReactElement => {
   const [visible, setVisible] = useState(false);
   const onOkHandler = useCallback(() => {
     props.resetSQLStats();

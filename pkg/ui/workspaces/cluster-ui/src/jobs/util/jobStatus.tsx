@@ -12,6 +12,8 @@ import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import React from "react";
 
+import styles from "../jobs.module.scss";
+
 import { Duration } from "./duration";
 import { JobStatusVisual, jobToVisual } from "./jobOptions";
 import {
@@ -19,8 +21,6 @@ import {
   ProgressBar,
   RetryingStatusBadge,
 } from "./progressBar";
-
-import styles from "../jobs.module.scss";
 
 const cx = classNames.bind(styles);
 

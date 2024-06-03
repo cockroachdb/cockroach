@@ -11,11 +11,13 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 
-import { EmptyTable } from "./emptyTable";
+import { Button } from "src/button";
+
 import emptyListResultsImg from "../../assets/emptyState/empty-list-results.svg";
 import notFoundImg from "../../assets/emptyState/not-found-404.svg";
-import { Button } from "src/button";
 import SpinIcon from "../../icon/spin";
+
+import { EmptyTable } from "./emptyTable";
 
 storiesOf("EmptyTablePlaceholder", module)
   .add("default", () => <EmptyTable />)

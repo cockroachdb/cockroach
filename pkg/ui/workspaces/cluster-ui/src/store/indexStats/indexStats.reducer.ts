@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+
 import { DOMAIN_NAME } from "../utils";
 import { ErrorWithKey } from "../../api";
 import { generateTableID } from "../../util";

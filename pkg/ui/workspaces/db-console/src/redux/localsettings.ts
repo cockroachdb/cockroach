@@ -19,10 +19,11 @@
  * it should be given the full redux treatment with unique modification actions.
  */
 
-import _ from "lodash";
 import { createSelector, Selector } from "reselect";
 import { Action } from "redux";
 import { call, takeEvery } from "redux-saga/effects";
+import clone from "lodash/clone";
+import isNil from "lodash/isNil";
 
 import { PayloadAction } from "src/interfaces/action";
 
@@ -53,6 +54,7 @@ function saveToSessionStorage(data: LocalSettingData) {
   try {
     sessionStorage.setItem(`${STORAGE_PREFIX}/${data.key}`, value);
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.warn(e.message);
   }
 }
@@ -73,14 +75,14 @@ export function localSettingsReducer(
   state: LocalSettingsState = {},
   action: Action,
 ): LocalSettingsState {
-  if (_.isNil(action)) {
+  if (isNil(action)) {
     return state;
   }
 
   switch (action.type) {
     case SET_UI_VALUE: {
       const { payload } = action as PayloadAction<LocalSettingData>;
-      state = _.clone(state);
+      state = clone(state);
       state[payload.key] = payload.value;
       return state;
     }

@@ -8,7 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import sortedIndex from "lodash/sortedIndex";
+import min from "lodash/min";
+import max from "lodash/max";
 import moment from "moment-timezone";
 
 import {
@@ -128,10 +130,8 @@ const abbreviateNumber = (num: number, fixedDecimals: number) => {
   );
 
   numAbbrev = numAbbrev < 0 ? numAbbrev : Math.abs(numAbbrev); // enforce -0 is 0
-
-  const abbreviatedString = numAbbrev + ["", "k", "m", "b", "t"][powerIdx]; // append power
-
-  return abbreviatedString;
+  // append power
+  return numAbbrev + ["", "k", "m", "b", "t"][powerIdx];
 };
 
 const formatPercentage = (n: number, fractionDigits: number) => {
@@ -162,7 +162,7 @@ function computeNormalizedIncrement(
     x++;
     rawIncrement = rawIncrement / 10;
   }
-  const normalizedIncrementIdx = _.sortedIndex(incrementTbl, rawIncrement);
+  const normalizedIncrementIdx = sortedIndex(incrementTbl, rawIncrement);
   return incrementTbl[normalizedIncrementIdx] * Math.pow(10, x);
 }
 
@@ -277,7 +277,7 @@ function ComputeTimeAxisDomain(extent: Extent, timezone: string): AxisDomain {
     const rawIncrement = (extent[1] - extent[0]) / (X_AXIS_TICK_COUNT + 1);
     // Compute X such that 0 <= rawIncrement/10^x <= 1
     const tbl = timeIncrements;
-    let normalizedIncrementIdx = _.sortedIndex(tbl, rawIncrement);
+    let normalizedIncrementIdx = sortedIndex(tbl, rawIncrement);
     if (normalizedIncrementIdx === tbl.length) {
       normalizedIncrementIdx--;
     }
@@ -316,7 +316,7 @@ export function calculateYAxisDomain(
   data: number[],
 ): AxisDomain {
   const allDatapoints = data.concat([0, 1]);
-  const yExtent = [_.min(allDatapoints), _.max(allDatapoints)] as Extent;
+  const yExtent = [min(allDatapoints), max(allDatapoints)] as Extent;
 
   switch (axisUnits) {
     case AxisUnits.Bytes:

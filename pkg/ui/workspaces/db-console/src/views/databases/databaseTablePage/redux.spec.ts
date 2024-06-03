@@ -20,6 +20,7 @@ import {
   util,
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
+import moment from "moment-timezone";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import {
@@ -28,8 +29,8 @@ import {
   tableNameAttr,
 } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
+
 import { mapStateToProps, mapDispatchToProps } from "./redux";
-import moment from "moment-timezone";
 
 function fakeRouteComponentProps(
   k1: string,
@@ -82,10 +83,7 @@ class TestDriver {
       );
   }
 
-  assertProperties(
-    expected: DatabaseTablePageData,
-    compareTimestamps: boolean = true,
-  ) {
+  assertProperties(expected: DatabaseTablePageData, compareTimestamps = true) {
     // Assert moments are equal if not in pre-loading state.
     if (compareTimestamps) {
       expect(this.properties().indexStats.lastReset).toEqual(
@@ -117,7 +115,7 @@ class TestDriver {
 
   assertIndexStats(
     expected: DatabaseTablePageIndexStats,
-    compareTimestamps: boolean = true,
+    compareTimestamps = true,
   ) {
     // Assert moments are equal if not in pre-loading state.
     if (compareTimestamps) {

@@ -11,8 +11,9 @@
 import React from "react";
 import { expect } from "chai";
 import { shallow } from "enzyme";
-import { IndexDetailsPage, IndexDetailsPageProps, util } from "../index";
 import moment from "moment";
+
+import { IndexDetailsPage, IndexDetailsPageProps, util } from "../index";
 
 describe("IndexDetailsPage", () => {
   const props: IndexDetailsPageProps = {

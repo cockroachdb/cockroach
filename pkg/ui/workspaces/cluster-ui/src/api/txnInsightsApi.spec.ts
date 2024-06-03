@@ -8,6 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
+
+import {
+  InsightExecEnum,
+  InsightNameEnum,
+  TxnContentionInsightDetails,
+} from "../insights";
+import { MockSqlResponse } from "../util/testing";
+
 import {
   TxnStmtFingerprintsResponseColumns,
   FingerprintStmtsResponseColumns,
@@ -15,16 +24,9 @@ import {
 import * as sqlApi from "./sqlApi";
 import { SqlExecutionResponse } from "./sqlApi";
 import {
-  InsightExecEnum,
-  InsightNameEnum,
-  TxnContentionInsightDetails,
-} from "../insights";
-import {
   ContentionResponseColumns,
   getTxnInsightsContentionDetailsApi,
 } from "./contentionApi";
-import moment from "moment-timezone";
-import { MockSqlResponse } from "../util/testing";
 
 type TxnContentionDetailsTests = {
   name: string;
@@ -99,7 +101,7 @@ describe("test txn insights api functions", () => {
           },
         ],
         execType: InsightExecEnum.TRANSACTION,
-        insightName: InsightNameEnum.highContention,
+        insightName: InsightNameEnum.HIGH_CONTENTION,
       },
     },
     {
@@ -146,7 +148,7 @@ describe("test txn insights api functions", () => {
           },
         ],
         execType: InsightExecEnum.TRANSACTION,
-        insightName: InsightNameEnum.highContention,
+        insightName: InsightNameEnum.HIGH_CONTENTION,
       },
     },
     {
@@ -202,7 +204,7 @@ describe("test txn insights api functions", () => {
           },
         ],
         execType: InsightExecEnum.TRANSACTION,
-        insightName: InsightNameEnum.highContention,
+        insightName: InsightNameEnum.HIGH_CONTENTION,
       },
     },
   ] as TxnContentionDetailsTests[])(

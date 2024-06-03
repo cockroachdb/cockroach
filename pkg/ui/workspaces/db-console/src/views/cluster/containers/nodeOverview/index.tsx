@@ -8,12 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import map from "lodash/map";
+import find from "lodash/find";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
+import { Button, util, Timestamp } from "@cockroachlabs/cluster-ui";
+import { ArrowLeft } from "@cockroachlabs/icons";
+
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import {
   livenessNomenclature,
@@ -31,9 +35,10 @@ import {
   SummaryLabel,
   SummaryValue,
 } from "src/views/shared/components/summaryBar";
-import { Button, util, Timestamp } from "@cockroachlabs/cluster-ui";
-import { ArrowLeft } from "@cockroachlabs/icons";
+import { TooltipProps } from "src/components/tooltip/tooltip";
+
 import "./nodeOverview.styl";
+
 import {
   LiveBytesTooltip,
   KeyBytesTooltip,
@@ -46,7 +51,6 @@ import {
   MVCCRangeKeyBytesTooltip,
   MVCCRangeValueBytesTooltip,
 } from "./tooltips";
-import { TooltipProps } from "src/components/tooltip/tooltip";
 
 /**
  * TableRow is a small stateless component that renders a single row in the node
@@ -72,7 +76,7 @@ function TableRow(props: {
         )}
       </td>
       <td className="table__cell">{valueFn(data.metrics)}</td>
-      {_.map(data.store_statuses, ss => {
+      {map(data.store_statuses, ss => {
         return (
           <td key={ss.desc.store_id} className="table__cell">
             {valueFn(ss.metrics)}
@@ -155,7 +159,7 @@ export class NodeOverview extends React.Component<NodeOverviewProps, {}> {
                 <tr className="table__row table__row--header">
                   <th className="table__cell" />
                   <th className="table__cell">{`Node ${node.desc.node_id}`}</th>
-                  {_.map(node.store_statuses, ss => {
+                  {map(node.store_statuses, ss => {
                     const storeId = ss.desc.store_id;
                     return (
                       <th
@@ -338,7 +342,7 @@ export const currentNode = createSelector(
     if (!nodes || !id) {
       return undefined;
     }
-    return _.find(nodes, ns => ns.desc.node_id === id);
+    return find(nodes, ns => ns.desc.node_id === id);
   },
 );
 

@@ -25,6 +25,7 @@ import {
   createStore,
   Store,
 } from "redux";
+
 import { AppState, rootReducer, sagas } from "../store";
 
 const history = createMemoryHistory();
@@ -38,8 +39,8 @@ const store: Store<AppState> = createStore(
   }),
   compose(
     applyMiddleware(sagaMiddleware, routerMiddleware(history)),
-    (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
-      (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+    window.__REDUX_DEVTOOLS_EXTENSION__ &&
+      window.__REDUX_DEVTOOLS_EXTENSION__(),
   ),
 );
 

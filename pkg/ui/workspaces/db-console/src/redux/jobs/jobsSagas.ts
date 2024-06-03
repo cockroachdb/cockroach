@@ -9,9 +9,11 @@
 // licenses/APL.txt.
 
 import { PayloadAction } from "@reduxjs/toolkit";
-import { refreshListExecutionDetailFiles } from "oss/src/redux/apiReducers";
 import { all, call, put, takeEvery } from "redux-saga/effects";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+
+import { refreshListExecutionDetailFiles } from "oss/src/redux/apiReducers";
+
 import {
   COLLECT_EXECUTION_DETAILS,
   collectExecutionDetailsCompleteAction,

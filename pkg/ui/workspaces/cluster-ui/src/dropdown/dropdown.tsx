@@ -10,11 +10,13 @@
 
 import React from "react";
 import classnames from "classnames/bind";
+import { CaretDown } from "@cockroachlabs/icons";
+
+import { Button, ButtonProps } from "src/button";
 
 import { OutsideEventHandler } from "../outsideEventHandler";
+
 import styles from "./dropdown.module.scss";
-import { Button, ButtonProps } from "src/button";
-import { CaretDown } from "@cockroachlabs/icons";
 
 const cx = classnames.bind(styles);
 

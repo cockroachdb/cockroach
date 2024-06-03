@@ -6,7 +6,9 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import _ from "lodash";
+import every from "lodash/every";
+import isEmpty from "lodash/isEmpty";
+import isNil from "lodash/isNil";
 
 import { LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
@@ -18,15 +20,15 @@ export function renderAsMap(
   localityTree: LocalityTree,
 ) {
   // If there are any nodes directly under this locality, don't show a map.
-  if (!_.isEmpty(localityTree.nodes)) {
+  if (!isEmpty(localityTree.nodes)) {
     return false;
   }
 
   // Otherwise, show a map as long as we're able to find or calculate a location
   // for every child locality.
   const children = getChildLocalities(localityTree);
-  return _.every(
+  return every(
     children,
-    child => !_.isNil(findOrCalculateLocation(locationTree, child)),
+    child => !isNil(findOrCalculateLocation(locationTree, child)),
   );
 }

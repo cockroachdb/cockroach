@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { isNumber } from "lodash";
+import isNumber from "lodash/isNumber";
 
 function numberToString(n: number) {
   return n?.toString() || "";

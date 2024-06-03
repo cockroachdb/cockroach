@@ -10,8 +10,9 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import { isString } from "lodash";
+import isString from "lodash/isString";
 import { Heading, Text } from "@cockroachlabs/ui-components";
+
 import styles from "./emptyTable.module.scss";
 
 export interface EmptyTableProps {

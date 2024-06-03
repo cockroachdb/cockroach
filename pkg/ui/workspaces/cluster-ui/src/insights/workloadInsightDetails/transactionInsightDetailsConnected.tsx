@@ -7,13 +7,10 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import {
-  TransactionInsightDetails,
-  TransactionInsightDetailsStateProps,
-  TransactionInsightDetailsDispatchProps,
-} from "./transactionInsightDetails";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
+
 import { AppState, uiConfigActions } from "src/store";
 import {
   selectTransactionInsightDetails,
@@ -21,13 +18,19 @@ import {
   actions,
   selectTransactionInsightDetailsMaxSizeReached,
 } from "src/store/insightDetails/transactionInsightDetails";
+import { TxnInsightDetailsRequest } from "src/api";
+
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
-import { Dispatch } from "redux";
 import { selectTimeScale } from "../../store/utils/selectors";
 import { selectHasAdminRole } from "../../store/uiConfig";
-import { TxnInsightDetailsRequest } from "src/api";
 import { actions as analyticsActions } from "../../store/analytics";
+
+import {
+  TransactionInsightDetails,
+  TransactionInsightDetailsStateProps,
+  TransactionInsightDetailsDispatchProps,
+} from "./transactionInsightDetails";
 
 const mapStateToProps = (
   state: AppState,

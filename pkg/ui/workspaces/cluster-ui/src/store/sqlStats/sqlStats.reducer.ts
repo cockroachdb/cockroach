@@ -10,11 +10,13 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { DOMAIN_NAME } from "../utils";
-import { StatementsRequest } from "src/api/statementsApi";
-import { TimeScale } from "../../timeScaleDropdown";
 import moment from "moment-timezone";
+
+import { StatementsRequest } from "src/api/statementsApi";
 import { createInitialState, RequestState } from "src/api/types";
+
+import { TimeScale } from "../../timeScaleDropdown";
+import { DOMAIN_NAME } from "../utils";
 
 export type StatementsResponse = cockroach.server.serverpb.StatementsResponse;
 

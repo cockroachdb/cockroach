@@ -9,9 +9,13 @@
 // licenses/APL.txt.
 
 import React, { ReactNode } from "react";
-import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import classNames from "classnames/bind";
+import { Link } from "react-router-dom";
+
+import { ColumnDescriptor, SortedTable } from "src/sortedtable";
+
 import {
   Duration,
   formatNumberForDisplay,
@@ -27,10 +31,9 @@ import {
   EncodeDatabaseTableUri,
 } from "../../util";
 import { Anchor } from "../../anchor";
-import classNames from "classnames/bind";
-import styles from "./plansTable.module.scss";
-import { Link } from "react-router-dom";
 import { Timestamp, Timezone } from "../../timestamp";
+
+import styles from "./plansTable.module.scss";
 
 export type PlanHashStats =
   cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;

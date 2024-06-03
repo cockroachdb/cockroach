@@ -19,8 +19,9 @@ import { LOGIN_PAGE, LOGOUT_PAGE } from "src/routes/login";
 import { cockroach } from "src/js/protos";
 import { getDataFromServer } from "src/util/dataFromServer";
 
-import UserLoginRequest = cockroach.server.serverpb.UserLoginRequest;
 import { clearTenantCookie } from "./cookies";
+
+import UserLoginRequest = cockroach.server.serverpb.UserLoginRequest;
 
 const dataFromServer = getDataFromServer();
 

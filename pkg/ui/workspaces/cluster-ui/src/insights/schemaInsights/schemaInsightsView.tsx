@@ -8,15 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext } from "react";
-import styles from "src/statementsPage/statementsPage.module.scss";
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import { ISortedTablePagination, SortSetting } from "../../sortedtable";
+import React, { useContext, useEffect, useState } from "react";
 import classNames from "classnames/bind";
+import { useHistory } from "react-router-dom";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import styles from "src/statementsPage/statementsPage.module.scss";
+import { insights } from "src/util";
+import { Anchor } from "src/anchor";
+
+import { ISortedTablePagination, SortSetting } from "../../sortedtable";
 import { PageConfig, PageConfigItem } from "../../pageConfig";
 import { Loading } from "../../loading";
-import { useEffect, useState } from "react";
-import { useHistory } from "react-router-dom";
 import {
   InsightsSortedTable,
   makeInsightsColumns,
@@ -37,12 +41,11 @@ import { filterSchemaInsights } from "../utils";
 import { Search } from "../../search";
 import { InsightsError } from "../insightsErrorComponent";
 import { Pagination } from "../../pagination";
-import { EmptySchemaInsightsTablePlaceholder } from "./emptySchemaInsightsTablePlaceholder";
 import { CockroachCloudContext } from "../../contexts";
-import { InlineAlert } from "@cockroachlabs/ui-components";
-import { insights } from "src/util";
-import { Anchor } from "src/anchor";
 import insightTableStyles from "../../insightsTable/insightsTable.module.scss";
+
+import { EmptySchemaInsightsTablePlaceholder } from "./emptySchemaInsightsTablePlaceholder";
+
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 const insightTableCx = classNames.bind(insightTableStyles);

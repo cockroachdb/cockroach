@@ -13,11 +13,25 @@
  * to display based on the current redux state.
  */
 
-import _ from "lodash";
 import moment from "moment-timezone";
 import { createSelector } from "reselect";
 import { Store, Dispatch, Action, AnyAction } from "redux";
 import { ThunkAction } from "redux-thunk";
+import has from "lodash/has";
+import without from "lodash/without";
+import isEmpty from "lodash/isEmpty";
+import filter from "lodash/filter";
+import isNil from "lodash/isNil";
+
+import { longToInt } from "src/util/fixLong";
+import * as docsURL from "src/util/docs";
+import {
+  singleVersionSelector,
+  numNodesByVersionsTagSelector,
+  numNodesByVersionsSelector,
+} from "src/redux/nodes";
+
+import { getDataFromServer } from "../util/dataFromServer";
 
 import { LocalSetting } from "./localsettings";
 import {
@@ -36,19 +50,11 @@ import {
   refreshHealth,
   refreshSettings,
 } from "./apiReducers";
-import {
-  singleVersionSelector,
-  numNodesByVersionsTagSelector,
-  numNodesByVersionsSelector,
-} from "src/redux/nodes";
 import { AdminUIState, AppDispatch } from "./state";
-import * as docsURL from "src/util/docs";
-import { getDataFromServer } from "../util/dataFromServer";
 import {
   selectClusterSettings,
   selectClusterSettingVersion,
 } from "./clusterSettings";
-import { longToInt } from "src/util/fixLong";
 
 export enum AlertLevel {
   NOTIFICATION,
@@ -94,7 +100,7 @@ const instructionsBoxCollapsedPersistentLoadedSelector = createSelector(
   (state: AdminUIState) => state.uiData,
   (uiData): boolean =>
     uiData &&
-    _.has(uiData, INSTRUCTIONS_BOX_COLLAPSED_KEY) &&
+    has(uiData, INSTRUCTIONS_BOX_COLLAPSED_KEY) &&
     uiData[INSTRUCTIONS_BOX_COLLAPSED_KEY].status === UIDataStatus.VALID,
 );
 
@@ -102,7 +108,7 @@ const instructionsBoxCollapsedPersistentSelector = createSelector(
   (state: AdminUIState) => state.uiData,
   (uiData): boolean =>
     uiData &&
-    _.has(uiData, INSTRUCTIONS_BOX_COLLAPSED_KEY) &&
+    has(uiData, INSTRUCTIONS_BOX_COLLAPSED_KEY) &&
     uiData[INSTRUCTIONS_BOX_COLLAPSED_KEY].status === UIDataStatus.VALID &&
     uiData[INSTRUCTIONS_BOX_COLLAPSED_KEY].data,
 );
@@ -181,7 +187,7 @@ export const staggeredVersionWarningSelector = createSelector(
 // "loaded, doesn't exist on server" without a separate selector.
 const newVersionDismissedPersistentLoadedSelector = createSelector(
   (state: AdminUIState) => state.uiData,
-  uiData => uiData && _.has(uiData, VERSION_DISMISSED_KEY),
+  uiData => uiData && has(uiData, VERSION_DISMISSED_KEY),
 );
 
 const newVersionDismissedPersistentSelector = createSelector(
@@ -639,7 +645,7 @@ export const overviewListAlertsSelector = createSelector(
   clusterPreserveDowngradeOptionOvertimeSelector,
   upgradeNotFinalizedWarningSelector,
   (...alerts: Alert[]): Alert[] => {
-    return _.without(alerts, null, undefined);
+    return without(alerts, null, undefined);
   },
 );
 
@@ -652,7 +658,7 @@ export const panelAlertsSelector = createSelector(
   newVersionNotificationSelector,
   staggeredVersionWarningSelector,
   (...alerts: Alert[]): Alert[] => {
-    return _.without(alerts, null, undefined);
+    return without(alerts, null, undefined);
   },
 );
 
@@ -665,7 +671,7 @@ export const panelAlertsSelector = createSelector(
 export const dataFromServerAlertSelector = createSelector(
   () => {},
   (): Alert => {
-    if (_.isEmpty(getDataFromServer())) {
+    if (isEmpty(getDataFromServer())) {
       return {
         level: AlertLevel.CRITICAL,
         title: "There was an error retrieving base DB Console configuration.",
@@ -729,7 +735,7 @@ export const bannerAlertsSelector = createSelector(
   terminateQueryAlertSelector,
   dataFromServerAlertSelector,
   (...alerts: Alert[]): Alert[] => {
-    return _.without(alerts, null, undefined);
+    return without(alerts, null, undefined);
   },
 );
 
@@ -775,8 +781,8 @@ export function alertDataSync(store: Store<AdminUIState>) {
         VERSION_DISMISSED_KEY,
         INSTRUCTIONS_BOX_COLLAPSED_KEY,
       ];
-      const keysToLoad = _.filter(keysToMaybeLoad, key => {
-        return !(_.has(uiData, key) || isInFlight(state, key));
+      const keysToLoad = filter(keysToMaybeLoad, key => {
+        return !(has(uiData, key) || isInFlight(state, key));
       });
       if (keysToLoad) {
         dispatch(loadUIData(...keysToLoad));
@@ -806,7 +812,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
     // ID and node statuses being loaded first and thus cannot simply run at
     // startup.
     const currentVersion = singleVersionSelector(state);
-    if (_.isNil(newerVersionsSelector(state))) {
+    if (isNil(newerVersionsSelector(state))) {
       if (cluster.data && cluster.data.cluster_id && currentVersion) {
         dispatch(
           refreshVersion({

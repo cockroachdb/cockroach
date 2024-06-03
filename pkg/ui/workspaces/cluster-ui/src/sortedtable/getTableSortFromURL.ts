@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { Location } from "history";
+
 import { SortSetting } from "src/sortedtable";
 
 export function getTableSortFromURL(location: Location): SortSetting | null {

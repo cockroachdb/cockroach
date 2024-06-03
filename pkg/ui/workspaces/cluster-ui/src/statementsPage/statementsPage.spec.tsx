@@ -11,6 +11,7 @@
 import { assert } from "chai";
 
 import { filterBySearchQuery } from "src/sqlActivity/util";
+
 import { AggregateStatistics } from "../statementsTable";
 import { FlatPlanNode } from "../statementDetails";
 

@@ -13,13 +13,15 @@ import { assert } from "chai";
 import { mount, ReactWrapper } from "enzyme";
 import { MemoryRouter } from "react-router-dom";
 import { Button } from "@cockroachlabs/ui-components";
-
-import { DiagnosticsView } from "./diagnosticsView";
-import { TestStoreProvider } from "src/test-utils";
-import { StatementDiagnosticsReport } from "../../api";
 import moment from "moment-timezone";
+
+import { TestStoreProvider } from "src/test-utils";
 import { SortedTable } from "src/sortedtable";
 import { TimeScale } from "src/timeScaleDropdown";
+
+import { StatementDiagnosticsReport } from "../../api";
+
+import { DiagnosticsView } from "./diagnosticsView";
 
 const activateDiagnosticsRef = { current: { showModalFor: jest.fn() } };
 const ts: TimeScale = {

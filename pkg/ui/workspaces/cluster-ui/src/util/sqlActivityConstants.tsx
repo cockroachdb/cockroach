@@ -10,13 +10,15 @@
 
 import React from "react";
 import { duration } from "moment-timezone";
+import classNames from "classnames/bind";
+
 import { SqlStatsSortOptions, SqlStatsSortType } from "src/api/statementsApi";
+import styles from "src/sqlActivity/sqlActivity.module.scss";
+
 import {
   getLabel,
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
-import classNames from "classnames/bind";
-import styles from "src/sqlActivity/sqlActivity.module.scss";
 
 const cx = classNames.bind(styles);
 

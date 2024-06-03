@@ -8,7 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// stubComponentInModule functions must be called before any other import in this test file to make sure
+// components are stubbed and then stubbed instances of components are imported as part of regular module
+// resolution workflow.
+// eslint-disable-next-line import/order
 import { stubComponentInModule } from "./test-utils/mockComponent";
+
 stubComponentInModule("src/views/cluster/containers/nodeGraphs", "default");
 stubComponentInModule("src/views/cluster/containers/events", "EventPage");
 stubComponentInModule("src/views/databases/databasesPage", "DatabasesPage");
@@ -54,6 +59,7 @@ stubComponentInModule(
   "default",
 );
 
+// NOTE: All imports should go after `stubComponentInModule` functions calls.
 import React from "react";
 import { Action, Store } from "redux";
 import { createMemoryHistory, MemoryHistory } from "history";

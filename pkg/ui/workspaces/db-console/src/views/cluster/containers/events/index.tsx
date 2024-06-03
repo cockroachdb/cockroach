@@ -8,12 +8,24 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import map from "lodash/map";
+import take from "lodash/take";
 import moment from "moment-timezone";
 import React, { useContext } from "react";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
+import {
+  Loading,
+  SortSetting,
+  SortedTable,
+  util,
+  api as clusterUiApi,
+  TimezoneContext,
+  WithTimezone,
+} from "@cockroachlabs/cluster-ui";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import { refreshEvents } from "src/redux/apiReducers";
 import {
   eventsLastErrorSelector,
@@ -25,16 +37,6 @@ import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { getEventDescription } from "src/util/events";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import {
-  Loading,
-  SortSetting,
-  SortedTable,
-  util,
-  api as clusterUiApi,
-  TimezoneContext,
-  WithTimezone,
-} from "@cockroachlabs/cluster-ui";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 import "./events.styl";
 
 // Number of events to show in the sidebar.
@@ -117,8 +119,8 @@ export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
       <div className="events">
         <table>
           <tbody>
-            {_.map(
-              _.take(events, EVENT_BOX_NUM_EVENTS),
+            {map(
+              take(events, EVENT_BOX_NUM_EVENTS),
               (e: clusterUiApi.EventColumns, i: number) => {
                 return <EventRow event={e} key={i} />;
               },
@@ -161,7 +163,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
 
   renderContent() {
     const { events, sortSetting, maxSizeApiReached } = this.props;
-    const simplifiedEvents = _.map(events, event => {
+    const simplifiedEvents = map(events, event => {
       return getEventInfo(event, this.props.timezone);
     });
 

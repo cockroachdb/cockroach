@@ -9,17 +9,19 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
+
+import {
+  InsightNameEnum,
+  StmtFailureCodesStr,
+  TxnInsightDetails,
+} from "../insights";
+
 import {
   executeInternalSql,
   isMaxSizeError,
   sqlApiErrorMessage,
   SqlApiResponse,
 } from "./sqlApi";
-import {
-  InsightNameEnum,
-  StmtFailureCodesStr,
-  TxnInsightDetails,
-} from "../insights";
 import {
   formatStmtInsights,
   stmtInsightsByTxnExecutionQuery,
@@ -138,7 +140,7 @@ export async function getTxnInsightDetailsApi(
   }
 
   const highContention = txnInsightDetails.txnDetails?.insights?.some(
-    insight => insight.name === InsightNameEnum.highContention,
+    insight => insight.name === InsightNameEnum.HIGH_CONTENTION,
   );
 
   const isRetrySerializableFailure =

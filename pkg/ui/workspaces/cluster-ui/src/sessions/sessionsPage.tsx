@@ -9,19 +9,13 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { isNil, merge } from "lodash";
-
-import { syncHistory } from "src/util/query";
-import {
-  getStatusString,
-  makeSessionsColumns,
-  SessionInfo,
-  SessionsSortedTable,
-} from "./sessionsTable";
+import isNil from "lodash/isNil";
+import merge from "lodash/merge";
 import { RouteComponentProps } from "react-router-dom";
 import classNames from "classnames/bind";
+import moment from "moment-timezone";
 
-import LoadingError, { mergeErrors } from "../sqlActivity/errorComponent";
+import { syncHistory } from "src/util/query";
 import { Pagination } from "src/pagination";
 import {
   SortSetting,
@@ -31,6 +25,16 @@ import {
 } from "src/sortedtable";
 import { Loading } from "src/loading";
 import {
+  ICancelSessionRequest,
+  ICancelQueryRequest,
+} from "src/store/terminateQuery";
+import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
+import { TimestampToMoment, unset } from "src/util";
+
+import ColumnsSelector, {
+  SelectOption,
+} from "../columnsSelector/columnsSelector";
+import {
   calculateActiveFilters,
   defaultFilters,
   Filter,
@@ -39,31 +43,26 @@ import {
   handleFiltersFromQueryString,
   SelectedFilters,
 } from "../queryFilter";
+import LoadingError, { mergeErrors } from "../sqlActivity/errorComponent";
+import {
+  getLabel,
+  StatisticTableColumnKeys,
+} from "../statsTableUtil/statsTableUtil";
+import { TableStatistics } from "../tableStatistics";
 
+import sessionPageStyles from "./sessionPage.module.scss";
 import TerminateQueryModal, {
   TerminateQueryModalRef,
 } from "./terminateQueryModal";
 import TerminateSessionModal, {
   TerminateSessionModalRef,
 } from "./terminateSessionModal";
-
 import {
-  ICancelSessionRequest,
-  ICancelQueryRequest,
-} from "src/store/terminateQuery";
-
-import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
-import sessionPageStyles from "./sessionPage.module.scss";
-import ColumnsSelector, {
-  SelectOption,
-} from "../columnsSelector/columnsSelector";
-import { TimestampToMoment, unset } from "src/util";
-import moment from "moment-timezone";
-import {
-  getLabel,
-  StatisticTableColumnKeys,
-} from "../statsTableUtil/statsTableUtil";
-import { TableStatistics } from "../tableStatistics";
+  getStatusString,
+  makeSessionsColumns,
+  SessionInfo,
+  SessionsSortedTable,
+} from "./sessionsTable";
 import { EmptySessionsTablePlaceholder } from "./emptySessionsTablePlaceholder";
 
 const statementsPageCx = classNames.bind(statementsPageStyles);

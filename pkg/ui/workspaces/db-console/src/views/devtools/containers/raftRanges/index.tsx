@@ -8,16 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import filter from "lodash/filter";
+import flatMap from "lodash/flatMap";
+import map from "lodash/map";
+import uniq from "lodash/uniq";
+import values from "lodash/values";
+import sortBy from "lodash/sortBy";
+import flow from "lodash/flow";
 import React from "react";
 import ReactPaginate from "react-paginate";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import * as protos from "src/js/protos";
 import { refreshRaft } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+
+import RaftDebugResponse = cockroach.server.serverpb.RaftDebugResponse;
 
 /******************************
  *   RAFT RANGES MAIN COMPONENT
@@ -171,16 +181,12 @@ export class RangesMain extends React.Component<
       errors = errors.concat(statuses.errors.map(err => err.message));
 
       // Build list of all nodes for static ordering.
-      const nodeIDs = _(statuses.ranges)
-        .flatMap((range: protos.cockroach.server.serverpb.IRaftRangeStatus) => {
-          return range.nodes;
-        })
-        .map((node: protos.cockroach.server.serverpb.IRaftRangeNode) => {
-          return node.node_id;
-        })
-        .uniq()
-        .sort()
-        .value();
+      const nodeIDs = flow(
+        (ranges: RaftDebugResponse["ranges"]) => flatMap(ranges, r => r.nodes),
+        nodes => map(nodes, node => node.node_id),
+        nodeIds => uniq(nodeIds),
+        nodeIds => sortBy(nodeIds),
+      )(statuses.ranges);
 
       const nodeIDIndex: { [nodeID: number]: number } = {};
       const columns = [<th key={-1}>Range</th>];
@@ -196,8 +202,8 @@ export class RangesMain extends React.Component<
       });
 
       // Filter ranges and paginate
-      const justRanges = _.values(statuses.ranges);
-      const filteredRanges = _.filter(justRanges, range => {
+      const justRanges = values(statuses.ranges);
+      const filteredRanges = filter(justRanges, range => {
         return !this.state.showOnlyErrors || range.errors.length > 0;
       });
       let offset = this.state.offset;
@@ -206,11 +212,11 @@ export class RangesMain extends React.Component<
       }
       const ranges = filteredRanges.slice(offset, offset + RANGES_PER_PAGE);
       const rows: React.ReactNode[][] = [];
-      _.map(ranges, (range, i) => {
+      map(ranges, (range, i) => {
         const hasErrors = range.errors.length > 0;
         const rangeErrors = (
           <ul>
-            {_.map(range.errors, (error, j) => {
+            {map(range.errors, (error, j) => {
               return <li key={j}>{error.message}</li>;
             })}
           </ul>
@@ -314,7 +320,7 @@ export class RangesMain extends React.Component<
                 <tr>{columns}</tr>
               </thead>
               <tbody>
-                {_.values(rows).map((row: React.ReactNode[], i: number) => {
+                {values(rows).map((row: React.ReactNode[], i: number) => {
                   return <tr key={i}>{row}</tr>;
                 })}
               </tbody>

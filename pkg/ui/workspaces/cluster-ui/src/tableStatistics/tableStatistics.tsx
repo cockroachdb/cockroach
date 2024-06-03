@@ -9,15 +9,17 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { statisticsClasses } from "../transactionsPage/transactionsPageClasses";
-import { ISortedTablePagination } from "../sortedtable";
+import classNames from "classnames/bind";
+import moment from "moment-timezone";
+
 import { Button } from "src/button";
 import { ResultsPerPageLabel } from "src/pagination";
-import classNames from "classnames/bind";
-import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 import { TimeScale } from "src/timeScaleDropdown";
-import moment from "moment-timezone";
+
+import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
+import { ISortedTablePagination } from "../sortedtable";
+import { statisticsClasses } from "../transactionsPage/transactionsPageClasses";
 
 const { statistic, countTitle } = statisticsClasses;
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);

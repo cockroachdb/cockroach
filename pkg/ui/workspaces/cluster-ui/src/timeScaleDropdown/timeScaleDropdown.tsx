@@ -11,22 +11,23 @@
 import React, { useContext, useMemo } from "react";
 import moment from "moment-timezone";
 import classNames from "classnames/bind";
+
+import { TimezoneContext } from "../contexts";
+import { FormatWithTimezone, getLogger } from "../util";
+
 import {
   ArrowDirection,
   TimeScale,
   TimeScaleOptions,
   TimeWindow,
 } from "./timeScaleTypes";
-import TimeFrameControls from "./timeFrameControls";
+import { TimeFrameControls } from "./timeFrameControls";
 import RangeSelect, {
   RangeOption,
   Selected as RangeSelectSelected,
 } from "./rangeSelect";
 import { defaultTimeScaleOptions, findClosestTimeScale } from "./utils";
-
 import styles from "./timeScale.module.scss";
-import { TimezoneContext } from "../contexts";
-import { FormatWithTimezone, getLogger } from "../util";
 
 const cx = classNames.bind(styles);
 

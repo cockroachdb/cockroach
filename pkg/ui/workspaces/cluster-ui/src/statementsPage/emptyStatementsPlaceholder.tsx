@@ -9,14 +9,17 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { Link } from "react-router-dom";
+
 import { EmptyTable, EmptyTableProps } from "src/empty";
 import { Anchor } from "src/anchor";
 import { statementsTable, tabAttr, viewAttr } from "src/util";
+import { commonStyles } from "src/common";
+
 import magnifyingGlassImg from "../assets/emptyState/magnifying-glass.svg";
 import emptyTableResultsImg from "../assets/emptyState/empty-table-results.svg";
+
 import { StatementViewType } from "./statementPageTypes";
-import { Link } from "react-router-dom";
-import { commonStyles } from "src/common";
 
 const footer = (
   <Anchor href={statementsTable} target="_blank">

@@ -12,13 +12,15 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { createSandbox } from "sinon";
 import { MemoryRouter as Router } from "react-router-dom";
+
+import * as sqlApi from "../api/sqlApi";
+import { MockSqlResponse } from "../util/testing";
+
 import {
   ActiveStatementDetails,
   ActiveStatementDetailsProps,
 } from "./activeStatementDetails";
 import { getActiveStatementDetailsPropsFixture } from "./activeStatementDetails.fixture";
-import * as sqlApi from "../api/sqlApi";
-import { MockSqlResponse } from "../util/testing";
 
 const sandbox = createSandbox();
 

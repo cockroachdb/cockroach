@@ -9,15 +9,18 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { Link } from "react-router-dom";
+
+import { tabAttr, viewAttr } from "src/util";
+import { commonStyles } from "src/common";
+
 import { EmptyTable, EmptyTableProps } from "../empty";
 import { Anchor } from "../anchor";
 import { transactionsTable } from "../util";
 import magnifyingGlassImg from "../assets/emptyState/magnifying-glass.svg";
 import emptyTableResultsImg from "../assets/emptyState/empty-table-results.svg";
+
 import { TransactionViewType } from "./transactionsPageTypes";
-import { tabAttr, viewAttr } from "src/util";
-import { Link } from "react-router-dom";
-import { commonStyles } from "src/common";
 
 const footer = (
   <Anchor href={transactionsTable} target="_blank">

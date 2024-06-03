@@ -10,15 +10,15 @@
 
 import Analytics from "analytics-node";
 import { Location, createLocation, createHashHistory } from "history";
-import _ from "lodash";
+import each from "lodash/each";
 import { Store } from "redux";
+
+import * as protos from "src/js/protos";
 
 import { history } from "./history";
 import { AnalyticsSync, defaultRedactions } from "./analytics";
 import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";
-
-import * as protos from "src/js/protos";
 
 describe("analytics listener", function () {
   const clusterID = "a49f0ced-7ada-4135-af37-8acf6b548df0";
@@ -296,7 +296,7 @@ describe("analytics listener", function () {
     it("sends the correct value of clusterID, version and enterprise", function () {
       setVersionData();
 
-      _.each([false, true], enterpriseSetting => {
+      each([false, true], enterpriseSetting => {
         identifySpy.mockReset();
         setClusterData(store, true, enterpriseSetting);
         const sync = new AnalyticsSync(analytics, store, []);

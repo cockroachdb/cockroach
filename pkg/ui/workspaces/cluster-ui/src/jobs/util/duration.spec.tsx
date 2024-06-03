@@ -11,7 +11,9 @@
 import React from "react";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { render, screen } from "@testing-library/react";
+
 import { makeTimestamp } from "src/util";
+
 import {
   JOB_STATUS_RUNNING,
   JOB_STATUS_SUCCEEDED,
