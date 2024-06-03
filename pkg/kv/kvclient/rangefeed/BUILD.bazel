@@ -94,6 +94,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/metamorphic",
         "//pkg/util/mon",
+        "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/stop",
