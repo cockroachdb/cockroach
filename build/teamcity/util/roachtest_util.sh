@@ -11,6 +11,9 @@ else
   echo "Assuming that you've run \`gcloud auth login\` from inside the builder." >&2
 fi
 
+# defines get_host_arch
+source  $root/build/teamcity/util/roachtest_arch_util.sh
+
 # Early bind the stats dir. Roachtest invocations can take ages, and we want the
 # date at the time of the start of the run (which identifies the version of the
 # code run best).
@@ -62,8 +65,30 @@ function upload_stats {
   fi
 }
 
-# Upload any stats.json we can find, no matter what happens.
-trap upload_stats EXIT
+set -x
+
+# Uploads roachprod and roachtest binaries to GCS.
+function upload_binaries {
+  if tc_release_branch; then
+      bucket="cockroach-nightly"
+      branch=$(tc_build_branch)
+      arch=$(get_host_arch)
+      os=linux
+      sha=${BUILD_VCS_NUMBER}
+      gsutil cp bin/roachprod gs://$bucket/binaries/$branch/$os/$arch/roachprod.$sha
+      gsutil cp bin/roachtest gs://$bucket/binaries/$branch/$os/$arch/roachtest.$sha
+      # N.B. both binaries are built from the same SHA, so one blob will suffice.
+      echo "$sha" | gsutil cp - gs://$bucket/binaries/$branch/$os/$arch/latest_sha
+  fi
+}
+
+function upload_all {
+  upload_stats
+  upload_binaries
+}
+
+# Upload any stats.json we can find, and some binaries, no matter what happens.
+trap upload_all EXIT
 
 # Set up the parameters for the roachtest invocation.
 PARALLELISM=16
