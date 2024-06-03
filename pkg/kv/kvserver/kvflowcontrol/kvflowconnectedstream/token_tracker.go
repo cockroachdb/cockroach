@@ -29,14 +29,7 @@ import (
 // deducted for an in-flight log entry (identified by raft log position), with
 // a given admissionpb.WorkPriority.
 type Tracker struct {
-	// TODO(irfansharif,aaditya): Everytime we track something, we incur a map
-	// assignment (shows up in CPU profiles). We could introduce a struct that
-	// internally embeds this list of tracked deductions, and append there
-	// instead. Do this as part of #104154.
-	//
-	// TODO: Priorities here are the original priorities. So the key will always be
-	// based on the original priority. Just the AC StoreQueue will admit based on overridden
-	// priority.
+	// TODO: change this to an array NumRaftPriorities.
 	trackedM map[admissionpb.WorkPriority][]tracked
 
 	stream kvflowcontrol.Stream // used for logging only
@@ -48,17 +41,36 @@ type Tracker struct {
 type tracked struct {
 	tokens      kvflowcontrol.Tokens
 	sendTokenWC admissionpb.WorkClass
-	// TODO: why do we care about the term?
-	position kvflowcontrolpb.RaftLogPosition
+	position    kvflowcontrolpb.RaftLogPosition
 }
 
-// New constructs a new Tracker with the given lower bound raft log position
+// Init constructs a new Tracker with the given lower bound raft log position
 // (below which we're not allowed to deduct tokens).
 func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
 	*dt = Tracker{
 		trackedM: make(map[admissionpb.WorkPriority][]tracked),
 		stream:   stream,
 	}
+}
+
+func (dt *Tracker) TrackNew(
+	index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens,
+) {
+	// TODO:
+}
+
+func (dt *Tracker) UntrackNew(
+	inheritedPri RaftPriority,
+	uptoIndex uint64,
+	f func(index uint64, originalPri RaftPriority, tokens kvflowcontrol.Tokens),
+) {
+	// TODO:
+}
+
+func (dt *Tracker) UntrackAllNew(
+	f func(index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens),
+) {
+	// TODO:
 }
 
 // Track token deductions of the given priority with the given raft log
