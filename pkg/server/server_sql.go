@@ -858,9 +858,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RootSQLMemoryPoolSize:    cfg.MemoryPoolSize,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
-	cfg.stopper.AddCloser(stop.CloserFn(func() {
-		cfg.TempStorageConfig.Mon.EmergencyStop(ctx)
-	}))
+	if codec.ForSystemTenant() {
+		// Stop the temp storage disk monitor to enforce (in test builds) that
+		// all short-living descendants are stopped too.
+		//
+		// Note that we don't do this for SQL servers of tenants since there we
+		// can have ungraceful shutdown whenever the node is quiescing, so we
+		// have some short-living monitors that aren't stopped.
+		cfg.stopper.AddCloser(stop.CloserFn(func() {
+			cfg.TempStorageConfig.Mon.EmergencyStop(ctx)
+		}))
+	}
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
