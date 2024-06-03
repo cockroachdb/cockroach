@@ -105,6 +105,7 @@ type ycsb struct {
 	sfu         bool
 	splits      int
 
+	customWorkload                                                  bool
 	workload                                                        string
 	requestDistribution                                             string
 	scanLengthDistribution                                          string
@@ -127,6 +128,12 @@ var ycsbMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`read-modify-write-in-txn`: {RuntimeOnly: true},
 			`workload`:                 {RuntimeOnly: true},
+			`custom-workload`:          {RuntimeOnly: true},
+			`read-freq`:                {RuntimeOnly: true},
+			`insert-freq`:              {RuntimeOnly: true},
+			`update-freq`:              {RuntimeOnly: true},
+			`scan-freq`:                {RuntimeOnly: true},
+			`read-modify-write-freq`:   {RuntimeOnly: true},
 		}
 		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
 		g.flags.BoolVar(&g.insertHash, `insert-hash`, true, `Key to be hashed or ordered.`)
@@ -139,11 +146,17 @@ var ycsbMeta = workload.Meta{
 		g.flags.BoolVar(&g.rmwInTxn, `read-modify-write-in-txn`, false, `Run workload F's read-modify-write operation in an explicit transaction.`)
 		g.flags.BoolVar(&g.sfu, `select-for-update`, true, `Use SELECT FOR UPDATE syntax in read-modify-write operation, if run in an explicit transactions.`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations.`)
-		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F.`)
-		g.flags.StringVar(&g.requestDistribution, `request-distribution`, ``, `Distribution for request key generation [zipfian, uniform, latest]. The default for workloads A, B, C, E, and F is zipfian, and the default for workload D is latest.`)
+		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F. (default B)`)
+		g.flags.StringVar(&g.requestDistribution, `request-distribution`, ``, `Distribution for request key generation [zipfian, uniform, latest]. The default for workloads A, B, C, E, F and custom is zipfian, and the default for workload D is latest.`)
 		g.flags.StringVar(&g.scanLengthDistribution, `scan-length-distribution`, `uniform`, `Distribution for scan length generation [zipfian, uniform]. Primarily used for workload E.`)
 		g.flags.Uint64Var(&g.minScanLength, `min-scan-length`, 1, `The minimum length for scan operations. Primarily used for workload E.`)
 		g.flags.Uint64Var(&g.maxScanLength, `max-scan-length`, 1000, `The maximum length for scan operations. Primarily used for workload E.`)
+		g.flags.BoolVar(&g.customWorkload, `custom-workload`, false, `Allows the specification of a custom workload in conjunction with the *-freq flags. (default false)`)
+		g.flags.Float32Var(&g.readFreq, `read-freq`, 0.0, `Percentage of reads in the workload. Used in conjunction with --custom-workload to specify an alternative workload mix. (default 0.0)`)
+		g.flags.Float32Var(&g.insertFreq, `insert-freq`, 0.0, `Percentage of inserts in the workload. Used in conjunction with --custom-workload to specify an alternative workload mix. (default 0.0)`)
+		g.flags.Float32Var(&g.updateFreq, `update-freq`, 0.0, `Percentage of updates in the workload. Used in conjunction with --custom-workload to specify an alternative workload mix. (default 0.0)`)
+		g.flags.Float32Var(&g.scanFreq, `scan-freq`, 0.0, `Percentage of scans in the workload. Used in conjunction with --custom-workload to specify an alternative workload mix. (default 0.0)`)
+		g.flags.Float32Var(&g.readModifyWriteFreq, `read-modify-write-freq`, 0.0, `Percentage of read-modify-writes in the workload. Used in conjunction with --custom-workload to specify an alternative workload mix. (default 0.0)`)
 		RandomSeed.AddFlag(&g.flags)
 
 		// TODO(dan): g.flags.Uint64Var(&g.maxWrites, `max-writes`,
@@ -169,33 +182,37 @@ func (g *ycsb) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
 			g.workload = strings.ToUpper(g.workload)
-			var defaultReqDist string
-			switch g.workload {
-			case "A":
-				g.readFreq = 0.5
-				g.updateFreq = 0.5
-				defaultReqDist = "zipfian"
-			case "B":
-				g.readFreq = 0.95
-				g.updateFreq = 0.05
-				defaultReqDist = "zipfian"
-			case "C":
-				g.readFreq = 1.0
-				defaultReqDist = "zipfian"
-			case "D":
-				g.readFreq = 0.95
-				g.insertFreq = 0.05
-				defaultReqDist = "latest"
-			case "E":
-				g.scanFreq = 0.95
-				g.insertFreq = 0.05
-				defaultReqDist = "zipfian"
-			case "F":
-				g.readFreq = 0.5
-				g.readModifyWriteFreq = 0.5
-				defaultReqDist = "zipfian"
-			default:
-				return errors.Errorf("Unknown workload: %q", g.workload)
+			defaultReqDist := "zipfian"
+			// If a custom workload was specified, the frequencies are provided
+			// directly through the flags.
+			if !g.customWorkload {
+				switch g.workload {
+				case "A":
+					g.readFreq = 0.5
+					g.updateFreq = 0.5
+					defaultReqDist = "zipfian"
+				case "B":
+					g.readFreq = 0.95
+					g.updateFreq = 0.05
+					defaultReqDist = "zipfian"
+				case "C":
+					g.readFreq = 1.0
+					defaultReqDist = "zipfian"
+				case "D":
+					g.readFreq = 0.95
+					g.insertFreq = 0.05
+					defaultReqDist = "latest"
+				case "E":
+					g.scanFreq = 0.95
+					g.insertFreq = 0.05
+					defaultReqDist = "zipfian"
+				case "F":
+					g.readFreq = 0.5
+					g.readModifyWriteFreq = 0.5
+					defaultReqDist = "zipfian"
+				default:
+					return errors.Errorf("Unknown workload: %q", g.workload)
+				}
 			}
 			if g.requestDistribution == "" {
 				g.requestDistribution = defaultReqDist
@@ -575,7 +592,7 @@ type ycsbWorker struct {
 	scanLengthGen randGenerator // used to generate length of scan operations
 	rng           *rand.Rand    // used to generate random strings for the values
 	hashFunc      hash.Hash64
-	hashBuf       [8]byte
+	hashBuf       [20]byte
 }
 
 func (yw *ycsbWorker) run(ctx context.Context) error {
@@ -619,7 +636,13 @@ const (
 )
 
 func (yw *ycsbWorker) hashKey(key uint64) uint64 {
-	yw.hashBuf = [8]byte{} // clear hashBuf
+	yw.hashBuf = [20]byte{} // clear hashBuf
+	// Salt the key with the provided seed. This ensures that runs with
+	// different seeds will produce distinct sets of inserted keys.
+	key ^= RandomSeed.Seed() << 13
+	key ^= RandomSeed.Seed() >> 17
+	key ^= RandomSeed.Seed() << 5
+
 	binary.PutUvarint(yw.hashBuf[:], key)
 	yw.hashFunc.Reset()
 	if _, err := yw.hashFunc.Write(yw.hashBuf[:]); err != nil {
