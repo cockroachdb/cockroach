@@ -98,18 +98,31 @@ func run(ctx context.Context, owner, repo, sha string, requiredChecks []string) 
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	checks, resp, err := client.Checks.ListCheckRunsForRef(ctx, owner, repo, sha, nil)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return true, fmt.Errorf("API request timed out")
+	var checkRuns []*github.CheckRun
+	opts := &github.ListCheckRunsOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+	for {
+		checks, resp, err := client.Checks.ListCheckRunsForRef(ctx, owner, repo, sha, opts)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return true, fmt.Errorf("API request timed out")
+			}
+			if resp != nil && resp.StatusCode >= 500 {
+				return true, fmt.Errorf("API server error: %w", err)
+			}
+			return false, fmt.Errorf("API request error: %w", err)
 		}
-		if resp != nil && resp.StatusCode >= 500 {
-			return true, fmt.Errorf("API server error: %w", err)
+		checkRuns = append(checkRuns, checks.CheckRuns...)
+		if resp.NextPage == 0 {
+			break
 		}
-		return false, fmt.Errorf("API request error: %w", err)
+		opts.Page = resp.NextPage
 	}
 
-	for _, check := range checks.CheckRuns {
+	for _, check := range checkRuns {
 		name := check.GetName()
 		// Skip the check we are not interested in
 		if _, ok := statuses[name]; !ok {
