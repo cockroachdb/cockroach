@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -282,6 +283,7 @@ func TestIndexForDisplay(t *testing.T) {
 				false, /* isPrimary */
 				tc.partition,
 				tree.FmtSimple,
+				&eval.Context{},
 				&semaCtx,
 				sd,
 				tc.displayMode,
@@ -305,6 +307,7 @@ func TestIndexForDisplay(t *testing.T) {
 				false, /* isPrimary */
 				tc.partition,
 				tree.FmtPGCatalog,
+				&eval.Context{},
 				&semaCtx,
 				sd,
 				tc.displayMode,

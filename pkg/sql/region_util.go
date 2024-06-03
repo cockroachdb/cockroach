@@ -1190,7 +1190,8 @@ func (p *planner) maybeInitializeMultiRegionDatabase(
 	}
 
 	if err := p.createEnumWithID(
-		p.RunParams(ctx),
+		ctx,
+		p.EvalContext(),
 		regionConfig.RegionEnumID(),
 		regionLabels,
 		desc,

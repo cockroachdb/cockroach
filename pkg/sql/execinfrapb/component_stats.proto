@@ -176,6 +176,9 @@ message KVStats {
 
   // NodeIDs are the NodeIDs of the KV servers that evaluated the requests.
   repeated int32 node_ids = 26 [(gogoproto.customname) = "NodeIDs"];
+  // Regions are all regions that the KV servers which evaluated the requests
+  // reside in.
+  repeated string regions = 27;
 }
 
 // ExecStats contains statistics about the execution of a component.

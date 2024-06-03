@@ -3711,4 +3711,6 @@ message ScanStats {
   // NodeID is the NodeID of the KV server that evaluated the request.
   int32 node_id = 21 [(gogoproto.customname) = "NodeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // Region, if set, is the region of the KV server that evaluated the request.
+  string region = 22;
 }
