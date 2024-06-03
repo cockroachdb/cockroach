@@ -606,12 +606,12 @@ func (r *raft) send(m pb.Message) {
 // if the follower log and commit index are up-to-date, the flow is paused (for
 // reasons like in-flight limits), or the message could not be constructed.
 func (r *raft) maybeSendAppend(to uint64) bool {
-	return r.maybeSendAppendImpl(to, r.enableLazyAppends)
+	return r.maybeSendAppendImpl(to, r.maxMsgSize, r.enableLazyAppends)
 }
 
 // maybeSendAppendImpl is the same as maybeSendAppend, but it supports the lazy
 // mode for StateReplicate, in which appends are not sent.
-func (r *raft) maybeSendAppendImpl(to uint64, lazy bool) bool {
+func (r *raft) maybeSendAppendImpl(to uint64, maxSize entryEncodingSize, lazy bool) bool {
 	pr := r.trk.Progress[to]
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
 	msgAppType := pr.ShouldSendMsgApp(last, commit)
@@ -632,7 +632,7 @@ func (r *raft) maybeSendAppendImpl(to uint64, lazy bool) bool {
 
 	var entries []pb.Entry
 	if msgAppType == tracker.MsgAppWithEntries {
-		if entries, err = r.raftLog.entries(pr.Next, r.maxMsgSize); err != nil {
+		if entries, err = r.raftLog.entries(pr.Next, min(maxSize, r.maxMsgSize)); err != nil {
 			// Send a snapshot if we failed to get the entries.
 			return r.maybeSendSnapshot(to, pr)
 		}
