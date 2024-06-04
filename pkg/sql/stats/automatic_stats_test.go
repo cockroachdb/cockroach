@@ -877,7 +877,12 @@ func TestAnalyzeSystemTables(t *testing.T) {
 			tableName == "jobs" || tableName == "scheduled_jobs" ||
 			tableName == "role_id_seq" ||
 			tableName == "tenant_id_seq" ||
-			tableName == "descriptor_id_seq" {
+			tableName == "descriptor_id_seq" ||
+			tableName == "sqlliveness" ||
+			tableName == "namespace" ||
+			tableName == "descriptor" ||
+			tableName == "comments" ||
+			tableName == "zones" {
 			continue
 		}
 		sql := fmt.Sprintf("ANALYZE system.%s", tableName)

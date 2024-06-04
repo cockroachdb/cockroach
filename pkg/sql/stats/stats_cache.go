@@ -243,7 +243,9 @@ func (sc *TableStatisticsCache) GetTableStats(
 
 func statsDisallowedSystemTable(tableID descpb.ID) bool {
 	switch tableID {
-	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID:
+	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
+		keys.SqllivenessID, keys.NamespaceTableID, keys.DescriptorTableID, keys.CommentsTableID,
+		keys.ZonesTableID:
 		return true
 	}
 	return false
