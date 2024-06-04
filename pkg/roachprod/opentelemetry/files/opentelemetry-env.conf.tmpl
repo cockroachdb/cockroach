@@ -1,0 +1,8 @@
+# Systemd environment file for the otelcol-contrib service
+
+DD_API_KEY={{ .DatadogAPIKey }}
+DD_SITE={{ .DatadogSite }}
+
+# Command-line options for the otelcol-contrib service.
+# Run `/usr/bin/otelcol-contrib --help` to see all available options.
+OTELCOL_OPTIONS="--config=/etc/otelcol-contrib/config.yaml --config=/etc/otelcol-contrib/config-override.yaml"

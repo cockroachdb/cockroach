@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "opentelemetry",
+    srcs = [
+        "cockroachdb_metrics.go",
+        "opentelemetry.go",
+    ],
+    embedsrcs = [
+        "files/opentelemetry-config.yaml.tmpl",
+        "files/opentelemetry-env.conf.tmpl",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/opentelemetry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "opentelemetry_test",
+    srcs = ["opentelemetry_test.go"],
+    embed = [":opentelemetry"],
+    deps = ["@com_github_stretchr_testify//assert"],
+)
