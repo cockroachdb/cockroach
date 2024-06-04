@@ -558,7 +558,7 @@ type RaftInterface interface {
 	// MakeMsgApp is used to construct a MsgApp for entries in [start, end).
 	// REQUIRES: start == next and replicaID is in StateReplicate.
 	//
-	// REQUIRES: maxSize > 0, maxEntries > 0.
+	// REQUIRES: maxSize > 0.
 	//
 	// If the sum of all entries in [start,end) are <= maxSize, all will be
 	// returned. Else, entries will be returned until, and including, the first
@@ -566,11 +566,49 @@ type RaftInterface interface {
 	// least one entry will be returned in the MsgApp on success.
 	//
 	// Returns raft.ErrCompacted error if log truncated. If no error, there is
-	// at lease one entry in the message, and next is advanced to be equal to
+	// at least one entry in the message, and next is advanced to be equal to
 	// the index+1 of the last entry in the returned message. If
 	// raft.ErrCompacted is returned, the replica will transition to
 	// StateSnapshot.
-	MakeMsgApp(replicaID roachpb.ReplicaID, start, end uint64, maxSize int64, maxEntries int64) (raftpb.Message, error)
+	//
+	// TODO: the transition to StateSnapshot is not guaranteed, there are some
+	// error conditions after which the flow stays in StateReplicate. We should
+	// define or eliminate these cases.
+	MakeMsgApp(replicaID roachpb.ReplicaID, start, end uint64, maxSize int64) (raftpb.Message, error)
+}
+
+// raftInterfaceImpl implements RaftInterface.
+type raftInterfaceImpl struct {
+	n *raft.RawNode
+}
+
+// newRaftInterface return the implementation of RaftInterface wrapped around
+// the given raft.RawNode. The node must have Config.EnableLazyAppends == true.
+func newRaftInterface(node *raft.RawNode) raftInterfaceImpl {
+	return raftInterfaceImpl{n: node}
+}
+
+func (r raftInterfaceImpl) FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo {
+	pr := r.n.GetProgress(uint64(replicaID))
+	return FollowerStateInfo{
+		State: pr.State,
+		Match: pr.Match,
+		Next:  pr.Next,
+		// TODO: populate Admitted
+	}
+}
+
+func (r raftInterfaceImpl) LastEntryIndex() uint64 {
+	return r.n.LastIndex()
+}
+
+func (r raftInterfaceImpl) MakeMsgApp(
+	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
+) (raftpb.Message, error) {
+	if maxSize <= 0 {
+		return raftpb.Message{}, errors.New("maxSize <= 0")
+	}
+	return r.n.NextMsgApp(uint64(replicaID), start, end, uint64(maxSize))
 }
 
 // Scheduler abstracts the raftScheduler to allow the RangeController to
@@ -1027,7 +1065,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 				// Have deducted the send tokens. Proceed to send.
 				//
 				// TODO: use configuration of a limit on max inflight entries.
-				msg, err := rc.opts.RaftInterface.MakeMsgApp(r, from, to, math.MaxInt64, math.MaxInt64)
+				msg, err := rc.opts.RaftInterface.MakeMsgApp(r, from, to, math.MaxInt64)
 				if err != nil {
 					panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
 				}
@@ -1371,9 +1409,13 @@ func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
 		return false
 	}
 	// TODO(sumeer): use configuration of a limit on max inflight entries.
+	//
+	// [pav-kv] The raft.Config.{MaxSizePerMsg, MaxInflightMsgs} fields are
+	// relevant. I don't think we need MsgInflightMsgs, but the the bytesToSend
+	// could be paginated MaxSizePerMsg per message, if we need it.
 	msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgApp(
 		rss.parent.desc.ReplicaID, rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex,
-		int64(bytesToSend), math.MaxInt64)
+		int64(bytesToSend))
 	if err != nil {
 		if !errors.Is(err, raft.ErrCompacted) {
 			panic(err)

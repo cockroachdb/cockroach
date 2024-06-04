@@ -621,6 +621,56 @@ func (r *raft) maybeSendAppendImpl(to uint64, lazy bool) bool {
 	return true
 }
 
+// TODO(pav-kv): integrate with maybeSendAppend.
+func (r *raft) nextMsgApp(to uint64, lo, hi uint64, maxSize entryEncodingSize) (pb.Message, error) {
+	if !r.enableLazyAppends {
+		return pb.Message{}, errors.New("Config.EnableLazyAppends is unset")
+	} else if r.state != StateLeader {
+		return pb.Message{}, errors.New("the node is not the leader")
+	} else if to == r.id {
+		return pb.Message{}, errors.New("leader can't send MsgApp to itself")
+	}
+	pr, ok := r.trk.Progress[to]
+	if !ok {
+		return pb.Message{}, fmt.Errorf("peer %d not found", to)
+	}
+
+	if s := pr.State; s != tracker.StateReplicate {
+		return pb.Message{}, fmt.Errorf("peer %d state %s is not StateReplicate", to, s)
+	} else if lo != pr.Next {
+		return pb.Message{}, fmt.Errorf("peer %d next is %s, expected %d", to, pr.Next, lo)
+	}
+
+	prevIndex := pr.Next - 1
+	prevTerm, err := r.raftLog.term(prevIndex)
+	if err != nil {
+		if !r.maybeSendSnapshot(to, pr) {
+			return pb.Message{}, errors.New("failed to enter StateSnapshot")
+		}
+		return pb.Message{}, err // ErrCompacted or ErrUnavailable
+	}
+	entries, err := r.raftLog.slice(pr.Next, hi, maxSize)
+	if err != nil {
+		if !r.maybeSendSnapshot(to, pr) {
+			return pb.Message{}, errors.New("failed to enter StateSnapshot")
+		}
+		return pb.Message{}, err // ErrCompacted
+	}
+
+	msg := pb.Message{
+		To:      to,
+		Type:    pb.MsgApp,
+		Index:   prevIndex,
+		LogTerm: prevTerm,
+		Entries: entries,
+		Commit:  r.raftLog.committed,
+		Match:   pr.Match,
+	}
+	pr.SentEntries(len(entries), uint64(payloadsSize(entries)))
+	pr.SentCommit(msg.Commit)
+	return msg, nil
+}
+
 // maybeSendSnapshot fetches a snapshot from Storage, and sends it to the given
 // node. Returns true iff the snapshot message has been emitted successfully.
 func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress) bool {
