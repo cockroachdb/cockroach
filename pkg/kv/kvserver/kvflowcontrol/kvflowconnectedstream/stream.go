@@ -980,6 +980,12 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		}
 	}
 
+	// TODO: it is possible that we have a quorum with replicaSendStreams that
+	// are not in state snapshot, but not a quorum with an empty send-queue, because
+	// of some state transitions above. Accounting for pendingRecentlyReplicate,
+	// we may need to initiate a force-flush. We should abstract out the logic
+	// for deciding to force-flush since we need it in multiple places.
+
 	// Process ready.
 	ready := e.Ready()
 	if ready == nil {
@@ -1112,6 +1118,10 @@ type entryFlowControlState struct {
 func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
 	// TODO: change the payload encoding and parsing, and delegate the priority
 	// parsing to that.
+	//
+	// TODO(austen): as a temporary stop-gap, for unit-testing
+	// RangeControllerImpl and all the supporting classes, can hack this to be
+	// some arbitrary trivial encoding.
 	return entryFlowControlState{
 		index:           entry.Index,
 		usesFlowControl: false,         // TODO:
@@ -1561,6 +1571,9 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowContr
 		panic("")
 	}
 	wasEmpty := rss.isEmptySendQueue()
+	// TODO: if wasEmpty, we may need to force-flush something. That decision needs to be
+	// made in the caller.
+
 	rss.sendQueue.nextRaftIndex++
 	if entry.usesFlowControl {
 		rss.sendQueue.sizeSum += entry.tokens
