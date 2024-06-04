@@ -13,6 +13,7 @@ go_library(
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
         "//pkg/util/syncutil",

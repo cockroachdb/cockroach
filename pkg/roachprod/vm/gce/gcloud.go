@@ -28,6 +28,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1442,7 +1443,9 @@ func createInstanceTemplate(clusterName string, instanceArgs []string, labelsArg
 }
 
 // createInstanceGroups creates an instance group in each zone, for the cluster
-func createInstanceGroups(project, clusterName string, zones []string, opts vm.CreateOpts) error {
+func createInstanceGroups(
+	l *logger.Logger, project, clusterName string, zones []string, opts vm.CreateOpts,
+) error {
 	groupName := instanceGroupName(clusterName)
 	templateName := instanceTemplateName(clusterName)
 	// Note that we set the IP addresses to be stateful, so that they remain the
@@ -1473,7 +1476,7 @@ func createInstanceGroups(project, clusterName string, zones []string, opts vm.C
 	}
 	createGroupArgs = append(createGroupArgs, statefulDiskArgs...)
 
-	var g errgroup.Group
+	g := ui.NewDefaultSpinnerGroup(l, "creating instance groups", len(zones))
 	for _, zone := range zones {
 		argsWithZone := append(createGroupArgs[:len(createGroupArgs):len(createGroupArgs)], "--zone", zone)
 		g.Go(func() error {
@@ -1489,9 +1492,9 @@ func createInstanceGroups(project, clusterName string, zones []string, opts vm.C
 }
 
 // waitForGroupStability waits for the instance groups, in the given zones, to become stable.
-func waitForGroupStability(project, groupName string, zones []string) error {
+func waitForGroupStability(l *logger.Logger, project, groupName string, zones []string) error {
 	// Wait for group to become stable // zone TBD
-	var g errgroup.Group
+	g := ui.NewDefaultSpinnerGroup(l, "waiting for instance groups to become stable", len(zones))
 	for _, zone := range zones {
 		groupStableArgs := []string{"compute", "instance-groups", "managed", "wait-until", "--stable",
 			"--zone", zone,
@@ -1562,12 +1565,11 @@ func (p *Provider) Create(
 
 	switch {
 	case providerOpts.Managed:
-		var g errgroup.Group
 		err = createInstanceTemplate(opts.ClusterName, instanceArgs, labels)
 		if err != nil {
 			return err
 		}
-		err = createInstanceGroups(project, opts.ClusterName, usedZones, opts)
+		err = createInstanceGroups(l, project, opts.ClusterName, usedZones, opts)
 		if err != nil {
 			return err
 		}
@@ -1577,7 +1579,8 @@ func (p *Provider) Create(
 			"--project", project,
 			groupName}
 
-		l.Printf("Creating %d managed instances, distributed across [%s]", len(names), strings.Join(usedZones, ", "))
+		g := ui.NewDefaultSpinnerGroup(l, fmt.Sprintf("creating %d managed instances, distributed across [%s]",
+			len(names), strings.Join(usedZones, ", ")), len(names))
 		for zone, zoneHosts := range zoneToHostNames {
 			argsWithZone := append(createArgs[:len(createArgs):len(createArgs)], "--zone", zone)
 			for _, host := range zoneHosts {
@@ -1596,7 +1599,7 @@ func (p *Provider) Create(
 		if err != nil {
 			return err
 		}
-		err = waitForGroupStability(project, groupName, usedZones)
+		err = waitForGroupStability(l, project, groupName, usedZones)
 		if err != nil {
 			return err
 		}
@@ -1685,7 +1688,7 @@ func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName str
 		return err
 	}
 
-	return waitForGroupStability(project, groupName, maps.Keys(vmZones))
+	return waitForGroupStability(l, project, groupName, maps.Keys(vmZones))
 }
 
 func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
@@ -1731,7 +1734,7 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 		return err
 	}
 
-	err = waitForGroupStability(project, groupName, maps.Keys(zoneToHostNames))
+	err = waitForGroupStability(l, project, groupName, maps.Keys(zoneToHostNames))
 	if err != nil {
 		return err
 	}
