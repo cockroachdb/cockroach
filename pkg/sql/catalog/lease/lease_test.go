@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -429,6 +430,10 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 
 	t.mustRelease(1, l1, nil)
 	t.mustRelease(1, l3, nil)
+
+	if util.RaceEnabled && skip.Stress() {
+		t.Fatal("fail anyway! maybe this will give us enough info to understand")
+	}
 }
 
 func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
