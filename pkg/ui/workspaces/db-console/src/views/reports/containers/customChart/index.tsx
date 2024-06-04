@@ -376,10 +376,13 @@ export class CustomChart extends React.Component<
   }
 
   render() {
+    // Note: the vertical spacing below is to ensure we can scroll the page up
+    // enough for the drop-down metric menu to be visible.
+    // TODO(radu): remove this when we upgrade to a better component.
     return (
       <>
-        <Helmet title="Custom Chart | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
+        <Helmet title="Custom Chart | Debug"/>
+        <BackToAdvanceDebug history={this.props.history}/>
         <section className="section">
           <h1 className="base-heading">Custom Chart</h1>
         </section>
@@ -402,10 +405,11 @@ export class CustomChart extends React.Component<
             <div className="chart-group l-columns__left">
               {this.renderCharts()}
             </div>
-            <div className="l-columns__right" />
+            <div className="l-columns__right"/>
           </div>
         </section>
         <section className="section">{this.renderChartTables()}</section>
+        <br/><br/><br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>
       </>
     );
   }
