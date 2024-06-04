@@ -1,4 +1,5 @@
 # Test backing up and restoring a database with user defined functions.
+skip issue-num=122353
 new-cluster name=s
 ----
 
