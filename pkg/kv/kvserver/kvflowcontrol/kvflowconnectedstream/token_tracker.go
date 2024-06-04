@@ -104,6 +104,25 @@ func (dt *Tracker) Untrack(
 	dt.tracked[inheritedPri] = dt.tracked[inheritedPri][untracked:]
 }
 
+func (dt *Tracker) UntrackGE(
+	index uint64,
+	f func(index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens),
+) {
+	for i := range dt.tracked {
+		j := len(dt.tracked[i]) - 1
+		for j >= 0 {
+			tr := dt.tracked[i][j]
+			if tr.index >= index {
+				f(tr.index, tr.inheritedPri, tr.originalPri, tr.tokens)
+				j--
+			} else {
+				break
+			}
+		}
+		dt.tracked[i] = dt.tracked[i][:j+1]
+	}
+}
+
 // UntrackAll iterates through all tracked token deductions, invoking the
 // provided callback each deduction and untracking.
 func (dt *Tracker) UntrackAll(
