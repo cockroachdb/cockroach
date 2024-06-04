@@ -45,6 +45,9 @@ func EncodeCommand(
 		// prefix because the command ID is stored in a field in
 		// raft.ConfChange.
 		prefix = false
+		if raftAdmissionMeta != nil {
+			return nil, errors.AssertionFailedf("expected to encode prefix for raft commands using replication admission control")
+		}
 	} else if command.ReplicatedEvalResult.AddSSTable != nil {
 		entryEncoding = EntryEncodingSideloadedWithoutAC
 		if raftAdmissionMeta != nil {
@@ -60,18 +63,20 @@ func EncodeCommand(
 	// equivalent change in BenchmarkRaftAdmissionMetaOverhead.
 
 	// Create encoding buffer.
+	// INVARIANT: raftAdmissionMeta != nil => prefix
 	preLen := 0
+	cmdLen := command.Size()
+	var admissionMetaLen int
 	if prefix {
 		preLen = RaftCommandPrefixLen
-	}
-	var admissionMetaLen int
-	if raftAdmissionMeta != nil {
-		// Encode admission metadata data at the start, right after the command
-		// prefix.
-		admissionMetaLen = raftAdmissionMeta.Size()
+		if raftAdmissionMeta != nil {
+			// Encode admission metadata data at the start, right after the command
+			// prefix.
+			admissionMetaLen = raftAdmissionMeta.Size()
+			cmdLen += admissionMetaLen
+		}
 	}
 
-	cmdLen := command.Size() + admissionMetaLen
 	// Allocate the data slice with enough capacity to eventually hold the two
 	// "footers" that are filled later.
 	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
@@ -85,9 +90,6 @@ func EncodeCommand(
 	data = data[:preLen+cmdLen]
 	// Encode below-raft admission data, if any.
 	if raftAdmissionMeta != nil {
-		if !prefix {
-			return nil, errors.AssertionFailedf("expected to encode prefix for raft commands using replication admission control")
-		}
 		if buildutil.CrdbTestBuild {
 			if raftAdmissionMeta.AdmissionOriginNode == roachpb.NodeID(0) {
 				return nil, errors.AssertionFailedf("missing origin node for flow token returns")

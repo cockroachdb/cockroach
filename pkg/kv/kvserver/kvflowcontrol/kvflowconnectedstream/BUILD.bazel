@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvflowconnectedstream",
+    srcs = [
+        "store_stream.go",
+        "stream.go",
+        "token_counter.go",
+        "token_tracker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/raft",
+        "//pkg/raft/raftpb",
+        "//pkg/raft/tracker",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/buildutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "kvflowconnectedstream_test",
+    srcs = [
+        "store_stream_test.go",
+        "stream_test.go",
+        "token_counter_test.go",
+    ],
+    embed = [":kvflowconnectedstream"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/settings/cluster",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+    ],
+)
