@@ -973,3 +973,92 @@ sql admin
  },
  "num_statements": 1
 }
+
+sql admin expect-error
+{
+  "database": "system",
+  "execute": true,
+  "statements": [{"sql": "COMMIT"}]
+}
+----
+XXUUU|executing stmt 1: disallowed statement type
+
+sql admin
+{
+  "execute": true,
+  "statements": [
+    {"sql": "ROLLBACK"},
+    {"sql": "SHOW COMMIT TIMESTAMP"},
+    {"sql": "select 1"},
+    {"sql": "SET statement_timeout = '10s';"}
+  ],
+  "separate_txns": true
+}
+----
+{
+ "error": {
+  "code": "XXUUU",
+  "message": "separate transaction payload encountered transaction error(s)",
+  "severity": "ERROR"
+ },
+ "execution": {
+  "txn_results": [
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "XXUUU",
+     "message": "executing stmt 1: disallowed statement type",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 1,
+    "tag": "ROLLBACK"
+   },
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "XXUUU",
+     "message": "executing stmt 2: disallowed statement type",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 2,
+    "tag": "SHOW COMMIT TIMESTAMP"
+   },
+   {
+    "columns": [
+     {
+      "name": "?column?",
+      "oid": 20,
+      "type": "INT8"
+     }
+    ],
+    "end": "1970-01-01T00:00:00Z",
+    "rows": [
+     {
+      "?column?": 1
+     }
+    ],
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 3,
+    "tag": "SELECT"
+   },
+   {
+    "end": "1970-01-01T00:00:00Z",
+    "error": {
+     "code": "XXUUU",
+     "message": "executing stmt 4: disallowed statement type",
+     "severity": "ERROR"
+    },
+    "rows_affected": 0,
+    "start": "1970-01-01T00:00:00Z",
+    "statement": 4,
+    "tag": "SET"
+   }
+  ]
+ },
+ "num_statements": 4
+}
