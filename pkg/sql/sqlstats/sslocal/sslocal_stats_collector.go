@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -27,7 +28,13 @@ import (
 // StatsCollector is used to collect statistics for transactions and
 // statements for the entire lifetime of a session.
 type StatsCollector struct {
-	sqlstats.ApplicationStats
+
+	// currentTransactionStatementStats contains the current transaction's statement
+	// statistics. They will be flushed to flushTarget when the transaction is done
+	// so that we can include the transaction fingerprint ID as part of the
+	// statement's key. This container is local per stats collector and
+	// is cleared for reuse after every transaction.
+	currentTransactionStatementStats sqlstats.ApplicationStats
 
 	// stmtFingerprintID is the fingerprint ID of the current statement we are
 	// recording. Note that we don't observe sql stats for all statements (e.g. COMMIT).
@@ -53,15 +60,19 @@ type StatsCollector struct {
 	// statement insights.
 	sendInsights bool
 
+	// flushTarget is the sql stats container for the current application.
+	// This is the target where the statement stats are flushed to upon
+	// transaction completion. Note that these are the global stats for the
+	// application.
 	flushTarget sqlstats.ApplicationStats
 
+	// uniqueServerCounts is a pointer to the statement and transaction
+	// fingerprint counters tracked per server.
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters
 
 	st    *cluster.Settings
 	knobs *sqlstats.TestingKnobs
 }
-
-var _ sqlstats.ApplicationStats = &StatsCollector{}
 
 // NewStatsCollector returns an instance of StatsCollector.
 func NewStatsCollector(
@@ -70,15 +81,28 @@ func NewStatsCollector(
 	insights insights.Writer,
 	phaseTime *sessionphase.Times,
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters,
+	fromOuterTxn bool,
 	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
+	// See #124935 for more details. If fromOuterTxn is true, the
+	// executor owning the stats collector is not responsible for
+	// starting or committing the transaction. Since the statements
+	// are merged into flushTarget on EndTransaction, in this case the
+	// container would never be merged into the flushTarget. Instead
+	// we'll write directly to the flushTarget when we're collecting
+	// stats for a conn exec belonging to an outer transaction.
+	currentTransactionStatementStats := appStats
+	if !fromOuterTxn {
+		currentTransactionStatementStats = appStats.NewApplicationStatsWithInheritedOptions()
+	}
 	return &StatsCollector{
-		ApplicationStats:   appStats,
-		insightsWriter:     insights,
-		phaseTimes:         phaseTime.Clone(),
-		uniqueServerCounts: uniqueServerCounts,
-		st:                 st,
-		knobs:              knobs,
+		flushTarget:                      appStats,
+		currentTransactionStatementStats: currentTransactionStatementStats,
+		insightsWriter:                   insights,
+		phaseTimes:                       phaseTime.Clone(),
+		uniqueServerCounts:               uniqueServerCounts,
+		st:                               st,
+		knobs:                            knobs,
 	}
 }
 
@@ -103,7 +127,7 @@ func (s *StatsCollector) PreviousPhaseTimes() *sessionphase.Times {
 	return s.previousPhaseTimes
 }
 
-// Reset resets the StatsCollector with a new ApplicationStats and a new copy
+// Reset resets the StatsCollector with a new flushTarget and a new copy
 // of the sessionphase.Times.
 func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *sessionphase.Times) {
 	previousPhaseTime := s.phaseTimes
@@ -114,12 +138,20 @@ func (s *StatsCollector) Reset(appStats sqlstats.ApplicationStats, phaseTime *se
 	s.stmtFingerprintID = 0
 }
 
+// Free frees any local memory used by the stats collector.
+func (s *StatsCollector) Free(ctx context.Context) {
+	// For stats collectors for executors with outer transactions,
+	// the currentTransactionStatementStats is the flush target.
+	// We should make sure we're never freeing the flush target,
+	// since that container exists beyond the stats collector.
+	if s.currentTransactionStatementStats != s.flushTarget {
+		s.currentTransactionStatementStats.Free(ctx)
+	}
+}
+
 // StartTransaction sets up the StatsCollector for a new transaction.
-// The current application stats are reset for the new transaction.
 func (s *StatsCollector) StartTransaction() {
 	s.sendInsights = s.shouldObserveInsights()
-	s.flushTarget = s.ApplicationStats
-	s.ApplicationStats = s.flushTarget.NewApplicationStatsWithInheritedOptions()
 }
 
 // EndTransaction informs the StatsCollector that the current txn has
@@ -140,12 +172,7 @@ func (s *StatsCollector) EndTransaction(
 
 	var discardedStats uint64
 	discardedStats += s.flushTarget.MergeApplicationStatementStats(
-		ctx, s.ApplicationStats, transactionFingerprintID,
-	)
-
-	discardedStats += s.flushTarget.MergeApplicationTransactionStats(
-		ctx,
-		s.ApplicationStats,
+		ctx, s.currentTransactionStatementStats, transactionFingerprintID,
 	)
 
 	// Avoid taking locks if no stats are discarded.
@@ -153,9 +180,7 @@ func (s *StatsCollector) EndTransaction(
 		s.flushTarget.MaybeLogDiscardMessage(ctx)
 	}
 
-	s.ApplicationStats.Free(ctx)
-	s.ApplicationStats = s.flushTarget
-	s.flushTarget = nil
+	s.currentTransactionStatementStats.Clear(ctx)
 }
 
 // ShouldSample returns two booleans, the first one indicates whether we
@@ -165,24 +190,15 @@ func (s *StatsCollector) EndTransaction(
 func (s *StatsCollector) ShouldSample(
 	fingerprint string, implicitTxn bool, database string,
 ) (previouslySampled bool, savePlanForStats bool) {
-	sampledInFlushTarget := false
-	savePlanForStatsInFlushTarget := true
 
-	if s.flushTarget != nil {
-		sampledInFlushTarget, savePlanForStatsInFlushTarget = s.flushTarget.ShouldSample(fingerprint, implicitTxn, database)
-	}
-
-	sampledInAppStats, savePlanForStatsInAppStats := s.ApplicationStats.ShouldSample(fingerprint, implicitTxn, database)
-	previouslySampled = sampledInFlushTarget || sampledInAppStats
-	savePlanForStats = savePlanForStatsInFlushTarget && savePlanForStatsInAppStats
-	return previouslySampled, savePlanForStats
+	return s.flushTarget.ShouldSample(fingerprint, implicitTxn, database)
 }
 
 // UpgradeImplicitTxn informs the StatsCollector that the current txn has been
 // upgraded to an explicit transaction, thus all previously recorded statements
 // should be updated accordingly.
 func (s *StatsCollector) UpgradeImplicitTxn(ctx context.Context) error {
-	err := s.ApplicationStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
+	err := s.currentTransactionStatementStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
 		func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			statistics.Key.ImplicitTxn = false
 			return nil
@@ -324,4 +340,31 @@ func (s *StatsCollector) ObserveTransaction(
 // container is at capacity.
 func (s *StatsCollector) StatementsContainerFull() bool {
 	return s.uniqueServerCounts.GetStatementCount() >= s.uniqueServerCounts.UniqueStmtFingerprintLimit.Get(&s.st.SV)
+}
+
+// RecordStatement records the statistics of a statement.
+func (s *StatsCollector) RecordStatement(
+	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
+) (appstatspb.StmtFingerprintID, error) {
+	return s.currentTransactionStatementStats.RecordStatement(ctx, key, value)
+}
+
+// RecordTransaction records the statistics of a transaction.
+// Transaction stats are always recorded directly on the flushTarget.
+func (s *StatsCollector) RecordTransaction(
+	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
+) error {
+	return s.flushTarget.RecordTransaction(ctx, key, value)
+}
+
+func (s *StatsCollector) RecordStatementExecStats(
+	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
+) error {
+	return s.currentTransactionStatementStats.RecordStatementExecStats(key, stats)
+}
+
+func (s *StatsCollector) IterateStatementStats(
+	ctx context.Context, opts sqlstats.IteratorOptions, f sqlstats.StatementVisitor,
+) error {
+	return s.flushTarget.IterateStatementStats(ctx, opts, f)
 }
