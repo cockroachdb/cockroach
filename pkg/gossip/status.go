@@ -13,17 +13,28 @@ package gossip
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/redact"
 )
 
+// minCallbackDurationToRecord is the minimum duration for which we record
+// callback pending and callback processing durations. This skews the histogram,
+// but avoids recording very short durations which are not interesting and
+// which. will be dominated by the overhead of recording the duration itself.
+const minCallbackDurationToRecord = 10 * time.Millisecond
+
 // Metrics contains gossip metrics used per node and server.
 type Metrics struct {
-	ConnectionsRefused *metric.Counter
-	BytesReceived      *metric.Counter
-	BytesSent          *metric.Counter
-	InfosReceived      *metric.Counter
-	InfosSent          *metric.Counter
+	ConnectionsRefused          *metric.Counter
+	BytesReceived               *metric.Counter
+	BytesSent                   *metric.Counter
+	InfosReceived               *metric.Counter
+	InfosSent                   *metric.Counter
+	CallbacksProcessed          *metric.Counter
+	CallbacksPending            *metric.Gauge
+	CallbacksProcessingDuration metric.IHistogram
+	CallbacksPendingDuration    metric.IHistogram
 }
 
 func makeMetrics() Metrics {
@@ -33,6 +44,20 @@ func makeMetrics() Metrics {
 		BytesSent:          metric.NewCounter(MetaBytesSent),
 		InfosReceived:      metric.NewCounter(MetaInfosReceived),
 		InfosSent:          metric.NewCounter(MetaInfosSent),
+		CallbacksProcessed: metric.NewCounter(MetaCallbacksProcessed),
+		CallbacksPending:   metric.NewGauge(MetaCallbacksPending),
+		CallbacksProcessingDuration: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     MetaCallbacksProcessingDuration,
+			Duration:     base.DefaultHistogramWindowInterval(),
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		CallbacksPendingDuration: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     MetaCallbacksPendingDuration,
+			Duration:     base.DefaultHistogramWindowInterval(),
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
 	}
 }
 
