@@ -25,7 +25,7 @@ const numNodes = 4
 // and counts how many round trips the Stmt specified by the test case performs.
 var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(func(
 	tb testing.TB, knobs base.TestingKnobs,
-) (*gosql.DB, func()) {
+) (*gosql.DB, *gosql.DB, func()) {
 	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		tb, numNodes, knobs,
 	)
@@ -47,7 +47,7 @@ var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(f
 	if err != nil {
 		tb.Fatal(err)
 	}
-	return conn, func() {
+	return conn, nil, func() {
 		cleanup()
 		testuserCleanup()
 	}

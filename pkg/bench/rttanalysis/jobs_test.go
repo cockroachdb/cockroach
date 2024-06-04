@@ -111,6 +111,13 @@ func init() {
 			Stmt:    "SHOW JOBS",
 		},
 		{
+			SetupEx:      setupQueries,
+			Reset:        cleanupQuery,
+			Name:         "non admin show jobs",
+			Stmt:         "SHOW JOBS",
+			NonAdminUser: true,
+		},
+		{
 			SetupEx:  setupQueries,
 			Reset:    cleanupQuery,
 			Name:     "jobs page default",
@@ -143,6 +150,13 @@ func init() {
 			Reset:   cleanupQuery,
 			Name:    "crdb_internal.system_jobs",
 			Stmt:    "SELECT * FROM crdb_internal.system_jobs",
+		},
+		{
+			SetupEx:      setupQueries,
+			Reset:        cleanupQuery,
+			Name:         "non admin crdb_internal.system_jobs",
+			Stmt:         "SELECT * FROM crdb_internal.system_jobs",
+			NonAdminUser: true,
 		},
 	})
 }

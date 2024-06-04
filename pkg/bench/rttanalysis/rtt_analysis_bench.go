@@ -48,6 +48,10 @@ type RoundTripBenchTestCase struct {
 	StmtArgs  []interface{}
 	Reset     string
 	SkipIssue int
+	// NonAdminUser specifies that the test should be run as a user without admin
+	// privileges. The setup and reset portions of the test will still be run as
+	// an admin user.
+	NonAdminUser bool
 }
 
 func runRoundTripBenchmark(b testingB, tests []RoundTripBenchTestCase, cc ClusterConstructor) {
@@ -124,7 +128,11 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 	cluster := cc(b)
 	defer cluster.close()
 
-	sql := sqlutils.MakeSQLRunner(cluster.conn())
+	adminSQL := sqlutils.MakeSQLRunner(cluster.adminConn())
+	sql := adminSQL
+	if tc.NonAdminUser {
+		sql = sqlutils.MakeSQLRunner(cluster.nonAdminConn())
+	}
 
 	expData := readExpectationsFile(b)
 
@@ -146,18 +154,18 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 	// Do an extra iteration and don't record it in order to deal with effects of
 	// running it the first time.
 	for i := 0; i < b.N()+1; i++ {
-		sql.Exec(b, "CREATE DATABASE bench")
+		adminSQL.Exec(b, "CREATE DATABASE bench")
 		// Make sure the database descriptor is leased, so that tests don't count
 		// the leasing.
-		sql.Exec(b, "USE bench")
+		adminSQL.Exec(b, "USE bench")
 		// Also force a lease on the "public" schema too.
-		sql.Exec(b, "CREATE TABLE bench.public.__dummy__()")
-		sql.Exec(b, "SELECT 1 FROM bench.public.__dummy__")
-		sql.Exec(b, "DROP TABLE bench.public.__dummy__")
+		adminSQL.Exec(b, "CREATE TABLE bench.public.__dummy__()")
+		adminSQL.Exec(b, "SELECT 1 FROM bench.public.__dummy__")
+		adminSQL.Exec(b, "DROP TABLE bench.public.__dummy__")
 
-		sql.Exec(b, tc.Setup)
+		adminSQL.Exec(b, tc.Setup)
 		for _, s := range tc.SetupEx {
-			sql.Exec(b, s)
+			adminSQL.Exec(b, s)
 		}
 		for _, statement := range statements {
 			cluster.clearStatementTrace(statement.SQL)
@@ -193,8 +201,8 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 			roundTrips += total
 		}
 
-		sql.Exec(b, "DROP DATABASE bench;")
-		sql.Exec(b, tc.Reset)
+		adminSQL.Exec(b, "DROP DATABASE bench;")
+		adminSQL.Exec(b, tc.Reset)
 	}
 
 	res := float64(roundTrips) / float64(b.N())
