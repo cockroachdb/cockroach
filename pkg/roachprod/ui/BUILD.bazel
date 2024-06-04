@@ -4,8 +4,15 @@ go_library(
     name = "ui",
     srcs = [
         "collate_errors.go",
+        "spinner.go",
         "writer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/ui",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/config",
+        "//pkg/roachprod/logger",
+        "//pkg/util/syncutil",
+        "@org_golang_x_sync//errgroup",
+    ],
 )
