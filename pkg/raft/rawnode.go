@@ -157,6 +157,13 @@ func (rn *RawNode) SendAppend(to pb.PeerID) bool {
 	return rn.raft.maybeSendAppendImpl(to, false /* lazy */)
 }
 
+// NextMsgApp returns the next log replication message (MsgApp) to the given
+// peer, with a prefix of entries in [lo, hi), and total size up to maxSize. The
+// size may exceed maxSize if the last entry does not make it == maxSize.
+func (rn *RawNode) NextMsgApp(to pb.PeerID, lo, hi uint64, maxSize uint64) (pb.Message, error) {
+	return rn.raft.nextMsgApp(to, lo, hi, entryEncodingSize(maxSize))
+}
+
 // readyWithoutAccept returns a Ready. This is a read-only operation, i.e. there
 // is no obligation that the Ready must be handled.
 func (rn *RawNode) readyWithoutAccept() Ready {
@@ -521,6 +528,23 @@ const (
 // peers.
 func (rn *RawNode) WithProgress(visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
 	withProgress(rn.raft, visitor)
+}
+
+// GetProgress returns replication progress from this node to the given peer.
+// Should be used only when this node is in StateLeader.
+func (rn *RawNode) GetProgress(peer pb.PeerID) tracker.Progress {
+	pr := rn.raft.trk.Progress(peer)
+	if pr == nil {
+		return tracker.Progress{}
+	}
+	copied := *pr
+	copied.Inflights = nil
+	return copied
+}
+
+// LastIndex returns the index of the last entry in this node's log.
+func (rn *RawNode) LastIndex() uint64 {
+	return rn.raft.raftLog.lastIndex()
 }
 
 // ReportUnreachable reports the given node is not reachable for the last send.
