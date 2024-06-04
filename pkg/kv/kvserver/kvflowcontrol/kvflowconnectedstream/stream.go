@@ -227,7 +227,7 @@ We can consider doing a similar piggy-backing:
   RaftTransport.kvflowControl plumbing).
 - Every RaftMessageRequest for the node will piggy-back these.
 
-Priority override/inheritance:
+Priority inheritance:
 
 See https://docs.google.com/document/d/1Qf6uteFRlbScLdWIrTfqgbrKRHfUsoMGatRLWYQgAi8/edit#bookmark=id.69inkdboirw0
 for the high-level design.
@@ -321,7 +321,7 @@ corresponds to user facing work.
 // - use NotSubjectToACForFlowControl for most of force-flush.
 //
 // - for the first 1MB of force-flush, deduct flow tokens. So these will need
-//   to be in a separate MsgApp. Don't do any priority override for these.
+//   to be in a separate MsgApp. Don't do any priority inheritance for these.
 
 // TODO(sumeer): kvflowcontrol and the packages it contains are sliced and
 // diced quite fine, with the benefit of multiple code iterations to get to
@@ -643,8 +643,8 @@ const (
 	// TODO: move these elsewhere. Currently kvserverpb defines these using admissionpb,
 	// but that is obsolete.
 
-	NotSubjectToACForFlowControl        RaftPriority = math.MaxUint8 - 1
-	PriorityNotOverriddenForFlowControl RaftPriority = math.MaxUint8
+	NotSubjectToACForFlowControl       RaftPriority = math.MaxUint8 - 1
+	PriorityNotInheritedForFlowControl RaftPriority = math.MaxUint8
 )
 
 func admissionPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority {
@@ -676,7 +676,7 @@ func workClassFromRaftPriority(pri RaftPriority) admissionpb.WorkClass {
 type MessageSender interface {
 	// SendRaftMessage ...
 	//
-	// priorityOverride can be PriorityNotOverriddenForFlowControl or
+	// priorityInherited can be PriorityNotInheritedForFlowControl or
 	// NotSubjectToACForFlowControl
 	//
 	// Implementation:
@@ -686,18 +686,18 @@ type MessageSender interface {
 	// handleRaftReadyRaftMuLocked. By then we have no access to the wrapper
 	// that is RaftMessageRequest. So before calling RawNode.Step we will
 	// replace the byte in the encoding if NotSubjectToACForFlowControl or
-	// there is an override. In this setup, the priority encoded in
-	// RaftAdmissionMeta is unnecessary.
+	// there is a real inherited priority. In this setup, the priority encoded
+	// in RaftAdmissionMeta is unnecessary.
 	//
 	// Due to multiple transitions into and out of StateReplicate, the same
-	// entry could be sent to the follower with different priority overrides.
-	// Only the last send is being tracked in the tracker, with the priority
-	// override used in that send. The follower will track based on the priority
-	// override in the entry that it appended. These can differ, but it does not
-	// matter. See discussion about priority override in "Design for robust flow
-	// token return in RACv2".
+	// entry could be sent to the follower with different inherited
+	// priorities. Only the last send is being tracked in the tracker, with
+	// the inherited priority used in that send. The follower will track based
+	// on the inherited priority in the entry that it appended. These can
+	// differ, but it does not matter. See discussion about priority
+	// inheritance in "Design for robust flow token return in RACv2".
 	SendRaftMessage(
-		ctx context.Context, priorityOverride RaftPriority, msg raftpb.Message)
+		ctx context.Context, priorityInherited RaftPriority, msg raftpb.Message)
 }
 
 type RangeControllerOptions struct {
@@ -978,7 +978,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	msgApps := ready.RetransmitMsgApps()
 	for i := range msgApps {
 		rc.opts.MessageSender.SendRaftMessage(
-			context.TODO(), PriorityNotOverriddenForFlowControl, msgApps[i])
+			context.TODO(), PriorityNotInheritedForFlowControl, msgApps[i])
 	}
 
 	entries := ready.Entries()
@@ -1070,11 +1070,11 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 					panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
 				}
 				rc.opts.MessageSender.SendRaftMessage(
-					context.TODO(), PriorityNotOverriddenForFlowControl, msg)
+					context.TODO(), PriorityNotInheritedForFlowControl, msg)
 			}
 			// Else nothing to send.
 		} else {
-			// In StateSnapshot, or in StateReplicate with a queue. Need to queue.
+			// Not in StateReplicate, or have an existing send-queue. Need to queue.
 			for i := range entries {
 				entryFCState := getFlowControlState(entries[i])
 				rs.replicaSendStream.advanceNextRaftIndexAndSent(entryFCState)
@@ -1231,19 +1231,29 @@ type replicaSendStream struct {
 	// indexToSendInitial is the indexToSend when this replica was observed to
 	// transition to StateReplicate. Only indices >= indexToSendInitial can be
 	// in tracker.
+	//
+	// This is equal to FollowerStateInfo.Match+1 when the replicaSendStream
+	// is created, or transitions from snapshot => replicate.
 	indexToSendInitial uint64
 	// tracker contains entries that have been sent, and have had send-tokens
 	// deducted (and will have had eval-tokens deducted iff index >=
-	// nextRaftIndexInitial)
+	// nextRaftIndexInitial).
+	//
+	// All entries in (FollowerStateInfo.Match, indexToSend) must be in the
+	// tracker, since FollowerStateInfo.Admitted[i] <=
+	// FollowerStateInfo.Match.
 	tracker Tracker
 
-	// nextRaftIndexInitial is the value of nextRaftIndex when this transitioned
-	// to StateReplicate.
+	// nextRaftIndexInitial is the value of nextRaftIndex when this
+	// replicaSendStream was created, or transitioned from snapshot =>
+	// replicate.
+	//
+	// INVARIANT: indexToSendInitial <= nextRaftIndexInitial
 	nextRaftIndexInitial uint64
 
 	sendQueue struct {
 		// State of send-queue. [indexToSend, nextRaftIndex) have not been sent.
-		// indexToSend == FollowerStateInfo.Next
+		// indexToSend == FollowerStateInfo.Next.
 		indexToSend   uint64
 		nextRaftIndex uint64
 
@@ -1253,8 +1263,8 @@ type replicaSendStream struct {
 		// since the entries in < nextRaftIndexInitial, are not consuming eval
 		// tokens, and priority inheritance is a fairness device for eval
 		// tokens. However, it could serve a rudimentary function when
-		// nextRaftIndex == nextRaftIndexInitial, so there are no precise
-		// stats, and we need to grab some tokens in
+		// nextRaftIndex == nextRaftIndexInitial, i.e., there are no precise
+		// stats, and we need to grab some tokens for
 		// deductedForScheduler.tokens. For now, we chose to only grab elastic
 		// tokens in this case. If there is regular work waiting, it may have
 		// to wait longer, but this is a backlog case, so it is fine (we are
@@ -1286,14 +1296,14 @@ type replicaSendStream struct {
 		watcherHandleID StoreStreamSendTokenHandleID
 		// Two cases for deductedForScheduler.wc.
 		// - grabbed regular tokens: must have regular work waiting. Use the
-		//   highest pri in priorityCount for the decision for the override.
+		//   highest pri in priorityCount for the inherited priority.
 		//   TODO: when indexToSend jumps ahead, we should immediately return
 		//   any regular tokens in deductedForScheduler and watch again, so that
 		//   this invariant is satisfied.
 		//
 		// - grabbed elastic tokens: may have regular work that will be sent.
 		//   Unilaterally use regular tokens for those. The message is sent
-		//   with no priority override. Since elastic tokens were available
+		//   with no inherited priority. Since elastic tokens were available
 		//   recently it is highly probable that regular tokens are also
 		//   available.
 		deductedForScheduler struct {
@@ -1389,17 +1399,27 @@ func (rss *replicaSendStream) scheduleForceFlush() {
 
 // REQUIRES: !rss.closed
 func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
-	if !rss.sendQueue.forceFlushScheduled && rss.sendQueue.deductedForScheduler.tokens == 0 {
-		return
+	if rss.connectedState != replicate {
+		return false
+	}
+	info := rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID)
+	switch info.State {
+	case tracker.StateReplicate:
+		rss.makeConsistentInStateReplicate(info)
+	default:
+		rss.returnDeductedFromSchedulerTokens()
+		rss.sendQueue.forceFlushScheduled = false
+		return false
 	}
 	// 4MB. Don't want to hog the scheduler thread for too long.
 	//
 	// Also, if have regular tokens and one of the early queued entries is the
-	// one causing the priority override to regular, and the rest are elastic,
-	// will bound how much elastic we upgrade/inherit to regular. Note, we can
-	// also handle this algorithmically, by not sending the elastic entries,
-	// but we've already pulled them out using MakeMsgApp, so we don't want to
-	// waste the likely storage read.
+	// one causing the inherited priority to become a priority that belongs in
+	// regular work, and the rest after that are elastic, will bound how much
+	// elastic we unnecessarily inherit to regular. Note, we could also handle
+	// this algorithmically, by not sending the elastic entries, but we've
+	// already pulled them out using MakeMsgApp, so we don't want to waste the
+	// storage read.
 	const MaxBytesToSend kvflowcontrol.Tokens = 4 << 20
 	bytesToSend := MaxBytesToSend
 	if !rss.sendQueue.forceFlushScheduled {
@@ -1443,22 +1463,22 @@ func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
 	}
 }
 
-// TODO: rename overridden to inherited.
-
 func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
-	priOverride := PriorityNotOverriddenForFlowControl
+	inheritedPri := PriorityNotInheritedForFlowControl
+	// These are the remaining send tokens, that we may want to return. Can be
+	// negative, in which case we need to deduct some more.
 	var remainingTokens [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
-	trackEntries := true
 	if rss.sendQueue.forceFlushScheduled {
-		priOverride = NotSubjectToACForFlowControl
-		trackEntries = false
+		inheritedPri = NotSubjectToACForFlowControl
 	} else {
-		// Only inherit/override the priority if have regular tokens. If have
-		// elastic tokens, will not override.
+		// Only inherit the priority if have regular tokens. If have elastic
+		// tokens, will not inherit.
 		if rss.sendQueue.deductedForScheduler.tokens > 0 &&
 			rss.sendQueue.deductedForScheduler.wc == admissionpb.RegularWorkClass {
-			priOverride = rss.queuePriority()
-			if workClassFromRaftPriority(priOverride) == admissionpb.ElasticWorkClass {
+			// Best guess at the inheritedPri based on the stats. We will correct
+			// this before.
+			inheritedPri = rss.queuePriority()
+			if workClassFromRaftPriority(inheritedPri) == admissionpb.ElasticWorkClass {
 				panic("")
 			}
 			remainingTokens[admissionpb.RegularWorkClass] = rss.sendQueue.deductedForScheduler.tokens
@@ -1467,6 +1487,9 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 		}
 		rss.sendQueue.deductedForScheduler.tokens = 0
 	}
+	// fcStates is only used when we are doing priority inheritance, since we
+	// need to update the inheritedPri.
+	var fcStates []entryFlowControlState
 	for _, entry := range msg.Entries {
 		if rss.sendQueue.indexToSend != entry.Index {
 			panic("")
@@ -1476,11 +1499,11 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 		if !entryFCState.usesFlowControl {
 			continue
 		}
+		// Fix the stats since this is no longer in the send-queue.
 		rss.sendQueue.sizeSum -= entryFCState.tokens
 		rss.sendQueue.priorityCount[entryFCState.originalPri]--
 		originalEntryWC := workClassFromRaftPriority(entryFCState.originalPri)
-		inheritedPri := entryFCState.originalPri
-		switch priOverride {
+		switch inheritedPri {
 		case NotSubjectToACForFlowControl:
 			// Don't touch remaining tokens, and return the eval tokens.
 			if entryFCState.index >= rss.nextRaftIndexInitial {
@@ -1489,16 +1512,23 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 				rss.parent.evalTokenCounter.Return(
 					context.TODO(), originalEntryWC, entryFCState.tokens)
 			}
-		case PriorityNotOverriddenForFlowControl:
+		case PriorityNotInheritedForFlowControl:
 			remainingTokens[originalEntryWC] -= entryFCState.tokens
+			rss.tracker.Track(
+				context.TODO(), entryFCState.index, entryFCState.originalPri, entryFCState.originalPri, entryFCState.tokens)
 		default:
-			inheritedPri = priOverride
+			if entryFCState.originalPri > inheritedPri {
+				// This can happen since the priorityCounts are not complete.
+				// They only track >= nextRaftIndexInitial.
+				inheritedPri = entryFCState.originalPri
+			}
+			fcStates = append(fcStates, entryFCState)
 			remainingTokens[admissionpb.RegularWorkClass] -= entryFCState.tokens
 		}
-		if trackEntries {
-			rss.tracker.Track(
-				context.TODO(), entryFCState.index, inheritedPri, entryFCState.originalPri, entryFCState.tokens)
-		}
+	}
+	for _, e := range fcStates {
+		rss.tracker.Track(
+			context.TODO(), e.index, inheritedPri, e.originalPri, e.tokens)
 	}
 	for i := range remainingTokens {
 		if remainingTokens[i] > 0 {
@@ -1509,8 +1539,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 				context.TODO(), admissionpb.WorkClass(i), -remainingTokens[i])
 		}
 	}
-	rss.parent.parent.opts.MessageSender.SendRaftMessage(context.TODO(), priOverride, msg)
-
+	rss.parent.parent.opts.MessageSender.SendRaftMessage(context.TODO(), inheritedPri, msg)
 }
 
 func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowControlState) {
@@ -1527,7 +1556,7 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowContr
 			existingSendQWC = workClassFromRaftPriority(rss.queuePriority())
 		}
 		rss.sendQueue.priorityCount[entry.originalPri]++
-		if rss.connectedState != snapshot {
+		if rss.connectedState == snapshot {
 			// Do not deduct eval-tokens in StateSnapshot, since there is no
 			// guarantee when these will be returned. In
 			// probeRecentlyReplicate, we continue deducting, since it is
@@ -1598,17 +1627,21 @@ func (rss *replicaSendStream) queueSize() kvflowcontrol.Tokens {
 func (rss *replicaSendStream) changeToStateSnapshot() {
 	rss.connectedState = snapshot
 	// The tracker must only contain entries in < rss.sendQueue.indexToSend.
-	// These may not have been received by the replica and will not get resent
-	// by Raft, so we have no guarantee those tokens will be returned. So return
-	// all tokens in the tracker.
+	// These may not have been received by the replica. Since the replica is
+	// now in StateSnapshot, there is no need for Raft to send MsgApp pings to
+	// discover what has been missed. So there is no liveness guarantee on
+	// when these tokens will be returned, and therefore we return all tokens
+	// in the tracker.
 	rss.tracker.UntrackAll(func(
 		index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens) {
-		rss.parent.sendTokenCounter.Return(context.TODO(), workClassFromRaftPriority(inheritedPri), tokens)
+		rss.parent.sendTokenCounter.Return(
+			context.TODO(), workClassFromRaftPriority(inheritedPri), tokens)
 	})
 	// For the same reason, return all eval tokens deducted.
 	for wc := range rss.eval.tokensDeducted {
 		if rss.eval.tokensDeducted[wc] > 0 {
-			rss.parent.evalTokenCounter.Return(context.TODO(), admissionpb.WorkClass(wc), rss.eval.tokensDeducted[wc])
+			rss.parent.evalTokenCounter.Return(
+				context.TODO(), admissionpb.WorkClass(wc), rss.eval.tokensDeducted[wc])
 			rss.eval.tokensDeducted[wc] = 0
 		}
 	}
@@ -1630,7 +1663,7 @@ func (rss *replicaSendStream) returnDeductedFromSchedulerTokens() {
 
 // The replica is in StateReplicate, and has the provided info. It's previous state may
 // have been any state (include replicate). Make the state consistent with info. Note that
-// even in the previous state was replicate, we may not have seen all state transitions,
+// even if the previous state was replicate, we may not have seen all state transitions,
 // or even if we see all state transitions, info.Match can jump ahead of indexToSend, because
 // of old MsgApps arriving at the replica. So everything needs to be fixed up.
 func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateInfo) {
@@ -1648,7 +1681,7 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateI
 			// Everything is as expected.
 		} else if info.Next > rss.sendQueue.indexToSend {
 			// In pull-mode this can never happen. We've already covered the
-			// case where Next moves ahead along with Match earlier.
+			// case where Next moves ahead, along with Match earlier.
 			panic("")
 		} else {
 			// info.Next < rss.sendQueue.indexToSend.
@@ -1675,7 +1708,26 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateI
 }
 
 func (rss *replicaSendStream) makeConsistentWhenUnexpectedPop(indexToSend uint64) {
-	// TODO:
+	// Cancel watcher and return deductedForScheduler tokens. Will try again after
+	// we've fixed up everything.
+	if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
+		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
+		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
+	}
+	rss.returnDeductedFromSchedulerTokens()
+	rss.sendQueue.forceFlushScheduled = false
+
+	// We have accurate stats for indices >= nextRaftIndexInitial. This unexpected pop
+	// can't happen for any index >= nextRaftIndexInitial since these were proposed after
+	// this replicaSendStream was created.
+	if indexToSend > rss.nextRaftIndexInitial {
+		panic("")
+	}
+	// INVARIANT: indexToSend <= rss.nextRaftIndexInitial. Don't need to
+	// change any stats.
+	rss.sendQueue.indexToSend = indexToSend
+
+	rss.startProcessingSendQueue()
 }
 
 func (rss *replicaSendStream) makeConsistentWhenProbeToReplicate(indexToSend uint64) {
@@ -1697,32 +1749,27 @@ func (rss *replicaSendStream) makeConsistentWhenProbeToReplicate(indexToSend uin
 	// INVARIANT: indexToSend < rss.sendQueue.indexToSend.
 
 	// A regression in indexToSend necessarily means a MsgApp constructed by
-	// this replicaSendStream was dropped. There may be eval.tokensDeducted
-	// for these, but if so, they must be in the tracker -- we could simply remove
-	// them from the tracker, and continue with perfect stats accounting.
-	//
-	// TODO(sumeer): think through if the above statement is sound. If not, we
-	// can always resort to the worst-case behavior.
+	// this replicaSendStream was dropped.
 	if indexToSend < rss.indexToSendInitial {
 		panic("did not construct MsgApp in this replicaSendStream")
 	}
-	rss.tracker.UntrackAll(
+	// The messages in [indexToSend, rss.sendQueue.indexToSend) must be in
+	// the tracker. They can't have been removed since Match < indexToSend.
+	// We will be resending these, so we should return the send tokens for
+	// them. We don't need to adjust eval.tokensDeducted since even though we
+	// are returning these send tokens, all of them are now in the send-queue,
+	// and the eval.tokensDeducted includes the send-queue.
+	rss.tracker.UntrackGE(indexToSend,
 		func(index uint64, inheritedPri RaftPriority, originalPri RaftPriority,
 			tokens kvflowcontrol.Tokens) {
-			if index >= indexToSend {
-				rss.sendQueue.priorityCount[originalPri]++
-				rss.sendQueue.sizeSum += tokens
-			}
+			rss.sendQueue.priorityCount[originalPri]++
+			rss.sendQueue.sizeSum += tokens
 			inheritedWC := workClassFromRaftPriority(inheritedPri)
-			if index >= rss.nextRaftIndexInitial {
-				originalWC := workClassFromRaftPriority(originalPri)
-				rss.eval.tokensDeducted[originalWC] -= tokens
-				rss.parent.evalTokenCounter.Return(context.TODO(), originalWC, tokens)
-			}
 			rss.parent.sendTokenCounter.Return(context.TODO(), inheritedWC, tokens)
 
 		})
 	rss.sendQueue.indexToSend = indexToSend
+	rss.startProcessingSendQueue()
 }
 
 func (rss *replicaSendStream) makeConsistentWhenSnapshotToReplicate(indexToSend uint64) {
