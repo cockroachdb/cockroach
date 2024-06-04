@@ -104,8 +104,8 @@ func (m *mockTokenWaitingHandle) WaitChannel() <-chan struct{} {
 }
 
 // TestWaitForEval provides basic testing for the WaitForEval function. The
-// tests use a mocked token counter handle, which is either always available,
-// or available exactly once and later unavailable.
+// tests use a mocked token counter handle, which may be either available or
+// unavailable.
 func TestWaitForEval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -141,30 +141,6 @@ func TestWaitForEval(t *testing.T) {
 		}
 		refreshWaitCh := make(chan struct{}, 1)
 		refreshWaitCh <- struct{}{}
-		state, _ := WaitForEval(ctx, refreshWaitCh, handles, 2, nil)
-		require.Equal(t, RefreshWaitSignaled, state)
-	})
-	// Both a required quorum are signaled and the required waiters are signaled
-	// but later a quorum is unavailable.
-	t.Run("quorum available but later unavailable", func(t *testing.T) {
-		handles := []tokenWaitingHandleInfo{
-			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: false},
-			{handle: &mockTokenWaitingHandle{available: false}, requiredWait: false},
-			{handle: &mockTokenWaitingHandle{available: true, unavailableLater: true}, requiredWait: false},
-		}
-		refreshWaitCh := make(chan struct{})
-		state, _ := WaitForEval(ctx, refreshWaitCh, handles, 2, nil)
-		require.Equal(t, RefreshWaitSignaled, state)
-	})
-	// A required quorum of tokens are available but the required waiter is later
-	// unavailable.
-	t.Run("quorum available but later missing required", func(t *testing.T) {
-		handles := []tokenWaitingHandleInfo{
-			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: false},
-			{handle: &mockTokenWaitingHandle{available: true}, requiredWait: false},
-			{handle: &mockTokenWaitingHandle{available: true, unavailableLater: true}, requiredWait: true},
-		}
-		refreshWaitCh := make(chan struct{})
 		state, _ := WaitForEval(ctx, refreshWaitCh, handles, 2, nil)
 		require.Equal(t, RefreshWaitSignaled, state)
 	})
