@@ -270,6 +270,7 @@ func IterateRangeDescriptorsFromDisk(
 	lastReportTime := timeutil.Now()
 
 	iter.SeekGE(storage.MVCCKey{Key: keys.LocalRangePrefix})
+	var keyBuf []byte
 	for {
 		if valid, err := iter.Valid(); err != nil {
 			return err
@@ -329,7 +330,9 @@ func IterateRangeDescriptorsFromDisk(
 				return errors.AssertionFailedf("range key has intent with no timestamp")
 			}
 			// Seek to the latest value below the intent timestamp.
-			iter.SeekGE(storage.MVCCKey{Key: key.Key, Timestamp: metaTS.Prev()})
+			// We cannot pass to SeekGE a key that was returned to us from the iterator; make a copy.
+			keyBuf = append(keyBuf[:0], key.Key...)
+			iter.SeekGE(storage.MVCCKey{Key: keyBuf, Timestamp: metaTS.Prev()})
 			continue
 		}
 
