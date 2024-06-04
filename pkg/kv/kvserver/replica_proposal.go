@@ -595,9 +595,11 @@ func (r *Replica) maybeLogLeaseAcquisition(
 	// cluster health, so it's useful to know their location over time.
 	if r.descRLocked().StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax)) {
 		if r.ownsValidLeaseRLocked(ctx, now) {
-			log.Health.Infof(ctx, "acquired system range lease: %s", newLease)
+			log.Health.Infof(ctx, "acquired system range lease: %s [acquisition-type=%s]",
+				newLease, newLease.AcquisitionType)
 		} else {
-			log.Health.Warningf(ctx, "applied system range lease after it expired: %s", newLease)
+			log.Health.Warningf(ctx, "applied system range lease after it expired: %s [acquisition-type=%s]",
+				newLease, newLease.AcquisitionType)
 		}
 	}
 
@@ -622,8 +624,9 @@ func (r *Replica) maybeLogLeaseAcquisition(
 		//
 		// [^1]: https://github.com/cockroachdb/cockroach/pull/82758
 		log.Health.Warningf(ctx,
-			"applied lease after ~%.2fs replication lag, client traffic may have been delayed [lease=%v prev=%v]",
-			newLeaseAppDelay.Seconds(), newLease, prevLease)
+			"applied lease after ~%.2fs replication lag, client traffic may have "+
+				"been delayed [lease=%v prev=%v acquisition-type=%s]",
+			newLeaseAppDelay.Seconds(), newLease, prevLease, newLease.AcquisitionType)
 	} else if prevLease.Type() == roachpb.LeaseExpiration &&
 		newLease.Type() == roachpb.LeaseEpoch &&
 		prevLease.Expiration != nil && // nil when there is no previous lease
@@ -635,8 +638,9 @@ func (r *Replica) maybeLogLeaseAcquisition(
 		// actually serve any traffic). The result was likely an outage which
 		// resolves right now, so log to point this out.
 		log.Health.Warningf(ctx,
-			"lease expired before epoch lease upgrade, client traffic may have been delayed [lease=%v prev=%v]",
-			newLease, prevLease)
+			"lease expired before epoch lease upgrade, client traffic may have "+
+				"been delayed [lease=%v prev=%v acquisition-type=%s]",
+			newLease, prevLease, newLease.AcquisitionType)
 	}
 }
 
