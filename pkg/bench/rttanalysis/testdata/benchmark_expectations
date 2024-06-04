@@ -63,6 +63,7 @@ exp,benchmark
 25,GrantRole/grant_2_roles
 6,Jobs/cancel_job
 8,Jobs/crdb_internal.system_jobs
+83,Jobs/non_admin_crdb_internal.system_jobs
 8,Jobs/pause_job
 6,Jobs/resume_job
 8,Jobs/jobs_page_default
@@ -71,6 +72,7 @@ exp,benchmark
 6-9,Jobs/jobs_page_type_filtered_no_matches
 3,Jobs/show_job
 6-9,Jobs/show_jobs
+83,Jobs/non_admin_show_jobs
 3,ORMQueries/activerecord_type_introspection_query
 0,ORMQueries/asyncpg_types
 0,ORMQueries/column_descriptions_json_agg
