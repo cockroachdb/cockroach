@@ -2950,36 +2950,16 @@ func (c *SyncedCluster) ParallelE(
 		wg.Wait()
 	}()
 
-	var writer ui.Writer
-	out := l.Stdout
-	if options.Display == "" {
-		out = io.Discard
+	spinner := ui.NewDefaultCountingSpinner(l, options.Display, count)
+	if options.Display != "" {
+		defer spinner.Start()()
 	}
-
-	var ticker *time.Ticker
-	if !config.Quiet {
-		ticker = time.NewTicker(100 * time.Millisecond)
-	} else {
-		ticker = time.NewTicker(1000 * time.Millisecond)
-		fmt.Fprintf(out, "%s", options.Display)
-		if l.File != nil {
-			fmt.Fprintf(out, "\n")
-		}
-	}
-	defer ticker.Stop()
-
-	var spinner = []string{"|", "/", "-", "\\"}
-	spinnerIdx := 0
 
 	var hasError bool
 	n := 0
 	results := make([]*RunResultDetails, count)
 	for done := false; !done; {
 		select {
-		case <-ticker.C:
-			if config.Quiet && l.File == nil {
-				fmt.Fprintf(out, ".")
-			}
 		case r, ok := <-completed:
 			if ok {
 				results[r.Index] = r.RunResultDetails
@@ -3002,21 +2982,7 @@ func (c *SyncedCluster) ParallelE(
 				return nil, false, err
 			}
 		}
-
-		if !config.Quiet && l.File == nil {
-			fmt.Fprint(&writer, options.Display)
-			fmt.Fprintf(&writer, " %d/%d", n, count)
-			if !done {
-				fmt.Fprintf(&writer, " %s", spinner[spinnerIdx%len(spinner)])
-			}
-			fmt.Fprintf(&writer, "\n")
-			_ = writer.Flush(out)
-			spinnerIdx++
-		}
-	}
-
-	if config.Quiet && l.File == nil {
-		fmt.Fprintf(out, "\n")
+		spinner.CountStatus(n)
 	}
 
 	return results, hasError, nil
