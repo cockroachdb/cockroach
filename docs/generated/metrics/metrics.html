@@ -187,6 +187,10 @@
 <tr><td>STORAGE</td><td>gcbytesage</td><td>Cumulative age of non-live data</td><td>Age</td><td>GAUGE</td><td>SECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>gossip.bytes.received</td><td>Number of received gossip bytes</td><td>Gossip Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>gossip.bytes.sent</td><td>Number of sent gossip bytes</td><td>Gossip Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>STORAGE</td><td>gossip.callbacks.pending</td><td>Number of gossip callbacks waiting to be processed</td><td>Callbacks</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>STORAGE</td><td>gossip.callbacks.pending_duration</td><td>Duration of gossip callback queueing to be processed</td><td>Duration</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>STORAGE</td><td>gossip.callbacks.processed</td><td>Number of gossip callbacks processed</td><td>Callbacks</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>STORAGE</td><td>gossip.callbacks.processing_duration</td><td>Duration of gossip callback processing</td><td>Duration</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>gossip.connections.incoming</td><td>Number of active incoming gossip connections</td><td>Connections</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>gossip.connections.outgoing</td><td>Number of active outgoing gossip connections</td><td>Connections</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>gossip.connections.refused</td><td>Number of refused incoming gossip connections</td><td>Connections</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
