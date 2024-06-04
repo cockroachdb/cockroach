@@ -135,14 +135,16 @@ match, for all i.
 Advancing Raft state at leader for the follower:
 
 MsgAppResp currently contains Message.Index which becomes the new Match.
-Additionally it will contain Admitted [numFlowPri]uint64. This is the latest
+Additionally, it will contain Admitted [numFlowPri]uint64. This is the latest
 index up to which admission has happened. That is, this is not incremental
-state, and just the latest state (which makes it easy to handle lossiness). It
-will be used to advance admitted.
+state, and just the latest state (which makes it easy to tolerate lossiness). It
+will be used to advance admitted at the leader.
 
-MsgApp from the leader contains the latest admitted[i] values it has.
+MsgApp from the leader contains the latest admitted[i] values it has, so that
+the follower doesn't bother with a MsgAppResp if the states are the same at
+the leader and the follower.
 
-Raft state at follower:
+Raft state at all replicas:
 
 Existing state includes stableIndex, lastEntryIndex (I am not using the right
 Raft package terms, and there could be other mistakes here)
@@ -151,15 +153,17 @@ Raft package terms, and there could be other mistakes here)
 - lastEntryIndex is advanced in RawNode.Step. This happens before Ready handling in kvserver.
 
 - for async storage writes (which we enable in Raft): the MsgStorageAppend
-  includes Responses which contain both MsgStorageAppendResp for the local node
-  (this is delivered when the raftScheduler processes this range again), and
-  MsgAppResp for the leader (which is sent immediately).
-  - This early creation of MsgAppResp, before the entries to append, are
+  includes Responses to deliver when the write is done. These responses include
+  both MsgStorageAppendResp for the local node (this is delivered when the
+  raftScheduler processes this range again), and
+  MsgAppResp for the leader, when the node is a follower (which is sent immediately).
+  - This early creation of MsgAppResp, before the entries to append are
     persisted, is reasonable since that persistence is atomic for all the
     entries in MsgStorageAppend. In comparison, admission of the various entries
-    in MsgStorageAppend is not atomic.
+    in MsgStorageAppend is not atomic, which justifies the different behavior
+    sketched below.
 
-New raft state at follower: admitted [numFlowPri]uint64
+New raft state at all replicas regarding what they have admitted: admitted [numFlowPri]uint64
 Invariant: for all i: admitted[i] <= stableIndex.
 
 Raft constructs MsgAppResp for (a) MsgApp pings, (b) for use when
@@ -171,22 +175,26 @@ be called by kvserver in handleRaftReadyRaftMuLocked. And if advanced, this
 method will return a MsgAppResp to be sent.
 
 Life of admission:
-- MsgApp construction and sending at leader:
-  - (kvserver) deducts flow tokens corresponding to MsgApp it asks for by
-    calling RaftInterface.MakeMsgApp. This also advances next.
-  - (raft) constructs its own pinging MsgApps
-  Both kinds include Admitted, representing the leader's current knowledge.
+- (kvserver) Leader proposes by calling RawNode.Step with MsgProp.
+- (kvserver) Leader Ready processing:
+  - Raft produces MsgStorageAppend for leader. This includes MsgStorageAppendResp
+    to send to the leader when the append is done.
+  - MsgApp for followers, constructed by RAC once send tokens are available:
+    - RAC deducts flow tokens corresponding to MsgApp it asks for by
+      calling RaftInterface.MakeMsgApp. This also advances Next.
+    - Raft constructs its own pinging MsgApps
+    Both kinds include Admitted, representing the leader's current knowledge.
 
 - MsgApp processing at follower:
   - (kvserver) calls RawNode.Step with the MsgApps. lastEntryIndex is advanced.
   - (kvserver) handleRaftReadyRaftMuLocked. Ready may contain:
      - MsgAppResp: this will be sent.
-     - MsgStorageAppend: Processing:
+     - [MSA] MsgStorageAppend: Processing:
        - async storage writes: The MsgStorageAppend includes Responses which
          contain both MsgStorageAppendResp for the local node (this is delivered
-         when the raftScheduler processes this range again), and MsgAppResp
-         which are sent when the write completes, without waiting for the
-         raftScheduler (to minimize commit latency).
+         after the write completes and when the raftScheduler processes this
+         range again), and MsgAppResp which are sent when the write completes,
+         without waiting for the raftScheduler (to minimize commit latency).
        - calls AdmitRaftEntry for the entries in raftpb.MsgStorageAppend. In
          addition to queueing in the StoreWorkQueue, this will track (on the
          Replica): notAdmitted [numFlowPri][]uint64, where the []uint64 is in
@@ -195,17 +203,26 @@ Life of admission:
          slices are appended to here, based on the entries in MsgStorageAppend.
 
 - (kvserver) Admission happens on follower:
-  - The structs corresponding to the admitted entries are queued in the
+  - [AH1] The structs corresponding to the admitted entries are queued in the
     Replica akin to how we queue Replica.localMsgs and the raftScheduler will be
     told to do ready processing (there may not be a Raft ready, but this is akin
     to how handleRaftReadyRaftMuLocked does
     deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked).
-  - In handleRaftReadyRaftMuLocked, this queue is used to remove things from
+  - [AH2] In handleRaftReadyRaftMuLocked, this queue is used to remove things from
     notAdmitted. Additionally RaftInterface is queried for stableIndex. If a
     notAdmitted[i] is empty, admitted[i] = stableIndex, else admitted[i] =
     notAdmitted[i][0]-1. RaftInterface.AdvanceAdmitted is called, which may
     return a MsgAppResp.
-  - MsgAppResp is scheduled to be sent.
+  - MsgAppResp is sent.
+
+MSA is also the behavior at the leader (which is just another replica that
+must also advance Admitted for itself), which happens synchronously in the
+handleRaftReadyRaftMuLocked which handles the MsgStorageAppend.
+
+AH1 and AH2 can happen synchronously when the entry is immediately admitted
+during the handleRaftReadyRaftMuLocked that called AdmitRaftEntry. These
+entries are not stable yet, so we won't be able to advance admitted, but
+when MsgStorageAppendResp is processed, that will be advanced.
 
 Optimization:
 
@@ -216,15 +233,16 @@ ReplicaDescriptors etc. that make it heavyweight.
 RACv1 optimizes this by having
 kvflowcontrolpb.AdmittedRaftLogEntries(range-id, pri, upto-raft-log-position,
 store-id) and piggy-backing these on any RaftMessageRequest being sent to the
-relevant node.
+relevant node. It didn't matter that the RaftMessageRequest was for a different
+range.
 
-We can consider doing a similar piggy-backing:
+We will do a similar piggy-backing:
 
 - Say m is the raftpb.Message corresponding to the MsgAppResp that was
   returned from RaftInterface.AdvanceAdmitted
 - Wrap it with the RangeID, and enqueue it for the leader's nodeid in the
   RaftTransport (this will actually be much simpler than the
-  RaftTransport.kvflowControl plumbing).
+  current RaftTransport.kvflowControl plumbing).
 - Every RaftMessageRequest for the node will piggy-back these.
 
 Priority inheritance:
@@ -293,35 +311,18 @@ corresponds to user facing work.
 //   MsgApp drop. Related to this, should we delay the closing of the
 //   replicaSendStream since it has all the interesting stats? It also has
 //   tokens that we don't really need to return due to a transient transition
-//   to StateProbe and back. A regression in indexToSend necessarily means a
-//   MsgApp was dropped. There may be eval.tokensDeducted for these, but if
-//   so, they are in the tracker -- we could simply remove them from the
-//   tracker, and continue with perfect accounting. So the answer to the
-//   question above is yes.
+//   to StateProbe and back. A regression in indexToSend necessarily means one
+//   or more MsgApps were dropped that were sent during the latest
+//   StateReplicate. Only the send tokens for these MsgApps that will be
+//   resent need to be returned. We have already implemented
+//   probeRecentlyReplicate, but not the transition into and out of
+//   probeRecentlyReplicate.
 //
-// - While in StateReplicate, send-queue could have some elements popped
-//   (indexToSend advanced) because there could have been some inflight
-//   MsgApps that we forgot about due to a transition out of StateReplicate
-//   and back into StateReplicate, and we got acks for them (Match advanced
-//   past indexToSend). To handle this we need to do the same approx stats
-//   thing we do when transitioning from StateSnapshot => StateReplicate (we
-//   are still holding tokens unlike StateSnapshot and we can keep some of
-//   them since the transport did not break. We've popped some things from the
-//   send-queue, so we can keep the tracker state unchanged, but what about
-//   eval.tokensDeducted, which includes the tokens in the send-queue -- if
-//   the indices popped < nextRaftInitialIndex, they are not in
-//   tokensDeducted. This will be the common case, since old inflight MsgApps
-//   should not be showing up for >= nextRaftIndexInitial.
-//
-// - If we miss a transition out of StateReplicate and back, Match will not
-//   regress, but Next can regress. This is similar to us ignoring a
-//   transition into StateProbe to avoid force-flushing immediately. So should
-//   handle it in a similar manner.
-//
-// - use NotSubjectToACForFlowControl for most of force-flush.
-//
-// - for the first 1MB of force-flush, deduct flow tokens. So these will need
-//   to be in a separate MsgApp. Don't do any priority inheritance for these.
+// - for the first C bytes of force-flush, deduct flow tokens. So these will
+//   need to be in a separate MsgApp. Don't do any priority inheritance for
+//   these. This is motivated in
+//   https://docs.google.com/document/d/1Qf6uteFRlbScLdWIrTfqgbrKRHfUsoMGatRLWYQgAi8/edit#bookmark=id.wcwgvtka9qr0
+//   We will make C configurable, eventually.
 
 // TODO(sumeer): kvflowcontrol and the packages it contains are sliced and
 // diced quite fine, with the benefit of multiple code iterations to get to
@@ -378,20 +379,6 @@ corresponds to user facing work.
 // - SetLeaseholder: This is not synchronized with raftMu. The callee should
 //   be prepared to handle the case where the leaseholder is not even a known
 //   replica, but will eventually be known. TODO: The comment may be incorrect.
-//
-// - ReplicaDisconnected: raftMu is not held. Informs that a replica has
-//   its RaftTransport disconnected. This is necessary to prevent lossiness of
-//   tokens. The aforementioned map under Replica.mu will be used to
-//   ensure consistency.
-//   TODO: make it a narrower data-structure mutex in Replica, which will be
-//   held in read mode. So that Raft.mu is not held when calling
-//   RangeController.
-//
-//   Connection events are not communicated. The current state of connectivity
-//   should be requested from RaftInterface when handling RaftEvent (in case
-//   there are some disconnected replicas that have reconnected), SetReplicas
-//   (to see if a new replica is connected). So we rely on liveness of
-//   RaftEvent to notice reconnections.
 //
 // ======================================================================
 // Aside on consistency of RangeDescriptor in Replica and the raft group conf:
@@ -479,19 +466,19 @@ type RaftEvent interface {
 // produce a Ready that has the new entries it knows about, but MsgApps will
 // only be produced for a follower for (a) entries in (Match, Next), i.e.,
 // entries that are already in-flight for that follower, that Raft may want to
-// resend (b) empty MsgApps to ping the follower (it seems like (a) doesn't
-// happen in our Raft implementation, but it is permitted).
+// resend (b) empty MsgApps to ping the follower ((a) doesn't happen in our
+// Raft implementation, but it is permitted).
 //
 // Next is typically only advanced via pull, which is serviced via
-// RaftInterface. Next, never regresses in StateReplicate, and advances
+// RaftInterface. Next never regresses in StateReplicate, and advances
 // whenever RaftInterface.MakeMsgApp is called. And everything in (Match,
 // Next) is the responsibility of Raft to maintain liveness for (via MsgApp
 // pings). Next can regress if the replica transitions out of StateReplicate,
 // and back into StateReplicate. Also, in the rare case, Next can advance
-// within Raft there were old MsgApps forgotten about due to a transition to
-// StateProbe and back to StateReplicate, and we receive acks for those e.g.
-// if (Match, Next) was (5, 10), it is possible to receive acks up to 11, and
-// so the state becomes (12, 12).
+// during StateReplicate without a pull, if there were old MsgApps forgotten
+// about due to a transition to StateProbe and back to StateReplicate, and we
+// receive acks for those e.g. if (Match, Next) was (5, 10), it is possible to
+// receive acks up to 11, and so the state becomes (11, 12).
 //
 // The Ready described here is only the subset that is needed by replication
 // AC -- heartbeats, appending to the local log etc. are not relevant.
@@ -513,23 +500,21 @@ type Ready interface {
 	Entries() []raftpb.Entry
 	// RetransmitMsgApps returns the MsgApps that are being retransmitted, or
 	// being used to ping the follower. These will never be queued by
-	// replication AC.
+	// replication AC, and will simply be sent.
 	RetransmitMsgApps() []raftpb.Message
 }
 
 // RaftInterface abstracts what the RangeController needs from the raft
-// package, when running at the leader. It also provides one piece of
-// information that is not in the raft package -- the current connected state
-// of the store, that we will use the RaftTransport to answer.
+// package, when running at the leader.
 //
-// NB: group membership and connectivity information is communicated to the
-// RangeController via a separate channel, as in the v1 implementation, since
-// it depends on information inside and outside Raft. The methods in Raft are
-// the ones RangeController will call.
+// NB: group membership is communicated to the RangeController via a separate
+// path (SetReplicas) that kvserver already ensures is synchronized with the
+// internal state of RaftInterface. The methods in RaftInterface are the ones
+// RangeController will call.
 //
 // The implementation can assume Replica.raftMu is already held. It should not
 // need to acquire Replica.mu, since there is no promise made on whether it is
-// already held.
+// already held or not.
 type RaftInterface interface {
 	// FollowerState returns the current state of a follower. The value of match
 	// and next are populated iff in StateReplicate. All entries >= next have
@@ -551,12 +536,11 @@ type RaftInterface interface {
 	// simplified.
 	FollowerState(
 		replicaID roachpb.ReplicaID) FollowerStateInfo
-	// FollowerTransportConnected(storeID roachpb.StoreID) bool
-
 	// LastEntryIndex is the highest index assigned in the log.
 	LastEntryIndex() uint64
 	// MakeMsgApp is used to construct a MsgApp for entries in [start, end).
-	// REQUIRES: start == next and replicaID is in StateReplicate.
+	// REQUIRES: start == FollowerStateInfo.Next and replicaID is in
+	// StateReplicate.
 	//
 	// REQUIRES: maxSize > 0.
 	//
@@ -570,6 +554,8 @@ type RaftInterface interface {
 	// the index+1 of the last entry in the returned message. If
 	// raft.ErrCompacted is returned, the replica will transition to
 	// StateSnapshot.
+	//
+	// TODO: add back maxEntries.
 	//
 	// TODO: the transition to StateSnapshot is not guaranteed, there are some
 	// error conditions after which the flow stays in StateReplicate. We should
@@ -646,6 +632,34 @@ const (
 	NotSubjectToACForFlowControl       RaftPriority = math.MaxUint8 - 1
 	PriorityNotInheritedForFlowControl RaftPriority = math.MaxUint8
 )
+
+// RaftAdmittedInterface is used to interact with Raft on all replicas, for
+// the purposes of advancing Admitted for that replica. These methods will
+// only be called for replicas that are deemed initialized (in kvserver
+// terms).
+//
+// See the "Design for robust flow token return in RACv2" earlier in this
+// file for details.
+type RaftAdmittedInterface interface {
+	// StableIndex is the index up to which the raft log is stable. The
+	// Admitted values must be <= this index. It advances when raft sees
+	// MsgStorageAppendResp.
+	StableIndex() uint64
+	// GetAdmitted returns the admitted values known to Raft. Except for
+	// snapshot application, this value will only advance via the caller
+	// calling SetAdmitted. When a snapshot is applied, the snapshot index
+	// becomes the value of admitted for all priorities.
+	GetAdmitted() [NumRaftPriorities]uint64
+	// SetAdmitted sets the new value of admitted.
+	// REQUIRES:
+	//  The admitted[i] values in the parameter are >= the corresponding
+	//  values returned by GetAdmitted.
+	//
+	//  admitted[i] <= stableIndex.
+	//
+	// Returns a MsgAppResp that contains these latest admitted values.
+	SetAdmitted(admitted [NumRaftPriorities]uint64) raftpb.Message
+}
 
 func admissionPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority {
 	// TODO:
@@ -1685,7 +1699,9 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateI
 			panic("")
 		} else {
 			// info.Next < rss.sendQueue.indexToSend.
-			// Must have transitioned to StateProbe and back.
+			//
+			// Must have transitioned to StateProbe and back, and we did not
+			// observe it.
 			if info.Next != info.Match+1 {
 				panic("")
 			}
@@ -1707,6 +1723,11 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateI
 	rss.returnTokensUsingAdmitted(info.Admitted)
 }
 
+// While in StateReplicate, send-queue could have some elements popped
+// (indexToSend advanced) because there could have been some inflight MsgApps
+// that we forgot about due to a transition out of StateReplicate and back
+// into StateReplicate, and we got acks for them (Match advanced past
+// indexToSend).
 func (rss *replicaSendStream) makeConsistentWhenUnexpectedPop(indexToSend uint64) {
 	// Cancel watcher and return deductedForScheduler tokens. Will try again after
 	// we've fixed up everything.
@@ -1738,6 +1759,7 @@ func (rss *replicaSendStream) makeConsistentWhenProbeToReplicate(indexToSend uin
 	rss.returnDeductedFromSchedulerTokens()
 	rss.sendQueue.forceFlushScheduled = false
 
+	rss.connectedState = replicate
 	if indexToSend == rss.sendQueue.indexToSend {
 		// Queue state is already correct.
 		rss.startProcessingSendQueue()
