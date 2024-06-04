@@ -343,9 +343,7 @@ func (wh waitHandle) TryDeductAndUnblockNextWaiter(
 //
 // If the required quorum and required wait handles are signaled and have
 // tokens available, the function checks the availability of tokens for all
-// handles. If not all required handles have available tokens or the available
-// count is less than the required quorum, RefreshWaitSignaled is also
-// returned.
+// handles.
 func WaitForEval(
 	ctx context.Context,
 	refreshWaitCh <-chan struct{},
@@ -377,9 +375,9 @@ func WaitForEval(
 	m := len(scratch)
 	signaledCount := 0
 
-	// Wait for at least a quorumCount of handles to be signaled which also have
-	// tokens and additionally, all of the required wait handles to have signaled
-	// and have tokens available.
+	// Wait for (1) at least a quorumCount of handles to be signaled and have
+	// available tokens; as well as (2) all of the required wait handles to be
+	// signaled and have tokens available.
 	for signaledCount < requiredQuorum || requiredWaitCount > 0 {
 		chosen, _, _ := reflect.Select(scratch)
 		switch chosen {
@@ -389,6 +387,13 @@ func WaitForEval(
 			return RefreshWaitSignaled, scratch
 		default:
 			handleInfo := handles[chosen-2]
+			if _, available := handleInfo.handle.
+				TryDeductAndUnblockNextWaiter(0 /* tokens */); !available {
+				// The handle was signaled but does not currently have tokens
+				// available. Continue waiting on this handle.
+				continue
+			}
+
 			signaledCount++
 			if handleInfo.requiredWait {
 				requiredWaitCount--
@@ -398,29 +403,6 @@ func WaitForEval(
 			scratch = scratch[:m]
 			handles[chosen-2], handles[m-2] = handles[m-2], handles[chosen-2]
 		}
-	}
-
-	availableCount := 0
-	allRequiredAvailable := true
-	// Check whether the handle has available tokens, if not we keep the
-	// select case and keep on waiting.
-	// TODO(kvoli): Currently we are only trying to deduct and signal the next
-	// waiter after signaling a quorum and all required waiters. If we instead
-	// signaled the next waiter immediately following a signal, would that work?
-	// At the moment we will hold up the next waiter for all required waiters
-	// here. If we instead signaled the next waiter immediately, would it be
-	// possible that we over-admit, as no tokens are actually deducted until after
-	// this function returns WaitSuccess.
-	for _, handleInfo := range handles {
-		if _, available := handleInfo.handle.TryDeductAndUnblockNextWaiter(0 /* tokens */); available {
-			availableCount++
-		} else if !available && handleInfo.requiredWait {
-			allRequiredAvailable = false
-		}
-	}
-
-	if !allRequiredAvailable || availableCount < requiredQuorum {
-		return RefreshWaitSignaled, scratch
 	}
 
 	return WaitSuccess, scratch
