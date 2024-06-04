@@ -450,6 +450,10 @@ func runCDCBenchWorkload(
 		require.NoError(t, err)
 	}
 
+	// set new kafka sink option
+	// _, err := conn.ExecContext(ctx, "set cluster setting changefeed.new_kafka_sink.enabled = true;")
+	// require.NoError(t, err)
+
 	// Wait for system ranges to upreplicate.
 	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 

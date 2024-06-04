@@ -2,7 +2,6 @@ package changefeedccl
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path"
 	"strconv"
@@ -126,57 +125,57 @@ func (k *kafkaSinkClient) Close() error {
 
 // Flush implements SinkClient. Does not retry -- retries will be handled by ParallelIO.
 func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
-	msgs := payload.([]kafka.Message)
+	msgs := payload.([]*sarama.ProducerMessage)
 	defer log.Infof(ctx, `flushed %d messages to kafka (id=%d, err=%v)`, len(msgs), k.debuggingId, retErr)
 
 	log.Infof(ctx, `sending %d messages to kafka`, len(msgs))
-	debugDir := path.Join(debugRoot, strconv.Itoa(int(k.debuggingId)))
-	dfn := path.Join(debugDir, time.Now().Format(`2006-01-02T15:04:05.000000000`))
-	fh, err := os.OpenFile(dfn, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer fh.Close()
-	out := json.NewEncoder(fh)
-	for _, m := range msgs {
-		mm := map[string]any{
-			`topic`:     m.Topic,
-			`partition`: m.Partition,
-			`key`:       string(m.Key),
-			`value`:     string(m.Value),
-			`offset`:    m.Offset,
-		}
-		if err := out.Encode(mm); err != nil {
-			return err
-		}
-	}
-	log.Infof(ctx, `KAFKADEBUG: %d wrote %d messages to %s`, k.debuggingId, len(msgs), fh.Name())
+	// debugDir := path.Join(debugRoot, strconv.Itoa(int(k.debuggingId)))
+	// dfn := path.Join(debugDir, time.Now().Format(`2006-01-02T15:04:05.000000000`))
+	// fh, err := os.OpenFile(dfn, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer fh.Close()
+	// out := json.NewEncoder(fh)
+	// for _, m := range msgs {
+	// 	mm := map[string]any{
+	// 		`topic`:     m.Topic,
+	// 		`partition`: m.Partition,
+	// 		`key`:       string(m.Key.(sarama.ByteEncoder)),
+	// 		`value`:     string(m.Value.(sarama.ByteEncoder)),
+	// 		`offset`:    m.Offset,
+	// 	}
+	// 	if err := out.Encode(mm); err != nil {
+	// 		return err
+	// 	}
+	// }
+	// log.Infof(ctx, `KAFKADEBUG: %d wrote %d messages to %s`, k.debuggingId, len(msgs), fh.Name())
 
-	defer func() {
-		fh2, err := os.OpenFile(dfn+".after", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-		if err != nil {
-			panic(err)
-		}
-		out := json.NewEncoder(fh2)
-		for _, m := range msgs {
-			mm := map[string]any{
-				`topic`:     m.Topic,
-				`partition`: m.Partition,
-				`key`:       string(m.Key),
-				`value`:     string(m.Value),
-				`offset`:    m.Offset,
-			}
-			if err := out.Encode(mm); err != nil {
-				panic(err)
-			}
-		}
-		log.Infof(ctx, `KAFKADEBUG.after: %d wrote %d messages to %s`, k.debuggingId, len(msgs), fh2.Name())
-		_ = fh2.Close()
-	}()
+	// defer func() {
+	// 	fh2, err := os.OpenFile(dfn+".after", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	out := json.NewEncoder(fh2)
+	// 	for _, m := range msgs {
+	// 		mm := map[string]any{
+	// 			`topic`:     m.Topic,
+	// 			`partition`: m.Partition,
+	// 			`key`:       string(m.Key.(sarama.ByteEncoder)),
+	// 			`value`:     string(m.Value.(sarama.ByteEncoder)),
+	// 			`offset`:    m.Offset,
+	// 		}
+	// 		if err := out.Encode(mm); err != nil {
+	// 			panic(err)
+	// 		}
+	// 	}
+	// 	log.Infof(ctx, `KAFKADEBUG.after: %d wrote %d messages to %s`, k.debuggingId, len(msgs), fh2.Name())
+	// 	_ = fh2.Close()
+	// }()
 
 	// TODO: make this better. possibly moving the resizing up into the batch worker would help a bit
-	var flushMsgs func(msgs []kafka.Message) error
-	flushMsgs = func(msgs []kafka.Message) error {
+	var flushMsgs func(msgs []*sarama.ProducerMessage) error
+	flushMsgs = func(msgs []*sarama.ProducerMessage) error {
 		handleErr := func(err error) error {
 			log.Infof(ctx, `kafka error in %d: %s`, k.debuggingId, err.Error())
 			if k.shouldTryResizing(err, msgs) {
@@ -233,21 +232,22 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 		// node2/274/2024-05-30T23:46:18.407261212.after:{"key":"[0, 3]","offset":50882,"partition":0,"topic":"district","value":...:\"updated\": \"1717112771631751551.0000000000\"}"}
 		// node2/274/2024-05-30T23:46:18.407261212.after:{"key":"[0, 3]","offset":50884,"partition":0,"topic":"district","value":...:\"updated\": \"1717112772130398025.0000000000\"}"}
 
-		// this still hits the issue
+		// // this still hits the issue
 		// if err := k.producer.SendMessages(msgs); err != nil {
 		// 	return handleErr(err)
 		// }
 
-		if err := k.writer.WriteMessages(ctx, msgs...); err != nil {
-			return handleErr(err)
-		}
-
-		// // if we send them one at a time that should not hit it. but that's not a really tenable solution. but lets try it
-		// for _, m := range msgs {
-		// 	if _, _, err := k.producer.SendMessage(m); err != nil {
-		// 		return handleErr(err)
-		// 	}
+		// this works (new lib)
+		// if err := k.writer.WriteMessages(ctx, msgs...); err != nil {
+		// 	return handleErr(err)
 		// }
+
+		// this works if we also set maxmessages = 1
+		for _, m := range msgs {
+			if _, _, err := k.producer.SendMessage(m); err != nil {
+				return handleErr(err)
+			}
+		}
 
 		// trk := tracker{pendingIDs: make(map[int]struct{})}
 		// for _, m := range msgs {
@@ -313,7 +313,7 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 	// 		return err
 	// 	}
 	// 	for _, partition := range partitions {
-	// 		msgs := []kafka.Message{{
+	// 		msgs := []*sarama.ProducerMessage{{
 	// 			Topic:     topic,
 	// 			Partition: partition,
 	// 			Key:       nil,
@@ -332,7 +332,7 @@ func (k *kafkaSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
 	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg}
 }
 
-func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []kafka.Message) bool {
+func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []*sarama.ProducerMessage) bool {
 	if !k.canTryResizing || err == nil || len(msgs) < 2 {
 		return false
 	}
@@ -341,7 +341,7 @@ func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []kafka.Message) boo
 }
 
 var _ SinkClient = (*kafkaSinkClient)(nil)
-var _ SinkPayload = ([]kafka.Message)(nil) // this doesnt actually assert anything fyi
+var _ SinkPayload = ([]*sarama.ProducerMessage)(nil) // this doesnt actually assert anything fyi
 
 type keyPlusPayload struct {
 	key     []byte
@@ -364,12 +364,12 @@ func (b *kafkaBuffer) Append(key []byte, value []byte, _ attributes) {
 
 // Close implements BatchBuffer. Convert the buffer into a SinkPayload for sending to kafka.
 func (b *kafkaBuffer) Close() (SinkPayload, error) {
-	msgs := make([]kafka.Message, 0, len(b.messages))
+	msgs := make([]*sarama.ProducerMessage, 0, len(b.messages))
 	for _, m := range b.messages {
-		msgs = append(msgs, kafka.Message{
+		msgs = append(msgs, &sarama.ProducerMessage{
 			Topic: b.topic,
-			Key:   m.key,
-			Value: m.payload,
+			Key:   sarama.ByteEncoder(m.key),
+			Value: sarama.ByteEncoder(m.payload),
 		})
 	}
 	return msgs, nil
@@ -429,7 +429,7 @@ func makeKafkaSinkV2(ctx context.Context,
 	// kafkaCfg.Producer.Flush.Messages = 0
 
 	// trying one by one. see Flush()
-	// kafkaCfg.Producer.Flush.MaxMessages = 1
+	kafkaCfg.Producer.Flush.MaxMessages = 1
 
 	// but with this set and still using SendMessages(), we expect to see the issue more frequently. since num sarama batches per messageBatch will be > 1
 	// kafkaCfg.Producer.Flush.MaxMessages = 1
@@ -455,7 +455,7 @@ func makeKafkaSinkV2(ctx context.Context,
 	// node3/397/2024-06-03T13:50:13.539163516.after:{"key":"[15, 10]","offset":84106,"partition":0,"topic":"district","value":"{, \"updated\": \"1717422607448984688.0000000000\"}"}
 
 	// next try:
-	kafkaCfg.Producer.Flush.Frequency = time.Microsecond
+	// kafkaCfg.Producer.Flush.Frequency = time.Microsecond
 
 	topicNamer, err := MakeTopicNamer(
 		targets,
