@@ -1132,10 +1132,19 @@ type RunCmdOptions struct {
 	remoteOptions           []remoteSessionOption
 }
 
+// Default RunCmdOptions enable combining output (stdout and stderr) and capturing ssh (verbose) debug output.
 func defaultCmdOpts(debugName string) RunCmdOptions {
 	return RunCmdOptions{
 		combinedOut:   true,
 		remoteOptions: []remoteSessionOption{withDebugName(debugName)},
+	}
+}
+
+// Unlike defaultCmdOpts, ssh (verbose) debug output capture is _disabled_.
+func cmdOptsWithDebugDisabled() RunCmdOptions {
+	return RunCmdOptions{
+		combinedOut:   true,
+		remoteOptions: []remoteSessionOption{withDebugDisabled()},
 	}
 }
 
@@ -1375,7 +1384,8 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 			res := &RunResultDetails{Node: node}
 			var err error
 			cmd := fmt.Sprintf("test -e %s", vm.DisksInitializedFile)
-			opts := defaultCmdOpts("wait-init")
+			// N.B. we disable ssh debug output capture, lest we end up with _thousands_ of useless .log files.
+			opts := cmdOptsWithDebugDisabled()
 			for j := 0; j < 600; j++ {
 				res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 				if err != nil {
