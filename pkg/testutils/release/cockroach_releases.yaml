@@ -22,5 +22,5 @@
   latest: 23.2.5
   predecessor: "23.1"
 "24.1":
-  latest: 24.1.0-rc.2
+  latest: 24.1.0
   predecessor: "23.2"
