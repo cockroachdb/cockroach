@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -84,18 +85,53 @@ type verifyFormatDB struct {
 		syncutil.Mutex
 		// active holds the currently executing statements.
 		active map[string]int
+		// lastStmtBuffer contains the last set of statements executed
+		// within a ring buffer.
+		lastStmtBuffer ring.Buffer[string]
+		// lastStatementsDumped indicates if the statements have already been
+		// dumped.
+		lastStatementsDumped bool
 		// lastCompletedStmt tracks the time when the last statement finished
 		// executing, which will be used for resettable timeouts.
 		lastCompletedStmt time.Time
 	}
 }
 
+// dumpLastStatements dumps out diagnostic information of currently active and the past 50 queries
+// that were executed.
+func (db *verifyFormatDB) dumpLastStatements(printFn func(format string, args ...any)) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	// Only dump this information once inside the test.
+	if db.mu.lastStatementsDumped {
+		return
+	}
+	db.mu.lastStatementsDumped = true
+	for i := 0; i < db.mu.lastStmtBuffer.Len(); i++ {
+		// Assuming a fully populated buffer, start from the insertion
+		// point which will be the oldest statement (if the buffer is fully
+		// filled).
+		if len(db.mu.lastStmtBuffer.Get(i)) == 0 {
+			continue
+		}
+		printFn("Last executed (%d): %s", i, db.mu.lastStmtBuffer.Get(i))
+	}
+	// Next dump the set of active statements.
+	printFn("Currently active statements: %v", db.mu.active)
+}
+
 // Incr records sql in the active map and returns a func to decrement it.
 func (db *verifyFormatDB) Incr(sql string) func() {
 	db.mu.Lock()
+	const MaxStatementBufferSize = 50
 	if db.mu.active == nil {
 		db.mu.active = make(map[string]int)
+		db.mu.lastStmtBuffer = ring.MakeBuffer(make([]string, MaxStatementBufferSize))
 	}
+	if db.mu.lastStmtBuffer.Len() == MaxStatementBufferSize {
+		db.mu.lastStmtBuffer.RemoveFirst()
+	}
+	db.mu.lastStmtBuffer.AddLast(sql)
 	db.mu.active[sql]++
 	db.mu.Unlock()
 
@@ -447,7 +483,6 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		// involve schema changes like truncates. In general this should make
 		// this test more resilient as the timeouts are reset as long progress
 		// is made on *some* connection.
-		t.Logf("Running %q", s)
 		return db.execWithResettableTimeout(t, ctx, s, *flagRSGExecTimeout, *flagRSGGoRoutines)
 	})
 }
@@ -835,6 +870,12 @@ func testRandomSyntax(
 	s, rawDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
+	// If the test fails we can log the previous set of statements.
+	defer func() {
+		if t.Failed() {
+			db.dumpLastStatements(t.Logf)
+		}
+	}()
 	err := db.exec(t, ctx, "SET CLUSTER SETTING schemachanger.job.max_retry_backoff='1s'")
 	require.NoError(t, err)
 
