@@ -51,16 +51,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
@@ -3353,48 +3350,23 @@ func (cfc *changefeedCreator) Create() (int, error) {
 }
 
 type changefeedInfo struct {
-	status        string
-	errMsg        string
+	*jobRecord
+
 	startedTime   time.Time
 	statementTime time.Time
-	highwaterTime time.Time
-	finishedTime  time.Time
 }
-
-func (c *changefeedInfo) GetHighWater() time.Time    { return c.highwaterTime }
-func (c *changefeedInfo) GetFinishedTime() time.Time { return c.finishedTime }
-func (c *changefeedInfo) GetStatus() string          { return c.status }
-func (c *changefeedInfo) GetError() string           { return c.status }
 
 var _ jobInfo = (*changefeedInfo)(nil)
 
 func getChangefeedInfo(db *gosql.DB, jobID int) (*changefeedInfo, error) {
-	var status string
-	var payloadBytes []byte
-	var progressBytes []byte
-	if err := db.QueryRow(jobutils.InternalSystemJobsBaseQuery, jobID).Scan(&status, &payloadBytes, &progressBytes); err != nil {
+	jr, err := getJobRecord(db, jobID)
+	if err != nil {
 		return nil, err
-	}
-	var payload jobspb.Payload
-	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
-		return nil, err
-	}
-	var progress jobspb.Progress
-	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
-		return nil, err
-	}
-	var highwaterTime time.Time
-	highwater := progress.GetHighWater()
-	if highwater != nil {
-		highwaterTime = highwater.GoTime()
 	}
 	return &changefeedInfo{
-		status:        status,
-		errMsg:        payload.Error,
-		startedTime:   time.UnixMicro(payload.StartedMicros),
-		statementTime: payload.GetChangefeed().StatementTime.GoTime(),
-		highwaterTime: highwaterTime,
-		finishedTime:  time.UnixMicro(payload.FinishedMicros),
+		jobRecord:     jr,
+		startedTime:   time.UnixMicro(jr.payload.StartedMicros),
+		statementTime: jr.payload.GetChangefeed().StatementTime.GoTime(),
 	}, nil
 }
 

@@ -59,7 +59,7 @@ type clusterInfo struct {
 	ID int
 
 	// pgurl is a connection string to the system tenant
-	pgURL string
+	pgURL *url.URL
 
 	// db provides a connection to the system tenant
 	db *gosql.DB
@@ -72,6 +72,12 @@ type clusterInfo struct {
 
 	// nodes indicates the roachprod nodes running the cluster's nodes
 	nodes option.NodeListOption
+}
+
+func (i *clusterInfo) PgURLForDatabase(database string) string {
+	uri := *i.pgURL
+	uri.Path = database
+	return uri.String()
 }
 
 type c2cSetup struct {
@@ -669,7 +675,7 @@ func (rd *replicationDriver) preStreamingWorkload(ctx context.Context) {
 
 func (rd *replicationDriver) startReplicationStream(ctx context.Context) int {
 	streamReplStmt := fmt.Sprintf("CREATE TENANT %q FROM REPLICATION OF %q ON '%s'",
-		rd.setup.dst.name, rd.setup.src.name, rd.setup.src.pgURL)
+		rd.setup.dst.name, rd.setup.src.name, rd.setup.src.pgURL.String())
 	rd.setup.dst.sysSQL.Exec(rd.t, streamReplStmt)
 	rd.replicationStartHook(ctx, rd)
 	return getIngestionJobID(rd.t, rd.setup.dst.sysSQL, rd.setup.dst.name)
@@ -681,16 +687,7 @@ func (rd *replicationDriver) runWorkload(ctx context.Context) error {
 }
 
 func (rd *replicationDriver) waitForReplicatedTime(ingestionJobID int, wait time.Duration) {
-	testutils.SucceedsWithin(rd.t, func() error {
-		info, err := getStreamIngestionJobInfo(rd.setup.dst.db, ingestionJobID)
-		if err != nil {
-			return err
-		}
-		if info.GetHighWater().IsZero() {
-			return errors.New("no replicated time")
-		}
-		return nil
-	}, wait)
+	waitForReplicatedTime(rd.t, ingestionJobID, rd.setup.dst.db, getStreamIngestionJobInfo, wait)
 }
 
 func (rd *replicationDriver) getWorkloadTimeout() time.Duration {
@@ -1692,51 +1689,29 @@ func getIngestionJobID(t test.Test, dstSQL *sqlutils.SQLRunner, dstTenantName st
 	return int(tenantInfo.PhysicalReplicationConsumerJobID)
 }
 
-type streamIngesitonJobInfo struct {
-	status         string
-	errMsg         string
-	replicatedTime hlc.Timestamp
-	finishedTime   time.Time
+type streamIngestionJobInfo struct {
+	*jobRecord
 }
 
 // GetHighWater returns the replicated time. The GetHighWater name is
 // retained here as this is implementing the jobInfo interface used by
 // the latency verifier.
-func (c *streamIngesitonJobInfo) GetHighWater() time.Time {
-	if c.replicatedTime.IsEmpty() {
+func (c *streamIngestionJobInfo) GetHighWater() time.Time {
+	replicatedTime := replicationutils.ReplicatedTimeFromProgress(&c.progress)
+	if replicatedTime.IsEmpty() {
 		return time.Time{}
 	}
-	return c.replicatedTime.GoTime()
+	return replicatedTime.GoTime()
 }
-func (c *streamIngesitonJobInfo) GetFinishedTime() time.Time { return c.finishedTime }
-func (c *streamIngesitonJobInfo) GetStatus() string          { return c.status }
-func (c *streamIngesitonJobInfo) GetError() string           { return c.status }
 
-var _ jobInfo = (*streamIngesitonJobInfo)(nil)
+var _ jobInfo = (*streamIngestionJobInfo)(nil)
 
 func getStreamIngestionJobInfo(db *gosql.DB, jobID int) (jobInfo, error) {
-	var status string
-	var payloadBytes []byte
-	var progressBytes []byte
-	if err := db.QueryRow(
-		`SELECT status, payload, progress FROM crdb_internal.system_jobs WHERE id = $1`, jobID,
-	).Scan(&status, &payloadBytes, &progressBytes); err != nil {
+	jr, err := getJobRecord(db, jobID)
+	if err != nil {
 		return nil, err
 	}
-	var payload jobspb.Payload
-	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
-		return nil, err
-	}
-	var progress jobspb.Progress
-	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
-		return nil, err
-	}
-	return &streamIngesitonJobInfo{
-		status:         status,
-		errMsg:         payload.Error,
-		replicatedTime: replicationutils.ReplicatedTimeFromProgress(&progress),
-		finishedTime:   time.UnixMicro(payload.FinishedMicros),
-	}, nil
+	return &streamIngestionJobInfo{jr}, nil
 }
 
 func srcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
@@ -1770,6 +1745,41 @@ func overrideSrcAndDestTenantTTL(
 	destSQL.Exec(t, `ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = $1`, overrideTTL.Seconds())
 }
 
+func waitForReplicatedTimeToReachTimestamp(
+	t testutils.TestFataler,
+	jobID int,
+	db *gosql.DB,
+	jf jobFetcher,
+	wait time.Duration,
+	target time.Time,
+) {
+	testutils.SucceedsWithin(t, func() error {
+		info, err := jf(db, jobID)
+		if err != nil {
+			return err
+		}
+		if info.GetHighWater().Compare(target) < 0 {
+			return errors.Newf("replicated time %s not yet at %s", info.GetHighWater(), target)
+		}
+		return nil
+	}, wait)
+}
+
+func waitForReplicatedTime(
+	t testutils.TestFataler, jobID int, db *gosql.DB, jf jobFetcher, wait time.Duration,
+) {
+	testutils.SucceedsWithin(t, func() error {
+		info, err := jf(db, jobID)
+		if err != nil {
+			return err
+		}
+		if info.GetHighWater().IsZero() {
+			return errors.New("no replicated time")
+		}
+		return nil
+	}, wait)
+}
+
 func copyPGCertsAndMakeURL(
 	ctx context.Context,
 	t test.Test,
@@ -1777,33 +1787,33 @@ func copyPGCertsAndMakeURL(
 	srcNode option.NodeListOption,
 	pgURLDir string,
 	urlString string,
-) (string, error) {
+) (*url.URL, error) {
 	pgURL, err := url.Parse(urlString)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	tmpDir, err := os.MkdirTemp("", install.CockroachNodeCertsDir)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	func() { _ = os.RemoveAll(tmpDir) }()
 
 	if err := c.Get(ctx, t.L(), pgURLDir, tmpDir, srcNode); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	sslRootCert, err := os.ReadFile(filepath.Join(tmpDir, "ca.crt"))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	sslClientCert, err := os.ReadFile(filepath.Join(tmpDir, fmt.Sprintf("client.%s.crt", install.DefaultUser)))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	sslClientKey, err := os.ReadFile(filepath.Join(tmpDir, fmt.Sprintf("client.%s.key", install.DefaultUser)))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	options := pgURL.Query()
@@ -1813,5 +1823,5 @@ func copyPGCertsAndMakeURL(
 	options.Set("sslcert", string(sslClientCert))
 	options.Set("sslkey", string(sslClientKey))
 	pgURL.RawQuery = options.Encode()
-	return pgURL.String(), nil
+	return pgURL, nil
 }
