@@ -78,6 +78,10 @@ type lookupJoinNode struct {
 	// lookupExpr, not remoteLookupExpr.
 	remoteOnlyLookups bool
 
+	// If greater than zero, perLookupLimit limits the number of rows returned by
+	// each lookup. This is useful when only a subset of looked-up rows is needed.
+	perLookupLimit int64
+
 	// If true, reverseScans indicates that the lookups should use ReverseScan
 	// requests instead of Scan requests. This causes lookups *for each input row*
 	// to return results in reverse order. This is only useful when each lookup

@@ -2781,6 +2781,13 @@ message Header {
   // complications discussed in "Unordered requests". For now, that's a good
   // enough reason to disallow such batches.
   int64 max_span_request_keys = 8;
+  // If positive, limits the number of keys returned to serve Scan and
+  // ReverseScan requests. This is different from MaxSpanRequestKeys, which
+  // applies at the level of the batch. Note that the limit is applied to
+  // each individual scan that is used to serve a request; therefore the limit
+  // can be exceeded for a request that crosses range boundaries. A caller
+  // that sets the limit should be able to handle extra keys in the response.
+  int64 max_per_scan_request_keys = 35;
   // TargetBytes will have different behaviour depending on the request type.
   //
   // Forward and Reverse Scans:
@@ -2965,7 +2972,7 @@ message Header {
 
   reserved 7, 10, 12, 14, 20;
 
-  // Next ID: 35
+  // Next ID: 36
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded

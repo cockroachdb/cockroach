@@ -299,6 +299,7 @@ define LookupJoin {
     Locking opt.Locking
     LimitHint int64
     RemoteOnlyLookups bool
+    PerLookupLimit int64
     ReverseScans bool
 }
 

@@ -50,13 +50,18 @@ func Scan(
 	var err error
 
 	readCategory := ScanReadCategory(cArgs.EvalCtx.AdmissionHeader())
+	maxKeys := h.MaxSpanRequestKeys
+	if h.MaxPerScanRequestKeys > 0 && h.MaxPerScanRequestKeys < maxKeys {
+		maxKeys = h.MaxPerScanRequestKeys
+	}
+
 	opts := storage.MVCCScanOptions{
 		Inconsistent:            h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:              h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                     h.Txn,
 		ScanStats:               cArgs.ScanStats,
 		Uncertainty:             cArgs.Uncertainty,
-		MaxKeys:                 h.MaxSpanRequestKeys,
+		MaxKeys:                 maxKeys,
 		MaxLockConflicts:        storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetLockConflictBytes: storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:             h.TargetBytes,

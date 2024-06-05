@@ -250,6 +250,16 @@ type joinReader struct {
 	// of hard and soft limits.
 	limitHintHelper execinfra.LimitHintHelper
 
+	// perLookupRowLimit is the max number of matching looked-up rows that will be
+	// returned for each input row. This is useful for cases when only a subset
+	// of matching rows are needed; for example, existence checks.
+	//
+	// Note that perLookupRowLimit can only be set in the case when the join ON
+	// condition is empty. This ensures that the number of matches an input rows
+	// receives is equivalent to the number of looked up rows for that input row,
+	// which simplifies the implementation.
+	perLookupRowLimit int
+
 	// Set errorOnLookup to true to cause the join to error out just prior to
 	// performing a lookup. This is currently only set when the join contains
 	// only lookups to rows in remote regions and remote accesses are set to
@@ -352,6 +362,18 @@ func newJoinReader(
 		return nil, err
 	}
 
+	perLookupRowLimit := int(spec.PerLookupLimit)
+	if perLookupRowLimit != 0 && !spec.OnExpr.Empty() {
+		// See the joinReader.perLookupLimit comment for why this check is needed.
+		return nil, errors.Errorf("PerLookupLimit cannot be set with a nonempty ON condition")
+	}
+	if spec.OnExpr.Empty() && (spec.Type == descpb.LeftSemiJoin || spec.Type == descpb.LeftAntiJoin) {
+		// SemiJoins and AntiJoins only need to look up one row for each input row.
+		// The ON condition must be empty; otherwise, the first looked up row may
+		// not actually be a match.
+		perLookupRowLimit = 1
+	}
+
 	errorOnLookup := spec.RemoteOnlyLookups &&
 		flowCtx.EvalCtx.Planner != nil && flowCtx.EvalCtx.Planner.EnforceHomeRegion()
 
@@ -368,6 +390,7 @@ func newJoinReader(
 		usesStreamer:                        useStreamer,
 		lookupBatchBytesLimit:               rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
 		limitHintHelper:                     execinfra.MakeLimitHintHelper(spec.LimitHint, post),
+		perLookupRowLimit:                   perLookupRowLimit,
 		errorOnLookup:                       errorOnLookup,
 		allowEnforceHomeRegionFollowerReads: flowCtx.EvalCtx.SessionData().EnforceHomeRegionFollowerReadsEnabled,
 	}
@@ -473,6 +496,8 @@ func newJoinReader(
 	if memoryLimit < minMemoryLimit {
 		memoryLimit = minMemoryLimit
 	}
+	perLookupKeyLimit := perLookupRowLimit * int(spec.FetchSpec.MaxKeysPerRow)
+
 	var streamingKVFetcher *row.KVFetcher
 	if jr.usesStreamer {
 		// NOTE: this comment should only be considered in a case of low workmem
@@ -565,6 +590,7 @@ func newJoinReader(
 			jr.streamerInfo.maintainOrdering,
 			singleRowLookup,
 			int(spec.FetchSpec.MaxKeysPerRow),
+			perLookupKeyLimit,
 			spec.ReverseScans,
 			diskBuffer,
 			&jr.streamerInfo.txnKVStreamerMemAcc,
@@ -596,6 +622,7 @@ func newJoinReader(
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 			SpansCanOverlap:            jr.spansCanOverlap,
+			PerScanRequestKeyLimit:     rowinfra.KeyLimit(perLookupKeyLimit),
 		},
 	); err != nil {
 		return nil, err
@@ -710,6 +737,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			isPartialJoin:           jr.joinType == descpb.LeftSemiJoin || jr.joinType == descpb.LeftAntiJoin,
 			groupingState:           jr.groupingState,
 			strategyMemAcc:          &strategyMemAcc,
+			perLookupRowLimit:       jr.perLookupRowLimit,
 		}
 		return nil
 	}
@@ -745,6 +773,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		groupingState:                     jr.groupingState,
 		outputGroupContinuationForLeftRow: jr.outputGroupContinuationForLeftRow,
 		strategyMemAcc:                    &strategyMemAcc,
+		perLookupRowLimit:                 jr.perLookupRowLimit,
 	}
 	return nil
 }
@@ -1396,8 +1425,8 @@ type inputBatchGroupingState struct {
 }
 
 type groupState struct {
-	// Whether the group matched.
-	matched bool
+	// The number of times the group has been matched.
+	matched int
 	// The last row index in the group. Only valid when doGrouping = true.
 	lastRow int
 }
@@ -1416,7 +1445,7 @@ func (ib *inputBatchGroupingState) addContinuationValForRow(cont bool) {
 		// First row in input batch or the start of a new group. We need to
 		// add entries in the group indexed slices.
 		ib.groupState = append(ib.groupState,
-			groupState{matched: false, lastRow: len(ib.batchRowToGroupIndex)})
+			groupState{matched: 0, lastRow: len(ib.batchRowToGroupIndex)})
 	}
 	if ib.doGrouping {
 		groupIndex := len(ib.groupState) - 1
@@ -1426,40 +1455,44 @@ func (ib *inputBatchGroupingState) addContinuationValForRow(cont bool) {
 }
 
 func (ib *inputBatchGroupingState) setFirstGroupMatched() {
-	ib.groupState[0].matched = true
+	ib.groupState[0].matched++
 }
 
-// setMatched records that the given rowIndex has matched. It returns the
-// previous value of the matched field.
-func (ib *inputBatchGroupingState) setMatched(rowIndex int) bool {
-	groupIndex := rowIndex
+func (ib *inputBatchGroupingState) groupIndex(rowIndex int) int {
 	if ib.doGrouping {
-		groupIndex = ib.batchRowToGroupIndex[rowIndex]
+		return ib.batchRowToGroupIndex[rowIndex]
 	}
-	rv := ib.groupState[groupIndex].matched
-	ib.groupState[groupIndex].matched = true
+	return rowIndex
+}
+
+// addMatched records that the given rowIndex has matched. The return value
+// indicates whether the rowIndex was previously matched.
+func (ib *inputBatchGroupingState) addMatched(rowIndex int) bool {
+	groupIndex := ib.groupIndex(rowIndex)
+	rv := ib.groupState[groupIndex].matched > 0
+	ib.groupState[groupIndex].matched++
 	return rv
 }
 
 func (ib *inputBatchGroupingState) getMatched(rowIndex int) bool {
-	groupIndex := rowIndex
-	if ib.doGrouping {
-		groupIndex = ib.batchRowToGroupIndex[rowIndex]
-	}
-	return ib.groupState[groupIndex].matched
+	return ib.groupState[ib.groupIndex(rowIndex)].matched > 0
+}
+
+func (ib *inputBatchGroupingState) getMatchedCount(rowIndex int) int {
+	return ib.groupState[ib.groupIndex(rowIndex)].matched
 }
 
 func (ib *inputBatchGroupingState) lastGroupMatched() bool {
 	if !ib.doGrouping || len(ib.groupState) == 0 {
 		return false
 	}
-	return ib.groupState[len(ib.groupState)-1].matched
+	return ib.groupState[len(ib.groupState)-1].matched > 0
 }
 
 func (ib *inputBatchGroupingState) isUnmatched(rowIndex int) bool {
 	if !ib.doGrouping {
 		// The rowIndex is also the groupIndex.
-		return !ib.groupState[rowIndex].matched
+		return ib.groupState[rowIndex].matched == 0
 	}
 	groupIndex := ib.batchRowToGroupIndex[rowIndex]
 	if groupIndex == len(ib.groupState)-1 {
@@ -1474,7 +1507,7 @@ func (ib *inputBatchGroupingState) isUnmatched(rowIndex int) bool {
 	// saying that there is no match for the group until the last row in the
 	// group since for earlier rows, when at step (b), one does not know the
 	// match state of later rows in the group.
-	return !ib.groupState[groupIndex].matched && ib.groupState[groupIndex].lastRow == rowIndex
+	return ib.groupState[groupIndex].matched == 0 && ib.groupState[groupIndex].lastRow == rowIndex
 }
 
 func (ib *inputBatchGroupingState) memUsage() int64 {

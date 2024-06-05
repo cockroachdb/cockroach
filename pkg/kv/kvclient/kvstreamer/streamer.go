@@ -229,6 +229,11 @@ type Streamer struct {
 	mode          OperationMode
 	hints         Hints
 	maxKeysPerRow int32
+	// perScanRequestKeyLimit is a limit on the number of keys that will be
+	// returned for each scan request. It is set when the caller only needs a
+	// limited number of rows. The streamer may return extra KV pairs beyond just
+	// those for the needed rows.
+	perScanRequestKeyLimit int64
 	// eagerMemUsageLimitBytes determines the maximum memory used from the
 	// budget at which point the streamer stops sending non-head-of-the-line
 	// requests eagerly.
@@ -451,9 +456,15 @@ func NewStreamer(
 // maxKeysPerRow indicates the maximum number of KV pairs that comprise a single
 // SQL row (i.e. the number of column families in the index being scanned).
 //
+// perScanRequestKeyLimit indicates the maximum number of KVs that should be
+// returned for a given Scan or ReverseScan request.
+//
 // In InOrder mode, diskBuffer argument must be non-nil.
 func (s *Streamer) Init(
-	mode OperationMode, hints Hints, maxKeysPerRow int, diskBuffer ResultDiskBuffer,
+	mode OperationMode,
+	hints Hints,
+	maxKeysPerRow, perScanRequestKeyLimit int,
+	diskBuffer ResultDiskBuffer,
 ) {
 	s.mode = mode
 	// s.sd can be nil in tests, so use almost all the budget eagerly then.
@@ -485,6 +496,7 @@ func (s *Streamer) Init(
 	}
 	s.hints = hints
 	s.maxKeysPerRow = int32(maxKeysPerRow)
+	s.perScanRequestKeyLimit = int64(perScanRequestKeyLimit)
 }
 
 // Enqueue dispatches multiple requests for execution. Results are delivered
@@ -1368,6 +1380,7 @@ func (w *workerCoordinator) performRequestAsync(
 			ba.Header.TargetBytes = targetBytes
 			ba.Header.AllowEmpty = !headOfLine
 			ba.Header.WholeRowsOfSize = w.s.maxKeysPerRow
+			ba.Header.MaxPerScanRequestKeys = w.s.perScanRequestKeyLimit
 			// TODO(yuzefovich): consider setting MaxSpanRequestKeys whenever
 			// applicable (#67885).
 			ba.AdmissionHeader = w.requestAdmissionHeader

@@ -3119,6 +3119,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		LookupBatchBytesLimit:             dsp.distSQLSrv.TestingKnobs.JoinReaderBatchBytesLimit,
 		LimitHint:                         n.limitHint,
 		RemoteOnlyLookups:                 n.remoteOnlyLookups,
+		PerLookupLimit:                    n.perLookupLimit,
 		ReverseScans:                      n.reverseScans,
 	}
 

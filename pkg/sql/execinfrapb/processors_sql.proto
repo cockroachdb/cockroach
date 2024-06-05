@@ -390,6 +390,17 @@ message JoinReaderSpec {
   // reverse order. This is only useful if a lookup can return more than one
   // row.
   optional bool reverse_scans = 24 [(gogoproto.nullable) = false];
+
+  // If nonzero, limits the number of rows returned by each individual lookup.
+  // This is useful for cases where there are many matches for each input row,
+  // but only a subset of those is needed.
+  //
+  // The limit will respect the index ordering if maintain_lookup_ordering is
+  // also set, although the ascending column limitation still applies. If the
+  // ordering is not maintained, the first 'limit' matching rows that are found
+  // will be returned. This may cause nondeterministic results in the unordered
+  // case.
+  optional int64 per_lookup_limit = 25 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
