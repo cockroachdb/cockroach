@@ -489,7 +489,7 @@ type RaftEvent interface {
 // StateProbe/StateReplicate/StateSnapshot for a replica, and must be prepared
 // to adjust its internal state to reflect the current reality.
 type Ready interface {
-	// Entries represents the new entries that are being added to the log.
+	// GetEntries represents the new entries that are being added to the log.
 	// This may be empty.
 	//
 	// The second byte of AC entries will encode the priority, so we will have
@@ -497,11 +497,13 @@ type Ready interface {
 	// v1, where we are doing the accounting in
 	// https://github.com/cockroachdb/cockroach/blob/f601b7b439ced71030bfdb0d9ba9cb4925420569/pkg/kv/kvserver/replica_proposal_buf.go#L1057-L1066
 	// which is messy.
-	Entries() []raftpb.Entry
+	GetEntries() []raftpb.Entry
+	// TODO: remove this entirely. RACv2 is completely uninterested in these messages.
+
 	// RetransmitMsgApps returns the MsgApps that are being retransmitted, or
 	// being used to ping the follower. These will never be queued by
 	// replication AC, and will simply be sent.
-	RetransmitMsgApps() []raftpb.Message
+	// RetransmitMsgApps() []raftpb.Message
 }
 
 // RaftInterface abstracts what the RangeController needs from the raft
@@ -561,40 +563,6 @@ type RaftInterface interface {
 	// error conditions after which the flow stays in StateReplicate. We should
 	// define or eliminate these cases.
 	MakeMsgApp(replicaID roachpb.ReplicaID, start, end uint64, maxSize int64) (raftpb.Message, error)
-}
-
-// raftInterfaceImpl implements RaftInterface.
-type raftInterfaceImpl struct {
-	n *raft.RawNode
-}
-
-// newRaftInterface return the implementation of RaftInterface wrapped around
-// the given raft.RawNode. The node must have Config.EnableLazyAppends == true.
-func newRaftInterface(node *raft.RawNode) raftInterfaceImpl {
-	return raftInterfaceImpl{n: node}
-}
-
-func (r raftInterfaceImpl) FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo {
-	pr := r.n.GetProgress(raftpb.PeerID(replicaID))
-	return FollowerStateInfo{
-		State: pr.State,
-		Match: pr.Match,
-		Next:  pr.Next,
-		// TODO: populate Admitted
-	}
-}
-
-func (r raftInterfaceImpl) LastEntryIndex() uint64 {
-	return r.n.LastIndex()
-}
-
-func (r raftInterfaceImpl) MakeMsgApp(
-	replicaID roachpb.ReplicaID, start, end uint64, maxSize int64,
-) (raftpb.Message, error) {
-	if maxSize <= 0 {
-		return raftpb.Message{}, errors.New("maxSize <= 0")
-	}
-	return r.n.NextMsgApp(raftpb.PeerID(replicaID), start, end, uint64(maxSize))
 }
 
 // Scheduler abstracts the raftScheduler to allow the RangeController to
@@ -995,13 +963,13 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	// queueing up in Replica.addUnreachableRemoteReplica, but those will be
 	// handed to Raft later, so this act will not cause a transition from
 	// StateReplicate => StateProbe.
-	msgApps := ready.RetransmitMsgApps()
-	for i := range msgApps {
-		rc.opts.MessageSender.SendRaftMessage(
-			context.TODO(), PriorityNotInheritedForFlowControl, msgApps[i])
-	}
+	// msgApps := ready.RetransmitMsgApps()
+	// for i := range msgApps {
+	// rc.opts.MessageSender.SendRaftMessage(
+	//	context.TODO(), PriorityNotInheritedForFlowControl, msgApps[i])
+	// }
 
-	entries := ready.Entries()
+	entries := ready.GetEntries()
 	if len(entries) == 0 {
 		return nil
 	}
@@ -1939,3 +1907,7 @@ const (
 func (cs connectedState) shouldWaitForElasticEvalTokens() bool {
 	return cs == replicate || cs == probeRecentlyReplicate
 }
+
+// UseRACv2 is used to exercise integration. The integration in the prototype
+// does not have any capability to switch a range from RACv1 to RACv2.
+const UseRACv2 = false
