@@ -58,9 +58,9 @@ type FileSerializer struct {
 // NewFileSerializer creates a FileSerializer for the given types. The caller is
 // responsible for closing the given writer as well as the given memory account.
 func NewFileSerializer(
-	w io.Writer, typs []*types.T, acc *mon.BoundAccount,
+	w io.Writer, typs []*types.T, memAcc *mon.BoundAccount,
 ) (*FileSerializer, error) {
-	a, err := NewArrowBatchConverter(typs, BatchToArrowOnly, acc)
+	a, err := NewArrowBatchConverter(typs, BatchToArrowOnly, memAcc)
 	if err != nil {
 		return nil, err
 	}

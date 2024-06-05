@@ -67,7 +67,7 @@ func NewWindowAggregatorOperator(
 	colsToStore := framer.getColsToStore(append([]int{}, argIdxs...))
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg, args.FdSemaphore,
-		args.InputTypes, args.DiskAcc, args.ConverterMemAcc, colsToStore...,
+		args.InputTypes, args.DiskAcc, args.DiskQueueMemAcc, colsToStore...,
 	)
 	inputIdxs := make([]uint32, len(argIdxs))
 	for i := range inputIdxs {

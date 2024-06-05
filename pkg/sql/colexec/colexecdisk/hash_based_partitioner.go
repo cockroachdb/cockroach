@@ -228,7 +228,7 @@ func newHashBasedPartitioner(
 		fdSemaphore semaphore.Semaphore,
 	) colexecop.ResettableOperator,
 	diskAcc *mon.BoundAccount,
-	converterMemAcc *mon.BoundAccount,
+	diskQueueMemAcc *mon.BoundAccount,
 	numRequiredActivePartitions int,
 ) *hashBasedPartitioner {
 	// Make a copy of the DiskQueueCfg and set defaults for the partitioning
@@ -250,7 +250,7 @@ func newHashBasedPartitioner(
 	for i := range inputs {
 		partitioners[i] = colcontainer.NewPartitionedDiskQueue(
 			inputTypes[i], diskQueueCfg, partitionedDiskQueueSemaphore,
-			colcontainer.PartitionerStrategyDefault, diskAcc, converterMemAcc,
+			colcontainer.PartitionerStrategyDefault, diskAcc, diskQueueMemAcc,
 		)
 		partitionedInputs[i] = newPartitionerToOperator(
 			unlimitedAllocator, inputTypes[i], partitioners[i],
