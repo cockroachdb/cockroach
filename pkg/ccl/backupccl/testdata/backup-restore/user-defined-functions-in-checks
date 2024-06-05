@@ -4,11 +4,23 @@ new-cluster name=s
 
 exec-sql
 CREATE DATABASE db1;
+----
+
+exec-sql
 USE db1;
+----
+
+exec-sql
 CREATE SCHEMA sc1;
+----
+
+exec-sql
 CREATE FUNCTION sc1.f1(a INT) RETURNS INT LANGUAGE SQL AS $$
   SELECT a + 1;
 $$;
+----
+
+exec-sql
 CREATE TABLE sc1.t1(a INT PRIMARY KEY, b INT CHECK(sc1.f1(b) > 1));
 ----
 
@@ -68,11 +80,23 @@ new-cluster name=s1
 
 exec-sql cluster=s1
 CREATE DATABASE db1;
+----
+
+exec-sql cluster=s1
 USE db1;
+----
+
+exec-sql cluster=s1
 CREATE SCHEMA sc1;
+----
+
+exec-sql cluster=s1
 CREATE FUNCTION sc1.f1(a INT) RETURNS INT LANGUAGE SQL AS $$
   SELECT a + 1;
 $$;
+----
+
+exec-sql cluster=s1
 CREATE TABLE sc1.t1(a INT PRIMARY KEY, b INT CHECK(sc1.f1(b) > 1));
 ----
 
@@ -142,13 +166,31 @@ new-cluster name=s3
 
 exec-sql cluster=s3
 CREATE DATABASE db1;
+----
+
+exec-sql cluster=s3
 CREATE DATABASE db2;
+----
+
+exec-sql cluster=s3
 CREATE DATABASE db3;
+----
+
+exec-sql cluster=s3
 USE db1;
+----
+
+exec-sql cluster=s3
 CREATE SCHEMA sc1;
+----
+
+exec-sql cluster=s3
 CREATE FUNCTION sc1.f1(a INT) RETURNS INT LANGUAGE SQL AS $$
   SELECT a + 1;
 $$;
+----
+
+exec-sql cluster=s3
 CREATE TABLE sc1.t1(a INT PRIMARY KEY, b INT CHECK(sc1.f1(b) > 1));
 ----
 
