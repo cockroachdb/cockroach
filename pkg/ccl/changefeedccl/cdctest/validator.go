@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -44,13 +45,13 @@ type StreamValidator interface {
 type timestampValue struct {
 	ts    hlc.Timestamp
 	value string
-	dups  int
 }
 
 type orderValidator struct {
 	topic                 string
 	partitionForKey       map[string]string
 	keyTimestampAndValues map[string][]timestampValue
+	keyLatestTimestampRun map[string][]timestampValue
 	resolved              map[string]hlc.Timestamp
 
 	failures []string
@@ -89,6 +90,7 @@ func NewOrderValidator(topic string) Validator {
 		topic:                 topic,
 		partitionForKey:       make(map[string]string),
 		keyTimestampAndValues: make(map[string][]timestampValue),
+		keyLatestTimestampRun: make(map[string][]timestampValue),
 		resolved:              make(map[string]hlc.Timestamp),
 	}
 }
@@ -100,6 +102,7 @@ func NewStreamOrderValidator() StreamValidator {
 		topic:                 "unused",
 		partitionForKey:       make(map[string]string),
 		keyTimestampAndValues: make(map[string][]timestampValue),
+		keyLatestTimestampRun: make(map[string][]timestampValue),
 		resolved:              make(map[string]hlc.Timestamp),
 	}
 }
@@ -140,27 +143,54 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 	timestampValues := v.keyTimestampAndValues[key]
 
 	// Check if it's a duplicate event. If so, we can skip the rest of the checks.
-	if atOrAfterIdx := sort.Search(len(timestampValues), func(i int) bool {
+	atOrAfterIdx := sort.Search(len(timestampValues), func(i int) bool {
 		return updated.LessEq(timestampValues[i].ts)
-	}); atOrAfterIdx < len(timestampValues) {
-		atOrAfter := &timestampValues[atOrAfterIdx]
-		if atOrAfter.ts.Equal(updated) {
-			atOrAfter.dups += 1
-			return nil
-		}
-	}
+	})
+	hasEarlierTS := atOrAfterIdx < len(timestampValues)
+	if hasEarlierTS {
+		atOrAfter := timestampValues[atOrAfterIdx]
 
-	// Check if the event violates our per-key ordering guarantee.
-	if len(timestampValues) > 0 {
-		latestTimestamp := timestampValues[len(timestampValues)-1].ts
-		if updated.Less(latestTimestamp) {
+		// We have a per-key ordering violation if we haven't seen the earlier timestamp before.
+		if seen := atOrAfter.ts.Equal(updated); !seen {
 			v.failures = append(v.failures, fmt.Sprintf(
 				`topic %s partition %s key %s: saw new row timestamp %s that is earlier than already seen row timestamp %s`,
 				v.topic, partition, key,
 				updated.AsOfSystemTime(),
-				latestTimestamp.AsOfSystemTime(),
+				atOrAfter.ts.AsOfSystemTime(),
+			))
+			return nil
+		}
+
+		if atOrAfter.value != value {
+			v.failures = append(v.failures, fmt.Sprintf(
+				`topic %s partition %s key %s: saw duplicate row timestamp %s with value %s different from already seen value %s`,
+				v.topic, partition, key,
+				updated.AsOfSystemTime(), value, atOrAfter.value,
 			))
 		}
+
+		latestRun := v.keyLatestTimestampRun[key]
+		if len(latestRun) == 0 {
+			return errors.Newf("latest run for topic %s partition %s key %s is unexpectedly empty",
+				v.topic, partition, key)
+		}
+		// TODO(yang): Think about whether this is true when shutdown checkpointing is on.
+		// We're restarting the run.
+		if updated.Equal(latestRun[0].ts) {
+			v.keyLatestTimestampRun[key] = []timestampValue{{ts: updated, value: value}}
+			return nil
+		}
+		// We violated the per-key ordering guarantee during the re-emit.
+		runLastTimestamp := latestRun[len(latestRun)-1].ts
+		if updated.Less(runLastTimestamp) {
+			v.failures = append(v.failures, fmt.Sprintf(
+				`topic %s partition %s key %s: saw duplicate row timestamp %s that is earlier than already seen duplicate row timestamp %s`,
+				v.topic, partition, key,
+				updated.AsOfSystemTime(), runLastTimestamp.AsOfSystemTime(),
+			))
+		}
+		v.keyLatestTimestampRun[key] = append(latestRun, timestampValue{ts: updated, value: value})
+		return nil
 	}
 
 	// Check if the event violates our resolved timestamp guarantee.
@@ -170,9 +200,12 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 			`topic %s partition %s key %s: saw new row timestamp %s that is earlier than latest resolved timestamp %s`,
 			v.topic, partition, key, updated.AsOfSystemTime(), latestResolved.AsOfSystemTime(),
 		))
+		return nil
 	}
 
-	v.keyTimestampAndValues[key] = append(timestampValues, timestampValue{ts: updated, value: value})
+	tsValue := timestampValue{ts: updated, value: value}
+	v.keyTimestampAndValues[key] = append(v.keyTimestampAndValues[key], tsValue)
+	v.keyLatestTimestampRun[key] = append(v.keyLatestTimestampRun[key], tsValue)
 	return nil
 }
 
@@ -186,6 +219,36 @@ func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 		))
 		return nil
 	}
+	if prev.IsEmpty() {
+		v.resolved[partition] = resolved
+		return nil
+	}
+
+	// TODO(yang): Consider relaxing this to be just a tail of expected events.
+	// Validate that the latest run for every key on this partition contains
+	// every event since the last resolved timestamp.
+	for key, keyPartition := range v.partitionForKey {
+		if keyPartition != partition {
+			continue
+		}
+
+		timestampValues := v.keyTimestampAndValues[key]
+		atOrAfterIdx := sort.Search(len(timestampValues), func(i int) bool {
+			return prev.LessEq(timestampValues[i].ts)
+		})
+		expectedEvents := timestampValues[atOrAfterIdx:]
+		latestRun := v.keyLatestTimestampRun[key]
+		if !slices.Equal(expectedEvents, latestRun) {
+			v.failures = append(v.failures, fmt.Sprintf(
+				`topic %s partition %s key %s: latest run %#v does not contain every event since last resolved timestamp %s: %#v`,
+				v.topic, partition, key,
+				latestRun, prev, expectedEvents,
+			))
+		}
+
+		delete(v.keyLatestTimestampRun, key)
+	}
+
 	v.resolved[partition] = resolved
 	return nil
 }
