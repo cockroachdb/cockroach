@@ -550,7 +550,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		NextLiveInstanceID:          uint32(c.nextLiveInstanceIDFn(ctx)),
 		SeqNum:                      c.run.requestSeqNum,
 		ConsumptionSinceLastRequest: deltaConsumption,
-		RequestedRU:                 float64(requested),
+		RequestedTokens:             float64(requested),
 		TargetRequestPeriod:         c.run.targetPeriod,
 	}
 	c.run.requestInProgress = req
@@ -592,7 +592,7 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 	if log.ExpensiveLogEnabled(ctx, 1) {
 		log.Infof(
 			ctx, "TokenBucket response: %g RUs over %s (fallback rate %g)",
-			resp.GrantedRU, resp.TrickleDuration, resp.FallbackRate,
+			resp.GrantedTokens, resp.TrickleDuration, resp.FallbackRate,
 		)
 	}
 
@@ -602,7 +602,7 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 
 	// Process granted RUs.
 	now := c.timeSource.Now()
-	granted := tenantcostmodel.RU(resp.GrantedRU)
+	granted := tenantcostmodel.RU(resp.GrantedTokens)
 
 	// Shut down any trickle previously in-progress trickle.
 	if c.run.trickleTimer != nil {
@@ -646,7 +646,7 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		// could not even grant the RUs that were requested, then avoid triggering
 		// extra calls to the server. The next call to the server will be made by
 		// the next regularly scheduled consumption reporting interval.
-		if req.RequestedRU == resp.GrantedRU {
+		if req.RequestedTokens == resp.GrantedTokens {
 			cfg.NotifyThreshold = notifyThreshold
 		}
 	} else {
