@@ -828,7 +828,7 @@ func makeInsertQuery(fqTableName string, td catalog.TableDescriptor) string {
 	originTSIdx := argIdx
 	baseQuery := `
 INSERT INTO %s (%s, crdb_internal_origin_timestamp)
-VALUES (%s, %d)
+VALUES (%s, $%d)
 ON CONFLICT ON CONSTRAINT %s
 DO UPDATE SET
 %s,

@@ -1033,6 +1033,16 @@ func ResolveFK(
 		}
 	}
 
+	// We disallow any ON UPDATE and ON DELETE action that will modify the fk
+	// column of a computed key. The key value is computed and cannot change.
+	if d.Actions.HasDisallowedActionForComputedFKCol() {
+		for _, originColumn := range originCols {
+			if originColumn.IsComputed() {
+				return sqlerrors.NewInvalidActionOnComputedFKColumnError(d.Actions.HasUpdateAction())
+			}
+		}
+	}
+
 	var validity descpb.ConstraintValidity
 	if ts != NewTable {
 		if validationBehavior == tree.ValidationSkip {

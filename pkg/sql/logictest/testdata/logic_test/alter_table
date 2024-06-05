@@ -3868,3 +3868,73 @@ statement error pgcode 55000 pq: column "i" is being dropped
 ALTER TABLE foo_bar DROP COLUMN i, ALTER PRIMARY KEY USING COLUMNS (i);
 
 subtest end
+
+subtest alter_add_foreign_key_against_computed_column
+
+statement ok
+CREATE TABLE x (a int8 not null primary key, computed_col int8 null as (a) stored);
+
+statement ok
+CREATE TABLE y (a int8 not null primary key, computed_col int8 null as (a) stored);
+
+statement ok
+INSERT INTO x VALUES (0),(1),(2),(3),(4);
+
+statement ok
+INSERT INTO y VALUES (0),(1),(2);
+
+query II rowsort
+SELECT a,computed_col from y;
+----
+0 0
+1 1
+2 2
+
+statement ok
+ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x;
+
+statement error .*delete on table "x" violates foreign key constraint.*
+DELETE FROM x WHERE A IN (0,2,4);
+
+statement ok
+ALTER TABLE y DROP CONSTRAINT y_computed_col_fkey;
+
+statement ok
+ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON DELETE CASCADE;
+
+statement ok
+DELETE FROM x WHERE A IN (0,2);
+
+query II rowsort
+SELECT a,computed_col from y;
+----
+1 1
+
+statement error pq: invalid ON UPDATE action for foreign key constraint containing computed column
+ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON UPDATE CASCADE;
+
+statement error pq: invalid ON UPDATE action for foreign key constraint containing computed column
+ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON UPDATE CASCADE;
+
+statement error pq: invalid ON UPDATE action for foreign key constraint containing computed column
+ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON UPDATE SET DEFAULT;
+
+statement error pq: invalid ON UPDATE action for foreign key constraint containing computed column
+ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON UPDATE SET NULL;
+
+statement error pq: invalid ON UPDATE action for foreign key constraint containing computed column
+ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON UPDATE SET NULL ON DELETE SET DEFAULT;
+
+statement error pq: invalid ON DELETE action for foreign key constraint containing computed column
+ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON DELETE SET DEFAULT;
+
+statement error pq: invalid ON DELETE action for foreign key constraint containing computed column
+ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON DELETE SET NULL;
+
+statement ok
+DROP TABLE y CASCADE;
+
+statement ok
+DROP TABLE x CASCADE;
+
+subtest end

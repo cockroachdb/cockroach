@@ -53,12 +53,6 @@ func (desc *ColumnDescriptor) CheckCanBeOutboundFKRef() error {
 			desc.Name,
 		)
 	}
-	if desc.IsComputed() {
-		return unimplemented.NewWithIssuef(
-			46672, "computed column %q cannot reference a foreign key",
-			desc.Name,
-		)
-	}
 	return nil
 }
 
