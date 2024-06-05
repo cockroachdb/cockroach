@@ -194,8 +194,8 @@ type diskQueue struct {
 	readFile                     vfs.File
 	scratchDecompressedReadBytes []byte
 
-	diskAcc         *mon.BoundAccount
-	converterMemAcc *mon.BoundAccount
+	diskAcc *mon.BoundAccount
+	memAcc  *mon.BoundAccount
 }
 
 var _ RewindableQueue = &diskQueue{}
@@ -368,9 +368,9 @@ func NewDiskQueue(
 	typs []*types.T,
 	cfg DiskQueueCfg,
 	diskAcc *mon.BoundAccount,
-	converterMemAcc *mon.BoundAccount,
+	diskQueueMemAcc *mon.BoundAccount,
 ) (Queue, error) {
-	return newDiskQueue(ctx, typs, cfg, diskAcc, converterMemAcc)
+	return newDiskQueue(ctx, typs, cfg, diskAcc, diskQueueMemAcc)
 }
 
 // NewRewindableDiskQueue creates a RewindableQueue that spills to disk.
@@ -379,9 +379,9 @@ func NewRewindableDiskQueue(
 	typs []*types.T,
 	cfg DiskQueueCfg,
 	diskAcc *mon.BoundAccount,
-	converterMemAcc *mon.BoundAccount,
+	diskQueueMemAcc *mon.BoundAccount,
 ) (RewindableQueue, error) {
-	d, err := newDiskQueue(ctx, typs, cfg, diskAcc, converterMemAcc)
+	d, err := newDiskQueue(ctx, typs, cfg, diskAcc, diskQueueMemAcc)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +394,7 @@ func newDiskQueue(
 	typs []*types.T,
 	cfg DiskQueueCfg,
 	diskAcc *mon.BoundAccount,
-	converterMemAcc *mon.BoundAccount,
+	memAcc *mon.BoundAccount,
 ) (*diskQueue, error) {
 	if err := cfg.EnsureDefaults(); err != nil {
 		return nil, err
@@ -406,7 +406,7 @@ func newDiskQueue(
 		files:            make([]file, 0, 4),
 		writeBufferLimit: cfg.BufferSizeBytes / 3,
 		diskAcc:          diskAcc,
-		converterMemAcc:  converterMemAcc,
+		memAcc:           memAcc,
 	}
 	// Refer to the DiskQueueCacheMode comment for why this division of
 	// BufferSizeBytes.
@@ -518,7 +518,7 @@ func (d *diskQueue) rotateFile(ctx context.Context) (retErr error) {
 
 	if d.serializer == nil {
 		writer := &diskQueueWriter{testingKnobAlwaysCompress: d.cfg.TestingKnobs.AlwaysCompress, wrapped: f}
-		d.serializer, err = colserde.NewFileSerializer(writer, d.typs, d.converterMemAcc)
+		d.serializer, err = colserde.NewFileSerializer(writer, d.typs, d.memAcc)
 		if err != nil {
 			return err
 		}
