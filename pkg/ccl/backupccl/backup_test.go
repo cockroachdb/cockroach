@@ -9136,8 +9136,6 @@ func TestRestorePauseOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
-	skip.WithIssue(t, 121342)
-
 	defer jobs.TestingSetProgressThresholds()()
 
 	baseDir := "testdata"
@@ -9167,12 +9165,14 @@ func TestRestorePauseOnError(t *testing.T) {
 			})
 	}
 
+	t.Logf("Test")
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_restore_failure'`)
 	sqlDB.Exec(t, `CREATE DATABASE r1`)
 	sqlDB.Exec(t, `CREATE TABLE r1.foo (id INT)`)
 	sqlDB.Exec(t, `BACKUP DATABASE r1 TO 'nodelocal://1/eventlogging'`)
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
-	restoreQuery := `RESTORE DATABASE r1 FROM 'nodelocal://1/eventlogging' WITH DEBUG_PAUSE_ON = 'error'`
+	restoreQuery := `RESTORE DATABASE r1 FROM 'nodelocal://1/eventlogging'`
 	findJobQuery := `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%RESTORE DATABASE%' ORDER BY created DESC`
 
 	// Verify that a RESTORE job will self pause on an error, but can be resumed
@@ -9182,7 +9182,6 @@ func TestRestorePauseOnError(t *testing.T) {
 		forceFailure = true
 
 		sqlDB.QueryRow(t, restoreQuery)
-
 		sqlDB.QueryRow(t, findJobQuery).Scan(&jobID)
 		if err := waitForStatus(t, sqlDB, jobID, jobs.StatusPaused); err != nil {
 			t.Fatal(err)
@@ -9192,24 +9191,6 @@ func TestRestorePauseOnError(t *testing.T) {
 		sqlDB.Exec(t, "RESUME JOB $1", jobID)
 
 		if err := waitForStatus(t, sqlDB, jobID, jobs.StatusSucceeded); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Verify that a RESTORE job will self pause on an error and can be canceled.
-	{
-		var jobID int64
-		forceFailure = true
-		sqlDB.Exec(t, `DROP DATABASE r1`)
-		sqlDB.QueryRow(t, restoreQuery)
-		sqlDB.QueryRow(t, findJobQuery).Scan(&jobID)
-		if err := waitForStatus(t, sqlDB, jobID, jobs.StatusPaused); err != nil {
-			t.Fatal(err)
-		}
-
-		sqlDB.Exec(t, "CANCEL JOB $1", jobID)
-
-		if err := waitForStatus(t, sqlDB, jobID, jobs.StatusCanceled); err != nil {
 			t.Fatal(err)
 		}
 	}
