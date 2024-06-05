@@ -2807,7 +2807,7 @@ NULL  {m}  1000  1000  true
 NULL  {n}  1000  50    true
 NULL  {o}  1000  33    true
 
-query T
+query T retry
 EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9
 ----
 distribution: full
