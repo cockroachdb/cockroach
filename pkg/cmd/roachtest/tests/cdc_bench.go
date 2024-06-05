@@ -429,14 +429,18 @@ func runCDCBenchWorkload(
 	// this makes it easier to work with in grafana
 	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
 
+	concurrency *= 10
 	// set new kafka sink option
-	// settings.ClusterSettings["changefeed.new_kafka_sink.enabled"] = "true"
+	settings.ClusterSettings["changefeed.new_kafka_sink.enabled"] = "true"
 	// TODO: even if emittedbytes is the same, what about network bandwidth?
 	// - single row 50 - ~72Mb/s
-	// - control 0 - 43Mb/s
+	// - control (old kafka) 0 - 43Mb/s
 	// TODO: kafka metrics
 	// why is it limited to 2MiB/s for both control and singlerow kv0? trying control with only 100 ranges.
-	// -- control 0-100 - 3MiB/s in data, 72Mb/s in network
+	// -- control   0-100 - 3MiB/s in data, 72Mb/s in network. then it failed with the eof / connection lost error..
+	// -- singlerow 0-100 - 2.6MiB/s in data, 177Mb/s in network. and also failed. i think these really overload the cluster cpu wise
+	// -- control 0-100-10xconc - quickly got overloaded and died. with tolerate-errors:  4MiB/s, 62Mb/s. 5.5MiB in grafana
+	// -- singlerow 0-100-10xconc -
 	// TODO: next try upping kv workload's concurrency &/ batch size
 
 	switch server {
@@ -567,7 +571,7 @@ func runCDCBenchWorkload(
 		//
 		// TODO(erikgrinaker): remove this when benchmarks are stable.
 		var extra string
-		if readPercent < 100 && (numRanges/int64(len(nData))) >= 10000 {
+		if true || readPercent < 100 && (numRanges/int64(len(nData))) >= 10000 {
 			extra += ` --tolerate-errors`
 		}
 		t.L().Printf("running workload")
