@@ -2610,11 +2610,9 @@ func (dummyTenantUsageServer) ReconfigureTokenBucket(
 	ctx context.Context,
 	txn isql.Txn,
 	tenantID roachpb.TenantID,
-	availableRU float64,
+	availableTokens float64,
 	refillRate float64,
-	maxBurstRU float64,
-	asOf time.Time,
-	asOfConsumedRequestUnits float64,
+	maxBurstTokens float64,
 ) error {
 	return errors.Errorf("tenant resource limits require a CCL binary")
 }
