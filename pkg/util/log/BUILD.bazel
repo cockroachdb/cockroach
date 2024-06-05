@@ -44,6 +44,8 @@ go_library(
         "stderr_redirect_windows.go",
         "stderr_sink.go",
         "structured.go",
+        "structured_processor.go",
+        "structured_v2.go",
         "test_log_scope.go",
         "trace.go",
         "tracebacks.go",
