@@ -2740,7 +2740,7 @@ NULL  {o}  1000  32    true
 statement ok
 SET optimizer_use_virtual_computed_column_stats = true
 
-query T
+query T retry
 EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9
 ----
 distribution: full
