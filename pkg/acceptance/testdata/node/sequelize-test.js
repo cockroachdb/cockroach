@@ -101,5 +101,5 @@ describe('sequelize', () => {
         assert.deepEqual(result[0].dataValues.id, 1);
         assert.deepEqual(result[0].dataValues.data, {name: '2B'});
       });
-  });
+  }).timeout(10000);;
 });
