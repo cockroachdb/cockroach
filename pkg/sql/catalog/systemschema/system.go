@@ -1160,6 +1160,19 @@ CREATE TABLE system.mvcc_statistics (
 			created
 		)
 	);`
+
+	JobHistoryTableSchema = `
+	CREATE TABLE system.job_state_history (
+	  job_id INT8,
+	  job_type STRING NOT NULL,
+	  status STRING NOT NULL,
+	  state_change_time TIMESTAMP,
+	  progress_modified_time TIMESTAMP,
+	  progress_fractional FLOAT,
+	  progress_watermark TIMESTAMP,
+	  error STRING,
+	  final_resume_error STRING, 
+	);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1403,6 +1416,7 @@ func MakeSystemTables() []SystemTable {
 		SystemMVCCStatisticsTable,
 		StatementExecInsightsTable,
 		TransactionExecInsightsTable,
+		JobStateHistory,
 	}
 }
 
@@ -4718,6 +4732,56 @@ var (
 				ConstraintID:          tbl.NextConstraintID,
 			}}
 			tbl.NextConstraintID++
+		},
+	)
+
+	JobStateHistory = makeSystemTable(
+		JobHistoryTableSchema,
+		systemTable(catconstants.JobStateHistory,
+			descpb.InvalidID, // dynamically assigned table ID
+			[]descpb.ColumnDescriptor{
+				{Name: "job_id", ID: 1, Type: types.Int},
+				{Name: "job_type", ID: 2, Type: types.String},
+				{Name: "status", ID: 3, Type: types.String},
+				{Name: "state_change_time", ID: 4, Type: types.Timestamp},
+				{Name: "progress_modified_time", ID: 5, Type: types.Timestamp},
+				{Name: "progress_fractional", ID: 6, Type: types.Float},
+				{Name: "progress_watermark", ID: 7, Type: types.Timestamp},
+				{Name: "error", ID: 8, Type: types.String},
+				{Name: "final_resume_error", ID: 9, Type: types.String},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"job_id",
+						"job_type",
+						"status",
+						"state_change_time",
+						"progress_modified_time",
+						"progress_fractional",
+						"progress_watermark",
+						"error",
+						"final_resume_error",
+					},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					DefaultColumnID: 0,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           "job_history_idx",
+				ID:             1,
+				Unique:         false,
+				Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames: []string{"job_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1},
+			},
+		), func(tbl *descpb.TableDescriptor) {
+
 		},
 	)
 )

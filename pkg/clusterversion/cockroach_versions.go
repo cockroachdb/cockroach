@@ -312,6 +312,8 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V24_2_StmtDiagRedacted: {Major: 24, Minor: 1, Internal: 4},
 
+	// TODO[kyle] add job state history table?
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
