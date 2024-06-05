@@ -50,6 +50,7 @@ import (
 type testUtils struct {
 	// testAllocator is an Allocator with an unlimited budget for use in tests.
 	testAllocator     *colmem.Allocator
+	allocatorMemAcc   *mon.BoundAccount
 	testColumnFactory coldata.ColumnFactory
 	evalCtx           *eval.Context
 
@@ -58,7 +59,7 @@ type testUtils struct {
 	testMemMonitor *mon.BytesMonitor
 	testMemAcc     *mon.BoundAccount
 
-	// testDiskMonitor and testDiskmAcc are a test monitor with an unlimited budget
+	// testDiskMonitor and testDiskAcc are a test monitor with an unlimited budget
 	// and a disk account bound to it for use in tests.
 	testDiskMonitor *mon.BytesMonitor
 	testDiskAcc     *mon.BoundAccount
@@ -67,24 +68,26 @@ type testUtils struct {
 func newTestUtils(ctx context.Context) *testUtils {
 	st := cluster.MakeTestingClusterSettings()
 	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
-	memAcc := testMemMonitor.MakeBoundAccount()
+	allocatorMemAcc, testMemAcc := testMemMonitor.MakeBoundAccount(), testMemMonitor.MakeBoundAccount()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
-	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+	testAllocator := colmem.NewAllocator(ctx, &allocatorMemAcc, testColumnFactory)
 	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	diskAcc := testDiskMonitor.MakeBoundAccount()
 	return &testUtils{
 		testAllocator:     testAllocator,
+		allocatorMemAcc:   &allocatorMemAcc,
 		testColumnFactory: testColumnFactory,
 		evalCtx:           &evalCtx,
 		testMemMonitor:    testMemMonitor,
-		testMemAcc:        &memAcc,
+		testMemAcc:        &testMemAcc,
 		testDiskMonitor:   testDiskMonitor,
 		testDiskAcc:       &diskAcc,
 	}
 }
 
 func (t *testUtils) cleanup(ctx context.Context) {
+	t.allocatorMemAcc.Close(ctx)
 	t.testMemAcc.Close(ctx)
 	t.testMemMonitor.Stop(ctx)
 	t.testDiskAcc.Close(ctx)

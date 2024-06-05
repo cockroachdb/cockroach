@@ -194,8 +194,9 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	// keeping the remaining 0.2 for the output batch (which is never utilized).
 	// This logic lives in createDiskBackedSorter in execplan.go.
 	//
-	// To allow some drift we add another 0.2.
-	expMax := int64(float64(memoryLimit) * 2.8)
+	// To allow some drift (for things like memory used by the disk queue) we
+	// add another 0.7.
+	expMax := int64(float64(memoryLimit) * 3.3)
 	require.GreaterOrEqualf(t, totalMaxMemUsage, expMin, "minimum memory bound not satisfied: "+
 		"actual %d, expected min %d", totalMaxMemUsage, expMin)
 	require.GreaterOrEqualf(t, expMax, totalMaxMemUsage, "maximum memory bound not satisfied: "+
