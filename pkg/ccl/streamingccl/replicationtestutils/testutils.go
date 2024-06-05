@@ -263,13 +263,17 @@ ORDER BY created DESC LIMIT 1`, c.Args.DestTenantName)
 // stop eventually. If the provided cutover time is the zero value, cutover to
 // the latest replicated time.
 func (c *TenantStreamingClusters) Cutover(
-	producerJobID, ingestionJobID int, cutoverTime time.Time, async bool,
+	ctx context.Context, producerJobID, ingestionJobID int, cutoverTime time.Time, async bool,
 ) {
 	// Cut over the ingestion job and the job will stop eventually.
 	var cutoverStr string
 	if cutoverTime.IsZero() {
 		c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`,
 			c.Args.DestTenantName).Scan(&cutoverStr)
+		// Fetch PTS on the source cluster
+		protectedTimestamp := replicationutils.TestingGetPTSFromReplicationJob(c.T, ctx, c.SrcSysSQL, c.SrcSysServer, producerJobID)
+		// PTS must be less than or equal to cutover time
+		require.LessOrEqual(c.T, protectedTimestamp.GoTime(), cutoverTime)
 	} else {
 		c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 			c.Args.DestTenantName, cutoverTime).Scan(&cutoverStr)

@@ -17,12 +17,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -276,4 +280,27 @@ func TestingGetStreamIngestionStatsFromReplicationJob(
 	stats, err := GetStreamIngestionStats(ctx, *details, *progress)
 	require.NoError(t, err)
 	return stats
+}
+
+func TestingGetPTSFromReplicationJob(
+	t *testing.T,
+	ctx context.Context,
+	sqlRunner *sqlutils.SQLRunner,
+	srv serverutils.ApplicationLayerInterface,
+	ingestionJobID int,
+) hlc.Timestamp {
+	payload := jobutils.GetJobPayload(t, sqlRunner, jobspb.JobID(ingestionJobID))
+	details := payload.GetStreamReplication()
+	ptsRecordID := details.ProtectedTimestampRecordID
+	ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+
+	var ptsRecord *ptpb.Record
+	err := srv.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		ptsRecord, err = ptsProvider.WithTxn(txn).GetRecord(ctx, ptsRecordID)
+		return err
+	})
+	require.NoError(t, err)
+
+	return ptsRecord.Timestamp
 }
