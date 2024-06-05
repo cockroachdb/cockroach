@@ -93,7 +93,7 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 	if lv.initialScanLatency == 0 && lv.targetInitialScanLatency != 0 {
 		lv.initialScanLatency = timeutil.Since(lv.statementTime)
 		lv.initialScanHighwater = highwaterTime
-		lv.logger.Printf("initial scan completed: latency %s, highwater %s\n", lv.initialScanLatency, lv.initialScanHighwater)
+		lv.logger.Printf("%s: initial scan completed: latency %s, highwater %s\n", lv.name, lv.initialScanLatency, lv.initialScanHighwater)
 		return
 	}
 
@@ -114,7 +114,7 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 	// wait for catchup scans to finish before asserting latency.
 	if highwaterTime.Equal(lv.initialScanHighwater) {
 		if lv.catchupScanEveryN.ShouldLog() {
-			lv.logger.Printf("catchup scan: latency %s\n", latency.Truncate(time.Millisecond))
+			lv.logger.Printf("%s: catchup scan: latency %s\n", lv.name, latency.Truncate(time.Millisecond))
 		}
 		return
 	}
@@ -130,20 +130,20 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		// of the test that this happens at some point.
 		if lv.maxSeenSteadyEveryN.ShouldLog() {
 			lv.setTestStatus(fmt.Sprintf(
-				"watching %s: end-to-end latency %s not yet below target steady latency %s",
+				"%s: end-to-end latency %s not yet below target steady latency %s",
 				lv.name, latency.Truncate(time.Millisecond), lv.targetSteadyLatency.Truncate(time.Millisecond)))
 		}
 		return
 	}
 	if err := lv.latencyHist.RecordValue(latency.Nanoseconds()); err != nil {
-		lv.logger.Printf("could not record value %s: %s\n", latency, err)
+		lv.logger.Printf("%s: could not record value %s: %s\n", lv.name, latency, err)
 	}
 	if latency > lv.maxSeenSteadyLatency {
 		lv.maxSeenSteadyLatency = latency
 	}
 	if lv.maxSeenSteadyEveryN.ShouldLog() {
 		lv.setTestStatus(fmt.Sprintf(
-			"watching %s: end-to-end steady latency %s; max steady latency so far %s; highwater %s",
+			"%s: end-to-end steady latency %s; max steady latency so far %s; highwater %s",
 			lv.name, latency.Truncate(time.Millisecond), lv.maxSeenSteadyLatency.Truncate(time.Millisecond), highwaterTime))
 	}
 }
@@ -165,7 +165,7 @@ func (lv *latencyVerifier) pollLatencyUntilJobSucceeds(
 		info, err := lv.jobFetcher(db, jobID)
 		if err != nil {
 			if lv.tolerateErrors {
-				lv.logger.Printf("error getting %s info: %s", lv.name, err)
+				lv.logger.Printf("%s: error getting info: %s", lv.name, err)
 				continue
 			}
 			return err
@@ -173,35 +173,35 @@ func (lv *latencyVerifier) pollLatencyUntilJobSucceeds(
 		status := info.GetStatus()
 		if status == "succeeded" {
 			lv.noteHighwater(info.GetFinishedTime())
-			lv.logger.Printf("latency poller shutting down due to changefeed completion")
+			lv.logger.Printf("%s: latency poller shutting down due to changefeed completion", lv.name)
 			return nil
 		} else if status == "running" {
 			lv.noteHighwater(info.GetHighWater())
 		} else {
-			lv.logger.Printf("unexpected status: %s, error: %s", status, info.GetError())
-			return errors.Errorf("unexpected status: %s", status)
+			lv.logger.Printf("%s: unexpected status: %s, error: %s", lv.name, status, info.GetError())
+			return errors.Errorf("%s: unexpected status: %s", lv.name, status)
 		}
 		if lv.targetSteadyLatency != 0 && lv.maxSeenSteadyLatency > lv.targetSteadyLatency {
-			return errors.Errorf("max latency was more than allowed: %s vs %s",
-				lv.maxSeenSteadyLatency, lv.targetSteadyLatency)
+			return errors.Errorf("%s: max latency was more than allowed: %s vs %s",
+				lv.name, lv.maxSeenSteadyLatency, lv.targetSteadyLatency)
 		}
 	}
 }
 
 func (lv *latencyVerifier) assertValid(t test.Test) {
 	if lv.targetInitialScanLatency != 0 && lv.initialScanLatency == 0 {
-		t.Fatalf("initial scan did not complete")
+		t.Fatalf("%s: initial scan did not complete", lv.name)
 	}
 	if lv.targetInitialScanLatency != 0 && lv.initialScanLatency > lv.targetInitialScanLatency {
-		t.Fatalf("initial scan latency was more than target: %s vs %s",
-			lv.initialScanLatency, lv.targetInitialScanLatency)
+		t.Fatalf("%s: initial scan latency was more than target: %s vs %s",
+			lv.name, lv.initialScanLatency, lv.targetInitialScanLatency)
 	}
 	if lv.targetSteadyLatency != 0 && !lv.latencyBecameSteady {
-		t.Fatalf("latency never dropped to acceptable steady level: %s", lv.targetSteadyLatency)
+		t.Fatalf("%s: latency never dropped to acceptable steady level: %s", lv.name, lv.targetSteadyLatency)
 	}
 	if lv.targetSteadyLatency != 0 && lv.maxSeenSteadyLatency > lv.targetSteadyLatency {
-		t.Fatalf("max latency was more than allowed: %s vs %s",
-			lv.maxSeenSteadyLatency, lv.targetSteadyLatency)
+		t.Fatalf("%s: max latency was more than allowed: %s vs %s",
+			lv.name, lv.maxSeenSteadyLatency, lv.targetSteadyLatency)
 	}
 }
 
@@ -210,7 +210,7 @@ func (lv *latencyVerifier) maybeLogLatencyHist() {
 		return
 	}
 	lv.logger.Printf(
-		"%s end-to-end __avg(ms)__p50(ms)__p75(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)\n", lv.name)
+		"%s: end-to-end __avg(ms)__p50(ms)__p75(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)\n", lv.name)
 	lv.logger.Printf("%s end-to-end  %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
 		lv.name,
 		time.Duration(lv.latencyHist.Mean()).Seconds()*1000,

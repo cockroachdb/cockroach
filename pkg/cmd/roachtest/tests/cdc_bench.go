@@ -347,7 +347,7 @@ func runCDCBenchScan(
 			return err
 		}
 
-		duration := info.finishedTime.Sub(info.startedTime)
+		duration := info.GetFinishedTime().Sub(info.startedTime)
 		rate := int64(float64(numRows) / duration.Seconds())
 		t.L().Printf("changefeed completed in %s (scanned %s rows per second)",
 			duration.Truncate(time.Second), humanize.Comma(rate))
@@ -525,7 +525,7 @@ func runCDCBenchWorkload(
 				switch jobs.Status(info.status) {
 				case jobs.StatusPending, jobs.StatusRunning:
 					doneValue := done.Load()
-					return doneValue != nil && info.highwaterTime.After(doneValue.(time.Time)), nil
+					return doneValue != nil && info.GetHighWater().After(doneValue.(time.Time)), nil
 				default:
 					return false, errors.Errorf("unexpected changefeed status %s", info.status)
 				}
@@ -533,7 +533,7 @@ func runCDCBenchWorkload(
 			if err != nil {
 				return err
 			}
-			t.L().Printf("changefeed watermark is %s", info.highwaterTime.Format(time.RFC3339))
+			t.L().Printf("changefeed watermark is %s", info.GetHighWater().Format(time.RFC3339))
 			return nil
 		})
 
@@ -545,13 +545,13 @@ func runCDCBenchWorkload(
 		info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
 			switch jobs.Status(info.status) {
 			case jobs.StatusPending, jobs.StatusRunning:
-				return info.highwaterTime.After(now), nil
+				return info.GetHighWater().After(now), nil
 			default:
 				return false, errors.Errorf("unexpected changefeed status %s", info.status)
 			}
 		})
 		require.NoError(t, err)
-		t.L().Printf("changefeed watermark is %s", info.highwaterTime.Format(time.RFC3339))
+		t.L().Printf("changefeed watermark is %s", info.GetHighWater().Format(time.RFC3339))
 
 	} else {
 		t.L().Printf("control run, not starting changefeed")
@@ -591,7 +591,7 @@ func runCDCBenchWorkload(
 				return err
 			}
 			t.L().Printf("waiting for changefeed watermark to reach %s (lagging by %s)",
-				now.Format(time.RFC3339), now.Sub(info.highwaterTime).Truncate(time.Second))
+				now.Format(time.RFC3339), now.Sub(info.GetHighWater()).Truncate(time.Second))
 		}
 		return nil
 	})
@@ -639,8 +639,8 @@ func waitForChangefeed(
 				return changefeedInfo{}, errors.Wrapf(err, "failed %d attempts to get changefeed info", maxLoadJobAttempts)
 			}
 			continue
-		} else if info.errMsg != "" {
-			return changefeedInfo{}, errors.Errorf("changefeed error: %s", info.errMsg)
+		} else if info.GetError() != "" {
+			return changefeedInfo{}, errors.Errorf("changefeed error: %s", info.GetError())
 		}
 		if ok, err := f(*info); err != nil {
 			return changefeedInfo{}, err
