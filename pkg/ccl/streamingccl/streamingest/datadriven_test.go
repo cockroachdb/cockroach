@@ -198,7 +198,7 @@ func TestDataDriven(t *testing.T) {
 				}
 				timestamp, _, err := tree.ParseDTimestamp(nil, cutoverTime, time.Microsecond)
 				require.NoError(t, err)
-				ds.replicationClusters.Cutover(ds.producerJobID, ds.ingestionJobID, timestamp.Time, async)
+				ds.replicationClusters.Cutover(ctx, ds.producerJobID, ds.ingestionJobID, timestamp.Time, async)
 				return ""
 
 			case "exec-sql":
