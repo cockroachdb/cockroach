@@ -174,7 +174,7 @@ func (c *cFetcherWrapper) Close(ctx context.Context) {
 		c.detachedFetcherMon = nil
 	}
 	if c.converter != nil {
-		c.converter.Release(ctx)
+		c.converter.Close(ctx)
 		c.converter = nil
 	}
 	c.buf = bytes.Buffer{}

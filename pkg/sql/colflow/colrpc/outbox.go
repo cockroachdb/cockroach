@@ -124,7 +124,7 @@ func NewOutbox(
 func (o *Outbox) close(ctx context.Context) {
 	o.scratch.buf = nil
 	o.scratch.msg = nil
-	o.converter.Release(ctx)
+	o.converter.Close(ctx)
 	// Unset the input (which is a deselector operator) so that its output batch
 	// could be garbage collected. This allows us to release all memory
 	// registered with the allocator (the allocator is shared by the outbox and

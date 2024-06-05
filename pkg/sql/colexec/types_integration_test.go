@@ -83,7 +83,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 
 			c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional, testMemAcc)
 			require.NoError(t, err)
-			defer c.Release(ctx)
+			defer c.Close(ctx)
 			r, err := colserde.NewRecordBatchSerializer(typs)
 			require.NoError(t, err)
 			arrowOp := newArrowTestOperator(columnarizer, c, r, typs)

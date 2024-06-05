@@ -50,6 +50,7 @@ import (
 type testUtils struct {
 	// testAllocator is an Allocator with an unlimited budget for use in tests.
 	testAllocator     *colmem.Allocator
+	allocatorMemAcc   *mon.BoundAccount
 	testColumnFactory coldata.ColumnFactory
 	evalCtx           *eval.Context
 
@@ -58,7 +59,7 @@ type testUtils struct {
 	testMemMonitor *mon.BytesMonitor
 	testMemAcc     *mon.BoundAccount
 
-	// testDiskMonitor and testDiskmAcc are a test monitor with an unlimited budget
+	// testDiskMonitor and testDiskAcc are a test monitor with an unlimited budget
 	// and a disk account bound to it for use in tests.
 	testDiskMonitor *mon.BytesMonitor
 	testDiskAcc     *mon.BoundAccount
@@ -67,24 +68,26 @@ type testUtils struct {
 func newTestUtils(ctx context.Context) *testUtils {
 	st := cluster.MakeTestingClusterSettings()
 	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
-	memAcc := testMemMonitor.MakeBoundAccount()
+	allocatorMemAcc, testMemAcc := testMemMonitor.MakeBoundAccount(), testMemMonitor.MakeBoundAccount()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
-	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+	testAllocator := colmem.NewAllocator(ctx, &allocatorMemAcc, testColumnFactory)
 	testDiskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	diskAcc := testDiskMonitor.MakeBoundAccount()
 	return &testUtils{
 		testAllocator:     testAllocator,
+		allocatorMemAcc:   &allocatorMemAcc,
 		testColumnFactory: testColumnFactory,
 		evalCtx:           &evalCtx,
 		testMemMonitor:    testMemMonitor,
-		testMemAcc:        &memAcc,
+		testMemAcc:        &testMemAcc,
 		testDiskMonitor:   testDiskMonitor,
 		testDiskAcc:       &diskAcc,
 	}
 }
 
 func (t *testUtils) cleanup(ctx context.Context) {
+	t.allocatorMemAcc.Close(ctx)
 	t.testMemAcc.Close(ctx)
 	t.testMemMonitor.Stop(ctx)
 	t.testDiskAcc.Close(ctx)
@@ -226,7 +229,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 						unlimitedAllocator:  tu.testAllocator,
 						memoryLimit:         mtc.bytes,
 						diskAcc:             tu.testDiskAcc,
-						converterMemAcc:     tu.testMemAcc,
+						diskQueueMemAcc:     tu.testMemAcc,
 						cfg:                 queueCfg,
 						fdSemaphore:         colexecop.NewTestingSemaphore(2),
 						unblockedEventsChan: unblockEventsChan,
@@ -338,7 +341,7 @@ func TestRouterOutputNext(t *testing.T) {
 						unlimitedAllocator:  tu.testAllocator,
 						memoryLimit:         mtc.bytes,
 						diskAcc:             tu.testDiskAcc,
-						converterMemAcc:     tu.testMemAcc,
+						diskQueueMemAcc:     tu.testMemAcc,
 						cfg:                 queueCfg,
 						fdSemaphore:         colexecop.NewTestingSemaphore(2),
 						unblockedEventsChan: unblockedEventsChan,
@@ -400,7 +403,7 @@ func TestRouterOutputNext(t *testing.T) {
 					unlimitedAllocator:  tu.testAllocator,
 					memoryLimit:         mtc.bytes,
 					diskAcc:             tu.testDiskAcc,
-					converterMemAcc:     tu.testMemAcc,
+					diskQueueMemAcc:     tu.testMemAcc,
 					cfg:                 queueCfg,
 					fdSemaphore:         colexecop.NewTestingSemaphore(2),
 					unblockedEventsChan: unblockedEventsChan,
@@ -451,7 +454,7 @@ func TestRouterOutputNext(t *testing.T) {
 					unlimitedAllocator:  tu.testAllocator,
 					memoryLimit:         mtc.bytes,
 					diskAcc:             tu.testDiskAcc,
-					converterMemAcc:     tu.testMemAcc,
+					diskQueueMemAcc:     tu.testMemAcc,
 					cfg:                 queueCfg,
 					fdSemaphore:         colexecop.NewTestingSemaphore(2),
 					unblockedEventsChan: ch,
@@ -545,7 +548,7 @@ func TestRouterOutputRandom(t *testing.T) {
 						unlimitedAllocator:  tu.testAllocator,
 						memoryLimit:         mtc.bytes,
 						diskAcc:             tu.testDiskAcc,
-						converterMemAcc:     tu.testMemAcc,
+						diskQueueMemAcc:     tu.testMemAcc,
 						cfg:                 queueCfg,
 						fdSemaphore:         colexecop.NewTestingSemaphore(2),
 						unblockedEventsChan: unblockedEventsChans,
@@ -904,8 +907,8 @@ func TestHashRouterOneOutput(t *testing.T) {
 			tu.testAllocator.ReleaseAll()
 			diskAcc := tu.testDiskMonitor.MakeBoundAccount()
 			defer diskAcc.Close(ctx)
-			converterMemAcc := tu.testMemMonitor.MakeBoundAccount()
-			defer converterMemAcc.Close(ctx)
+			diskQueueMemAcc := tu.testMemMonitor.MakeBoundAccount()
+			defer diskQueueMemAcc.Close(ctx)
 			r, routerOutputs := NewHashRouter(
 				&execinfra.FlowCtx{Gateway: true},
 				0, /* processorID */
@@ -919,7 +922,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 				queueCfg,
 				colexecop.NewTestingSemaphore(2),
 				[]*mon.BoundAccount{&diskAcc},
-				[]*mon.BoundAccount{&converterMemAcc},
+				[]*mon.BoundAccount{&diskQueueMemAcc},
 			)
 
 			if len(routerOutputs) != 1 {
@@ -1059,15 +1062,15 @@ func TestHashRouterRandom(t *testing.T) {
 					diskAcc := tu.testDiskMonitor.MakeBoundAccount()
 					defer diskAcc.Close(ctx)
 					allocator := colmem.NewAllocator(ctx, &acc, tu.testColumnFactory)
-					converterMemAcc := tu.testMemMonitor.MakeBoundAccount()
-					defer converterMemAcc.Close(ctx)
+					diskQueueMemAcc := tu.testMemMonitor.MakeBoundAccount()
+					defer diskQueueMemAcc.Close(ctx)
 					op := newRouterOutputOp(
 						routerOutputOpArgs{
 							types:               typs,
 							unlimitedAllocator:  allocator,
 							memoryLimit:         memoryLimitPerOutput,
 							diskAcc:             &diskAcc,
-							converterMemAcc:     &converterMemAcc,
+							diskQueueMemAcc:     &diskQueueMemAcc,
 							cfg:                 queueCfg,
 							fdSemaphore:         colexecop.NewTestingSemaphore(len(outputs) * 2),
 							unblockedEventsChan: unblockEventsChan,
@@ -1331,7 +1334,7 @@ func BenchmarkHashRouter(b *testing.B) {
 			b.Run(fmt.Sprintf("numOutputs=%d/numInputBatches=%d", numOutputs, numInputBatches), func(b *testing.B) {
 				allocators := make([]*colmem.Allocator, numOutputs)
 				diskAccounts := make([]*mon.BoundAccount, numOutputs)
-				converterMemAccounts := make([]*mon.BoundAccount, numOutputs)
+				diskQueueMemAccounts := make([]*mon.BoundAccount, numOutputs)
 				for i := range allocators {
 					acc := tu.testMemMonitor.MakeBoundAccount()
 					allocators[i] = colmem.NewAllocator(ctx, &acc, tu.testColumnFactory)
@@ -1339,9 +1342,9 @@ func BenchmarkHashRouter(b *testing.B) {
 					diskAcc := tu.testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctx)
-					converterMemAcc := tu.testMemMonitor.MakeBoundAccount()
-					converterMemAccounts[i] = &converterMemAcc
-					defer converterMemAcc.Close(ctx)
+					diskQueueMemAcc := tu.testMemMonitor.MakeBoundAccount()
+					diskQueueMemAccounts[i] = &diskQueueMemAcc
+					defer diskQueueMemAcc.Close(ctx)
 				}
 				r, outputs := NewHashRouter(
 					&execinfra.FlowCtx{Gateway: true},
@@ -1354,7 +1357,7 @@ func BenchmarkHashRouter(b *testing.B) {
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
-					converterMemAccounts,
+					diskQueueMemAccounts,
 				)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that

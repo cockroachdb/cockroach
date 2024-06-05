@@ -81,7 +81,7 @@ func (d *Deserializer) Deserialize(serializedBatch []byte) coldata.Batch {
 // Close closes the Deserializer. Safe to be called even if Init wasn't called.
 func (d *Deserializer) Close(ctx context.Context) {
 	if d.converter != nil {
-		d.converter.Release(ctx)
+		d.converter.Close(ctx)
 	}
 	*d = Deserializer{}
 }

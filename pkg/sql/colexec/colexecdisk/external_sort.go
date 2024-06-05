@@ -240,7 +240,7 @@ func NewExternalSorter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAcc *mon.BoundAccount,
-	converterMemAcc *mon.BoundAccount,
+	diskQueueMemAcc *mon.BoundAccount,
 	testingVecFDsToAcquire int,
 ) colexecop.Operator {
 	if diskQueueCfg.BufferSizeBytes > 0 && maxNumberPartitions == 0 {
@@ -313,7 +313,7 @@ func NewExternalSorter(
 		partitionerCreator: func() colcontainer.PartitionedQueue {
 			return colcontainer.NewPartitionedDiskQueue(
 				inputTypes, diskQueueCfg, partitionedDiskQueueSemaphore,
-				colcontainer.PartitionerStrategyCloseOnNewPartition, diskAcc, converterMemAcc,
+				colcontainer.PartitionerStrategyCloseOnNewPartition, diskAcc, diskQueueMemAcc,
 			)
 		},
 		inputTypes:           inputTypes,
