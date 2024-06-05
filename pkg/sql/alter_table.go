@@ -385,17 +385,29 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.ForeignKeyConstraintTableDef:
-				// We want to reject uses of FK ON UPDATE actions where there is already
-				// an ON UPDATE expression for the column.
-				if d.Actions.Update != tree.NoAction && d.Actions.Update != tree.Restrict {
+				// There are two cases that we want to reject FKs related to
+				// ON UPDATE/DELETE clauses:
+				// - a FK ON UPDATE action and there is already an ON UPDATE
+				//   expression for the column
+				// - a FK over a computed column, and we have a ON UPDATE or ON DELETE
+				//   that modifies the FK column value in some manner. We block these
+				//   because the column value cannot change since it is computed. We do
+				//   allow ON DELETE CASCADE though since that removes the entire row.
+				hasUpdateAction := d.Actions.HasUpdateAction()
+				if hasUpdateAction || d.Actions.HasDisallowedActionForComputedFKCol() {
 					for _, fromCol := range d.FromCols {
 						for _, toCheck := range n.tableDesc.Columns {
-							if fromCol == toCheck.ColName() && toCheck.HasOnUpdate() {
+							if fromCol != toCheck.ColName() {
+								continue
+							}
+							if hasUpdateAction && toCheck.HasOnUpdate() {
 								return pgerror.Newf(
 									pgcode.InvalidTableDefinition,
 									"cannot specify a foreign key update action and an ON UPDATE"+
 										" expression on the same column",
 								)
+							} else if toCheck.IsComputed() {
+								return sqlerrors.NewInvalidActionOnComputedFKColumnError(hasUpdateAction)
 							}
 						}
 					}
