@@ -181,4 +181,3 @@ false
 update fingerprint=fDDL planHash=123 database=db stmtType=DDL rec=shouldNotShowUp
 ----
 recs=[] execCount=0 found=false cacheSize=1
-

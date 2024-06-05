@@ -132,6 +132,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"addd new job_events table to the system tenant",
+		clusterversion.V24_2_JobEvents.Version(),
+		upgrade.NoPrecondition,
+		addJobEventsTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

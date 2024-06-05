@@ -388,6 +388,9 @@ catalog:
   "066":
     descriptor: relation
     namespace: (1, 29, "statement_execution_insights")
+  "067":
+    descriptor: relation
+    namespace: (1, 29, "job_events")
   "100":
     comments:
       database: this is the default database

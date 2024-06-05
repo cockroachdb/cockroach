@@ -1235,6 +1235,7 @@ system         crdb_internal       index_spans                                  
 system         crdb_internal       index_usage_statistics                       SYSTEM VIEW  NO
 system         information_schema  information_schema_catalog_name              SYSTEM VIEW  NO
 system         crdb_internal       invalid_objects                              SYSTEM VIEW  NO
+system         public              job_events                                   BASE TABLE   YES
 system         public              job_info                                     BASE TABLE   YES
 system         crdb_internal       jobs                                         SYSTEM VIEW  NO
 system         public              jobs                                         BASE TABLE   YES
@@ -1618,6 +1619,14 @@ system              public             29_53_5_not_null                         
 system              public             29_53_6_not_null                                                                                                system         public        external_connections             CHECK            NO             NO
 system              public             29_53_7_not_null                                                                                                system         public        external_connections             CHECK            NO             NO
 system              public             primary                                                                                                         system         public        external_connections             PRIMARY KEY      NO             NO
+system              public             29_67_1_not_null                                                                                                system         public        job_events                       CHECK            NO             NO
+system              public             29_67_2_not_null                                                                                                system         public        job_events                       CHECK            NO             NO
+system              public             29_67_3_not_null                                                                                                system         public        job_events                       CHECK            NO             NO
+system              public             29_67_4_not_null                                                                                                system         public        job_events                       CHECK            NO             NO
+system              public             29_67_5_not_null                                                                                                system         public        job_events                       CHECK            NO             NO
+system              public             29_67_7_not_null                                                                                                system         public        job_events                       CHECK            NO             NO
+system              public             check_event_level                                                                                               system         public        job_events                       CHECK            NO             NO
+system              public             primary                                                                                                         system         public        job_events                       PRIMARY KEY      NO             NO
 system              public             29_54_1_not_null                                                                                                system         public        job_info                         CHECK            NO             NO
 system              public             29_54_2_not_null                                                                                                system         public        job_info                         CHECK            NO             NO
 system              public             29_54_3_not_null                                                                                                system         public        job_info                         CHECK            NO             NO
@@ -2179,6 +2188,12 @@ system              public             29_66_2_not_null                         
 system              public             29_66_3_not_null                                                                                                transaction_fingerprint_id IS NOT NULL
 system              public             29_66_4_not_null                                                                                                statement_id IS NOT NULL
 system              public             29_66_5_not_null                                                                                                statement_fingerprint_id IS NOT NULL
+system              public             29_67_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_67_2_not_null                                                                                                event_level IS NOT NULL
+system              public             29_67_3_not_null                                                                                                event_type IS NOT NULL
+system              public             29_67_4_not_null                                                                                                event_time IS NOT NULL
+system              public             29_67_5_not_null                                                                                                event_summary IS NOT NULL
+system              public             29_67_7_not_null                                                                                                event_id IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
@@ -2191,6 +2206,7 @@ system              public             check_crdb_internal_aggregated_ts_app_nam
 system              public             check_crdb_internal_created_at_database_id_index_id_table_id_shard_16                                           ((crdb_internal_created_at_database_id_index_id_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
 system              public             check_crdb_internal_end_time_start_time_shard_16                                                                ((crdb_internal_end_time_start_time_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)))
+system              public             check_event_level                                                                                               ((event_level IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8)))
 system              public             check_sampling_probability                                                                                      ((sampling_probability BETWEEN 0.0:::FLOAT8 AND 1.0:::FLOAT8))
 system              public             check_singleton                                                                                                 ((singleton))
 system              public             single_row                                                                                                      ((singleton))
@@ -2352,6 +2368,11 @@ system         public        descriptor_id_seq                value             
 system         public        eventlog                         timestamp                                                                                                 system              public             primary
 system         public        eventlog                         uniqueID                                                                                                  system              public             primary
 system         public        external_connections             connection_name                                                                                           system              public             primary
+system         public        job_events                       event_id                                                                                                  system              public             primary
+system         public        job_events                       event_level                                                                                               system              public             check_event_level
+system         public        job_events                       event_time                                                                                                system              public             primary
+system         public        job_events                       event_type                                                                                                system              public             primary
+system         public        job_events                       job_id                                                                                                    system              public             primary
 system         public        job_info                         info_key                                                                                                  system              public             primary
 system         public        job_info                         job_id                                                                                                    system              public             primary
 system         public        job_info                         written                                                                                                   system              public             primary
@@ -2869,6 +2890,13 @@ system         pg_extension  geometry_columns                 f_table_name      
 system         pg_extension  geometry_columns                 f_table_schema                                                                                            2
 system         pg_extension  geometry_columns                 srid                                                                                                      6
 system         pg_extension  geometry_columns                 type                                                                                                      7
+system         public        job_events                       event_details                                                                                             6
+system         public        job_events                       event_id                                                                                                  7
+system         public        job_events                       event_level                                                                                               2
+system         public        job_events                       event_summary                                                                                             5
+system         public        job_events                       event_time                                                                                                4
+system         public        job_events                       event_type                                                                                                3
+system         public        job_events                       job_id                                                                                                    1
 system         public        job_info                         info_key                                                                                                  2
 system         public        job_info                         job_id                                                                                                    1
 system         public        job_info                         value                                                                                                     4
@@ -4185,6 +4213,14 @@ NULL     root     system         public              external_connections       
 NULL     root     system         public              external_connections                         INSERT          YES           NO
 NULL     root     system         public              external_connections                         SELECT          YES           YES
 NULL     root     system         public              external_connections                         UPDATE          YES           NO
+NULL     admin    system         public              job_events                                   DELETE          YES           NO
+NULL     admin    system         public              job_events                                   INSERT          YES           NO
+NULL     admin    system         public              job_events                                   SELECT          YES           YES
+NULL     admin    system         public              job_events                                   UPDATE          YES           NO
+NULL     root     system         public              job_events                                   DELETE          YES           NO
+NULL     root     system         public              job_events                                   INSERT          YES           NO
+NULL     root     system         public              job_events                                   SELECT          YES           YES
+NULL     root     system         public              job_events                                   UPDATE          YES           NO
 NULL     admin    system         public              job_info                                     DELETE          YES           NO
 NULL     admin    system         public              job_info                                     INSERT          YES           NO
 NULL     admin    system         public              job_info                                     SELECT          YES           YES
@@ -5238,6 +5274,14 @@ NULL     root     system         public              statement_execution_insight
 NULL     root     system         public              statement_execution_insights                 INSERT          YES           NO
 NULL     root     system         public              statement_execution_insights                 SELECT          YES           YES
 NULL     root     system         public              statement_execution_insights                 UPDATE          YES           NO
+NULL     admin    system         public              job_events                                   DELETE          YES           NO
+NULL     admin    system         public              job_events                                   INSERT          YES           NO
+NULL     admin    system         public              job_events                                   SELECT          YES           YES
+NULL     admin    system         public              job_events                                   UPDATE          YES           NO
+NULL     root     system         public              job_events                                   DELETE          YES           NO
+NULL     root     system         public              job_events                                   INSERT          YES           NO
+NULL     root     system         public              job_events                                   SELECT          YES           YES
+NULL     root     system         public              job_events                                   UPDATE          YES           NO
 
 statement ok
 USE other_db;

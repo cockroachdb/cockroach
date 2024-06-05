@@ -1160,6 +1160,28 @@ CREATE TABLE system.mvcc_statistics (
 			created
 		)
 	);`
+
+	JobEventsTableSchema = `
+	CREATE TABLE system.job_events (
+	  job_id INT NOT NULL,
+	  event_level INT NOT NULL,
+	  event_type STRING NOT NULL,
+	  event_time TIMESTAMPTZ NOT NULL,
+	  event_summary STRING NOT NULL,
+	  event_details JSONB,
+	  event_id INT DEFAULT unique_rowid(),
+		CONSTRAINT "primary" PRIMARY KEY (job_id, event_type, event_time, event_id),
+		CONSTRAINT "check_event_level" CHECK (event_level IN (0, 1, 2, 3, 4, 5)),
+		FAMILY "primary" (
+			"job_id",
+			"event_level",
+			"event_type",
+			"event_time",
+			"event_summary",
+			"event_details",
+			"event_id"
+		)
+	);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1212,7 +1234,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_2_StmtDiagRedacted.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_2_JobEvents.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1403,6 +1425,7 @@ func MakeSystemTables() []SystemTable {
 		SystemMVCCStatisticsTable,
 		StatementExecInsightsTable,
 		TransactionExecInsightsTable,
+		JobEvents,
 	}
 }
 
@@ -4716,6 +4739,60 @@ var (
 				IsNonNullConstraint:   false,
 				FromHashShardedColumn: true,
 				ConstraintID:          tbl.NextConstraintID,
+			}}
+			tbl.NextConstraintID++
+		},
+	)
+
+	JobEvents = makeSystemTable(
+		JobEventsTableSchema,
+		systemTable(catconstants.JobEvents,
+			descpb.InvalidID, // dynamically assigned table ID
+			[]descpb.ColumnDescriptor{
+				{Name: "job_id", ID: 1, Type: types.Int},
+				{Name: "event_level", ID: 2, Type: types.Int},
+				{Name: "event_type", ID: 3, Type: types.String},
+				{Name: "event_time", ID: 4, Type: types.TimestampTZ},
+				{Name: "event_summary", ID: 5, Type: types.String},
+				{Name: "event_details", ID: 6, Type: types.Jsonb, Nullable: true},
+				{Name: "event_id", ID: 7, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"job_id",
+						"event_level",
+						"event_type",
+						"event_time",
+						"event_summary",
+						"event_details",
+						"event_id",
+					},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames: []string{"job_id", "event_type", "event_time", "event_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 3, 4, 7},
+			},
+		), func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Name:         "check_event_level",
+				Expr:         "event_level IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8)",
+				ColumnIDs:    []descpb.ColumnID{2},
+				ConstraintID: tbl.NextConstraintID,
 			}}
 			tbl.NextConstraintID++
 		},
