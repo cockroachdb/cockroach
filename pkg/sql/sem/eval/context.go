@@ -120,9 +120,10 @@ type Context struct {
 	// transaction_timestamp() and the like.
 	TxnTimestamp time.Time
 
-	// AsOfSystemTime denotes the explicit AS OF SYSTEM TIME timestamp for the
-	// query, if any. If the query is not an AS OF SYSTEM TIME query,
-	// AsOfSystemTime is nil.
+	// AsOfSystemTime denotes either the explicit (i.e. in the query text) or
+	// implicit (via the txn mode) AS OF SYSTEM TIME timestamp for the query, if
+	// any. If the query is not an AS OF SYSTEM TIME query, AsOfSystemTime is
+	// nil.
 	// TODO(knz): we may want to support table readers at arbitrary
 	// timestamps, so that each FROM clause can have its own
 	// timestamp. In that case, the timestamp would not be set

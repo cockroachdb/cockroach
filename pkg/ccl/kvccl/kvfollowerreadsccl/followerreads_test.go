@@ -1237,15 +1237,17 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			require.Equal(t, numN2FRs, 1, "follower read wasn't served by n2: %s", rec)
 
 			if useExplainAnalyze {
-				expectedMessage := "used follower read"
-				var foundMessage bool
+				frMessage, historicalMessage := "used follower read", "historical"
+				var foundFRMessage, foundHistoricalMessage bool
 				for _, row := range rows {
-					if strings.TrimSpace(row[0]) == expectedMessage {
-						foundMessage = true
-						break
+					if strings.TrimSpace(row[0]) == frMessage {
+						foundFRMessage = true
+					} else if strings.HasPrefix(strings.TrimSpace(row[0]), historicalMessage) {
+						foundHistoricalMessage = true
 					}
 				}
-				require.True(t, foundMessage, "didn't see %q message in EXPLAIN ANALYZE: %v", expectedMessage, rows)
+				require.True(t, foundFRMessage, "didn't see %q message in EXPLAIN ANALYZE: %v", frMessage, rows)
+				require.True(t, foundHistoricalMessage, "didn't see %q message in EXPLAIN ANALYZE: %v", historicalMessage, rows)
 			}
 		})
 	}
