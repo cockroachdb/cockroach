@@ -122,11 +122,13 @@ func TestLeaseRenewer(t *testing.T) {
 
 		// Split off an expiration-based range, and assert that the lease is extended.
 		desc := tc.LookupRangeOrFatal(t, tc.ScratchRangeWithExpirationLease(t))
+		// Wait for the split to apply on all nodes first.
+		require.NoError(t, tc.WaitForFullReplication())
+		// Assert that the lease is extended.
 		assertLeaseExtension(desc.RangeID)
 
 		// Transfer the lease to a different leaseholder, and assert that the lease is
-		// still extended. Wait for the split to apply on all nodes first.
-		require.NoError(t, tc.WaitForFullReplication())
+		// still extended.
 		lease, _ := getNodeReplica(1, desc.RangeID).GetLease()
 		target := tc.Target(lookupNode(lease.Replica.NodeID%3 + 1))
 		tc.TransferRangeLeaseOrFatal(t, desc, target)
