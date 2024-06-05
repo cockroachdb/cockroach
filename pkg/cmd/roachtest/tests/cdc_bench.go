@@ -426,6 +426,19 @@ func runCDCBenchWorkload(
 	opts, settings := makeCDCBenchOptions(c)
 	settings.ClusterSettings["kv.rangefeed.enabled"] = strconv.FormatBool(cdcEnabled)
 
+	// this makes it easier to work with in grafana
+	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
+
+	// set new kafka sink option
+	// settings.ClusterSettings["changefeed.new_kafka_sink.enabled"] = "true"
+	// TODO: even if emittedbytes is the same, what about network bandwidth?
+	// - single row 50 - ~72Mb/s
+	// - control 0 - 43Mb/s
+	// TODO: kafka metrics
+	// why is it limited to 2MiB/s for both control and singlerow kv0? trying control with only 100 ranges.
+	// -- control 0-100 - 3MiB/s in data, 72Mb/s in network
+	// TODO: next try upping kv workload's concurrency &/ batch size
+
 	switch server {
 	case cdcBenchProcessorServer:
 		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "false"
@@ -449,13 +462,6 @@ func runCDCBenchWorkload(
 			`ALTER %s CONFIGURE ZONE USING num_replicas=3, constraints='[-node%d]'`, target, nCoord[0]))
 		require.NoError(t, err)
 	}
-
-	// TODO: dont see anything in kafka... does this workload insert data? or wtf. no errors tho
-	// yeah i think this test creates all the data before starting the changefeed....?
-
-	// set new kafka sink option
-	// _, err := conn.ExecContext(ctx, "set cluster setting changefeed.new_kafka_sink.enabled = true;")
-	// require.NoError(t, err)
 
 	// Wait for system ranges to upreplicate.
 	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
