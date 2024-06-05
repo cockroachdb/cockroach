@@ -58,9 +58,9 @@ type FileSerializer struct {
 // NewFileSerializer creates a FileSerializer for the given types. The caller is
 // responsible for closing the given writer as well as the given memory account.
 func NewFileSerializer(
-	w io.Writer, typs []*types.T, acc *mon.BoundAccount,
+	w io.Writer, typs []*types.T, memAcc *mon.BoundAccount,
 ) (*FileSerializer, error) {
-	a, err := NewArrowBatchConverter(typs, BatchToArrowOnly, acc)
+	a, err := NewArrowBatchConverter(typs, BatchToArrowOnly, memAcc)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (s *FileSerializer) Finish() error {
 
 // Close releases the resources of the serializer.
 func (s *FileSerializer) Close(ctx context.Context) {
-	s.a.Release(ctx)
+	s.a.Close(ctx)
 }
 
 // FileDeserializer decodes columnar data batches from files encoded according
@@ -230,7 +230,7 @@ func newFileDeserializer(
 
 // Close releases any resources held by this deserializer.
 func (d *FileDeserializer) Close(ctx context.Context) error {
-	d.a.Release(ctx)
+	d.a.Close(ctx)
 	return d.bufCloseFn()
 }
 

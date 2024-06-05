@@ -170,7 +170,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				// Create an allocator for each output.
 				allocators := make([]*colmem.Allocator, numHashRouterOutputs)
 				diskAccounts := make([]*mon.BoundAccount, numHashRouterOutputs)
-				converterMemAccounts := make([]*mon.BoundAccount, numHashRouterOutputs)
+				diskQueueMemAccounts := make([]*mon.BoundAccount, numHashRouterOutputs)
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
 					defer acc.Close(ctxRemote)
@@ -178,9 +178,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctxRemote)
-					converterMemAcc := testMemMonitor.MakeBoundAccount()
-					converterMemAccounts[i] = &converterMemAcc
-					defer converterMemAcc.Close(ctx)
+					diskQueueMemAcc := testMemMonitor.MakeBoundAccount()
+					diskQueueMemAccounts[i] = &diskQueueMemAcc
+					defer diskQueueMemAcc.Close(ctx)
 				}
 				createMetadataSourceForID := func(id int) colexecop.MetadataSource {
 					return colexectestutils.CallbackMetadataSource{
@@ -211,7 +211,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
-					converterMemAccounts,
+					diskQueueMemAccounts,
 				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()

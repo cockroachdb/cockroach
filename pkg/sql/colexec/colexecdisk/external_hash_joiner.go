@@ -68,7 +68,7 @@ func NewExternalHashJoiner(
 	leftInput, rightInput colexecop.Operator,
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	diskAcc *mon.BoundAccount,
-	converterMemAcc *mon.BoundAccount,
+	diskQueueMemAcc *mon.BoundAccount,
 ) colexecop.ClosableOperator {
 	// This memory limit will restrict the size of the batches output by the
 	// in-memory hash joiner in the main strategy as well as by the merge joiner
@@ -116,7 +116,7 @@ func NewExternalHashJoiner(
 		return colexecjoin.NewMergeJoinOp(
 			unlimitedAllocator, memoryLimit, args.DiskQueueCfg, fdSemaphore, spec.JoinType,
 			leftPartitionSorter, rightPartitionSorter, spec.Left.SourceTypes,
-			spec.Right.SourceTypes, leftOrdering, rightOrdering, diskAcc, converterMemAcc, flowCtx.EvalCtx,
+			spec.Right.SourceTypes, leftOrdering, rightOrdering, diskAcc, diskQueueMemAcc, flowCtx.EvalCtx,
 		)
 	}
 	return newHashBasedPartitioner(
@@ -130,7 +130,7 @@ func NewExternalHashJoiner(
 		inMemMainOpConstructor,
 		diskBackedFallbackOpConstructor,
 		diskAcc,
-		converterMemAcc,
+		diskQueueMemAcc,
 		colexecop.ExternalHJMinPartitions,
 	)
 }

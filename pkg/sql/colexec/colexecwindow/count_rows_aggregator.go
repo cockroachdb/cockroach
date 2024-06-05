@@ -36,7 +36,7 @@ func NewCountRowsOperator(
 	colsToStore := framer.getColsToStore(nil /* oldColsToStore */)
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg, args.FdSemaphore,
-		args.InputTypes, args.DiskAcc, args.ConverterMemAcc, colsToStore...,
+		args.InputTypes, args.DiskAcc, args.DiskQueueMemAcc, colsToStore...,
 	)
 	windower := &countRowsWindowAggregator{
 		partitionSeekerBase: partitionSeekerBase{

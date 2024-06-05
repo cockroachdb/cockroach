@@ -44,7 +44,7 @@ func NewFirstValueOperator(
 	mainMemLimit := args.MemoryLimit - bufferMemLimit
 	buffer := colexecutils.NewSpillingBuffer(
 		args.BufferAllocator, bufferMemLimit, args.QueueCfg, args.FdSemaphore,
-		args.InputTypes, args.DiskAcc, args.ConverterMemAcc, colsToStore...,
+		args.InputTypes, args.DiskAcc, args.DiskQueueMemAcc, colsToStore...,
 	)
 	base := firstValueBase{
 		partitionSeekerBase: partitionSeekerBase{

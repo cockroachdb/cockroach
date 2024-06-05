@@ -704,7 +704,7 @@ func makeNewHashAggregatorArgs(
 			DiskAcc: args.MonitorRegistry.CreateDiskAccount(
 				ctx, flowCtx, hashAggregatorMemMonitorName+"-spilling-queue", args.Spec.ProcessorID,
 			),
-			ConverterMemAcc: accounts[4],
+			DiskQueueMemAcc: accounts[4],
 		},
 		hashAggregatorMemMonitorName
 }
@@ -1990,11 +1990,11 @@ func (r opResult) finishBufferedWindowerArgs(
 		accounts := monitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, processorID, 3 /* numAccounts */)
 		mainAcc = accounts[0]
 		args.BufferAllocator = colmem.NewAllocator(ctx, accounts[1], factory)
-		args.ConverterMemAcc = accounts[2]
+		args.DiskQueueMemAcc = accounts[2]
 	} else {
 		accounts := monitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, processorID, 2 /* numAccounts */)
 		mainAcc = accounts[0]
-		args.ConverterMemAcc = accounts[1]
+		args.DiskQueueMemAcc = accounts[1]
 	}
 	args.MainAllocator = colmem.NewAllocator(ctx, mainAcc, factory)
 }
