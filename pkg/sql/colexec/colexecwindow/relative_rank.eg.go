@@ -60,7 +60,7 @@ func NewRelativeRankOperator(
 		fdSemaphore:     args.FdSemaphore,
 		inputTypes:      args.InputTypes,
 		diskAcc:         args.DiskAcc,
-		converterMemAcc: args.ConverterMemAcc,
+		diskQueueMemAcc: args.DiskQueueMemAcc,
 	}
 	switch windowFn {
 	case execinfrapb.WindowerSpec_PERCENT_RANK:
@@ -134,7 +134,7 @@ type relativeRankInitFields struct {
 	inputTypes   []*types.T
 
 	diskAcc         *mon.BoundAccount
-	converterMemAcc *mon.BoundAccount
+	diskQueueMemAcc *mon.BoundAccount
 }
 
 type relativeRankSizesState struct {
@@ -192,7 +192,7 @@ func (r *percentRankNoPartitionOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
-			ConverterMemAcc:    r.converterMemAcc,
+			DiskQueueMemAcc:    r.diskQueueMemAcc,
 		},
 	)
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
@@ -375,7 +375,7 @@ func (r *percentRankWithPartitionOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
-			ConverterMemAcc:    r.converterMemAcc,
+			DiskQueueMemAcc:    r.diskQueueMemAcc,
 		},
 	)
 	r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
@@ -388,7 +388,7 @@ func (r *percentRankWithPartitionOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
-			ConverterMemAcc:    r.converterMemAcc,
+			DiskQueueMemAcc:    r.diskQueueMemAcc,
 		},
 	)
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
@@ -658,7 +658,7 @@ func (r *cumeDistNoPartitionOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
-			ConverterMemAcc:    r.converterMemAcc,
+			DiskQueueMemAcc:    r.diskQueueMemAcc,
 		},
 	)
 	r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
@@ -671,7 +671,7 @@ func (r *cumeDistNoPartitionOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
-			ConverterMemAcc:    r.converterMemAcc,
+			DiskQueueMemAcc:    r.diskQueueMemAcc,
 		},
 	)
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
@@ -926,7 +926,7 @@ func (r *cumeDistWithPartitionOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
-			ConverterMemAcc:    r.converterMemAcc,
+			DiskQueueMemAcc:    r.diskQueueMemAcc,
 		},
 	)
 	r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
@@ -939,7 +939,7 @@ func (r *cumeDistWithPartitionOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
-			ConverterMemAcc:    r.converterMemAcc,
+			DiskQueueMemAcc:    r.diskQueueMemAcc,
 		},
 	)
 	r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
@@ -952,7 +952,7 @@ func (r *cumeDistWithPartitionOp) Init(ctx context.Context) {
 			DiskQueueCfg:       r.diskQueueCfg,
 			FDSemaphore:        r.fdSemaphore,
 			DiskAcc:            r.diskAcc,
-			ConverterMemAcc:    r.converterMemAcc,
+			DiskQueueMemAcc:    r.diskQueueMemAcc,
 		},
 	)
 	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
