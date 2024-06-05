@@ -70,6 +70,10 @@ type streamIngestionFrontier struct {
 	// persistedReplicatedTime stores the highwater mark of
 	// progress that is persisted in the job record.
 	persistedReplicatedTime hlc.Timestamp
+	// retainedTime is the minimum timestamp of persistedReplicatedTime
+	// and cutoverTime. It represents the earliest timestamp for which
+	// the source cluster can start garbage collection.
+	retainedTime hlc.Timestamp
 
 	lastPartitionUpdate time.Time
 	lastFrontierDump    time.Time
@@ -206,8 +210,10 @@ func (sf *streamIngestionFrontier) Next() (
 			return nil, sf.DrainHelper()
 			// Send the latest persisted replicated time in the heartbeat to the source cluster
 			// as even with retries we will never request an earlier row than it, and
-			// the source cluster is free to clean up earlier data.
-		case sf.heartbeatSender.FrontierUpdates <- sf.persistedReplicatedTime:
+			// the source cluster is free to clean up earlier data. If cutover time is set
+			// and is earlier than the persisted replicated time, the cutover time will be
+			// sent in the heartbeat instead.
+		case sf.heartbeatSender.FrontierUpdates <- sf.retainedTime:
 			// If heartbeatSender has error, it means remote has error, we want to
 			// stop the processor.
 		case <-sf.heartbeatSender.StoppedChan:
@@ -329,6 +335,9 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
 		streamProgress.Checkpoint.ResolvedSpans = frontierResolvedSpans
 
+		// Initialize retained time to cutover time to compare with persisted replicated time later.
+		sf.retainedTime = streamProgress.CutoverTime
+
 		// Keep the recorded replicatedTime empty until some advancement has been made
 		if sf.replicatedTimeAtStart.Less(replicatedTime) {
 			streamProgress.ReplicatedTime = replicatedTime
@@ -382,6 +391,11 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	}
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedReplicatedTime = f.Frontier()
+
+	// Set retained time to the minimum timestamp of persisted replicated time and cutover time.
+	if sf.retainedTime.IsEmpty() || sf.persistedReplicatedTime.Less(sf.retainedTime) {
+		sf.retainedTime = sf.persistedReplicatedTime
+	}
 	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
 }
