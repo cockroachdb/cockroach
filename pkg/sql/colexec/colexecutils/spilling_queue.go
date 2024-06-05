@@ -88,7 +88,7 @@ type SpillingQueue struct {
 	}
 
 	diskAcc         *mon.BoundAccount
-	converterMemAcc *mon.BoundAccount
+	diskQueueMemAcc *mon.BoundAccount
 }
 
 // spillingQueueInitialItemsLen is the initial capacity of the in-memory buffer
@@ -106,7 +106,7 @@ type NewSpillingQueueArgs struct {
 	DiskQueueCfg       colcontainer.DiskQueueCfg
 	FDSemaphore        semaphore.Semaphore
 	DiskAcc            *mon.BoundAccount
-	ConverterMemAcc    *mon.BoundAccount
+	DiskQueueMemAcc    *mon.BoundAccount
 }
 
 // NewSpillingQueue creates a new SpillingQueue. An unlimited allocator must be
@@ -127,7 +127,7 @@ func NewSpillingQueue(args *NewSpillingQueueArgs) *SpillingQueue {
 		diskQueueCfg:       args.DiskQueueCfg,
 		fdSemaphore:        args.FDSemaphore,
 		diskAcc:            args.DiskAcc,
-		converterMemAcc:    args.ConverterMemAcc,
+		diskQueueMemAcc:    args.DiskQueueMemAcc,
 	}
 }
 
@@ -441,9 +441,9 @@ func (q *SpillingQueue) maybeSpillToDisk(ctx context.Context) error {
 	log.VEvent(ctx, 1, "spilled to disk")
 	var diskQueue colcontainer.Queue
 	if q.rewindable {
-		diskQueue, err = colcontainer.NewRewindableDiskQueue(ctx, q.typs, q.diskQueueCfg, q.diskAcc, q.converterMemAcc)
+		diskQueue, err = colcontainer.NewRewindableDiskQueue(ctx, q.typs, q.diskQueueCfg, q.diskAcc, q.diskQueueMemAcc)
 	} else {
-		diskQueue, err = colcontainer.NewDiskQueue(ctx, q.typs, q.diskQueueCfg, q.diskAcc, q.converterMemAcc)
+		diskQueue, err = colcontainer.NewDiskQueue(ctx, q.typs, q.diskQueueCfg, q.diskAcc, q.diskQueueMemAcc)
 	}
 	if err != nil {
 		return err

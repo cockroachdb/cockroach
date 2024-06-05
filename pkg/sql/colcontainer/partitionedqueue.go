@@ -124,7 +124,7 @@ type PartitionedDiskQueue struct {
 	// share the accounts given that they only grow or shrink and never get
 	// closed.
 	diskAcc         *mon.BoundAccount
-	converterMemAcc *mon.BoundAccount
+	diskQueueMemAcc *mon.BoundAccount
 }
 
 var _ PartitionedQueue = &PartitionedDiskQueue{}
@@ -145,7 +145,7 @@ func NewPartitionedDiskQueue(
 	fdSemaphore semaphore.Semaphore,
 	partitionerStrategy PartitionerStrategy,
 	diskAcc *mon.BoundAccount,
-	converterMemAcc *mon.BoundAccount,
+	diskQueueMemAcc *mon.BoundAccount,
 ) *PartitionedDiskQueue {
 	return &PartitionedDiskQueue{
 		typs:                     typs,
@@ -156,7 +156,7 @@ func NewPartitionedDiskQueue(
 		lastEnqueuedPartitionIdx: -1,
 		fdSemaphore:              fdSemaphore,
 		diskAcc:                  diskAcc,
-		converterMemAcc:          converterMemAcc,
+		diskQueueMemAcc:          diskQueueMemAcc,
 	}
 }
 
@@ -250,7 +250,7 @@ func (p *PartitionedDiskQueue) Enqueue(
 			p.acquireNewFD(ctx)
 		}
 		// Partition has not been created yet.
-		q, err := NewDiskQueue(ctx, p.typs, p.cfg, p.diskAcc, p.converterMemAcc)
+		q, err := NewDiskQueue(ctx, p.typs, p.cfg, p.diskAcc, p.diskQueueMemAcc)
 		if err != nil {
 			return err
 		}
