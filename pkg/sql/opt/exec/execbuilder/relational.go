@@ -2679,6 +2679,10 @@ func (b *Builder) buildLookupJoin(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+	ok, reverse := ordering.LookupJoinCanProvideOrdering(join, &join.RequiredPhysical().Ordering)
+	if !ok {
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("lookup join can't provide required ordering")
+	}
 	var res execPlan
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinType,
@@ -2697,6 +2701,7 @@ func (b *Builder) buildLookupJoin(
 		locking,
 		join.RequiredPhysical().LimitHintInt64(),
 		join.RemoteOnlyLookups,
+		reverse,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err

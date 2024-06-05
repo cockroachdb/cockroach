@@ -547,7 +547,7 @@ func newJoinReader(
 				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
 			)
 			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
-				jr.FlowCtx.Cfg.TempStorage, jr.streamerInfo.diskMonitor,
+				jr.FlowCtx.Cfg.TempStorage, jr.streamerInfo.diskMonitor, spec.ReverseScans,
 			)
 		}
 		singleRowLookup := readerType == indexJoinReaderType || spec.LookupColumnsAreKey
@@ -565,6 +565,7 @@ func newJoinReader(
 			jr.streamerInfo.maintainOrdering,
 			singleRowLookup,
 			int(spec.FetchSpec.MaxKeysPerRow),
+			spec.ReverseScans,
 			diskBuffer,
 			&jr.streamerInfo.txnKVStreamerMemAcc,
 		)
@@ -584,6 +585,7 @@ func newJoinReader(
 		row.FetcherInitArgs{
 			StreamingKVFetcher:         streamingKVFetcher,
 			Txn:                        jr.txn,
+			Reverse:                    spec.ReverseScans,
 			LockStrength:               spec.LockingStrength,
 			LockWaitPolicy:             spec.LockingWaitPolicy,
 			LockDurability:             spec.LockingDurability,

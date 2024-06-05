@@ -561,8 +561,9 @@ func NewColIndexJoin(
 			maintainOrdering,
 			true, /* singleRowLookup */
 			int(spec.FetchSpec.MaxKeysPerRow),
+			false, /* reverse */
 			rowcontainer.NewKVStreamerResultDiskBuffer(
-				flowCtx.Cfg.TempStorage, diskMonitor,
+				flowCtx.Cfg.TempStorage, diskMonitor, false, /* reverse */
 			),
 			kvFetcherMemAcc,
 		)

@@ -43,6 +43,18 @@ func ScanIsReverse(scan *memo.ScanExpr, required *props.OrderingChoice) bool {
 	return reverse
 }
 
+// scanDirection represents the direction of a scan, either for a Scan operator
+// or a LookupJoin. It allows for an unspecified "either" direction, since the
+// required direction of a scan may not be determined by the first column of an
+// ordering.
+type scanDirection = uint8
+
+const (
+  eitherDirection scanDirection = iota
+  fwdDirection
+  revDirection
+)
+
 // ScanPrivateCanProvide returns true if the scan operator returns rows
 // that satisfy the given required ordering; it also returns whether the scan
 // needs to be in reverse order to match the required ordering.
@@ -60,23 +72,18 @@ func ScanPrivateCanProvide(
 	// We start off as accepting either a forward or a reverse scan. Until then,
 	// the reverse variable is unset. Once the direction is known, reverseSet is
 	// true and reverse indicates whether we need to do a reverse scan.
-	const (
-		either = 0
-		fwd    = 1
-		rev    = 2
-	)
-	direction := either
+	direction := eitherDirection
 	if s.HardLimit.IsSet() {
 		// When we have a limit, the limit forces a certain scan direction (because
 		// it affects the results, not just their ordering).
-		direction = fwd
+		direction = fwdDirection
 		if s.HardLimit.Reverse() {
-			direction = rev
+			direction = revDirection
 		}
 	} else if s.Flags.Direction != 0 {
-		direction = fwd
+		direction = fwdDirection
 		if s.Flags.Direction == tree.Descending {
-			direction = rev
+			direction = revDirection
 		}
 	}
 	index := md.Table(s.Table).Index(s.Index)
@@ -101,11 +108,11 @@ func ScanPrivateCanProvide(
 		}
 		// The directions of the index column and the required column impose either
 		// a forward or a reverse scan.
-		required := fwd
+		required := fwdDirection
 		if indexCol.Descending != reqCol.Descending {
-			required = rev
+			required = revDirection
 		}
-		if direction == either {
+		if direction == eitherDirection {
 			direction = required
 		} else if direction != required {
 			// We already determined the direction, and according to it, this column
@@ -115,7 +122,7 @@ func ScanPrivateCanProvide(
 		left, right = left+1, right+1
 	}
 	// If direction is either, we prefer forward scan.
-	return true, direction == rev
+	return true, direction == revDirection
 }
 
 func scanBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {

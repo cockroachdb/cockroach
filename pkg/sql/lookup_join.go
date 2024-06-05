@@ -77,6 +77,12 @@ type lookupJoinNode struct {
 	// that read into remote regions, though the lookups are defined in
 	// lookupExpr, not remoteLookupExpr.
 	remoteOnlyLookups bool
+
+	// If true, reverseScans indicates that the lookups should use ReverseScan
+	// requests instead of Scan requests. This causes lookups *for each input row*
+	// to return results in reverse order. This is only useful when each lookup
+	// can return more than one row.
+	reverseScans bool
 }
 
 func (lj *lookupJoinNode) startExec(params runParams) error {
