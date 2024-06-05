@@ -549,11 +549,6 @@ func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
 			maxLag, checkFreq.Minutes(), sf.lastNodeLagCheck, timeutil.Since(sf.lastNodeLagCheck).Minutes())
 		return nil
 	}
-	// Don't check for lagging nodes if the hwm has yet to advance.
-	if sf.replicatedTimeAtStart.Equal(sf.persistedReplicatedTime) {
-		log.VEventf(ctx, 2, "skipping lag replanning check: hwm has yet to advance past %s", sf.replicatedTimeAtStart)
-		return nil
-	}
 	defer func() {
 		sf.lastNodeLagCheck = timeutil.Now()
 	}()
@@ -580,7 +575,7 @@ func (sf *streamIngestionFrontier) handleLaggingNodeError(ctx context.Context, e
 		sf.replicatedTimeAtLastPositiveLagNodeCheck = sf.persistedReplicatedTime
 		return nil
 	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Equal(sf.persistedReplicatedTime):
-		return errors.Wrapf(err, "hwm has not advanced from %s", sf.persistedReplicatedTime)
+		return errors.Wrapf(err, "replicated time has not advanced from %s", sf.persistedReplicatedTime)
 	default:
 		return errors.Wrapf(err, "unable to handle replanning error with replicated time %s and last node lag check replicated time %s", sf.persistedReplicatedTime, sf.replicatedTimeAtLastPositiveLagNodeCheck)
 	}
