@@ -253,7 +253,7 @@ func alterTableAddForeignKey(
 	var originColSet catalog.TableColSet
 	for i, colName := range fkDef.FromCols {
 		colID := getColumnIDFromColumnName(b, tbl.TableID, colName, true /* required */)
-		ensureColCanBeUsedInOutboundFK(b, tbl.TableID, colID)
+		ensureColCanBeUsedInOutboundFK(b, tbl.TableID, colID, fkDef.Actions)
 		if originColSet.Contains(colID) {
 			panic(pgerror.Newf(pgcode.InvalidForeignKey,
 				"foreign key contains duplicate column %q", fromColsFRNames[i]))
@@ -783,7 +783,9 @@ func retrieveColumnOnUpdateExpressionElem(
 
 // ensureColCanBeUsedInOutboundFK ensures the column can be used in an outbound
 // FK reference. Panic if it cannot.
-func ensureColCanBeUsedInOutboundFK(b BuildCtx, tableID catid.DescID, columnID catid.ColumnID) {
+func ensureColCanBeUsedInOutboundFK(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID, actions tree.ReferenceActions,
+) {
 	colNameElem := mustRetrieveColumnNameElem(b, tableID, columnID)
 	colTypeElem := mustRetrieveColumnTypeElem(b, tableID, columnID)
 	colElem := mustRetrieveColumnElem(b, tableID, columnID)
@@ -803,11 +805,12 @@ func ensureColCanBeUsedInOutboundFK(b BuildCtx, tableID catid.DescID, columnID c
 		))
 	}
 
-	if colTypeElem.ComputeExpr != nil {
-		panic(unimplemented.NewWithIssuef(
-			46672, "computed column %q cannot reference a foreign key",
-			colNameElem.Name,
-		))
+	// When a FK has a computed column, we block any ON UPDATE or ON DELETE
+	// actions that would try to change the computed value. Computed values cannot
+	// be altered directly, so attempts to set them to NULL or a DEFAULT value are
+	// blocked.
+	if colTypeElem.ComputeExpr != nil && actions.HasDisallowedActionForComputedFKCol() {
+		panic(sqlerrors.NewInvalidActionOnComputedFKColumnError(actions.HasUpdateAction()))
 	}
 }
 
