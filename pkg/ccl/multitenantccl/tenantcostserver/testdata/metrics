@@ -12,7 +12,7 @@ consumption:
   write_batches: 3
   write_req: 40
   write_bytes: 50
-  sql_pods_cpu_usage: 60
+  sql_pods_cpu_seconds: 60
   pgwire_egress_bytes: 70
   cross_region_network_ru: 80
 ----
@@ -45,7 +45,7 @@ consumption:
   write_batches: 30
   write_req: 400
   write_bytes: 500
-  sql_pods_cpu_usage: 600
+  sql_pods_cpu_seconds: 600
   pgwire_egress_bytes: 700
   cross_region_network_ru: 800
 ----
@@ -61,14 +61,14 @@ consumption:
   write_batches: 300
   write_req: 4000
   write_bytes: 5000
-  sql_pods_cpu_usage: 6000
+  sql_pods_cpu_seconds: 6000
   pgwire_egress_bytes: 7000
   cross_region_network_ru: 8000
 ----
 
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  ru-current-avg=5781250
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
 Consumption: ru=1110 kvru=888  reads=2220 in 222 batches (3330 bytes)  writes=4440 in 333 batches (5550 bytes)  pod-cpu-usage: 6660 secs  pgwire-egress=7770 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:00.000
 First active instance: 1

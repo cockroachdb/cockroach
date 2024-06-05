@@ -37,9 +37,9 @@ func (s *instance) TokenBucketRequest(
 			Error: errors.EncodeError(ctx, errors.Errorf("invalid instance ID %d", instanceID)),
 		}
 	}
-	if in.RequestedRU < 0 {
+	if in.RequestedTokens < 0 {
 		return &kvpb.TokenBucketResponse{
-			Error: errors.EncodeError(ctx, errors.Errorf("negative requested RUs")),
+			Error: errors.EncodeError(ctx, errors.Errorf("negative requested tokens")),
 		}
 	}
 
@@ -95,9 +95,9 @@ func (s *instance) TokenBucketRequest(
 
 		// Only update consumption if we are sure this is not a duplicate request
 		// that we already counted. Note that if this is a duplicate request, it
-		// will still use RUs from the bucket (RUCurrent); we rely on a higher level
-		// control loop that periodically reconfigures the token bucket to correct
-		// such errors.
+		// will still use tokens from the bucket (TokenCurrent); we rely on a higher
+		// level control loop that periodically reconfigures the token bucket to
+		// correct such errors.
 		if instance.Seq == 0 || instance.Seq < in.SeqNum {
 			tenant.Consumption.Add(&in.ConsumptionSinceLastRequest)
 			instance.Seq = in.SeqNum

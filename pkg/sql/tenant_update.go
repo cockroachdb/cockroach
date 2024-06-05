@@ -124,11 +124,9 @@ func TestingUpdateTenantRecord(
 func (p *planner) UpdateTenantResourceLimits(
 	ctx context.Context,
 	tenantID uint64,
-	availableRU float64,
+	availableTokens float64,
 	refillRate float64,
-	maxBurstRU float64,
-	asOf time.Time,
-	asOfConsumedRequestUnits float64,
+	maxBurstTokens float64,
 ) error {
 	const op = "update-resource-limits"
 	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER); err != nil {
@@ -143,8 +141,8 @@ func (p *planner) UpdateTenantResourceLimits(
 	}
 
 	return p.ExecCfg().TenantUsageServer.ReconfigureTokenBucket(
-		ctx, p.InternalSQLTxn(), roachpb.MustMakeTenantID(tenantID), availableRU, refillRate,
-		maxBurstRU, asOf, asOfConsumedRequestUnits,
+		ctx, p.InternalSQLTxn(), roachpb.MustMakeTenantID(tenantID), availableTokens, refillRate,
+		maxBurstTokens,
 	)
 }
 
