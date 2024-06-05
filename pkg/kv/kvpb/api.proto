@@ -3714,3 +3714,7 @@ message ScanStats {
   // Region, if set, is the region of the KV server that evaluated the request.
   string region = 22;
 }
+
+// UsedFollowerRead indicates whether the reads were served by the follower
+// replica.
+message UsedFollowerRead {}

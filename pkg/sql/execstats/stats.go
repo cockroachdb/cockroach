@@ -57,7 +57,7 @@ func (c *ContentionEventsListener) GetContentionTime() time.Duration {
 }
 
 // ScanStatsListener aggregates all kvpb.ScanStats objects into a single
-// ScanStats object.
+// ScanStats object. It additionally looks for kvpb.UsedFollowerRead objects.
 type ScanStatsListener struct {
 	mu struct {
 		syncutil.Mutex
@@ -69,8 +69,16 @@ var _ tracing.EventListener = &ScanStatsListener{}
 
 // Notify is part of the tracing.EventListener interface.
 func (l *ScanStatsListener) Notify(event tracing.Structured) tracing.EventConsumptionStatus {
-	ss, ok := event.(protoutil.Message).(*kvpb.ScanStats)
-	if !ok {
+	var ss *kvpb.ScanStats
+	switch t := event.(type) {
+	case *kvpb.ScanStats:
+		ss = t
+	case *kvpb.UsedFollowerRead:
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.mu.ScanStats.usedFollowerRead = true
+		return tracing.EventConsumed
+	default:
 		return tracing.EventNotConsumed
 	}
 	l.mu.Lock()
@@ -172,6 +180,9 @@ type ScanStats struct {
 	// regions stores the ordered list of all regions that KV nodes used to
 	// evaluate the KV requests reside in.
 	regions []string
+	// usedFollowerRead indicates whether the reads were served by the follower
+	// replica.
+	usedFollowerRead bool
 }
 
 // PopulateKVMVCCStats adds data from the input ScanStats to the input KVStats.
@@ -194,4 +205,5 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 	kvStats.NumReverseScans = optional.MakeUint(ss.numReverseScans)
 	kvStats.NodeIDs = ss.nodeIDs
 	kvStats.Regions = ss.regions
+	kvStats.UsedFollowerRead = ss.usedFollowerRead
 }
