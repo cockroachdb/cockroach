@@ -1,0 +1,10 @@
+sinks:
+  file-groups:
+    structured-events-json:
+      channels: [STRUCTURED_EVENTS]
+      format: json
+  stderr:
+    exit-on-error: false
+    auditable: false
+capture-stray-errors:
+  enable: false

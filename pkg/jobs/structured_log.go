@@ -12,9 +12,15 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/logstream"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
 )
@@ -64,3 +70,33 @@ func maybeLogStateChangeStructured(ctx context.Context, job *Job, status Status,
 
 	log.Structured(ctx, log.StructuredMeta{EventType: log.JOB_STATE_CHANGE}, out)
 }
+
+type JobStateChangeProcessor struct {
+	r *Registry
+}
+
+func (js JobStateChangeProcessor) Process(ctx context.Context, j *JobStateChange) error {
+	override := sessiondata.NodeUserSessionDataOverride
+	override.Database = catconstants.SystemDatabaseName
+	insertStmt := `
+		INSERT INTO system.job_state_history (job_id, job_type, status, state_change_time, progress_modified_time, 
+		                                      progress_fractional, progress_watermark, error, final_resume_error) 
+		VALUES ($1, $2, $3, $4 :: TIMESTAMP, $5 :: TIMESTAMP, $6, $7 :: TIMESTAMP, $8, $9)`
+	if js.r.db == nil {
+		fmt.Println("DB IS NIL, continuing")
+		return nil
+	}
+	return js.r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := txn.ExecEx(ctx, "job-state-history-insert", txn.KV(), override, insertStmt,
+			[]interface{}{j.JobID, j.JobType, j.Status, j.StateChangeTimeNanos, j.ProgressModifiedMicros,
+				j.ProgressFractional, j.ProgressWatermark, j.Error, j.FinalResumeError})
+		return err
+	})
+}
+
+func InitJobStateLogProcessor(ctx context.Context, stopper *stop.Stopper, r *Registry) {
+	processor := logstream.NewStructuredLogProcessor[*JobStateChange](&JobStateChangeProcessor{r: r})
+	logstream.RegisterProcessor(ctx, stopper, log.JOB_STATE_CHANGE, processor)
+}
+
+var _ logstream.LogProcessor[*JobStateChange] = (*JobStateChangeProcessor)(nil)

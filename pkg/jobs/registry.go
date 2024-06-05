@@ -255,6 +255,7 @@ func MakeRegistry(
 	r.mu.adoptedJobs = make(map[jobspb.JobID]*adoptedJob)
 	r.mu.waiting = make(map[jobspb.JobID]map[*waitingSet]struct{})
 	r.metrics.init(histogramWindowInterval)
+	InitJobStateLogProcessor(ctx, stopper, r)
 	return r
 }
 
