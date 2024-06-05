@@ -34,6 +34,8 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
+        "//pkg/sql/parser",
+        "//pkg/sql/parser/statements",
         "//pkg/sql/physicalplan",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",

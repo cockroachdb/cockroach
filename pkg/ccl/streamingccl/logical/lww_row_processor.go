@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,8 +54,8 @@ type sqlLastWriteWinsRowProcessor struct {
 }
 
 type queryBuffer struct {
-	deleteQueries map[catid.DescID]string
-	insertQueries map[catid.DescID]map[catid.FamilyID]string
+	deleteQueries map[catid.DescID]statements.Statement[tree.Statement]
+	insertQueries map[catid.DescID]map[catid.FamilyID]statements.Statement[tree.Statement]
 }
 
 func makeSQLLastWriteWinsHandler(
@@ -64,15 +66,18 @@ func makeSQLLastWriteWinsHandler(
 ) (*sqlLastWriteWinsRowProcessor, error) {
 	descs := make(map[catid.DescID]catalog.TableDescriptor)
 	qb := queryBuffer{
-		deleteQueries: make(map[catid.DescID]string, len(tableDescs)),
-		insertQueries: make(map[catid.DescID]map[catid.FamilyID]string, len(tableDescs)),
+		deleteQueries: make(map[catid.DescID]statements.Statement[tree.Statement], len(tableDescs)),
+		insertQueries: make(map[catid.DescID]map[catid.FamilyID]statements.Statement[tree.Statement], len(tableDescs)),
 	}
 	cdcEventTargets := changefeedbase.Targets{}
+	var err error
 	for name, desc := range tableDescs {
 		td := tabledesc.NewBuilder(&desc).BuildImmutableTable()
 		descs[desc.ID] = td
-		qb.deleteQueries[desc.ID] = makeDeleteQuery(name, td)
-		var err error
+		qb.deleteQueries[desc.ID], err = parser.ParseOne(makeDeleteQuery(name, td))
+		if err != nil {
+			return nil, err
+		}
 		qb.insertQueries[desc.ID], err = makeInsertQueries(name, td)
 		if err != nil {
 			return nil, err
@@ -141,8 +146,8 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 	if !ok {
 		return errors.Errorf("no pre-generated insert query for table %d column family %d", row.TableID, row.FamilyID)
 	}
-	if _, err := txn.Exec(ctx, "replicated-insert", txn.KV(), insertQuery, datums...); err != nil {
-		log.Warningf(ctx, "replicated insert failed (query: %s): %s", insertQuery, err.Error())
+	if _, err := txn.ExecParsed(ctx, "replicated-insert", txn.KV(), insertQuery, datums...); err != nil {
+		log.Warningf(ctx, "replicated insert failed (query: %s): %s", insertQuery.SQL, err.Error())
 		return err
 	}
 	return nil
@@ -159,8 +164,8 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 		return err
 	}
 	deleteQuery := lww.queryBuffer.deleteQueries[row.TableID]
-	if _, err := txn.Exec(ctx, "replicated-delete", txn.KV(), deleteQuery, datums...); err != nil {
-		log.Warningf(ctx, "replicated delete failed (query: %s): %s", deleteQuery, err.Error())
+	if _, err := txn.ExecParsed(ctx, "replicated-delete", txn.KV(), deleteQuery, datums...); err != nil {
+		log.Warningf(ctx, "replicated delete failed (query: %s): %s", deleteQuery.SQL, err.Error())
 		return err
 	}
 	return nil
@@ -168,8 +173,8 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 
 func makeInsertQueries(
 	fqTableName string, td catalog.TableDescriptor,
-) (map[catid.FamilyID]string, error) {
-	queries := make(map[catid.FamilyID]string, td.NumFamilies())
+) (map[catid.FamilyID]statements.Statement[tree.Statement], error) {
+	queries := make(map[catid.FamilyID]statements.Statement[tree.Statement], td.NumFamilies())
 
 	if err := td.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		var columnNames strings.Builder
@@ -230,6 +235,7 @@ func makeInsertQueries(
 			addColumn(colName, family.ColumnIDs[i])
 		}
 
+		var err error
 		originTSIdx := argIdx
 		baseQuery := `
 INSERT INTO %s (%s, crdb_internal_origin_timestamp)
@@ -242,15 +248,15 @@ WHERE (%[1]s.crdb_internal_mvcc_timestamp <= $%[4]d
        AND %[1]s.crdb_internal_origin_timestamp IS NULL)
    OR (%[1]s.crdb_internal_origin_timestamp <= $%[4]d
        AND %[1]s.crdb_internal_origin_timestamp IS NOT NULL)`
-		queries[family.ID] = fmt.Sprintf(baseQuery,
+		queries[family.ID], err = parser.ParseOne(fmt.Sprintf(baseQuery,
 			fqTableName,
 			columnNames.String(),
 			valueStrings.String(),
 			originTSIdx,
 			td.GetPrimaryIndex().GetName(),
 			onConflictUpdateClause.String(),
-		)
-		return nil
+		))
+		return err
 	}); err != nil {
 		return nil, err
 	}
