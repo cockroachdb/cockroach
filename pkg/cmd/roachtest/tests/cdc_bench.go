@@ -103,7 +103,7 @@ func registerCDCBench(r registry.Registry) {
 	}
 
 	// Workload impact benchmarks.
-	for _, readPercent := range []int{0, 100} {
+	for _, readPercent := range []int{0, 50, 100} {
 		for _, ranges := range []int64{100, 100000} {
 			readPercent, ranges := readPercent, ranges // pin loop variables
 			const (
@@ -449,6 +449,9 @@ func runCDCBenchWorkload(
 			`ALTER %s CONFIGURE ZONE USING num_replicas=3, constraints='[-node%d]'`, target, nCoord[0]))
 		require.NoError(t, err)
 	}
+
+	// TODO: dont see anything in kafka... does this workload insert data? or wtf. no errors tho
+	// yeah i think this test creates all the data before starting the changefeed....?
 
 	// set new kafka sink option
 	// _, err := conn.ExecContext(ctx, "set cluster setting changefeed.new_kafka_sink.enabled = true;")
