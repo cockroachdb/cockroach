@@ -51,7 +51,7 @@ type orderValidator struct {
 	topic                 string
 	partitionForKey       map[string]string
 	keyTimestampAndValues map[string][]timestampValue
-	keyLatestTimestampRun map[string][]timestampValue
+	keyTimestampRuns      map[string][][]timestampValue
 	resolved              map[string]hlc.Timestamp
 
 	failures []string
@@ -90,7 +90,7 @@ func NewOrderValidator(topic string) Validator {
 		topic:                 topic,
 		partitionForKey:       make(map[string]string),
 		keyTimestampAndValues: make(map[string][]timestampValue),
-		keyLatestTimestampRun: make(map[string][]timestampValue),
+		keyTimestampRuns:      make(map[string][][]timestampValue),
 		resolved:              make(map[string]hlc.Timestamp),
 	}
 }
@@ -102,7 +102,7 @@ func NewStreamOrderValidator() StreamValidator {
 		topic:                 "unused",
 		partitionForKey:       make(map[string]string),
 		keyTimestampAndValues: make(map[string][]timestampValue),
-		keyLatestTimestampRun: make(map[string][]timestampValue),
+		keyTimestampRuns:      make(map[string][][]timestampValue),
 		resolved:              make(map[string]hlc.Timestamp),
 	}
 }
@@ -142,7 +142,6 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 
 	timestampValues := v.keyTimestampAndValues[key]
 
-	// Check if it's a duplicate event. If so, we can skip the rest of the checks.
 	atOrAfterIdx := sort.Search(len(timestampValues), func(i int) bool {
 		return updated.LessEq(timestampValues[i].ts)
 	})
@@ -169,15 +168,19 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 			))
 		}
 
-		latestRun := v.keyLatestTimestampRun[key]
+		timestampRuns := v.keyTimestampRuns[key]
+		if len(timestampRuns) == 0 {
+			return errors.Newf("list of runs for topic %s partition %s key %s is unexpectedly empty",
+				v.topic, partition, key)
+		}
+		latestRun := timestampRuns[len(timestampRuns)-1]
 		if len(latestRun) == 0 {
 			return errors.Newf("latest run for topic %s partition %s key %s is unexpectedly empty",
 				v.topic, partition, key)
 		}
-		// TODO(yang): Think about whether this is true when shutdown checkpointing is on.
-		// We're restarting the run.
-		if updated.Equal(latestRun[0].ts) {
-			v.keyLatestTimestampRun[key] = []timestampValue{{ts: updated, value: value}}
+		// We're starting a new run.
+		if updated.LessEq(latestRun[0].ts) {
+			v.keyTimestampRuns[key] = append(timestampRuns, []timestampValue{{ts: updated, value: value}})
 			return nil
 		}
 		// We violated the per-key ordering guarantee during the re-emit.
@@ -189,7 +192,8 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 				updated.AsOfSystemTime(), runLastTimestamp.AsOfSystemTime(),
 			))
 		}
-		v.keyLatestTimestampRun[key] = append(latestRun, timestampValue{ts: updated, value: value})
+		// Append event to latest run.
+		v.keyTimestampRuns[key][len(timestampRuns)-1] = append(latestRun, timestampValue{ts: updated, value: value})
 		return nil
 	}
 
@@ -205,7 +209,12 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 
 	tsValue := timestampValue{ts: updated, value: value}
 	v.keyTimestampAndValues[key] = append(v.keyTimestampAndValues[key], tsValue)
-	v.keyLatestTimestampRun[key] = append(v.keyLatestTimestampRun[key], tsValue)
+	if timestampRuns := v.keyTimestampRuns[key]; len(timestampRuns) == 0 {
+		v.keyTimestampRuns[key] = [][]timestampValue{{tsValue}}
+	} else {
+		latestRun := timestampRuns[len(timestampRuns)-1]
+		v.keyTimestampRuns[key][len(timestampRuns)-1] = append(latestRun, timestampValue{ts: updated, value: value})
+	}
 	return nil
 }
 
@@ -224,9 +233,11 @@ func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 		return nil
 	}
 
-	// TODO(yang): Consider relaxing this to be just a tail of expected events.
-	// Validate that the latest run for every key on this partition contains
-	// every event since the last resolved timestamp.
+	// Validate that for every key on this partition:
+	// 1.	Every run contains consecutive events and is a subslice of the slice of
+	//    events from between the previous and current resolved timestamp.
+	// 2. Additionally, the final run is a tail of the slice of events from
+	//    between the previous and current resolved timestamp.
 	for key, keyPartition := range v.partitionForKey {
 		if keyPartition != partition {
 			continue
@@ -243,21 +254,44 @@ func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 			return timestampValues[atOrAfterPrevResolvedIdx:atOrAfterResolvedIdx]
 		}()
 
-		latestRun := v.keyLatestTimestampRun[key]
-		atOrAfterResolvedLatestRunIdx := sort.Search(len(latestRun), func(i int) bool {
-			return resolved.LessEq(latestRun[i].ts)
-		})
-		actualEvents := latestRun[:atOrAfterResolvedLatestRunIdx]
+		timestampRuns := v.keyTimestampRuns[key]
+		lastRunIdx := sort.Search(len(timestampRuns), func(i int) bool {
+			return !timestampRuns[i][0].ts.Less(resolved)
+		}) - 1
+		var remainingRuns [][]timestampValue
+		for i, run := range timestampRuns {
+			if i > lastRunIdx {
+				remainingRuns = append(remainingRuns, run)
+				continue
+			}
 
-		if !slices.Equal(expectedEvents, actualEvents) {
-			v.failures = append(v.failures, fmt.Sprintf(
-				`topic %s partition %s key %s: latest run %#v does not contain every event since last resolved timestamp %s: %#v`,
-				v.topic, partition, key,
-				latestRun, prevResolved, expectedEvents,
-			))
+			atOrAfterResolvedIdx := sort.Search(len(run), func(i int) bool {
+				return resolved.LessEq(run[i].ts)
+			})
+			if runSuffix := run[atOrAfterResolvedIdx:]; len(runSuffix) > 0 {
+				remainingRuns = append(remainingRuns, runSuffix)
+			}
+			run = run[:atOrAfterResolvedIdx]
+			expectedEventsStartIdx := sort.Search(len(expectedEvents), func(i int) bool {
+				return run[0].ts.LessEq(expectedEvents[i].ts)
+			})
+			if expectedEventsEndIdx := expectedEventsStartIdx + len(run); expectedEventsEndIdx > len(expectedEvents) ||
+				!slices.Equal(expectedEvents[expectedEventsStartIdx:expectedEventsEndIdx], run) {
+				v.failures = append(v.failures, fmt.Sprintf(
+					`topic %s partition %s key %s: observed run %#v is not a subslice of the events since last resolved timestamp %s: %#v`,
+					v.topic, partition, key,
+					run, prevResolved, expectedEvents,
+				))
+			}
+			if i == lastRunIdx && run[len(run)-1] != expectedEvents[len(expectedEvents)-1] {
+				v.failures = append(v.failures, fmt.Sprintf(
+					`topic %s partition %s key %s: observed last run %#v is not a tail of the events since last resolved timestamp %s: %#v`,
+					v.topic, partition, key,
+					run, prevResolved, expectedEvents,
+				))
+			}
 		}
-
-		v.keyLatestTimestampRun[key] = latestRun[atOrAfterResolvedLatestRunIdx:]
+		v.keyTimestampRuns[key] = remainingRuns
 	}
 
 	v.resolved[partition] = resolved
