@@ -12,6 +12,7 @@ package storeliveness
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"time"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
@@ -21,6 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
+
+var StoreLivenessEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.storeliveness.enabled",
+	"if enabled, store liveness will heartbeat periodically",
+	true,
 )
 
 type receiveQueue struct {
@@ -84,6 +92,7 @@ type SupportManager struct {
 	ss supporterState
 	rs requesterState
 	// Metrics
+	loopStopper *stop.Stopper
 }
 
 func NewSupportManager(
@@ -108,13 +117,9 @@ func NewSupportManager(
 	if err := sm.onRestart(ctx); err != nil {
 		return nil, err
 	}
-
-	// TODO(mira): load and populate persisted state (bySelfFor).
-	// For each remote store in supportMap, set:
-	// 1. forSelfBy.epoch = currentEpoch,
-	// 2. forSelfBy.expiration = empty.
-	// TODO(mira): use a stopper here.
-	go sm.startLoop(context.Background())
+	if err := sm.Start(ctx); err != nil {
+		return nil, err
+	}
 	return sm, nil
 }
 
@@ -148,6 +153,18 @@ func (sm *SupportManager) HandleMessage(ctx context.Context, msg slpb.Message) {
 	sm.receiveQueue.Append(msg)
 }
 
+func (sm *SupportManager) Start(ctx context.Context) error {
+	sm.loopStopper = stop.NewStopper()
+	return sm.loopStopper.RunAsyncTaskEx(
+		ctx, stop.TaskOpts{TaskName: "storeliveness-loop"}, func(context.Context) {
+			sm.startLoop(ctx)
+		})
+}
+
+func (sm *SupportManager) Stop(ctx context.Context) {
+	sm.loopStopper.Stop(ctx)
+}
+
 func (sm *SupportManager) startLoop(ctx context.Context) {
 	var heartbeatTimer timeutil.Timer
 	var supportExpiryInterval timeutil.Timer
@@ -167,6 +184,12 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 		}
 
 		select {
+		case <-sm.stopper.ShouldQuiesce():
+			return
+
+		case <-sm.loopStopper.ShouldQuiesce():
+			return
+
 		case <-heartbeatTimer.C:
 			heartbeatTimer.Read = true
 			heartbeatTimer.Reset(sm.options.HeartbeatInterval)

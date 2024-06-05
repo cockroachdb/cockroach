@@ -2156,12 +2156,23 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		LivenessInterval:      s.cfg.RangeLeaseDuration,
 		SupportExpiryInterval: 1 * time.Second,
 	}
-	sm, err := storeliveness.NewSupportManager(ctx, storeID, s.TODOEngine(), options, stopper, s.cfg.Clock, s.cfg.StoreLivenessTransport)
+	sm, err := storeliveness.NewSupportManager(ctx, storeID, s.TODOEngine(),
+		options, stopper, s.cfg.Clock, s.cfg.StoreLivenessTransport)
 	if err != nil {
 		return errors.Wrap(err, "loading store liveness state")
 	}
 	s.cfg.StoreLivenessTransport.ListenMessages(storeID.StoreID, sm)
 	s.storeLiveness = sm
+
+	storeliveness.StoreLivenessEnabled.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
+		if storeliveness.StoreLivenessEnabled.Get(&s.ClusterSettings().SV) {
+			if err = sm.Start(ctx); err != nil {
+				log.Infof(ctx, "error starting store liveness %+v", err)
+			}
+		} else {
+			sm.Stop(ctx)
+		}
+	})
 
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
