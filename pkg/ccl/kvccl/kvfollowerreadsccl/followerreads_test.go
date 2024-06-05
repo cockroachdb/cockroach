@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -1018,6 +1019,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 	skip.UnderRace(t, "times out")
 	skip.UnderDeadlock(t)
 
+	rng, _ := randutil.NewTestRand()
 	for _, testCase := range []struct {
 		name             string
 		sharedProcess    bool
@@ -1078,6 +1080,10 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
 
 			historicalQuery := `SELECT * FROM t.test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
+			useExplainAnalyze := rng.Float64() < 0.5
+			if useExplainAnalyze {
+				historicalQuery = "EXPLAIN ANALYZE " + historicalQuery
+			}
 			recCh := make(chan tracingpb.Recording, 1)
 
 			var tenants [numNodes]serverutils.ApplicationLayerInterface
@@ -1211,7 +1217,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 				{NodeID: 3, StoreID: 3, ReplicaID: 3},
 			}, entry.Desc.Replicas().Descriptors())
 
-			tenantSQL.Exec(t, historicalQuery)
+			rows := tenantSQL.QueryStr(t, historicalQuery)
 			rec := <-recCh
 
 			// Look at the trace and check that the follower read was served by
@@ -1229,6 +1235,18 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			}
 			require.Equal(t, numFRs, 1, "query wasn't served through follower reads: %s", rec)
 			require.Equal(t, numN2FRs, 1, "follower read wasn't served by n2: %s", rec)
+
+			if useExplainAnalyze {
+				expectedMessage := "used follower read"
+				var foundMessage bool
+				for _, row := range rows {
+					if strings.TrimSpace(row[0]) == expectedMessage {
+						foundMessage = true
+						break
+					}
+				}
+				require.True(t, foundMessage, "didn't see %q message in EXPLAIN ANALYZE: %v", expectedMessage, rows)
+			}
 		})
 	}
 }

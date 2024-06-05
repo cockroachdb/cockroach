@@ -980,6 +980,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"database_name",
 			"exec_node_ids",
 			"kv_node_ids",
+			"used_follower_read",
 			"txn_fingerprint_id",
 			"index_recommendations",
 			"latency_seconds_min",

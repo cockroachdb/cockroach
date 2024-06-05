@@ -107,6 +107,7 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //		        "type": "string",
 //		      },
 //		    },
+//		    "usedFollowerRead": { "type": "boolean" },
 //		    "mvcc_iterator_stats": {
 //		      "type": "object",
 //		      "properties": {
@@ -185,6 +186,7 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //		        "nodes":             { "type": "node_ids" },
 //		        "kvNodeIds":         { "type": "kv_node_ids" },
 //		        "regions":           { "type": "regions" },
+//		        "usedFollowerRead":  { "type": "boolean" },
 //		        "indexes":           { "type": "indexes" },
 //		        "lastErrorCode":     { "type": "string" },
 //		      },

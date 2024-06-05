@@ -1828,6 +1828,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   database_name       STRING NOT NULL,
   exec_node_ids       INT[] NOT NULL,
   kv_node_ids         INT[] NOT NULL,
+  used_follower_read  BOOL NOT NULL,
   txn_fingerprint_id  STRING,
   index_recommendations STRING[] NOT NULL,
   latency_seconds_min FLOAT,
@@ -1976,8 +1977,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.MakeDBool(tree.DBool(stats.Key.FullScan)),                                                                           // full_scan
 				alloc.NewDJSON(tree.DJSON{JSON: samplePlan}),                                                                             // sample_plan
 				alloc.NewDString(tree.DString(stats.Key.Database)),                                                                       // database_name
-				execNodeIDs,          // exec_node_ids
-				kvNodeIDs,            // kv_node_ids
+				execNodeIDs, // exec_node_ids
+				kvNodeIDs,   // kv_node_ids
+				tree.MakeDBool(tree.DBool(stats.Stats.UsedFollowerRead)), // used_follower_read
 				txnFingerprintID,     // txn_fingerprint_id
 				indexRecommendations, // index_recommendations
 				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.Min)), // latency_seconds_min
