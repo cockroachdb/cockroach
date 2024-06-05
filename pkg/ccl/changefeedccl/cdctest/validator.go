@@ -44,6 +44,7 @@ type StreamValidator interface {
 type timestampValue struct {
 	ts    hlc.Timestamp
 	value string
+	dups  int
 }
 
 type orderValidator struct {
@@ -130,54 +131,62 @@ func (v *orderValidator) GetValuesForKeyBelowTimestamp(
 func (v *orderValidator) NoteRow(partition string, key, value string, updated hlc.Timestamp) error {
 	if prev, ok := v.partitionForKey[key]; ok && prev != partition {
 		v.failures = append(v.failures, fmt.Sprintf(
-			`key [%s] received on two partitions: %s and %s`, key, prev, partition,
+			`topic %s key %s: received on two partitions: %s and %s`, v.topic, key, prev, partition,
 		))
 		return nil
 	}
 	v.partitionForKey[key] = partition
 
-	timestampValueTuples := v.keyTimestampAndValues[key]
-	timestampsIdx := sort.Search(len(timestampValueTuples), func(i int) bool {
-		return updated.LessEq(timestampValueTuples[i].ts)
-	})
-	seen := timestampsIdx < len(timestampValueTuples) &&
-		timestampValueTuples[timestampsIdx].ts == updated
-	if seen {
-		return nil
+	timestampValues := v.keyTimestampAndValues[key]
+
+	// Check if it's a duplicate event. If so, we can skip the rest of the checks.
+	if atOrAfterIdx := sort.Search(len(timestampValues), func(i int) bool {
+		return updated.LessEq(timestampValues[i].ts)
+	}); atOrAfterIdx < len(timestampValues) {
+		atOrAfter := &timestampValues[atOrAfterIdx]
+		if atOrAfter.ts.Equal(updated) {
+			atOrAfter.dups += 1
+			return nil
+		}
 	}
 
-	if len(timestampValueTuples) > 0 &&
-		updated.Less(timestampValueTuples[len(timestampValueTuples)-1].ts) {
-		v.failures = append(v.failures, fmt.Sprintf(
-			`topic %s partition %s: saw new row timestamp %s after %s was seen`,
-			v.topic, partition,
-			updated.AsOfSystemTime(),
-			timestampValueTuples[len(timestampValueTuples)-1].ts.AsOfSystemTime(),
-		))
+	// Check if the event violates our per-key ordering guarantee.
+	if len(timestampValues) > 0 {
+		latestTimestamp := timestampValues[len(timestampValues)-1].ts
+		if updated.Less(latestTimestamp) {
+			v.failures = append(v.failures, fmt.Sprintf(
+				`topic %s partition %s key %s: saw new row timestamp %s that is earlier than already seen row timestamp %s`,
+				v.topic, partition, key,
+				updated.AsOfSystemTime(),
+				latestTimestamp.AsOfSystemTime(),
+			))
+		}
 	}
+
+	// Check if the event violates our resolved timestamp guarantee.
 	latestResolved := v.resolved[partition]
 	if updated.Less(latestResolved) {
 		v.failures = append(v.failures, fmt.Sprintf(
-			`topic %s partition %s: saw new row timestamp %s after %s was resolved`,
-			v.topic, partition, updated.AsOfSystemTime(), latestResolved.AsOfSystemTime(),
+			`topic %s partition %s key %s: saw new row timestamp %s that is earlier than latest resolved timestamp %s`,
+			v.topic, partition, key, updated.AsOfSystemTime(), latestResolved.AsOfSystemTime(),
 		))
 	}
 
-	v.keyTimestampAndValues[key] = append(
-		append(timestampValueTuples[:timestampsIdx], timestampValue{
-			ts:    updated,
-			value: value,
-		}),
-		timestampValueTuples[timestampsIdx:]...)
+	v.keyTimestampAndValues[key] = append(timestampValues, timestampValue{ts: updated, value: value})
 	return nil
 }
 
 // NoteResolved implements the Validator interface.
 func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
 	prev := v.resolved[partition]
-	if prev.Less(resolved) {
-		v.resolved[partition] = resolved
+	if resolved.Less(prev) {
+		v.failures = append(v.failures, fmt.Sprintf(
+			`topic %s partition %s: saw new resolved timestamp %s that is earlier than previous resolved timestamp %s`,
+			v.topic, partition, resolved, prev,
+		))
+		return nil
 	}
+	v.resolved[partition] = resolved
 	return nil
 }
 
