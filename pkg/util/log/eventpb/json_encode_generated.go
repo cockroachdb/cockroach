@@ -5021,6 +5021,15 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, '"')
 	}
 
+	if m.UsedFollowerRead {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"UsedFollowerRead\":"...)
+		b = strconv.AppendBool(b, m.UsedFollowerRead)
+	}
+
 	return printComma, b
 }
 
