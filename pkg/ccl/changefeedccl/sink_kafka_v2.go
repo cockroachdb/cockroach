@@ -242,7 +242,7 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 		// 	return handleErr(err)
 		// }
 
-		// this works if we also set maxmessages = 1, which i havent done rn
+		// this works if we also set maxmessages = 1
 		for _, m := range msgs {
 			if _, _, err := k.producer.SendMessage(m); err != nil {
 				return handleErr(err)
@@ -429,7 +429,7 @@ func makeKafkaSinkV2(ctx context.Context,
 	// kafkaCfg.Producer.Flush.Messages = 0
 
 	// trying one by one. see Flush()
-	// kafkaCfg.Producer.Flush.MaxMessages = 1
+	kafkaCfg.Producer.Flush.MaxMessages = 1
 
 	// but with this set and still using SendMessages(), we expect to see the issue more frequently. since num sarama batches per messageBatch will be > 1
 	// kafkaCfg.Producer.Flush.MaxMessages = 1
