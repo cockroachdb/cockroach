@@ -168,6 +168,17 @@ case "${cmd}" in
     shift
     gcloud compute scp --recurse "${from}" "$@"
     ;;
+    put)
+    lpath="${1}"
+    rpath="${2}"
+    # Check whether we have an absolute path like /foo, ~foo, or ~/foo.
+    # If not, base the path relative to the CRDB repo.
+    if [[ "${rpath:0:1}" != / && "${rpath:0:2}" != ~[/a-z] ]]; then
+        rpath="go/src/github.com/cockroachdb/cockroach/${rpath}"
+    fi
+    to="${NAME}:${rpath}"
+    gcloud compute scp --recurse "${lpath}" "${to}"
+    ;;
     ip)
     gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
     ;;
@@ -222,7 +233,7 @@ case "${cmd}" in
     gcloud compute instances describe ${NAME} --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
     ;;
     *)
-    echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, or sync"
+    echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, put, or sync"
     exit 1
     ;;
 esac
