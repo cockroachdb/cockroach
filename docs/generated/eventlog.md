@@ -3025,6 +3025,7 @@ contains common SQL event/execution details.
 | `SQLInstanceIDs` | SQLInstanceIDs is a list of all the SQL instances used in this statement's execution. | no |
 | `KVNodeIDs` | KVNodeIDs is a list of all the KV nodes used in this statement's execution. | no |
 | `StatementFingerprintID` | Statement fingerprint ID of the query. | no |
+| `UsedFollowerRead` | UsedFollowerRead indicates whether at least some reads were served by the follower replicas. | no |
 
 
 #### Common fields

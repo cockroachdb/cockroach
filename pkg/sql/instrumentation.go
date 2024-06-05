@@ -830,6 +830,9 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		if len(queryStats.Regions) > 0 {
 			ob.AddRegionsStats(queryStats.Regions)
 		}
+		if queryStats.UsedFollowerRead {
+			ob.AddTopLevelField("used follower read", "")
+		}
 
 		if !ih.containsMutation && ih.vectorized && grunning.Supported() {
 			// Currently we cannot separate SQL CPU time from local KV CPU time for
@@ -1017,6 +1020,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 					// component_stats.go.
 					nodeStats.SQLCPUTime.MaybeAdd(stats.Exec.CPUTime)
 				}
+				nodeStats.UsedFollowerRead = nodeStats.UsedFollowerRead || stats.KV.UsedFollowerRead
 			}
 			// If we didn't get statistics for all processors, we don't show the
 			// incomplete results. In the future, we may consider an incomplete flag

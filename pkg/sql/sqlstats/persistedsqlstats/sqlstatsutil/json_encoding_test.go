@@ -103,6 +103,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "nodes": [{{joinInts .IntArray}}],
          "kvNodeIds": [{{joinInt32s .Int32Array}}],
          "regions": [{{joinStrings .StringArray}}],
+         "usedFollowerRead": {{.Bool}},
          "planGists": [{{joinStrings .StringArray}}],
          "indexes": [{{joinStrings .StringArray}}],
          "latencyInfo": {
@@ -290,6 +291,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          },
          "nodes": [{{joinInts .IntArray}}],
          "kvNodeIds": [{{joinInt32s .Int32Array}}],
+         "usedFollowerRead": {{.Bool}},
          "planGists": [{{joinStrings .StringArray}}],
          "latencyInfo": {
            "min": {{.Float}},

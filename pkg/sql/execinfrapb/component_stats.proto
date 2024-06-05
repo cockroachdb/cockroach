@@ -179,6 +179,9 @@ message KVStats {
   // Regions are all regions that the KV servers which evaluated the requests
   // reside in.
   repeated string regions = 27;
+  // UsedFollowerRead indicates whether at least some reads were served by the
+  // follower replicas.
+  optional bool used_follower_read = 28 [(gogoproto.nullable) = false];
 }
 
 // ExecStats contains statistics about the execution of a component.

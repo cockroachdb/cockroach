@@ -287,6 +287,7 @@ function makeStats(): Required<StatementStatistics> {
     nodes: [Long.fromInt(1), Long.fromInt(2), Long.fromInt(3)],
     kv_node_ids: [1, 2, 3],
     regions: ["gcp-us-east1"],
+    used_follower_read: false,
     plan_gists: ["Ais="],
     index_recommendations: [],
     indexes: ["123@456"],

@@ -178,6 +178,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	}
 
 	// KV stats.
+	if s.KV.UsedFollowerRead {
+		fn("used follower read", nil)
+	}
 	if len(s.KV.NodeIDs) > 0 {
 		fn("KV nodes", printNodeIDs(s.KV.NodeIDs))
 	}
@@ -288,6 +291,7 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	if len(other.KV.Regions) != 0 {
 		result.KV.Regions = util.CombineUnique(result.KV.Regions, other.KV.Regions)
 	}
+	result.KV.UsedFollowerRead = result.KV.UsedFollowerRead || other.KV.UsedFollowerRead
 	if !result.KV.KVTime.HasValue() {
 		result.KV.KVTime = other.KV.KVTime
 	}
@@ -435,9 +439,6 @@ func (s *ComponentStats) MakeDeterministic() {
 	}
 
 	// KV.
-	if len(s.KV.Regions) > 0 {
-		s.KV.Regions = []string{"test"}
-	}
 	timeVal(&s.KV.KVTime)
 	timeVal(&s.KV.ContentionTime)
 	resetUint(&s.KV.NumInterfaceSteps)
@@ -471,6 +472,9 @@ func (s *ComponentStats) MakeDeterministic() {
 		// The nodes can be non-deterministic because they depend on the actual
 		// cluster configuration. Override to a useful value for tests.
 		s.KV.NodeIDs = []int32{1}
+	}
+	if len(s.KV.Regions) > 0 {
+		s.KV.Regions = []string{"test"}
 	}
 
 	// Exec.

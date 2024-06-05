@@ -134,8 +134,11 @@ type QueryLevelStats struct {
 	KVNodeIDs []int32
 	// Regions is an ordered list of regions in which both SQL and KV nodes
 	// involved in query processing reside.
-	Regions    []string
-	ClientTime time.Duration
+	Regions []string
+	// UsedFollowerRead indicates whether at least some reads were served by the
+	// follower replicas.
+	UsedFollowerRead bool
+	ClientTime       time.Duration
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -189,6 +192,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.SQLInstanceIDs = util.CombineUnique(s.SQLInstanceIDs, other.SQLInstanceIDs)
 	s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, other.KVNodeIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
+	s.UsedFollowerRead = s.UsedFollowerRead || other.UsedFollowerRead
 	s.ClientTime += other.ClientTime
 }
 
@@ -261,6 +265,7 @@ func (a *TraceAnalyzer) ProcessStats() {
 		s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, stats.KV.NodeIDs)
 		// Aggregate both KV and SQL regions into the same field.
 		s.Regions = util.CombineUnique(s.Regions, stats.KV.Regions)
+		s.UsedFollowerRead = s.UsedFollowerRead || stats.KV.UsedFollowerRead
 		s.KVBytesRead += int64(stats.KV.BytesRead.Value())
 		s.KVPairsRead += int64(stats.KV.KVPairsRead.Value())
 		s.KVRowsRead += int64(stats.KV.TuplesRead.Value())

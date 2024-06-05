@@ -448,6 +448,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if len(s.Regions) > 0 {
 			e.ob.AddFlakyField(DeflakeNodes, "regions", strings.Join(s.Regions, ", "))
 		}
+		if s.UsedFollowerRead {
+			e.ob.AddField("used follower read", "")
+		}
 		if s.RowCount.HasValue() {
 			actualRowCount = s.RowCount.Value()
 			hasActualRowCount = true

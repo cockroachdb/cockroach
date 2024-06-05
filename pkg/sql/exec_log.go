@@ -401,6 +401,7 @@ func (p *planner) maybeLogStatementInternal(
 			Regions:                               queryLevelStats.Regions,
 			SQLInstanceIDs:                        queryLevelStats.SQLInstanceIDs,
 			KVNodeIDs:                             queryLevelStats.KVNodeIDs,
+			UsedFollowerRead:                      queryLevelStats.UsedFollowerRead,
 			NetworkBytesSent:                      queryLevelStats.NetworkBytesSent,
 			MaxMemUsage:                           queryLevelStats.MaxMemUsage,
 			MaxDiskUsage:                          queryLevelStats.MaxDiskUsage,
