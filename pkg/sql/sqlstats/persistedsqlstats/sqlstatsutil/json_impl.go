@@ -343,6 +343,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"nodes", (*int64Array)(&s.Nodes)},
 		{"kvNodeIds", (*int32Array)(&s.KVNodeIDs)},
 		{"regions", (*stringArray)(&s.Regions)},
+		{"usedFollowerRead", (*jsonBool)(&s.UsedFollowerRead)},
 		{"planGists", (*stringArray)(&s.PlanGists)},
 		{"indexes", (*stringArray)(&s.Indexes)},
 		{"latencyInfo", (*latencyInfo)(&s.LatencyInfo)},

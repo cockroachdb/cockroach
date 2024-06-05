@@ -269,6 +269,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		SQLInstanceIDs:                     []int32{1},
 		KVNodeIDs:                          []int32{1, 2},
 		Regions:                            []string{"east-usA"},
+		UsedFollowerRead:                   false,
 		ClientTime:                         time.Second,
 	}
 	bEvent := kvpb.ContentionEvent{Duration: 14 * time.Second}
@@ -302,6 +303,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		SQLInstanceIDs:                     []int32{2},
 		KVNodeIDs:                          []int32{1, 3},
 		Regions:                            []string{"east-usB"},
+		UsedFollowerRead:                   true,
 		ClientTime:                         2 * time.Second,
 	}
 	expected := execstats.QueryLevelStats{
@@ -334,6 +336,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		SQLInstanceIDs:                     []int32{1, 2},
 		KVNodeIDs:                          []int32{1, 2, 3},
 		Regions:                            []string{"east-usA", "east-usB"},
+		UsedFollowerRead:                   true,
 		ClientTime:                         3 * time.Second,
 	}
 
