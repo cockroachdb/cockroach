@@ -422,6 +422,25 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
+	// Issue a warning to users who attempt to build indexes
+	// with a timestamp field as the first column of the index.
+	for _, def := range n.n.Defs {
+		if d, ok := def.(*tree.IndexTableDef); ok {
+			if len(d.Columns) == 0 {
+				continue
+			}
+			if columnHasDefaultTimestampExpression(desc, d.Columns[0].Column) {
+				params.p.BufferClientNotice(params.ctx,
+					errors.WithHintf(
+						pgnotice.Newf("it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots."),
+						"consider using hash-sharded index. See %s", docs.URL("hash-sharded-indexes.html"),
+					),
+				)
+				break
+			}
+		}
+	}
+
 	// Replace all UDF names with OIDs in check constraints and update back
 	// references in functions used.
 	for _, ck := range desc.CheckConstraints() {
@@ -2903,4 +2922,18 @@ func isImplicitlyCreatedBySystem(td *tabledesc.Mutable, c *descpb.ColumnDescript
 		return true, nil
 	}
 	return false, nil
+}
+
+func columnHasDefaultTimestampExpression(desc catalog.TableDescriptor, columnName tree.Name) bool {
+	column := catalog.FindColumnByTreeName(desc, columnName)
+	expr := column.GetDefaultExpr()
+	exprLen := len(expr)
+	return exprLen >= 19 && expr[:19] == "current_timestamp()" ||
+		exprLen >= 17 && expr[:17] == "clock_timestamp()" ||
+		exprLen >= 14 && expr[:14] == "current_date()" ||
+		exprLen >= 14 && expr[:14] == "current_time()" ||
+		exprLen >= 16 && expr[:16] == "localtimestamp()" ||
+		exprLen >= 5 && expr[:5] == "now()" ||
+		exprLen >= 21 && expr[:21] == "statement_timestamp()" ||
+		exprLen >= 23 && expr[:23] == "transaction_timestamp()"
 }

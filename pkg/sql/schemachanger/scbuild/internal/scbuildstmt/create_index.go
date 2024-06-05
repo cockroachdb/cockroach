@@ -241,6 +241,17 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			pgnotice.Newf("CONCURRENTLY is not required as all indexes are created concurrently"),
 		)
 	}
+
+	// Issue a warning to users who attempt to build indexes
+	// with a timestamp field as the first column of the index.
+	if len(idxSpec.columns) > 0 && columnHasDefaultTimestampExpression(b, idxSpec.secondary.TableID, idxSpec.columns[0].ColumnID) {
+		b.EvalCtx().ClientNoticeSender.BufferClientNotice(b,
+			errors.WithHintf(
+				pgnotice.Newf("it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots."),
+				"consider using hash-sharded index. See %s", docs.URL("hash-sharded-indexes.html"),
+			),
+		)
+	}
 }
 
 func nextRelationIndexID(b BuildCtx, relation scpb.Element) catid.IndexID {
@@ -768,6 +779,23 @@ func maybeCreateAndAddShardCol(
 	b.Add(shardCheckConstraintName)
 
 	return shardColName, shardColID
+}
+
+func columnHasDefaultTimestampExpression(
+	b BuildCtx, tableID catid.DescID, columnID tree.ColumnID,
+) bool {
+	if defExprEl := retrieveColumnDefaultExpressionElem(b, tableID, columnID); defExprEl != nil {
+		defExpr, exprLen := defExprEl.Expr, len(defExprEl.Expr)
+		return exprLen >= 19 && defExpr[:19] == "current_timestamp()" ||
+			exprLen >= 17 && defExpr[:17] == "clock_timestamp()" ||
+			exprLen >= 14 && defExpr[:14] == "current_date()" ||
+			exprLen >= 14 && defExpr[:14] == "current_time()" ||
+			exprLen >= 16 && defExpr[:16] == "localtimestamp()" ||
+			exprLen >= 5 && defExpr[:5] == "now()" ||
+			exprLen >= 21 && defExpr[:21] == "statement_timestamp()" ||
+			exprLen >= 23 && defExpr[:23] == "transaction_timestamp()"
+	}
+	return false
 }
 
 func maybeCreateVirtualColumnForIndex(

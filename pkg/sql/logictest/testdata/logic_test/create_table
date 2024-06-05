@@ -1068,3 +1068,39 @@ CREATE TABLE public.t_115352 (
 )
 
 subtest end
+
+statement ok
+CREATE TABLE test_updated_at1 (id UUID PRIMARY KEY, temp1 TEXT, updated_at TIMESTAMP DEFAULT current_timestamp(), INDEX temp1_updated_at_index (temp1, updated_at));
+
+statement ok
+CREATE TABLE test_updated_at2 (id UUID PRIMARY KEY, temp1 TEXT, temp2 TEXT, updated_at TIMESTAMPTZ DEFAULT now(), INDEX temp1_updated_at_temp2_index (temp1, updated_at, temp2));
+
+statement ok
+CREATE TABLE test_updated_at3 (id UUID PRIMARY KEY, updated_at TIMESTAMPTZ, INDEX updated_at_index (updated_at));
+
+statement notice NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.\nHINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+CREATE TABLE test_updated_at4 (id UUID PRIMARY KEY, updated_at TIMESTAMPTZ DEFAULT current_timestamp(), INDEX updated_at_index (updated_at));
+
+statement notice NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.\nHINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+CREATE TABLE test_updated_at5 (id UUID PRIMARY KEY, updated_at TIMESTAMP DEFAULT clock_timestamp(), INDEX updated_at_index (updated_at));
+
+statement notice NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.\nHINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+CREATE TABLE test_updated_at6 (id UUID PRIMARY KEY, updated_at DATE DEFAULT current_date(), INDEX updated_at_index (updated_at));
+
+statement notice NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.\nHINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+CREATE TABLE test_updated_at7 (id UUID PRIMARY KEY, updated_at TIME DEFAULT current_time(), INDEX updated_at_index (updated_at));
+
+statement notice NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.\nHINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+CREATE TABLE test_updated_at8 (id UUID PRIMARY KEY, updated_at INT DEFAULT localtimestamp()::int, INDEX updated_at_index (updated_at));
+
+statement notice NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.\nHINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+CREATE TABLE test_updated_at9 (id UUID PRIMARY KEY, updated_at INTEGER DEFAULT now()::int, INDEX updated_at_index (updated_at));
+
+statement notice NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.\nHINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+CREATE TABLE test_updated_at10 (id UUID PRIMARY KEY, updated_at BIGINT DEFAULT statement_timestamp()::bigint, INDEX updated_at_index (updated_at));
+
+statement notice NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.\nHINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+CREATE TABLE test_updated_at11 (id UUID PRIMARY KEY, updated_at SMALLINT DEFAULT transaction_timestamp()::smallint, INDEX updated_at_index (updated_at));
+
+statement notice NOTICE: it is not recommended to use a column with a default timestamp value as the first index column, as it may cause hotspots.\nHINT: consider using hash-sharded index. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/hash-sharded-indexes.html
+CREATE TABLE test_updated_at12 (id UUID PRIMARY KEY, temp1 TEXT, updated_at TIMESTAMPTZ DEFAULT current_timestamp(), INDEX updated_at_index (updated_at, temp1));
