@@ -168,6 +168,23 @@ case "${cmd}" in
     shift
     gcloud compute scp --recurse "${from}" "$@"
     ;;
+    put)
+    # scp allows one or more sources, followed by a single destination. (With no
+    # destination path we'll default to the home directory.)
+    if (( $# < 1 )); then
+      echo "usage: $0 put sourcepath [sourcepath...] destpath"
+      echo "or:    $0 put sourcepath"
+      exit 1
+    elif (( $# == 1 )); then
+      lpath="${1}"
+      rpath="~"
+    else
+      lpath="${@:1:$#-1}"
+      rpath="${@: -1}"
+    fi
+    to="${NAME}:${rpath}"
+    gcloud compute scp --recurse ${lpath} "${to}"
+    ;;
     ip)
     gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
     ;;
@@ -222,7 +239,7 @@ case "${cmd}" in
     gcloud compute instances describe ${NAME} --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
     ;;
     *)
-    echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, or sync"
+    echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, get, put, or sync"
     exit 1
     ;;
 esac
