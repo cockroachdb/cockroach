@@ -682,11 +682,9 @@ type TenantOperator interface {
 	UpdateTenantResourceLimits(
 		ctx context.Context,
 		tenantID uint64,
-		availableRU float64,
+		availableTokens float64,
 		refillRate float64,
-		maxBurstRU float64,
-		asOf time.Time,
-		asOfConsumedRequestUnits float64,
+		maxBurstTokens float64,
 	) error
 }
 

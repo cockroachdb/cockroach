@@ -6934,13 +6934,15 @@ Parameters:` + randgencfg.ConfigDoc,
 			Undocumented: true,
 		},
 		tree.Overload{
+			// NOTE: as_of and as_of_consumed_tokens are not used and can be
+			// deprecated.
 			Types: tree.ParamTypes{
 				{Name: "tenant_id", Typ: types.Int},
-				{Name: "available_request_units", Typ: types.Float},
+				{Name: "available_tokens", Typ: types.Float},
 				{Name: "refill_rate", Typ: types.Float},
-				{Name: "max_burst_request_units", Typ: types.Float},
+				{Name: "max_burst_tokens", Typ: types.Float},
 				{Name: "as_of", Typ: types.Timestamp},
-				{Name: "as_of_consumed_request_units", Typ: types.Float},
+				{Name: "as_of_consumed_tokens", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6948,20 +6950,16 @@ Parameters:` + randgencfg.ConfigDoc,
 				if err != nil {
 					return nil, err
 				}
-				availableRU := float64(tree.MustBeDFloat(args[1]))
+				availableTokens := float64(tree.MustBeDFloat(args[1]))
 				refillRate := float64(tree.MustBeDFloat(args[2]))
-				maxBurstRU := float64(tree.MustBeDFloat(args[3]))
-				asOf := tree.MustBeDTimestamp(args[4]).Time
-				asOfConsumed := float64(tree.MustBeDFloat(args[5]))
+				maxBurstTokens := float64(tree.MustBeDFloat(args[3]))
 
 				if err := evalCtx.Tenant.UpdateTenantResourceLimits(
 					ctx,
 					uint64(sTenID),
-					availableRU,
+					availableTokens,
 					refillRate,
-					maxBurstRU,
-					asOf,
-					asOfConsumed,
+					maxBurstTokens,
 				); err != nil {
 					return nil, err
 				}
@@ -6971,13 +6969,15 @@ Parameters:` + randgencfg.ConfigDoc,
 			Volatility: volatility.Volatile,
 		},
 		tree.Overload{
+			// NOTE: as_of and as_of_consumed_tokens are not used and can be
+			// deprecated.
 			Types: tree.ParamTypes{
 				{Name: "tenant_name", Typ: types.String},
-				{Name: "available_request_units", Typ: types.Float},
+				{Name: "available_tokens", Typ: types.Float},
 				{Name: "refill_rate", Typ: types.Float},
-				{Name: "max_burst_request_units", Typ: types.Float},
+				{Name: "max_burst_tokens", Typ: types.Float},
 				{Name: "as_of", Typ: types.Timestamp},
-				{Name: "as_of_consumed_request_units", Typ: types.Float},
+				{Name: "as_of_consumed_tokens", Typ: types.Float},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -6987,20 +6987,16 @@ Parameters:` + randgencfg.ConfigDoc,
 					return nil, err
 				}
 
-				availableRU := float64(tree.MustBeDFloat(args[1]))
+				availableTokens := float64(tree.MustBeDFloat(args[1]))
 				refillRate := float64(tree.MustBeDFloat(args[2]))
-				maxBurstRU := float64(tree.MustBeDFloat(args[3]))
-				asOf := tree.MustBeDTimestamp(args[4]).Time
-				asOfConsumed := float64(tree.MustBeDFloat(args[5]))
+				maxBurstTokens := float64(tree.MustBeDFloat(args[3]))
 
 				if err := evalCtx.Tenant.UpdateTenantResourceLimits(
 					ctx,
 					tenantID.ToUint64(),
-					availableRU,
+					availableTokens,
 					refillRate,
-					maxBurstRU,
-					asOf,
-					asOfConsumed,
+					maxBurstTokens,
 				); err != nil {
 					return nil, err
 				}

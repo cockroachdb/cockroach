@@ -7197,7 +7197,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.CheckQueryResults(t,
 			`SELECT ru_refill_rate, instance_id, next_instance_id, current_share_sum
 			 FROM system.tenant_usage WHERE tenant_id = 10`,
-			[][]string{{`100`, `0`, `0`, `0`}},
+			[][]string{{`10000`, `0`, `0`, `0`}},
 		)
 
 		ten10Stopper := stop.NewStopper()
