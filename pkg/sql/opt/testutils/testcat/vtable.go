@@ -138,6 +138,7 @@ var systemTables = []string{
 	systemschema.SystemMVCCStatisticsSchema,
 	systemschema.TxnExecutionStatsTableSchema,
 	systemschema.StatementExecutionStatsTableSchema,
+	systemschema.JobEventsTableSchema,
 }
 
 func init() {
