@@ -409,7 +409,7 @@ func checkCDCEvents[S any](
 	_, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
 		switch jobs.Status(info.status) {
 		case jobs.StatusPending, jobs.StatusRunning:
-			return info.highwaterTime.After(now), nil
+			return info.GetHighWater().After(now), nil
 		default:
 			return false, errors.Errorf("unexpected changefeed status %s", info.status)
 		}
