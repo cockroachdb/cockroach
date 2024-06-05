@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -151,8 +153,8 @@ type logicalReplicationWriterProcessor struct {
 }
 
 type queryBuffer struct {
-	deleteQueries map[catid.DescID]string
-	insertQueries map[catid.DescID]string
+	deleteQueries map[catid.DescID]statements.Statement[tree.Statement]
+	insertQueries map[catid.DescID]statements.Statement[tree.Statement]
 }
 
 var (
@@ -185,8 +187,8 @@ func newLogicalReplicationWriterProcessor(
 	}
 
 	qb := queryBuffer{
-		deleteQueries: make(map[catid.DescID]string, len(spec.TableDescriptors)),
-		insertQueries: make(map[catid.DescID]string, len(spec.TableDescriptors)),
+		deleteQueries: make(map[catid.DescID]statements.Statement[tree.Statement], len(spec.TableDescriptors)),
+		insertQueries: make(map[catid.DescID]statements.Statement[tree.Statement], len(spec.TableDescriptors)),
 	}
 
 	descs := make(map[catid.DescID]catalog.TableDescriptor)
@@ -195,8 +197,16 @@ func newLogicalReplicationWriterProcessor(
 	for name, desc := range spec.TableDescriptors {
 		td := tabledesc.NewBuilder(&desc).BuildImmutableTable()
 		descs[desc.ID] = td
-		qb.deleteQueries[desc.ID] = makeDeleteQuery(name, td)
-		qb.insertQueries[desc.ID] = makeInsertQuery(name, td)
+		delete, err := parser.ParseOne(makeDeleteQuery(name, td))
+		if err != nil {
+			return nil, err
+		}
+		qb.deleteQueries[desc.ID] = delete
+		insert, err := parser.ParseOne(makeInsertQuery(name, td))
+		if err != nil {
+			return nil, err
+		}
+		qb.insertQueries[desc.ID] = insert
 		cdcEventTargets.Add(changefeedbase.Target{
 			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
 			TableID:           td.GetID(),
@@ -757,8 +767,8 @@ func (lrw *logicalReplicationWriterProcessor) flushBatch(
 			}
 			datums = append(datums, eval.TimestampToDecimalDatum(row.MvccTimestamp))
 			insertQuery := lrw.queryBuffer.insertQueries[row.TableID]
-			if _, err := lrw.ie.Exec(ctx, "replicated-insert", txn.KV(), insertQuery, datums...); err != nil {
-				log.Warningf(ctx, "replicated insert failed (query: %s): %s", insertQuery, err.Error())
+			if _, err := lrw.ie.ExecParsed(ctx, "replicated-insert", txn.KV(), insertQuery, datums...); err != nil {
+				log.Warningf(ctx, "replicated insert failed (query: %s): %s", insertQuery.SQL, err.Error())
 				return batchBytes, err
 			}
 		} else {
@@ -771,8 +781,8 @@ func (lrw *logicalReplicationWriterProcessor) flushBatch(
 				return batchBytes, err
 			}
 			deleteQuery := lrw.queryBuffer.deleteQueries[row.TableID]
-			if _, err := lrw.ie.Exec(ctx, "replicated-delete", txn.KV(), deleteQuery, datums...); err != nil {
-				log.Warningf(ctx, "replicated delete failed (query: %s): %s", deleteQuery, err.Error())
+			if _, err := lrw.ie.ExecParsed(ctx, "replicated-delete", txn.KV(), deleteQuery, datums...); err != nil {
+				log.Warningf(ctx, "replicated delete failed (query: %s): %s", deleteQuery.SQL, err.Error())
 				return batchBytes, err
 			}
 		}

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -658,6 +659,8 @@ func (ie *InternalExecutor) QueryBufferedExWithCols(
 	return datums, cols, err
 }
 
+var noParsedStmt = statements.Statement[tree.Statement]{}
+
 func (ie *InternalExecutor) queryInternalBuffered(
 	ctx context.Context,
 	opName string,
@@ -671,7 +674,7 @@ func (ie *InternalExecutor) queryInternalBuffered(
 	// We will run the query to completion, so we can use an async result
 	// channel.
 	rw := newAsyncIEResultChannel()
-	it, err := ie.execInternal(ctx, opName, rw, defaultIEExecutionMode, txn, sessionDataOverride, stmt, qargs...)
+	it, err := ie.execInternal(ctx, opName, rw, defaultIEExecutionMode, txn, sessionDataOverride, stmt, noParsedStmt, qargs...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -770,6 +773,30 @@ func (ie *InternalExecutor) ExecEx(
 	stmt string,
 	qargs ...interface{},
 ) (int, error) {
+	return ie.exec(ctx, opName, txn, session, stmt, noParsedStmt, qargs...)
+}
+
+// ExecParsed is like Exec but allows the caller to provide already parsed
+// statement.
+func (ie *InternalExecutor) ExecParsed(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	parsedStmt statements.Statement[tree.Statement],
+	qargs ...interface{},
+) (int, error) {
+	return ie.exec(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), "" /* stmt */, parsedStmt, qargs...)
+}
+
+func (ie *InternalExecutor) exec(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt string,
+	parsedStmt statements.Statement[tree.Statement],
+	qargs ...interface{},
+) (int, error) {
 	// We will run the query to completion, so we can use an async result
 	// channel.
 	rw := newAsyncIEResultChannel()
@@ -777,7 +804,7 @@ func (ie *InternalExecutor) ExecEx(
 	// rowsIterator, we execute this stmt in "rows affected" mode allowing the
 	// internal executor to transparently retry.
 	const mode = rowsAffectedIEExecutionMode
-	it, err := ie.execInternal(ctx, opName, rw, mode, txn, session, stmt, qargs...)
+	it, err := ie.execInternal(ctx, opName, rw, mode, txn, session, stmt, parsedStmt, qargs...)
 	if err != nil {
 		return 0, err
 	}
@@ -816,7 +843,7 @@ func (ie *InternalExecutor) QueryIteratorEx(
 	qargs ...interface{},
 ) (isql.Rows, error) {
 	return ie.execInternal(
-		ctx, opName, newSyncIEResultChannel(), defaultIEExecutionMode, txn, session, stmt, qargs...,
+		ctx, opName, newSyncIEResultChannel(), defaultIEExecutionMode, txn, session, stmt, noParsedStmt, qargs...,
 	)
 }
 
@@ -1026,7 +1053,7 @@ func GetInternalOpName(ctx context.Context) (opName string, ok bool) {
 // - the rowsIterator receives the error and returns it to the caller of
 //   execInternal.
 
-// execInternal executes a statement.
+// execInternal executes a statement. Either stmt or parsed must be specified.
 //
 // sessionDataOverride can be used to control select fields in the executor's
 // session data. It overrides what has been previously set through
@@ -1039,6 +1066,7 @@ func (ie *InternalExecutor) execInternal(
 	txn *kv.Txn,
 	sessionDataOverride sessiondata.InternalExecutorOverride,
 	stmt string,
+	parsed statements.Statement[tree.Statement],
 	qargs ...interface{},
 ) (r *rowsIterator, retErr error) {
 	startup.AssertStartupRetry(ctx)
@@ -1138,9 +1166,12 @@ func (ie *InternalExecutor) execInternal(
 
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
-	parsed, err := parser.ParseOne(stmt)
-	if err != nil {
-		return nil, err
+	if parsed.AST == nil {
+		var err error
+		parsed, err = parser.ParseOne(stmt)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err := ie.checkIfStmtIsAllowed(parsed.AST, txn); err != nil {
 		return nil, err

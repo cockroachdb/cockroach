@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -857,6 +858,16 @@ func (txn *wrappedInternalTxn) ExecEx(
 		}
 	}
 	return txn.wrapped.ExecEx(ctx, opName, kvTxn, o, stmt, qargs...)
+}
+
+func (txn *wrappedInternalTxn) ExecParsed(
+	ctx context.Context,
+	opName string,
+	_ *kv.Txn,
+	statement statements.Statement[tree.Statement],
+	params ...interface{},
+) (int, error) {
+	panic("unimplemented")
 }
 
 func (txn *wrappedInternalTxn) QueryRowEx(
