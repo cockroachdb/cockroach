@@ -79,7 +79,6 @@ const (
 	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	restoreOptSkipMissingViews          = "skip_missing_views"
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
-	restoreOptDebugPauseOn              = "debug_pause_on"
 	restoreOptAsTenant                  = "virtual_cluster_name"
 	restoreOptForceTenantID             = "virtual_cluster"
 
@@ -87,10 +86,6 @@ const (
 	// cluster backups.
 	restoreTempSystemDB = "crdb_temp_system"
 )
-
-var allowedDebugPauseOnValues = map[string]struct{}{
-	"error": {},
-}
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
 var featureRestoreEnabled = settings.RegisterBoolSetting(
@@ -1079,7 +1074,6 @@ func resolveOptionsForRestoreJobDescription(
 		SkipMissingUDFs:                  opts.SkipMissingUDFs,
 		Detached:                         opts.Detached,
 		SkipLocalitiesCheck:              opts.SkipLocalitiesCheck,
-		DebugPauseOn:                     opts.DebugPauseOn,
 		AsTenant:                         opts.AsTenant,
 		ForceTenantID:                    opts.ForceTenantID,
 		SchemaOnly:                       opts.SchemaOnly,
@@ -1187,7 +1181,6 @@ func restoreTypeCheck(
 			restoreStmt.Options.NewDBName,
 			restoreStmt.Options.ForceTenantID,
 			restoreStmt.Options.AsTenant,
-			restoreStmt.Options.DebugPauseOn,
 			restoreStmt.Options.ExecutionLocality,
 		},
 	); err != nil {
@@ -1994,19 +1987,6 @@ func doRestorePlan(
 		}
 	}
 
-	var debugPauseOn string
-	if restoreStmt.Options.DebugPauseOn != nil {
-		var err error
-		debugPauseOn, err = exprEval.String(ctx, restoreStmt.Options.DebugPauseOn)
-		if err != nil {
-			return err
-		}
-
-		if _, ok := allowedDebugPauseOnValues[debugPauseOn]; len(debugPauseOn) > 0 && !ok {
-			return errors.Newf("%s cannot be set with the value %s", restoreOptDebugPauseOn, debugPauseOn)
-		}
-	}
-
 	var asOfInterval int64
 	if !endTime.IsEmpty() {
 		asOfInterval = endTime.WallTime - p.ExtendedEvalContext().StmtTimestamp.UnixNano()
@@ -2143,7 +2123,6 @@ func doRestorePlan(
 		DescriptorCoverage: restoreStmt.DescriptorCoverage,
 		Encryption:         encryption,
 		DatabaseModifiers:  databaseModifiers,
-		DebugPauseOn:       debugPauseOn,
 
 		// A RESTORE SYSTEM USERS planned on a 22.1 node will use the
 		// RestoreSystemUsers field in the job details to identify this flavour of
@@ -2187,7 +2166,7 @@ func doRestorePlan(
 		}
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
 		collectRestoreTelemetry(ctx, jobID, restoreDetails, intoDB, newDBName, subdir, restoreStmt,
-			descsByTablePattern, restoreDBs, asOfInterval, debugPauseOn, p.SessionData().ApplicationName)
+			descsByTablePattern, restoreDBs, asOfInterval, p.SessionData().ApplicationName)
 		return nil
 	}
 
@@ -2234,7 +2213,7 @@ func doRestorePlan(
 	// execution.
 	p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
 	collectRestoreTelemetry(ctx, sj.ID(), restoreDetails, intoDB, newDBName, subdir, restoreStmt,
-		descsByTablePattern, restoreDBs, asOfInterval, debugPauseOn, p.SessionData().ApplicationName)
+		descsByTablePattern, restoreDBs, asOfInterval, p.SessionData().ApplicationName)
 	if err := sj.Start(ctx); err != nil {
 		return err
 	}
@@ -2255,7 +2234,6 @@ func collectRestoreTelemetry(
 	descsByTablePattern map[tree.TablePattern]catalog.Descriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
 	asOfInterval int64,
-	debugPauseOn string,
 	applicationName string,
 ) {
 	telemetry.Count("restore.total.started")
@@ -2269,7 +2247,7 @@ func collectRestoreTelemetry(
 	}
 
 	logRestoreTelemetry(ctx, jobID, details, intoDB, newDBName, subdir, asOfInterval, restoreStmt.Options,
-		descsByTablePattern, restoreDBs, debugPauseOn, applicationName)
+		descsByTablePattern, restoreDBs, applicationName)
 }
 
 // checkForConflictingDescriptors checks for user-created descriptors that would

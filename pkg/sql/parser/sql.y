@@ -926,7 +926,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CURSOR CYCLE
 
-%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_IDS DEBUG_PAUSE_ON DEC DEBUG_DUMP_METADATA_SST DECIMAL DEFAULT DEFAULTS DEFINER
+%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_IDS DEC DEBUG_DUMP_METADATA_SST DECIMAL DEFAULT DEFAULTS DEFINER
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED DETAILS
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
@@ -3771,7 +3771,6 @@ drop_external_connection_stmt:
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : decrypt backups using KMS
 //    detached: execute restore job asynchronously, without waiting for its completion
 //    skip_localities_check: ignore difference of zone configuration between restore cluster and backup cluster
-//    debug_pause_on: describes the events that the job should pause itself on for debugging purposes.
 //    new_db_name: renames the restored database. only applies to database restores
 //    include_all_virtual_clusters: enable backups of all virtual clusters during a cluster backup
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
@@ -3924,10 +3923,6 @@ restore_options:
 | SKIP_LOCALITIES_CHECK
   {
     $$.val = &tree.RestoreOptions{SkipLocalitiesCheck: true}
-  }
-| DEBUG_PAUSE_ON '=' string_or_placeholder
-  {
-    $$.val = &tree.RestoreOptions{DebugPauseOn: $3.expr()}
   }
 | NEW_DB_NAME '=' string_or_placeholder
   {
@@ -17115,7 +17110,6 @@ unreserved_keyword:
 | DAY
 | DEALLOCATE
 | DEBUG_IDS
-| DEBUG_PAUSE_ON
 | DEBUG_DUMP_METADATA_SST
 | DECLARE
 | DELETE
@@ -17620,7 +17614,6 @@ bare_label_keywords:
 | DEALLOCATE
 | DEBUG_DUMP_METADATA_SST
 | DEBUG_IDS
-| DEBUG_PAUSE_ON
 | DEC
 | DECIMAL
 | DECLARE

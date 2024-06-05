@@ -138,7 +138,6 @@ type RestoreOptions struct {
 	SkipMissingUDFs                  bool
 	Detached                         bool
 	SkipLocalitiesCheck              bool
-	DebugPauseOn                     Expr
 	NewDBName                        Expr
 	IncrementalStorage               StringOrPlaceholderOptList
 	AsTenant                         Expr
@@ -427,12 +426,6 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.IntoDB)
 	}
 
-	if o.DebugPauseOn != nil {
-		maybeAddSep()
-		ctx.WriteString("debug_pause_on = ")
-		ctx.FormatNode(o.DebugPauseOn)
-	}
-
 	if o.SkipMissingFKs {
 		maybeAddSep()
 		ctx.WriteString("skip_missing_foreign_keys")
@@ -601,12 +594,6 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.SkipLocalitiesCheck = other.SkipLocalitiesCheck
 	}
 
-	if o.DebugPauseOn == nil {
-		o.DebugPauseOn = other.DebugPauseOn
-	} else if other.DebugPauseOn != nil {
-		return errors.New("debug_pause_on specified multiple times")
-	}
-
 	if o.NewDBName == nil {
 		o.NewDBName = other.NewDBName
 	} else if other.NewDBName != nil {
@@ -692,7 +679,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.IntoDB == options.IntoDB &&
 		o.Detached == options.Detached &&
 		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
-		o.DebugPauseOn == options.DebugPauseOn &&
 		o.NewDBName == options.NewDBName &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.AsTenant == options.AsTenant &&
