@@ -90,7 +90,8 @@ func TestDockerNodeJS(t *testing.T) {
 	export SHOULD_FAIL=%v
 	# Get access to globally installed node modules.
 	export NODE_PATH=$NODE_PATH:/usr/lib/node
-	/usr/lib/node/.bin/mocha .
+	# Have a 10 second timeout on promises, in case the server is slow.
+	/usr/lib/node/.bin/mocha -t 10000 . 
 	`
 
 	ctx := context.Background()
