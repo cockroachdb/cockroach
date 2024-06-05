@@ -5,26 +5,19 @@
 create-tenant tenant=5
 ----
 
-# First drain all the initially available tokens.
 token-bucket-request tenant=5
 instance_id: 1
-ru: 10000000
+tokens: 10
 ----
-10000000 RUs granted immediately. Fallback rate: 2877.777778 RU/s
-
-token-bucket-request tenant=5
-instance_id: 1
-ru: 10
-----
-10 RUs granted over 10s. Fallback rate: 100 RU/s
+10 tokens granted over 10s. Fallback rate: 10000 tokens/s
 
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=-10  ru-current-avg=1875000
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=-10  token-current-avg=0
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:00.000
 First active instance: 1
-  Instance 1:  lease="foo"  seq=2  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 1:  lease="foo"  seq=1  shares=0.0  next-instance=0  last-update=00:00:00.000
 
 advance
 10s
@@ -33,23 +26,23 @@ advance
 
 token-bucket-request tenant=5
 instance_id: 1
-ru: 500
+tokens: 500
 ----
-500 RUs granted immediately. Fallback rate: 100.275 RU/s
+500 tokens granted immediately. Fallback rate: 10027.775 tokens/s
 
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=490  ru-current-avg=1406497.5
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=99490  token-current-avg=24997.5
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:10.000
 First active instance: 1
-  Instance 1:  lease="foo"  seq=3  shares=0.0  next-instance=0  last-update=00:00:10.000
+  Instance 1:  lease="foo"  seq=2  shares=0.0  next-instance=0  last-update=00:00:10.000
 
 token-bucket-request tenant=5
 instance_id: 2
-ru: 250
+tokens: 250
 ----
-250 RUs granted immediately. Fallback rate: 100.1361111 RU/s
+250 tokens granted immediately. Fallback rate: 10027.63611 tokens/s
 
 # Verify that if the time goes backward, the tenant's last_updated does not go
 # back (which would result in some tokens being doubly refilled). Note that in
@@ -63,19 +56,19 @@ advance
 
 token-bucket-request tenant=5
 instance_id: 1
-ru: 10
+tokens: 10
 ----
-10 RUs granted immediately. Fallback rate: 100.0666667 RU/s
+10 tokens granted immediately. Fallback rate: 10027.56667 tokens/s
 
 # Last update time for the tenant is unchanged. The per-instance time does get updated.
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=230  ru-current-avg=791306.71875
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=99230  token-current-avg=57525.46875
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:10.000
 First active instance: 1
-  Instance 1:  lease="foo"  seq=5  shares=0.0  next-instance=2  last-update=00:00:09.000
-  Instance 2:  lease="foo"  seq=4  shares=0.0  next-instance=0  last-update=00:00:10.000
+  Instance 1:  lease="foo"  seq=4  shares=0.0  next-instance=2  last-update=00:00:09.000
+  Instance 2:  lease="foo"  seq=3  shares=0.0  next-instance=0  last-update=00:00:10.000
 
 advance
 1s
@@ -86,15 +79,15 @@ token-bucket-request tenant=5
 instance_id: 1
 ----
 
-# The current RU amount stays the same.
+# The current tokens amount stays the same.
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=230  ru-current-avg=593537.539062
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=99230  token-current-avg=67951.6015625
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:10.000
 First active instance: 1
-  Instance 1:  lease="foo"  seq=6  shares=0.0  next-instance=2  last-update=00:00:10.000
-  Instance 2:  lease="foo"  seq=4  shares=0.0  next-instance=0  last-update=00:00:10.000
+  Instance 1:  lease="foo"  seq=5  shares=0.0  next-instance=2  last-update=00:00:10.000
+  Instance 2:  lease="foo"  seq=3  shares=0.0  next-instance=0  last-update=00:00:10.000
 
 advance
 1s
@@ -105,12 +98,12 @@ token-bucket-request tenant=5
 instance_id: 1
 ----
 
-# RU refilling resumed.
+# tokens refilling resumed.
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=330  ru-current-avg=445235.654297
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=109230  token-current-avg=78271.2011719
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:11.000
 First active instance: 1
-  Instance 1:  lease="foo"  seq=7  shares=0.0  next-instance=2  last-update=00:00:11.000
-  Instance 2:  lease="foo"  seq=4  shares=0.0  next-instance=0  last-update=00:00:10.000
+  Instance 1:  lease="foo"  seq=6  shares=0.0  next-instance=2  last-update=00:00:11.000
+  Instance 2:  lease="foo"  seq=3  shares=0.0  next-instance=0  last-update=00:00:10.000
