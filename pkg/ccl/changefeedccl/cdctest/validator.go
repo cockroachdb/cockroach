@@ -211,15 +211,15 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 
 // NoteResolved implements the Validator interface.
 func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
-	prev := v.resolved[partition]
-	if resolved.Less(prev) {
+	prevResolved := v.resolved[partition]
+	if resolved.Less(prevResolved) {
 		v.failures = append(v.failures, fmt.Sprintf(
 			`topic %s partition %s: saw new resolved timestamp %s that is earlier than previous resolved timestamp %s`,
-			v.topic, partition, resolved, prev,
+			v.topic, partition, resolved, prevResolved,
 		))
 		return nil
 	}
-	if prev.IsEmpty() {
+	if prevResolved.IsEmpty() {
 		v.resolved[partition] = resolved
 		return nil
 	}
@@ -232,21 +232,32 @@ func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 			continue
 		}
 
-		timestampValues := v.keyTimestampAndValues[key]
-		atOrAfterIdx := sort.Search(len(timestampValues), func(i int) bool {
-			return prev.LessEq(timestampValues[i].ts)
-		})
-		expectedEvents := timestampValues[atOrAfterIdx:]
+		expectedEvents := func() []timestampValue {
+			timestampValues := v.keyTimestampAndValues[key]
+			atOrAfterPrevResolvedIdx := sort.Search(len(timestampValues), func(i int) bool {
+				return prevResolved.LessEq(timestampValues[i].ts)
+			})
+			atOrAfterResolvedIdx := sort.Search(len(timestampValues), func(i int) bool {
+				return resolved.LessEq(timestampValues[i].ts)
+			})
+			return timestampValues[atOrAfterPrevResolvedIdx:atOrAfterResolvedIdx]
+		}()
+
 		latestRun := v.keyLatestTimestampRun[key]
-		if !slices.Equal(expectedEvents, latestRun) {
+		atOrAfterResolvedLatestRunIdx := sort.Search(len(latestRun), func(i int) bool {
+			return resolved.LessEq(latestRun[i].ts)
+		})
+		actualEvents := latestRun[:atOrAfterResolvedLatestRunIdx]
+
+		if !slices.Equal(expectedEvents, actualEvents) {
 			v.failures = append(v.failures, fmt.Sprintf(
 				`topic %s partition %s key %s: latest run %#v does not contain every event since last resolved timestamp %s: %#v`,
 				v.topic, partition, key,
-				latestRun, prev, expectedEvents,
+				latestRun, prevResolved, expectedEvents,
 			))
 		}
 
-		delete(v.keyLatestTimestampRun, key)
+		v.keyLatestTimestampRun[key] = latestRun[atOrAfterResolvedLatestRunIdx:]
 	}
 
 	v.resolved[partition] = resolved
