@@ -70,6 +70,10 @@ type streamIngestionFrontier struct {
 	// persistedReplicatedTime stores the highwater mark of
 	// progress that is persisted in the job record.
 	persistedReplicatedTime hlc.Timestamp
+	// heartbeatTime is the minimum timestamp of persistedReplicatedTime
+	// and cutoverTime. It represents the earliest timestamp for which
+	// the source cluster can start garbage collection.
+	heartbeatTime hlc.Timestamp
 
 	lastPartitionUpdate time.Time
 	lastFrontierDump    time.Time
@@ -204,10 +208,10 @@ func (sf *streamIngestionFrontier) Next() (
 		case <-sf.Ctx().Done():
 			sf.MoveToDrainingAndLogError(sf.Ctx().Err())
 			return nil, sf.DrainHelper()
-			// Send the latest persisted replicated time in the heartbeat to the source cluster
+			// Send the latest heartbeat time in the heartbeat to the source cluster
 			// as even with retries we will never request an earlier row than it, and
 			// the source cluster is free to clean up earlier data.
-		case sf.heartbeatSender.FrontierUpdates <- sf.persistedReplicatedTime:
+		case sf.heartbeatSender.FrontierUpdates <- sf.heartbeatTime:
 			// If heartbeatSender has error, it means remote has error, we want to
 			// stop the processor.
 		case <-sf.heartbeatSender.StoppedChan:
@@ -315,6 +319,7 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	})
 
 	replicatedTime := f.Frontier()
+	cutoverTime := hlc.Timestamp{}
 
 	sf.lastPartitionUpdate = timeutil.Now()
 	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
@@ -328,6 +333,9 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		progress := md.Progress
 		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
 		streamProgress.Checkpoint.ResolvedSpans = frontierResolvedSpans
+
+		// Initialize heartbeat time to cutover time to compare with persisted replicated time later.
+		cutoverTime = streamProgress.CutoverTime
 
 		// Keep the recorded replicatedTime empty until some advancement has been made
 		if sf.replicatedTimeAtStart.Less(replicatedTime) {
@@ -368,8 +376,8 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 
 		// If we have a CutoverTime set, keep the protected
 		// timestamp at or below the cutover time.
-		if !streamProgress.CutoverTime.IsEmpty() && streamProgress.CutoverTime.Less(newProtectAbove) {
-			newProtectAbove = streamProgress.CutoverTime
+		if !cutoverTime.IsEmpty() && cutoverTime.Less(newProtectAbove) {
+			newProtectAbove = cutoverTime
 		}
 
 		if record.Timestamp.Less(newProtectAbove) {
@@ -382,6 +390,13 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	}
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedReplicatedTime = f.Frontier()
+
+	// Set heartbeat time to the minimum timestamp of persisted replicated time and cutover time.
+	if cutoverTime.IsEmpty() || sf.persistedReplicatedTime.Less(cutoverTime) {
+		sf.heartbeatTime = sf.persistedReplicatedTime
+	} else {
+		sf.heartbeatTime = cutoverTime
+	}
 	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
 }
