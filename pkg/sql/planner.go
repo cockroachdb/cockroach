@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	crypto_rand "crypto/rand"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -59,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -554,7 +552,6 @@ func internalExtendedEvalCtx(
 			ConsistencyChecker:             execCfg.ConsistencyChecker,
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
 			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
-			ULIDEntropy:                    ulid.Monotonic(crypto_rand.Reader, 0),
 		},
 		Tracing:         &SessionTracing{},
 		Descs:           tables,
