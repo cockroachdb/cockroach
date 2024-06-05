@@ -142,6 +142,10 @@ type StructuredLogSpy[T any] struct {
 
 		// Function to transform log entries into the desired format.
 		format func(entry logpb.Entry) (T, error)
+
+		// lastChannelRead is a map of channel to int, representing the last read log
+		// line read when calling GetUnreadLogs.
+		lastChannelRead map[logpb.Channel]int
 	}
 }
 
@@ -165,16 +169,18 @@ func NewStructuredLogSpy[T any](
 		testState: testState,
 		channels:  make(map[logpb.Channel]struct{}, len(channels)),
 	}
-
 	for _, ch := range channels {
 		s.channels[ch] = struct{}{}
 	}
+	s.mu.lastChannelRead = make(map[logpb.Channel]int, len(channels))
 	s.mu.logs = make(map[logpb.Channel][]T, len(s.channels))
+
 	s.mu.format = format
 	s.mu.filters = append(s.mu.filters, filters...)
 	s.eventTypes = eventTypes
 	for _, eventType := range eventTypes {
-		s.eventTypeRe = append(s.eventTypeRe, regexp.MustCompile(fmt.Sprintf(`"EventType":"%s"`, eventType)))
+		s.eventTypeRe = append(s.eventTypeRe,
+			regexp.MustCompile(fmt.Sprintf(`"(EventType|event_type)":"%s"`, eventType)))
 	}
 
 	return s
@@ -234,6 +240,19 @@ func (s *StructuredLogSpy[T]) GetLogs(ch logpb.Channel) []T {
 	defer s.mu.RUnlock()
 	logs := make([]T, 0, len(s.mu.logs[ch]))
 	logs = append(logs, s.mu.logs[ch]...)
+	return logs
+}
+
+// GetUnreadLogs returns all logs that have been intercepted in the given channel
+// since the last time this method was called.
+func (s *StructuredLogSpy[T]) GetUnreadLogs(ch logpb.Channel) []T {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	currentCount := len(s.mu.logs[ch])
+	lastReadLogLine := s.mu.lastChannelRead[ch]
+	logs := make([]T, 0, currentCount-lastReadLogLine)
+	logs = append(logs, s.mu.logs[ch][lastReadLogLine:currentCount]...)
+	s.mu.lastChannelRead[ch] = currentCount
 	return logs
 }
 
