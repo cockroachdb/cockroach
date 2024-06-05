@@ -246,7 +246,7 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 
 	// Check dest has caught up the previous updates.
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
+	c.Cutover(ctx, producerJobID, ingestionJobID, srcTime.GoTime(), false)
 	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
 
 	// Ingestion happened one more time after resuming the ingestion job.
@@ -331,7 +331,7 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 
 	cutoverTime := c.DestSysServer.Clock().Now()
 	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
-	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
+	c.Cutover(ctx, producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
 	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 
 	// Clients should never be started prior to a checkpointed timestamp
@@ -566,7 +566,7 @@ INSERT INTO d.t_for_import (i) VALUES (1);
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
 	cutoverTime := c.SrcSysServer.Clock().Now()
-	c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
+	c.Cutover(ctx, producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
 	c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
 }
 
@@ -720,7 +720,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 		c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
 
 		cutoverTime := c.DestSysServer.Clock().Now()
-		c.Cutover(producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
+		c.Cutover(ctx, producerJobID, ingestionJobID, cutoverTime.GoTime(), false)
 		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 		require.GreaterOrEqual(t, counts["physical_replication.cutover"], int32(1))
 		c.RequireFingerprintMatchAtTimestamp(cutoverTime.AsOfSystemTime())
@@ -1055,7 +1055,7 @@ func TestProtectedTimestampManagement(t *testing.T) {
 				c.DestSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", replicationJobID))
 				jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 				var emptyCutoverTime time.Time
-				c.Cutover(producerJobID, replicationJobID, emptyCutoverTime, false)
+				c.Cutover(ctx, producerJobID, replicationJobID, emptyCutoverTime, false)
 				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
 			}
 
@@ -1404,7 +1404,7 @@ func TestStreamingMismatchedMRDatabase(t *testing.T) {
 
 	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
+	c.Cutover(ctx, producerJobID, ingestionJobID, srcTime.GoTime(), false)
 
 	defer c.StartDestTenant(ctx, nil, 0)()
 
@@ -1479,7 +1479,7 @@ func TestStreamingZoneConfigsMismatchedRegions(t *testing.T) {
 
 	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
-	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
+	c.Cutover(ctx, producerJobID, ingestionJobID, srcTime.GoTime(), false)
 
 	defer c.StartDestTenant(ctx, nil, 0)()
 

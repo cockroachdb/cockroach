@@ -83,9 +83,8 @@ func TestAlterTenantCompleteToLatest(t *testing.T) {
 	targetReplicatedTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(targetReplicatedTime, jobspb.JobID(ingestionJobID))
 
-	var cutoverStr string
-	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`,
-		args.DestTenantName).Scan(&cutoverStr)
+	var emptyCutoverTime time.Time
+	cutoverStr := c.Cutover(ctx, producerJobID, ingestionJobID, emptyCutoverTime, false)
 
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.GreaterOrEqual(t, cutoverOutput.GoTime(), targetReplicatedTime.GoTime())
