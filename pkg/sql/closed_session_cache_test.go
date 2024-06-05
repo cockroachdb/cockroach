@@ -56,8 +56,8 @@ func TestSessionCacheBasic(t *testing.T) {
 				})
 				cache = NewClosedSessionCache(st, monitor, time.Now)
 
-				ClosedSessionCacheCapacity.Override(ctx, &st.SV, int64(capacity))
-				ClosedSessionCacheTimeToLive.Override(ctx, &st.SV, int64(timeToLive))
+				closedSessionCacheCapacity.Override(ctx, &st.SV, int64(capacity))
+				closedSessionCacheTimeToLive.Override(ctx, &st.SV, int64(timeToLive))
 
 				return fmt.Sprintf("cache_size: %d", cache.size())
 			case "addSession":
