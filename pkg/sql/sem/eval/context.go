@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
@@ -85,6 +86,9 @@ type Context struct {
 	TxnIsSingleStmt bool
 	// TxnIsoLevel is the isolation level of the current transaction.
 	TxnIsoLevel isolation.Level
+	// TxnIsHistorical indicates whether the current transaction is using a
+	// historical timestamp through the use of AS OF SYSTEM TIME.
+	TxnIsHistorical *atomic.Bool
 
 	Settings *cluster.Settings
 	// ClusterID is the logical cluster ID for this tenant.

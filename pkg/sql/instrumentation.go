@@ -853,11 +853,13 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 
 	qos := sessiondatapb.Normal
 	iso := isolation.Serializable
+	var txnIsHistorical bool
 	if ih.evalCtx != nil {
 		qos = ih.evalCtx.QualityOfService()
 		iso = ih.evalCtx.TxnIsoLevel
+		txnIsHistorical = ih.evalCtx.TxnIsHistorical.Load()
 	}
-	ob.AddTxnInfo(iso, ih.txnPriority, qos)
+	ob.AddTxnInfo(iso, ih.txnPriority, qos, txnIsHistorical)
 
 	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		ob.AddField("error emitting plan", fmt.Sprint(err))

@@ -425,11 +425,17 @@ func (ob *OutputBuilder) AddRegionsStats(regions []string) {
 // AddTxnInfo adds top-level fields for information about the query's
 // transaction.
 func (ob *OutputBuilder) AddTxnInfo(
-	txnIsoLevel isolation.Level, txnPriority roachpb.UserPriority, txnQoSLevel sessiondatapb.QoSLevel,
+	txnIsoLevel isolation.Level,
+	txnPriority roachpb.UserPriority,
+	txnQoSLevel sessiondatapb.QoSLevel,
+	txnIsHistorical bool,
 ) {
 	ob.AddTopLevelField("isolation level", txnIsoLevel.StringLower())
 	ob.AddTopLevelField("priority", txnPriority.String())
 	ob.AddTopLevelField("quality of service", txnQoSLevel.String())
+	if txnIsHistorical {
+		ob.AddTopLevelField("historical (AOST)", "")
+	}
 }
 
 // AddWarning adds the provided string to the list of warnings. Warnings will be
