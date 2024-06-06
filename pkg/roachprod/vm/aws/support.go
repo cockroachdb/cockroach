@@ -45,8 +45,10 @@ fi
 sudo apt-get update
 sudo apt-get install -qy --no-install-recommends mdadm
 
-mount_opts="defaults"
+{{ if not .Zfs }}
+mount_opts="defaults,nofail"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
+{{ end }}
 
 use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
 
@@ -66,11 +68,22 @@ mount_prefix="/mnt/data"
 local_disks=()
 ebs_volumes=()
 
+{{ if .Zfs }}
+	apt-get update -q
+	apt-get install -yq zfsutils-linux
+{{ end }}
+
 # On different machine types, the drives are either called nvme... or xvdd.
 for d in $(ls /dev/nvme?n1 /dev/xvdd); do
-  if ! mount | grep ${d}; then
-		if udevadm info --query=property --name=${d} | grep "ID_MODEL=Amazon Elastic Block Store"; then
-			echo "EBS Volume ${d} identified!"
+{{ if .Zfs }}
+  # Check if the disk is already part of a zpool or mounted; skip if so.
+  (zpool list -v -P | grep ${d} > /dev/null) || (mount | grep ${d} > /dev/null)
+{{ else }}
+  # Skip already mounted disks.
+  mount | grep ${d} > /dev/null
+{{ end }}
+  if [ $? -ne 0 ]; then
+		if udevadm info --query=property --name=${d} | grep "ID_MODEL=Amazon Elastic Block Store">/dev/null; then
 			ebs_volumes+=("${d}")
 		else
 			local_disks+=("${d}")
@@ -84,8 +97,10 @@ done
 # use only EBS volumes if available and ignore EC2 NVMe Instance Storage
 disks=()
 if [ "${#ebs_volumes[@]}" -gt "0" ]; then
+  echo "Using only EBS disks: ${ebs_volumes[@]}"
 	disks=("${ebs_volumes[@]}")
 else
+	echo "Using only local disks: ${local_disks[@]}"
 	disks=("${local_disks[@]}")
 fi
 
@@ -102,28 +117,41 @@ elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
     disknum=$((disknum + 1 ))
     echo "Mounting ${disk} at ${mountpoint}"
     mkdir -p ${mountpoint}
+{{ if .Zfs }}
+    zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
+    # NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+{{ else }}
     mkfs.ext4 -F ${disk}
     mount -o ${mount_opts} ${disk} ${mountpoint}
-    chmod 777 ${mountpoint}
     echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
     tune2fs -m 0 ${disk}
+{{ end }}
+    chmod 777 ${mountpoint}
   done
 else
   mountpoint="${mount_prefix}1"
   echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
   mkdir -p ${mountpoint}
+{{ if .Zfs }}
+  zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disks[@]}
+  # NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+{{ else }}
   raiddisk="/dev/md0"
   mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
   mkfs.ext4 -F ${raiddisk}
   mount -o ${mount_opts} ${raiddisk} ${mountpoint}
-  chmod 777 ${mountpoint}
   echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
   tune2fs -m 0 ${raiddisk}
+{{ end }}
+  chmod 777 ${mountpoint}
 fi
 
 # Print the block device and FS usage output. This is useful for debugging.
 lsblk
 df -h
+{{ if .Zfs }}
+zpool list
+{{ end }}
 
 sudo apt-get install -qy chrony
 
@@ -215,12 +243,13 @@ sudo touch {{ .DisksInitializedFile }}
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
 func writeStartupScript(
-	name string, extraMountOpts string, useMultiple bool, enableFips bool,
+	name string, extraMountOpts string, fileSystem string, useMultiple bool, enableFips bool,
 ) (string, error) {
 	type tmplParams struct {
 		VMName               string
 		ExtraMountOpts       string
 		UseMultipleDisks     bool
+		Zfs                  bool
 		EnableFIPS           bool
 		DisksInitializedFile string
 	}
@@ -229,6 +258,7 @@ func writeStartupScript(
 		VMName:               name,
 		ExtraMountOpts:       extraMountOpts,
 		UseMultipleDisks:     useMultiple,
+		Zfs:                  fileSystem == vm.Zfs,
 		EnableFIPS:           enableFips,
 		DisksInitializedFile: vm.DisksInitializedFile,
 	}
