@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -25,6 +26,11 @@ import (
 type StoreStreamsTokenCounter interface {
 	EvalTokenCounterForStream(kvflowcontrol.Stream) TokenCounter
 	SendTokenCounterForStream(kvflowcontrol.Stream) TokenCounter
+}
+
+func NewStoreStreamsTokenCounter(settings *cluster.Settings) StoreStreamsTokenCounter {
+	// TODO:
+	return nil
 }
 
 // TokenCounter will be implemented by tokenCounter.

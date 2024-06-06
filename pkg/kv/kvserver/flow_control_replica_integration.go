@@ -16,6 +16,8 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -439,4 +441,122 @@ func (f *replicaFlowControlIntegrationImpl) clearState(ctx context.Context) {
 	f.innerHandle = nil
 	f.lastKnownReplicas = roachpb.MakeReplicaSet(nil)
 	f.disconnectedStreams = nil
+}
+
+// RACv2
+
+type replicaRACv2Integration struct {
+	replica *Replica
+	// This can be 0, if the leaderID is not known.
+	leaderID              roachpb.ReplicaID
+	rcAtLeader            kvflowconnectedstream.RangeController
+	raftAdmittedInterface kvflowconnectedstream.RaftAdmittedInterface
+
+	destroyed bool
+}
+
+// Should we make all the state transitions in handleRaftReadyRaftMuLocked?
+//
+//   - Transitioning from follower => leader: r.mu.leaderID = leaderID is being set
+//     in handleRaftReadyRaftMuLocked. But Raft knows it is the leader after a Step.
+//     The small lag is ok in that we won't be delaying eval.
+//
+//   - Transitioning from leader => follower: Or the replica getting destroyed.
+//     We need to return the flow tokens immediaely, since we won't have them returned
+//     via Raft. And we need to stop WaitForEval.
+//
+// Due to the latter, we call tryUpdateLeader after calling Step.
+//
+// Replica.raftMu is held. Replica.mu is not held.
+func (rr2 *replicaRACv2Integration) tryUpdateLeader(leaderID roachpb.ReplicaID) {
+	if rr2.destroyed || leaderID == rr2.leaderID {
+		return
+	}
+	// INVARIANT: leaderID != rr2.leaderID
+	if rr2.leaderID == rr2.replica.replicaID && leaderID != rr2.replica.replicaID {
+		// Transition from leader to follower.
+		rr2.rcAtLeader.Close()
+		rr2.rcAtLeader = nil
+	} else if leaderID == rr2.replica.replicaID {
+		// Transition from follower to leader.
+		var tenantID roachpb.TenantID
+		var rn *raft.RawNode
+		var leaseholderID roachpb.ReplicaID
+		var desc *roachpb.RangeDescriptor
+		func() {
+			rr2.replica.mu.RLock()
+			defer rr2.replica.mu.RUnlock()
+			tenantID = rr2.replica.mu.tenantID
+			rn = rr2.replica.mu.internalRaftGroup
+			leaseholderID = rr2.replica.mu.state.Lease.Replica.ReplicaID
+			desc = rr2.replica.mu.state.Desc
+		}()
+		opts := kvflowconnectedstream.RangeControllerOptions{
+			RangeID:           rr2.replica.RangeID,
+			TenantID:          tenantID,
+			LocalReplicaID:    rr2.replica.replicaID,
+			SSTokenCounter:    rr2.replica.store.cfg.RACv2StreamsTokenCounter,
+			SendTokensWatcher: rr2.replica.store.cfg.RACv2SendTokensWatcher,
+			RaftInterface:     kvflowconnectedstream.NewRaftInterface(rn),
+			MessageSender:     rr2.replica,
+			Scheduler:         (*racV2Scheduler)(rr2.replica.store.scheduler),
+		}
+		state := kvflowconnectedstream.RangeControllerInitState{
+			ReplicaSet:  descToReplicaSet(desc),
+			Leaseholder: leaseholderID,
+		}
+		rr2.rcAtLeader = kvflowconnectedstream.NewRangeControllerImpl(opts, state)
+	}
+	rr2.leaderID = leaderID
+}
+
+func descToReplicaSet(desc *roachpb.RangeDescriptor) kvflowconnectedstream.ReplicaSet {
+	rs := kvflowconnectedstream.ReplicaSet{}
+	for _, r := range desc.InternalReplicas {
+		rs[r.ReplicaID] = r
+	}
+	return rs
+}
+
+// We need to know when r.mu.destroyStatus is updated, so that we can close,
+// and return tokens. RACv1 is handling this state change in
+// disconnectReplicationRaftMuLocked. Make sure this is not too late in that
+// these flow tokens may be needed by others.
+//
+// Replica.raftMu is held. Replica.mu is not held.
+func (rr2 *replicaRACv2Integration) onDestroy() {
+	if rr2.rcAtLeader != nil {
+		rr2.rcAtLeader.Close()
+		rr2.rcAtLeader = nil
+	}
+	rr2.destroyed = true
+}
+
+// Harmless for this to be eventually consistent, so we do this
+// handleRaftReadyRaftMuLocked.
+//
+// Replica.raftMu is held. Replica.mu is not held.
+func (rr2 *replicaRACv2Integration) tryUpdateLeaseholder(replicaID roachpb.ReplicaID) {
+	if rr2.rcAtLeader != nil {
+		rr2.rcAtLeader.SetLeaseholder(replicaID)
+	}
+}
+
+// TODO(racV2-integration): synchronization.
+func (rr2 *replicaRACv2Integration) rangeController() kvflowconnectedstream.RangeController {
+	return rr2.rcAtLeader
+}
+
+// Replica.raftMu and Replica.mu are held.
+func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor) {
+	if rr2.rcAtLeader == nil {
+		return
+	}
+	rr2.rcAtLeader.SetReplicas(descToReplicaSet(desc))
+}
+
+func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent() {
+	if rr2.rcAtLeader != nil {
+		rr2.rcAtLeader.HandleControllerSchedulerEvent()
+	}
 }

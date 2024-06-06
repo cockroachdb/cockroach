@@ -586,7 +586,8 @@ var errRemoved = errors.New("replica removed")
 // override, what will happen? Will raft notice and panic for this harmless
 // difference in the byte slices.
 func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
-	return r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+	var leaderID roachpb.ReplicaID
+	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		// We're processing an incoming raft message (from a batch that may
 		// include MsgVotes), so don't campaign if we wake up our raft
 		// group.
@@ -644,8 +645,15 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 			// https://github.com/cockroachdb/cockroach/issues/21849
 			err = nil
 		}
+		st := r.raftBasicStatusRLocked()
+		leaderID = roachpb.ReplicaID(st.Lead)
 		return false /* unquiesceAndWakeLeader */, err
 	})
+	if err != nil {
+		return err
+	}
+	r.raftMu.racV2Integration.tryUpdateLeader(leaderID)
+	return nil
 }
 
 type handleSnapshotStats struct {
@@ -859,7 +867,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	})
 	r.mu.applyingEntries = hasMsg(msgStorageApply)
 	pausedFollowers := r.mu.pausedFollowers
+	leaseholderReplicaID := r.mu.state.Lease.Replica.ReplicaID
 	r.mu.Unlock()
+	r.raftMu.racV2Integration.tryUpdateLeaseholder(leaseholderReplicaID)
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
 		return stats, nil

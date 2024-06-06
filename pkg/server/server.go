@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
@@ -605,6 +606,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		storesFlowControl        kvserver.StoresForFlowControl
 		kvFlowHandleMetrics      *kvflowhandle.Metrics
 	}
+	var racV2 struct {
+		streamsTokenCounter kvflowconnectedstream.StoreStreamsTokenCounter
+		sendTokensWatcher   kvflowconnectedstream.StoreStreamSendTokensWatcher
+	}
+	racV2.streamsTokenCounter = kvflowconnectedstream.NewStoreStreamsTokenCounter(st)
+	racV2.sendTokensWatcher = kvflowconnectedstream.NewStoreStreamSendTokensWatcher(stopper)
+
 	admissionControl.schedulerLatencyListener = gcoords.Elastic.SchedulerLatencyListener
 	admissionControl.kvflowController = kvflowcontroller.New(nodeRegistry, st, clock)
 	admissionControl.kvflowTokenDispatch = kvflowTokenDispatch
@@ -872,6 +880,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowController:             admissionControl.kvflowController,
 		KVFlowHandles:                admissionControl.storesFlowControl,
 		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
+		RACv2StreamsTokenCounter:     racV2.streamsTokenCounter,
+		RACv2SendTokensWatcher:       racV2.sendTokensWatcher,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
 	}

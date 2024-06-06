@@ -179,6 +179,8 @@ func (p *testProcessor) processTick(_ context.Context, rangeID roachpb.RangeID) 
 	return false
 }
 
+func (p *testProcessor) processRACv2RangeController(id roachpb.RangeID) {}
+
 func (p *testProcessor) readyCount(rangeID roachpb.RangeID) int {
 	p.mu.Lock()
 	defer p.mu.Unlock()

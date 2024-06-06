@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
@@ -321,6 +322,8 @@ type Replica struct {
 		// to be applied. Currently, it only tracks bytes used by committed entries
 		// being applied to the state machine.
 		bytesAccount logstore.BytesAccount
+
+		racV2Integration replicaRACv2Integration
 	}
 
 	// localMsgs contains a collection of raftpb.Message that target the local
@@ -2529,4 +2532,19 @@ func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err er
 // GetMutexForTesting returns the replica's mutex, for use in tests.
 func (r *Replica) GetMutexForTesting() *ReplicaMutex {
 	return &r.mu.ReplicaMutex
+}
+
+func (r *Replica) processRACv2RangeController() {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.raftMu.racV2Integration.processRangeControllerSchedulerEvent()
+}
+
+var _ kvflowconnectedstream.MessageSender = &Replica{}
+
+func (r *Replica) SendRaftMessage(
+	ctx context.Context, priorityInherited kvflowconnectedstream.RaftPriority, msg raftpb.Message,
+) {
+	// TODO(racV2-integration):
+	// r.sendRaftMessage(ctx, msg)
 }

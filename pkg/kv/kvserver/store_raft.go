@@ -720,6 +720,14 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 	return exists // ready
 }
 
+func (s *Store) processRACv2RangeController(rangeID roachpb.RangeID) {
+	r, ok := s.mu.replicasByRangeID.Load(rangeID)
+	if !ok {
+		return
+	}
+	r.processRACv2RangeController()
+}
+
 // nodeIsLiveCallback is invoked when a node transitions from non-live to live.
 // Iterate through all replicas and find any which belong to ranges containing
 // the implicated node. Unquiesce if currently quiesced and the node's replica
