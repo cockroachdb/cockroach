@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -29,6 +30,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+)
+
+var GossipWhenCapacityDeltaExceedsFraction = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.store_gossip.capacity_delta_threshold",
+	"the fraction from the last gossiped store capacity values which need be "+
+		"exceeded before the store will gossip immediately without waiting for "+
+		"the periodic gossip interval, at most kv.store_gossip.max_frequency "+
+		"frequency",
+	defaultGossipWhenCapacityDeltaExceedsFraction,
+)
+
+var MaxStoreGossipFrequency = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_gossip.max_frequency",
+	"the maximum frequency at which a store will gossip its store descriptor",
+	defaultMaxStoreGossipFrequency,
 )
 
 const (
@@ -67,11 +85,11 @@ const (
 	// gossip update.
 	systemDataGossipInterval = 1 * time.Minute
 
-	// maxStoreGossipFrequency is the maximum frequency at which a store will
-	// gossip its descriptor. Note that periodic gossip will still occur at the
-	// configured period, regardless of whether the last gossip was less than
+	// defaultMaxStoreGossipFrequency is the maximum frequency at which a store
+	// will gossip its descriptor. Note that periodic gossip will still occur at
+	// the configured period, regardless of whether last gossip was less than
 	// maxStoreGossipFrequency ago.
-	maxStoreGossipFrequency = 2 * time.Second
+	defaultMaxStoreGossipFrequency = 2 * time.Second
 )
 
 var errPeriodicGossipsDisabled = errors.New("periodic gossip is disabled")
@@ -231,6 +249,7 @@ type StoreGossip struct {
 	// descriptorGetter is used for getting an up to date or cached store
 	// descriptor to gossip.
 	descriptorGetter StoreDescriptorProvider
+	sv               *settings.Values
 	clock            timeutil.TimeSource
 }
 
@@ -261,6 +280,7 @@ func NewStoreGossip(
 	gossiper InfoGossiper,
 	descGetter StoreDescriptorProvider,
 	testingKnobs StoreGossipTestingKnobs,
+	sv *settings.Values,
 	clock timeutil.TimeSource,
 ) *StoreGossip {
 	return &StoreGossip{
@@ -268,6 +288,7 @@ func NewStoreGossip(
 		gossiper:         gossiper,
 		descriptorGetter: descGetter,
 		knobs:            testingKnobs,
+		sv:               sv,
 		clock:            clock,
 	}
 }
@@ -315,7 +336,8 @@ func (s *StoreGossip) canEagerlyGossipNow() (canGossip bool) {
 	s.cachedCapacity.Lock()
 	defer s.cachedCapacity.Unlock()
 
-	nextValidGossipTime := s.cachedCapacity.lastGossipedTime.Add(maxStoreGossipFrequency)
+	nextValidGossipTime := s.cachedCapacity.lastGossipedTime.Add(
+		MaxStoreGossipFrequency.Get(s.sv))
 
 	return nextValidGossipTime.Before(now)
 }
@@ -456,7 +478,7 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 		return
 	}
 
-	gossipWhenCapacityDeltaExceedsFraction := defaultGossipWhenCapacityDeltaExceedsFraction
+	gossipWhenCapacityDeltaExceedsFraction := GossipWhenCapacityDeltaExceedsFraction.Get(s.sv)
 	if overrideCapacityDeltaFraction := s.knobs.OverrideGossipWhenCapacityDeltaExceedsFraction; overrideCapacityDeltaFraction > 0 {
 		gossipWhenCapacityDeltaExceedsFraction = overrideCapacityDeltaFraction
 	}
