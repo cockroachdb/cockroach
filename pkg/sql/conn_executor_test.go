@@ -785,6 +785,65 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 	defer func() { _ = stmt.Close() }()
 }
 
+// TestStatementTimeoutRollback confirms that rollbacks because of statement
+// timeouts are *always* asynchronous.
+func TestStatementTimeoutRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	hookEnabled := atomic.Bool{}
+	rollbackCompleted := make(chan struct{})
+	rollbackExpected := make(chan struct{})
+	var codec keys.SQLCodec
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					// Once the hook is enabled we are expecting a txn rollback involving
+					// the system.descriptor key, because the first tihng accessed by the
+					// txn below is the descriptor table.
+					if hookEnabled.Load() {
+						if request.IsSingleEndTxnRequest() {
+							if !request.Requests[0].GetEndTxn().Commit {
+								_, tblID, err := codec.DecodeTablePrefix(request.Header.Txn.TxnMeta.Key)
+								if err != nil {
+									return nil
+								}
+								if tblID == keys.DescriptorTableID {
+									// This channel will only be closed once the "synchronous" rollback returns.
+									<-rollbackExpected
+									close(rollbackCompleted)
+									hookEnabled.Swap(false)
+								}
+							}
+						}
+					}
+					return nil
+				},
+			},
+		},
+	})
+	codec = s.ApplicationLayer().Codec()
+	defer s.Stopper().Stop(context.Background())
+	conn, err := sqlDB.Conn(context.Background())
+	require.NoError(t, err)
+
+	hookEnabled.Swap(true)
+	_, err = conn.ExecContext(ctx, "SET statement_timeout='1s'")
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, "CREATE TABLE t1(n int);SELECT * FROM pg_sleep(5)")
+	require.ErrorContains(t,
+		err,
+		"query execution canceled due to statement timeout",
+		"expected timeout error")
+	// Because the rollback is asynchronous due to the timeout, we expected
+	// to just return here. Any rollbacks involving the descriptor key above are
+	// *blocked*.
+	close(rollbackExpected)
+	// Confirm the async rollback happened.
+	<-rollbackCompleted
+}
+
 // TestRetriableErrorDuringUpgradedTransaction ensures that a retriable error
 // that happens during a transaction that was upgraded from an implicit
 // transaction into an explicit transaction does not cause the BEGIN to be
