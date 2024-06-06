@@ -36,7 +36,7 @@ const (
 	// last gossiped store capacity values which need be exceeded before the
 	// store will gossip immediately without waiting for the periodic gossip
 	// interval.
-	defaultGossipWhenCapacityDeltaExceedsFraction = 0.05
+	defaultGossipWhenCapacityDeltaExceedsFraction = 0.10
 
 	//  gossipWhenLeaseCountDeltaExceeds specifies the absolute change from the
 	//  last gossiped store capacity lease count which needs to be exceeded
