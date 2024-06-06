@@ -1,3 +1,6 @@
+// This code has been modified from its original form by Cockroach Labs, Inc.
+// All modifications are Copyright 2024 Cockroach Labs, Inc.
+//
 // Copyright 2019 The etcd Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,4 +44,12 @@ func (cs ConfState) Equivalent(cs2 ConfState) error {
 		return fmt.Errorf("ConfStates not equivalent after sorting:\n%+#v\n%+#v\nInputs were:\n%+#v\n%+#v", cs1, cs2, orig1, orig2)
 	}
 	return nil
+}
+
+// DescribeConfState formats the ConfState to a string.
+func DescribeConfState(state ConfState) string {
+	return fmt.Sprintf(
+		"Voters:%v VotersOutgoing:%v Learners:%v LearnersNext:%v AutoLeave:%v",
+		state.Voters, state.VotersOutgoing, state.Learners, state.LearnersNext, state.AutoLeave,
+	)
 }
