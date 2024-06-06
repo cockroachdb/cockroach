@@ -53,6 +53,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -160,8 +163,6 @@ func (m *Manager) getSessionBasedLeasingMode(ctx context.Context) SessionBasedLe
 
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
-// WaitForNoVersion returns once there are no unexpired leases left
-// for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
 	ctx context.Context,
 	id descpb.ID,
@@ -179,18 +180,21 @@ func (m *Manager) WaitForNoVersion(
 	// takes longer than the lease duration.
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForNoVersion)
 	defer decAfterWait()
+	wsTracker := startWaitStatsTracker(ctx)
+	defer wsTracker.end()
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		now := m.storage.clock.Now()
-		count, err := CountLeases(ctx, m.storage.db, m.Codec(), cachedDatabaseRegions, m.settings, versions, now, true /*forAnyVersion*/)
+		detail, err := countLeasesWithDetail(ctx, m.storage.db, m.Codec(), cachedDatabaseRegions, m.settings, versions, now, true /*forAnyVersion*/)
 		if err != nil {
 			return err
 		}
-		if count == 0 {
+		if detail.count == 0 {
 			break
 		}
-		if count != lastCount {
-			lastCount = count
-			log.Infof(ctx, "waiting for %d leases to expire: desc=%d", count, id)
+		if detail.count != lastCount {
+			lastCount = detail.count
+			wsTracker.updateProgress(detail)
+			log.Infof(ctx, "waiting for %d leases to expire: desc=%d", detail.count, id)
 		}
 		if lastCount == 0 {
 			break
@@ -224,6 +228,8 @@ func (m *Manager) WaitForOneVersion(
 	// takes longer than the lease duration.
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForOneVersion)
 	defer decAfterWait()
+	wsTracker := startWaitStatsTracker(ctx)
+	defer wsTracker.end()
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			// Use the lower-level MaybeGetDescriptorByIDUnvalidated to avoid
@@ -252,16 +258,17 @@ func (m *Manager) WaitForOneVersion(
 		// version of the descriptor.
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
-		count, err := CountLeases(ctx, m.storage.db, m.Codec(), regions, m.settings, descs, now, false /*forAnyVersion*/)
+		detail, err := countLeasesWithDetail(ctx, m.storage.db, m.Codec(), regions, m.settings, descs, now, false /*forAnyVersion*/)
 		if err != nil {
 			return nil, err
 		}
-		if count == 0 {
+		if detail.count == 0 {
 			break
 		}
-		if count != lastCount {
-			lastCount = count
-			log.Infof(ctx, "waiting for %d leases to expire: desc=%v", count, descs)
+		if detail.count != lastCount {
+			lastCount = detail.count
+			wsTracker.updateProgress(detail)
+			log.Infof(ctx, "waiting for %d leases to expire: desc=%v", detail.count, descs)
 		}
 	}
 	return desc, nil
@@ -1854,5 +1861,51 @@ func (m *Manager) IncGaugeAfterLeaseDuration(
 		if !timer.Stop() {
 			gauge.Dec(1)
 		}
+	}
+}
+
+// waitStatsTracker is used to maintain the stats in descpb.WaitStats
+type waitStatsTracker struct {
+	ws        descpb.WaitStats
+	startTime time.Time
+	recSp     *tracing.Span // Set only if recording events in the span
+}
+
+// startWaitStatsTracker will initialize the waitStatsTracker. If the span is
+// set up for recording, then it will save state so that we can call
+// RecordStructured as we collect stats. If it isn't setup for recording, an
+// empty struct is returned. Subsequent calls to updateProgress/end will still
+// work but behave as no-ops.
+func startWaitStatsTracker(ctx context.Context) waitStatsTracker {
+	if sp := tracing.SpanFromContext(ctx); sp.RecordingType() != tracingpb.RecordingOff {
+		return waitStatsTracker{
+			startTime: timeutil.Now(),
+			recSp:     sp,
+			ws: descpb.WaitStats{
+				Uuid: uuid.NewV4(),
+			},
+		}
+	}
+	return waitStatsTracker{}
+}
+
+// updateProgress will refresh stats while we are in the middle of waiting.
+func (w *waitStatsTracker) updateProgress(detail countDetail) {
+	if w.recSp != nil {
+		w.ws.NumRetries++
+		w.ws.LastCount = int32(detail.count)
+		w.ws.SampleSQLInstanceID = int32(detail.sampleSQLInstanceID)
+		w.ws.NumSQLInstances = int32(detail.numSQLInstances)
+		w.ws.ElapsedTimeInMS = timeutil.Now().Sub(w.startTime).Milliseconds()
+		w.recSp.RecordStructured(&w.ws)
+	}
+}
+
+// end is called when the wait is over.
+func (w *waitStatsTracker) end() {
+	if w.recSp != nil {
+		w.ws.ElapsedTimeInMS = timeutil.Now().Sub(w.startTime).Milliseconds()
+		w.ws.LastCount = 0
+		w.recSp.RecordStructured(&w.ws)
 	}
 }

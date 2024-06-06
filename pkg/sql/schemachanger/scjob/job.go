@@ -12,6 +12,7 @@ package scjob
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func init() {
@@ -38,7 +40,18 @@ func init() {
 
 type newSchemaChangeResumer struct {
 	job           *jobs.Job
+	deps          scrun.JobRunDependencies
 	rollbackCause error
+}
+
+// ForceRealSpan implements the TraceableJob interface.
+func (n *newSchemaChangeResumer) ForceRealSpan() bool {
+	return true
+}
+
+// DumpTraceAfterRun implements the TraceableJob interface.
+func (n *newSchemaChangeResumer) DumpTraceAfterRun() bool {
+	return true
 }
 
 func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{}) (err error) {
@@ -60,8 +73,15 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	return n.run(ctx, execCtx)
 }
 
-func (n *newSchemaChangeResumer) CollectProfile(_ context.Context, _ interface{}) error {
-	return nil
+// CollectProfile writes the current phase's explain output, captured earlier,
+// to the jobs_info table.
+func (n *newSchemaChangeResumer) CollectProfile(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
+	return p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		exOp := n.deps.GetExplain()
+		filename := fmt.Sprintf("explain-phase.%s.txt", timeutil.Now().Format("20060102_150405.00"))
+		return jobs.WriteExecutionDetailFile(ctx, filename, []byte(exOp), txn, n.job.ID())
+	})
 }
 
 func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) error {
@@ -80,7 +100,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		return err
 	}
 	payload := n.job.Payload()
-	deps := scdeps.NewJobRunDependencies(
+	n.deps = scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
 		execCfg.InternalDB,
 		execCfg.IndexBackfiller,
@@ -118,7 +138,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	err := scrun.RunSchemaChangesInJob(
 		ctx,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
-		deps,
+		n.deps,
 		n.job.ID(),
 		payload.DescriptorIDs,
 		n.rollbackCause,

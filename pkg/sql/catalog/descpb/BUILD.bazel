@@ -31,6 +31,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
+        "//pkg/util/uuid",  # keep
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -46,6 +47,7 @@ proto_library(
     name = "descpb_proto",
     srcs = [
         "join_type.proto",
+        "lease.proto",
         "locking.proto",
         "structured.proto",
     ],
