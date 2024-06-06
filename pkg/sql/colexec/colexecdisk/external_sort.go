@@ -668,6 +668,10 @@ func (s *externalSorter) Close(ctx context.Context) error {
 // to the last n current partitions to be merged.
 func (s *externalSorter) createPartitionerToOperators(n int) {
 	oldPartitioners := s.partitionerToOperators
+	for i := range oldPartitioners {
+		// Prepare the partitioner for reuse.
+		oldPartitioners[i].Reset(s.Ctx)
+	}
 	if len(oldPartitioners) < n {
 		s.partitionerToOperators = make([]*partitionerToOperator, n)
 		copy(s.partitionerToOperators, oldPartitioners)
