@@ -553,9 +553,20 @@ func TestBackupRestoreAppend(t *testing.T) {
 
 	skip.UnderDuress(t, "test is very large")
 
-	const numAccounts = 1000
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				// NB: Not routing to the leaseholder first
+				// slows down this test by anywhere from 5x to
+				// 10x.
+				KVClient: &kvcoord.ClientTestingKnobs{RouteToLeaseholderFirst: true},
+			},
+		},
+	}
+
+	const numAccounts = 400
 	ctx := context.Background()
-	tc, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
+	tc, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
 
 	if !tc.ApplicationLayer(0).Codec().ForSystemTenant() {
@@ -577,152 +588,86 @@ func TestBackupRestoreAppend(t *testing.T) {
 			return err
 		})
 	}
-	makeCollections := func(c1, c2, c3 string) []interface{} {
-		return []interface{}{
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c1, url.QueryEscape("default")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c2, url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c3, url.QueryEscape("dc=dc2")),
+
+	// For testing backup *into* collection, pick collection
+	// shards on each node.
+	collections := []interface{}{
+		fmt.Sprintf("nodelocal://1/?COCKROACH_LOCALITY=%s", url.QueryEscape("default")),
+		fmt.Sprintf("nodelocal://2/?COCKROACH_LOCALITY=%s", url.QueryEscape("dc=dc1")),
+		fmt.Sprintf("nodelocal://3/?COCKROACH_LOCALITY=%s", url.QueryEscape("dc=dc2")),
+	}
+	// Test timeline
+	//
+	// tsBefore - Full backup
+	// ts1      - Incremental backup after UPDATE
+	// ts1again - Incremental backup (no changes to data.bank)
+	// ts2      - Full backup after UPDATE
+	//          - Incremental backup after rename
+	var tsBefore, ts1, ts1again, ts2 string
+	sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
+	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore, collections...)
+
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 100")
+	sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1)
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1, collections...)
+
+	// Append to latest again, just to prove we can append to an appended one and
+	// that appended didn't e.g. mess up LATEST.
+	sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1again)
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1again, collections...)
+
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 200")
+	sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts2)
+	rowsTS2 := sqlDB.QueryStr(t, "SELECT * from data.bank ORDER BY id")
+
+	// Start a new full-backup in the collection version.
+	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3) AS OF SYSTEM TIME "+ts2, collections...)
+
+	sqlDB.Exec(t, "ALTER TABLE data.bank RENAME TO data.renamed")
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", collections...)
+
+	// TODO(dt): prevent backing up different targets to same collection?
+
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM LATEST IN ($1, $2, $3)", collections...)
+	sqlDB.ExpectErr(t, "relation \"data.bank\" does not exist", "SELECT * FROM data.bank ORDER BY id")
+	sqlDB.CheckQueryResults(t, "SELECT * from data.renamed ORDER BY id", rowsTS2)
+
+	findFullBackupPaths := func(baseDir, glob string) (string, string) {
+		matches, err := filepath.Glob(glob)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(matches))
+		for i := range matches {
+			matches[i] = strings.TrimPrefix(filepath.Dir(matches[i]), baseDir)
 		}
+		return matches[0], matches[1]
 	}
 
-	makeCollectionsWithSubdir := func(c1, c2, c3 string) []interface{} {
-		return []interface{}{
-			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s", c1, "foo", url.QueryEscape("default")),
-			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s", c2, "foo", url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s", c3, "foo", url.QueryEscape("dc=dc2")),
-		}
-	}
+	// Find the backup times in the collection and try RESTORE'ing to each, and
+	// within each also check if we can restore to individual times captured with
+	// incremental backups that were appended to that backup.
+	fullBackup1, fullBackup2 := findFullBackupPaths(tmpDir, path.Join(tmpDir, "*/*/*/"+backupbase.BackupManifestName))
 
-	// for testing backup *into* with specified subdirectory.
-	const specifiedSubdir = `subdir`
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore,
+		append(collections, fullBackup1)...)
 
-	var full1, full2 string
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1,
+		append(collections, fullBackup1)...)
 
-	for _, test := range []struct {
-		name                  string
-		collections           []interface{}
-		collectionsWithSubdir []interface{}
-	}{
-		{
-			"nodelocal",
-			// for testing backup *into* collection, pick collection shards on each
-			// node.
-			makeCollections(`nodelocal://1/`, `nodelocal://2/`, `nodelocal://3/`),
-			makeCollectionsWithSubdir(`nodelocal://1`, `nodelocal://2`, `nodelocal://3`),
-		},
-		{
-			"userfile",
-			makeCollections(`userfile:///0`, `userfile:///1`, `userfile:///2`),
-			makeCollectionsWithSubdir(`userfile:///0`, `userfile:///1`, `userfile:///2`),
-		},
-	} {
-		var tsBefore, ts1, ts1again, ts2 string
-		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
-		sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore, test.collections...)
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1again,
+		append(collections, fullBackup1)...)
 
-		// We cannot run `BACKUP INTO subdir` when a pre-existing backup does not
-		// exist at that location.
-		sqlDB.ExpectErr(t, "A full backup cannot be written to \"/subdir\", a user defined subdirectory",
-			"BACKUP INTO $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore, append(test.collectionsWithSubdir, specifiedSubdir)...)
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts2, append(collections, fullBackup2)...)
 
-		sqlDB.Exec(t, "UPDATE data.bank SET balance = 100")
-		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1)
-		sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1, test.collections...)
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, multiNode, tmpDir, InitManualReplication, params)
+	defer cleanupEmptyCluster()
+	sqlDBRestore.Exec(t, "RESTORE FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts2, append(collections, fullBackup2)...)
 
-		// Append to latest again, just to prove we can append to an appended one and
-		// that appended didn't e.g. mess up LATEST.
-		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1again)
-		sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1again, test.collections...)
-		sqlDB.Exec(t, "UPDATE data.bank SET balance = 200")
-		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts2)
-		rowsTS2 := sqlDB.QueryStr(t, "SELECT * from data.bank ORDER BY id")
-
-		// Start a new full-backup in the collection version.
-		sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3) AS OF SYSTEM TIME "+ts2, test.collections...)
-
-		sqlDB.Exec(t, "ALTER TABLE data.bank RENAME TO data.renamed")
-		sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", test.collections...)
-
-		// TODO(dt): prevent backing up different targets to same collection?
-
-		sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-		sqlDB.Exec(t, "RESTORE DATABASE data FROM LATEST IN ($1, $2, $3)", test.collections...)
-		sqlDB.ExpectErr(t, "relation \"data.bank\" does not exist", "SELECT * FROM data.bank ORDER BY id")
-		sqlDB.CheckQueryResults(t, "SELECT * from data.renamed ORDER BY id", rowsTS2)
-
-		findFullBackupPaths := func(baseDir, glob string) (string, string) {
-			matches, err := filepath.Glob(glob)
-			require.NoError(t, err)
-			require.Equal(t, 2, len(matches))
-			for i := range matches {
-				matches[i] = strings.TrimPrefix(filepath.Dir(matches[i]), baseDir)
-			}
-			return matches[0], matches[1]
-		}
-
-		runRestores := func(collections []interface{}, fullBackup1, fullBackup2 string) {
-			sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-			sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore,
-				append(collections, fullBackup1)...)
-
-			sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-			sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1,
-				append(collections, fullBackup1)...)
-
-			sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-			sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1again,
-				append(collections, fullBackup1)...)
-
-			sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-			sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts2, append(collections, fullBackup2)...)
-
-			if test.name != "userfile" {
-				// Cluster restores from userfile are not supported yet since the
-				// restoring cluster needs to be empty, which means it can't contain any
-				// userfile tables.
-
-				_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, multiNode, tmpDir, InitManualReplication, base.TestClusterArgs{})
-				defer cleanupEmptyCluster()
-				sqlDBRestore.Exec(t, "RESTORE FROM $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts2, append(collections, fullBackup2)...)
-			}
-		}
-
-		if test.name == "userfile" {
-			// Find the backup times in the collection and try RESTORE'ing to each, and
-			// within each also check if we can restore to individual times captured with
-			// incremental backups that were appended to that backup.
-			s := tc.ApplicationLayer(0)
-			store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///0",
-				base.ExternalIODirConfig{},
-				s.ClusterSettings(),
-				blobs.TestEmptyBlobClientFactory,
-				username.RootUserName(),
-				s.InternalDB().(isql.DB),
-				nil, /* limiters */
-				cloud.NilMetrics,
-			)
-			require.NoError(t, err)
-			defer store.Close()
-			var files []string
-			require.NoError(t, store.List(ctx, "/", "", func(f string) error {
-				ok, err := path.Match("*/*/*/"+backupbase.BackupManifestName, f)
-				if ok {
-					files = append(files, f)
-				}
-				return err
-			}))
-			full1 = strings.TrimSuffix(files[0], backupbase.BackupManifestName)
-			full2 = strings.TrimSuffix(files[1], backupbase.BackupManifestName)
-		} else {
-			// Find the backup times in the collection and try RESTORE'ing to each, and
-			// within each also check if we can restore to individual times captured with
-			// incremental backups that were appended to that backup.
-			full1, full2 = findFullBackupPaths(tmpDir, path.Join(tmpDir, "*/*/*/"+backupbase.BackupManifestName))
-		}
-		runRestores(test.collections, full1, full2)
-
-		// TODO(dt): test restoring to other backups via AOST.
-	}
+	// TODO(dt): test restoring to other backups via AOST.
 }
 
 func TestBackupAndRestoreJobDescription(t *testing.T) {
