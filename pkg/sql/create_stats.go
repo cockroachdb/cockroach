@@ -224,6 +224,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		)
 	}
 
+	// TODO(93998): Add support for WHERE.
 	if n.Options.Where != nil {
 		return nil, pgerror.New(pgcode.FeatureNotSupported,
 			"creating partial statistics with a WHERE clause is not yet supported",
