@@ -502,6 +502,11 @@ func (a *Allocator) Used() int64 {
 	return a.acc.Used()
 }
 
+// Acc returns the memory account of the Allocator.
+func (a *Allocator) Acc() *mon.BoundAccount {
+	return a.acc
+}
+
 // adjustMemoryUsage adjusts the number of bytes currently allocated through
 // this allocator by delta bytes (which can be both positive or negative).
 //
