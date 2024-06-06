@@ -624,6 +624,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		gcoords.Stores,
 		admissionControl.kvflowController,
 		admissionControl.storesFlowControl,
+		kvserver.MakeStoresForRACv2(stores),
 		cfg.Settings,
 	)
 	admissionControl.kvFlowHandleMetrics = kvflowhandle.NewMetrics(nodeRegistry)

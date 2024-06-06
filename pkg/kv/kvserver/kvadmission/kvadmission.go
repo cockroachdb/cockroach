@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -214,8 +215,11 @@ type controllerImpl struct {
 	kvAdmissionQ               *admission.WorkQueue
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
-	kvflowController           kvflowcontrol.Controller
-	kvflowHandles              kvflowcontrol.Handles
+	// RACv1
+	kvflowController kvflowcontrol.Controller
+	kvflowHandles    kvflowcontrol.Handles
+	// RACv2
+	storesForRACv2 StoresForRACv2
 
 	settings *cluster.Settings
 	every    log.EveryN
@@ -251,6 +255,14 @@ func (h *Handle) AnnotateCtx(ctx context.Context) context.Context {
 	return ctx
 }
 
+type StoresForRACv2 interface {
+	Lookup(rangeID roachpb.RangeID) RangeControllerProvider
+}
+
+type RangeControllerProvider interface {
+	RangeController() kvflowconnectedstream.RangeController
+}
+
 // MakeController returns a Controller. All three parameters must together be
 // nil or non-nil.
 func MakeController(
@@ -260,6 +272,7 @@ func MakeController(
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	kvflowController kvflowcontrol.Controller,
 	kvflowHandles kvflowcontrol.Handles,
+	storesForRACv2 StoresForRACv2,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
@@ -269,6 +282,7 @@ func MakeController(
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
 		kvflowController:           kvflowController,
 		kvflowHandles:              kvflowHandles,
+		storesForRACv2:             storesForRACv2,
 		settings:                   settings,
 		every:                      log.Every(10 * time.Second),
 	}
@@ -333,25 +347,48 @@ func (n *controllerImpl) AdmitKVWork(
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
 		var admitted bool
 		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV)
-		if attemptFlowControl && !bypassAdmission {
-			kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
-			if !found {
-				return Handle{}, nil
-			}
-			var err error
-			admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
-			if err != nil {
-				return Handle{}, err
-			} else if admitted {
-				// NB: It's possible for us to be waiting for available flow tokens
-				// for a different set of streams that the ones we'll eventually
-				// deduct tokens from, if the range experiences a split between now
-				// and the point of deduction. That's ok, there's no strong
-				// synchronization needed between these two points.
-				ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
-					AdmissionPriority:   int32(admissionInfo.Priority),
-					AdmissionCreateTime: admissionInfo.CreateTime,
-					AdmissionOriginNode: n.nodeID.Get(),
+		if attemptFlowControl && !bypassAdmission && !kvflowconnectedstream.UseRACv2 {
+			if !kvflowconnectedstream.UseRACv2 {
+				kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
+				if !found {
+					return Handle{}, nil
+				}
+				var err error
+				admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
+				if err != nil {
+					return Handle{}, err
+				} else if admitted {
+					// NB: It's possible for us to be waiting for available flow tokens
+					// for a different set of streams that the ones we'll eventually
+					// deduct tokens from, if the range experiences a split between now
+					// and the point of deduction. That's ok, there's no strong
+					// synchronization needed between these two points.
+					ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+						AdmissionPriority:   int32(admissionInfo.Priority),
+						AdmissionCreateTime: admissionInfo.CreateTime,
+						AdmissionOriginNode: n.nodeID.Get(),
+					}
+				}
+			} else {
+				rcp := n.storesForRACv2.Lookup(ba.RangeID)
+				if rcp == nil {
+					return Handle{}, nil
+				}
+				rc := rcp.RangeController()
+				if rc != nil {
+					err := rc.WaitForEval(ctx, admissionInfo.Priority)
+					if err != nil {
+						return Handle{}, err
+					}
+					ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+						AdmissionPriority:   int32(kvflowconnectedstream.AdmissionPriorityToRaftPriority(admissionInfo.Priority)),
+						AdmissionCreateTime: admissionInfo.CreateTime,
+						AdmissionOriginNode: n.nodeID.Get(),
+					}
+					admitted = true
+				} else {
+					// Else, must not be leader
+					// Will do above-raft, leaseholder-only AC.
 				}
 			}
 		}

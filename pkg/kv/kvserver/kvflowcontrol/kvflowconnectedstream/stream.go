@@ -629,7 +629,7 @@ type RaftAdmittedInterface interface {
 	SetAdmitted(admitted [NumRaftPriorities]uint64) raftpb.Message
 }
 
-func admissionPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority {
+func AdmissionPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority {
 	// TODO:
 
 	// The new priorities are:
