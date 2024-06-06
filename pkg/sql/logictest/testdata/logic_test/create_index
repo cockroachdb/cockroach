@@ -437,3 +437,41 @@ CREATE INDEX ON v (b);
 statement ok
 CREATE INDEX ON v ((b>0));
 
+# Repro of issue found in #124511 when using the declarative schema changer.
+# Using utf8 character in column name that is included in STORED() clause is not
+# being seen as a duplicate of an existing index.
+subtest create_index_with_utf8_col_names
+
+statement ok
+CREATE TABLE tab_w0_7 (
+   "col\u000b7ͪ%q_w0_10" UUID,
+   c2 STRING,
+   PRIMARY KEY(c2, "col\u000b7ͪ%q_w0_10")
+);
+
+statement error index ".*" already contains column ".*".*
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("col\u000b7ͪ%q_w0_10");
+
+statement error index ".*" already contains column ".*".*
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 ("col\u000b7ͪ%q_w0_10") STORING ("col\u000b7ͪ%q_w0_10");
+
+statement ok
+DROP TABLE tab_w0_7;
+
+# Repro of issue found in #124511 when using the declarative schema changer. We
+# need to block when attempting to include a virtual column in a STORED()
+# clause.
+subtest create_index_with_stored_virtual_col
+
+statement ok
+CREATE TABLE tab1 (
+  c1 UUID PRIMARY KEY,
+  c2 UUID AS (c1) VIRTUAL,
+  c3 STRING
+);
+
+statement error index cannot store virtual column c2
+CREATE INDEX tab1_i1 ON tab1 (c3) STORING (c2);
+
+statement ok
+DROP TABLE tab1;
