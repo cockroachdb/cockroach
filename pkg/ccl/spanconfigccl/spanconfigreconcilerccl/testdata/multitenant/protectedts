@@ -134,8 +134,8 @@ CREATE TABLE db.t2();
 
 mutations tenant=10
 ----
-upsert /Tenant/10/Table/10{6-7}            range default
-upsert /Tenant/10/Table/10{7-8}            range default
+upsert /Tenant/10/Table/10{6-7}            rangefeed_enabled=true
+upsert /Tenant/10/Table/10{7-8}            rangefeed_enabled=true
 
 # Write a protected timestamp record on the cluster as a secondary tenant.
 protect record-id=3 ts=3 cluster tenant=10
