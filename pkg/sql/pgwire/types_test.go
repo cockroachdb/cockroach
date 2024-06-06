@@ -225,7 +225,8 @@ func TestIntArrayRoundTrip(t *testing.T) {
 
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	got, err := pgwirebase.DecodeDatum(context.Background(), evalCtx, types.IntArray, pgwirebase.FormatText, b[4:])
+	var da tree.DatumAlloc
+	got, err := pgwirebase.DecodeDatum(context.Background(), evalCtx, types.IntArray, pgwirebase.FormatText, b[4:], &da)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,6 +284,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	var da tree.DatumAlloc
 	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
 	randValues := make(tree.Datums, 0, 11)
 	randValues = append(randValues, tree.NewDBytes(tree.DBytes("\x00abc\\\n")))
@@ -311,7 +313,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 
 					evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 					defer evalCtx.Stop(context.Background())
-					got, err := pgwirebase.DecodeDatum(context.Background(), evalCtx, types.Bytes, pgwirebase.FormatText, b[4:])
+					got, err := pgwirebase.DecodeDatum(context.Background(), evalCtx, types.Bytes, pgwirebase.FormatText, b[4:], &da)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -757,12 +759,13 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	var da tree.DatumAlloc
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		b.StartTimer()
-		got, err := pgwirebase.DecodeDatum(context.Background(), evalCtx, types.Decimal, pgwirebase.FormatBinary, bytes)
+		got, err := pgwirebase.DecodeDatum(context.Background(), evalCtx, types.Decimal, pgwirebase.FormatBinary, bytes, &da)
 		b.StopTimer()
 		if err != nil {
 			b.Fatal(err)

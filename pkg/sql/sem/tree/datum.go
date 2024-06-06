@@ -3840,7 +3840,7 @@ func NewDBox2D(b geo.CartesianBoundingBox) *DBox2D {
 func ParseDBox2D(str string) (*DBox2D, error) {
 	b, err := geo.ParseCartesianBoundingBox(str)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not parse geometry")
+		return nil, errors.Wrapf(err, "could not parse bounding box")
 	}
 	return &DBox2D{CartesianBoundingBox: b}, nil
 }
