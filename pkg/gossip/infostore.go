@@ -63,6 +63,7 @@ type infoStore struct {
 
 	nodeID  *base.NodeIDContainer
 	stopper *stop.Stopper
+	metrics Metrics
 
 	Infos           infoMap                  `json:"infos,omitempty"` // Map from key to info
 	NodeAddr        util.UnresolvedAddr      `json:"-"`               // Address of node owning this info store: "host:port"
@@ -161,11 +162,13 @@ func newInfoStore(
 	nodeID *base.NodeIDContainer,
 	nodeAddr util.UnresolvedAddr,
 	stopper *stop.Stopper,
+	metrics Metrics,
 ) *infoStore {
 	is := &infoStore{
 		AmbientContext:  ambient,
 		nodeID:          nodeID,
 		stopper:         stopper,
+		metrics:         metrics,
 		Infos:           make(infoMap),
 		NodeAddr:        nodeAddr,
 		highWaterStamps: map[roachpb.NodeID]int64{},
@@ -335,9 +338,26 @@ func (is *infoStore) processCallbacks(key string, content roachpb.Value, changed
 
 func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks ...Callback) {
 	// Add the callbacks to the callback work list.
+	beforeQueue := timeutil.Now()
+	is.metrics.CallbacksPending.Inc(int64(len(callbacks)))
 	f := func() {
+		afterQueue := timeutil.Now()
 		for _, method := range callbacks {
+			queueDur := afterQueue.Sub(beforeQueue)
+			is.metrics.CallbacksPending.Dec(1)
+			if queueDur >= minCallbackDurationToRecord {
+				is.metrics.CallbacksPendingDuration.RecordValue(queueDur.Nanoseconds())
+			}
+
 			method(key, content)
+
+			afterProcess := timeutil.Now()
+			processDur := afterProcess.Sub(afterQueue)
+			is.metrics.CallbacksProcessed.Inc(1)
+			if processDur > minCallbackDurationToRecord {
+				is.metrics.CallbacksProcessingDuration.RecordValue(processDur.Nanoseconds())
+			}
+			afterQueue = afterProcess // update for next iteration
 		}
 	}
 	is.callbackWorkMu.Lock()

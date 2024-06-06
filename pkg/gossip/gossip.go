@@ -170,6 +170,30 @@ var (
 		Measurement: "Gossip Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	MetaCallbacksProcessed = metric.Metadata{
+		Name:        "gossip.callbacks.processed",
+		Help:        "Number of gossip callbacks processed",
+		Measurement: "Callbacks",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaCallbacksPending = metric.Metadata{
+		Name:        "gossip.callbacks.pending",
+		Help:        "Number of gossip callbacks waiting to be processed",
+		Measurement: "Callbacks",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaCallbacksProcessingDuration = metric.Metadata{
+		Name:        "gossip.callbacks.processing_duration",
+		Help:        "Duration of gossip callback processing",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	MetaCallbacksPendingDuration = metric.Metadata{
+		Name:        "gossip.callbacks.pending_duration",
+		Help:        "Duration of gossip callback queueing to be processed",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // KeyNotPresentError is returned by gossip when queried for a key that doesn't
