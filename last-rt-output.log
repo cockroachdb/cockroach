@@ -1,0 +1,47 @@
+Locating and verifying binaries for os="linux", arch="amd64"
+WARN: unable to find "cockroach-ea" for "amd64": binary or library "cockroach-ea" not found (or was not executable)
+WARN: unable to find library libgeos, ignoring: binary or library "libgeos" not found (or was not executable)
+WARN: unable to find library libgeos_c, ignoring: binary or library "libgeos_c" not found (or was not executable)
+
+Found the following binaries:
+	cockroach "amd64" at: /home/miles/crdb/artifacts/cockroach
+	workload "amd64" at: /home/miles/crdb/artifacts/workload
+AMD64 clusters will be provisioned with probability 1.00
+
+Running tests which match regex "cdc/kafka-chaos$" and are compatible with cloud "gce".
+
+HTTP server listening on port 39593 on all network interfaces: http://:39593/
+16:46:41 run.go:369: test runner logs in: /home/miles/tmp/artifacts-backups/kafka-chaos-newlib/_runner-logs/test_runner-1717692401.log
+test runner logs in: /home/miles/tmp/artifacts-backups/kafka-chaos-newlib/_runner-logs/test_runner-1717692401.log
+16:46:41 run.go:163: global random seed: 2245928646704803355
+16:46:41 test_runner.go:356: test_run_id: miles-1717692401
+test_run_id: miles-1717692401
+[w0] 16:46:41 work_pool.go:204: Acquired quota for 64 CPUs
+[w0] 16:46:41 cluster.go:3102: Using randomly chosen arch="amd64", cdc/kafka-chaos
+16:46:41 test_runner.go:501: Attaching to existing cluster miles-runs-roachtests-all-day for test cdc/kafka-chaos
+miles-runs-roachtests-all-day: stopping
+miles-runs-roachtests-all-day: stopping and waiting
+miles-runs-roachtests-all-day: wiping
+[w0] 16:47:09 test_runner.go:742: Created new cluster for test cdc/kafka-chaos: miles-runs-roachtests-all-day (arch="amd64")
+[w0] 16:47:09 cluster.go:1084: saving cluster miles-runs-roachtests-all-day [tag:] (4 nodes) for debugging (--debug specified)
+[w0] 16:47:09 test_runner.go:818: Starting test: cdc/kafka-chaos:1 on cluster=miles-runs-roachtests-all-day (arch="amd64")
+16:47:09 test_impl.go:157: Benchmark test, running with standard cockroach
+16:47:09 test_impl.go:157: Benchmark test, running with standard cockroach
+16:47:09 cluster.go:692: test status: uploading file
+[w0] 16:47:09 cluster_synced.go:2043: [31mWARNING: Source file is a symlink to /home/miles/go/src/github.com/cockroachdb/cockroach/artifacts/cockroach[0m
+[w0] 16:47:09 cluster_synced.go:2044: [31mWARNING: Remote file will inherit the target permissions '-rwxrwxrwx'.[0m
+[w0] 16:47:09 cluster_synced.go:2062: miles-runs-roachtests-all-day: putting (scp) /home/miles/crdb/artifacts/cockroach ./cockroach on nodes [1 2 3 4]
+[w0] 16:47:23 cluster_synced.go:2264: 
+[w0] 16:47:23 cluster_synced.go:2269:    1: done
+[w0] 16:47:23 cluster_synced.go:2269:    2: done
+[w0] 16:47:23 cluster_synced.go:2269:    3: done
+[w0] 16:47:23 cluster_synced.go:2269:    4: done
+16:47:23 cluster.go:692: test status: 
+16:47:23 cluster.go:692: test status: running test
+16:47:23 cluster.go:692: test status: metamorphically setting kv.expiration_leases_only.enabled = true
+16:47:26 test_runner.go:1233: === RUN   cdc/kafka-chaos  [metrics: https://go.crdb.dev/roachtest-grafana/miles-1717692401/cdc-kafka-chaos/1717692446918/1717694246918]
+=== RUN   cdc/kafka-chaos  [metrics: https://go.crdb.dev/roachtest-grafana/miles-1717692401/cdc-kafka-chaos/1717692446918/1717694246918]
+16:47:26 test_runner.go:1881: error adding annotation for test start: error adding grafana annotation: GRAFANA_SERVICE_ACCOUNT_JSON env variable was not found
+16:47:26 cluster.go:692: test status: starting nodes :1-3
+16:47:28 cluster_synced.go:1897: miles-runs-roachtests-all-day: checking certs.tar
+miles-runs-roachtests-all-day: initializing certs

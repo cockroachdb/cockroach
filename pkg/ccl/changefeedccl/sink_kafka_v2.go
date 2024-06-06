@@ -22,6 +22,11 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
+const oneByOne = "onebyone"
+const noBufAndClose = "nobuf"
+const newLib = "newlib"
+const whichHack = newLib
+
 func newKafkaSinkClient(
 	kafkaCfg *sarama.Config,
 	batchCfg sinkBatchConfig,
@@ -242,13 +247,42 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 		// 	return handleErr(err)
 		// }
 
-		// this works if we also set maxmessages = 1
-		for _, m := range msgs {
-			if _, _, err := k.producer.SendMessage(m); err != nil {
+		switch whichHack {
+		case oneByOne:
+			// this works if we also set maxmessages = 1
+			for _, m := range msgs {
+				if _, _, err := k.producer.SendMessage(m); err != nil {
+					return handleErr(err)
+				}
+			}
+		case noBufAndClose: // TODO: if this is competitive, validate that it's actually correct. nope its not working lol
+			// TODO: i dont think Close() actually flushes. it just waits for flush...
+			producer, err := sarama.NewSyncProducerFromClient(k.client)
+			if err != nil {
+				return err
+			}
+			if err := producer.SendMessages(msgs); err != nil {
 				return handleErr(err)
 			}
+			if err := producer.Close(); err != nil {
+				return err
+			}
+		case newLib:
+			// this is actually less efficient but easier for switching around what we're testing
+			msgs2 := make([]kafka.Message, len(msgs))
+			for i, m := range msgs {
+				msgs2[i] = kafka.Message{
+					Key:   m.Key.(sarama.ByteEncoder),
+					Value: m.Value.(sarama.ByteEncoder),
+					Topic: m.Topic,
+				}
+			}
+			if err := k.writer.WriteMessages(ctx, msgs2...); err != nil {
+				return handleErr(err)
+			}
+		default:
+			panic("unknown hack")
 		}
-
 		// trk := tracker{pendingIDs: make(map[int]struct{})}
 		// for _, m := range msgs {
 		// 	m.Metadata = map[string]any{`id`: trk.next()}
@@ -429,7 +463,16 @@ func makeKafkaSinkV2(ctx context.Context,
 	// kafkaCfg.Producer.Flush.Messages = 0
 
 	// trying one by one. see Flush()
-	kafkaCfg.Producer.Flush.MaxMessages = 1
+	switch whichHack {
+	case oneByOne:
+		kafkaCfg.Producer.Flush.MaxMessages = 1
+	case noBufAndClose:
+		kafkaCfg.Producer.Flush.MaxMessages = batchCfg.Messages * 100
+		kafkaCfg.Producer.Flush.Messages = batchCfg.Messages * 100
+		kafkaCfg.Producer.Flush.Bytes = batchCfg.Bytes * 100
+		kafkaCfg.Producer.Flush.Frequency = 0
+	case newLib:
+	}
 
 	// but with this set and still using SendMessages(), we expect to see the issue more frequently. since num sarama batches per messageBatch will be > 1
 	// kafkaCfg.Producer.Flush.MaxMessages = 1

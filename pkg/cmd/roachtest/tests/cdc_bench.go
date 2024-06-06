@@ -440,7 +440,7 @@ func runCDCBenchWorkload(
 	// -- control   0-100 - 3MiB/s in data, 72Mb/s in network. then it failed with the eof / connection lost error..
 	// -- singlerow 0-100 - 2.6MiB/s in data, 177Mb/s in network. and also failed. i think these really overload the cluster cpu wise
 	// -- control 0-100-10xconc - quickly got overloaded and died. with tolerate-errors:  4MiB/s, 62Mb/s. 5.5MiB in grafana
-	// -- singlerow 0-100-10xconc -
+	// -- singlerow 0-100-10xconc - 3.2MiB/s, 128 Mb/s. 4.7MiB in grafana. doesnt seem that bad actually
 	// TODO: next try upping kv workload's concurrency &/ batch size
 
 	switch server {
