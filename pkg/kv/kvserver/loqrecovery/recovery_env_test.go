@@ -488,8 +488,7 @@ func raftLogFromPendingDescriptorUpdate(
 	if err != nil {
 		t.Fatalf("failed to serialize raftCommand: %v", err)
 	}
-	data := raftlog.EncodeCommandBytes(
-		raftlog.EntryEncodingStandardWithoutAC, kvserverbase.CmdIDKey(fmt.Sprintf("%08d", entryIndex)), out)
+	data := raftlog.EncodeCommandBytes(raftlog.EntryEncodingStandardWithoutAC, kvserverbase.CmdIDKey(fmt.Sprintf("%08d", entryIndex)), out, 0)
 	ent := raftpb.Entry{
 		Term:  1,
 		Index: uint64(replica.RaftCommittedIndex + entryIndex),

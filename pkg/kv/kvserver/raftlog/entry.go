@@ -18,6 +18,7 @@ package raftlog
 import (
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -29,34 +30,40 @@ import (
 )
 
 // EncodingOf determines the EntryEncoding for a given Entry.
-func EncodingOf(ent raftpb.Entry) (EntryEncoding, error) {
+func EncodingOf(ent raftpb.Entry) (EntryEncoding, kvflowconnectedstream.RaftPriority, error) {
 	if len(ent.Data) == 0 {
 		// An empty command.
-		return EntryEncodingEmpty, nil
+		return EntryEncodingEmpty, 0, nil
 	}
 
 	switch ent.Type {
 	case raftpb.EntryConfChange:
-		return EntryEncodingRaftConfChange, nil
+		return EntryEncodingRaftConfChange, 0, nil
 	case raftpb.EntryConfChangeV2:
-		return EntryEncodingRaftConfChangeV2, nil
+		return EntryEncodingRaftConfChangeV2, 0, nil
 	case raftpb.EntryNormal:
 	default:
-		return 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
+		return 0, 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
 	}
 
-	// TODO: update.
-	switch ent.Data[0] {
+	pri := kvflowconnectedstream.RaftPriority(ent.Data[0] & priMask)
+	encoding := ent.Data[0] & encodingMask
+
+	switch encoding {
+	case entryEncodingStandardWithRaftPriorityPrefixByte:
+		return EntryEncodingStandardWithRaftPriority, pri + 1, nil
+	case entryEncodingSideloadedWithRaftPriorityPrefixByte:
+		return EntryEncodingSideloadedWithRaftPriority, pri + 1, nil
 	case entryEncodingStandardWithACPrefixByte:
-		return EntryEncodingStandardWithAC, nil
+		return EntryEncodingStandardWithAC, pri, nil
 	case entryEncodingSideloadedWithACPrefixByte:
-		return EntryEncodingSideloadedWithAC, nil
+		return EntryEncodingSideloadedWithAC, pri, nil
 	case entryEncodingStandardWithoutACPrefixByte:
-		return EntryEncodingStandardWithoutAC, nil
+		return EntryEncodingStandardWithoutAC, pri, nil
 	case entryEncodingSideloadedWithoutACPrefixByte:
-		return EntryEncodingSideloadedWithoutAC, nil
+		return EntryEncodingSideloadedWithoutAC, pri, nil
 	default:
-		return 0, errors.AssertionFailedf("unknown command encoding version %d", ent.Data[0])
+		return 0, 0, errors.AssertionFailedf("unknown command encoding version %d", ent.Data[0])
 	}
 }
 
@@ -138,7 +145,7 @@ func raftEntryFromRawValue(b []byte) (raftpb.Entry, error) {
 }
 
 func (e *Entry) load() error {
-	typ, err := EncodingOf(e.Entry)
+	typ, _, err := EncodingOf(e.Entry)
 	if err != nil {
 		return err
 	}
@@ -154,10 +161,10 @@ func (e *Entry) load() error {
 		AsV2() raftpb.ConfChangeV2
 	}
 	switch typ {
-	case EntryEncodingStandardWithAC, EntryEncodingSideloadedWithAC:
+	case EntryEncodingStandardWithAC, EntryEncodingSideloadedWithAC, EntryEncodingStandardWithRaftPriority,
+		EntryEncodingSideloadedWithRaftPriority:
 		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
 		e.ApplyAdmissionControl = true
-		// TODO: handle the *WithACPriority case
 	case EntryEncodingStandardWithoutAC, EntryEncodingSideloadedWithoutAC:
 		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
 	case EntryEncodingEmpty:

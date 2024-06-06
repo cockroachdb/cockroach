@@ -13,6 +13,7 @@ package raftlog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -24,18 +25,30 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const encodingMask byte = 0x3F
+const priMask byte = 0xC0
+
 // EncodeCommand encodes the provided command into a slice.
+//
+// useRACv2 is relevant iff raftAdmissionMeta != nil.
 func EncodeCommand(
 	ctx context.Context,
 	command *kvserverpb.RaftCommand,
 	idKey kvserverbase.CmdIDKey,
 	raftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta,
+	useRACv2 bool,
 ) ([]byte, error) {
 	// Determine the encoding style for the Raft command.
 	prefix := true
 	entryEncoding := EntryEncodingStandardWithoutAC
+	var rpri kvflowconnectedstream.RaftPriority
 	if raftAdmissionMeta != nil {
-		entryEncoding = EntryEncodingStandardWithAC
+		if useRACv2 {
+			entryEncoding = EntryEncodingStandardWithRaftPriority
+			rpri = kvflowconnectedstream.RaftPriority(raftAdmissionMeta.AdmissionPriority)
+		} else {
+			entryEncoding = EntryEncodingStandardWithAC
+		}
 	}
 	if crt := command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
@@ -51,7 +64,12 @@ func EncodeCommand(
 	} else if command.ReplicatedEvalResult.AddSSTable != nil {
 		entryEncoding = EntryEncodingSideloadedWithoutAC
 		if raftAdmissionMeta != nil {
-			entryEncoding = EntryEncodingSideloadedWithAC
+			if useRACv2 {
+				entryEncoding = EntryEncodingSideloadedWithRaftPriority
+				rpri = kvflowconnectedstream.RaftPriority(raftAdmissionMeta.AdmissionPriority)
+			} else {
+				entryEncoding = EntryEncodingSideloadedWithAC
+			}
 		}
 
 		if command.ReplicatedEvalResult.AddSSTable.Data == nil {
@@ -83,7 +101,7 @@ func EncodeCommand(
 	data := make([]byte, preLen, needed)
 	// Encode prefix with command ID, if necessary.
 	if prefix {
-		EncodeRaftCommandPrefix(data, entryEncoding, idKey)
+		EncodeRaftCommandPrefix(data, entryEncoding, idKey, rpri)
 	}
 
 	// Encode the body of the command.

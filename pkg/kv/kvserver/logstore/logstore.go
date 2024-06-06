@@ -484,7 +484,7 @@ func LoadTerm(
 		// sideloaded entries here to keep the term fetching cheap.
 		// TODO(pavelkalinnikov): consider not caching here, after measuring if it
 		// makes any difference.
-		typ, err := raftlog.EncodingOf(entry)
+		typ, _, err := raftlog.EncodingOf(entry)
 		if err != nil {
 			return 0, err
 		}
@@ -577,7 +577,7 @@ func LoadEntries(
 		}
 		expectedIndex++
 
-		typ, err := raftlog.EncodingOf(ent)
+		typ, _, err := raftlog.EncodingOf(ent)
 		if err != nil {
 			return err
 		}

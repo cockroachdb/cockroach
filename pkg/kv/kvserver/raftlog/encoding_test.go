@@ -74,7 +74,7 @@ func BenchmarkRaftAdmissionMetaOverhead(b *testing.B) {
 				func(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						// 1. Encode the raft command prefix.
-						EncodeRaftCommandPrefix(encodingBuf[:RaftCommandPrefixLen], entryEnc, "deadbeef")
+						EncodeRaftCommandPrefix(encodingBuf[:RaftCommandPrefixLen], entryEnc, "deadbeef", 0)
 
 						// 2. If using below-raft admission, encode the raft
 						// metadata right after the command prefix.

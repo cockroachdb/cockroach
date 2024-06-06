@@ -585,7 +585,8 @@ type FollowerStateInfo struct {
 type RaftPriority uint8
 
 const (
-	RaftLowPri RaftPriority = iota
+	RaftUnusedZeroValuePriority RaftPriority = iota
+	RaftLowPri                  RaftPriority = iota + 1
 	RaftNormalPri
 	RaftAboveNormalPri
 	RaftHighPri

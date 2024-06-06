@@ -17,7 +17,6 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
-        "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
     ],
