@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -783,6 +784,86 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 	stmt, err := sqlDB.Prepare("SELECT " + uniqueString)
 	require.NoError(t, err)
 	defer func() { _ = stmt.Close() }()
+}
+
+// TestStatementCancelRollback confirms that rollbacks because of statement
+// timeouts are *always* asynchronous.
+func TestStatementCancelRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t)
+
+	for _, useStatementTimeout := range []bool{true, false} {
+		t.Run(fmt.Sprintf("Cancel with statement timeout=%t", useStatementTimeout),
+			func(t *testing.T) {
+				hookEnabled := atomic.Bool{}
+				rollbackCompleted := make(chan struct{})
+				rollbackExpected := make(chan struct{})
+				var codec keys.SQLCodec
+				queryCtx, cancelFn := context.WithCancel(ctx)
+				defer cancelFn()
+				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						SQLExecutor: &sql.ExecutorTestingKnobs{
+							BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
+								if !useStatementTimeout && strings.Contains(stmt, "pg_sleep") {
+									cancelFn()
+								}
+							},
+						},
+						Store: &kvserver.StoreTestingKnobs{
+							TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+								// Once the hook is enabled we are expecting a txn rollback involving
+								// the system.descriptor key, because the first tihng accessed by the
+								// txn below is the descriptor table.
+								if hookEnabled.Load() {
+									if request.IsSingleEndTxnRequest() {
+										if !request.Requests[0].GetEndTxn().Commit {
+											_, tblID, err := codec.DecodeTablePrefix(request.Header.Txn.TxnMeta.Key)
+											if err != nil {
+												return nil
+											}
+											if tblID == keys.DescriptorTableID {
+												// This channel will only be closed once the "synchronous" rollback returns.
+												<-rollbackExpected
+												close(rollbackCompleted)
+												hookEnabled.Swap(false)
+											}
+										}
+									}
+								}
+								return nil
+							},
+						},
+					},
+				})
+				codec = s.ApplicationLayer().Codec()
+				defer s.Stopper().Stop(context.Background())
+				conn, err := sqlDB.Conn(context.Background())
+				require.NoError(t, err)
+
+				hookEnabled.Swap(true)
+				if useStatementTimeout {
+					_, err = conn.ExecContext(queryCtx, "SET statement_timeout='1s'")
+					require.NoError(t, err)
+				}
+				_, err = conn.ExecContext(queryCtx, "CREATE TABLE t1(n int);SELECT * FROM pg_sleep(5)")
+				expectedError := "query execution canceled due to statement timeout"
+				if !useStatementTimeout {
+					expectedError = "pq: query execution canceled"
+				}
+				require.ErrorContains(t,
+					err,
+					expectedError,
+					"expected timeout error")
+				// Because the rollback is asynchronous due to the timeout, we expected
+				// to just return here. Any rollbacks involving the descriptor key above are
+				// *blocked*.
+				close(rollbackExpected)
+				// Confirm the async rollback happened.
+				<-rollbackCompleted
+			})
+	}
 }
 
 // TestRetriableErrorDuringUpgradedTransaction ensures that a retriable error
