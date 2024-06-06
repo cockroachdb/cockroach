@@ -59,6 +59,15 @@ type DB interface {
 		opts ...kvcoord.RangeFeedOption,
 	) error
 
+	// RangefeedFromFrontier runs a rangefeed on the frontier's spans, and
+	// starting at each span's associated timestamp.
+	RangeFeedFromFrontier(
+		ctx context.Context,
+		frontier span.Frontier,
+		eventC chan<- kvcoord.RangeFeedMessage,
+		opts ...kvcoord.RangeFeedOption,
+	) error
+
 	// Scan encapsulates scanning a key span at a given point in time. The method
 	// deals with pagination, calling the caller back for each row. Note that
 	// the API does not require that the rows be ordered to allow for future
@@ -203,7 +212,7 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 	if err != nil {
 		return err
 	}
-	return f.start(ctx, frontier, true)
+	return f.start(ctx, frontier, true, false)
 }
 
 // StartFromFrontier is like Start but allows passing a frontier containing the
@@ -214,10 +223,12 @@ func (f *RangeFeed) Start(ctx context.Context, spans []roachpb.Span) error {
 // caller must not interact with it until Close returns. The caller remains
 // responsible for releasing the frontier thereafter however.
 func (f *RangeFeed) StartFromFrontier(ctx context.Context, frontier span.Frontier) error {
-	return f.start(ctx, frontier, false)
+	return f.start(ctx, frontier, false, true)
 }
 
-func (f *RangeFeed) start(ctx context.Context, frontier span.Frontier, ownsFrontier bool) error {
+func (f *RangeFeed) start(
+	ctx context.Context, frontier span.Frontier, ownsFrontier bool, resumeFromFrontier bool,
+) error {
 	if !atomic.CompareAndSwapInt32(&f.started, 0, 1) {
 		return errors.AssertionFailedf("rangefeed already started")
 	}
@@ -239,7 +250,7 @@ func (f *RangeFeed) start(ctx context.Context, frontier span.Frontier, ownsFront
 		defer pprof.SetGoroutineLabels(ctx)
 		ctx = pprof.WithLabels(ctx, pprof.Labels(append(f.extraPProfLabels, "rangefeed", f.name)...))
 		pprof.SetGoroutineLabels(ctx)
-		f.run(ctx, frontier)
+		f.run(ctx, frontier, resumeFromFrontier)
 	}
 
 	f.spansDebugStr = func() string {
@@ -281,8 +292,10 @@ const resetThreshold = 30 * time.Second
 var useMuxRangeFeed = metamorphic.ConstantWithTestBool("use-mux-rangefeed", true)
 
 // run will run the RangeFeed until the context is canceled or if the client
-// indicates that an initial scan error is non-recoverable.
-func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
+// indicates that an initial scan error is non-recoverable. The
+// resumeWithFrontier arg enables the client to resume the rangefeed using the
+// span frontier instead of from the frontier's low water mark.
+func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithFrontier bool) {
 	defer f.running.Done()
 	r := retry.StartWithCtx(ctx, f.retryOptions)
 	restartLogEvery := log.Every(10 * time.Second)
@@ -291,7 +304,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
 		if failed := f.runInitialScan(ctx, &restartLogEvery, &r, frontier); failed {
 			return
 		}
-	} else {
+	} else if !resumeWithFrontier {
 		for _, sp := range f.spans {
 			if _, err := frontier.Forward(sp, f.initialTimestamp); err != nil {
 				if fn := f.onUnrecoverableError; fn != nil {
@@ -338,6 +351,11 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier) {
 
 		rangeFeedTask := func(ctx context.Context) error {
 			return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
+		}
+		if resumeWithFrontier {
+			rangeFeedTask = func(ctx context.Context) error {
+				return f.client.RangeFeedFromFrontier(ctx, frontier, eventCh, rangefeedOpts...)
+			}
 		}
 		processEventsTask := func(ctx context.Context) error {
 			return f.processEvents(ctx, frontier, eventCh)
