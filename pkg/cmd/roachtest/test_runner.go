@@ -605,7 +605,9 @@ func (r *testRunner) runWorker(
 			qp.Release(alloc)
 		}
 	}()
-
+	clusterDestroyWg := &sync.WaitGroup{}
+	// cluster destroy can be done concurrently. The WaitGroup just ensures that all pending Destroy calls have completed.
+	defer clusterDestroyWg.Wait() // wait for the clusters to be destroyed
 	// Loop until there's no more work in the pool, we get interrupted, or an
 	// error occurs.
 	for {
@@ -661,8 +663,7 @@ func (r *testRunner) runWorker(
 				// We failed to find a test that can take advantage of this cluster. So
 				// we're going to release it, which will deallocate its resources.
 				l.PrintfCtx(ctx, "No tests that can reuse cluster %s found. Destroying.", c)
-				// We use a context that can't be canceled for the Destroy().
-				c.Destroy(context.Background(), closeLogger, l)
+				r.destroyClusterAsync(clusterDestroyWg, c, l)
 				wStatus.SetCluster(nil)
 				c = nil
 			}
@@ -924,6 +925,24 @@ func (r *testRunner) runWorker(
 			}
 		}
 	}
+}
+
+// destroyClusterAsync runs cluster destroy in a goroutine and adds 1 to the wait group.
+// if the cluster is local, the cluster destroy is sequential.
+func (r *testRunner) destroyClusterAsync(
+	clusterDestroyWg *sync.WaitGroup, c *clusterImpl, l *logger.Logger,
+) {
+	if c.IsLocal() {
+		// N.B. multiple local clusters aren't supported, hence we must use a blocking call.
+		c.Destroy(context.Background(), closeLogger, l)
+		return
+	}
+	clusterDestroyWg.Add(1)
+	go func(ci *clusterImpl) {
+		defer clusterDestroyWg.Done()
+		// We use a context that can't be canceled for the Destroy().
+		ci.Destroy(context.Background(), closeLogger, l)
+	}(c)
 }
 
 // getArtifacts retrieves artifacts (like perf or go cover) produced by a
