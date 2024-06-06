@@ -103,6 +103,9 @@ type scope struct {
 	// scopes.
 	ctes map[string]*cteSource
 
+	// TODO
+	placeholderMapping opt.ColList
+
 	// alias is set to the last data source alias we've come across, if we
 	// are processing a data source with an alias.
 	alias *tree.AliasClause
@@ -218,6 +221,10 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	// the new scope.
 	for i := l; i < len(s.cols); i++ {
 		s.cols[i].scalar = nil
+	}
+	// Include the placeholder mapping from src if s has none.
+	if s.placeholderMapping == nil {
+		s.placeholderMapping = src.placeholderMapping
 	}
 }
 
@@ -997,6 +1004,19 @@ func (s *scope) Resolve(
 	}
 
 	return nil, colinfo.NewUndefinedColumnError(tree.ErrString(tree.NewColumnItem(prefix, colName)))
+}
+
+// ResolvePlaceholder TODO.
+func (s *scope) ResolvePlaceholder(idx tree.PlaceholderIdx) (col opt.ColumnID, ok bool) {
+	// We start from the current scope; if we find at least one match we are done
+	// (either with a result or an ambiguity error). Otherwise, we search the
+	// parent scope.
+	for ; s != nil; s = s.parent {
+		if s.placeholderMapping != nil {
+			return s.placeholderMapping[idx], true
+		}
+	}
+	return 0, false
 }
 
 func makeUntypedTuple(labels []string, texprs []tree.TypedExpr) *tree.Tuple {

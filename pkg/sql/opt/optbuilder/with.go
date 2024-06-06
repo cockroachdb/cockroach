@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -110,6 +113,7 @@ func (b *Builder) processWiths(
 	with *tree.With, inScope *scope, buildStmt func(inScope *scope) *scope,
 ) *scope {
 	var correlatedCTEs cteSources
+	// inScope = b.buildPlaceholderCTE(inScope)
 	inScope, correlatedCTEs = b.buildCTEs(with, inScope)
 	prevAtRoot := inScope.atRoot
 	inScope.atRoot = false
@@ -412,4 +416,74 @@ func (b *Builder) splitRecursiveCTE(
 		return nil, nil, false, false
 	}
 	return union.Left, union.Right, union.All, true
+}
+
+// buildPlaceholderCTE constructs... TODO
+func (b *Builder) buildPlaceholderCTE(inScope *scope) (outScope *scope) {
+	// No-op if there are no placeholders.
+	if len(b.semaCtx.Placeholders.Types) == 0 {
+		return inScope
+	}
+
+	// TODO: Do I need to push a new scope?
+	outScope = inScope.push()
+
+	// Build the Values.
+	numPlaceholders := len(b.semaCtx.Placeholders.Types)
+
+	exprs := make(memo.ScalarListExpr, 0, numPlaceholders)
+	typs := make([]*types.T, 0, numPlaceholders)
+	cols := make(opt.ColList, 0, numPlaceholders)
+	aliases := make([]string, 0, numPlaceholders)
+
+	for i := 0; i < numPlaceholders; i++ {
+		exprs = append(exprs, b.factory.ConstructPlaceholder(&tree.Placeholder{Idx: tree.PlaceholderIdx(i)}))
+		// TODO: Get the real type here.
+		typs = append(typs, types.Int)
+		// typs = append(typs, b.semaCtx.Placeholders.Types[i])
+		aliases = append(aliases, fmt.Sprintf("$%d", i+1))
+		cols = append(cols, b.factory.Metadata().AddColumn(aliases[i], typs[i]))
+	}
+
+	tupleTyp := types.MakeTuple(typs)
+	rows := memo.ScalarListExpr{b.factory.ConstructTuple(exprs, tupleTyp)}
+
+	values := b.factory.ConstructValues(rows, &memo.ValuesPrivate{
+		Cols: cols,
+		ID:   b.factory.Metadata().NextUniqueID(),
+	})
+
+	id := b.factory.Memo().NextWithID()
+	b.factory.Metadata().AddWithBinding(id, values)
+
+	presentation := make(physical.Presentation, 0, len(cols))
+	for i := range cols {
+		col := cols[i]
+		presentation = append(presentation, opt.AliasedColumn{
+			Alias: aliases[i],
+			ID:    col,
+		})
+	}
+
+	b.addCTE(&cteSource{
+		name: tree.AliasClause{
+			// TODO
+			Alias: "",
+			Cols:  nil,
+		},
+		cols: presentation,
+		// TODO
+		// ordering:     cteOrdering,
+		// TODO
+		// originalExpr: cte.Stmt,
+		expr: values,
+		id:   id,
+		// Ensure that the CTE is never inlined.
+		mtr: tree.CTEMaterializeAlways,
+	})
+
+	b.placeholderWithID = id
+
+	// TODO: Do I need to return the outscope?
+	return outScope
 }

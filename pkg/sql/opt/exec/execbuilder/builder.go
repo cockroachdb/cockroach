@@ -53,8 +53,10 @@ func getParallelScanResultThreshold(forceProductionValue bool) uint64 {
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
 // expression tree (opt.Expr).
 type Builder struct {
-	ctx              context.Context
-	factory          exec.Factory
+	ctx     context.Context
+	factory exec.Factory
+	// TODO(mgartner): Execbuild should not depend on an optimizer - it may not
+	// be initialized correctly when the memo is a reused, cached memo.
 	optimizer        *xform.Optimizer
 	mem              *memo.Memo
 	catalog          cat.Catalog

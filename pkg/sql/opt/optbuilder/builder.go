@@ -116,6 +116,9 @@ type Builder struct {
 	// Together, they form a directed acyclic graph.
 	cteRefMap map[opt.WithID]cteSources
 
+	// TODO
+	placeholderWithID opt.WithID
+
 	// If set, the planner will skip checking for the SELECT privilege when
 	// resolving data sources (tables, views, etc). This is used when compiling
 	// views and the view SELECT privilege has already been checked. This should
@@ -296,6 +299,7 @@ func (b *Builder) buildStmtAtRootWithScope(
 	// Save any CTEs above the boundary.
 	prevCTEs := b.ctes
 	b.ctes = nil
+
 	outScope = b.buildStmt(stmt, desiredTypes, inScope)
 	// Build With operators for any CTEs hoisted to the top level.
 	outScope.expr = b.buildWiths(outScope.expr, b.ctes)
@@ -579,3 +583,135 @@ func (o *optTrackingTypeResolver) ResolveTypeByOID(
 	o.metadata.AddUserDefinedType(typ, nil /* name */)
 	return typ, nil
 }
+
+// func (b *Builder) preparePlaceholderWith() {
+// 	// No-op if there are no placeholders.
+// 	if len(b.semaCtx.Placeholders.Types) == 0 {
+// 		return
+// 	}
+// 	b.placeholderWithID = b.factory.Memo().NextWithID()
+// 	// TODO: We don't have an expression yet...
+// 	// b.factory.Metadata().AddWithBinding(id, values)
+//
+// 	numPlaceholders := len(b.semaCtx.Placeholders.Types)
+//
+// 	// exprs := make(memo.ScalarListExpr, 0, numPlaceholders)
+// 	// typs := make([]*types.T, 0, numPlaceholders)
+// 	cols := make(opt.ColList, 0, numPlaceholders)
+// 	aliases := make([]string, 0, numPlaceholders)
+//
+// 	for i := 0; i < numPlaceholders; i++ {
+// 		// exprs = append(exprs, b.factory.ConstructPlaceholder(&tree.Placeholder{Idx: tree.PlaceholderIdx(i)}))
+// 		// TODO: Get the real type here.
+// 		// typs = append(typs, types.Int)
+// 		// typs = append(typs, b.semaCtx.Placeholders.Types[i])
+// 		aliases = append(aliases, fmt.Sprintf("$%d", i+1))
+// 		cols = append(cols, b.factory.Metadata().AddColumn(aliases[i], typs[i]))
+// 	}
+//
+// 	tupleTyp := types.MakeTuple(typs)
+// 	rows := memo.ScalarListExpr{b.factory.ConstructTuple(exprs, tupleTyp)}
+//
+// 	values := b.factory.ConstructValues(rows, &memo.ValuesPrivate{
+// 		Cols: cols,
+// 		ID:   b.factory.Metadata().NextUniqueID(),
+// 	})
+//
+// 	id := b.factory.Memo().NextWithID()
+// 	b.factory.Metadata().AddWithBinding(id, values)
+//
+// 	presentation := make(physical.Presentation, 0, len(cols))
+// 	for i := range cols {
+// 		col := cols[i]
+// 		presentation = append(presentation, opt.AliasedColumn{
+// 			Alias: aliases[i],
+// 			ID:    col,
+// 		})
+// 	}
+// }
+//
+// // buildPlaceholderCTE constructs... TODO
+// func (b *Builder) buildPlaceholderWith(inScope *scope) (outScope *scope) {
+// 	// No-op if there are no placeholders.
+// 	if len(b.semaCtx.Placeholders.Types) == 0 {
+// 		return inScope
+// 	}
+//
+// 	// TODO: this might be a better check.
+// 	if b.placeholderWithID == 0 {
+// 		return inScope
+// 	}
+//
+// 	// TODO: Do I need to push a new scope?
+// 	outScope = inScope.push()
+//
+// 	// Build the Values.
+// 	numPlaceholders := len(b.semaCtx.Placeholders.Types)
+//
+// 	exprs := make(memo.ScalarListExpr, 0, numPlaceholders)
+// 	typs := make([]*types.T, 0, numPlaceholders)
+// 	cols := make(opt.ColList, 0, numPlaceholders)
+// 	aliases := make([]string, 0, numPlaceholders)
+//
+// 	for i := 0; i < numPlaceholders; i++ {
+// 		exprs = append(exprs, b.factory.ConstructPlaceholder(&tree.Placeholder{Idx: tree.PlaceholderIdx(i)}))
+// 		// TODO: Get the real type here.
+// 		typs = append(typs, types.Int)
+// 		// typs = append(typs, b.semaCtx.Placeholders.Types[i])
+// 		aliases = append(aliases, fmt.Sprintf("$%d", i+1))
+// 		cols = append(cols, b.factory.Metadata().AddColumn(aliases[i], typs[i]))
+// 	}
+//
+// 	tupleTyp := types.MakeTuple(typs)
+// 	rows := memo.ScalarListExpr{b.factory.ConstructTuple(exprs, tupleTyp)}
+//
+// 	values := b.factory.ConstructValues(rows, &memo.ValuesPrivate{
+// 		Cols: cols,
+// 		ID:   b.factory.Metadata().NextUniqueID(),
+// 	})
+//
+// 	id := b.factory.Memo().NextWithID()
+// 	b.factory.Metadata().AddWithBinding(id, values)
+//
+// 	presentation := make(physical.Presentation, 0, len(cols))
+// 	for i := range cols {
+// 		col := cols[i]
+// 		presentation = append(presentation, opt.AliasedColumn{
+// 			Alias: aliases[i],
+// 			ID:    col,
+// 		})
+// 	}
+//
+// 	private := &memo.WithPrivate{
+// 		ID:   b.placeholderWithID,
+// 		Name: "placeholder",
+// 		Mtr:  tree.CTEMaterializeAlways,
+// 		// OriginalExpr: ctes[i].originalExpr,
+// 	}
+// 	// if len(ctes[i].ordering) > 0 {
+// 	// 	private.Mtr = tree.CTEMaterializeAlways
+// 	// 	private.BindingOrdering.FromOrdering(ctes[i].ordering)
+// 	// }
+// 	outScope.expr = b.factory.ConstructWith(values, outScope.expr, private)
+// 	// b.addCTE(&cteSource{
+// 	// 	name: tree.AliasClause{
+// 	// 		// TODO
+// 	// 		Alias: "",
+// 	// 		Cols:  nil,
+// 	// 	},
+// 	// 	cols: presentation,
+// 	// 	// TODO
+// 	// 	// ordering:     cteOrdering,
+// 	// 	// TODO
+// 	// 	// originalExpr: cte.Stmt,
+// 	// 	expr: values,
+// 	// 	id:   id,
+// 	// 	// Ensure that the CTE is never inlined.
+// 	// 	mtr: tree.CTEMaterializeAlways,
+// 	// })
+//
+// 	// b.placeholderWithID = id
+//
+// 	// TODO: Do I need to return the outscope?
+// 	return outScope
+// }

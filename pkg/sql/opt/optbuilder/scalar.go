@@ -419,7 +419,11 @@ func (b *Builder) buildScalar(
 			}
 			out = b.factory.ConstructConstVal(d, t.ResolvedType())
 		} else {
-			out = b.factory.ConstructPlaceholder(t)
+			if col, ok := inScope.ResolvePlaceholder(t.Idx); ok {
+				out = b.factory.ConstructVariable(col)
+			} else {
+				out = b.factory.ConstructPlaceholder(t)
+			}
 		}
 
 	case *tree.RangeCond:

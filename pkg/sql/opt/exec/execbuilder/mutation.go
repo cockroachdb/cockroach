@@ -115,6 +115,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 		insertOrds,
 		returnOrds,
 		checkOrds,
+		// TODO:
 		b.allowAutoCommit && len(ins.UniqueChecks) == 0 &&
 			len(ins.FKChecks) == 0 && len(ins.FKCascades) == 0,
 	)

@@ -784,7 +784,9 @@ $left
 [ProjectInnerJoinValues, Normalize]
 (InnerJoin | InnerJoinApply
     $left:*
-    $right:(Values) & (HasOneRow $right)
+    $right:(Values) &
+        (HasOneRow $right) &
+        ^(IsGenericValues $right)
     $on:*
 )
 =>

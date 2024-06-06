@@ -461,23 +461,23 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// one row). This is advantageous because a full-table constrained scan for
 		// a singleton table will be performed using a Get instead of a Scan, which
 		// allows for some low-level optimizations.
-		if !grp.Relational().Cardinality.IsZeroOrOne() {
-			checkConstraintFilters := c.checkConstraintFilters(scanPrivate.Table)
-			for i := range checkConstraintFilters {
-				if !checkConstraintFilters[i].ScalarProps().TightConstraints {
-					continue
-				}
-				optionalConstraints := checkConstraintFilters[i].ScalarProps().Constraints
-				if optionalConstraints == nil {
-					continue
-				}
-				for j := 0; j < optionalConstraints.Length(); j++ {
-					if combinedConstraint.Contains(c.e.evalCtx, optionalConstraints.Constraint(j)) {
-						return
-					}
-				}
-			}
-		}
+		// if !grp.Relational().Cardinality.IsZeroOrOne() {
+		// 	checkConstraintFilters := c.checkConstraintFilters(scanPrivate.Table)
+		// 	for i := range checkConstraintFilters {
+		// 		if !checkConstraintFilters[i].ScalarProps().TightConstraints {
+		// 			continue
+		// 		}
+		// 		optionalConstraints := checkConstraintFilters[i].ScalarProps().Constraints
+		// 		if optionalConstraints == nil {
+		// 			continue
+		// 		}
+		// 		for j := 0; j < optionalConstraints.Length(); j++ {
+		// 			if combinedConstraint.Contains(c.e.evalCtx, optionalConstraints.Constraint(j)) {
+		// 				return
+		// 			}
+		// 		}
+		// 	}
+		// }
 
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
@@ -827,6 +827,81 @@ func (c *CustomFuncs) partitionValuesFilters(
 
 	return inPartition, inBetween
 }
+
+// func (c *CustomFuncs) GenerateGenericScans(
+// 	grp memo.RelExpr,
+// 	required *physical.Required,
+// 	scanPrivate *memo.ScanPrivate,
+// 	explicitFilters memo.FiltersExpr,
+// ) {
+//
+// 	var pkCols opt.ColSet
+// 	var sb indexScanBuilder
+// 	md := c.e.mem.Metadata()
+// 	tabMeta := md.TableMeta(scanPrivate.Table)
+//
+// 	sb.Init(c, scanPrivate.Table)
+//
+// 	// Build optional filters from check constraint and computed column filters.
+// 	optionalFilters, _ := c.GetOptionalFiltersAndFilterColumns(explicitFilters, scanPrivate)
+//
+// 	// Iterate over all non-inverted indexes.
+// 	var iter scanIndexIter
+// 	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, explicitFilters, rejectInvertedIndexes)
+// 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+// 		// TODO: Determine if the filters+optional filters can constrain the
+// 		// index.
+// 		genericFilters := GenericFiltersForIndex(index, tabMeta, filters, optionalFilters)
+//
+// 		// Construct new constrained ScanPrivate.
+// 		newScanPrivate := *scanPrivate
+// 		newScanPrivate.Distribution.Regions = nil
+// 		newScanPrivate.Index = index.Ordinal()
+// 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
+// 		newScanPrivate.GenericConstraint = genericFilters
+//
+// 		// If the alternate index includes the set of needed columns, then
+// 		// construct a new Scan operator using that index.
+// 		if isCovering {
+// 			sb.SetScan(&newScanPrivate)
+//
+// 			// Project constants from partial index predicate filters, if there
+// 			// are any.
+// 			sb.AddConstProjections(constProj)
+//
+// 			// Always add the original filters.
+// 			// TODO: Explain why.
+// 			sb.AddSelect(filters)
+//
+// 			sb.Build(grp)
+// 			return
+// 		}
+//
+// 		// Otherwise, construct an IndexJoin operator that provides the columns
+// 		// missing from the index.
+// 		if scanPrivate.Flags.NoIndexJoin {
+// 			return
+// 		}
+//
+// 		// Calculate the PK columns once.
+// 		if pkCols.Empty() {
+// 			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
+// 		}
+//
+// 		// If the index is not covering, scan the needed index columns plus
+// 		// primary key columns.
+// 		newScanPrivate.Cols.UnionWith(pkCols)
+// 		sb.SetScan(&newScanPrivate)
+//
+// 		// Split the filters into one part that can be pushed below the
+// 		// IndexJoin, and one part that needs to stay above.
+// 		filters = sb.AddSelectAfterSplit(filters, newScanPrivate.Cols)
+// 		sb.AddIndexJoin(scanPrivate.Cols)
+// 		sb.AddSelect(filters)
+//
+// 		sb.Build(grp)
+// 	})
+// }
 
 // GenerateInvertedIndexScans enumerates all inverted indexes on the Scan
 // operator's table and generates an alternate Scan operator for each inverted

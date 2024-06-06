@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -26,9 +25,9 @@ import (
 //
 // This function does not assume that the expression has been fully normalized.
 func (m *Memo) CheckExpr(e opt.Expr) {
-	if !buildutil.CrdbTestBuild {
-		return
-	}
+	// if !buildutil.CrdbTestBuild {
+	return
+	// }
 
 	if m.disableCheckExpr {
 		return

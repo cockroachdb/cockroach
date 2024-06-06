@@ -642,6 +642,11 @@ func (c *CustomFuncs) CommuteJoinFlags(p *memo.JoinPrivate) *memo.JoinPrivate {
 	return &res
 }
 
+// TODO
+func (c *CustomFuncs) IsGenericValues(v *memo.ValuesExpr) bool {
+	return v.Generic
+}
+
 // MakeProjectionsFromValues converts single-row values into projections, for
 // use when transforming inner joins with a values operator into a projection.
 func (c *CustomFuncs) MakeProjectionsFromValues(values *memo.ValuesExpr) memo.ProjectionsExpr {

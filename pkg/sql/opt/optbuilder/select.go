@@ -818,6 +818,40 @@ func (b *Builder) buildScan(
 		}
 		b.schemaDeps = append(b.schemaDeps, dep)
 	}
+
+	// Join with a WithScan if there is a placeholder CTE.
+	// if b.placeholderWithID != 0 {
+	// 	// lockCtx.locking.ignoreLockingForCTE()
+	//
+	// 	// cte := b.ctes[0]
+	// 	inCols := make(opt.ColList, len(cte.cols))
+	// 	outCols := make(opt.ColList, len(cte.cols))
+	// 	for i, col := range cte.cols {
+	// 		id := col.ID
+	// 		c := b.factory.Metadata().ColumnMeta(id)
+	// 		newCol := b.synthesizeColumn(outScope, scopeColName(tree.Name(col.Alias)), c.Type, nil, nil)
+	// 		newCol.visibility = inaccessible
+	// 		inCols[i] = id
+	// 		outCols[i] = newCol.id
+	// 	}
+	// 	outScope.placeholderMapping = outCols
+	//
+	// 	withScan := b.factory.ConstructWithScan(&memo.WithScanPrivate{
+	// 		With:    b.placeholderWithID,
+	// 		Name:    "placeholder",
+	// 		InCols:  inCols,
+	// 		OutCols: outCols,
+	// 		ID:      b.factory.Metadata().NextUniqueID(),
+	// 	})
+	//
+	// 	outScope.expr = b.factory.ConstructInnerJoin(
+	// 		outScope.expr,
+	// 		withScan,
+	// 		memo.TrueFilter,
+	// 		&memo.JoinPrivate{},
+	// 	)
+	// }
+
 	return outScope
 }
 
@@ -1372,10 +1406,50 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 		inScope,
 	)
 
+	filterItem := b.factory.ConstructFiltersItem(filter)
+
+	// If the filter references a placeholder, join an expression producing the
+	// placeholder values.
+	// if filterItem.ScalarProps().HasPlaceholder {
+	// 	numPlaceholders := len(b.semaCtx.Placeholders.Types)
+	//
+	// 	exprs := make(memo.ScalarListExpr, 0, numPlaceholders)
+	// 	types := make([]*types.T, 0, numPlaceholders)
+	// 	cols := make(opt.ColList, 0, numPlaceholders)
+	//
+	// 	for i := 0; i < numPlaceholders; i++ {
+	// 		exprs = append(exprs, b.factory.ConstructPlaceholder(&tree.Placeholder{Idx: tree.PlaceholderIdx(i)}))
+	// 		inScope.addColumn(scopeColName(""), )
+	// 		b.factory.Metadata().
+	//
+	// 	}
+	//
+	// 	// values := input.(*memo.ValuesExpr)
+	// 	// tuple := values.Rows[0].(*memo.TupleExpr)
+	// 	for i := range projections {
+	// 		item := &projections[i]
+	// 		newTypes = append(newTypes, item.Element.DataType())
+	// 		newCols = append(newCols, item.Col)
+	// 	}
+	//
+	// 	tupleTyp := types.MakeTuple(newTypes)
+	// 	rows := memo.ScalarListExpr{b.factory.ConstructTuple(exprs, tupleTyp)}
+	// 	return c.f.ConstructValues(rows, &memo.ValuesPrivate{
+	// 		Cols: newCols,
+	// 		ID:   values.ID,
+	// 	})
+	//
+	// 	b.factory.ConstructValues(rows, &memo.ValuesPrivate{
+	// 		Cols: nil,
+	// 		ID:   0,
+	// 	})
+	//
+	// }
+
 	// Wrap the filter in a FiltersOp.
 	inScope.expr = b.factory.ConstructSelect(
 		inScope.expr,
-		memo.FiltersExpr{b.factory.ConstructFiltersItem(filter)},
+		memo.FiltersExpr{filterItem},
 	)
 }
 
