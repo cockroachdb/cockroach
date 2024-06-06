@@ -67,54 +67,6 @@ var CPUUsageAllowance = settings.RegisterDurationSetting(
 	settings.DurationInRange(0, 1000*time.Millisecond),
 )
 
-// ExternalIORUAccountingMode controls whether external ingress and
-// egress bytes are included in RU calculations.
-var ExternalIORUAccountingMode = *settings.RegisterStringSetting(
-	settings.SystemVisible,
-	"tenant_external_io_ru_accounting_mode",
-	"controls how external IO RU accounting behaves; allowed values are 'on' (external IO RUs are accounted for and callers wait for RUs), "+
-		"'nowait' (external IO RUs are accounted for but callers do not wait for RUs), "+
-		"and 'off' (no external IO RU accounting)",
-	"on",
-	settings.WithName("tenant_cost_control.external_io.ru_accounting_mode"),
-	settings.WithValidateString(func(_ *settings.Values, s string) error {
-		switch s {
-		case "on", "off", "nowait":
-			return nil
-		default:
-			return errors.Errorf("invalid value %q, expected 'on', 'off', or 'nowait'", s)
-		}
-	}),
-)
-
-type externalIORUAccountingMode int64
-
-const (
-	// externalIORUAccountingOff means that all calls to the ExternalIORecorder
-	// functions are no-ops.
-	externalIORUAccountingOff externalIORUAccountingMode = iota
-	// externalIOAccountOn means that calls to the ExternalIORecorder functions
-	// work as documented.
-	externalIORUAccountingOn
-	// externalIOAccountingNoWait means that calls ExternalIORecorder functions
-	// that would typically wait for RUs do not wait for RUs.
-	externalIORUAccountingNoWait
-)
-
-func externalIORUAccountingModeFromString(s string) externalIORUAccountingMode {
-	switch s {
-	case "on":
-		return externalIORUAccountingOn
-	case "off":
-		return externalIORUAccountingOff
-	case "nowait":
-		return externalIORUAccountingNoWait
-	default:
-		// Default to off given an unknown value.
-		return externalIORUAccountingOff
-	}
-}
-
 // defaultTickInterval is the default period at which we collect CPU usage and
 // evaluate whether we need to send a new token request.
 const defaultTickInterval = time.Second
@@ -187,12 +139,6 @@ func newTenantSideCostController(
 	initialConfig := tenantcostmodel.ConfigFromSettings(&st.SV)
 	c.costCfg.CompareAndSwap(nil, &initialConfig)
 
-	c.modeMu.externalIORUAccountingMode = externalIORUAccountingModeFromString(ExternalIORUAccountingMode.Get(&st.SV))
-	ExternalIORUAccountingMode.SetOnChange(&st.SV, func(context.Context) {
-		c.modeMu.Lock()
-		defer c.modeMu.Unlock()
-		c.modeMu.externalIORUAccountingMode = externalIORUAccountingModeFromString(ExternalIORUAccountingMode.Get(&st.SV))
-	})
 	return c, nil
 }
 
@@ -259,12 +205,6 @@ type tenantSideCostController struct {
 	sessionID            sqlliveness.SessionID
 	externalUsageFn      multitenant.ExternalUsageFn
 	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn
-
-	modeMu struct {
-		syncutil.RWMutex
-
-		externalIORUAccountingMode externalIORUAccountingMode
-	}
 
 	mu struct {
 		syncutil.Mutex
@@ -830,24 +770,12 @@ func (c *tenantSideCostController) OnResponseWait(
 	return nil
 }
 
-func (c *tenantSideCostController) shouldWaitForExternalIORUs() bool {
-	c.modeMu.RLock()
-	defer c.modeMu.RUnlock()
-	return c.modeMu.externalIORUAccountingMode == externalIORUAccountingOn
-}
-
-func (c *tenantSideCostController) shouldAccountForExternalIORUs() bool {
-	c.modeMu.RLock()
-	defer c.modeMu.RUnlock()
-	return c.modeMu.externalIORUAccountingMode != externalIORUAccountingOff
-}
-
 // OnExternalIOWait is part of the multitenant.TenantSideExternalIORecorder
 // interface.
 func (c *tenantSideCostController) OnExternalIOWait(
 	ctx context.Context, usage multitenant.ExternalIOUsage,
 ) error {
-	return c.onExternalIO(ctx, usage, c.shouldWaitForExternalIORUs())
+	return c.onExternalIO(ctx, usage, true /* wait */)
 }
 
 // OnExternalIO is part of the multitenant.TenantSideExternalIORecorder
@@ -885,9 +813,7 @@ func (c *tenantSideCostController) onExternalIO(
 	defer c.mu.Unlock()
 	c.mu.consumption.ExternalIOIngressBytes += uint64(usage.IngressBytes)
 	c.mu.consumption.ExternalIOEgressBytes += uint64(usage.EgressBytes)
-	if c.shouldAccountForExternalIORUs() {
-		c.mu.consumption.RU += float64(totalRU)
-	}
+	c.mu.consumption.RU += float64(totalRU)
 
 	return nil
 }
