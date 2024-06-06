@@ -12,7 +12,6 @@ package lease
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -59,12 +58,8 @@ type ManagerTestingKnobs struct {
 	// To disable the deletion of orphaned leases at server startup.
 	DisableDeleteOrphanedLeases bool
 
-	// VersionPollIntervalForRangefeeds controls the polling interval for the
-	// check whether the requisite version for rangefeed-based notifications has
-	// been finalized.
-	//
-	// TODO(ajwerner): Remove this and replace it with a callback.
-	VersionPollIntervalForRangefeeds time.Duration
+	// DisableRangeFeedCheckpoint is used to disable rangefeed checkpoints
+	DisableRangeFeedCheckpoint int64
 
 	LeaseStoreTestingKnobs StorageTestingKnobs
 }
