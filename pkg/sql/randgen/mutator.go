@@ -463,6 +463,12 @@ func foreignKeyMutator(
 		for _, def := range table.Defs {
 			switch def := def.(type) {
 			case *tree.ColumnTableDef:
+				if def.Computed.Virtual {
+					// We currently don't support FK references to / from
+					// virtual columns.
+					// TODO(#59671): remove this skip.
+					continue
+				}
 				idx, ok := tableNameToColIdx(table.Table)
 				if !ok {
 					idx = len(cols)
