@@ -294,6 +294,10 @@ type planner struct {
 	// This field is embedded into the planner to avoid an allocation in
 	// checkScanParallelizationIfLocal.
 	parallelizationChecker localScanParallelizationChecker
+
+	// datumAlloc is used when decoding datums and is initialized in
+	// initPlanner.
+	datumAlloc *tree.DatumAlloc
 }
 
 // hasFlowForPausablePortal returns true if the planner is for re-executing a
