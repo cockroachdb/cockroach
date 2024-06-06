@@ -6,7 +6,9 @@ go_library(
     srcs = [
         "doc.go",
         "frontier.go",
+        "frontier_fuzz.go",
         "llrb_frontier.go",
+        "test_helper.go",
         ":btreefrontierentry_interval_btree.go",  #keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/span",
@@ -19,6 +21,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/metamorphic",
+        "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -39,12 +42,10 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
-        "//pkg/util/interval",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",  #keep
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
