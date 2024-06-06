@@ -882,32 +882,7 @@ func maybeCreateVirtualColumnForIndex(
 	d.Nullable.Nullability = tree.Null
 	// Infer column type from expression.
 	{
-		colLookupFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-			scpb.ForEachColumnName(elts, func(_ scpb.Status, target scpb.TargetStatus, cn *scpb.ColumnName) {
-				if target == scpb.ToPublic && tree.Name(cn.Name) == columnName {
-					id = cn.ColumnID
-				}
-			})
-			if id == 0 {
-				return false, false, 0, nil
-			}
-			scpb.ForEachColumn(elts, func(_ scpb.Status, target scpb.TargetStatus, col *scpb.Column) {
-				if target == scpb.ToPublic && col.ColumnID == id {
-					exists = true
-					accessible = !col.IsInaccessible
-				}
-			})
-			scpb.ForEachColumnType(elts, func(_ scpb.Status, target scpb.TargetStatus, col *scpb.ColumnType) {
-				if target == scpb.ToPublic && col.ColumnID == id {
-					typ = col.Type
-				}
-			})
-			return exists, accessible, id, typ
-		}
-		replacedExpr, _, err := schemaexpr.ReplaceColumnVars(expr, colLookupFn)
-		if err != nil {
-			panic(err)
-		}
+		replacedExpr := b.ComputedColumnExpression(tbl, d)
 		typedExpr, err := tree.TypeCheck(b, replacedExpr, b.SemaCtx(), types.Any)
 		if err != nil {
 			panic(err)
