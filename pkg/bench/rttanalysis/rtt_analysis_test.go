@@ -23,7 +23,7 @@ import (
 
 var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
 	t testing.TB, knobs base.TestingKnobs,
-) (_ *gosql.DB, cleanup func()) {
+) (_, _ *gosql.DB, cleanup func()) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "bench",
 		Knobs:       knobs,
@@ -32,19 +32,34 @@ var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
 	if _, err := db.Exec("SET CLUSTER SETTING server.eventlog.enabled = false"); err != nil {
 		t.Fatal(err)
 	}
+	// Create a user with admin privileges.
 	if _, err := db.Exec("CREATE USER testuser"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("GRANT admin TO testuser"); err != nil {
 		t.Fatal(err)
 	}
-	url, testuserCleanup := sqlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), "rttanalysis", url.User("testuser"))
-	conn, err := gosql.Open("postgres", url.String())
+	adminUserURL, adminUserCleanup := sqlutils.PGUrl(
+		t, s.ApplicationLayer().AdvSQLAddr(), "rttanalysis", url.User("testuser"),
+	)
+	adminUserConn, err := gosql.Open("postgres", adminUserURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return conn, func() {
+	// Create a user with no privileges.
+	if _, err := db.Exec("CREATE USER testuser2"); err != nil {
+		t.Fatal(err)
+	}
+	nonAdminUserURL, nonAdminUserCleanup := sqlutils.PGUrl(
+		t, s.ApplicationLayer().AdvSQLAddr(), "rttanalysis", url.User("testuser2"),
+	)
+	nonAdminUserConn, err := gosql.Open("postgres", nonAdminUserURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return adminUserConn, nonAdminUserConn, func() {
 		s.Stopper().Stop(context.Background())
-		testuserCleanup()
+		adminUserCleanup()
+		nonAdminUserCleanup()
 	}
 }))
