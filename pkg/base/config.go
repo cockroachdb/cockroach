@@ -724,6 +724,15 @@ func maxInflightBytesFrom(maxInflightMsgs int, maxSizePerMsg uint64) uint64 {
 	return math.MaxUint64
 }
 
+// StoreSize configures the maximum allowable size for a store.
+// Can be specified either as a percentage of total capacity or
+// an absolute byte size; if both are specified, the percentage takes
+// precedence.
+type StoreSize struct {
+	Bytes   int64
+	Percent float64
+}
+
 // StorageConfig contains storage configs for all storage engine.
 type StorageConfig struct {
 	Attrs roachpb.Attributes
@@ -736,7 +745,7 @@ type StorageConfig struct {
 	MustExist bool
 	// MaxSize is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size.
-	MaxSize int64
+	MaxSize StoreSize
 	// BallastSize is the amount reserved by a ballast file for manual
 	// out-of-disk recovery.
 	BallastSize int64

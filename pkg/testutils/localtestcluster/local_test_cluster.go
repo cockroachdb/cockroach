@@ -157,7 +157,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		storage.InMemory(),
 		cfg.Settings,
 		storage.CacheSize(0),
-		storage.MaxSize(50<<20 /* 50 MiB */),
+		storage.MaxSizeBytes(50<<20 /* 50 MiB */),
 	)
 	if err != nil {
 		t.Fatal(err)
