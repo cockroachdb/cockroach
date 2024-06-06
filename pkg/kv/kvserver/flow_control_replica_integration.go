@@ -542,8 +542,10 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaseholder(replicaID roachpb.Repli
 	}
 }
 
+// RangeController implements kvadmission.RangeControllerProvider.
+//
 // TODO(racV2-integration): synchronization.
-func (rr2 *replicaRACv2Integration) rangeController() kvflowconnectedstream.RangeController {
+func (rr2 *replicaRACv2Integration) RangeController() kvflowconnectedstream.RangeController {
 	return rr2.rcAtLeader
 }
 

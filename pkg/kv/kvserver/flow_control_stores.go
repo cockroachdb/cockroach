@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -219,4 +220,33 @@ func (l NoopStoresFlowControlIntegration) Inspect() []roachpb.RangeID {
 func (NoopStoresFlowControlIntegration) OnRaftTransportDisconnected(
 	context.Context, ...roachpb.StoreID,
 ) {
+}
+
+// RACv2
+
+func MakeStoresForRACv2(stores *Stores) kvadmission.StoresForRACv2 {
+	return (*storesForRACv2)(stores)
+}
+
+type storesForRACv2 Stores
+
+var _ kvadmission.StoresForRACv2 = &storesForRACv2{}
+
+func (ss *storesForRACv2) Lookup(rangeID roachpb.RangeID) kvadmission.RangeControllerProvider {
+	ls := (*Stores)(ss)
+	var rr *replicaRACv2Integration
+	if err := ls.VisitStores(func(s *Store) error {
+		if rr != nil {
+			return nil
+		}
+		repl := s.GetReplicaIfExists(rangeID)
+		if repl == nil {
+			return nil
+		}
+		rr = &repl.raftMu.racV2Integration
+		return nil
+	}); err != nil {
+		panic("")
+	}
+	return rr
 }
