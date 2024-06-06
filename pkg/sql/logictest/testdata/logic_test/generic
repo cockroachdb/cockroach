@@ -1,0 +1,615 @@
+statement ok
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  s STRING,
+  INDEX a_b_idx (a, b) STORING (c),
+  INDEX (a) STORING (b),
+  INDEX (b) STORING (a),
+  INDEX s_idx (s)
+);
+
+statement ok
+INSERT INTO t(k, a, b, c, s) VALUES
+  (1, 100, 0, 200, 'foo'),
+  (10, 1000, 0, 2000, 'bar');
+
+statement ok
+SET optimizer_use_generic_query_plans = on;
+
+statement ok
+PREPARE p1 AS SELECT * FROM t WHERE a = $1 AND c = $2
+
+query IIIIT
+EXECUTE p1(100, 200);
+----
+1  100  0  200  foo
+
+query T
+EXPLAIN ANALYZE EXECUTE p1(100, 200);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 1
+│ KV pairs read: 2
+│ KV bytes read: 8 B
+│ KV gRPC calls: 1
+│ estimated max memory allocated: 0 B
+│ table: t@t_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 1
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 1
+    │ KV pairs read: 2
+    │ KV bytes read: 8 B
+    │ KV gRPC calls: 1
+    │ estimated max memory allocated: 0 B
+    │ table: t@a_b_idx
+    │ equality: ($1) = (a)
+    │ pred: c = "$2"
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 2 columns, 1 row
+
+# A contradiction.
+query T
+EXPLAIN ANALYZE EXECUTE p1(NULL, 200);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 0
+│ KV bytes read: 0 B
+│ KV gRPC calls: 0
+│ estimated max memory allocated: 0 B
+│ table: t@t_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: t@a_b_idx
+    │ equality: ($1) = (a)
+    │ pred: c = "$2"
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 2 columns, 1 row
+
+query IIIIT
+EXECUTE p1(NULL, 200);
+----
+
+statement ok
+PREPARE p2 AS SELECT * FROM t WHERE a = $1 AND b = $2
+
+query T
+EXPLAIN ANALYZE EXECUTE p2(100, 0);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 1
+│ KV pairs read: 2
+│ KV bytes read: 8 B
+│ KV gRPC calls: 1
+│ estimated max memory allocated: 0 B
+│ table: t@t_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│
+└── • lookup join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 1
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 1
+    │ KV pairs read: 2
+    │ KV bytes read: 8 B
+    │ KV gRPC calls: 1
+    │ estimated max memory allocated: 0 B
+    │ table: t@a_b_idx
+    │ equality: ($1, $2) = (a, b)
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 2 columns, 1 row
+
+query IIIIT
+EXECUTE p2(100, 0);
+----
+1  100  0  200  foo
+
+# TODO: We need better OR support in lookup joins to support this case.
+statement ok
+PREPARE p3 AS SELECT * FROM t@a_b_idx WHERE a = $1 OR a = $2
+
+query T
+EXPLAIN ANALYZE EXECUTE p3(100, 200);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 1
+│ KV pairs read: 2
+│ KV bytes read: 8 B
+│ KV gRPC calls: 1
+│ estimated max memory allocated: 0 B
+│ table: t@t_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│
+└── • cross join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 1
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ pred: (a = "$1") OR (a = "$2")
+    │
+    ├── • scan
+    │     nodes: <hidden>
+    │     regions: <hidden>
+    │     actual row count: 2
+    │     KV time: 0µs
+    │     KV contention time: 0µs
+    │     KV rows decoded: 2
+    │     KV pairs read: 4
+    │     KV bytes read: 16 B
+    │     KV gRPC calls: 2
+    │     estimated max memory allocated: 0 B
+    │     missing stats
+    │     table: t@a_b_idx
+    │     spans: FULL SCAN
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 2 columns, 1 row
+
+query T
+EXPLAIN ANALYZE EXECUTE p3(NULL, 200);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 0
+│ KV bytes read: 0 B
+│ KV gRPC calls: 0
+│ estimated max memory allocated: 0 B
+│ table: t@t_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│
+└── • cross join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ pred: (a = "$1") OR (a = "$2")
+    │
+    ├── • scan
+    │     nodes: <hidden>
+    │     regions: <hidden>
+    │     actual row count: 2
+    │     KV time: 0µs
+    │     KV contention time: 0µs
+    │     KV rows decoded: 2
+    │     KV pairs read: 4
+    │     KV bytes read: 16 B
+    │     KV gRPC calls: 2
+    │     estimated max memory allocated: 0 B
+    │     missing stats
+    │     table: t@a_b_idx
+    │     spans: FULL SCAN
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 2 columns, 1 row
+
+statement ok
+PREPARE p4 AS SELECT k FROM t WHERE a = $1 OR b = $2
+
+# TODO: We don't get the advantage of SplitDisjunction* rules.
+query T
+EXPLAIN ANALYZE EXECUTE p4(100, 200);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• cross join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
+│ pred: (a = "$1") OR (b = "$2")
+│
+├── • scan
+│     nodes: <hidden>
+│     regions: <hidden>
+│     actual row count: 2
+│     KV time: 0µs
+│     KV contention time: 0µs
+│     KV rows decoded: 2
+│     KV pairs read: 4
+│     KV bytes read: 16 B
+│     KV gRPC calls: 2
+│     estimated max memory allocated: 0 B
+│     missing stats
+│     table: t@t_a_idx
+│     spans: FULL SCAN
+│
+└── • values
+      nodes: <hidden>
+      regions: <hidden>
+      actual row count: 1
+      size: 2 columns, 1 row
+
+# TODO: We don't get the advantage of SplitDisjunction* rules.
+query T
+EXPLAIN ANALYZE EXECUTE p4(NULL, 200);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• cross join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
+│ pred: (a = "$1") OR (b = "$2")
+│
+├── • scan
+│     nodes: <hidden>
+│     regions: <hidden>
+│     actual row count: 2
+│     KV time: 0µs
+│     KV contention time: 0µs
+│     KV rows decoded: 2
+│     KV pairs read: 4
+│     KV bytes read: 16 B
+│     KV gRPC calls: 2
+│     estimated max memory allocated: 0 B
+│     missing stats
+│     table: t@t_a_idx
+│     spans: FULL SCAN
+│
+└── • values
+      nodes: <hidden>
+      regions: <hidden>
+      actual row count: 1
+      size: 2 columns, 1 row
+
+statement ok
+PREPARE p5 AS SELECT * FROM t@s_idx WHERE s LIKE $1
+
+# TODO: We cannot constrain a prefix match.
+query T
+EXPLAIN ANALYZE EXECUTE p5('hello%');
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 0
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 0
+│ KV bytes read: 0 B
+│ KV gRPC calls: 0
+│ estimated max memory allocated: 0 B
+│ table: t@t_pkey
+│ equality: (k) = (k)
+│ equality cols are key
+│
+└── • cross join
+    │ nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ estimated max memory allocated: 0 B
+    │ estimated max sql temp disk usage: 0 B
+    │ pred: s LIKE "$1"
+    │
+    ├── • scan
+    │     nodes: <hidden>
+    │     regions: <hidden>
+    │     actual row count: 2
+    │     KV time: 0µs
+    │     KV contention time: 0µs
+    │     KV rows decoded: 2
+    │     KV pairs read: 4
+    │     KV bytes read: 16 B
+    │     KV gRPC calls: 2
+    │     estimated max memory allocated: 0 B
+    │     missing stats
+    │     table: t@s_idx
+    │     spans: FULL SCAN
+    │
+    └── • values
+          nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 1 column, 1 row
+
+statement ok
+PREPARE p6 AS SELECT * FROM t WHERE a IN ($1, $2, $3)
+
+# TODO: We need better IN support for lookup joins to support this case.
+# We need something like this PR, but for IN expressions: https://github.com/cockroachdb/cockroach/pull/85597.
+query T
+EXPLAIN ANALYZE EXECUTE p6(100, 200, 300);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• cross join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
+│ pred: a IN ("$1", "$2", "$3")
+│
+├── • scan
+│     nodes: <hidden>
+│     regions: <hidden>
+│     actual row count: 2
+│     KV time: 0µs
+│     KV contention time: 0µs
+│     KV rows decoded: 2
+│     KV pairs read: 4
+│     KV bytes read: 16 B
+│     KV gRPC calls: 2
+│     estimated max memory allocated: 0 B
+│     missing stats
+│     table: t@t_pkey
+│     spans: FULL SCAN
+│
+└── • values
+      nodes: <hidden>
+      regions: <hidden>
+      actual row count: 1
+      size: 3 columns, 1 row
+
+query IIIIT
+EXECUTE p6(100, 200, 300);
+----
+1  100  0  200  foo
+
+statement ok
+PREPARE p7 AS SELECT k, a FROM t WHERE a > $1
+
+query T
+EXPLAIN ANALYZE EXECUTE p7(50);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• lookup join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 2
+│ KV time: 0µs
+│ KV contention time: 0µs
+│ KV rows decoded: 2
+│ KV pairs read: 4
+│ KV bytes read: 16 B
+│ KV gRPC calls: 2
+│ estimated max memory allocated: 0 B
+│ table: t@t_a_idx
+│ lookup condition: a > "$1"
+│
+└── • values
+      nodes: <hidden>
+      regions: <hidden>
+      actual row count: 1
+      size: 1 column, 1 row
+
+query II rowsort
+EXECUTE p7(50);
+----
+1   100
+10  1000
+
+statement ok
+PREPARE p8 AS SELECT * FROM t WHERE a > $1
+
+# TODO: A lookup-join is explored by not selected if an index join with the
+# primary index is required (because we're selecting all columns) because it is
+# deemed too costly. With a range filter with a placeholder, we only have a wild
+# (and high) row estimate of rows matching the filter.
+query T
+EXPLAIN ANALYZE EXECUTE p8(50);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• cross join
+│ nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 2
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
+│ pred: a > "$1"
+│
+├── • scan
+│     nodes: <hidden>
+│     regions: <hidden>
+│     actual row count: 2
+│     KV time: 0µs
+│     KV contention time: 0µs
+│     KV rows decoded: 2
+│     KV pairs read: 4
+│     KV bytes read: 16 B
+│     KV gRPC calls: 2
+│     estimated max memory allocated: 0 B
+│     missing stats
+│     table: t@t_pkey
+│     spans: FULL SCAN
+│
+└── • values
+      nodes: <hidden>
+      regions: <hidden>
+      actual row count: 1
+      size: 1 column, 1 row

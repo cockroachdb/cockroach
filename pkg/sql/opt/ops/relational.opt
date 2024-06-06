@@ -163,6 +163,9 @@ define ValuesPrivate {
     # cases the column set is sufficient to do this, but various rules make it
     # possible to construct Values expressions with no columns.
     ID UniqueID
+
+    # TODO
+    Generic bool
 }
 
 # LiteralValues is a version of values where the exprs have already been type checked
