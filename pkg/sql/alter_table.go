@@ -1509,7 +1509,7 @@ StatsLoop:
 			// Ignore dropped columns (they are handled below).
 			if col != nil {
 				if err := h.TypeCheck(
-					col.GetType(), desc.GetName(), s.Columns[0], s.CreatedAt,
+					col.GetType(), desc.GetName(), s.Columns[0], s.CreatedAt, time.Time{}, /* createdAtTime */
 				); err != nil {
 					return pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
 				}

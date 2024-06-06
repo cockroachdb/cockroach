@@ -1805,9 +1805,8 @@ func (os *optTableStat) init(
 	// adjustment.
 	if len(os.columnOrdinals) == 1 {
 		col := tab.getCol(os.columnOrdinals[0])
-		createdAt := string(tree.PGWireFormatTimestamp(stat.CreatedAt, nil, nil))
 		if err := stat.HistogramData.TypeCheck(
-			col.GetType(), string(tab.Name()), col.GetName(), createdAt,
+			col.GetType(), string(tab.Name()), col.GetName(), "" /* createdAt */, stat.CreatedAt,
 		); err != nil {
 			// Column type in the histogram differs from column type in the
 			// table. This is only possible if we somehow re-used the same column ID

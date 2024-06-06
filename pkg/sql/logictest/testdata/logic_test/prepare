@@ -1246,7 +1246,7 @@ user root
 statement ok
 CREATE TABLE ts (d DATE PRIMARY KEY, x INT)
 
-statement error pq: histogram for table ts column d created_at 2020-03-24 15:34:22\.863634\+00:00 does not match column type DATE: TIMESTAMP
+statement error pq: histogram for table ts column d created_at 2020-03-24 15:34:22\.863634\+00:000001-01-01 00:00:00 \+0000 UTC does not match column type DATE: TIMESTAMP
 ALTER TABLE ts INJECT STATISTICS '[
   {
     "columns": ["d"],

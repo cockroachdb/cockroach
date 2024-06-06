@@ -16,6 +16,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -329,9 +330,10 @@ func equiDepthHistogramWithoutAdjustment(
 }
 
 // TypeCheck returns an error if the type of the histogram does not match the
-// type of the column.
+// type of the column. Only one of createdAt and createdAtTime should be
+// specified.
 func (histogramData *HistogramData) TypeCheck(
-	colType *types.T, table, column, createdAt string,
+	colType *types.T, table, column, createdAt string, createdAtTime time.Time,
 ) error {
 	if histogramData == nil || histogramData.ColumnType == nil {
 		return nil
@@ -342,8 +344,8 @@ func (histogramData *HistogramData) TypeCheck(
 	}
 	if !histogramData.ColumnType.Equivalent(colType) {
 		return errors.Newf(
-			"histogram for table %v column %v created_at %v does not match column type %v: %v",
-			table, column, createdAt, colType.SQLStringForError(),
+			"histogram for table %v column %v created_at %v%v does not match column type %v: %v",
+			table, column, createdAt, createdAtTime, colType.SQLStringForError(),
 			histogramData.ColumnType.SQLStringForError(),
 		)
 	}
