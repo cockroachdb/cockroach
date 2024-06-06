@@ -3330,3 +3330,14 @@ CREATE UNIQUE INDEX ON public.t_118626(c) WHERE n>= 1;
 
 statement ok
 ALTER TABLE public.t_118626 ALTER PRIMARY KEY USING COLUMNS(b);
+
+subtest regression_test_alter_table_add_constraint_unique
+
+statement ok
+create table t_124546(a int);
+
+# Regression Test for https://github.com/cockroachdb/cockroach/issues/124546
+statement error pgcode 42601 variable sub-expressions are not allowed in EXPRESSION INDEX ELEMENT
+ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR READ ONLY ) ) DESC ) STORING ( ident , ident );
+
+subtest end
