@@ -36,6 +36,9 @@ type descriptorState struct {
 	// entering renewal initialization.
 	renewalInProgress int32
 
+	// lastRefresh of this state
+	lastRefreshTime atomic.Int64
+
 	mu struct {
 		syncutil.Mutex
 
