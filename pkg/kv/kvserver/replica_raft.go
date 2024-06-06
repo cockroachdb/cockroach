@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -405,7 +406,7 @@ func (r *Replica) propose(
 	if !p.useReplicationAdmissionControl() {
 		raftAdmissionMeta = nil
 	}
-	data, err := raftlog.EncodeCommand(ctx, p.command, p.idKey, raftAdmissionMeta)
+	data, err := raftlog.EncodeCommand(ctx, p.command, p.idKey, raftAdmissionMeta, kvflowconnectedstream.UseRACv2)
 	if err != nil {
 		return kvpb.NewError(err)
 	}
@@ -581,10 +582,7 @@ var errRemoved = errors.New("replica removed")
 // message. Before doing so, it assures that the replica is unquiesced and ready
 // to handle the request.
 //
-// TODO: change the contents of the entry based on the priority override. If
-// we receive the same entry multiple times and with different priority
-// override, what will happen? Will raft notice and panic for this harmless
-// difference in the byte slices.
+// TODO(racV2-integration): are we guaranteed that raftMu is always held?
 func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	var leaderID roachpb.ReplicaID
 	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
@@ -634,6 +632,31 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 			// this addition.
 			if term := raftGroup.BasicStatus().Term; term > req.Message.Term {
 				req.Message.Term = term
+			}
+		case raftpb.MsgApp:
+			n := len(req.Message.Entries)
+			if n > 0 {
+				// TODO(racV2-integration): this side channel is a hack. The Step call
+				// below can silently ignore old messages, but we have no way of doing
+				// so here. So we could incorrectly specify inherited priority values
+				// that are bogus. It won't affect liveness or safety, but will affect
+				// performance isolation.
+				//
+				// TODO(racV2-raft): Originally we were planning to tweak the encoded
+				// entry in the follower to the inherited priority. But The follower
+				// may become the leader in the future, and so the priority should
+				// always be the original priority. All we need is a way to plumb the
+				// inherited priority locally through RawNode.Step for a MsgApp.
+				//
+				// Should we change the Entry proto to include a RaftPriority field?
+				// It will be slightly cleaner in that the original priority will
+				// already be parsed. But does it solve our inherited priority
+				// problem? -- we could change the Entry proto before calling Step in
+				// the follower, however now the inherited priority will be persisted.
+				firstIndex := req.Message.Entries[0].Index
+				lastIndex := req.Message.Entries[n-1].Index
+				inheritedPri := kvflowconnectedstream.RaftPriority(req.InheritedRaftPriority)
+				r.raftMu.racV2Integration.sideChannelForInheritedPriority(firstIndex, lastIndex, inheritedPri)
 			}
 		}
 		err := raftGroup.Step(req.Message)
@@ -1740,12 +1763,12 @@ func (r *Replica) sendRaftMessages(
 			}
 
 			if !drop {
-				r.sendRaftMessage(ctx, message)
+				r.sendRaftMessage(ctx, message, kvflowconnectedstream.RaftUnusedZeroValuePriority)
 			}
 		}
 	}
 	if lastAppResp.Index > 0 {
-		r.sendRaftMessage(ctx, lastAppResp)
+		r.sendRaftMessage(ctx, lastAppResp, kvflowconnectedstream.RaftUnusedZeroValuePriority)
 	}
 }
 
@@ -1809,7 +1832,11 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 //
 // When calling this method, the raftMu may be held, but it does not need to be.
 // The Replica mu must not be held.
-func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
+//
+// inheritedPri is relevant iff the msg is a MsgApp.
+func (r *Replica) sendRaftMessage(
+	ctx context.Context, msg raftpb.Message, inheritedPri kvflowconnectedstream.RaftPriority,
+) {
 	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
 
 	r.mu.RLock()
@@ -1863,6 +1890,9 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		FromReplica:   fromReplica,
 		Message:       msg,
 		RangeStartKey: startKey, // usually nil
+	}
+	if msg.Type == raftpb.MsgApp {
+		req.InheritedRaftPriority = uint32(inheritedPri)
 	}
 	if !r.sendRaftMessageRequest(ctx, req) {
 		r.mu.Lock()

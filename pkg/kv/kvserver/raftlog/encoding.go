@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -73,33 +74,40 @@ const (
 	// EntryEncodingRaftConfChange, with the replacements
 	// raftpb.EntryConfChange{,V2} and raftpb.ConfChange{,V2} applied.
 	EntryEncodingRaftConfChangeV2
-	// EntryEncodingStandardWithACPriority is analogous to
-	// EntryEncodingStandardWithAC, but has the second data byte containing the
-	// admission priority. This is often the priority that is also encoded in
-	// the kvflowcontrolpb.RaftAdmissionMeta, but could be the overridden
-	// priority.
-	EntryEncodingStandardWithACPriority
-	// EntryEncodingSideloadedWithACPriority ...
-	EntryEncodingSideloadedWithACPriority
+
+	// For RACv2
+
+	// EntryEncodingStandardWithRaftPriority is analogous to
+	// EntryEncodingStandardWithAC, but has the most significant bits in the
+	// first byte containing the raft priority minus 1. This is the priority
+	// that is also encoded in the kvflowcontrolpb.RaftAdmissionMeta, but is
+	// cheap to decode.
+	EntryEncodingStandardWithRaftPriority
+	// EntryEncodingSideloadedWithRaftPriority ...
+	EntryEncodingSideloadedWithRaftPriority
 )
 
 // IsSideloaded returns true if the encoding is
 // EntryEncodingSideloadedWith{,out}AC.
 func (enc EntryEncoding) IsSideloaded() bool {
 	return enc == EntryEncodingSideloadedWithAC || enc == EntryEncodingSideloadedWithoutAC ||
-		enc == EntryEncodingSideloadedWithACPriority
+		enc == EntryEncodingSideloadedWithRaftPriority
 }
 
 // UsesAdmissionControl returns true if the encoding is
 // EntryEncoding{Standard,Sideloaded}WithAC.
 func (enc EntryEncoding) UsesAdmissionControl() bool {
 	return enc == EntryEncodingStandardWithAC || enc == EntryEncodingSideloadedWithAC ||
-		enc == EntryEncodingStandardWithACPriority || enc == EntryEncodingSideloadedWithACPriority
+		enc == EntryEncodingStandardWithRaftPriority || enc == EntryEncodingSideloadedWithRaftPriority
 }
 
 // prefixByte returns the prefix byte used during encoding, applicable only to
 // EntryEncoding{Standard,Sideloaded}With{,out}AC.
-func (enc EntryEncoding) prefixByte() byte {
+func (enc EntryEncoding) prefixByte(pri kvflowconnectedstream.RaftPriority) byte {
+	pri -= 1
+	if pri > 3 {
+		panic("")
+	}
 	switch enc {
 	case EntryEncodingStandardWithAC:
 		return entryEncodingStandardWithACPrefixByte
@@ -109,16 +117,24 @@ func (enc EntryEncoding) prefixByte() byte {
 		return entryEncodingStandardWithoutACPrefixByte
 	case EntryEncodingSideloadedWithoutAC:
 		return entryEncodingSideloadedWithoutACPrefixByte
-	case EntryEncodingStandardWithACPriority:
-		return 0 // TODO
-	case EntryEncodingSideloadedWithACPriority:
-		return 0 // TODO
+	case EntryEncodingStandardWithRaftPriority:
+		return entryEncodingStandardWithRaftPriorityPrefixByte | (byte(pri) << 6)
+	case EntryEncodingSideloadedWithRaftPriority:
+		return entryEncodingSideloadedWithRaftPriorityPrefixByte | (byte(pri) << 6)
 	default:
 		panic(fmt.Sprintf("invalid encoding: %v has no prefix byte", enc))
 	}
 }
 
 const (
+	// entryEncodingStandardWithRaftPriorityPrefixByte is the first byte of a
+	// raftpb.Entry's Data slice for an Entry of encoding
+	// EntryEncodingStandardWithRaftPriority, after applying encodingMask.
+	entryEncodingStandardWithRaftPriorityPrefixByte = byte(4) // 0b00000100
+	// entryEncodingSideloadedWithRaftPriorityPrefixByte is the first byte of a
+	// raftpb.Entry's Data slice for an Entry of encoding
+	// EntryEncodingSideloadedWithRaftPriority, after applying encodingMask.
+	entryEncodingSideloadedWithRaftPriorityPrefixByte = byte(5) // 0b00000101
 	// entryEncodingStandardWithACPrefixByte is the first byte of a
 	// raftpb.Entry's Data slice for an Entry of encoding
 	// EntryEncodingStandardWithAC.
@@ -135,15 +151,8 @@ const (
 	// raftpb.Entry's Data slice for an Entry of encoding
 	// EntryEncodingSideloadedWithoutAC.
 	entryEncodingSideloadedWithoutACPrefixByte = byte(1) // 0b00000001
-	// TODO: other encodings.
 )
 
-// TODO: change the encoding and decoding.
-// Placing the priority in the second byte serves multiple purposes:
-//   - The prority of each entry in the Entries provided in Ready can be cheaply computed.
-//     This is needed for both eval token and send token accounting.
-//   - When the priority is overridden in the RaftMessageRequest, the receiver can
-//     cheaply alter the entries before feeding them Raft.
 const (
 	// RaftCommandIDLen is the length of a command ID.
 	RaftCommandIDLen = 8
@@ -151,32 +160,42 @@ const (
 	// the EntryEncoding{Standard,Sideloaded}With{,out}AC encodings. The bytes
 	// after the prefix represent the kvserverpb.RaftCommand.
 	RaftCommandPrefixLen = 1 + RaftCommandIDLen
-	// RaftCommandPrefixLenWithPriority is the length of .... The second byte is
-	// admissionpb.WorkPriority.
-	RaftCommandPrefixLenWithPriority = RaftCommandPrefixLen + 1
 )
 
 // EncodeCommandBytes encodes a marshaled kvserverpb.RaftCommand using
 // the given encoding (one of EntryEncoding{Standard,Sideloaded}With{,out}AC).
 //
 // This is 1 byte for the EntryEncoding + 8 bytes for the CmdIDKey + command.
-func EncodeCommandBytes(enc EntryEncoding, commandID kvserverbase.CmdIDKey, command []byte) []byte {
+//
+// If EntryEncoding is one of the WithRaftPriority encodings, the pri parameter
+// is used.
+func EncodeCommandBytes(
+	enc EntryEncoding,
+	commandID kvserverbase.CmdIDKey,
+	command []byte,
+	pri kvflowconnectedstream.RaftPriority,
+) []byte {
 	b := make([]byte, RaftCommandPrefixLen+len(command))
-	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], enc, commandID)
+	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], enc, commandID, pri)
 	copy(b[RaftCommandPrefixLen:], command)
 	return b
 }
 
 // EncodeRaftCommandPrefix encodes the prefix for a Raft command, using the
 // given encoding (one of EntryEncoding{Standard,Sideloaded}With{,out}AC).
-func EncodeRaftCommandPrefix(b []byte, enc EntryEncoding, commandID kvserverbase.CmdIDKey) {
+func EncodeRaftCommandPrefix(
+	b []byte,
+	enc EntryEncoding,
+	commandID kvserverbase.CmdIDKey,
+	pri kvflowconnectedstream.RaftPriority,
+) {
 	if len(commandID) != RaftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), RaftCommandIDLen))
 	}
 	if len(b) != RaftCommandPrefixLen {
 		panic(fmt.Sprintf("invalid command prefix length; %d != %d", len(b), RaftCommandPrefixLen))
 	}
-	b[0] = enc.prefixByte()
+	b[0] = enc.prefixByte(pri)
 	copy(b[1:], commandID)
 }
 
@@ -184,8 +203,10 @@ func EncodeRaftCommandPrefix(b []byte, enc EntryEncoding, commandID kvserverbase
 // raftpb.Entry.Data. Expects an EntryEncoding{Standard,Sideloaded}WithAC
 // encoding.
 func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, error) {
-	prefix := data[0]
-	if !(prefix == entryEncodingStandardWithACPrefixByte || prefix == entryEncodingSideloadedWithACPrefixByte) {
+	prefix := data[0] & encodingMask
+	if !(prefix == entryEncodingStandardWithACPrefixByte || prefix == entryEncodingSideloadedWithACPrefixByte ||
+		prefix == entryEncodingStandardWithRaftPriorityPrefixByte ||
+		prefix == entryEncodingSideloadedWithRaftPriorityPrefixByte) {
 		panic(fmt.Sprintf("invalid encoding: prefix %v", prefix))
 	}
 
@@ -196,6 +217,14 @@ func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, er
 	var raftAdmissionMeta kvflowcontrolpb.RaftAdmissionMeta
 	if err := protoutil.Unmarshal(data[RaftCommandPrefixLen:], &raftAdmissionMeta); err != nil {
 		return kvflowcontrolpb.RaftAdmissionMeta{}, err
+	}
+	pri := data[0] & priMask
+	switch prefix {
+	case entryEncodingStandardWithRaftPriorityPrefixByte, entryEncodingSideloadedWithRaftPriorityPrefixByte:
+		if kvflowconnectedstream.RaftPriority(pri+1) !=
+			kvflowconnectedstream.RaftPriority(raftAdmissionMeta.AdmissionPriority) {
+			panic("")
+		}
 	}
 	return raftAdmissionMeta, nil
 }

@@ -96,16 +96,20 @@ message RaftMessageRequest {
   // that were admitted below raft.
   repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedRaftLogEntries admitted_raft_log_entries = 11 [(gogoproto.nullable) = false];
 
-  // AdmissionPriorityOverride specifies whether the priority of the Entries
-  // in the Message, which is of type MsgApp are overridden, and the new
+  // InheritedRaftPriority specifies whether the priority of the Entries
+  // in the Message, which is of type MsgApp are overridden/inherited, and the new
   // priority. It is ignored if the Message is not a MsgApp.
+  //
+  // Used in RACv2.
+  //
   // For a MsgApp, this must be either:
-  // - PriorityNotOverriddenForFlowControl: there is no priority override. The
+  // - PriorityNotInheritedForFlowControl: there is no priority override. The
   //   priority encoded in the entries should be used.
-  //   NotSubjectToACForFlowControl: these entries should not be subject to
+  // - NotSubjectToACForFlowControl: these entries should not be subject to
   //   AC, regardless of what the entry encoding says.
-  // - Neither of the above: this is the real priority override.
-  int32 admission_priority_override = 12;
+  // - RaftUnusedZeroValuePriority: completely ignored
+  // - None of the above: this is the real priority override.
+  uint32 inherited_raft_priority = 12;
   reserved 10;
 }
 

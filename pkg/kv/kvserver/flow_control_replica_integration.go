@@ -562,3 +562,16 @@ func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent() {
 		rr2.rcAtLeader.HandleControllerSchedulerEvent()
 	}
 }
+
+// Corresponding to raft indices [first,last].
+func (rr2 *replicaRACv2Integration) sideChannelForInheritedPriority(
+	first, last uint64, inheritedPri kvflowconnectedstream.RaftPriority,
+) {
+	// TODO(racV2-integration):
+	switch inheritedPri {
+	case kvflowconnectedstream.RaftUnusedZeroValuePriority:
+	case kvflowconnectedstream.NotSubjectToACForFlowControl:
+	case kvflowconnectedstream.PriorityNotInheritedForFlowControl:
+	default:
+	}
+}

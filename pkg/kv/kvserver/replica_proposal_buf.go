@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -580,7 +581,10 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 
 			// We don't want deduct flow tokens for reproposed commands, and of
 			// course for proposals that didn't integrate with kvflowcontrol.
-			shouldAdmit := !reproposal && p.raftAdmissionMeta != nil
+			//
+			// RACv2 does not care about reproposals, and eval token deductions
+			// happens in Ready handling.
+			shouldAdmit := !(reproposal && !kvflowconnectedstream.UseRACv2) && p.raftAdmissionMeta != nil
 			if !shouldAdmit {
 				admitHandles = append(admitHandles, admitEntHandle{})
 			} else {
@@ -881,7 +885,7 @@ func proposeBatch(
 		p.onErrProposalDropped(ents, props, raftGroup.BasicStatus().RaftState)
 		return nil //nolint:returnerrcheck
 	}
-	if err == nil {
+	if err == nil && !kvflowconnectedstream.UseRACv2 {
 		// Now that we know what raft log position[1] this proposal is to end up
 		// in, deduct flow tokens for it. This is done without blocking (we've
 		// already waited for available flow tokens pre-evaluation). The tokens

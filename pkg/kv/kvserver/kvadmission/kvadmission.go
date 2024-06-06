@@ -615,7 +615,7 @@ func (n *controllerImpl) AdmitRaftEntry(
 	rangeID roachpb.RangeID,
 	entry raftpb.Entry,
 ) {
-	typ, err := raftlog.EncodingOf(entry)
+	typ, _, err := raftlog.EncodingOf(entry)
 	if err != nil {
 		log.Errorf(ctx, "unable to determine raft command encoding: %v", err)
 		return
@@ -628,6 +628,9 @@ func (n *controllerImpl) AdmitRaftEntry(
 		log.Errorf(ctx, "unable to decode raft command admission data: %v", err)
 		return
 	}
+	// TODO(racV2-integration): handle RACv2 entries differently? Caller of
+	// AdmitRaftEntry is the Replica, so should consider handling most things
+	// there, and then call a AdmitRACv2Entry with specifics.
 
 	if log.V(1) {
 		log.Infof(ctx, "decoded raft admission meta below-raft: pri=%s create-time=%d proposer=n%s receiver=[n%d,s%s] tenant=t%d tokens≈%d sideloaded=%t raft-entry=%d/%d",
