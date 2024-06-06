@@ -264,7 +264,7 @@ type ResponseInfo struct {
 	// it is a write batch.
 	readCount int64
 	// readBytes is the total size of all batched reads in the response, in
-	// bytee, or 0 if it is a write batch.
+	// bytes, or 0 if it is a write batch.
 	readBytes int64
 	// networkCost is RU/byte cost for this read request.
 	networkCost NetworkCost

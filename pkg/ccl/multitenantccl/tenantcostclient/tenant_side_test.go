@@ -263,24 +263,22 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 var testStateCommands = map[string]func(
 	*testState, *testing.T, *datadriven.TestData, cmdArgs,
 ) string{
-	"read":                           (*testState).read,
-	"write":                          (*testState).write,
-	"await":                          (*testState).await,
-	"not-completed":                  (*testState).notCompleted,
-	"advance":                        (*testState).advance,
-	"wait-for-event":                 (*testState).waitForEvent,
-	"timers":                         (*testState).timers,
-	"cpu":                            (*testState).cpu,
-	"pgwire-egress":                  (*testState).pgwireEgress,
-	"external-egress":                (*testState).externalEgress,
-	"external-ingress":               (*testState).externalIngress,
-	"enable-external-ru-accounting":  (*testState).enableRUAccounting,
-	"disable-external-ru-accounting": (*testState).disableRUAccounting,
-	"usage":                          (*testState).usage,
-	"metrics":                        (*testState).metrics,
-	"configure":                      (*testState).configure,
-	"token-bucket":                   (*testState).tokenBucket,
-	"unblock-request":                (*testState).unblockRequest,
+	"read":             (*testState).read,
+	"write":            (*testState).write,
+	"await":            (*testState).await,
+	"not-completed":    (*testState).notCompleted,
+	"advance":          (*testState).advance,
+	"wait-for-event":   (*testState).waitForEvent,
+	"timers":           (*testState).timers,
+	"cpu":              (*testState).cpu,
+	"pgwire-egress":    (*testState).pgwireEgress,
+	"external-egress":  (*testState).externalEgress,
+	"external-ingress": (*testState).externalIngress,
+	"usage":            (*testState).usage,
+	"metrics":          (*testState).metrics,
+	"configure":        (*testState).configure,
+	"token-bucket":     (*testState).tokenBucket,
+	"unblock-request":  (*testState).unblockRequest,
 }
 
 // runOperation invokes the given operation function on a background goroutine.
@@ -368,16 +366,6 @@ func (ts *testState) externalEgress(t *testing.T, d *datadriven.TestData, args c
 			t.Errorf("OnExternalIOWait error: %s", err)
 		}
 	})
-	return ""
-}
-
-func (ts *testState) enableRUAccounting(_ *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
-	tenantcostclient.ExternalIORUAccountingMode.Override(context.Background(), &ts.settings.SV, "on")
-	return ""
-}
-
-func (ts *testState) disableRUAccounting(_ *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
-	tenantcostclient.ExternalIORUAccountingMode.Override(context.Background(), &ts.settings.SV, "off")
 	return ""
 }
 
@@ -1349,7 +1337,7 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	hostServer, hostSQL, _ := serverutils.StartServer(b,
+	hostServer, _, _ := serverutils.StartServer(b,
 		base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
@@ -1365,11 +1353,6 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 	})
 
 	nullsink.NullRequiresExternalIOAccounting = true
-
-	setRUAccountingMode := func(b *testing.B, mode string) {
-		_, err := hostSQL.Exec(fmt.Sprintf("SET CLUSTER SETTING tenant_cost_control.external_io.ru_accounting_mode = '%s'", mode))
-		require.NoError(b, err)
-	}
 
 	concurrently := func(b *testing.B, ctx context.Context, concurrency int, op func(context.Context) error) {
 		g := ctxgroup.WithContext(ctx)
@@ -1456,25 +1439,21 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 			}
 		})
 		b.Run(fmt.Sprintf("op=%s/with-interceptor", op), func(b *testing.B) {
-			for _, ruAccountingMode := range []string{"on", "off", "nowait"} {
-				limits := []int{1024, 16384, 16777216}
-				for _, limit := range limits {
-					for _, c := range concurrencyCounts {
-						testName := fmt.Sprintf("ru-accounting=%s/limit=%d/concurrency=%d",
-							ruAccountingMode, limit, c)
-						b.Run(testName, func(b *testing.B) {
-							setRUAccountingMode(b, ruAccountingMode)
-							interceptor := multitenantio.NewReadWriteAccounter(tenantS.DistSQLServer().(*distsql.ServerImpl).ExternalIORecorder, int64(limit))
-							testOp, cleanup := funcForOp(b, op, interceptor)
-							defer func() { _ = cleanup() }()
+			limits := []int{1024, 16384, 16777216}
+			for _, limit := range limits {
+				for _, c := range concurrencyCounts {
+					testName := fmt.Sprintf("limit=%d/concurrency=%d", limit, c)
+					b.Run(testName, func(b *testing.B) {
+						interceptor := multitenantio.NewReadWriteAccounter(tenantS.DistSQLServer().(*distsql.ServerImpl).ExternalIORecorder, int64(limit))
+						testOp, cleanup := funcForOp(b, op, interceptor)
+						defer func() { _ = cleanup() }()
 
-							b.ResetTimer()
-							b.SetBytes(int64(dataSize))
-							for n := 0; n < b.N; n++ {
-								concurrently(b, context.Background(), c, testOp)
-							}
-						})
-					}
+						b.ResetTimer()
+						b.SetBytes(int64(dataSize))
+						for n := 0; n < b.N; n++ {
+							concurrently(b, context.Background(), c, testOp)
+						}
+					})
 				}
 			}
 		})
