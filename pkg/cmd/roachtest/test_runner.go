@@ -605,7 +605,10 @@ func (r *testRunner) runWorker(
 			qp.Release(alloc)
 		}
 	}()
-
+	// cluster destroy can be done concurrently.
+	// The WaitGroup just ensures that all pending Destroy calls have completed.
+	clusterDestroyWg := &sync.WaitGroup{}
+	defer clusterDestroyWg.Wait() // wait for the clusters to be destroyed
 	// Loop until there's no more work in the pool, we get interrupted, or an
 	// error occurs.
 	for {
@@ -616,6 +619,7 @@ func (r *testRunner) runWorker(
 		default:
 			if ctx.Err() != nil {
 				// The context has been canceled. No need to continue.
+				c.Destroy(context.Background(), closeLogger, l)
 				return errors.Wrap(ctx.Err(), "worker ctx done")
 			}
 		}
@@ -625,6 +629,7 @@ func (r *testRunner) runWorker(
 		failureRate := float64(len(r.status.fail)) / float64(maxTotalFailures)
 		r.status.Unlock()
 		if failureRate > roachtestflags.AutoKillThreshold {
+			c.Destroy(context.Background(), closeLogger, l)
 			return errors.Errorf("failure rate %.2f exceeds limit %.2f", failureRate, roachtestflags.AutoKillThreshold)
 		}
 
@@ -661,8 +666,7 @@ func (r *testRunner) runWorker(
 				// We failed to find a test that can take advantage of this cluster. So
 				// we're going to release it, which will deallocate its resources.
 				l.PrintfCtx(ctx, "No tests that can reuse cluster %s found. Destroying.", c)
-				// We use a context that can't be canceled for the Destroy().
-				c.Destroy(context.Background(), closeLogger, l)
+				r.destroyCluster(clusterDestroyWg, c, l) // do not wait as we can free the worker
 				wStatus.SetCluster(nil)
 				c = nil
 			}
@@ -716,6 +720,7 @@ func (r *testRunner) runWorker(
 		// case.
 		if err := VerifyLibraries(testToRun.spec.NativeLibs, arch); err != nil {
 			shout(ctx, l, stdout, "Library verification failed: %s", err)
+			c.Destroy(context.Background(), closeLogger, l)
 			return err
 		}
 
@@ -780,10 +785,12 @@ func (r *testRunner) runWorker(
 
 		testL, err := logger.RootLogger(logPath, lopt.tee)
 		if err != nil {
+			c.Destroy(context.Background(), closeLogger, l)
 			return err
 		}
 		binaryVersion, err := version.Parse(build.BinaryVersion())
 		if err != nil {
+			c.Destroy(context.Background(), closeLogger, l)
 			return err
 		}
 		t := &testImpl{
@@ -924,6 +931,24 @@ func (r *testRunner) runWorker(
 			}
 		}
 	}
+}
+
+// destroyCluster runs cluster destroy in a goroutine and adds 1 to the wait group.
+// if the cluster is local, the cluster destroy is sequential.
+func (r *testRunner) destroyCluster(
+	clusterDestroyWg *sync.WaitGroup, c *clusterImpl, l *logger.Logger,
+) {
+	if c.IsLocal() {
+		// local cluster - do not use goroutine as we generally recreate the cluster.
+		c.Destroy(context.Background(), closeLogger, l)
+		return
+	}
+	clusterDestroyWg.Add(1)
+	go func(ci *clusterImpl) {
+		defer clusterDestroyWg.Done()
+		// We use a context that can't be canceled for the Destroy().
+		ci.Destroy(context.Background(), closeLogger, l)
+	}(c)
 }
 
 // getArtifacts retrieves artifacts (like perf or go cover) produced by a
