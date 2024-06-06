@@ -17,6 +17,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
     ],
 )
 

@@ -13,6 +13,7 @@ package gossip
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -87,11 +88,17 @@ func TestGossip(t *testing.T) {
 	require.Len(t, gossip.exchange.pending, 0)
 	assertStorePool(assertSameFn)
 
+	// Tick state by a large duration to ensure the below capacity changes don't
+	// run into the max gossip frequency limit.
+	storeTick := tick
+
 	// Update the usage info leases for s1 and s2, so that it exceeds the delta
 	// required to trigger a gossip update. We do this by transferring every
 	// lease to s2.
 	for _, rng := range s.Ranges() {
 		s.TransferLease(rng.RangeID(), 2)
+		storeTick = storeTick.Add(3 * time.Second)
+		s.TickClock(storeTick)
 	}
 	gossip.Tick(ctx, tick, s)
 	// There should be just store 1 and 2 pending gossip updates in the exchanger.
