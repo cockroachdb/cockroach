@@ -11,12 +11,16 @@
 package kvserver
 
 import (
+	math "math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +34,7 @@ func TestStoreGossipDeltaTrigger(t *testing.T) {
 		cached, lastGossiped roachpb.StoreCapacity
 		expectedReason       string
 		expectedShould       bool
+		lastGossipTime       time.Time
 	}{
 		{
 			desc:           "no delta (empty): shouldn't gossip",
@@ -87,6 +92,16 @@ func TestStoreGossipDeltaTrigger(t *testing.T) {
 			expectedReason: "io-overload(0.3) change",
 			expectedShould: true,
 		},
+		{
+			desc:           "should gossip on IO overload increase greater than min but last gossip was too recent",
+			lastGossiped:   roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(0)},
+			cached:         roachpb.StoreCapacity{IOThresholdMax: allocatorimpl.TestingIOThresholdWithScore(allocatorimpl.DefaultLeaseIOOverloadThreshold)},
+			expectedReason: "",
+			expectedShould: false,
+			// Set the last gossip time to be some time far in the future, so the
+			// next gossip time is also far in the future.
+			lastGossipTime: timeutil.Unix(math.MaxInt64/2, 0),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -98,9 +113,12 @@ func TestStoreGossipDeltaTrigger(t *testing.T) {
 				nil,
 				cfg.TestingKnobs.GossipTestingKnobs,
 				&cluster.MakeTestingClusterSettings().SV,
+				hlc.NewClockForTesting(nil),
 			)
 			sg.cachedCapacity.cached = tc.cached
 			sg.cachedCapacity.lastGossiped = tc.lastGossiped
+			t.Logf("lastGossipTime: %v", tc.lastGossipTime)
+			sg.cachedCapacity.lastGossipedTime = tc.lastGossipTime
 
 			should, reason := sg.shouldGossipOnCapacityDelta()
 			require.Equal(t, tc.expectedReason, reason)
