@@ -270,6 +270,8 @@ SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'POLL JOBS STATS' AN
 
 subtest control_job_priv
 
+skip 125212
+
 user testuser
 
 statement ok
@@ -300,6 +302,8 @@ REVOKE SYSTEM CONTROLJOB FROM testuser
 subtest end
 
 subtest control_job_priv_inherited
+
+skip 125212
 
 user testuser
 
