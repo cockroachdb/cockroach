@@ -60,6 +60,8 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	nTuples := 2*coldata.BatchSize() + 1
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	diskQueueMemAcc := testMemMonitor.MakeBoundAccount()
+	defer diskQueueMemAcc.Close(ctx)
 	rng, _ := randutil.NewTestRand()
 	typs := []*types.T{types.Int, types.Bytes, types.Decimal}
 	colsLeft := make([]*coldata.Vec, len(typs))
@@ -101,7 +103,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 		leftMJSource, rightMJSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-		testDiskAcc, testMemAcc, evalCtx,
+		testDiskAcc, &diskQueueMemAcc, evalCtx,
 	)
 	mj.Init(ctx)
 	hj := NewHashJoiner(NewHashJoinerArgs{
