@@ -12,6 +12,7 @@ package operations
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -51,9 +52,9 @@ func runDiskStall(
 
 	nodes := c.All()
 	nid := nodes[rng.Intn(len(nodes))]
-	o.Status("stalling disk on node %d", nid)
-	ds := roachtestutil.MakeCgroupDiskStaller(o, c, false, false)
+	ds := roachtestutil.MakeDmsetupDiskStaller(o, c)
 
+	o.Status(fmt.Sprintf("stalling disk on node %d", nid))
 	ds.Stall(ctx, c.Node(nid))
 
 	return &cleanupDiskStall{
@@ -64,7 +65,7 @@ func runDiskStall(
 
 func registerDiskStall(r registry.Registry) {
 	r.AddOperation(registry.OperationSpec{
-		Name:             "disk-stall/cgroup",
+		Name:             "disk-stall/dmsetup",
 		Owner:            registry.OwnerStorage,
 		Timeout:          10 * time.Minute,
 		CompatibleClouds: registry.OnlyGCE,
