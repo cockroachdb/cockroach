@@ -179,7 +179,7 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 				v.topic, partition, key)
 		}
 		// We're starting a new run.
-		if updated.LessEq(latestRun[0].ts) {
+		if updated.LessEq(latestRun[len(latestRun)-1].ts) {
 			v.keyTimestampRuns[key] = append(timestampRuns, []timestampValue{{ts: updated, value: value}})
 			return nil
 		}
