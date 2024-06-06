@@ -465,6 +465,9 @@ func (ex *connExecutor) execBind(
 		resolve := func(ctx context.Context, txn *kv.Txn) (err error) {
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			p := &ex.planner
+			if p.datumAlloc == nil {
+				p.datumAlloc = &tree.DatumAlloc{}
+			}
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
 			if err := ex.handleAOST(ctx, ps.AST); err != nil {
 				return err
@@ -501,6 +504,7 @@ func (ex *connExecutor) execBind(
 						typ,
 						qArgFormatCodes[i],
 						arg,
+						p.datumAlloc,
 					)
 					if err != nil {
 						return pgerror.Wrapf(err, pgcode.ProtocolViolation, "error in argument for %s", k)

@@ -49,6 +49,7 @@ type DatumAlloc struct {
 	doidAlloc         []DOid
 	dvoidAlloc        []DVoid
 	dpglsnAlloc       []DPGLSN
+	// TODO(yuzefovich): add support for TSQuery and TSVector types.
 	// stringAlloc is used by all datum types that are strings (DBytes, DString, DEncodedKey).
 	stringAlloc []string
 	env         CollationEnvironment

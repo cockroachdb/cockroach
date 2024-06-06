@@ -969,6 +969,9 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err e
 		return bytesRead, pgerror.Newf(pgcode.BadCopyFileFormat,
 			"unexpected field count: %d", fieldCount)
 	}
+	if c.p.datumAlloc == nil {
+		c.p.datumAlloc = &tree.DatumAlloc{}
+	}
 	datums := make(tree.Datums, fieldCount)
 	var byteCount int32
 	var byteCountBytes [4]byte
@@ -995,6 +998,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err e
 			c.resultColumns[i].Typ,
 			pgwirebase.FormatBinary,
 			data,
+			c.p.datumAlloc,
 		)
 		if err != nil {
 			return bytesRead, pgerror.Wrapf(err, pgcode.BadCopyFileFormat,

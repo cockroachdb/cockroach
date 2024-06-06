@@ -154,6 +154,7 @@ func TestEncodings(t *testing.T) {
 	conv, loc := makeTestingConvCfg()
 	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(nil)
+	var da tree.DatumAlloc
 
 	type writeFunc func(tree.Datum, *types.T)
 	type testCase struct {
@@ -277,6 +278,7 @@ func TestEncodings(t *testing.T) {
 					types.OidToType[tc.Oid],
 					code,
 					value,
+					&da,
 				)
 				if err != nil {
 					t.Fatal(err)
@@ -333,6 +335,7 @@ func TestExoticNumericEncodings(t *testing.T) {
 	}
 
 	evalCtx := eval.MakeTestingEvalContext(nil)
+	var da tree.DatumAlloc
 	for i, c := range testCases {
 		t.Run(fmt.Sprintf("%d_%s", i, c.Value), func(t *testing.T) {
 			d, err := pgwirebase.DecodeDatum(
@@ -341,6 +344,7 @@ func TestExoticNumericEncodings(t *testing.T) {
 				types.Decimal,
 				pgwirebase.FormatBinary,
 				c.Encoding,
+				&da,
 			)
 			if err != nil {
 				t.Fatal(err)
