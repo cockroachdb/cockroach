@@ -228,10 +228,6 @@ func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 		))
 		return nil
 	}
-	if prevResolved.IsEmpty() {
-		v.resolved[partition] = resolved
-		return nil
-	}
 
 	// Validate that for every key on this partition:
 	// 1.	Every run contains consecutive events and is a subslice of the slice of
