@@ -1,13 +1,13 @@
 # This test verifies the following condition:
-#  - we have a large request blocked, requiring more RU than the "low RU"
-#    notification threshold.
-#  - the bucket has more RUs available than the notification threshold.
+#  - we have a large request blocked, requiring more tokens than the "low
+#    tokens" notification threshold.
+#  - the bucket has more tokens available than the notification threshold.
 
 configure
 throttle: 1000
 ----
 
-# Fire off a write that needs significantly more than the initial RUs.
+# Fire off a write that needs significantly more than the initial tokens.
 write bytes=15357952 label=w1
 ----
 
@@ -16,10 +16,10 @@ timers
 00:00:09.000
 00:00:10.000
 
-# Ensure that low RU notification is sent even though the token bucket still has
-# 10K RUs (waiting RUs need to be taken into account).
+# Ensure that low tokens notification is sent even though the token bucket still
+# has 10K tokens (waiting tokens need to be taken into account).
 wait-for-event
-low-ru
+low-tokens
 ----
 
 wait-for-event
@@ -31,7 +31,7 @@ not-completed label=w1
 
 token-bucket
 ----
-5000.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU) (15000.00 waiting RU)
+5000.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens) (15000.00 waiting tokens)
 
 # Advance time to just short of trickle renewal and trigger tick event.
 advance wait=true
@@ -41,7 +41,7 @@ advance wait=true
 
 token-bucket
 ----
-13750.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU) (15000.00 waiting RU)
+13750.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens) (15000.00 waiting tokens)
 
 # Now advance time to trigger trickle renewal (but do not trigger tick in order
 # to avoid a race that makes test non-deterministic).
@@ -61,7 +61,7 @@ timers
 
 token-bucket
 ----
-14000.00 RU filling @ 1100.00 RU/s (limited to 16000.00 RU) (15000.00 waiting RU)
+14000.00 tokens filling @ 1100.00 tokens/s (limited to 16000.00 tokens) (15000.00 waiting tokens)
 
 # One more second to fulfill waiting write.
 advance
@@ -74,10 +74,10 @@ await label=w1
 
 token-bucket
 ----
-100.00 RU filling @ 1100.00 RU/s (limited to 16000.00 RU)
+100.00 tokens filling @ 1100.00 tokens/s (limited to 16000.00 tokens)
 
 # Un-throttle central token bucket and ensure that another large write goes
-# through after requesting more RUs.
+# through after requesting more tokens.
 configure
 ----
 

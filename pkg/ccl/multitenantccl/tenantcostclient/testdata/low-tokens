@@ -1,8 +1,8 @@
 # This test verifies that after the server does not fully grant a request, the
-# client will not trigger low RU notifications.
+# client will not trigger low tokens notifications.
 
-# When throttle = -1, the server will refuse to grant any RUs, either directly
-# or via a trickle.
+# When throttle = -1, the server will refuse to grant any tokens, either
+# directly or via a trickle.
 configure
 throttle: -1
 ----
@@ -17,21 +17,21 @@ token-bucket-response
 
 token-bucket
 ----
-4000.00 RU filling @ 0.00 RU/s
+4000.00 tokens filling @ 0.00 tokens/s
 
-# Allow server to grant more RUs.
+# Allow server to grant more tokens.
 configure
 throttle: 0
 ----
 
-# Issue another 1K RU write and expect no low RU notification and therefore no
-# call to the server.
+# Issue another 1K RU write and expect no low tokens notification and therefore
+# no call to the server.
 write bytes=1021952
 ----
 
 token-bucket
 ----
-3000.00 RU filling @ 0.00 RU/s
+3000.00 tokens filling @ 0.00 tokens/s
 
 # Advance time and ensure there's no change to the bucket.
 advance wait=true
@@ -41,4 +41,4 @@ advance wait=true
 
 token-bucket
 ----
-3000.00 RU filling @ 0.00 RU/s
+3000.00 tokens filling @ 0.00 tokens/s

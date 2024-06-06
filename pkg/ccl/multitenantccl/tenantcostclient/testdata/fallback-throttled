@@ -6,22 +6,23 @@ throttle: 100
 fallback_rate: 1000
 ----
 
-# Issue a 3K write that triggers fetch of more RU and also sets fallback rate.
+# Issue a 3K write that triggers fetch of more tokens and also sets fallback
+# rate.
 write bytes=3069952
 ----
 
 wait-for-event
-low-ru
+low-tokens
 ----
 
 wait-for-event
 token-bucket-response
 ----
 
-# Response sets up throttled rate of 100 RU/s.
+# Response sets up throttled rate of 100 tokens/s.
 token-bucket
 ----
-2000.00 RU filling @ 100.00 RU/s (limited to 6000.00 RU)
+2000.00 tokens filling @ 100.00 tokens/s (limited to 6000.00 tokens)
 
 # Force error on next fetch.
 configure
@@ -48,7 +49,7 @@ advance wait=true
 
 token-bucket
 ----
-3100.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
+3100.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens)
 
 # Advance 1 second and ensure bucket is replenished at fallback rate.
 advance wait=true
@@ -58,7 +59,7 @@ advance wait=true
 
 token-bucket
 ----
-4100.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
+4100.00 tokens filling @ 1000.00 tokens/s (limited to 15000.00 tokens)
 
 wait-for-event
 token-bucket-response-error
