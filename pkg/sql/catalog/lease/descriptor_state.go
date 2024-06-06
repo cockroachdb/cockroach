@@ -154,7 +154,10 @@ func (t *descriptorState) upsertLeaseLocked(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// The desc is replacing an existing one at the same version.
-	if !s.mu.expiration.Less(expiration) {
+	// Note: For session based leasing we can violate this rule, if
+	// the session is expired (it invalidates the active lease).
+	if !s.mu.expiration.Less(expiration) && (s.mu.session == nil ||
+		!s.mu.session.Expiration().Less(s.mu.expiration)) {
 		// This is a violation of an invariant and can actually not
 		// happen. We return an error here to aid in further investigations.
 		return nil, nil, errors.AssertionFailedf("lease expiration monotonicity violation, (%s) vs (%s)", s, desc)

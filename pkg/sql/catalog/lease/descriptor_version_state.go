@@ -160,7 +160,10 @@ func (s *descriptorVersionState) getExpirationLocked(ctx context.Context) hlc.Ti
 	if s.mu.session != nil &&
 		s.t.m.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDrain) {
 		sessionExpiry := s.mu.session.Expiration()
-		if expiration.Less(sessionExpiry) {
+		// If the fixed expiration lasts longer use that, just to have a consistent
+		// view of expirations. However, if the session has expired always pick up
+		// that time.
+		if expiration.Less(sessionExpiry) || sessionExpiry.Less(s.t.m.storage.clock.Now()) {
 			expiration = sessionExpiry
 		}
 	}

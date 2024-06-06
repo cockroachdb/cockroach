@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -75,6 +76,14 @@ var LeaseJitterFraction = settings.RegisterFloatSetting(
 	"mean duration of sql descriptor leases, this actual duration is jitterred",
 	base.DefaultDescriptorLeaseJitterFraction,
 	settings.Fraction)
+
+var LeaseMonitorRangeFeed = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.catalog.descriptor_lease_monitor_range_feed",
+	"leasing subsystem range feed is monitored to make sure it is receiving "+
+		"checkpoints",
+	true,
+)
 
 //go:generate stringer -type=SessionBasedLeasingMode
 type SessionBasedLeasingMode int64
@@ -863,9 +872,13 @@ type Manager struct {
 		// a new version has arrived.
 		leasesToExpire []*descriptorVersionState
 
-		// updatesResolvedTimestamp keeps track of a timestamp before which all
-		// descriptor updates have already been seen.
-		updatesResolvedTimestamp hlc.Timestamp
+		// rangeFeedCheckpoints tracks the health of the range by tracking
+		// the number of observed checkpoints.
+		rangeFeedCheckpoints int
+
+		// rangeFeedIsUnavailable tracks if an unavailability issue was observed,
+		// and we were forced to disable
+		rangeFeedIsUnavailable bool
 	}
 
 	draining atomic.Value
@@ -968,7 +981,6 @@ func NewLeaseManager(
 	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher, lm)
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
-	lm.mu.updatesResolvedTimestamp = clock.Now()
 	lm.draining.Store(false)
 	return lm
 }
@@ -1425,6 +1437,10 @@ func (m *Manager) watchForUpdates(
 	handleEvent := func(
 		ctx context.Context, ev *kvpb.RangeFeedValue,
 	) {
+		// Detect if rangefeed checkpoints updates should be disabled.
+		if m.testingKnobs.DisableRangeFeedCheckpoint != nil && m.testingKnobs.DisableRangeFeedCheckpoint() {
+			return
+		}
 		if len(ev.Value.RawBytes) == 0 {
 			id, err := m.Codec().DecodeDescMetadataID(ev.Key)
 			if err != nil {
@@ -1455,12 +1471,33 @@ func (m *Manager) watchForUpdates(
 		case descUpdateCh <- mut:
 		}
 	}
+
+	handleCheckpoint := func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
+		// Track checkpoints that occur from the rangefeed to make sure progress
+		// is always made.
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.testingKnobs.DisableRangeFeedCheckpoint != nil &&
+			m.testingKnobs.DisableRangeFeedCheckpoint() {
+			return
+		}
+
+		m.mu.rangeFeedCheckpoints += 1
+		// If heart beating was disabled, we should re-enable it once we start
+		// checkpointing again.
+		if m.mu.rangeFeedIsUnavailable {
+			m.storage.livenessProvider.UnpauseLivenessHeartbeat(ctx)
+			m.mu.rangeFeedIsUnavailable = false
+		}
+	}
+
 	// Ignore errors here because they indicate that the server is shutting down.
 	// Also note that the range feed automatically shuts down when the server
 	// shuts down, so we don't need to call Close() ourselves.
 	_, _ = m.rangeFeedFactory.RangeFeed(
 		ctx, "lease", []roachpb.Span{descriptorTableSpan}, hlc.Timestamp{}, handleEvent,
 		rangefeed.WithSystemTablePriority(),
+		rangefeed.WithOnCheckpoint(handleCheckpoint),
 	)
 }
 
@@ -1472,6 +1509,34 @@ var leaseRefreshLimit = settings.RegisterIntSetting(
 	"maximum number of descriptors to periodically refresh leases for",
 	500,
 )
+
+// getRangeFeedMonitorFrequency determines how long the range feed becomes silent
+// before we started treating it as an availability issue on the cluster.
+func (m *Manager) getRangeFeedMonitorFrequency() time.Duration {
+	return max(slbase.DefaultTTL.Get(&m.storage.settings.SV),
+		LeaseDuration.Get(&m.storage.settings.SV))
+}
+
+// checkRangeFeedStatus ensures that the rangefeed is always checkpointing and
+// receiving data. If we see this for too long, we will treat it as an avability
+// issue for this node.
+func (m *Manager) checkRangeFeedStatus(ctx context.Context) {
+	// If monitoring is disabled then this is a no-op.
+	if !LeaseMonitorRangeFeed.Get(&m.settings.SV) {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	lastCheckpoints := m.mu.rangeFeedCheckpoints
+	m.mu.rangeFeedCheckpoints = 0
+	// No checkpoints have occurred on the rangefeed, so we are no longer
+	// getting any updates. At this point there is some type of availability
+	// issue.
+	if lastCheckpoints == 0 {
+		m.mu.rangeFeedIsUnavailable = true
+		m.storage.livenessProvider.PauseLivenessHeartbeat(ctx)
+	}
+}
 
 // PeriodicallyRefreshSomeLeases so that leases are fresh and can serve
 // traffic immediately.
@@ -1491,6 +1556,9 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 		var refreshTimer timeutil.Timer
 		defer refreshTimer.Stop()
 		refreshTimer.Reset(refreshTimerDuration / 2)
+		// Used to make sure that the system.descriptor lease is active.
+		var rangeFeedProgressWatchDog timeutil.Timer
+		rangeFeedProgressWatchDog.Reset(m.getRangeFeedMonitorFrequency())
 		for {
 			select {
 			case <-m.stopper.ShouldQuiesce():
@@ -1498,6 +1566,10 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 
 			case <-m.refreshAllLeases:
 				m.refreshSomeLeases(ctx, true /*refreshAll*/)
+			case <-rangeFeedProgressWatchDog.C:
+				rangeFeedProgressWatchDog.Read = true
+				rangeFeedProgressWatchDog.Reset(m.getRangeFeedMonitorFrequency())
+				m.checkRangeFeedStatus(ctx)
 			case <-refreshTimer.C:
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
@@ -1855,4 +1927,13 @@ func (m *Manager) IncGaugeAfterLeaseDuration(
 			gauge.Dec(1)
 		}
 	}
+}
+
+// TestingSetDisableRangeFeedCheckpointFn sets the testing knob used to
+// disable rangefeed checkpoints.
+func (m *Manager) TestingSetDisableRangeFeedCheckpointFn(fn func() bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.rangeFeedCheckpoints = 0
+	m.testingKnobs.DisableRangeFeedCheckpoint = fn
 }
