@@ -10,18 +10,21 @@
 
 import { PayloadAction } from "@reduxjs/toolkit";
 import { all, call, put, takeLatest, takeEvery } from "redux-saga/effects";
+
 import {
   getCombinedStatements,
   StatementsRequest,
 } from "src/api/statementsApi";
 import { resetSQLStats } from "src/api/sqlStatsApi";
 import { actions as localStorageActions } from "src/store/localStorage";
+
+import { actions as txnStatsActions } from "../transactionStats";
+import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
+
 import {
   actions as sqlStatsActions,
   UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
-import { actions as txnStatsActions } from "../transactionStats";
-import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
 
 export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   yield put(sqlStatsActions.request(action.payload));

@@ -3539,8 +3539,8 @@ message TokenBucketRequest {
   // sequence number than the last request is ignored.
   int64 seq_num = 7;
 
-  // RequestedRU is the number of requested tokens (RUs).
-  double requested_r_u = 5;
+  // RequestedTokens is the number of requested tokens.
+  double requested_tokens = 5;
 
   // TargetRequestPeriod is the approximate frequency of requests, used to limit
   // TrickleDuration in the response.
@@ -3554,11 +3554,11 @@ message TokenBucketResponse {
   // RPC errors.
   errorspb.EncodedError error = 1 [(gogoproto.nullable) = false];
 
-  // GrantedTokens is the amount of RUs granted. In most cases, this is equal to
-  // the requested RUs; the only exception is when TrickleDuration would
-  // otherwise exceed TargetRequestPeriod, in which case the number of granted
-  // RUs is reduced.
-  double granted_r_u = 2;
+  // GrantedTokens is the number of tokens granted by the server. In most cases,
+  // this is equal to the requested tokens; the only exception is when
+  // TrickleDuration would otherwise exceed TargetRequestPeriod, in which case
+  // the number of granted tokens is reduced.
+  double granted_tokens = 2;
 
   // TrickleDuration describes how the granted tokens can be consumed.
   //
@@ -3572,8 +3572,8 @@ message TokenBucketResponse {
   google.protobuf.Duration trickle_duration = 3 [(gogoproto.nullable) = false,
                                                  (gogoproto.stdduration) = true];
 
-  // FallbackRate indicates a rate (in RU/s) that the instance will use once it
-  // runs out of tokens and a problem prevents TokenBucket requests from
+  // FallbackRate indicates a rate (in tokens/s) that the instance will use once
+  // it runs out of tokens and a problem prevents TokenBucket requests from
   // completing.
   double fallback_rate = 4;
 }
@@ -3711,4 +3711,6 @@ message ScanStats {
   // NodeID is the NodeID of the KV server that evaluated the request.
   int32 node_id = 21 [(gogoproto.customname) = "NodeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // Region, if set, is the region of the KV server that evaluated the request.
+  string region = 22;
 }

@@ -60,14 +60,6 @@ const (
 	// tagSnapshotTiming is the tracing span tag that the *snapshotTimingTag
 	// lives under.
 	tagSnapshotTiming = "snapshot_timing_tag"
-
-	// DefaultSnapshotSendLimit is the max number of snapshots concurrently sent.
-	// See server.KVConfig for more info.
-	DefaultSnapshotSendLimit = 2
-
-	// DefaultSnapshotApplyLimit is the number of snapshots concurrently applied.
-	// See server.KVConfig for more info.
-	DefaultSnapshotApplyLimit = 1
 )
 
 // snapshotMetrics contains metrics on the number and size of snapshots in
@@ -1690,7 +1682,7 @@ func SendEmptySnapshot(
 		storage.InMemory(),
 		cluster.MakeClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */),
-		storage.MaxSize(512<<20 /* 512 MiB */))
+		storage.MaxSizeBytes(512<<20 /* 512 MiB */))
 	if err != nil {
 		return err
 	}

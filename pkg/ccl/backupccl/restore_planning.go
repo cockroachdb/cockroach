@@ -2540,7 +2540,7 @@ func restoreCreateDefaultPrimaryRegionEnums(
 		regionLabels = append(regionLabels, tree.EnumValue(regionName))
 	}
 	regionEnum, err := sql.CreateEnumTypeDesc(
-		p.RunParams(ctx),
+		p.SessionData(),
 		regionConfig.RegionEnumID(),
 		regionLabels,
 		db,
@@ -2553,7 +2553,6 @@ func restoreCreateDefaultPrimaryRegionEnums(
 	}
 	regionEnum.ArrayTypeID = regionEnumArrayID
 	regionArrayEnum, err := sql.CreateUserDefinedArrayTypeDesc(
-		p.RunParams(ctx),
 		regionEnum,
 		db,
 		sc.GetID(),

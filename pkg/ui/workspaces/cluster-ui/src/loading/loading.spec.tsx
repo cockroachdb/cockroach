@@ -12,6 +12,7 @@ import React from "react";
 import { assert } from "chai";
 import { mount } from "enzyme";
 import { Spinner, InlineAlert } from "@cockroachlabs/ui-components";
+
 import { Loading } from "./loading";
 
 const SomeComponent = () => <div>Hello, world!</div>;

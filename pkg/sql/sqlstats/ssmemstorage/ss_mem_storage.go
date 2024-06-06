@@ -361,12 +361,6 @@ func (t *txnStats) sizeUnsafeLocked() int64 {
 	return txnStatsShallowSize + stmtFingerprintIDsSize + dataSize
 }
 
-func (t *txnStats) mergeStats(stats *appstatspb.TransactionStatistics) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.mu.data.Add(stats)
-}
-
 // stmtStats holds per-statement statistics.
 type stmtStats struct {
 	// ID is the statementFingerprintID constructed using the stmtKey fields.
@@ -671,10 +665,8 @@ func (s *Container) Clear(ctx context.Context) {
 }
 
 func (s *Container) clearLocked(ctx context.Context) {
-	// freeLocked needs to be called before we clear the containers as
-	// it uses the size of each container to decrements counters that
-	// track the node-wide unique in-memory fingerprint counts for stmts
-	// and txns.
+	// We must call freeLocked before clearing the containers as freeLocked
+	// reads the size of each container to reset the counters.
 	s.freeLocked(ctx)
 
 	// Clear the map, to release the memory; make the new map somewhat already
@@ -745,39 +737,6 @@ func (s *Container) MergeApplicationStatementStats(
 			return nil
 		},
 	); err != nil {
-		// Calling Iterate.*Stats() function with a visitor function that does not
-		// return error should not cause any error.
-		panic(
-			errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error returned when iterating through application stats"),
-		)
-	}
-
-	return discardedStats
-}
-
-// MergeApplicationTransactionStats implements the sqlstats.ApplicationStats interface.
-func (s *Container) MergeApplicationTransactionStats(
-	ctx context.Context, other sqlstats.ApplicationStats,
-) (discardedStats uint64) {
-	if err := other.IterateTransactionStats(
-		ctx,
-		sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
-			txnStats, _, throttled :=
-				s.getStatsForTxnWithKey(
-					statistics.TransactionFingerprintID,
-					statistics.StatementFingerprintIDs,
-					true, /* createIfNonexistent */
-				)
-
-			if throttled {
-				discardedStats++
-				return nil
-			}
-
-			txnStats.mergeStats(&statistics.Stats)
-			return nil
-		}); err != nil {
 		// Calling Iterate.*Stats() function with a visitor function that does not
 		// return error should not cause any error.
 		panic(

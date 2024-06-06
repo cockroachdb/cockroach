@@ -10,12 +10,35 @@
 
 import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import classNames from "classnames/bind";
+
+import {
+  FixFingerprintHexValue,
+  Count,
+  FixLong,
+  longToInt,
+  unset,
+  appNamesAttr,
+  propsToQueryString,
+} from "src/util";
+import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
+
 import {
   SortedTable,
   ISortedTablePagination,
   longListWithTooltip,
   ColumnDescriptor,
+  SortSetting,
 } from "../sortedtable";
+import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
+import {
+  getStatementsByFingerprintId,
+  collectStatementsText,
+  statementFingerprintIdsToText,
+  statementFingerprintIdsToSummarizedText,
+} from "../transactionsPage/utils";
+import { BarChartOptions } from "../barCharts/barChartFactory";
+
 import {
   transactionsCountBarChart,
   transactionsBytesReadBarChart,
@@ -26,28 +49,8 @@ import {
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
 } from "./transactionsBarCharts";
-import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
 import { transactionLink } from "./transactionsCells";
-import {
-  FixFingerprintHexValue,
-  Count,
-  FixLong,
-  longToInt,
-  unset,
-  appNamesAttr,
-  propsToQueryString,
-} from "src/util";
-import { SortSetting } from "../sortedtable";
-import {
-  getStatementsByFingerprintId,
-  collectStatementsText,
-  statementFingerprintIdsToText,
-  statementFingerprintIdsToSummarizedText,
-} from "../transactionsPage/utils";
-import classNames from "classnames/bind";
-import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
-import { BarChartOptions } from "../barCharts/barChartFactory";
 
 export type Transaction =
   protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;

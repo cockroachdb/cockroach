@@ -9,20 +9,20 @@
 import React from "react";
 import moment from "moment-timezone";
 import { Link } from "react-router-dom";
+import { util } from "@cockroachlabs/cluster-ui";
 
 import { INodeStatus } from "src/util/proto";
 import { nodeCapacityStats, livenessNomenclature } from "src/redux/nodes";
 import { trustIcon } from "src/util/trust";
-import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
-import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
-import deadIcon from "!!raw-loader!assets/livenessIcons/dead.svg";
-import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
 import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
 import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capacityArc";
 import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
-import { util } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "src/js/protos";
 
+import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
+import deadIcon from "!!raw-loader!assets/livenessIcons/dead.svg";
+import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
+import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import NodeLivenessStatus = cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 type ILiveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
 

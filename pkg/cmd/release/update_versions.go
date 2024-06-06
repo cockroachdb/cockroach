@@ -216,8 +216,12 @@ func (r prRepo) push() error {
 }
 
 func (r prRepo) createPullRequest() (string, error) {
+	head := fmt.Sprintf("%s:%s", r.githubUsername, r.prBranch)
+	if r.pushToOrigin {
+		head = r.prBranch
+	}
 	parts := []string{
-		"gh", "pr", "create", "--base", r.branch, "--head", fmt.Sprintf("%s:%s", r.githubUsername, r.prBranch),
+		"gh", "pr", "create", "--base", r.branch, "--head", head,
 	}
 	title, body, _ := strings.Cut(r.commitMessage, "\n")
 	if title == "" {

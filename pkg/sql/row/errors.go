@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -300,6 +301,7 @@ func DecodeRowInfo(
 // CheckFailed returns error message when a check constraint is violated.
 func CheckFailed(
 	ctx context.Context,
+	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	tabDesc catalog.TableDescriptor,
@@ -308,7 +310,7 @@ func CheckFailed(
 	// Failed to satisfy CHECK constraint, so unwrap the serialized
 	// check expression to display to the user.
 	expr, err := schemaexpr.FormatExprForDisplay(
-		ctx, tabDesc, check.GetExpr(), semaCtx, sessionData, tree.FmtParsable,
+		ctx, tabDesc, check.GetExpr(), evalCtx, semaCtx, sessionData, tree.FmtParsable,
 	)
 	if err != nil {
 		// If we ran into an error trying to read the check constraint, wrap it

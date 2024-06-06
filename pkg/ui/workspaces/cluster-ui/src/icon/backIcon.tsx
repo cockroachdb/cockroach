@@ -10,6 +10,7 @@
 
 import React from "react";
 import classNames from "classnames/bind";
+
 import Back from "./back-arrow.svg";
 import styles from "./backIcon.module.scss";
 

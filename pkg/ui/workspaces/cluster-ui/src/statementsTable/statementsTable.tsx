@@ -10,6 +10,7 @@
 
 import React from "react";
 import classNames from "classnames/bind";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import {
   FixLong,
@@ -40,20 +41,21 @@ import {
   longListWithTooltip,
   SortedTable,
 } from "src/sortedtable";
+import { BarChartOptions } from "src/barCharts/barChartFactory";
 
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { StatementTableCell } from "./statementsTableContent";
 import {
   statisticsTableTitles,
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
-import { BarChartOptions } from "src/barCharts/barChartFactory";
+import { StatementDiagnosticsReport } from "../api";
+import { Timestamp } from "../timestamp";
+
+import styles from "./statementsTable.module.scss";
+import { StatementTableCell } from "./statementsTableContent";
 
 type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-import styles from "./statementsTable.module.scss";
-import { StatementDiagnosticsReport } from "../api";
-import { Timestamp } from "../timestamp";
+
 const cx = classNames.bind(styles);
 
 export interface AggregateStatistics {

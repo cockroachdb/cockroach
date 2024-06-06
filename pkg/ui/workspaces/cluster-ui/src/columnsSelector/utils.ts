@@ -8,7 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { isEmpty } from "lodash";
+import isEmpty from "lodash/isEmpty";
+
 import { ColumnDescriptor } from "src/sortedtable/sortedtable";
 
 // We show a column if:

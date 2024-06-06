@@ -16,11 +16,11 @@ import classNames from "classnames/bind";
 import React, { useEffect } from "react";
 import Helmet from "react-helmet";
 import { Link, match, useHistory } from "react-router-dom";
+
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import { SqlBox, SqlBoxSize } from "src/sql/box";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-
 import {
   ActiveTransaction,
   ExecutionContentionDetails,
@@ -29,9 +29,9 @@ import { StatusIcon } from "src/activeExecutions/statusIcon";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { getMatchParamByName } from "src/util/query";
 import { executionIdAttr, DATE_FORMAT_24_TZ } from "src/util";
+import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 
 import styles from "../statementDetails/statementDetails.module.scss";
-import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 import { capitalize, Duration } from "../util/format";
 import { Timestamp } from "../timestamp";
 const cx = classNames.bind(styles);
@@ -110,7 +110,7 @@ export const ActiveTransactionDetails: React.FC<
           <Col className="gutter-row" span={24}>
             <SqlBox
               value={transaction?.query || RECENT_STATEMENT_NOT_FOUND_MESSAGE}
-              size={SqlBoxSize.custom}
+              size={SqlBoxSize.CUSTOM}
             />
           </Col>
         </Row>

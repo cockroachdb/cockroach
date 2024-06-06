@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+
 import { localStorageSelector } from "../utils/selectors";
 
 export const selectSortSetting = createSelector(

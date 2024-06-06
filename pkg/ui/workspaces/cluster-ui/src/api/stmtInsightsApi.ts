@@ -8,6 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
+
+import {
+  ContentionDetails,
+  InsightExecEnum,
+  StatementStatus,
+  StmtInsightEvent,
+} from "src/insights/types";
+import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
+
+import { FixFingerprintHexValue } from "../util";
+import { getInsightsFromProblemsAndCauses } from "../insights/utils";
+
+import { getContentionDetailsApi } from "./contentionApi";
 import {
   SqlApiResponse,
   executeInternalSql,
@@ -18,17 +32,6 @@ import {
   sqlResultsAreEmpty,
   SqlTxnResult,
 } from "./sqlApi";
-import {
-  ContentionDetails,
-  InsightExecEnum,
-  StatementStatus,
-  StmtInsightEvent,
-} from "src/insights/types";
-import moment from "moment-timezone";
-import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
-import { FixFingerprintHexValue } from "../util";
-import { getContentionDetailsApi } from "./contentionApi";
-import { getInsightsFromProblemsAndCauses } from "../insights/utils";
 
 export type StmtInsightsReq = {
   start?: moment.Moment;

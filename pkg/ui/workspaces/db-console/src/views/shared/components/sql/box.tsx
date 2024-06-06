@@ -9,9 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Highlight } from "./highlight";
 import classNames from "classnames/bind";
 
+import { Highlight } from "./highlight";
 import styles from "./sqlhighlight.module.styl";
 
 export interface SqlBoxProps {

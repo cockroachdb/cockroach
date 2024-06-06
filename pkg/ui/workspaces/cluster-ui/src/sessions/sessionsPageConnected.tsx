@@ -10,23 +10,23 @@
 
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
-import { analyticsActions, AppState } from "src/store";
-import { SessionsState } from "src/store/sessions";
-
 import { createSelector } from "reselect";
-import { SessionsPage } from "./index";
+import { Dispatch } from "redux";
 
-import { actions as sessionsActions } from "src/store/sessions";
+import { analyticsActions, AppState } from "src/store";
+import { SessionsState, actions as sessionsActions } from "src/store/sessions";
 import { actions as localStorageActions } from "src/store/localStorage";
 import {
   actions as terminateQueryActions,
   ICancelQueryRequest,
   ICancelSessionRequest,
 } from "src/store/terminateQuery";
-import { Dispatch } from "redux";
+
 import { Filters } from "../queryFilter";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 import { localStorageSelector } from "../store/utils/selectors";
+
+import { SessionsPage } from "./index";
 
 export const selectSessionsData = createSelector(
   sqlStatsSelector,

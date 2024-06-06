@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
+
 import { summarize, computeOrUseStmtSummary } from "./summarize";
 
 describe("summarize", () => {

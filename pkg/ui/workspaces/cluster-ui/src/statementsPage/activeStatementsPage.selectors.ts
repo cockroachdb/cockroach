@@ -18,6 +18,7 @@ import {
   SortSetting,
   analyticsActions,
 } from "src";
+
 import {
   selectActiveStatements,
   selectAppName,
@@ -29,6 +30,7 @@ import {
 } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
 import { selectIsTenant } from "src/store/uiConfig";
+
 import { localStorageSelector } from "../store/utils/selectors";
 
 export const selectSortSetting = (state: AppState): SortSetting =>

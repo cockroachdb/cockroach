@@ -23,6 +23,7 @@ import {
   routerMiddleware,
 } from "connected-react-router";
 import { createMemoryHistory } from "history";
+
 import { AppState, rootReducer } from "src/store";
 
 export const TestStoreProvider: React.FC = ({ children }) => {

@@ -858,9 +858,17 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RootSQLMemoryPoolSize:    cfg.MemoryPoolSize,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
-	cfg.stopper.AddCloser(stop.CloserFn(func() {
-		cfg.TempStorageConfig.Mon.EmergencyStop(ctx)
-	}))
+	if codec.ForSystemTenant() {
+		// Stop the temp storage disk monitor to enforce (in test builds) that
+		// all short-living descendants are stopped too.
+		//
+		// Note that we don't do this for SQL servers of tenants since there we
+		// can have ungraceful shutdown whenever the node is quiescing, so we
+		// have some short-living monitors that aren't stopped.
+		cfg.stopper.AddCloser(stop.CloserFn(func() {
+			cfg.TempStorageConfig.Mon.EmergencyStop(ctx)
+		}))
+	}
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
 		distSQLCfg.TestingKnobs = *distSQLTestingKnobs.(*execinfra.TestingKnobs)
 	}
@@ -1874,6 +1882,8 @@ func startServeSQL(
 	// objects when the stopper tells us to shut down.
 	connManager := netutil.MakeTCPServer(ctx, stopper)
 
+	logEvery := log.Every(10 * time.Second)
+
 	_ = stopper.RunAsyncTaskEx(ctx,
 		stop.TaskOpts{TaskName: "pgwire-listener", SpanOpt: stop.SterileRootSpan},
 		func(ctx context.Context) {
@@ -1883,12 +1893,16 @@ func startServeSQL(
 
 				conn, status, err := pgPreServer.PreServe(connCtx, conn, pgwire.SocketTCP)
 				if err != nil {
-					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+					if logEvery.ShouldLog() {
+						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+					}
 					return
 				}
 
 				if err := serveConn(connCtx, conn, status); err != nil {
-					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+					if logEvery.ShouldLog() {
+						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+					}
 				}
 			})
 			netutil.FatalIfUnexpected(err)

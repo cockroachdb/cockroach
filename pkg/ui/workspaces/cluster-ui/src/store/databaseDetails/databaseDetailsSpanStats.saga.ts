@@ -9,14 +9,15 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeEvery } from "redux-saga/effects";
+import { PayloadAction } from "@reduxjs/toolkit";
 
-import { databaseDetailsSpanStatsReducer } from "./databaseDetails.reducer";
 import {
   DatabaseDetailsSpanStatsReqParams,
   ErrorWithKey,
   getDatabaseDetailsSpanStats,
 } from "src/api";
-import { PayloadAction } from "@reduxjs/toolkit";
+
+import { databaseDetailsSpanStatsReducer } from "./databaseDetails.reducer";
 
 const actions = databaseDetailsSpanStatsReducer.actions;
 export function* refreshDatabaseDetailsSpanStatsSaga(

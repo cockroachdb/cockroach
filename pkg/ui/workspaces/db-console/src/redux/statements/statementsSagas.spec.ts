@@ -10,12 +10,16 @@
 
 import { expectSaga } from "redux-saga-test-plan";
 import { call } from "redux-saga-test-plan/matchers";
+import { throwError } from "redux-saga-test-plan/providers";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
+import { PayloadAction, WithRequest } from "src/interfaces/action";
 import {
-  cancelDiagnosticsReportSaga,
-  createDiagnosticsReportSaga,
-  receivedStatementDiagnosticsSaga,
-} from "./statementsSagas";
+  invalidateStatementDiagnosticsRequests,
+  RECEIVE_STATEMENT_DIAGNOSTICS_REPORT,
+  refreshStatementDiagnosticsRequests,
+} from "src/redux/apiReducers";
+
 import {
   createStatementDiagnosticsReportCompleteAction,
   createStatementDiagnosticsReportFailedAction,
@@ -24,14 +28,11 @@ import {
   cancelStatementDiagnosticsReportFailedAction,
   cancelStatementDiagnosticsReportAction,
 } from "./statementsActions";
-import { throwError } from "redux-saga-test-plan/providers";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
-import { PayloadAction, WithRequest } from "src/interfaces/action";
 import {
-  invalidateStatementDiagnosticsRequests,
-  RECEIVE_STATEMENT_DIAGNOSTICS_REPORT,
-  refreshStatementDiagnosticsRequests,
-} from "src/redux/apiReducers";
+  cancelDiagnosticsReportSaga,
+  createDiagnosticsReportSaga,
+  receivedStatementDiagnosticsSaga,
+} from "./statementsSagas";
 
 describe("statementsSagas", () => {
   describe("requestDiagnostics generator", () => {

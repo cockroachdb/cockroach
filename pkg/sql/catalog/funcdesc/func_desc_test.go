@@ -816,11 +816,15 @@ func TestToOverload(t *testing.T) {
 
 func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 	type testCase struct {
-		name                  string
-		input, expectedOutput descpb.FunctionDescriptor
-		validIDs              catalog.DescriptorIDSet
+		name                           string
+		input, expectedOutput          descpb.FunctionDescriptor
+		validIDs                       catalog.DescriptorIDSet
+		strippedDanglingBackReferences bool
+		strippedNonExistentRoles       bool
 	}
 
+	badOwnerPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.MakeSQLUsernameFromPreNormalizedString("dropped_user"))
+	goodOwnerPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.AdminRoleName())
 	badPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
 	goodPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
 	badPrivilege.Users = append(badPrivilege.Users, catpb.UserPrivileges{
@@ -855,7 +859,36 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 				},
 				Privileges: goodPrivilege,
 			},
-			validIDs: catalog.MakeDescriptorIDSet(104, 105),
+			validIDs:                       catalog.MakeDescriptorIDSet(104, 105),
+			strippedDanglingBackReferences: true,
+			strippedNonExistentRoles:       true,
+		},
+		{
+			name: "missing owner",
+			input: descpb.FunctionDescriptor{
+				Name: "foo",
+				ID:   105,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{
+						ID:        104,
+						ColumnIDs: []descpb.ColumnID{1},
+					},
+				},
+				Privileges: badOwnerPrivilege,
+			},
+			expectedOutput: descpb.FunctionDescriptor{
+				Name: "foo",
+				ID:   105,
+				DependedOnBy: []descpb.FunctionDescriptor_Reference{
+					{
+						ID:        104,
+						ColumnIDs: []descpb.ColumnID{1},
+					},
+				},
+				Privileges: goodOwnerPrivilege,
+			},
+			validIDs:                 catalog.MakeDescriptorIDSet(104, 105),
+			strippedNonExistentRoles: true,
 		},
 	}
 
@@ -869,11 +902,11 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 				return false
 			}))
 			require.NoError(t, b.StripNonExistentRoles(func(role username.SQLUsername) bool {
-				return role.IsAdminRole() || role.IsPublicRole() || role.IsRootUser()
+				return role.IsAdminRole() || role.IsPublicRole() || role.IsRootUser() || role.IsNodeUser()
 			}))
 			desc := b.BuildCreatedMutableFunction()
-			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
-			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
+			require.Equal(t, test.strippedDanglingBackReferences, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
+			require.Equal(t, test.strippedNonExistentRoles, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
 			require.Equal(t, out.BuildCreatedMutableFunction().FuncDesc(), desc.FuncDesc())
 		})
 	}

@@ -11,6 +11,16 @@ import { connect } from "react-redux";
 import { withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 import Long from "long";
+import { RouteComponentProps } from "react-router";
+import {
+  StatementDetails,
+  StatementDetailsDispatchProps,
+  StatementDetailsStateProps,
+  toRoundedDateRange,
+  util,
+  api as clusterUiApi,
+} from "@cockroachlabs/cluster-ui";
+import moment from "moment-timezone";
 
 import {
   refreshLiveness,
@@ -20,17 +30,9 @@ import {
   refreshUserSQLRoles,
   refreshStatementFingerprintInsights,
 } from "src/redux/apiReducers";
-import { RouteComponentProps } from "react-router";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import { selectDiagnosticsReportsByStatementFingerprint } from "src/redux/statements/statementsSelectors";
-import {
-  StatementDetails,
-  StatementDetailsDispatchProps,
-  StatementDetailsStateProps,
-  toRoundedDateRange,
-  util,
-} from "@cockroachlabs/cluster-ui";
 import {
   cancelStatementDiagnosticsReportAction,
   createStatementDiagnosticsReportAction,
@@ -48,11 +50,10 @@ import {
 } from "src/redux/analyticsActions";
 import { StatementDetailsResponseMessage } from "src/util/api";
 import { getMatchParamByName, queryByName } from "src/util/query";
-
 import { appNamesAttr, statementAttr } from "src/util/constants";
 import { selectTimeScale } from "src/redux/timeScale";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
-import moment from "moment-timezone";
+
+
 import { requestTimeLocalSetting } from "./statementsPage";
 
 const { generateStmtDetailsToID } = util;

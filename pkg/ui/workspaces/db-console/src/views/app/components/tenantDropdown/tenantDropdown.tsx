@@ -7,12 +7,15 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import { getCookieValue, setCookie } from "src/redux/cookies";
 import React from "react";
 import { Dropdown } from "@cockroachlabs/cluster-ui";
-import ErrorBoundary from "../errorMessage/errorBoundary";
-import "./tenantDropdown.styl";
+
+import { getCookieValue, setCookie } from "src/redux/cookies";
 import { isSystemTenant } from "src/redux/tenants";
+
+import ErrorBoundary from "../errorMessage/errorBoundary";
+
+import "./tenantDropdown.styl";
 
 const tenantIDKey = "tenant";
 

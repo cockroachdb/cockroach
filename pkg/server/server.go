@@ -718,7 +718,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		//
 		// Note that we don't do this for SQL servers of tenants since there we
 		// can have ungraceful shutdown whenever the node is quiescing, so we
-		// have some short-living monitors that are't stopped.
+		// have some short-living monitors that aren't stopped.
 		sqlMonitorAndMetrics.rootSQLMemoryMonitor.EmergencyStop(ctx)
 	}))
 
@@ -866,8 +866,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		SharedStorageEnabled:         cfg.SharedStorage != "",
 		SystemConfigProvider:         systemConfigWatcher,
 		SpanConfigSubscriber:         spanConfig.subscriber,
-		SnapshotApplyLimit:           cfg.SnapshotApplyLimit,
-		SnapshotSendLimit:            cfg.SnapshotSendLimit,
 		RangeLogWriter:               rangeLogWriter,
 		KVAdmissionController:        admissionControl.kvAdmissionController,
 		KVFlowController:             admissionControl.kvflowController,

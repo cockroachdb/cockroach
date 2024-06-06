@@ -47,15 +47,10 @@ type tenantState struct {
 }
 
 // defaultRefillRate is the default refill rate if it is never configured (via
-// the crdb_internal.update_tenant_resource_limits SQL built-in).
-const defaultRefillRate = 100
-
-// defaultInitialRUs is the default quantity of RUs available to use immediately
-// if it is never configured (via the
-// crdb_internal.update_tenant_resource_limits SQL built-in).
-// This value is intended to prevent short-running unit tests from being
-// throttled.
-const defaultInitialRUs = 10 * 1000 * 1000
+// the crdb_internal.update_tenant_resource_limits SQL built-in). It's high
+// enough that if it's not explicitly configured, there should be little or no
+// throttling (e.g. for running unit tests).
+const defaultRefillRate = 10000
 
 // maxInstancesCleanup restricts the number of stale instances that are removed
 // in a single transaction.
@@ -70,8 +65,7 @@ func (ts *tenantState) update(now time.Time) {
 			LastUpdate:    tree.DTimestamp{Time: now},
 			FirstInstance: 0,
 			Bucket: tenanttokenbucket.State{
-				RURefillRate: defaultRefillRate,
-				RUCurrent:    defaultInitialRUs,
+				TokenRefillRate: defaultRefillRate,
 			},
 		}
 		return
@@ -172,16 +166,16 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 		instanceID := base.SQLInstanceID(tree.MustBeDInt(r[0]))
 		if instanceID == 0 {
 			// Tenant state.
-			// NOTE: The current_share_sum column is mapped to the RUCurrentAvg
-			// field.
+			// NOTE: The current_share_sum column is mapped to the TokenCurrentAvg
+			// field. The RU fields are mapped to corresponding Token fields.
 			tenant.Present = true
 			tenant.LastUpdate = tree.MustBeDTimestamp(r[2])
 			tenant.FirstInstance = base.SQLInstanceID(tree.MustBeDInt(r[1]))
 			tenant.Bucket = tenanttokenbucket.State{
-				RUBurstLimit: float64(tree.MustBeDFloat(r[3])),
-				RURefillRate: float64(tree.MustBeDFloat(r[4])),
-				RUCurrent:    float64(tree.MustBeDFloat(r[5])),
-				RUCurrentAvg: float64(tree.MustBeDFloat(r[6])),
+				TokenBurstLimit: float64(tree.MustBeDFloat(r[3])),
+				TokenRefillRate: float64(tree.MustBeDFloat(r[4])),
+				TokenCurrent:    float64(tree.MustBeDFloat(r[5])),
+				TokenCurrentAvg: float64(tree.MustBeDFloat(r[6])),
 			}
 			if consumption := r[7]; consumption != tree.DNull {
 				// total_consumption can be NULL because of an upgrade of the
@@ -214,7 +208,8 @@ func (h *sysTableHelper) updateTenantState(txn isql.Txn, tenant tenantState) err
 	}
 	// Note: it is important that this UPSERT specifies all columns of the
 	// table, to allow it to perform "blind" writes.
-	// Note: The RUCurrentAvg field is mapped to the current_share_sum column.
+	// Note: The TokenCurrentAvg field is mapped to the current_share_sum column
+	// and the other Token fields are mapped to RU columns.
 	_, err = txn.ExecEx(
 		h.ctx, "tenant-usage-upsert", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
@@ -236,10 +231,10 @@ func (h *sysTableHelper) updateTenantState(txn isql.Txn, tenant tenantState) err
 		h.tenantID.ToUint64(),                    // $1
 		int64(tenant.FirstInstance),              // $2
 		&tenant.LastUpdate,                       // $3
-		tenant.Bucket.RUBurstLimit,               // $4
-		tenant.Bucket.RURefillRate,               // $5
-		tenant.Bucket.RUCurrent,                  // $6
-		tenant.Bucket.RUCurrentAvg,               // $7
+		tenant.Bucket.TokenBurstLimit,            // $4
+		tenant.Bucket.TokenRefillRate,            // $5
+		tenant.Bucket.TokenCurrent,               // $6
+		tenant.Bucket.TokenCurrentAvg,            // $7
 		tree.NewDBytes(tree.DBytes(consumption)), // $8
 	)
 	return err
@@ -255,7 +250,8 @@ func (h *sysTableHelper) updateTenantAndInstanceState(
 	}
 	// Note: it is important that this UPSERT specifies all columns of the
 	// table, to allow it to perform "blind" writes.
-	// Note: The RUCurrentAvg field is mapped to the current_share_sum column.
+	// Note: The TokenCurrentAvg field is mapped to the current_share_sum column
+	// and the other token fields are mapped to corresponding RU columns.
 	_, err = txn.ExecEx(
 		h.ctx, "tenant-usage-insert", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
@@ -279,10 +275,10 @@ func (h *sysTableHelper) updateTenantAndInstanceState(
 		h.tenantID.ToUint64(),                    // $1
 		int64(tenant.FirstInstance),              // $2
 		&tenant.LastUpdate,                       // $3
-		tenant.Bucket.RUBurstLimit,               // $4
-		tenant.Bucket.RURefillRate,               // $5
-		tenant.Bucket.RUCurrent,                  // $6
-		tenant.Bucket.RUCurrentAvg,               // $7
+		tenant.Bucket.TokenBurstLimit,            // $4
+		tenant.Bucket.TokenRefillRate,            // $5
+		tenant.Bucket.TokenCurrent,               // $6
+		tenant.Bucket.TokenCurrentAvg,            // $7
 		tree.NewDBytes(tree.DBytes(consumption)), // $8
 		int64(instance.ID),                       // $9
 		int64(instance.NextInstance),             // $10
@@ -552,11 +548,11 @@ func InspectTenantMetadata(
 	}
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Bucket state: ru-burst-limit=%g  ru-refill-rate=%g  ru-current=%.12g  ru-current-avg=%.12g\n",
-		tenant.Bucket.RUBurstLimit,
-		tenant.Bucket.RURefillRate,
-		tenant.Bucket.RUCurrent,
-		tenant.Bucket.RUCurrentAvg,
+	fmt.Fprintf(&buf, "Bucket state: token-burst-limit=%g  token-refill-rate=%g  token-current=%.12g  token-current-avg=%.12g\n",
+		tenant.Bucket.TokenBurstLimit,
+		tenant.Bucket.TokenRefillRate,
+		tenant.Bucket.TokenCurrent,
+		tenant.Bucket.TokenCurrentAvg,
 	)
 	fmt.Fprintf(&buf, "Consumption: ru=%.12g kvru=%.12g  reads=%d in %d batches (%d bytes)  writes=%d in %d batches (%d bytes)  pod-cpu-usage: %g secs  pgwire-egress=%d bytes  external-egress=%d bytes  external-ingress=%d bytes\n",
 		tenant.Consumption.RU,

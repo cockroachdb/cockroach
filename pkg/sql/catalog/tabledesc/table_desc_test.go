@@ -62,12 +62,16 @@ func (desc *Mutable) TestingSetClusterVersion(d descpb.TableDescriptor) {
 
 func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 	type testCase struct {
-		name                  string
-		input, expectedOutput descpb.TableDescriptor
-		validDescIDs          catalog.DescriptorIDSet
-		validJobIDs           map[jobspb.JobID]struct{}
+		name                           string
+		input, expectedOutput          descpb.TableDescriptor
+		validDescIDs                   catalog.DescriptorIDSet
+		validJobIDs                    map[jobspb.JobID]struct{}
+		strippedDanglingBackReferences bool
+		strippedNonExistentRoles       bool
 	}
 
+	badOwnerPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.MakeSQLUsernameFromPreNormalizedString("dropped_user"))
+	goodOwnerPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.AdminRoleName())
 	badPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
 	goodPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
 	badPrivilege.Users = append(badPrivilege.Users, catpb.UserPrivileges{
@@ -107,8 +111,10 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 				},
 				Privileges: goodPrivilege,
 			},
-			validDescIDs: catalog.MakeDescriptorIDSet(100, 101, 104, 105),
-			validJobIDs:  map[jobspb.JobID]struct{}{},
+			validDescIDs:                   catalog.MakeDescriptorIDSet(100, 101, 104, 105),
+			validJobIDs:                    map[jobspb.JobID]struct{}{},
+			strippedDanglingBackReferences: true,
+			strippedNonExistentRoles:       true,
 		},
 		{
 			name: "job IDs",
@@ -139,8 +145,40 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 				},
 				Privileges: goodPrivilege,
 			},
-			validDescIDs: catalog.MakeDescriptorIDSet(100, 101, 104, 105),
-			validJobIDs:  map[jobspb.JobID]struct{}{111222333444: {}},
+			validDescIDs:                   catalog.MakeDescriptorIDSet(100, 101, 104, 105),
+			validJobIDs:                    map[jobspb.JobID]struct{}{111222333444: {}},
+			strippedDanglingBackReferences: true,
+			strippedNonExistentRoles:       true,
+		},
+		{
+			name: "missing owner",
+			input: descpb.TableDescriptor{
+				Name: "foo",
+				ID:   104,
+				MutationJobs: []descpb.TableDescriptor_MutationJob{
+					{JobID: 111222333444, MutationID: 1},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{MutationID: 1},
+					{MutationID: 2},
+				},
+				Privileges: badOwnerPrivilege,
+			},
+			expectedOutput: descpb.TableDescriptor{
+				Name: "foo",
+				ID:   104,
+				MutationJobs: []descpb.TableDescriptor_MutationJob{
+					{JobID: 111222333444, MutationID: 1},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{MutationID: 1},
+					{MutationID: 2},
+				},
+				Privileges: goodOwnerPrivilege,
+			},
+			validDescIDs:             catalog.MakeDescriptorIDSet(100, 101, 104, 105),
+			validJobIDs:              map[jobspb.JobID]struct{}{111222333444: {}},
+			strippedNonExistentRoles: true,
 		},
 	}
 
@@ -158,8 +196,8 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 				return role.IsAdminRole() || role.IsPublicRole() || role.IsRootUser()
 			}))
 			desc := b.BuildCreatedMutableTable()
-			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
-			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
+			require.Equal(t, test.strippedDanglingBackReferences, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
+			require.Equal(t, test.strippedNonExistentRoles, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
 			require.Equal(t, out.BuildCreatedMutableTable().TableDesc(), desc.TableDesc())
 		})
 	}

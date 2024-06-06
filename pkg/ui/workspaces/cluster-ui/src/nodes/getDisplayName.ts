@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { NoConnection } from "./noConnection";
 
 type INodeStatus = cockroach.server.status.statuspb.INodeStatus;

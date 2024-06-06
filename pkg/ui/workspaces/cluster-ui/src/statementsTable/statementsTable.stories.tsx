@@ -11,13 +11,16 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { MemoryRouter } from "react-router-dom";
+
+import statementsPagePropsFixture from "src/statementsPage/statementsPage.fixture";
+import { calculateTotalWorkload } from "src/util";
+
+import { convertRawStmtsToAggregateStatistics } from "../sqlActivity/util";
+
 import {
   makeStatementsColumns,
   StatementsSortedTable,
 } from "./statementsTable";
-import statementsPagePropsFixture from "src/statementsPage/statementsPage.fixture";
-import { calculateTotalWorkload } from "src/util";
-import { convertRawStmtsToAggregateStatistics } from "../sqlActivity/util";
 
 const statements =
   statementsPagePropsFixture.statementsResponse.data.statements;

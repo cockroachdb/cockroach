@@ -9,10 +9,11 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { AdminUIState } from "src/redux/state";
-import { cockroach } from "src/js/protos";
 import moment from "moment-timezone";
 import { CoordinatedUniversalTime, util } from "@cockroachlabs/cluster-ui";
+
+import { AdminUIState } from "src/redux/state";
+import { cockroach } from "src/js/protos";
 import { indexUnusedDuration } from "src/util/constants";
 
 export const selectClusterSettings = createSelector(

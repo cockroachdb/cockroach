@@ -19,6 +19,7 @@ go_library(
         "//pkg/roachprod/install",
         "//pkg/roachprod/lock",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/opentelemetry",
         "//pkg/roachprod/prometheus",
         "//pkg/roachprod/promhelperclient",
         "//pkg/roachprod/vm",

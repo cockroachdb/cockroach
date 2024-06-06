@@ -132,8 +132,8 @@ type QueryLevelStats struct {
 	// KVNodeIDs is an ordered list of KV Node IDs that were used for KV reads
 	// while processing the query.
 	KVNodeIDs []int32
-	// Regions is an ordered list of regions in which SQL instances involved in
-	// query processing reside.
+	// Regions is an ordered list of regions in which both SQL and KV nodes
+	// involved in query processing reside.
 	Regions    []string
 	ClientTime time.Duration
 }
@@ -259,6 +259,8 @@ func (a *TraceAnalyzer) ProcessStats() {
 			continue
 		}
 		s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, stats.KV.NodeIDs)
+		// Aggregate both KV and SQL regions into the same field.
+		s.Regions = util.CombineUnique(s.Regions, stats.KV.Regions)
 		s.KVBytesRead += int64(stats.KV.BytesRead.Value())
 		s.KVPairsRead += int64(stats.KV.KVPairsRead.Value())
 		s.KVRowsRead += int64(stats.KV.TuplesRead.Value())

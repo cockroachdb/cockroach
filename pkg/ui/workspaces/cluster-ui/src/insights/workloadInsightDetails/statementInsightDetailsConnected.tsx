@@ -10,21 +10,24 @@
 import { connect } from "react-redux";
 import { Dispatch } from "redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import {
-  StatementInsightDetails,
-  StatementInsightDetailsDispatchProps,
-  StatementInsightDetailsStateProps,
-} from "./statementInsightDetails";
+
 import { AppState, uiConfigActions } from "src/store";
 import {
   selectStmtInsightDetails,
   selectStmtInsightsError,
 } from "src/store/insights/statementInsights";
 import { selectHasAdminRole } from "src/store/uiConfig";
+
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { selectTimeScale } from "../../store/utils/selectors";
 import { actions as analyticsActions } from "../../store/analytics";
+
+import {
+  StatementInsightDetails,
+  StatementInsightDetailsDispatchProps,
+  StatementInsightDetailsStateProps,
+} from "./statementInsightDetails";
 
 const mapStateToProps = (
   state: AppState,

@@ -9,15 +9,17 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import moment from "moment-timezone";
+
 import {
   ErrorWithKey,
   JobRequest,
   JobResponse,
   JobResponseWithKey,
 } from "src/api/jobsApi";
+
 import { DOMAIN_NAME } from "../utils";
 import { RequestState } from "../../api";
-import moment from "moment-timezone";
 
 export type JobState = RequestState<JobResponse>;
 

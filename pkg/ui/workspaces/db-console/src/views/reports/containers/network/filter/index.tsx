@@ -11,10 +11,12 @@
 import { Checkbox, Select } from "antd";
 import "antd/lib/checkbox/style";
 import "antd/lib/select/style";
-import Dropdown, { arrowRenderer } from "src/views/shared/components/dropdown";
-import { OutsideEventHandler } from "src/components/outsideEventHandler";
 import React from "react";
 import classNames from "classnames";
+
+import Dropdown, { arrowRenderer } from "src/views/shared/components/dropdown";
+import { OutsideEventHandler } from "src/components/outsideEventHandler";
+
 import { NetworkFilter, NetworkSort } from "..";
 import "./filter.styl";
 

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/opentelemetry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
@@ -116,6 +117,8 @@ var (
 	sshKeyUser string
 
 	fluentBitConfig fluentbit.Config
+
+	opentelemetryConfig opentelemetry.Config
 )
 
 func initFlags() {
@@ -203,10 +206,12 @@ func initFlags() {
 
 	pgurlCmd.Flags().BoolVar(&external,
 		"external", false, "return pgurls for external connections")
-	pgurlCmd.Flags().StringVar(&pgurlCertsDir,
-		"certs-dir", install.CockroachNodeCertsDir, "cert dir to use for secure connections")
+	for _, cmd := range []*cobra.Command{pgurlCmd, loadBalancerPGUrl} {
+		cmd.Flags().StringVar(&pgurlCertsDir,
+			"certs-dir", install.CockroachNodeCertsDir, "cert dir to use for secure connections")
+	}
 
-	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd} {
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, loadBalancerPGUrl} {
 		cmd.Flags().StringVar(&authMode,
 			"auth-mode", defaultAuthMode, fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(pgAuthModes)))
 	}
@@ -321,7 +326,7 @@ func initFlags() {
 		"the absolute path to dump prometheus data to (use the contained 'prometheus-docker-run.sh' to visualize")
 
 	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogSite, "datadog-site", "us5.datadoghq.com",
-		"Datadog site to send telemetry data to")
+		"Datadog site to send telemetry data to (e.g., us5.datadoghq.com)")
 
 	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogAPIKey, "datadog-api-key", "",
 		"Datadog API key")
@@ -329,8 +334,17 @@ func initFlags() {
 	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogService, "datadog-service", "cockroachdb",
 		"Datadog service name for emitted logs")
 
-	fluentBitStartCmd.Flags().StringVar(&fluentBitConfig.DatadogTeam, "datadog-team", "",
-		"Datadog team to tag emitted logs")
+	fluentBitStartCmd.Flags().StringSliceVar(&fluentBitConfig.DatadogTags, "datadog-tags", []string{},
+		"Datadog tags as a comma-separated list in the format KEY1:VAL1,KEY2:VAL2")
+
+	opentelemetryStartCmd.Flags().StringVar(&opentelemetryConfig.DatadogSite, "datadog-site", "us5.datadoghq.com",
+		"Datadog site to send telemetry data to (e.g., us5.datadoghq.com)")
+
+	opentelemetryStartCmd.Flags().StringVar(&opentelemetryConfig.DatadogAPIKey, "datadog-api-key", "",
+		"Datadog API key")
+
+	opentelemetryStartCmd.Flags().StringSliceVar(&opentelemetryConfig.DatadogTags, "datadog-tags", []string{},
+		"Datadog tags as a comma-separated list in the format KEY1:VAL1,KEY2:VAL2")
 
 	sshKeysAddCmd.Flags().StringVar(&sshKeyUser, "user", config.OSUser.Username,
 		"the user to be associated with the new key",
@@ -435,7 +449,7 @@ func initFlags() {
 		cmd.Flags().StringVarP(&config.Binary,
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
-	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, loadBalanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd, updateTargetsCmd} {
+	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, createLoadBalancerCmd, sqlCmd, pgurlCmd, loadBalancerPGUrl, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd, updateTargetsCmd} {
 		// TODO(renato): remove --secure once the default of secure
 		// clusters has existed in roachprod long enough.
 		cmd.Flags().BoolVar(&secure,
@@ -443,7 +457,7 @@ func initFlags() {
 		cmd.Flags().BoolVar(&insecure,
 			"insecure", insecure, "use an insecure cluster")
 	}
-	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd, loadBalanceCmd, jaegerStartCmd} {
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd, createLoadBalancerCmd, loadBalancerPGUrl, loadBalancerIP, jaegerStartCmd} {
 		cmd.Flags().StringVar(&virtualClusterName,
 			"cluster", "", "specific virtual cluster to connect to")
 		cmd.Flags().IntVar(&sqlInstance,

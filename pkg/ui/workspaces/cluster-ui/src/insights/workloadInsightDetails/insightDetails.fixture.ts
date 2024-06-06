@@ -10,8 +10,8 @@
 
 import moment from "moment-timezone";
 import { createMemoryHistory } from "history";
-import { noop } from "lodash";
-import { StatementInsightDetailsProps } from "./statementInsightDetails";
+import noop from "lodash/noop";
+
 import {
   InsightEventBase,
   InsightExecEnum,
@@ -19,6 +19,8 @@ import {
   StatementStatus,
   StmtInsightEvent,
 } from "../types";
+
+import { StatementInsightDetailsProps } from "./statementInsightDetails";
 
 const insightEventBaseFixture: InsightEventBase = {
   application: "app",
@@ -28,13 +30,13 @@ const insightEventBaseFixture: InsightEventBase = {
   implicitTxn: true,
   insights: [
     {
-      name: InsightNameEnum.slowExecution,
+      name: InsightNameEnum.SLOW_EXECUTION,
       label: "label",
       description: "slow query",
       tooltipDescription: "a really slow query",
     },
     {
-      name: InsightNameEnum.suboptimalPlan,
+      name: InsightNameEnum.SUBOPTIMAL_PLAN,
       label: "label2",
       description: "bad plan",
       tooltipDescription: "a really bad plan",

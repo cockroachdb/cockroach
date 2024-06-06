@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import moment from "moment-timezone";
+
 import { Duration } from "src/util/format";
 import {
   createSqlExecutionRequest,
@@ -115,7 +116,7 @@ export function createStatementDiagnosticsReport({
   expiresAfterSeconds,
   planGist,
 }: InsertStmtDiagnosticRequest): Promise<InsertStmtDiagnosticResponse> {
-  const args: any = [stmtFingerprint];
+  const args: Array<string | number> = [stmtFingerprint];
   let query = `SELECT crdb_internal.request_statement_bundle($1, $2, $3::INTERVAL, $4::INTERVAL) as req_resp`;
 
   if (planGist) {

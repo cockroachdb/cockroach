@@ -8,11 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import isString from "lodash/isString";
+import map from "lodash/map";
 import React from "react";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { TimeScale } from "@cockroachlabs/cluster-ui";
 
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import {
@@ -41,11 +43,11 @@ import {
   PageConfigItem,
 } from "src/views/shared/components/pageconfig";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
-import messagesDashboard from "./messages";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import { TimeWindow, setMetricsFixedWindow } from "src/redux/timeScale";
-import { TimeScale } from "@cockroachlabs/cluster-ui";
+
+import messagesDashboard from "./messages";
 
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
@@ -87,7 +89,7 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
 
   setClusterPath(nodeID: string) {
     const push = this.props.history.push;
-    if (!_.isString(nodeID) || nodeID === "") {
+    if (!isString(nodeID) || nodeID === "") {
       push("/raft/messages/all/");
     } else {
       push(`/raft/messages/node/${nodeID}`);
@@ -153,7 +155,7 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
     // Generate graphs for the current dashboard, wrapping each one in a
     // MetricsDataProvider with a unique key.
     const graphs = messagesDashboard(dashboardProps);
-    const graphComponents = _.map(graphs, (graph, idx) => {
+    const graphComponents = map(graphs, (graph, idx) => {
       const key = `nodes.raftMessages.${idx}`;
       return (
         <div key={key}>
@@ -199,7 +201,7 @@ const nodeDropdownOptionsSelector = createSelector(
   (nodeIds, nodeDisplayNameByID): DropdownOption[] => {
     const base = [{ value: "", label: "Cluster" }];
     return base.concat(
-      _.map(nodeIds, id => {
+      map(nodeIds, id => {
         return {
           value: id.toString(),
           label: nodeDisplayNameByID[id],

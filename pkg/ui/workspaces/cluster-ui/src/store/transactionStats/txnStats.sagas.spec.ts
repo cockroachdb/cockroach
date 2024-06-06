@@ -16,12 +16,13 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-
-import { getFlushedTxnStatsApi } from "src/api/statementsApi";
-import { refreshTxnStatsSaga, requestTxnStatsSaga } from "./txnStats.sagas";
-import { actions, reducer, TxnStatsState } from "./txnStats.reducer";
 import Long from "long";
 import moment from "moment-timezone";
+
+import { getFlushedTxnStatsApi } from "src/api/statementsApi";
+
+import { refreshTxnStatsSaga, requestTxnStatsSaga } from "./txnStats.sagas";
+import { actions, reducer, TxnStatsState } from "./txnStats.reducer";
 
 const lastUpdated = moment();
 

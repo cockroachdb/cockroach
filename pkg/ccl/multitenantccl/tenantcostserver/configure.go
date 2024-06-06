@@ -10,7 +10,6 @@ package tenantcostserver
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -27,11 +26,9 @@ func (s *instance) ReconfigureTokenBucket(
 	ctx context.Context,
 	txn isql.Txn,
 	tenantID roachpb.TenantID,
-	availableRU float64,
+	availableTokens float64,
 	refillRate float64,
-	maxBurstRU float64,
-	asOf time.Time,
-	asOfConsumedRequestUnits float64,
+	maxBurstTokens float64,
 ) error {
 	if err := s.checkTenantID(ctx, txn, tenantID); err != nil {
 		return err
@@ -43,10 +40,7 @@ func (s *instance) ReconfigureTokenBucket(
 	}
 	now := s.timeSource.Now()
 	state.update(now)
-	state.Bucket.Reconfigure(
-		ctx, tenantID, availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
-		now, state.Consumption.RU,
-	)
+	state.Bucket.Reconfigure(ctx, tenantID, availableTokens, refillRate, maxBurstTokens)
 	if err := h.updateTenantState(txn, state); err != nil {
 		return err
 	}

@@ -9,6 +9,13 @@
 // licenses/APL.txt.
 
 import {
+  InsightRecommendation,
+  InsightType,
+  recommendDropUnusedIndex,
+} from "../insights";
+import { HexStringToInt64String, indexUnusedDuration } from "../util";
+
+import {
   SqlExecutionRequest,
   SqlTxnResult,
   executeInternalSql,
@@ -18,12 +25,6 @@ import {
   SqlApiResponse,
   formatApiResult,
 } from "./sqlApi";
-import {
-  InsightRecommendation,
-  InsightType,
-  recommendDropUnusedIndex,
-} from "../insights";
-import { HexStringToInt64String, indexUnusedDuration } from "../util";
 import { QuoteIdentifier } from "./safesql";
 
 // Export for db-console import from clusterUiApi.
@@ -65,11 +66,11 @@ type SchemaInsightQuery<RowType> = {
 };
 
 function clusterIndexUsageStatsToSchemaInsight(
-  txn_result: SqlTxnResult<ClusterIndexUsageStatistic>,
+  txnResult: SqlTxnResult<ClusterIndexUsageStatistic>,
 ): InsightRecommendation[] {
   const results: Record<string, InsightRecommendation> = {};
 
-  txn_result.rows.forEach(row => {
+  txnResult.rows.forEach(row => {
     const result = recommendDropUnusedIndex(row);
     if (result.recommend) {
       const key = row.table_id.toString() + row.index_id.toString();
@@ -98,11 +99,11 @@ function clusterIndexUsageStatsToSchemaInsight(
 }
 
 function createIndexRecommendationsToSchemaInsight(
-  txn_result: SqlTxnResult<CreateIndexRecommendationsResponse>,
+  txnResult: SqlTxnResult<CreateIndexRecommendationsResponse>,
 ): InsightRecommendation[] {
   const results: InsightRecommendation[] = [];
 
-  txn_result.rows.forEach(row => {
+  txnResult.rows.forEach(row => {
     row.index_recommendations.forEach(rec => {
       if (!rec.includes(" : ")) {
         return;
@@ -245,12 +246,12 @@ export async function getSchemaInsights(
       "retrieving insights information",
     );
   }
-  result.execution.txn_results.map(txn_result => {
+  result.execution.txn_results.map(txnResult => {
     // Note: txn_result.statement values begin at 1, not 0.
     const insightQuery: SchemaInsightQuery<SchemaInsightResponse> =
-      schemaInsightQueries[txn_result.statement - 1];
-    if (txn_result.rows) {
-      results.push(...insightQuery.toSchemaInsight(txn_result));
+      schemaInsightQueries[txnResult.statement - 1];
+    if (txnResult.rows) {
+      results.push(...insightQuery.toSchemaInsight(txnResult));
     }
   });
   return formatApiResult<InsightRecommendation[]>(

@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { createSelector } from "@reduxjs/toolkit";
+
 import { containAny } from "src/util/arrays";
 import {
   CollectedStatementStatistics,
@@ -15,7 +17,6 @@ import {
 } from "src/util/appStats/appStats";
 import { FixFingerprintHexValue } from "src/util/format";
 import { INTERNAL_APP_NAME_PREFIX, unset } from "src/util/constants";
-import { createSelector } from "@reduxjs/toolkit";
 import { SqlStatsResponse } from "src/api/statementsApi";
 import { Filters, getTimeValueInSeconds } from "src/queryFilter";
 import { AggregateStatistics } from "src/statementsTable";

@@ -8,7 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import forEach from "lodash/forEach";
+import isNil from "lodash/isNil";
+import isEmpty from "lodash/isEmpty";
+import values from "lodash/values";
 
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { INodeStatus } from "src/util/proto";
@@ -18,7 +21,7 @@ import { INodeStatus } from "src/util/proto";
  * locality and returns the locality tiers it represents.
  */
 export function parseLocalityRoute(route: string): LocalityTier[] {
-  if (_.isEmpty(route)) {
+  if (isEmpty(route)) {
     return [];
   }
 
@@ -52,8 +55,8 @@ export function getNodeLocalityTiers(node: INodeStatus): LocalityTier[] {
 export function getChildLocalities(locality: LocalityTree): LocalityTree[] {
   const children: LocalityTree[] = [];
 
-  _.values(locality.localities).forEach(tier => {
-    children.push(..._.values(tier));
+  values(locality.localities).forEach(tier => {
+    children.push(...values(tier));
   });
 
   return children;
@@ -72,12 +75,12 @@ export function getLocality(
     const { key, value } = tiers[i];
 
     const thisTier = result.localities[key];
-    if (_.isNil(thisTier)) {
+    if (isNil(thisTier)) {
       return null;
     }
 
     result = thisTier[value];
-    if (_.isNil(result)) {
+    if (isNil(result)) {
       return null;
     }
   }
@@ -92,8 +95,8 @@ export function getLeaves(tree: LocalityTree): INodeStatus[] {
   const output: INodeStatus[] = [];
   function recur(curTree: LocalityTree) {
     output.push(...curTree.nodes);
-    _.forEach(curTree.localities, localityValues => {
-      _.forEach(localityValues, recur);
+    forEach(curTree.localities, localityValues => {
+      forEach(localityValues, recur);
     });
   }
   recur(tree);

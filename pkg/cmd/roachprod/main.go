@@ -478,8 +478,20 @@ destroyed:
 	}),
 }
 
-var loadBalanceCmd = &cobra.Command{
-	Use:   "load-balance <cluster>",
+var loadBalancerCmd = &cobra.Command{
+	Use:   "load-balancer [command]",
+	Short: "manage and query load balancers",
+	Long:  `create load balancers for specific services, query the IP or postgres URL of a load balancer`,
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.CreateLoadBalancer(context.Background(), config.Logger,
+			args[0], isSecure, virtualClusterName, sqlInstance,
+		)
+	}),
+}
+
+var createLoadBalancerCmd = &cobra.Command{
+	Use:   "create <cluster>",
 	Short: "create a load balancer for a cluster",
 	Long: `Create a load balancer for a specific service (port), system by default, for the given cluster.
 
@@ -495,6 +507,47 @@ These resources will automatically be destroyed when the cluster is destroyed.
 		return roachprod.CreateLoadBalancer(context.Background(), config.Logger,
 			args[0], isSecure, virtualClusterName, sqlInstance,
 		)
+	}),
+}
+
+var loadBalancerPGUrl = &cobra.Command{
+	Use:   "pgurl <cluster>",
+	Short: "get the postgres URL of a load balancer",
+	Long: fmt.Sprintf(`Get the postgres URL of a load balancer.
+%[1]s`, strings.TrimSpace(AuthModeHelp)),
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		auth, err := resolveAuthMode()
+		if err != nil {
+			return err
+		}
+		url, err := roachprod.LoadBalancerPgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
+			External:           external,
+			Secure:             isSecure,
+			VirtualClusterName: virtualClusterName,
+			SQLInstance:        sqlInstance,
+			Auth:               auth,
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Println(url)
+		return nil
+	}),
+}
+
+var loadBalancerIP = &cobra.Command{
+	Use:   "ip <cluster>",
+	Short: "get the IP address of a load balancer",
+	Long:  "Get the IP address of a load balancer.",
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		ip, err := roachprod.LoadBalancerIP(context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance)
+		if err != nil {
+			return err
+		}
+		fmt.Println(ip)
+		return nil
 	}),
 }
 
@@ -1078,31 +1131,16 @@ var sqlCmd = &cobra.Command{
 var pgurlCmd = &cobra.Command{
 	Use:   "pgurl <cluster> --auth-mode <auth-mode>",
 	Short: "generate pgurls for the nodes in a cluster",
-	Long: `Generate pgurls for the nodes in a cluster.
+	Long: fmt.Sprintf(`Generate pgurls for the nodes in a cluster.
 
-The command generates postgres urls for the specified nodes in a cluster.
-Both the nodes or a load balancer can be specified as the target of the pgurl.
-
-Examples of <cluster>:
-	cluster-name:1-3
-	cluster-name:lb
-
---auth-mode specifies the method of authentication unless --insecure is passed.
-Defaults to root if not passed. Available auth-modes are:
-
-	root: authenticates with the root user and root certificates
-
-	user-password: authenticates with the default roachprod user and password
-
-	user-cert: authenticates with the default roachprod user and certificates
-`,
+%[1]s
+`, strings.TrimSpace(AuthModeHelp)),
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		auth, ok := pgAuthModes[authMode]
-		if !ok {
-			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
+		auth, err := resolveAuthMode()
+		if err != nil {
+			return err
 		}
-
 		urls, err := roachprod.PgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
 			External:           external,
 			Secure:             isSecure,
@@ -1116,6 +1154,24 @@ Defaults to root if not passed. Available auth-modes are:
 		fmt.Println(strings.Join(urls, " "))
 		return nil
 	}),
+}
+
+const AuthModeHelp = `
+--auth-mode specifies the method of authentication unless --insecure is passed.
+Defaults to root if not passed. Available auth-modes are:
+
+	root: authenticates with the root user and root certificates
+
+	user-password: authenticates with the default roachprod user and password
+
+	user-cert: authenticates with the default roachprod user and certificates`
+
+func resolveAuthMode() (install.PGAuthMode, error) {
+	auth, ok := pgAuthModes[authMode]
+	if !ok {
+		return -1, errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
+	}
+	return auth, nil
 }
 
 var pprofCmd = &cobra.Command{
@@ -1786,6 +1842,26 @@ var fluentBitStopCmd = &cobra.Command{
 	}),
 }
 
+var opentelemetryStartCmd = &cobra.Command{
+	Use:   "opentelemetry-start <cluster>",
+	Short: "Install and start the OpenTelemetry Collector",
+	Long:  "Install and start the OpenTelemetry Collector",
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.StartOpenTelemetry(context.Background(), config.Logger, args[0], opentelemetryConfig)
+	}),
+}
+
+var opentelemetryStopCmd = &cobra.Command{
+	Use:   "opentelemetry-stop <cluster>",
+	Short: "Stop the OpenTelemetry Collector",
+	Long:  "Stop the OpenTelemetry Collector",
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.StopOpenTelemetry(context.Background(), config.Logger, args[0])
+	}),
+}
+
 func main() {
 	_ = roachprod.InitProviders()
 	providerOptsContainer = vm.CreateProviderOptionsContainer()
@@ -1799,7 +1875,7 @@ func main() {
 		resetCmd,
 		destroyCmd,
 		extendCmd,
-		loadBalanceCmd,
+		loadBalancerCmd,
 		listCmd,
 		syncCmd,
 		gcCmd,
@@ -1848,7 +1924,12 @@ func main() {
 		jaegerURLCmd,
 		fluentBitStartCmd,
 		fluentBitStopCmd,
+		opentelemetryStartCmd,
+		opentelemetryStopCmd,
 	)
+	loadBalancerCmd.AddCommand(createLoadBalancerCmd)
+	loadBalancerCmd.AddCommand(loadBalancerPGUrl)
+	loadBalancerCmd.AddCommand(loadBalancerIP)
 	setBashCompletionFunction()
 
 	// Add help about specifying nodes

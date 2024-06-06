@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { cockroach } from "src/js/protos";
+
 import KeyVisSamplesResponse = cockroach.server.serverpb.KeyVisSamplesResponse;
 import IKeyVisSample = cockroach.server.serverpb.KeyVisSamplesResponse.IKeyVisSample;
 import IBucket = cockroach.server.serverpb.KeyVisSamplesResponse.IBucket;

@@ -10,17 +10,18 @@
 
 import React, { useContext, useEffect, useRef } from "react";
 import classNames from "classnames/bind";
-import { getStackedBarOpts, stack } from "./bars";
-import uPlot, { AlignedData } from "uplot";
-import styles from "./bargraph.module.scss";
+import uPlot, { AlignedData, Options } from "uplot";
+
 import { Visualization } from "../visualization";
 import {
   AxisUnits,
   calculateXAxisDomainBarChart,
   calculateYAxisDomain,
 } from "../utils/domain";
-import { Options } from "uplot";
 import { TimezoneContext } from "../../contexts";
+
+import styles from "./bargraph.module.scss";
+import { getStackedBarOpts, stack } from "./bars";
 
 const cx = classNames.bind(styles);
 

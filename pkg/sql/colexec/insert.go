@@ -217,7 +217,7 @@ func (v *vectorInserter) checkMutationInput(ctx context.Context, b coldata.Batch
 		nulls := vec.Nulls()
 		for r := 0; r < b.Length(); r++ {
 			if !bools[r] && !nulls.NullAt(r) {
-				return row.CheckFailed(ctx, v.semaCtx, v.flowCtx.EvalCtx.SessionData(), v.desc, ch)
+				return row.CheckFailed(ctx, v.flowCtx.EvalCtx, v.semaCtx, v.flowCtx.EvalCtx.SessionData(), v.desc, ch)
 			}
 		}
 		colIdx++
