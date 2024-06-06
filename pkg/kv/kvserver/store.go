@@ -1625,7 +1625,7 @@ func NewStore(
 		updateSystemConfigUpdateQueueLimits)
 
 	if s.cfg.Gossip != nil {
-		s.storeGossip = NewStoreGossip(cfg.Gossip, s, cfg.TestingKnobs.GossipTestingKnobs)
+		s.storeGossip = NewStoreGossip(cfg.Gossip, s, cfg.TestingKnobs.GossipTestingKnobs, timeutil.DefaultTimeSource{})
 
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(

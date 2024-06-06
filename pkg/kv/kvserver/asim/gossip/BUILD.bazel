@@ -16,6 +16,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
     ],
 )
 

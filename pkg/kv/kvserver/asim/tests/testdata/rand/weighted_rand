@@ -73,7 +73,7 @@ configurations generated using seed 5571782338101878760
 	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
-	stores(6)=[s1n1=(replicas(132)),s2n1=(replicas(130)),s3n2=(replicas(131)),s4n2=(replicas(437)),s5n3=(replicas(428)),s6n3=(replicas(431))]
+	stores(6)=[s1n1=(replicas(132)),s2n1=(replicas(130)),s3n2=(replicas(129)),s4n2=(replicas(439)),s5n3=(replicas(433)),s6n3=(replicas(426))]
 sample1: pass
 ----------------------------------
 sample2: start running
