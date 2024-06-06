@@ -765,6 +765,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			timerDuration,
 			func() {
 				cancelQuery()
+				// Also cancel the transactions context, so that there is no danger
+				// getting stuck rolling back.
+				ex.state.ctxCancelFn()
 				queryTimedOut = true
 				queryDoneAfterFunc <- struct{}{}
 			})

@@ -94,6 +94,10 @@ type txnState struct {
 	// tracing. This context is hijacked when session tracing is enabled.
 	Ctx context.Context
 
+	// txnCancelFn is a function that can be used to cancel the current
+	// txn context.
+	ctxCancelFn context.CancelFunc
+
 	// recordingThreshold, is not zero, indicates that sp is recording and that
 	// the recording should be dumped to the log if execution of the transaction
 	// took more than this.
@@ -204,17 +208,18 @@ func (ts *txnState) resetForNewSQLTxn(
 	// (automatic or user-directed) retries. The span is closed by finishSQLTxn().
 	opName := sqlTxnName
 	alreadyRecording := tranCtx.sessionTracing.Enabled()
-
+	ctx, cancelFn := context.WithCancel(connCtx)
 	var sp *tracing.Span
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
 	if alreadyRecording || duration > 0 {
-		ts.Ctx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName,
+		ts.Ctx, sp = tracing.EnsureChildSpan(ctx, tranCtx.tracer, opName,
 			tracing.WithRecording(tracingpb.RecordingVerbose))
 	} else if ts.testingForceRealTracingSpans {
-		ts.Ctx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName, tracing.WithForceRealSpan())
+		ts.Ctx, sp = tracing.EnsureChildSpan(ctx, tranCtx.tracer, opName, tracing.WithForceRealSpan())
 	} else {
-		ts.Ctx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName)
+		ts.Ctx, sp = tracing.EnsureChildSpan(ctx, tranCtx.tracer, opName)
 	}
+	ts.ctxCancelFn = cancelFn
 	if txnType == implicitTxn {
 		sp.SetTag("implicit", attribute.StringValue("true"))
 	}
