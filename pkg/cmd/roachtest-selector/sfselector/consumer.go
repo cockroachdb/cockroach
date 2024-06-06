@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 
 	"cloud.google.com/go/storage"
@@ -90,6 +91,10 @@ func ReadTestsToRun(
 			totalRuns:           getTotalRuns(d[3]),
 		}
 	}
+	//testsToRun := map[string]struct{}{
+	//	"schemachange/secondary-index-multi-version": {},
+	//	"sqlsmith/setup=tpcc/setting=ddl-nodrop":     {},
+	//}
 	selectedTestsCount := 0
 	for i := range tests {
 		if testShouldBeSkipped(testNamesToRun, tests[i], suite) {
@@ -100,6 +105,21 @@ func ReadTestsToRun(
 		}
 	}
 	return selectedTestsCount, nil
+}
+
+func sortTestsByDuration(
+	tests []registry.TestSpec, testNamesToRun map[string]*testInfo,
+) []registry.TestSpec {
+	slices.SortFunc(tests, func(t1, t2 registry.TestSpec) int {
+		if _, ok := testNamesToRun[t1.Name]; !ok {
+			return 0
+		}
+		if _, ok := testNamesToRun[t2.Name]; !ok {
+			return 0
+		}
+		return int(testNamesToRun[t2.Name].avgDurationInMillis - testNamesToRun[t1.Name].avgDurationInMillis)
+	})
+	return tests
 }
 
 // getDuration extracts the duration from the csv data

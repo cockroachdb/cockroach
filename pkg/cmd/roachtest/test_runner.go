@@ -652,18 +652,22 @@ func (r *testRunner) runWorker(
 				}
 			}
 		}
-
+		wg := sync.WaitGroup{}
 		// We could not find a test that can reuse the cluster. Destroy the cluster
 		// and search for a new test.
 		if testToRun.noWork {
 			if c != nil {
-				wStatus.SetStatus("destroying cluster")
-				// We failed to find a test that can take advantage of this cluster. So
-				// we're going to release it, which will deallocate its resources.
-				l.PrintfCtx(ctx, "No tests that can reuse cluster %s found. Destroying.", c)
-				// We use a context that can't be canceled for the Destroy().
-				c.Destroy(context.Background(), closeLogger, l)
-				wStatus.SetCluster(nil)
+				wg.Add(1)
+				go func(ci *clusterImpl) {
+					defer wg.Done()
+					wStatus.SetStatus("destroying cluster")
+					// We failed to find a test that can take advantage of this cluster. So
+					// we're going to release it, which will deallocate its resources.
+					l.PrintfCtx(ctx, "No tests that can reuse cluster %s found. Destroying.", c)
+					// We use a context that can't be canceled for the Destroy().
+					ci.Destroy(context.Background(), closeLogger, l)
+					wStatus.SetCluster(nil)
+				}(c)
 				c = nil
 			}
 
@@ -786,6 +790,7 @@ func (r *testRunner) runWorker(
 		if err != nil {
 			return err
 		}
+		wg.Wait()
 		t := &testImpl{
 			spec:                   &testToRun.spec,
 			cockroach:              cockroach[arch],
