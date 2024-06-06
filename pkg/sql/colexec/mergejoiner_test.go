@@ -1739,6 +1739,8 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	nTuples := coldata.BatchSize() * 4
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	diskQueueMemAcc := testMemMonitor.MakeBoundAccount()
+	defer diskQueueMemAcc.Close(ctx)
 	typs := []*types.T{types.Int}
 	colsLeft := []*coldata.Vec{testAllocator.NewVec(typs[0], nTuples)}
 	colsRight := []*coldata.Vec{testAllocator.NewVec(typs[0], nTuples)}
@@ -1756,7 +1758,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 		leftSource, rightSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-		testDiskAcc, testMemAcc, &evalCtx,
+		testDiskAcc, &diskQueueMemAcc, &evalCtx,
 	)
 	a.Init(ctx)
 	i, count, expVal := 0, 0, int64(0)
@@ -1808,6 +1810,8 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	diskQueueMemAcc := testMemMonitor.MakeBoundAccount()
+	defer diskQueueMemAcc.Close(ctx)
 	for _, numInputBatches := range []int{1, 2, 16} {
 		t.Run(fmt.Sprintf("numInputBatches=%d", numInputBatches),
 			func(t *testing.T) {
@@ -1826,7 +1830,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 					leftSource, rightSource, typs, typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					testDiskAcc, testMemAcc, &evalCtx,
+					testDiskAcc, &diskQueueMemAcc, &evalCtx,
 				)
 				a.Init(ctx)
 				i := 0
@@ -1864,6 +1868,8 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	diskQueueMemAcc := testMemMonitor.MakeBoundAccount()
+	defer diskQueueMemAcc.Close(ctx)
 	for _, groupSize := range []int{coldata.BatchSize() / 8, coldata.BatchSize() / 4, coldata.BatchSize() / 2} {
 		if groupSize == 0 {
 			// We might be varying coldata.BatchSize() so that when it is divided by
@@ -1901,7 +1907,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
-						testDiskAcc, testMemAcc, &evalCtx,
+						testDiskAcc, &diskQueueMemAcc, &evalCtx,
 					)
 					a.Init(ctx)
 					i := 0
@@ -2007,6 +2013,8 @@ func TestMergeJoinerRandomized(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
+	diskQueueMemAcc := testMemMonitor.MakeBoundAccount()
+	defer diskQueueMemAcc.Close(ctx)
 	for _, numInputBatches := range []int{1, 2, 16, 256} {
 		for _, maxRunLength := range []int64{2, 3, 100} {
 			for _, skipValues := range []bool{false, true} {
@@ -2024,7 +2032,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-						testDiskAcc, testMemAcc, &evalCtx,
+						testDiskAcc, &diskQueueMemAcc, &evalCtx,
 					)
 					a.Init(ctx)
 					i := 0

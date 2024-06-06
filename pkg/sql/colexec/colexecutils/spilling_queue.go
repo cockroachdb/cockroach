@@ -115,6 +115,11 @@ type NewSpillingQueueArgs struct {
 // If fdSemaphore is nil, no Acquire or Release calls will happen. The caller
 // may want to do this if requesting FDs up front.
 func NewSpillingQueue(args *NewSpillingQueueArgs) *SpillingQueue {
+	if args.UnlimitedAllocator.Acc() == args.DiskQueueMemAcc {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"memory accounts for allocator and disk queue must be different",
+		))
+	}
 	var items []coldata.Batch
 	if args.MemoryLimit > 0 {
 		items = make([]coldata.Batch, spillingQueueInitialItemsLen)

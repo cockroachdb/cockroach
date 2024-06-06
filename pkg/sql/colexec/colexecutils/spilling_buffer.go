@@ -107,6 +107,11 @@ func NewSpillingBuffer(
 	diskQueueMemAcc *mon.BoundAccount,
 	colIdxs ...int,
 ) *SpillingBuffer {
+	if unlimitedAllocator.Acc() == diskQueueMemAcc {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"memory accounts for allocator and disk queue must be different",
+		))
+	}
 	if colIdxs == nil {
 		colIdxs = make([]int, len(inputTypes))
 		for i := range colIdxs {
