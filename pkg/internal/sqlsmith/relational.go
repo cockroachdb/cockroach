@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -111,6 +113,7 @@ var (
 		{1, makeRestore},
 		{1, makeExport},
 		{1, makeImport},
+		{2, makeCreateStats},
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
@@ -1834,4 +1837,62 @@ func (s *Smither) makeReturning(tables []*tableRef) (*tree.ReturningExprs, colRe
 		}
 	}
 	return &returning, returningRefs
+}
+
+func makeCreateStats(s *Smither) (tree.Statement, bool) {
+	table, ok := s.getRandTable()
+	if !ok {
+		return nil, false
+	}
+
+	// Names slightly change behavior of statistics, so pick randomly between:
+	// ~67%: __auto__
+	// ~17%: random
+	// ~17%: blank
+	var name tree.Name
+	switch s.d6() {
+	case 1, 2, 3, 4:
+		name = jobspb.AutoStatsName
+	case 5:
+		name = s.name("stats")
+	}
+
+	// Pick specific columns ~17% of the time.
+	var columns tree.NameList
+	if name != jobspb.AutoStatsName && s.coin() {
+		for _, col := range table.Columns {
+			if !colinfo.IsSystemColumnName(string(col.Name)) {
+				columns = append(columns, col.Name)
+			}
+		}
+		s.rnd.Shuffle(len(columns), func(i, j int) {
+			columns[i], columns[j] = columns[j], columns[i]
+		})
+		columns = columns[0:s.rnd.Intn(len(columns))]
+	}
+
+	var options tree.CreateStatsOptions
+	if name == jobspb.AutoStatsName {
+		options.Throttling = 0.9
+		// Auto-stats uses -30s by default, but this will make things
+		// non-deterministic, so we choose the smallest legal AOST.
+		options.AsOf = tree.AsOfClause{Expr: tree.NewStrVal("-0.001ms")}
+	} else {
+		if s.coin() {
+			options.Throttling = s.rnd.Float64()
+		}
+		if s.coin() {
+			options.AsOf = tree.AsOfClause{Expr: tree.NewStrVal("-0.001ms")}
+		}
+		if s.coin() {
+			options.UsingExtremes = true
+		}
+	}
+
+	return &tree.CreateStats{
+		Name:        name,
+		ColumnNames: columns,
+		Table:       table.TableName,
+		Options:     options,
+	}, true
 }

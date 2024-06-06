@@ -435,21 +435,24 @@ var SimpleNames = simpleOption("simple names", func(s *Smither) {
 	s.simpleNames = true
 })
 
-// MutationsOnly causes the Smither to emit 80% INSERT, 10% UPDATE, and 10%
-// DELETE statements.
+// MutationsOnly causes the Smither to emit 70% INSERT, 10% UPDATE, 10% DELETE,
+// and 10% CREATE STATISTICS statements.
 var MutationsOnly = simpleOption("mutations only", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
-		{8, makeInsert},
+		{7, makeInsert},
 		{1, makeUpdate},
 		{1, makeDelete},
+		{1, makeCreateStats},
 	}
 })
 
-// InsUpdOnly causes the Smither to emit 90% INSERT and 10% UPDATE statements.
+// InsUpdOnly causes the Smither to emit 80% INSERT, 10% UPDATE, and 10% CREATE
+// STATISTICS statements.
 var InsUpdOnly = simpleOption("inserts and updates only", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
-		{9, makeInsert},
+		{8, makeInsert},
 		{1, makeUpdate},
+		{1, makeCreateStats},
 	}
 })
 
