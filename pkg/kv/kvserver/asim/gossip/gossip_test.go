@@ -115,6 +115,10 @@ func TestGossip(t *testing.T) {
 	// Assert that the lease counts are as expected after transferring all of
 	// the leases to s2.
 	require.Equal(t, int32(0), (*details[1])[1].Desc.Capacity.LeaseCount)
-	require.Equal(t, int32(100), (*details[1])[2].Desc.Capacity.LeaseCount)
+	// Depending on the capacity delta threshold, s2 may not have gossiped
+	// exactly when it reached 100 leases, as it earlier gossiped at 90+ leases,
+	// so 100 may be < lastGossip * capacityDeltaThreshold, not triggering
+	// gossip. Assert that the lease count gossiped is at least 90.
+	require.Greater(t, (*details[1])[2].Desc.Capacity.LeaseCount, int32(90))
 	require.Equal(t, int32(0), (*details[1])[3].Desc.Capacity.LeaseCount)
 }
