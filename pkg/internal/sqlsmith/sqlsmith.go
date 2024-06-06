@@ -355,6 +355,7 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 		{5, makeInsert},
 		{5, makeUpdate},
 		{1, makeDelete},
+		{1, makeCreateStats},
 		// If we don't have any DDL's, allow for use of savepoints and transactions.
 		{2, makeBegin},
 		{2, makeSavepoint},
@@ -366,13 +367,14 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 })
 
 // OnlySingleDMLs causes the Smither to only emit single-statement DML (SELECT,
-// INSERT, UPDATE, DELETE).
+// INSERT, UPDATE, DELETE) and CREATE STATISTICS statements.
 var OnlySingleDMLs = simpleOption("only single DMLs", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
 		{20, makeSelect},
 		{5, makeInsert},
 		{5, makeUpdate},
 		{1, makeDelete},
+		{1, makeCreateStats},
 	}
 })
 
@@ -435,21 +437,24 @@ var SimpleNames = simpleOption("simple names", func(s *Smither) {
 	s.simpleNames = true
 })
 
-// MutationsOnly causes the Smither to emit 80% INSERT, 10% UPDATE, and 10%
-// DELETE statements.
+// MutationsOnly causes the Smither to emit 70% INSERT, 10% UPDATE, 10% DELETE,
+// and 10% CREATE STATISTICS statements.
 var MutationsOnly = simpleOption("mutations only", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
-		{8, makeInsert},
+		{7, makeInsert},
 		{1, makeUpdate},
 		{1, makeDelete},
+		{1, makeCreateStats},
 	}
 })
 
-// InsUpdOnly causes the Smither to emit 90% INSERT and 10% UPDATE statements.
+// InsUpdOnly causes the Smither to emit 80% INSERT, 10% UPDATE, and 10% CREATE
+// STATISTICS statements.
 var InsUpdOnly = simpleOption("inserts and updates only", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
-		{9, makeInsert},
+		{8, makeInsert},
 		{1, makeUpdate},
+		{1, makeCreateStats},
 	}
 })
 

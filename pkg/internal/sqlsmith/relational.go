@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -111,6 +113,7 @@ var (
 		{1, makeRestore},
 		{1, makeExport},
 		{1, makeImport},
+		{1, makeCreateStats},
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
@@ -1834,4 +1837,71 @@ func (s *Smither) makeReturning(tables []*tableRef) (*tree.ReturningExprs, colRe
 		}
 	}
 	return &returning, returningRefs
+}
+
+func makeCreateStats(s *Smither) (tree.Statement, bool) {
+	table, ok := s.getRandTable()
+	if !ok {
+		return nil, false
+	}
+
+	// Names slightly change behavior of statistics, so pick randomly between:
+	// ~50%: __auto__ (simulating auto stats)
+	// ~33%: random (simulating manual CREATE STATISTICS statements)
+	// ~17%: blank (simulating manual ANALYZE statements)
+	var name tree.Name
+	switch s.d6() {
+	case 1, 2, 3:
+		name = jobspb.AutoStatsName
+	case 4, 5:
+		name = s.name("stats")
+	}
+
+	// Pick specific columns ~17% of the time. We only do this for simulated
+	// manual CREATE STATISTICS statements because neither auto stats nor ANALYZE
+	// allow column selection.
+	var columns tree.NameList
+	if name != jobspb.AutoStatsName && name != "" && s.coin() {
+		for _, col := range table.Columns {
+			if !colinfo.IsSystemColumnName(string(col.Name)) {
+				columns = append(columns, col.Name)
+			}
+		}
+		s.rnd.Shuffle(len(columns), func(i, j int) {
+			columns[i], columns[j] = columns[j], columns[i]
+		})
+		columns = columns[0:s.rnd.Intn(len(columns))]
+	}
+
+	var options tree.CreateStatsOptions
+	if name == jobspb.AutoStatsName {
+		// For auto stats we always set throttling and AOST.
+		options.Throttling = 0.9
+		// For auto stats we use AOST -30s by default, but this will make things
+		// non-deterministic, so we use the smallest legal AOST instead.
+		options.AsOf = tree.AsOfClause{Expr: tree.NewStrVal("-0.001ms")}
+	} else if name == "" {
+		// ANALYZE only sets AOST.
+		options.AsOf = tree.AsOfClause{Expr: tree.NewStrVal("-0.001ms")}
+	} else {
+		// For CREATE STATISTICS we randomly set options.
+		// Set throttling ~17% of the time.
+		if s.coin() {
+			options.Throttling = s.rnd.Float64()
+		}
+		// Set AOST ~17% of the time.
+		if s.coin() {
+			options.AsOf = tree.AsOfClause{Expr: tree.NewStrVal("-0.001ms")}
+		}
+		// Set USING EXTREMES ~17% of the time.
+		options.UsingExtremes = s.coin()
+		// TODO(93998): Add random predicate when we support WHERE.
+	}
+
+	return &tree.CreateStats{
+		Name:        name,
+		ColumnNames: columns,
+		Table:       table.TableName,
+		Options:     options,
+	}, true
 }
