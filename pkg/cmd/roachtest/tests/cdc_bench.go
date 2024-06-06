@@ -511,7 +511,7 @@ func runCDCBenchWorkload(
 		require.NoError(t, err)
 
 		require.NoError(t, conn.QueryRowContext(ctx, fmt.Sprintf(
-			`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH format = '%s', initial_scan = 'no'`,
+			`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH format = '%s', initial_scan = 'no', resolved`, // added resolved to test that
 			sinkURI, format)).
 			Scan(&jobID))
 

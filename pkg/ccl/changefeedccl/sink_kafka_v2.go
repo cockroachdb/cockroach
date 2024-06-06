@@ -271,8 +271,13 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 			// this is actually less efficient but easier for switching around what we're testing
 			msgs2 := make([]kafka.Message, len(msgs))
 			for i, m := range msgs {
+				var key []byte
+				if m.Key != nil { // resolved payloads have nil keys
+					key = m.Key.(sarama.ByteEncoder)
+				}
+
 				msgs2[i] = kafka.Message{
-					Key:   m.Key.(sarama.ByteEncoder),
+					Key:   key,
 					Value: m.Value.(sarama.ByteEncoder),
 					Topic: m.Topic,
 				}
@@ -330,35 +335,32 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 	forEachTopic func(func(topic string) error) error,
 	retryOpts retry.Options,
 ) error {
-	// disabled to reduce variables
-	return nil
+	const metadataRefreshMinDuration = time.Minute
+	if timeutil.Since(k.lastMetadataRefresh) > metadataRefreshMinDuration {
+		if err := k.client.RefreshMetadata(k.topics.DisplayNamesSlice()...); err != nil {
+			return err
+		}
+		k.lastMetadataRefresh = timeutil.Now()
+	}
 
-	// const metadataRefreshMinDuration = time.Minute
-	// if timeutil.Since(k.lastMetadataRefresh) > metadataRefreshMinDuration {
-	// 	if err := k.client.RefreshMetadata(k.topics.DisplayNamesSlice()...); err != nil {
-	// 		return err
-	// 	}
-	// 	k.lastMetadataRefresh = timeutil.Now()
-	// }
-
-	// return forEachTopic(func(topic string) error {
-	// 	partitions, err := k.client.Partitions(topic)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	for _, partition := range partitions {
-	// 		msgs := []*sarama.ProducerMessage{{
-	// 			Topic:     topic,
-	// 			Partition: partition,
-	// 			Key:       nil,
-	// 			Value:     sarama.ByteEncoder(body),
-	// 		}}
-	// 		if err := k.Flush(ctx, msgs); err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	// 	return nil
-	// })
+	return forEachTopic(func(topic string) error {
+		partitions, err := k.client.Partitions(topic)
+		if err != nil {
+			return err
+		}
+		for _, partition := range partitions {
+			msgs := []*sarama.ProducerMessage{{
+				Topic:     topic,
+				Partition: partition,
+				Key:       nil,
+				Value:     sarama.ByteEncoder(body),
+			}}
+			if err := k.Flush(ctx, msgs); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // MakeBatchBuffer implements SinkClient.
