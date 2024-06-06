@@ -1,2 +1,0 @@
-pause_all_jobs_stmt ::=
-	'PAUSE' 'ALL' name 'JOBS'

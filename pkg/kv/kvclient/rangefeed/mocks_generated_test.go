@@ -12,6 +12,7 @@ import (
 	kvcoord "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+	span "github.com/cockroachdb/cockroach/pkg/util/span"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -55,6 +56,25 @@ func (mr *MockDBMockRecorder) RangeFeed(arg0, arg1, arg2, arg3 interface{}, arg4
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeed", reflect.TypeOf((*MockDB)(nil).RangeFeed), varargs...)
+}
+
+// RangeFeedFromFrontier mocks base method.
+func (m *MockDB) RangeFeedFromFrontier(arg0 context.Context, arg1 span.Frontier, arg2 chan<- kvcoord.RangeFeedMessage, arg3 ...kvcoord.RangeFeedOption) error {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RangeFeedFromFrontier", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RangeFeedFromFrontier indicates an expected call of RangeFeedFromFrontier.
+func (mr *MockDBMockRecorder) RangeFeedFromFrontier(arg0, arg1, arg2 interface{}, arg3 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeFeedFromFrontier", reflect.TypeOf((*MockDB)(nil).RangeFeedFromFrontier), varargs...)
 }
 
 // Scan mocks base method.

@@ -318,10 +318,15 @@ func encodeSpecForSpans(
 	previousReplicatedTime hlc.Timestamp,
 	spans []roachpb.Span,
 ) []byte {
+	var progress []jobspb.ResolvedSpan
+	for _, span := range spans {
+		progress = append(progress, jobspb.ResolvedSpan{Span: span, Timestamp: previousReplicatedTime})
+	}
 	spec := &streampb.StreamPartitionSpec{
 		InitialScanTimestamp:        initialScanTime,
 		PreviousReplicatedTimestamp: previousReplicatedTime,
 		Spans:                       spans,
+		Progress:                    progress,
 		Config: streampb.StreamPartitionSpec_ExecutionConfig{
 			MinCheckpointFrequency: 10 * time.Millisecond,
 		},

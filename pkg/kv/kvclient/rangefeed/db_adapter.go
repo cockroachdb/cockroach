@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
 
@@ -77,6 +78,16 @@ func (dbc *dbAdapter) RangeFeed(
 	opts ...kvcoord.RangeFeedOption,
 ) error {
 	return dbc.distSender.RangeFeed(ctx, spans, startFrom, eventC, opts...)
+}
+
+// RangeFeedFromFrontier is part of the DB interface.
+func (dbc *dbAdapter) RangeFeedFromFrontier(
+	ctx context.Context,
+	frontier span.Frontier,
+	eventC chan<- kvcoord.RangeFeedMessage,
+	opts ...kvcoord.RangeFeedOption,
+) error {
+	return dbc.distSender.RangeFeedFromFrontier(ctx, frontier, eventC, opts...)
 }
 
 // Scan is part of the DB interface.

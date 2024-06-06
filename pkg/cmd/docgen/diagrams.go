@@ -699,6 +699,11 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'WHERE'")},
 	},
 	{
+		name:    "cancel_all_jobs",
+		stmt:    "cancel_all_jobs_stmt",
+		replace: map[string]string{"name": "( 'BACKUP' | 'CHANGEFEED' | 'RESTORE' | 'IMPORT')"},
+	},
+	{
 		name:    "cancel_job",
 		stmt:    "cancel_jobs_stmt",
 		replace: map[string]string{"a_expr": "job_id"},
@@ -1173,9 +1178,15 @@ var specs = []stmtSpec{
 		inline: []string{"storage_parameter_list"},
 	},
 	{
+		name:    "pause_all_jobs",
+		stmt:    "pause_all_jobs_stmt",
+		replace: map[string]string{"name": "( 'BACKUP' | 'CHANGEFEED' | 'RESTORE' | 'IMPORT')"},
+	},
+	{
 		name:    "pause_job",
 		stmt:    "pause_jobs_stmt",
 		replace: map[string]string{"a_expr": "job_id"},
+		inline:  []string{"for_schedules_clause"},
 		unlink:  []string{"job_id"},
 	},
 	{
@@ -1256,6 +1267,11 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'REPLICATION' 'STREAM' 'FROM'"),
 		},
+	},
+	{
+		name:    "resume_all_jobs",
+		stmt:    "resume_all_jobs_stmt",
+		replace: map[string]string{"name": "( 'BACKUP' | 'CHANGEFEED' | 'RESTORE' | 'IMPORT')"},
 	},
 	{
 		name:    "resume_job",
@@ -1442,13 +1458,16 @@ var specs = []stmtSpec{
 	{
 		name:   "show_backup",
 		stmt:   "show_backup_stmt",
-		inline: []string{"opt_with_options"},
+		inline: []string{"opt_with_options", "show_backup_details", "opt_with_show_backup_options", "opt_with_show_backup_connection_options_list", "show_backup_connection_options_list", "show_backup_options_list"},
 		replace: map[string]string{
-			"'BACKUPS' 'IN' string_or_placeholder":                      "'BACKUPS' 'IN' location",
-			"'BACKUP' string_or_placeholder 'IN' string_or_placeholder": "'BACKUP' subdirectory 'IN' location",
-			"'BACKUP' 'SCHEMAS' string_or_placeholder":                  "'BACKUP' 'SCHEMAS' location",
+			"'BACKUPS' 'IN' string_or_placeholder_opt_list":                                       "'BACKUPS' 'IN' collectionURI",
+			"'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list":                  "'BACKUP' subdirectory 'IN' collectionURI",
+			"'BACKUP' 'SCHEMAS' string_or_placeholder":                                            "'BACKUP' 'SCHEMAS' collectionURI_path",
+			"'BACKUP' 'SCHEMAS' 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list": "'BACKUP' 'SCHEMAS' 'FROM' subdirectory 'IN' collectionURI",
+			"'BACKUP' string_or_placeholder":                                                      "'BACKUP' collectionURI_path",
+			"'BACKUP' 'CONNECTION' string_or_placeholder":                                         "'BACKUP' 'CONNECTION' collectionURI",
 		},
-		unlink: []string{"subdirectory", "location", "location_opt_list"},
+		unlink: []string{"subdirectory", "collectionURI", "collectionURI_path"},
 	},
 	{
 		name:    "show_jobs",
