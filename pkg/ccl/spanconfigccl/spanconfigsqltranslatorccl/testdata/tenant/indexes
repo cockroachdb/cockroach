@@ -51,9 +51,9 @@ INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
 #               the same as the table's config.
 translate database=db table=t
 ----
-/Tenant/10/Table/106{-/2}                  num_replicas=7
-/Tenant/10/Table/106/{2-3}                 num_replicas=7 num_voters=5
-/Tenant/10/Table/10{6/3-7}                 num_replicas=7
+/Tenant/10/Table/106{-/2}                  num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/{2-3}                 num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/10{6/3-7}                 num_replicas=7 rangefeed_enabled=true
 
 # Configure GC ttl on the database and override it for the index. The table
 # continues to hold a placeholder zone config.
@@ -64,9 +64,9 @@ ALTER INDEX db.t@idx CONFIGURE ZONE USING gc.ttlseconds = 25
 
 translate database=db table=t
 ----
-/Tenant/10/Table/106{-/2}                  ttl_seconds=3600 num_replicas=7
-/Tenant/10/Table/106/{2-3}                 ttl_seconds=25 num_replicas=7 num_voters=5
-/Tenant/10/Table/10{6/3-7}                 ttl_seconds=3600 num_replicas=7
+/Tenant/10/Table/106{-/2}                  ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/{2-3}                 ttl_seconds=25 num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/10{6/3-7}                 ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
 
 # Configure a zone config field on the table, so that it is no longer a
 # placeholder zone config.
@@ -89,9 +89,9 @@ INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
 
 translate database=db table=t
 ----
-/Tenant/10/Table/106{-/2}                  range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-/Tenant/10/Table/106/{2-3}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5
-/Tenant/10/Table/10{6/3-7}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
+/Tenant/10/Table/106{-/2}                  range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/{2-3}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/10{6/3-7}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
 
 block-gc-jobs
 ----
@@ -105,12 +105,12 @@ ALTER INDEX db.t@idx2 CONFIGURE ZONE USING gc.ttlseconds = 1;
 # Both the newly added index and the temporary index have the configured zone configuration.
 translate database=db table=t
 ----
-/Tenant/10/Table/106{-/2}                  range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-/Tenant/10/Table/106/{2-3}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5
-/Tenant/10/Table/106/{3-4}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-/Tenant/10/Table/106/{4-5}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=1 num_replicas=7
-/Tenant/10/Table/106/{5-6}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=1 num_replicas=7
-/Tenant/10/Table/10{6/6-7}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
+/Tenant/10/Table/106{-/2}                  range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/{2-3}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/106/{3-4}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/{4-5}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=1 num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/{5-6}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=1 num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/10{6/6-7}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
 
 unblock-gc-jobs
 ----
@@ -122,11 +122,11 @@ SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])
 # The zone configuration for the temporary index is cleaned up
 translate database=db table=t
 ----
-/Tenant/10/Table/106{-/2}                  range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-/Tenant/10/Table/106/{2-3}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5
-/Tenant/10/Table/106/{3-4}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-/Tenant/10/Table/106/{4-5}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=1 num_replicas=7
-/Tenant/10/Table/10{6/5-7}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
+/Tenant/10/Table/106{-/2}                  range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/{2-3}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/106/{3-4}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/{4-5}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=1 num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/10{6/5-7}                 range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
 
 # Create and drop an index inside the same transaction. The related
 # zone configuration should also be cleaned up.
@@ -139,4 +139,4 @@ DROP INDEX db.t2@idx
 
 translate database=db table=t2
 ----
-/Tenant/10/Table/10{7-8}                   ttl_seconds=3600 num_replicas=7
+/Tenant/10/Table/10{7-8}                   ttl_seconds=3600 num_replicas=7 rangefeed_enabled=true
