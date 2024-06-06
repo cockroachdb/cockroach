@@ -34,6 +34,23 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+var GossipWhenCapacityDeltaExceedsFraction = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.store_gossip.capacity_delta_threshold",
+	"the fraction from the last gossiped store capacity values which need be "+
+		"exceeded before the store will gossip immediately without waiting for "+
+		"the periodic gossip interval, at most kv.store_gossip.max_frequency "+
+		"frequency",
+	defaultGossipWhenCapacityDeltaExceedsFraction,
+)
+
+var MaxStoreGossipFrequency = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_gossip.max_frequency",
+	"the maximum frequency at which a store will gossip its store descriptor",
+	defaultMaxStoreGossipFrequency,
+)
+
 const (
 	// defaultGossipWhenCapacityDeltaExceedsFraction specifies the fraction from the
 	// last gossiped store capacity values which need be exceeded before the
@@ -70,11 +87,11 @@ const (
 	// gossip update.
 	systemDataGossipInterval = 1 * time.Minute
 
-	// maxStoreGossipFrequency is the maximum frequency at which a store will
-	// gossip its descriptor. Note that periodic gossip will still occur at the
-	// configured period, regardless if the last gossip was less than
+	// defaultMaxStoreGossipFrequency is the maximum frequency at which a store
+	// will gossip its descriptor. Note that periodic gossip will still occur at
+	// the configured period, regardless if the last gossip was less than
 	// maxStoreGossipFrequency ago.
-	maxStoreGossipFrequency = 2 * time.Second
+	defaultMaxStoreGossipFrequency = 2 * time.Second
 )
 
 var errPeriodicGossipsDisabled = errors.New("periodic gossip is disabled")
@@ -321,7 +338,8 @@ func (s *StoreGossip) canEagerlyGossipNow() (canGossip bool) {
 	s.cachedCapacity.Lock()
 	defer s.cachedCapacity.Unlock()
 
-	nextValidGossipTime := s.cachedCapacity.lastGossipedTime.Add(maxStoreGossipFrequency)
+	nextValidGossipTime := s.cachedCapacity.lastGossipedTime.Add(
+		MaxStoreGossipFrequency.Get(s.sv))
 
 	return nextValidGossipTime.Before(now)
 }
@@ -476,7 +494,7 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 		return
 	}
 
-	gossipWhenCapacityDeltaExceedsFraction := defaultGossipWhenCapacityDeltaExceedsFraction
+	gossipWhenCapacityDeltaExceedsFraction := GossipWhenCapacityDeltaExceedsFraction.Get(s.sv)
 	if overrideCapacityDeltaFraction := s.knobs.OverrideGossipWhenCapacityDeltaExceedsFraction; overrideCapacityDeltaFraction > 0 {
 		gossipWhenCapacityDeltaExceedsFraction = overrideCapacityDeltaFraction
 	}
