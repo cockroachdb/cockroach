@@ -127,6 +127,7 @@ go_library(
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/kvadmission",
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontroller",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowdispatch",

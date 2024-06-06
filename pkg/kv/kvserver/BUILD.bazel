@@ -142,6 +142,7 @@ go_library(
         "//pkg/kv/kvserver/intentresolver",
         "//pkg/kv/kvserver/kvadmission",
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowdispatch",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowhandle",
