@@ -94,6 +94,7 @@ import changefeedsDashboard from "./dashboards/changefeeds";
 import overloadDashboard from "./dashboards/overload";
 import ttlDashboard from "./dashboards/ttl";
 import crossClusterReplicationDashboard from "./dashboards/crossClusterReplication";
+import logicalDataReplicationDashboard from "./dashboards/logicalDataReplication";
 import networkingDashboard from "./dashboards/networking";
 import ClusterSummaryBar from "./summaryBar";
 
@@ -160,6 +161,11 @@ const dashboards: { [key: string]: GraphDashboard } = {
   crossClusterReplication: {
     label: "Physical Cluster Replication",
     component: crossClusterReplicationDashboard,
+    isKvDashboard: true,
+  },
+  logicalDataReplication: {
+    label: "Logical Data Replication",
+    component: logicalDataReplicationDashboard,
     isKvDashboard: true,
   },
 };
