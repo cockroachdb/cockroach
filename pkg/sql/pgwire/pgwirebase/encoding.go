@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -221,12 +220,11 @@ func (b *ReadBuffer) GetString() (string, error) {
 	if pos == -1 {
 		return "", NewProtocolViolationErrorf("NUL terminator not found")
 	}
-	// Note: this is a conversion from a byte slice to a string which avoids
-	// allocation and copying. It is safe because we never reuse the bytes in our
-	// read buffer. It is effectively the same as: "s := string(b.Msg[:pos])"
-	s := b.Msg[:pos]
+	// This conversion is safe because we never reuse the bytes in our read
+	// buffer.
+	s := encoding.UnsafeConvertBytesToString(b.Msg[:pos])
 	b.Msg = b.Msg[pos+1:]
-	return *((*string)(unsafe.Pointer(&s))), nil
+	return s, nil
 }
 
 // GetPrepareType returns the buffer's contents as a PrepareType.
@@ -314,11 +312,13 @@ func validateArrayDimensions(nDimensions int, nElements int) error {
 }
 
 // DecodeDatum decodes bytes with specified type and format code into a datum.
+// NB: the caller is **not** allowed to mutate b.
 func DecodeDatum(
 	ctx context.Context, evalCtx *eval.Context, typ *types.T, code FormatCode, b []byte,
 ) (tree.Datum, error) {
 	id := typ.Oid()
-	// Use a direct string pointing to b where we are sure we aren't retaining this string.
+	// Use a direct string pointing to b where we are sure we aren't retaining
+	// this string.
 	bs := encoding.UnsafeConvertBytesToString(b)
 	switch code {
 	case FormatText:
@@ -398,9 +398,7 @@ func DecodeDatum(
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			// Note: we could use encoding.UnsafeConvertBytesToString here if
-			// we were guaranteed all callers never mutated b.
-			return tree.NewDBytes(tree.DBytes(string(res))), nil
+			return tree.NewDBytes(tree.DBytes(res)), nil
 		case oid.T_timestamp:
 			d, _, err := tree.ParseDTimestamp(evalCtx, bs, time.Microsecond)
 			if err != nil {
@@ -647,8 +645,7 @@ func DecodeDatum(
 
 			return &alloc.dd, nil
 		case oid.T_bytea:
-			// Note: there's an implicit string cast here reallocating b.
-			return tree.NewDBytes(tree.DBytes(b)), nil
+			return tree.NewDBytes(tree.DBytes(bs)), nil
 		case oid.T_timestamp:
 			if len(b) < 8 {
 				return nil, pgerror.Newf(pgcode.Syntax, "timestamp requires 8 bytes for binary format")
@@ -818,31 +815,23 @@ func DecodeDatum(
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		// Note: we could use bs here if we were guaranteed all callers never
-		// mutated b.
-		return tree.NewDRefCursor(string(b)), nil
+		return tree.NewDRefCursor(bs), nil
 	}
 	switch id {
 	case oid.T_text, oid.T_varchar, oid.T_unknown:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		// Note: we could use bs here if we were guaranteed all callers never
-		// mutated b.
-		return tree.NewDString(string(b)), nil
+		return tree.NewDString(bs), nil
 	case oid.T_bpchar:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		// Trim the trailing spaces
-		// Note: we could use bs here if we were guaranteed all callers never
-		// mutated b.
-		sv := strings.TrimRight(string(b), " ")
+		// Trim the trailing spaces.
+		sv := strings.TrimRight(bs, " ")
 		return tree.NewDString(sv), nil
 	case oid.T_char:
-		// Note: we could use bs here if we were guaranteed all callers never
-		// mutated b.
-		sv := string(b)
+		sv := bs
 		// Always truncate to 1 byte, and handle the null byte specially.
 		if len(b) >= 1 {
 			if b[0] == 0 {
@@ -856,9 +845,7 @@ func DecodeDatum(
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		// Note: we could use bs here if we were guaranteed all callers never
-		// mutated b.
-		return tree.NewDName(string(b)), nil
+		return tree.NewDName(bs), nil
 	}
 
 	// Fallthrough case.
