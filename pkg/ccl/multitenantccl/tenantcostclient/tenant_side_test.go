@@ -263,24 +263,22 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 var testStateCommands = map[string]func(
 	*testState, *testing.T, *datadriven.TestData, cmdArgs,
 ) string{
-	"read":                           (*testState).read,
-	"write":                          (*testState).write,
-	"await":                          (*testState).await,
-	"not-completed":                  (*testState).notCompleted,
-	"advance":                        (*testState).advance,
-	"wait-for-event":                 (*testState).waitForEvent,
-	"timers":                         (*testState).timers,
-	"cpu":                            (*testState).cpu,
-	"pgwire-egress":                  (*testState).pgwireEgress,
-	"external-egress":                (*testState).externalEgress,
-	"external-ingress":               (*testState).externalIngress,
-	"enable-external-ru-accounting":  (*testState).enableRUAccounting,
-	"disable-external-ru-accounting": (*testState).disableRUAccounting,
-	"usage":                          (*testState).usage,
-	"metrics":                        (*testState).metrics,
-	"configure":                      (*testState).configure,
-	"token-bucket":                   (*testState).tokenBucket,
-	"unblock-request":                (*testState).unblockRequest,
+	"read":             (*testState).read,
+	"write":            (*testState).write,
+	"await":            (*testState).await,
+	"not-completed":    (*testState).notCompleted,
+	"advance":          (*testState).advance,
+	"wait-for-event":   (*testState).waitForEvent,
+	"timers":           (*testState).timers,
+	"cpu":              (*testState).cpu,
+	"pgwire-egress":    (*testState).pgwireEgress,
+	"external-egress":  (*testState).externalEgress,
+	"external-ingress": (*testState).externalIngress,
+	"usage":            (*testState).usage,
+	"metrics":          (*testState).metrics,
+	"configure":        (*testState).configure,
+	"token-bucket":     (*testState).tokenBucket,
+	"unblock-request":  (*testState).unblockRequest,
 }
 
 // runOperation invokes the given operation function on a background goroutine.
@@ -368,16 +366,6 @@ func (ts *testState) externalEgress(t *testing.T, d *datadriven.TestData, args c
 			t.Errorf("OnExternalIOWait error: %s", err)
 		}
 	})
-	return ""
-}
-
-func (ts *testState) enableRUAccounting(_ *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
-	tenantcostclient.ExternalIORUAccountingMode.Override(context.Background(), &ts.settings.SV, "on")
-	return ""
-}
-
-func (ts *testState) disableRUAccounting(_ *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
-	tenantcostclient.ExternalIORUAccountingMode.Override(context.Background(), &ts.settings.SV, "off")
 	return ""
 }
 
