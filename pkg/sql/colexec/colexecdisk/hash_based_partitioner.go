@@ -332,6 +332,9 @@ func (op *hashBasedPartitioner) Init(ctx context.Context) {
 	for i := range op.inputs {
 		op.inputs[i].Init(op.Ctx)
 	}
+	for i := range op.partitionedInputs {
+		op.partitionedInputs[i].ctx = op.Ctx
+	}
 	op.cancelChecker.Init(op.Ctx)
 	op.partitionsToProcessUsingMain = make(map[int]*hbpPartitionInfo)
 	// If we are initializing the hash-based partitioner, it means that we had

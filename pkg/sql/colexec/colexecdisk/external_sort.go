@@ -675,6 +675,7 @@ func (s *externalSorter) createPartitionerToOperators(n int) {
 			s.partitionerToOperators[i] = newPartitionerToOperator(
 				s.mergeUnlimitedAllocator, s.inputTypes, s.partitioner,
 			)
+			s.partitionerToOperators[i].ctx = s.Ctx
 		}
 	}
 	for i := 0; i < n; i++ {
