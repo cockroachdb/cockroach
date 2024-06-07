@@ -49,12 +49,15 @@ type requestedStat struct {
 
 // histogramSamples is the number of sample rows to be collected for histogram
 // construction. For larger tables, it may be beneficial to increase this number
-// to get a more accurate distribution.
+// to get a more accurate distribution. The default value is 0, which means that
+// we will automatically pick a reasonable default based on the table size.
 var histogramSamples = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.stats.histogram_samples.count",
-	"number of rows sampled for histogram construction during table statistics collection",
-	10000,
+	"number of rows sampled for histogram construction during table statistics collection. "+
+		"Not setting this or setting a value of 0 means that a reasonable sample size will be "+
+		"automatically picked based on the table size.",
+	0,
 	settings.NonNegativeIntWithMaximum(math.MaxUint32),
 	settings.WithPublic)
 
@@ -71,6 +74,23 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 	5*time.Minute,
 )
 
+// Dynamically determine the number of samples to collect based on the estimated
+// number of rows in the table. This formula is based on empirical data collected
+// by running the sampler with different sample sizes on a variety of
+// table sizes and observing the proportion of heavy hitters (most frequent
+// elements) represented in the sample. Bounds the number of samples between
+// 10,000 and 300,000.
+func computeNumberSamples(numRows uint64) uint32 {
+	numSamples := math.Max(
+		math.Min(
+			582.0*math.Pow(float64(numRows), 0.29),
+			300000.0,
+		),
+		10000.0,
+	)
+	return uint32(numSamples)
+}
+
 func (dsp *DistSQLPlanner) createAndAttachSamplers(
 	ctx context.Context,
 	p *PhysicalPlan,
@@ -82,6 +102,21 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 	reqStats []requestedStat,
 	sketchSpec, invSketchSpec []execinfrapb.SketchSpec,
 ) *PhysicalPlan {
+	// Estimate the expected number of rows based on existing stats in the cache.
+	var rowsExpected uint64
+	if len(tableStats) > 0 {
+		overhead := stats.AutomaticStatisticsFractionStaleRows.Get(&dsp.st.SV)
+		if autoStatsFractionStaleRowsForTable, ok := desc.AutoStatsFractionStaleRows(); ok {
+			overhead = autoStatsFractionStaleRowsForTable
+		}
+		// Convert to a signed integer first to make the linter happy.
+		rowsExpected = uint64(int64(
+			// The total expected number of rows is the same number that was measured
+			// most recently, plus some overhead for possible insertions.
+			float64(tableStats[0].RowCount) * (1 + overhead),
+		))
+	}
+
 	// Set up the samplers.
 	sampler := &execinfrapb.SamplerSpec{
 		Sketches:         sketchSpec,
@@ -92,11 +127,15 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 	// since we only support one reqStat at a time.
 	for _, s := range reqStats {
 		if s.histogram {
-			if count, ok := desc.HistogramSamplesCount(); ok {
-				sampler.SampleSize = count
+			var histogramSamplesCount uint32
+			if tableSampleCount, ok := desc.HistogramSamplesCount(); ok {
+				histogramSamplesCount = tableSampleCount
+			} else if clusterSampleCount := histogramSamples.Get(&dsp.st.SV); clusterSampleCount != histogramSamples.Default() {
+				histogramSamplesCount = uint32(clusterSampleCount)
 			} else {
-				sampler.SampleSize = uint32(histogramSamples.Get(&dsp.st.SV))
+				histogramSamplesCount = computeNumberSamples(rowsExpected)
 			}
+			sampler.SampleSize = histogramSamplesCount
 			// This could be anything >= 2 to produce a histogram, but the max number
 			// of buckets is probably also a reasonable minimum number of samples. (If
 			// there are fewer rows than this in the table, there will be fewer
@@ -133,21 +172,6 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		outTypes,
 		execinfrapb.Ordering{},
 	)
-
-	// Estimate the expected number of rows based on existing stats in the cache.
-	var rowsExpected uint64
-	if len(tableStats) > 0 {
-		overhead := stats.AutomaticStatisticsFractionStaleRows.Get(&dsp.st.SV)
-		if autoStatsFractionStaleRowsForTable, ok := desc.AutoStatsFractionStaleRows(); ok {
-			overhead = autoStatsFractionStaleRowsForTable
-		}
-		// Convert to a signed integer first to make the linter happy.
-		rowsExpected = uint64(int64(
-			// The total expected number of rows is the same number that was measured
-			// most recently, plus some overhead for possible insertions.
-			float64(tableStats[0].RowCount) * (1 + overhead),
-		))
-	}
 
 	// Set up the final SampleAggregator stage.
 	agg := &execinfrapb.SampleAggregatorSpec{
