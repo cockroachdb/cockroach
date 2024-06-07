@@ -113,7 +113,7 @@ func TestReplicaRaftOverload_computeExpendableOverloadedFollowers(t *testing.T) 
 
 				// First, set up a progress map in which all replicas are tracked and are live.
 				m := map[uint64]tracker.Progress{}
-				for _, replDesc := range replDescs.AsProto() {
+				for _, replDesc := range replDescs.Descriptors() {
 					pr := tracker.Progress{
 						State:        tracker.StateReplicate,
 						Match:        match[replDesc.ReplicaID],
