@@ -12,6 +12,7 @@ package appstatspb
 
 import (
 	"math"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -19,11 +20,15 @@ import (
 // StmtFingerprintID is the type of a Statement's fingerprint ID.
 type StmtFingerprintID uint64
 
+func (s StmtFingerprintID) String() string {
+	return strconv.FormatUint(uint64(s), 10)
+}
+
 // ConstructStatementFingerprintID constructs an ID by hashing query with
 // constants redacted, its database and failure status, and if it was part of an
 // implicit txn. At the time of writing, these are the axis' we use to bucket
 // queries for stats collection (see stmtKey).
-func ConstructStatementFingerprintID(
+var ConstructStatementFingerprintID = func(
 	stmtNoConstants string, failed bool, implicitTxn bool, database string,
 ) StmtFingerprintID {
 	fnv := util.MakeFNV64()
@@ -49,6 +54,10 @@ func ConstructStatementFingerprintID(
 // TransactionFingerprintID is the hashed string constructed using the
 // individual statement fingerprint IDs that comprise the transaction.
 type TransactionFingerprintID uint64
+
+func (t TransactionFingerprintID) String() string {
+	return strconv.FormatUint(uint64(t), 10)
+}
 
 // InvalidTransactionFingerprintID denotes an invalid transaction fingerprint ID.
 const InvalidTransactionFingerprintID = TransactionFingerprintID(0)

@@ -62,9 +62,6 @@ message SampledQuery {
   // Transaction ID of the query.
   string transaction_id = 11 [(gogoproto.customname) = "TransactionID", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
-  // Statement fingerprint ID of the query.
-  uint64 statement_fingerprint_id = 13 [(gogoproto.customname) = "StatementFingerprintID", (gogoproto.jsontag) = ',omitempty'];
-
   // Maximum number of rows scanned by a full scan, as estimated by the
   // optimizer.
   double max_full_scan_rows_estimate = 14 [(gogoproto.jsontag) = ",omitempty"];
@@ -288,12 +285,26 @@ message SampledQuery {
   // if any.
   string schema_changer_mode = 76 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
-  // SQLInstanceIDs is a list of all the SQL instance id used in this statements execution.
+  // SQLInstanceIDs is a list of all the SQL instances used in this statement's
+  // execution.
   repeated int32 sql_instance_ids = 77 [(gogoproto.jsontag) = ',omitempty', (gogoproto.customname) = "SQLInstanceIDs", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+
+  // Statement fingerprint ID of the query.
+  string statement_fingerprint_id = 79 [(gogoproto.customname) = "StatementFingerprintID", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
   reserved 12;
 
-  // Next available ID: 78.
+  // Previously used for statement_fingerprint_id. Originally this was typed as a uint64
+  // but has been re-typed to be a string due to downstream json parsing issues. For
+  // more details see: https://github.com/cockroachdb/cockroach/issues/123665
+  reserved 13;
+
+  // PR #124681 used this field for KVNodeIDs, but isn't being backported to 23.2. Instead, it
+  // is reserved for visibility and to ensure compatability in the future.
+  reserved 78;
+
+  // Next available ID: 80.
 }
 
 // SampledExecStats contains execution statistics that apply to both statements
@@ -418,10 +429,6 @@ message SampledTransaction {
   // TransactionID is the id of the transaction.
   string transaction_id = 6 [(gogoproto.customname) = "TransactionID", (gogoproto.jsontag) = ',includeempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
-  // TransactionFingerprintID is the fingerprint ID of the transaction.
-  // This can be used to find the transaction in the console.
-  uint64 transaction_fingerprint_id = 7 [(gogoproto.customname) = "TransactionFingerprintID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID", (gogoproto.nullable) = false, (gogoproto.jsontag) = 'TransactionFingerprintID,'];
-
   // Committed indicates if the transaction committed successfully. We want to include this value even if it is false.
   bool committed = 8 [(gogoproto.jsontag) = ",includeempty"];
 
@@ -449,9 +456,6 @@ message SampledTransaction {
 
   // LastAutoRetryReason is a string containing the reason for the last automatic retry.
   string last_auto_retry_reason = 16 [(gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"mixed\""];
-
-  // StatementFingerprintIDs is an array of statement fingerprint IDs belonging to this transaction.
-  repeated uint64 statement_fingerprint_ids = 17 [(gogoproto.customname) = "StatementFingerprintIDs", (gogoproto.jsontag) = ',omitempty', (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"];
 
   // NumRows is the total number of rows returned across all statements.
   int64 num_rows = 18 [(gogoproto.jsontag) = ",includeempty"];
@@ -483,6 +487,27 @@ message SampledTransaction {
   // this one. We only count skipped transactions when telemetry logging is enabled and the sampling
   // mode is set to "transaction".
   int64 skipped_transactions = 26 [(gogoproto.jsontag) = ",omitempty"];
+
+  // TransactionFingerprintID is the fingerprint ID of the transaction.
+  // This can be used to find the transaction in the console.
+  string transaction_fingerprint_id = 27 [(gogoproto.customname) = "TransactionFingerprintID", (gogoproto.jsontag) = 'TransactionFingerprintID,', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // StatementFingerprintIDs is an array of statement fingerprint IDs belonging to this transaction.
+  repeated string statement_fingerprint_ids = 28 [(gogoproto.customname) = "StatementFingerprintIDs", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+
+  // Previously used for transaction_fingerprint_id. Originally this was typed as a uint64
+  // but has been re-typed to be a string due to downstream json parsing issues. For
+  // more details see: https://github.com/cockroachdb/cockroach/issues/123665
+  reserved 7;
+
+  // Previously used for statement_fingerprint_ids. Originally this was typed as a uint64
+  // but has been re-typed to be a string due to downstream json parsing issues. For
+  // more details see: https://github.com/cockroachdb/cockroach/issues/123665
+  reserved 17;
+
+  // Next available ID: 29.
+
 }
 
 // CapturedIndexUsageStats

@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -98,10 +99,13 @@ func printJSONMap(data map[string]interface{}) (string, error) {
 // It only includes fields that are included by in includeByDefault.
 func FormatEntryAsJSON(entry logpb.Entry) (string, error) {
 	var jsonMap map[string]interface{}
-	if err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &jsonMap); err != nil {
+	// A decoder with .UseNumber() is used to ensure that precision on int64 and uint64 isn't lost. This happens
+	// due to the json package using type float64 when unmarshalling numbers into an interface{} type.
+	decoder := json.NewDecoder(strings.NewReader(entry.Message[entry.StructuredStart:entry.StructuredEnd]))
+	decoder.UseNumber()
+	if err := decoder.Decode(&jsonMap); err != nil {
 		return "", err
 	}
-
 	return printJSONMap(jsonMap)
 }
 
