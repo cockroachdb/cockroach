@@ -317,8 +317,13 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 			}
 		}
 
-		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(lrw.spec.StreamID), int32(lrw.flowCtx.NodeID.SQLInstanceID()), token,
-			lrw.spec.InitialScanTimestamp, lrw.frontier, streamclient.WithFiltering(true))
+		sub, err := streamClient.Subscribe(ctx,
+			streampb.StreamID(lrw.spec.StreamID),
+			int32(lrw.flowCtx.NodeID.SQLInstanceID()), lrw.ProcessorID,
+			token,
+			lrw.spec.InitialScanTimestamp, lrw.frontier,
+			streamclient.WithFiltering(true),
+		)
 
 		if err != nil {
 			lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", redactedAddr))

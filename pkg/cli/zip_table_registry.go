@@ -377,7 +377,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	`"".crdb_internal.cluster_replication_node_streams`: {
 		nonSensitiveCols: NonSensitiveColumns{
 			"stream_id",
-			"consumer_id",
+			"consumer",
 			"spans",
 			"initial_ts",
 			"prev_ts",
@@ -395,13 +395,13 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	`"".crdb_internal.cluster_replication_node_stream_spans`: {
 		nonSensitiveCols: NonSensitiveColumns{
 			"stream_id",
-			"consumer_id",
+			"consumer",
 		},
 	},
 	`"".crdb_internal.cluster_replication_node_stream_checkpoints`: {
 		nonSensitiveCols: NonSensitiveColumns{
 			"stream_id",
-			"consumer_id",
+			"consumer",
 			"resolved",
 			"resolved_age",
 		},
