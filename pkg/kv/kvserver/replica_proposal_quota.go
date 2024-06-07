@@ -37,7 +37,7 @@ func (r *Replica) maybeAcquireProposalQuota(
 
 	r.mu.RLock()
 	quotaPool := r.mu.proposalQuota
-	desc := *r.mu.state.Desc
+	desc := r.mu.state.Desc
 	r.mu.RUnlock()
 
 	// Quota acquisition only takes place on the leader replica,
@@ -74,7 +74,7 @@ func (r *Replica) maybeAcquireProposalQuota(
 	return alloc, err
 }
 
-func quotaPoolEnabledForRange(desc roachpb.RangeDescriptor) bool {
+func quotaPoolEnabledForRange(desc *roachpb.RangeDescriptor) bool {
 	// The NodeLiveness range does not use a quota pool. We don't want to
 	// throttle updates to the NodeLiveness range even if a follower is falling
 	// behind because this could result in cascading failures.
