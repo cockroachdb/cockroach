@@ -270,8 +270,6 @@ SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'POLL JOBS STATS' AN
 
 subtest control_job_priv
 
-skip 125212
-
 user testuser
 
 statement ok
@@ -303,12 +301,17 @@ subtest end
 
 subtest control_job_priv_inherited
 
-skip 125212
-
 user testuser
 
 statement ok
-CREATE TABLE t_control_job_priv_inherited(x INT);
+CREATE TABLE t_control_job_priv_inherited(x INT)
+
+# Add a row into the table so that the GC job does not complete immediately;
+# it must wait for the table data gc.ttl before removing the descriptor.
+statement ok
+INSERT INTO t_control_job_priv_inherited VALUES (1)
+
+statement ok
 DROP TABLE t_control_job_priv_inherited
 
 let $job_id
