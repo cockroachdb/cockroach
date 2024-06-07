@@ -9,46 +9,103 @@
 // licenses/APL.txt.
 
 import React from "react";
+import map from "lodash/map";
 import { AxisUnits, util } from "@cockroachlabs/cluster-ui";
 
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 import { cockroach } from "src/js/protos";
 
-import { GraphDashboardProps } from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {
-  const { storeSources, tenantSource } = props;
+  const { storeSources, tenantSource, nodeIDs,nodeDisplayNameByID} = props;
 
   return [
     <LineGraph
-      title="Logical Bytes"
+      title="Logical Bytes Received"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`Rate at which the logical bytes (sum of keys + values) are ingested by all logical replication jobs`}
+      tooltip={`Rate at which the logical bytes (sum of keys + values) are received by all logical replication jobs`}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
         <Metric
           name="cr.node.logical_replication.logical_bytes"
-          title="Logical Bytes"
+          title="Logical Bytes Received"
           nonNegativeRate
         />
       </Axis>
     </LineGraph>,
+
+     <LineGraph
+     title="SQL Events Applied"
+     sources={storeSources}
+     tenantSource={tenantSource}
+     tooltip={`Rate at which INSERT, UPDATE, and DELETE statements are applied by all logical replication jobs`}
+   >
+     <Axis label="events">
+       <Metric
+         name="cr.node.logical_replication.events_ingested"
+         title="SQL Events Applied"
+         nonNegativeRate
+       />
+     </Axis>
+   </LineGraph>,
+
     <LineGraph
-      title="Replication Lag"
+    title="Event Commit Latency: 50th percentile"
+    isKvGraph={false}
+    tenantSource={tenantSource}
+    tooltip={"The 50th percentile in the difference in INSERT, UPDATE, and DELETE commit times between the source cluster and the destination cluster"}
+    showMetricsInTooltip={true}
+  >
+    <Axis units={AxisUnits.Duration} label="latency">
+      {map(nodeIDs, node => (
+        <Metric
+          key={node}
+          name="cr.node.logical_replication.commit_latency-50"
+          title={nodeDisplayName(nodeDisplayNameByID, node)}
+          sources={[node]}
+          downsampleMax
+        />
+      ))}
+    </Axis>
+  </LineGraph>,
+
+   <LineGraph
+   title="Event Commit Latency: 95th percentile"
+   isKvGraph={false}
+   tenantSource={tenantSource}
+   tooltip={"The 95th percentile in the difference in INSERT, UPDATE, and DELETE commit times between the source cluster and the destination cluster"}
+   showMetricsInTooltip={true}
+ >
+   <Axis units={AxisUnits.Duration} label="latency">
+     {map(nodeIDs, node => (
+       <Metric
+         key={node}
+         name="cr.node.logical_replication.commit_latency-95"
+         title={nodeDisplayName(nodeDisplayNameByID, node)}
+         sources={[node]}
+         downsampleMax
+       />
+     ))}
+   </Axis>
+ </LineGraph>,
+
+    <LineGraph
+      title="Age of Oldest Row Pending Replication"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`Replication lag between source and destination cluster`}
+      tooltip={`Age of Oldest Row on Source that has yet to replicate to destination cluster`}
     >
       <Axis units={AxisUnits.Duration} label="duration">
         <Metric
           downsampler={TimeSeriesQueryAggregator.MIN}
           aggregator={TimeSeriesQueryAggregator.MAX}
           name="cr.node.logical_replication.replicated_time_seconds"
-          title="Replication Lag"
+          title="Age of Oldest Row Pending Replication"
           transform={datapoints =>
             datapoints
               .filter(d => d.value !== 0)
