@@ -172,3 +172,57 @@ func GetDiskDevice(f Fataler, c cluster.Cluster, nodes option.NodeListOption) st
 	}
 	return "/dev/" + strings.TrimSpace(res.Stdout)
 }
+
+type dmsetupDiskStaller struct {
+	f Fataler
+	c cluster.Cluster
+}
+
+var _ DiskStaller = (*dmsetupDiskStaller)(nil)
+
+func (s *dmsetupDiskStaller) device(nodes option.NodeListOption) string {
+	return GetDiskDevice(s.f, s.c, nodes)
+}
+
+func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
+	dev := s.device(s.c.All())
+	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
+	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
+	// reload, so uninstall snapd.
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo apt-get purge -y snapd`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo umount -f /mnt/data1 || true`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup remove_all`)
+	err := s.c.RunE(ctx, option.WithNodes(s.c.All()), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
+		`sudo dmsetup create data1`)
+	if err != nil {
+		// This has occasionally been seen to fail with "Device or resource busy",
+		// with no clear explanation. Try to find out who it is.
+		s.c.Run(ctx, option.WithNodes(s.c.All()), "sudo bash -c 'ps aux; dmsetup status; mount; lsof'")
+		s.f.Fatal(err)
+	}
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo mount /dev/mapper/data1 /mnt/data1`)
+}
+
+func (s *dmsetupDiskStaller) Cleanup(ctx context.Context) {
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup resume data1`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo umount /mnt/data1`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup remove_all`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo mount /mnt/data1`)
+	// Reinstall snapd in case subsequent tests need it.
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo apt-get install -y snapd`)
+}
+
+func (s *dmsetupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
+	s.c.Run(ctx, option.WithNodes(nodes), `sudo dmsetup suspend --noflush --nolockfs data1`)
+}
+
+func (s *dmsetupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
+	s.c.Run(ctx, option.WithNodes(nodes), `sudo dmsetup resume data1`)
+}
+
+func (s *dmsetupDiskStaller) DataDir() string { return "{store-dir}" }
+func (s *dmsetupDiskStaller) LogDir() string  { return "logs" }
+
+func MakeDmsetupDiskStaller(f Fataler, c cluster.Cluster) DiskStaller {
+	return &dmsetupDiskStaller{f: f, c: c}
+}
