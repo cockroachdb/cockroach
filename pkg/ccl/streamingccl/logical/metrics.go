@@ -121,7 +121,7 @@ var (
 		Unit:        metric.Unit_BYTES,
 	}
 	metaReplicationBatchHistNanos = metric.Metadata{
-		Name:        "logical_replication.flush_wait_nanos",
+		Name:        "logical_replication.batch_hist_nanos",
 		Help:        "Time spent flushing a batch",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
