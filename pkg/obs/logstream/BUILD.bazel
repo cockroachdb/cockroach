@@ -28,6 +28,7 @@ go_test(
     embed = [":logstream"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/stop",
