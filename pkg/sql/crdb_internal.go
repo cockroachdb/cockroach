@@ -9028,6 +9028,11 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 	megabytes FLOAT,
 	last_checkpoint INTERVAL,
 	
+	produce_wait INTERVAL,
+	emit_wait INTERVAL,
+	last_produce_wait INTERVAL,
+	last_emit_wait INTERVAL,
+
 	rf_checkpoints INT,
 	rf_advances INT,
 	rf_last_advance INTERVAL,
@@ -9070,6 +9075,23 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),
 				tree.NewDFloat(tree.DFloat(math.Round(float64(s.Flushes.Bytes.Load())/float64(1<<18))/4)),
 				age(time.UnixMicro(s.LastCheckpoint.Micros.Load())),
+
+				tree.NewDInterval(
+					duration.MakeDuration(s.Flushes.ProduceWaitNanos.Load(), 0, 0),
+					types.DefaultIntervalTypeMetadata,
+				),
+				tree.NewDInterval(
+					duration.MakeDuration(s.Flushes.EmitWaitNanos.Load(), 0, 0),
+					types.DefaultIntervalTypeMetadata,
+				),
+				tree.NewDInterval(
+					duration.MakeDuration(s.Flushes.LastProduceWaitNanos.Load(), 0, 0),
+					types.DefaultIntervalTypeMetadata,
+				),
+				tree.NewDInterval(
+					duration.MakeDuration(s.Flushes.LastEmitWaitNanos.Load(), 0, 0),
+					types.DefaultIntervalTypeMetadata,
+				),
 
 				tree.NewDInt(tree.DInt(s.RF.Checkpoints.Load())),
 				tree.NewDInt(tree.DInt(s.RF.Advances.Load())),
