@@ -632,14 +632,19 @@ var aggregatorHeartbeatFrequency = settings.RegisterDurationSetting(
 var aggregatorFlushJitter = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"changefeed.aggregator.flush_jitter",
-	"jitter aggregator flushes as a fraction of min_checkpoint_frequency",
+	"jitter aggregator flushes as a fraction of min_checkpoint_frequency. This "+
+		"setting has no effect if min_checkpoint_frequency is set to 0.",
 	0.1, /* 10% */
 	settings.NonNegativeFloat,
 	settings.WithPublic,
 )
 
 func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) time.Time {
-	if j == 0 {
+	if j < 0 || d < 0 {
+		log.Fatalf(context.Background(), "invalid jitter value: %f, duration: %s", j, d)
+		return s.Now()
+	}
+	if j == 0 || d == 0 {
 		return s.Now().Add(d)
 	}
 	nextFlush := d + time.Duration(rand.Int63n(int64(j*float64(d))))
