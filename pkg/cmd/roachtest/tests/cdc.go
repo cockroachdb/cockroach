@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -421,6 +422,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		kafka, _ := setupKafka(ct.ctx, ct.t, ct.cluster, ct.kafkaSinkNode())
 		kafka.mon = ct.mon
 		kafka.validateOrder = args.chaosArgs.validateOrder
+		kafka.validateConsistency = args.chaosArgs.validateConsistency
 
 		if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
 			ct.t.Fatal(err)
@@ -701,6 +703,8 @@ type chaosArgs struct {
 	// If validateOrder is set to true, order validators will be created
 	// for each topic to validate the changefeed's ordering guarantees.
 	validateOrder bool
+
+	validateConsistency cdctest.ConsistencyValidationType
 }
 
 func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
@@ -1868,6 +1872,96 @@ func registerCDC(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-chaos-consistency",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			var err error
+
+			// _, err := ct.DB().ExecContext(ctx, `set cluster setting changefeed.new_kafka_sink.enabled = true;`)
+			// if err != nil {
+			// 	t.Fatal("failed to set cluster setting")
+			// }
+			_, err = ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
+			if err != nil {
+				t.Fatal("failed to create table")
+			}
+			_, err = ct.DB().ExecContext(ctx, `INSERT INTO t VALUES (1, -1);`)
+			if err != nil {
+				t.Fatal("failed to insert row into table")
+			}
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  []string{"t"},
+				chaosArgs: chaosArgs{
+					chaos:               true,
+					validateOrder:       true,
+					validateConsistency: cdctest.ConsistencyValidationEachKeySequential,
+				},
+				opts: map[string]string{
+					"updated":                       "",
+					"initial_scan":                  "'no'",
+					"min_checkpoint_frequency":      "'3s'",
+					"protect_data_from_gc_on_pause": "",
+					"on_error":                      "pause",
+					"kafka_sink_config":             `'{"Flush": {"MaxMessages": 100, "Frequency": "1s","Messages": 100 }, "Version": "2.7.2", "RequiredAcks": "ALL","Compression": "GZIP"}'`,
+				},
+			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				steadyLatency: 5 * time.Minute,
+			})
+
+			const (
+				par     = 8
+				numKeys = 1000
+				n       = 1_000_000
+			)
+
+			var wg sync.WaitGroup
+			wg.Add(par)
+			for wi := 0; wi < par; wi++ {
+				wi := wi
+				go func() {
+					conn, err := ct.DB().Conn(ctx)
+					require.NoError(t, err)
+					defer func() { _ = conn.Close() }()
+
+					// run workload: update keys sequentially
+					// split key space into par parts and each goroutine updates its own part
+					offset := wi * numKeys / par
+					for i := 0; i < n*(numKeys/par); i++ {
+						key := offset + i%numKeys
+						_, err := conn.ExecContext(ctx, "UPDATE t SET x = x + 1 WHERE id = $1", key)
+						require.NoError(t, err)
+					}
+				}()
+			}
+
+			// // Repeatedly update a single row in a table in order to create a large
+			// // number of events with the same key that will span multiple batches.
+			// for i := 0; i < 1000000; i++ {
+			// 	stmt := fmt.Sprintf(`UPDATE t SET x = %d WHERE id = 1;`, i)
+			// 	if i%2 == 0 {
+			// 		_, err = conn1.ExecContext(ctx, stmt)
+			// 	} else {
+			// 		_, err = conn2.ExecContext(ctx, stmt)
+			// 	}
+			// 	if err != nil {
+			// 		t.Fatalf("failed to execute stmt %q: %s", stmt, err)
+			// 	}
+			// }
+		},
+	})
+
+	r.Add(registry.TestSpec{
 		Name:             "cdc/crdb-chaos",
 		Owner:            `cdc`,
 		Benchmark:        true,
@@ -2749,6 +2843,8 @@ type kafkaManager struct {
 	// validateOrder specifies whether consumers created by the
 	// kafkaManager should create and use order validators.
 	validateOrder bool
+
+	validateConsistency cdctest.ConsistencyValidationType
 }
 
 func (k kafkaManager) basePath() string {
@@ -3400,9 +3496,18 @@ func (k kafkaManager) newConsumer(
 	if err != nil {
 		return nil, err
 	}
-	var validator cdctest.Validator
+	var (
+		validator cdctest.Validator
+		ov        cdctest.Validator
+		cv        cdctest.Validator
+	)
 	if k.validateOrder {
-		validator = cdctest.NewOrderValidator(topic)
+		ov = cdctest.NewOrderValidator(topic)
+		validator = ov
+	}
+	if k.validateConsistency != cdctest.ConsistencyValidationNone {
+		cv = cdctest.NewConsistencyValidator(k.validateConsistency, topic, ov)
+		validator = cv
 	}
 	tc, err := newTopicConsumer(k.t, consumer, topic, validator, stopper)
 	if err != nil {

@@ -14,11 +14,13 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 )
 
 // Validator checks for violations of our changefeed ordering and delivery
@@ -187,6 +189,86 @@ func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 func (v *orderValidator) Failures() []string {
 	return v.failures
 }
+
+type ConsistencyValidationType string
+
+const (
+	ConsistencyValidationNone              ConsistencyValidationType = ""
+	ConsistencyValidationEachKeySequential ConsistencyValidationType = "each_key_sequential"
+)
+
+func NewConsistencyValidator(ct ConsistencyValidationType, topic string, inner Validator) Validator {
+	switch ct {
+	case ConsistencyValidationNone:
+		return NoOpValidator
+	case ConsistencyValidationEachKeySequential:
+		if inner == nil {
+			inner = NoOpValidator
+		}
+		return &eachKeySequentialConsistencyValidator{ct: ct, topic: topic, inner: inner, vals: make(map[string]*btree.BTree)}
+	default:
+		panic(fmt.Sprintf("unknown consistency validation type: %s", ct))
+	}
+}
+
+type eachKeySequentialConsistencyValidator struct {
+	inner Validator
+	ct    ConsistencyValidationType
+	topic string
+	vals  map[string]*btree.BTree
+}
+
+func (c *eachKeySequentialConsistencyValidator) Failures() []string {
+	var failures []string
+
+	// Check that the values for each key are in order.
+	for key, tree := range c.vals {
+		toDelete := make([]btree.Item, 0, tree.Len())
+		last := tree.Min().(btree.Int)
+		tree.AscendGreaterOrEqual(last+1, func(i btree.Item) bool {
+			if i == nil {
+				return false
+			}
+			cur := i.(btree.Int)
+			if cur-last != 1 {
+				failures = append(failures, fmt.Sprintf(
+					`topic %s key %s: saw gap between %d and %d`, c.topic, key, last, cur,
+				))
+				// it's simpler to only accumulate one failure per key
+				return false
+			} else {
+				// remove the last value if it's in order
+				toDelete = append(toDelete, last)
+			}
+			last = cur
+			return true
+		})
+		for _, i := range toDelete {
+			tree.Delete(i)
+		}
+	}
+
+	return append(failures, c.inner.Failures()...)
+}
+
+func (c *eachKeySequentialConsistencyValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	return c.inner.NoteResolved(partition, resolved)
+}
+
+func (c *eachKeySequentialConsistencyValidator) NoteRow(partition string, key string, value string, updated hlc.Timestamp) error {
+	ival, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse value %s as int", value)
+	}
+	if _, ok := c.vals[key]; !ok {
+		c.vals[key] = btree.New(2)
+	}
+	c.vals[key].ReplaceOrInsert(btree.Int(ival))
+	fmt.Printf("noting row %s: %d\n", key, ival)
+	return c.inner.NoteRow(partition, key, value, updated)
+}
+
+var _ Validator = &eachKeySequentialConsistencyValidator{}
 
 type beforeAfterValidator struct {
 	sqlDB          *gosql.DB

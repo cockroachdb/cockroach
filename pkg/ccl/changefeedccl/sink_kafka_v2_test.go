@@ -99,7 +99,7 @@ func makeTestKafkaSinkV2(
 
 	kcfg := &sarama.Config{}
 	bcfg := sinkBatchConfig{}
-	s, err = newKafkaSinkClient(kcfg, bcfg, "no addrs", topics, nil, kafkaSinkKnobs{
+	s, err = newKafkaSinkClient(context.TODO(), kcfg, bcfg, "no addrs", topics, nil, kafkaSinkKnobs{
 		OverrideAsyncProducerFromClient: func(client kafkaClient) (sarama.AsyncProducer, error) {
 			return p, nil
 		},

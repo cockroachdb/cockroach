@@ -28,6 +28,7 @@ const newLib = "newlib"
 const whichHack = newLib
 
 func newKafkaSinkClient(
+	ctx context.Context,
 	kafkaCfg *sarama.Config,
 	batchCfg sinkBatchConfig,
 	bootstrapAddrs string,
@@ -41,23 +42,25 @@ func newKafkaSinkClient(
 	}
 
 	writer := &kafka.Writer{
-		Addr:         kafka.TCP(bootstrapAddrs),
-		Balancer:     &kafka.Hash{}, // TODO: would need to change to retain parity
-		MaxAttempts:  kafkaCfg.Producer.Retry.Max,
-		BatchSize:    min(kafkaCfg.Producer.Flush.MaxMessages, kafkaCfg.Producer.Flush.Messages),
-		BatchBytes:   int64(kafkaCfg.Producer.Flush.Bytes),
-		BatchTimeout: kafkaCfg.Producer.Flush.Frequency,
-		RequiredAcks: kafka.RequiredAcks(kafkaCfg.Producer.RequiredAcks),
-		Async:        false,
-		Completion:   func(messages []kafka.Message, err error) {}, // ?
-		Compression:  kafka.Compression(kafkaCfg.Producer.Compression),
+		Addr:            kafka.TCP(bootstrapAddrs),
+		Balancer:        &kafka.Hash{}, // TODO: would need to change to retain parity
+		MaxAttempts:     kafkaCfg.Producer.Retry.Max,
+		WriteBackoffMin: 10 * time.Millisecond,
+		BatchSize:       min(kafkaCfg.Producer.Flush.MaxMessages, kafkaCfg.Producer.Flush.Messages),
+		BatchBytes:      int64(kafkaCfg.Producer.Flush.Bytes),
+		BatchTimeout:    kafkaCfg.Producer.Flush.Frequency,
+		RequiredAcks:    kafka.RequiredAcks(kafkaCfg.Producer.RequiredAcks),
+		Async:           false,
+		Completion:      func(messages []kafka.Message, err error) {}, // ?
+		Compression:     kafka.Compression(kafkaCfg.Producer.Compression),
 		Logger: kafka.LoggerFunc(func(msg string, args ...any) {
-			log.Infof(context.Background(), "kafka: %+v", []any{msg, args})
+			log.Infof(ctx, "kafka: %+v", []any{msg, args})
 		}),
 		ErrorLogger:            nil,
 		Transport:              nil,
 		AllowAutoTopicCreation: true,
 	}
+	log.Infof(ctx, `kafka writer: %+v`, writer)
 
 	var producer sarama.SyncProducer
 	producer, err = sarama.NewSyncProducerFromClient(client)
@@ -130,7 +133,7 @@ func (k *kafkaSinkClient) Close() error {
 
 // Flush implements SinkClient. Does not retry -- retries will be handled by ParallelIO.
 func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
-	msgs := payload.([]*sarama.ProducerMessage)
+	msgs := payload.([]kafka.Message)
 	defer log.Infof(ctx, `flushed %d messages to kafka (id=%d, err=%v)`, len(msgs), k.debuggingId, retErr)
 
 	log.Infof(ctx, `sending %d messages to kafka`, len(msgs))
@@ -179,8 +182,8 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 	// }()
 
 	// TODO: make this better. possibly moving the resizing up into the batch worker would help a bit
-	var flushMsgs func(msgs []*sarama.ProducerMessage) error
-	flushMsgs = func(msgs []*sarama.ProducerMessage) error {
+	var flushMsgs func(msgs []kafka.Message) error
+	flushMsgs = func(msgs []kafka.Message) error {
 		handleErr := func(err error) error {
 			log.Infof(ctx, `kafka error in %d: %s`, k.debuggingId, err.Error())
 			if k.shouldTryResizing(err, msgs) {
@@ -250,39 +253,28 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 		switch whichHack {
 		case oneByOne:
 			// this works if we also set maxmessages = 1
-			for _, m := range msgs {
-				if _, _, err := k.producer.SendMessage(m); err != nil {
-					return handleErr(err)
-				}
-			}
+			panic("undo the change")
+			// for _, m := range msgs {
+			// 	if _, _, err := k.producer.SendMessage(m); err != nil {
+			// 		return handleErr(err)
+			// 	}
+			// }
 		case noBufAndClose: // TODO: if this is competitive, validate that it's actually correct. nope its not working lol
+			panic("undo the change")
 			// TODO: i dont think Close() actually flushes. it just waits for flush...
-			producer, err := sarama.NewSyncProducerFromClient(k.client)
-			if err != nil {
-				return err
-			}
-			if err := producer.SendMessages(msgs); err != nil {
-				return handleErr(err)
-			}
-			if err := producer.Close(); err != nil {
-				return err
-			}
+			// producer, err := sarama.NewSyncProducerFromClient(k.client)
+			// if err != nil {
+			// 	return err
+			// }
+			// if err := producer.SendMessages(msgs); err != nil {
+			// 	return handleErr(err)
+			// }
+			// if err := producer.Close(); err != nil {
+			// 	return err
+			// }
 		case newLib:
-			// this is actually less efficient but easier for switching around what we're testing
-			msgs2 := make([]kafka.Message, len(msgs))
-			for i, m := range msgs {
-				var key []byte
-				if m.Key != nil { // resolved payloads have nil keys
-					key = m.Key.(sarama.ByteEncoder)
-				}
-
-				msgs2[i] = kafka.Message{
-					Key:   key,
-					Value: m.Value.(sarama.ByteEncoder),
-					Topic: m.Topic,
-				}
-			}
-			if err := k.writer.WriteMessages(ctx, msgs2...); err != nil {
+			// TODO: leverage k.writer.Stats()
+			if err := k.writer.WriteMessages(ctx, msgs...); err != nil {
 				return handleErr(err)
 			}
 		default:
@@ -349,9 +341,9 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 			return err
 		}
 		for _, partition := range partitions {
-			msgs := []*sarama.ProducerMessage{{
+			msgs := []kafka.Message{{
 				Topic:     topic,
-				Partition: partition,
+				Partition: int(partition),
 				Key:       nil,
 				Value:     sarama.ByteEncoder(body),
 			}}
@@ -368,7 +360,7 @@ func (k *kafkaSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
 	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg}
 }
 
-func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []*sarama.ProducerMessage) bool {
+func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []kafka.Message) bool {
 	if !k.canTryResizing || err == nil || len(msgs) < 2 {
 		return false
 	}
@@ -377,7 +369,7 @@ func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []*sarama.ProducerMe
 }
 
 var _ SinkClient = (*kafkaSinkClient)(nil)
-var _ SinkPayload = ([]*sarama.ProducerMessage)(nil) // this doesnt actually assert anything fyi
+var _ SinkPayload = ([]kafka.Message)(nil) // this doesnt actually assert anything fyi
 
 type keyPlusPayload struct {
 	key     []byte
@@ -400,12 +392,12 @@ func (b *kafkaBuffer) Append(key []byte, value []byte, _ attributes) {
 
 // Close implements BatchBuffer. Convert the buffer into a SinkPayload for sending to kafka.
 func (b *kafkaBuffer) Close() (SinkPayload, error) {
-	msgs := make([]*sarama.ProducerMessage, 0, len(b.messages))
+	msgs := make([]kafka.Message, 0, len(b.messages))
 	for _, m := range b.messages {
-		msgs = append(msgs, &sarama.ProducerMessage{
+		msgs = append(msgs, kafka.Message{
 			Topic: b.topic,
-			Key:   sarama.ByteEncoder(m.key),
-			Value: sarama.ByteEncoder(m.payload),
+			Key:   m.key,
+			Value: m.payload,
 		})
 	}
 	return msgs, nil
@@ -526,7 +518,7 @@ func makeKafkaSinkV2(ctx context.Context,
 		}
 
 		// TODO: how to handle knobs
-		client, err := newKafkaSinkClient(kafkaCfg, batchCfg, u.Host, topicNamer2, settings, kafkaSinkKnobs{})
+		client, err := newKafkaSinkClient(ctx, kafkaCfg, batchCfg, u.Host, topicNamer2, settings, kafkaSinkKnobs{})
 		if err != nil {
 			return nil, err
 		}
