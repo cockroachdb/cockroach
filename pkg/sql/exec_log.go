@@ -369,7 +369,7 @@ func (p *planner) maybeLogStatementInternal(
 			Database:                              p.CurrentDatabase(),
 			StatementID:                           p.stmt.QueryID.String(),
 			TransactionID:                         txnID,
-			StatementFingerprintID:                uint64(stmtFingerprintID),
+			StatementFingerprintID:                stmtFingerprintID.String(),
 			MaxFullScanRowsEstimate:               p.curPlan.instrumentation.maxFullScanRows,
 			TotalScanRowsEstimate:                 p.curPlan.instrumentation.totalScanRows,
 			OutputRowsEstimate:                    p.curPlan.instrumentation.outputRows,
@@ -462,6 +462,10 @@ func (p *planner) logTransaction(
 
 	sampledTxn := getSampledTransaction()
 	defer releaseSampledTransaction(sampledTxn)
+	statementFingerprintIDStrs := make([]string, 0, len(txnStats.StatementFingerprintIDs))
+	for _, id := range txnStats.StatementFingerprintIDs {
+		statementFingerprintIDStrs = append(statementFingerprintIDStrs, id.String())
+	}
 
 	*sampledTxn = eventpb.SampledTransaction{
 		SkippedTransactions:      int64(skippedTransactions),
@@ -470,7 +474,7 @@ func (p *planner) logTransaction(
 		TxnCounter:               uint32(txnCounter),
 		SessionID:                txnStats.SessionID.String(),
 		TransactionID:            txnStats.TransactionID.String(),
-		TransactionFingerprintID: txnFingerprintID,
+		TransactionFingerprintID: txnFingerprintID.String(),
 		Committed:                txnStats.Committed,
 		ImplicitTxn:              txnStats.ImplicitTxn,
 		StartTimeUnixNanos:       txnStats.StartTime.UnixNano(),
@@ -480,7 +484,7 @@ func (p *planner) logTransaction(
 		ErrorText:                execErrStr,
 		NumRetries:               txnStats.RetryCount,
 		LastAutoRetryReason:      retryErr,
-		StatementFingerprintIDs:  txnStats.StatementFingerprintIDs,
+		StatementFingerprintIDs:  statementFingerprintIDStrs,
 		NumRows:                  int64(txnStats.RowsAffected),
 		RetryLatNanos:            txnStats.RetryLatency.Nanoseconds(),
 		CommitLatNanos:           txnStats.CommitLatency.Nanoseconds(),

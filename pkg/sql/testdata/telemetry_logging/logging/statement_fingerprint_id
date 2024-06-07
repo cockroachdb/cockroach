@@ -1,0 +1,48 @@
+# Test that stub statement fingerprint id value to be max uint64 and ensure that it is represented properly as
+# a string
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 10;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.transaction_sampling.statement_events_per_transaction.max = 100;
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
+----
+
+spy-sql unixSecs=1 stubStatementFingerprintId=18446744073709551615
+SELECT 1,2
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"NumRows": 1,
+	"OutputRowsEstimate": 1,
+	"PlanGist": "AgICBAYE",
+	"Statement": "SELECT ‹1›, ‹2›",
+	"StatementFingerprintID": "18446744073709551615",
+	"StmtPosInTxn": 1,
+	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		"18446744073709551615"
+	],
+	"TransactionFingerprintID": "5808590958014384160",
+	"User": "root"
+}
