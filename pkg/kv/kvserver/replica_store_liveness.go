@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,7 +37,7 @@ func (r *replicaRLockedStoreLiveness) getStoreIdentifier(replicaID uint64) (slpb
 func (r *replicaRLockedStoreLiveness) Enabled() bool {
 	// TODO(nvanbenschoten): we can hook this up to a version check and cluster
 	// setting.
-	return true
+	return storeliveness.StoreLivenessEnabled.Get(&r.store.cfg.Settings.SV)
 }
 
 // SupportFor implements the raftstoreliveness.StoreLiveness interface.

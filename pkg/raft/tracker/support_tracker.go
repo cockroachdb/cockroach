@@ -61,6 +61,9 @@ func (st *SupportTracker) IsSupportedBy(id uint64) (raftstoreliveness.StoreLiven
 }
 
 func (st *SupportTracker) LeadSupportUntil() raftstoreliveness.StoreLivenessExpiration {
+	if !st.storeLiveness.Enabled() {
+		return raftstoreliveness.StoreLivenessExpiration{}
+	}
 	supportExpMap := make(map[uint64]raftstoreliveness.StoreLivenessExpiration)
 	for id, supportEpoch := range st.support {
 		curEpoch, curExp, ok := st.storeLiveness.SupportFrom(id)
@@ -83,6 +86,9 @@ func (st *SupportTracker) LeadSupportUntil() raftstoreliveness.StoreLivenessExpi
 // QuorumActive returns whether the leader has fortified support from a quorum
 // majority of replicas.
 func (st *SupportTracker) QuorumActive() bool {
+	if !st.storeLiveness.Enabled() {
+		return true
+	}
 	supportedUntil := st.LeadSupportUntil()
 	return !supportedUntil.IsEmpty() && !st.storeLiveness.InPast(supportedUntil)
 }

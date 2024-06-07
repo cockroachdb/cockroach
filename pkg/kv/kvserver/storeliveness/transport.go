@@ -36,7 +36,7 @@ import (
 
 const (
 	// Outgoing messages are queued per-node on a channel of this size.
-	sendBufferSize = 10
+	sendBufferSize = 128
 
 	// When no message has been queued for this duration, the corresponding
 	// instance of processQueue will shut down.

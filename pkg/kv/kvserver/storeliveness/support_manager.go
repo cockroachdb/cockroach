@@ -12,10 +12,10 @@ package storeliveness
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"time"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -221,7 +221,7 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	for _, ss := range sm.rs.supportFrom {
 		sm.sendHeartbeat(ctx, ss.Target, ss.Epoch, sm.rs.meta.MaxRequested)
 	}
-	log.Infof(ctx, "sent heartbeats to all remote stores")
+	log.Infof(ctx, "store %d sent heartbeats to %d remote stores", sm.storeID, len(sm.rs.supportFrom))
 }
 
 func (sm *SupportManager) sendHeartbeat(
@@ -236,7 +236,7 @@ func (sm *SupportManager) sendHeartbeat(
 	}
 	sent := sm.transport.SendAsync(msg)
 	if sent {
-		log.Infof(ctx, "sent heartbeat to store %+v, with epoch %+v and expiration %+v",
+		log.VInfof(ctx, 2, "sent heartbeat to store %+v, with epoch %+v and expiration %+v",
 			to, epoch, endTime)
 	} else {
 		log.Warningf(ctx, "sending heartbeat to store %+v failed", to)
@@ -251,7 +251,7 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 	}
 
 	if !ssv.needsWrite() {
-		log.Infof(ctx, "checked for support withdrawal and found none")
+		log.VInfof(ctx, 2, "checked for support withdrawal and found none")
 		return
 	}
 
@@ -266,11 +266,11 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 		return
 	}
 	ssv.updateDurable()
-	log.Infof(ctx, "withdrew some store liveness support")
+	log.VInfof(ctx, 2, "withdrew some store liveness support")
 }
 
 func (sm *SupportManager) handleMessages(ctx context.Context, msgs []slpb.Message) {
-	log.Infof(ctx, "drained receive queue of size %d", len(msgs))
+	log.VInfof(ctx, 2, "drained receive queue of size %d", len(msgs))
 	ssv := makeSupporterStateVolatile(&sm.ss)
 	rsv := makeRequesterStateVolatile(&sm.rs)
 	var resps []slpb.Message
@@ -308,14 +308,14 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []slpb.Messag
 	for _, resp := range resps {
 		_ = sm.transport.SendAsync(resp)
 	}
-	log.Infof(ctx, "sent %d responses", len(resps))
+	log.VInfof(ctx, 2, "sent %d responses", len(resps))
 }
 
 func (sm *SupportManager) handleHeartbeat(
 	ctx context.Context, ssv *supporterStateVolatile, msg slpb.Message,
 ) (resp slpb.Message) {
 	ss, ack := ssv.handleHeartbeat(msg)
-	log.Infof(ctx, "handled heartbeat from %+v with epoch %+v and expiration %+v, ack: %t",
+	log.VInfof(ctx, 2, "handled heartbeat from %+v with epoch %+v and expiration %+v, ack: %t",
 		msg.From, msg.Epoch, msg.EndTime, ack)
 	resp = slpb.Message{
 		Type: slpb.MsgHeartbeatResp,
@@ -333,14 +333,14 @@ func (sm *SupportManager) handleHeartbeatResp(
 	ctx context.Context, rsv *requesterStateVolatile, msg slpb.Message,
 ) {
 	rsv.handleHeartbeatResp(msg)
-	log.Infof(ctx, "handled heartbeat response from %s with expiration %s and ack %t",
+	log.VInfof(ctx, 2, "handled heartbeat response from %s with expiration %s and ack %t",
 		msg.From, msg.EndTime, msg.Ack)
 }
 
 func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
 	ss, ok := sm.ss.getSupportFor(id)
 	if !ok {
-		log.Infof(context.Background(), "attempting to evaluate support for an unknown remote store %+v", id)
+		log.VInfof(context.Background(), 2, "attempting to evaluate support for an unknown remote store %+v", id)
 		return 0, false
 	}
 	return ss.Epoch, true
