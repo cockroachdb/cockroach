@@ -38,17 +38,21 @@ export class OutsideEventHandler extends React.Component<OutsideEventHandlerProp
     this.removeEventListener();
   }
 
-  onClick = (event: any): void => {
+  onClick = (event: PointerEvent): void => {
+    if (!(event.target instanceof Node)) {
+      return;
+    }
+    const target = event.target;
+
     const { onOutsideClick, ignoreClickOnRefs = [] } = this.props;
     const isChildEl =
-      this.nodeRef.current &&
-      this.nodeRef.current.contains(event.target.target);
+      this.nodeRef.current && this.nodeRef.current.contains(target);
 
     const isOutsideIgnoredEl = ignoreClickOnRefs.some(outsideIgnoredRef => {
       if (!outsideIgnoredRef || !outsideIgnoredRef.current) {
         return false;
       }
-      return outsideIgnoredRef.current.contains(event.target);
+      return outsideIgnoredRef.current.contains(target);
     });
 
     if (!isChildEl && !isOutsideIgnoredEl) {
@@ -57,11 +61,11 @@ export class OutsideEventHandler extends React.Component<OutsideEventHandlerProp
   };
 
   addEventListener = (): void => {
-    addEventListener("click", this.onClick);
+    document.addEventListener("click", this.onClick);
   };
 
   removeEventListener = (): void => {
-    removeEventListener("click", this.onClick);
+    document.removeEventListener("click", this.onClick);
   };
 
   render(): React.ReactElement {

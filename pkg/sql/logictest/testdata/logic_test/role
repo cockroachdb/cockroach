@@ -186,14 +186,14 @@ CREATE ROLE child_role;
 GRANT testrole to child_role;
 GRANT testuser TO child_role;
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role      member      isAdmin  role_id  member_id
-admin     root        true     2        1
-testrole  child_role  false    108      109
-testrole  testuser    true     108      100
-testuser  child_role  false    100      109
+role      member      isAdmin
+admin     root        true
+testrole  child_role  false
+testrole  testuser    true
+testuser  child_role  false
 
 query TTBB colnames,rowsort
 SELECT * FROM "".crdb_internal.kv_inherited_role_members
