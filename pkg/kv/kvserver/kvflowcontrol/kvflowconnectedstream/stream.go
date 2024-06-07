@@ -324,6 +324,28 @@ corresponds to user facing work.
 //   https://docs.google.com/document/d/1Qf6uteFRlbScLdWIrTfqgbrKRHfUsoMGatRLWYQgAi8/edit#bookmark=id.wcwgvtka9qr0
 //   We will make C configurable, eventually.
 
+// TODO(sumeer): non-voters; voter <=> non-voter state transition
+//
+// (not essential to fix this for the prototype, where we can just run with
+// voting replicas)
+//
+// For a non-voter, we never wait for eval-tokens. But the code deducts
+// eval-tokens for a non-voter too. Consider a store s2 with a voter follower
+// replica for range R1 and a non-voter follower replica for range R2, and
+// both have a leader at the same other node. R2 can keep evaluating even if
+// the send-queue to s2 are back logged. R1 and R2 are fairly competing for
+// the send-queues, but if s2 is needed for the quorum of R1, that range will
+// not be able to evaluate since R2 keeps consuming all the eval-tokens. Note
+// that this "unfairness" is within the same WorkClass (regular or elastic).
+// Say we didn't deduct eval-tokens for R2. R2 can still keep evaluating. R1
+// will evaluate if eval-tokens are available, which only it is consuming. If
+// R1 and R2 compete equally for send-tokens, R1 will be able to get half the
+// bandwidth.
+//
+// We know the latest state of a replica, in terms of whether it is a voter or
+// a non-voter. We can maintain replicaSendStream.eval.tokensDeducted to be
+// zero when a non-voter.
+
 // TODO(sumeer): kvflowcontrol and the packages it contains are sliced and
 // diced quite fine, with the benefit of multiple code iterations to get to
 // that final structure. We don't yet have that benefit, so we just lump
@@ -456,6 +478,9 @@ type RangeController interface {
 
 // RaftEvent is an abstraction around raft.Ready, constructed in
 // handleRaftReadyRaftMuLocked.
+//
+// TODO: this is unnecessarily abstracted. Make this a struct with an Entries
+// slice.
 type RaftEvent interface {
 	// Ready can return nil if there is no Ready.
 	Ready() Ready
@@ -498,7 +523,8 @@ type Ready interface {
 	// https://github.com/cockroachdb/cockroach/blob/f601b7b439ced71030bfdb0d9ba9cb4925420569/pkg/kv/kvserver/replica_proposal_buf.go#L1057-L1066
 	// which is messy.
 	GetEntries() []raftpb.Entry
-	// TODO: remove this entirely. RACv2 is completely uninterested in these messages.
+	// TODO: remove the following entirely. RACv2 is completely uninterested in
+	// these messages.
 
 	// RetransmitMsgApps returns the MsgApps that are being retransmitted, or
 	// being used to ping the follower. These will never be queued by
@@ -518,10 +544,10 @@ type Ready interface {
 // need to acquire Replica.mu, since there is no promise made on whether it is
 // already held or not.
 type RaftInterface interface {
-	// FollowerState returns the current state of a follower. The value of match
-	// and next are populated iff in StateReplicate. All entries >= next have
-	// not had MsgApps constructed during the lifetime of this StateReplicate
-	// (they may have been constructed previously).
+	// FollowerState returns the current state of a follower. The value of
+	// Match, Next, Admitted are populated iff in StateReplicate. All entries >=
+	// Next have not had MsgApps constructed during the lifetime of this
+	// StateReplicate (they may have been constructed previously).
 	//
 	// When a follower transitions from {StateProbe,StateSnapshot} =>
 	// StateReplicate, we start trying to send MsgApps. We should
@@ -536,8 +562,7 @@ type RaftInterface interface {
 	// elastic experiencing a hiccup, given it paces at rate of slowest). For
 	// (a), we plan to remove follower pausing. So the v2 code will be
 	// simplified.
-	FollowerState(
-		replicaID roachpb.ReplicaID) FollowerStateInfo
+	FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo
 	// LastEntryIndex is the highest index assigned in the log.
 	LastEntryIndex() uint64
 	// MakeMsgApp is used to construct a MsgApp for entries in [start, end).
@@ -566,7 +591,8 @@ type RaftInterface interface {
 }
 
 // Scheduler abstracts the raftScheduler to allow the RangeController to
-// schedule its own internal processing.
+// schedule its own internal processing. This internal processing is to pop
+// some entries from the send queue and send them in a MsgApp.
 type Scheduler interface {
 	ScheduleControllerEvent(rangeID roachpb.RangeID)
 }
@@ -592,11 +618,14 @@ const (
 	RaftHighPri
 	NumRaftPriorities
 
-	// The following are not real priorities, but will be encoded in a byte in
-	// the entry encoding.
+	// The following are not real priorities, but will be encoded in
+	// RaftMessageRequest.InheritedRaftPriority. This should actually be a
+	// separate enum in that proto instead of trying to overload the priority.
+	// The reason we were trying to fit this into the same byte earlier was that
+	// we were planning to reencode this override into the Entry, but we are no
+	// longer doing that. This is ok-ish for the sake of the prototype.
 	//
-	// TODO: move these elsewhere. Currently kvserverpb defines these using admissionpb,
-	// but that is obsolete.
+	// TODO: move these elsewhere.
 
 	NotSubjectToACForFlowControl       RaftPriority = math.MaxUint8 - 1
 	PriorityNotInheritedForFlowControl RaftPriority = math.MaxUint8
@@ -611,7 +640,7 @@ const (
 // file for details.
 type RaftAdmittedInterface interface {
 	// StableIndex is the index up to which the raft log is stable. The
-	// Admitted values must be <= this index. It advances when raft sees
+	// Admitted values must be <= this index. It advances when Raft sees
 	// MsgStorageAppendResp.
 	StableIndex() uint64
 	// GetAdmitted returns the admitted values known to Raft. Except for
@@ -630,6 +659,8 @@ type RaftAdmittedInterface interface {
 	SetAdmitted(admitted [NumRaftPriorities]uint64) raftpb.Message
 }
 
+// AdmissionPriorityToRaftPriority maps the larger set of values in admissionpb.WorkPriority
+// to the smaller set of raft priorities.
 func AdmissionPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority {
 	// TODO:
 
@@ -638,9 +669,23 @@ func AdmissionPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority 
 	// NormalPri <= pri < LockingNormalPri : RaftNormalPri
 	// LockingNormalPri <= pri < UserHighPri : intent resolution typically RaftAboveNormalPri
 	// UserHighPri <= pri: RaftHighPri
-	return RaftHighPri
+	return RaftNormalPri
 }
 
+// RaftPriorityToAdmissionPriority maps a RaftPriority to the highest
+// admissionpb.WorkPriority that could map to it. This is needed before
+// calling into the admission package, since it is possible for a mix of RACv2
+// entries and other entries to be competing in the same admission WorkQueue.
+func RaftPriorityToAdmissionPriority(rp RaftPriority) admissionpb.WorkPriority {
+	// TODO:
+	return admissionpb.NormalPri
+}
+
+// Used for deciding what kind of flow tokens are needed. The result here
+// should be equivalent to
+// admissionpb.WorkClassFromPri(admissionpb.RaftPriorityToAdmissionPriority(pri)),
+// though that is not necessary for correctness since this computation is used
+// only locally in the leader and within the RACv2 sub-system.
 func workClassFromRaftPriority(pri RaftPriority) admissionpb.WorkClass {
 	switch pri {
 	case RaftLowPri:
@@ -667,10 +712,9 @@ type MessageSender interface {
 	// On the receiver Replica.stepRaftGroup is called with
 	// kvserverpb.RaftMessageRequest. And we do the AdmitRaftEntry call in
 	// handleRaftReadyRaftMuLocked. By then we have no access to the wrapper
-	// that is RaftMessageRequest. So before calling RawNode.Step we will
-	// replace the byte in the encoding if NotSubjectToACForFlowControl or
-	// there is a real inherited priority. In this setup, the priority encoded
-	// in RaftAdmissionMeta is unnecessary.
+	// that is RaftMessageRequest. So before calling RawNode.Step we will pass
+	// this information via a side-channel to the Replica. See the integration
+	// code for more discussion.
 	//
 	// Due to multiple transitions into and out of StateReplicate, the same
 	// entry could be sent to the follower with different inherited
@@ -684,19 +728,23 @@ type MessageSender interface {
 }
 
 type RangeControllerOptions struct {
-	// TODO: synchronization.
-	// RaftMu    *syncutil.Mutex
 	RangeID  roachpb.RangeID
 	TenantID roachpb.TenantID
 	// LocalReplicaID is the ReplicaID of the local replica, which is the
 	// leader.
 	LocalReplicaID roachpb.ReplicaID
 
-	SSTokenCounter    StoreStreamsTokenCounter
+	// SSTokenCounter provides access to all the TokenCounters that will be
+	// needed (keyed by (tenantID, storeID)).
+	SSTokenCounter StoreStreamsTokenCounter
+	// SendTokensWatcher is for watching for send-token availability for any
+	// TokenCounter.
 	SendTokensWatcher StoreStreamSendTokensWatcher
 	RaftInterface     RaftInterface
-	MessageSender     MessageSender
-	Scheduler         Scheduler
+	// MessageSender is for sending MsgApps mediated by RACv2.
+	MessageSender MessageSender
+	// Scheduler is for scheduing popping from the send-queue.
+	Scheduler Scheduler
 }
 
 // RangeControllerInitState is the initial state at the time of creation.
@@ -721,6 +769,10 @@ type RangeControllerImpl struct {
 	// eventually consistent with the set of replicas.
 	leaseholder roachpb.ReplicaID
 
+	// TODO: synchronization. Ensure all methods other than WaitForEval are
+	// called with raftMu held. RangeControllerImpl needs its own mutex for
+	// WaitForEval since it needs to sample voterSets*.
+
 	// State for waiters. When anything in voterSets changes, voterSetRefreshCh
 	// is closed, and replaced with a new channel. The voterSets is
 	// copy-on-write, so waiters make a shallow copy.
@@ -729,11 +781,16 @@ type RangeControllerImpl struct {
 
 	replicaMap map[roachpb.ReplicaID]*replicaState
 
+	// Demultiplexer. When HandleControllerSchedulerEvent is called, this
+	// is used to call into the replicaSendStreams that have asked to be
+	// scheduled.
 	scheduledReplicas map[roachpb.ReplicaID]struct{}
 }
 
 type voterSet []voterStateForWaiters
 
+// voterStateForWaiters informs whether WaitForEval is required to wait for
+// eval-tokens for a voter.
 type voterStateForWaiters struct {
 	replicaID        roachpb.ReplicaID
 	isLeader         bool
@@ -1187,7 +1244,6 @@ func (rs *replicaState) createReplicaSendStream(indexToSend uint64) {
 		indexToSend:   indexToSend,
 		nextRaftIndex: rs.parent.opts.RaftInterface.LastEntryIndex() + 1,
 		// TODO: these need to be based on some history observed by RangeControllerImpl.
-		approxMaxPriority:   admissionpb.NormalPri,
 		approxMeanSizeBytes: 1000,
 	})
 	rs.replicaSendStream = rss
@@ -1208,15 +1264,19 @@ func (rs *replicaState) close() {
 // send-queue for the replica. We may track token deductions in states
 // replicate and probeRecentlyReplicate. On a transition to state snapshot we
 // immediately return all tokens since holding onto these can affect other
-// ranges. The justification for not immediately returning all tokens in
+// ranges.
+//
+// The justification for not immediately returning all tokens in
 // probeRecentlyReplicate is that such a transition will (a) typically happen
 // due to lossiness that affects all ranges replicating to that store, (b)
 // this is a very transient state. Any immediate returning of tokens can cause
-// more overload, so we want to be generally narrow in the conditions when we
-// resort to it.
+// more overload, so we want to be narrow in the conditions when we resort to
+// it.
 type replicaSendStream struct {
 	parent *replicaState
-	// TODO: synchronization.
+	// TODO: synchronization. Needs synchronization as callbacks corresponding
+	// to TokenAvailableNotification come directly to replicaSendStream without
+	// any external synchronization.
 	mu syncutil.Mutex
 
 	connectedState connectedState
@@ -1290,12 +1350,9 @@ type replicaSendStream struct {
 		// Two cases for deductedForScheduler.wc.
 		// - grabbed regular tokens: must have regular work waiting. Use the
 		//   highest pri in priorityCount for the inherited priority.
-		//   TODO: when indexToSend jumps ahead, we should immediately return
-		//   any regular tokens in deductedForScheduler and watch again, so that
-		//   this invariant is satisfied.
 		//
 		// - grabbed elastic tokens: may have regular work that will be sent.
-		//   Unilaterally use regular tokens for those. The message is sent
+		//   Deduct regular tokens without waiting for those. The message is sent
 		//   with no inherited priority. Since elastic tokens were available
 		//   recently it is highly probable that regular tokens are also
 		//   available.
@@ -1326,7 +1383,6 @@ type replicaSendStreamInitState struct {
 	nextRaftIndex uint64
 
 	// Approximate stats for the initial send-queue.
-	approxMaxPriority   admissionpb.WorkPriority
 	approxMeanSizeBytes kvflowcontrol.Tokens
 }
 
