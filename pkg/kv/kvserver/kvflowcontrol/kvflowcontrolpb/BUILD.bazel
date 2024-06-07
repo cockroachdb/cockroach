@@ -7,7 +7,10 @@ proto_library(
     srcs = ["kvflowcontrol.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+    deps = [
+        "//pkg/raft/raftpb:raftpb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
 )
 
 go_proto_library(
@@ -17,6 +20,7 @@ go_proto_library(
     proto = ":kvflowcontrolpb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",  # keep
         "@com_github_gogo_protobuf//gogoproto",
     ],
