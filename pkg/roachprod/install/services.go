@@ -220,9 +220,16 @@ func (c *SyncedCluster) DiscoverService(
 
 	// Finally, fall back to the default ports if no services are found. This is
 	// required for scenarios where the services were not registered with a DNS
-	// provider (Google DNS). Currently, services will not be registered with DNS
-	// for clusters not on GCP, and it will also not be registered for GCP
-	// clusters that specify a custom project. The fall back is also useful for
+	// provider (Google DNS). Currently, services will not be registered in the
+	// following scenarios:
+	//
+	// 1. A system interface started with default ports. This is an optimisation
+	// to avoid the overhead of registering services when starting a storage
+	// cluster with default ports.
+	// 2. Clusters not on GCP
+	// 3. Clusters that specify a custom project.
+	//
+	// The fall back is also useful for
 	// backwards compatibility with clusters that were created before the
 	// introduction of service discovery, or without a DNS provider.
 	// TODO(Herko): Remove this once DNS support is fully
