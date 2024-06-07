@@ -60,7 +60,7 @@ upsert descriptor #104
   -    partitioning: {}
   -    predicate: i > 0:::INT8
   -    sharded: {}
-  -    version: 4
+  -    version: 3
   +  indexes: []
      modificationTime: {}
   +  mutations:
@@ -84,8 +84,8 @@ upsert descriptor #104
   +      partitioning: {}
   +      predicate: i > 0:::INT8
   +      sharded: {}
-  +      version: 4
-  +    mutationId: 1
+  +      version: 3
+  +    mutationId: 2
   +    state: WRITE_ONLY
   +  - column:
   +      computeExpr: lower(j)
@@ -98,7 +98,7 @@ upsert descriptor #104
   +        oid: 25
   +      virtual: true
   +    direction: DROP
-  +    mutationId: 1
+  +    mutationId: 2
   +    state: WRITE_ONLY
      name: t
      nextColumnId: 4
@@ -176,7 +176,7 @@ upsert descriptor #104
   -    partitioning: {}
   -    predicate: i > 0:::INT8
   -    sharded: {}
-  -    version: 4
+  -    version: 3
   +  indexes: []
      modificationTime: {}
   +  mutations:
@@ -200,8 +200,8 @@ upsert descriptor #104
   +      partitioning: {}
   +      predicate: i > 0:::INT8
   +      sharded: {}
-  +      version: 4
-  +    mutationId: 1
+  +      version: 3
+  +    mutationId: 2
   +    state: WRITE_ONLY
   +  - column:
   +      computeExpr: lower(j)
@@ -214,7 +214,7 @@ upsert descriptor #104
   +        oid: 25
   +      virtual: true
   +    direction: DROP
-  +    mutationId: 1
+  +    mutationId: 2
   +    state: WRITE_ONLY
      name: t
      nextColumnId: 4
@@ -243,15 +243,15 @@ upsert descriptor #104
          partitioning: {}
   -      predicate: i > 0:::INT8
          sharded: {}
-         version: 4
-       mutationId: 1
+         version: 3
+       mutationId: 2
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - column:
          computeExpr: lower(j)
   ...
        direction: DROP
-       mutationId: 1
+       mutationId: 2
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
@@ -319,8 +319,8 @@ upsert descriptor #104
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
   -      sharded: {}
-  -      version: 4
-  -    mutationId: 1
+  -      version: 3
+  -    mutationId: 2
   -    state: DELETE_ONLY
   -  - column:
   -      computeExpr: lower(j)
@@ -333,7 +333,7 @@ upsert descriptor #104
   -        oid: 25
   -      virtual: true
   -    direction: DROP
-  -    mutationId: 1
+  -    mutationId: 2
   -    state: DELETE_ONLY
   +  mutations: []
      name: t
