@@ -9018,7 +9018,7 @@ var crdbInternalPCRStreamsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.cluster_replication_node_streams (
 	stream_id INT,
-	consumer_id INT,
+	consumer STRING,
 	spans INT,
 	initial_ts DECIMAL,
 	prev_ts DECIMAL,
@@ -9061,7 +9061,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 
 			if err := addRow(
 				tree.NewDInt(tree.DInt(s.StreamID)),
-				tree.NewDInt(tree.DInt(s.Spec.ConsumerID)),
+				tree.NewDString(fmt.Sprintf("%d[%d]", s.Spec.ConsumerNode, s.Spec.ConsumerProc)),
 				tree.NewDInt(tree.DInt(len(s.Spec.Spans))),
 				eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp),
 				eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp),
@@ -9090,7 +9090,7 @@ var crdbInternalPCRStreamSpansTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.cluster_replication_node_stream_spans (
 	stream_id INT,
-	consumer_id INT,
+	consumer STRING,
 	span_start STRING,
 	span_end STRING
 );`,
@@ -9107,7 +9107,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_stream_spans (
 			for _, s := range status.Spec.Spans {
 				if err := addRow(
 					tree.NewDInt(tree.DInt(status.StreamID)),
-					tree.NewDInt(tree.DInt(status.Spec.ConsumerID)),
+					tree.NewDString(fmt.Sprintf("%d[%d]", status.Spec.ConsumerNode, status.Spec.ConsumerProc)),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, s.Key)),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, s.EndKey)),
 				); err != nil {
@@ -9124,7 +9124,7 @@ var crdbInternalPCRStreamCheckpointsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.cluster_replication_node_stream_checkpoints (
 	stream_id INT,
-	consumer_id INT,
+	consumer STRING,
 	span_start STRING,
 	span_end STRING,
 	resolved DECIMAL,
@@ -9147,7 +9147,7 @@ CREATE TABLE crdb_internal.cluster_replication_node_stream_checkpoints (
 			for _, s := range sp.([]jobspb.ResolvedSpan) {
 				if err := addRow(
 					tree.NewDInt(tree.DInt(status.StreamID)),
-					tree.NewDInt(tree.DInt(status.Spec.ConsumerID)),
+					tree.NewDString(fmt.Sprintf("%d[%d]", status.Spec.ConsumerNode, status.Spec.ConsumerProc)),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, s.Span.Key)),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, s.Span.EndKey)),
 					eval.TimestampToDecimalDatum(s.Timestamp),
