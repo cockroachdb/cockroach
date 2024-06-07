@@ -184,15 +184,12 @@ func (ds *ServerImpl) setDraining(drain bool) error {
 
 // setupFlow creates a Flow.
 //
-// Args:
-// reserved: Specifies the upfront memory reservation that the flow takes
+//   - reserved: specifies the upfront memory reservation that the flow takes
+//     ownership of. This account is already closed if an error is returned or
+//     will be closed through Flow.Cleanup.
 //
-//	ownership of. This account is already closed if an error is returned or
-//	will be closed through Flow.Cleanup.
-//
-// localState: Specifies if the flow runs entirely on this node and, if it does,
-//
-//	specifies the txn and other attributes.
+//   - localState: specifies if the flow runs entirely on this node and, if it
+//     does, specifies the txn and other attributes.
 //
 // Note: unless an error is returned, the returned context contains a span that
 // must be finished through Flow.Cleanup.
@@ -263,11 +260,10 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	monitor = mon.NewMonitor(mon.Options{
-		Name:       "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
-		CurCount:   ds.Metrics.CurBytesCount,
-		MaxHist:    ds.Metrics.MaxBytesHist,
-		Settings:   ds.Settings,
-		LongLiving: localState.MarkFlowMonitorAsLongLiving,
+		Name:     "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
+		CurCount: ds.Metrics.CurBytesCount,
+		MaxHist:  ds.Metrics.MaxBytesHist,
+		Settings: ds.Settings,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
 	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")
@@ -560,11 +556,6 @@ type LocalState struct {
 	// mapping to coldata.Batch, use any to avoid injecting new
 	// dependencies.
 	LocalVectorSources map[int32]any
-
-	// MarkFlowMonitorAsLongLiving, if set, instructs the DistSQL runner to mark
-	// the "flow" memory monitor as long-living one, thus exempting it from
-	// having to be stopped when the txn monitor is stopped.
-	MarkFlowMonitorAsLongLiving bool
 }
 
 // MustUseLeafTxn returns true if a LeafTxn must be used. It is valid to call

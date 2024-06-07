@@ -1136,6 +1136,42 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	return m
 }
 
+var (
+	metaMemMaxBytes = metric.Metadata{
+		Name:        "sql.mem.changefeed.max",
+		Help:        "Maximum memory usage across all changefeeds",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaMemCurBytes = metric.Metadata{
+		Name:        "sql.mem.changefeed.current",
+		Help:        "Current memory usage across all changefeeds",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+)
+
+// See pkg/sql/mem_metrics.go
+// log10int64times1000 = log10(math.MaxInt64) * 1000, rounded up somewhat
+const log10int64times1000 = 19 * 1000
+
+// MakeMemoryMetrics instantiates the metrics holder for memory monitors of
+// changefeeds.
+func MakeMemoryMetrics(
+	histogramWindow time.Duration,
+) (curCount *metric.Gauge, maxHist metric.IHistogram) {
+	curCount = metric.NewGauge(metaMemCurBytes)
+	maxHist = metric.NewHistogram(metric.HistogramOptions{
+		Metadata:     metaMemMaxBytes,
+		Duration:     histogramWindow,
+		MaxVal:       log10int64times1000,
+		SigFigs:      3,
+		BucketConfig: metric.MemoryUsage64MBBuckets,
+	})
+	return curCount, maxHist
+}
+
 func init() {
 	jobs.MakeChangefeedMetricsHook = MakeMetrics
+	jobs.MakeChangefeedMemoryMetricsHook = MakeMemoryMetrics
 }

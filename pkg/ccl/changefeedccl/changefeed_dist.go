@@ -315,12 +315,15 @@ func startDistChangefeed(
 
 		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
 
-		// CDC DistSQL flows are long-living, so we want to mark the flow memory
-		// monitor accordingly.
-		planCtx.MarkFlowMonitorAsLongLiving = true
+		// Make sure to use special changefeed monitor going forward as the
+		// parent monitor for the DistSQL infrastructure. This is needed to
+		// prevent a race between the connection that started the changefeed
+		// closing (which closes the current planner's monitor) and changefeed
+		// DistSQL flow being cleaned up.
+		planCtx.OverridePlannerMon = execCfg.DistSQLSrv.ChangefeedMonitor
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
-		// p is the physical plan, recv is the distsqlreceiver
+		// p is the physical plan, recv is the DistSQLReceiver.
 		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)
 		return resultRows.Err()
 	}

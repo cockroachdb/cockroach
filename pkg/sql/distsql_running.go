@@ -466,7 +466,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 		batchReceiver = recv
 	}
 	origCtx := ctx
-	ctx, flow, opChains, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Planner.Mon(), &setupReq, recv, batchReceiver, localState)
+	parentMonitor := evalCtx.Planner.Mon()
+	if planCtx.OverridePlannerMon != nil {
+		parentMonitor = planCtx.OverridePlannerMon
+	}
+	ctx, flow, opChains, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, parentMonitor, &setupReq, recv, batchReceiver, localState)
 	if err == nil && planCtx.saveFlows != nil {
 		err = planCtx.saveFlows(flows, opChains, planCtx.infra.LocalProcessors, isVectorized)
 	}
@@ -696,7 +700,6 @@ func (dsp *DistSQLPlanner) Run(
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
 	localState.LocalVectorSources = plan.LocalVectorSources
-	localState.MarkFlowMonitorAsLongLiving = planCtx.MarkFlowMonitorAsLongLiving
 	if planCtx.planner != nil {
 		// Note that the planner's collection will only be used for local plans.
 		localState.Collection = planCtx.planner.Descriptors()

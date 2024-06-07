@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -919,10 +920,9 @@ type PlanningCtx struct {
 	// This is true if plan is a simple insert that can be vectorized.
 	isVectorInsert bool
 
-	// MarkFlowMonitorAsLongLiving, if set, instructs the DistSQL runner to mark
-	// the "flow" memory monitor as long-living one, thus exempting it from
-	// having to be stopped when the txn monitor is stopped.
-	MarkFlowMonitorAsLongLiving bool
+	// OverridePlannerMon, if set, will be used instead of the Planner.Mon() as
+	// the parent monitor for the DistSQL flow.
+	OverridePlannerMon *mon.BytesMonitor
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
