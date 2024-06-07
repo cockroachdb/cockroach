@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 // planHookFn is a function that can intercept a statement being planned and
@@ -158,6 +158,7 @@ type hookFnNode struct {
 	f        PlanHookRowFn
 	header   colinfo.ResultColumns
 	subplans []planNode
+	stopper  *stop.Stopper
 
 	run hookFnRun
 }
@@ -173,40 +174,37 @@ type hookFnRun struct {
 }
 
 func newHookFnNode(
-	name string, fn PlanHookRowFn, header colinfo.ResultColumns, subplans []planNode,
+	name string,
+	fn PlanHookRowFn,
+	header colinfo.ResultColumns,
+	subplans []planNode,
+	stopper *stop.Stopper,
 ) *hookFnNode {
-	return &hookFnNode{name: name, f: fn, header: header, subplans: subplans}
+	return &hookFnNode{name: name, f: fn, header: header, subplans: subplans, stopper: stopper}
 }
 
 func (f *hookFnNode) startExec(params runParams) error {
-	// TODO(dan): Make sure the resultCollector is set to flush after every row.
 	f.run.resultsCh = make(chan tree.Datums)
 	f.run.errCh = make(chan error)
-	// Start a new span for the execution of the hook's plan. This is particularly
-	// important since that execution might outlive the span in params.ctx.
-	// Generally speaking, the subplan is not supposed to outlive the caller since
-	// hookFnNode.Next() is supposed to be called until the subplan is exhausted.
-	// However, there's no strict protocol in place about the goroutines that the
-	// subplan might spawn. For example, if the subplan creates a DistSQL flow,
-	// the cleanup of that flow might race with an error bubbling up to Next(). In
-	// particular, there seem to be races around context cancelation, as Next()
-	// listens for cancellation for better or worse.
-	//
-	// TODO(andrei): We should implement a protocol where the hookFnNode doesn't
-	// listen for cancellation and guarantee Next() doesn't return false until the
-	// subplan has completely shutdown.
-	subplanCtx, sp := tracing.ChildSpan(params.ctx, f.name)
-	go func() {
-		defer sp.Finish()
-		err := f.f(subplanCtx, f.subplans, f.run.resultsCh)
-		select {
-		case <-params.ctx.Done():
-		case f.run.errCh <- err:
-		}
-		close(f.run.errCh)
-		close(f.run.resultsCh)
-	}()
-	return nil
+	// Note that it's ok if the async task is not started due to server shutdown
+	// because the context should be canceled then too, which would unblock
+	// calls to Next if they happen.
+	return f.stopper.RunAsyncTaskEx(
+		params.ctx,
+		stop.TaskOpts{
+			TaskName: f.name,
+			SpanOpt:  stop.ChildSpan,
+		},
+		func(ctx context.Context) {
+			err := f.f(ctx, f.subplans, f.run.resultsCh)
+			select {
+			case <-ctx.Done():
+			case f.run.errCh <- err:
+			}
+			close(f.run.errCh)
+			close(f.run.resultsCh)
+		},
+	)
 }
 
 func (f *hookFnNode) Next(params runParams) (bool, error) {
