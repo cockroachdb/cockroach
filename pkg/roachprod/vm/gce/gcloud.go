@@ -1649,6 +1649,45 @@ func computeGrowDistribution(groups []jsonManagedInstanceGroup, newNodeCount int
 	return addCount
 }
 
+// Shrink shrinks the cluster by deleting the given VMs. This is only supported
+// for managed instance groups. Currently, nodes should only be deleted from the
+// tail of the cluster, due to complexities thar arise when the node names are
+// not contiguous.
+func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName string) error {
+	if !isManaged(vmsToDelete) {
+		return errors.New("shrinking is only supported for managed instance groups")
+	}
+
+	project := vmsToDelete[0].Project
+	groupName := instanceGroupName(clusterName)
+	vmZones := make(map[string]vm.List)
+	for _, cVM := range vmsToDelete {
+		vmZones[cVM.Zone] = append(vmZones[cVM.Zone], cVM)
+	}
+
+	g := errgroup.Group{}
+	for zone, vms := range vmZones {
+		instances := vms.Names()
+		args := []string{"compute", "instance-groups", "managed", "delete-instances",
+			groupName, "--project", project, "--zone", zone, "--instances", strings.Join(instances, ",")}
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", args...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			}
+			return nil
+		})
+	}
+
+	err := g.Wait()
+	if err != nil {
+		return err
+	}
+
+	return waitForGroupStability(project, groupName, maps.Keys(vmZones))
+}
+
 func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
 	project := vms[0].Project
 	groupName := instanceGroupName(clusterName)
@@ -2282,7 +2321,7 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 
 // deleteManaged deletes the managed instance group for the given VMs. It also
 // deletes any instance templates that were used to create the managed instance
-// group.
+// group and associated load balancers.
 func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 	clusterProjectMap := make(map[string]string)
 	for _, v := range vms {
