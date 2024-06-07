@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -308,6 +309,7 @@ func changefeedPlanHook(
 		}
 
 		logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
+		updateTargetMetrics(p.ExecCfg(), jobID, sj.Payload())
 
 		select {
 		case <-ctx.Done():
@@ -1101,6 +1103,9 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 		return err
 	}
 
+	// Update the watched target metrics before trying to resume the changefeed.
+	updateTargetMetrics(execCfg, jobID, b.job.Payload())
+
 	err := b.resumeWithRetries(ctx, jobExec, jobID, details, progress, execCfg)
 	if err != nil {
 		return b.handleChangefeedError(ctx, err, details, jobExec)
@@ -1425,15 +1430,18 @@ func (b *changefeedResumer) OnFailOrCancel(
 	)
 
 	// If this job has failed (not canceled), increment the counter.
+	metrics := exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	if jobs.HasErrJobCanceled(
 		errors.DecodeError(ctx, *b.job.Payload().FinalResumeError),
 	) {
 		telemetry.Count(`changefeed.enterprise.cancel`)
 	} else {
 		telemetry.Count(`changefeed.enterprise.fail`)
-		exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
+		metrics.Failures.Inc(1)
 		logChangefeedFailedTelemetry(ctx, b.job, changefeedbase.UnknownError)
 	}
+
+	metrics.updateLastTargets(b.job.ID(), intsets.Fast{})
 	return nil
 }
 
@@ -1671,4 +1679,16 @@ func maybeUpgradePreProductionReadyExpression(
 		"Existing changefeed needs to be recreated using new syntax. "+
 		"Please see CDC documentation on the use of new cdc_prev tuple.",
 		tree.AsString(oldExpression), tree.AsString(newExpression))
+}
+
+func updateTargetMetrics(execCfg *sql.ExecutorConfig, jobID jobspb.JobID, pl jobspb.Payload) {
+	metrics := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	cf := pl.GetDetails().(*jobspb.Payload_Changefeed).Changefeed
+	var targetSet intsets.Fast
+	targets := AllTargets(*cf)
+	_ = targets.EachTableID(func(id descpb.ID) error {
+		targetSet.Add(int(id))
+		return nil
+	})
+	metrics.updateLastTargets(jobID, targetSet)
 }
