@@ -236,7 +236,7 @@ func TestCacheBasic(t *testing.T) {
 	// Create a cache and iteratively query the cache for each tableID. This
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
-	sc := NewTableStatisticsCache(2 /* cacheSize */, s.ClusterSettings(), db)
+	sc := NewTableStatisticsCache(2 /* cacheSize */, s.ClusterSettings(), db, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -338,7 +338,7 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	insqlDB := s.InternalDB().(descs.DB)
 
 	// Make a stats cache.
-	sc := NewTableStatisticsCache(1, s.ClusterSettings(), insqlDB)
+	sc := NewTableStatisticsCache(1, s.ClusterSettings(), insqlDB, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
@@ -391,7 +391,7 @@ func TestCacheWait(t *testing.T) {
 		tableIDs = append(tableIDs, tableID)
 	}
 	sort.Sort(tableIDs)
-	sc := NewTableStatisticsCache(len(tableIDs) /* cacheSize */, s.ClusterSettings(), db)
+	sc := NewTableStatisticsCache(len(tableIDs) /* cacheSize */, s.ClusterSettings(), db, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -443,6 +443,7 @@ func TestCacheAutoRefresh(t *testing.T) {
 		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
+		s.AppStopper(),
 	)
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 
