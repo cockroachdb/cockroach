@@ -324,6 +324,7 @@ func (r *registration) outputLoop(ctx context.Context) error {
 		return err
 	}
 
+	firstIteration := true
 	// Normal buffered output loop.
 	for {
 		overflowed := false
@@ -334,9 +335,12 @@ func (r *registration) outputLoop(ctx context.Context) error {
 		}
 		r.mu.Unlock()
 		if overflowed {
+			if firstIteration {
+				log.Warningf(ctx, "rangefeed on %s was already overflowed by the time that first iteration (after catch up scan from %s) ran", r.span, r.catchUpTimestamp)
+			}
 			return newErrBufferCapacityExceeded().GoError()
 		}
-
+		firstIteration = false
 		select {
 		case nextEvent := <-r.buf:
 			err := r.stream.Send(nextEvent.event)
