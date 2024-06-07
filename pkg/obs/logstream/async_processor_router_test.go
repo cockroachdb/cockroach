@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -281,6 +282,7 @@ func TestCtxDoneFlushesBeforeExit(t *testing.T) {
 
 // Test that we still accept & buffer new events while a flush is in-flight, and the flush channel buffer is full.
 func TestBlockedFlush(t *testing.T) {
+	skip.WithIssue(t, 125290 /*githubIssueID*/)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
