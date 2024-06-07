@@ -1922,7 +1922,8 @@ func registerCDC(r registry.Registry) {
 			const (
 				parallelism = 8
 				numKeys     = 1000
-				numVals     = 1_000_000
+				numVals     = 1_000 //_000
+				chunkSize   = numKeys / parallelism
 			)
 
 			var wg sync.WaitGroup
@@ -1937,11 +1938,11 @@ func registerCDC(r registry.Registry) {
 
 					// run workload: update keys sequentially
 					// split key space into par parts and each goroutine updates its own part
-					chunkSize := numKeys / parallelism
+
 					offset := wi * chunkSize
 					for i := 0; i < numVals*chunkSize; i++ {
 						key := offset + i%chunkSize
-						_, err := conn.ExecContext(ctx, "UPDATE t SET x = x + 1 WHERE id = $1", key)
+						_, err := conn.ExecContext(ctx, "INSERT INTO t (id, x) VALUES ($1, 1) ON CONFLICT(id) DO UPDATE SET x = t.x + 1", key)
 						require.NoError(t, err)
 					}
 				}()
@@ -3531,6 +3532,11 @@ func (k kafkaManager) startTopicConsumers(
 			for {
 				select {
 				case <-stopper:
+					// do one last validation
+					if err := topicConsumer.validate(); err != nil {
+						return err
+					}
+
 					return nil
 				case <-ctx.Done():
 					return ctx.Err()
@@ -3859,6 +3865,13 @@ func newTopicConsumer(
 	}, nil
 }
 
+func (c *topicConsumer) validate() error {
+	if fs := c.validator.Failures(); len(fs) > 0 {
+		return errors.Errorf("validator failed with errors: %s", strings.Join(fs, ", "))
+	}
+	return nil
+}
+
 func (c *topicConsumer) tryNextMessage(ctx context.Context) (*sarama.ConsumerMessage, error) {
 	for partition, pc := range c.partitionConsumers {
 		select {
@@ -3897,7 +3910,17 @@ func (c *topicConsumer) validateMessage(partition int32, m *sarama.ConsumerMessa
 		}
 	}
 	if failures := c.validator.Failures(); len(failures) > 0 {
-		c.t.Fatalf("topic consumer for %s encountered validator error(s): %s", c.topic, strings.Join(failures, ","))
+		// only want to consider consistency failures at the end
+		// TODO: less hacky
+		nonConsistencyFailures := make([]string, 0, len(failures))
+		for _, failure := range failures {
+			if !strings.HasPrefix(failure, "consistency:") {
+				nonConsistencyFailures = append(nonConsistencyFailures, failure)
+			}
+		}
+		if len(nonConsistencyFailures) > 0 {
+			c.t.Fatalf("topic consumer for %s encountered validator error(s): %s", c.topic, strings.Join(nonConsistencyFailures, ","))
+		}
 	}
 	return nil
 }

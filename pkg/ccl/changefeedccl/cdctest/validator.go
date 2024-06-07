@@ -222,7 +222,7 @@ func (c *eachKeySequentialConsistencyValidator) Failures() []string {
 
 	// Check that the values for each key are in order.
 	for key, tree := range c.vals {
-		toDelete := make([]btree.Item, 0, tree.Len())
+		// toDelete := make([]btree.Item, 0, tree.Len())
 		last := tree.Min().(btree.Int)
 		tree.AscendGreaterOrEqual(last+1, func(i btree.Item) bool {
 			if i == nil {
@@ -231,20 +231,21 @@ func (c *eachKeySequentialConsistencyValidator) Failures() []string {
 			cur := i.(btree.Int)
 			if cur-last != 1 {
 				failures = append(failures, fmt.Sprintf(
-					`topic %s key %s: saw gap between %d and %d`, c.topic, key, last, cur,
+					`consistency: topic %s key %s: saw gap between %d and %d`, c.topic, key, last, cur,
 				))
 				// it's simpler to only accumulate one failure per key
 				return false
 			} else {
 				// remove the last value if it's in order
-				toDelete = append(toDelete, last)
+				// toDelete = append(toDelete, last)
+				// actually we can't do this because if we see a duplicate we'd think we had a gap :/
 			}
 			last = cur
 			return true
 		})
-		for _, i := range toDelete {
-			tree.Delete(i)
-		}
+		// for _, i := range toDelete {
+		// 	tree.Delete(i)
+		// }
 	}
 
 	return append(failures, c.inner.Failures()...)
@@ -255,7 +256,6 @@ func (c *eachKeySequentialConsistencyValidator) NoteResolved(partition string, r
 }
 
 func (c *eachKeySequentialConsistencyValidator) NoteRow(partition string, key string, value string, updated hlc.Timestamp) error {
-	// : failed to parse value {"after": {"id": 1, "x": 0}, "updated": "1717790563670214440.0000000000"} as int
 	type val struct {
 		After struct {
 			ID int `json:"id"`
