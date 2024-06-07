@@ -1024,6 +1024,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.TableStatCacheSize,
 			cfg.Settings,
 			cfg.internalDB,
+			cfg.stopper,
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
