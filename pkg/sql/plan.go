@@ -546,7 +546,7 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 					"cannot execute prepared %v statement",
 					planHook.name,
 				)
-			}, header, nil), nil
+			}, header, nil /* subplans */, p.execCfg.DistSQLPlanner.stopper), nil
 		}
 
 		if fn, header, subplans, avoidBuffering, err := planHook.fn(ctx, stmt, p); err != nil {
@@ -555,7 +555,7 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 			if avoidBuffering {
 				p.curPlan.avoidBuffering = true
 			}
-			return newHookFnNode(planHook.name, fn, header, subplans), nil
+			return newHookFnNode(planHook.name, fn, header, subplans, p.execCfg.DistSQLPlanner.stopper), nil
 		}
 	}
 	return nil, nil
