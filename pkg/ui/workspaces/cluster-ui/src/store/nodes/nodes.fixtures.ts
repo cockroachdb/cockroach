@@ -295,6 +295,8 @@ export const getNodeStatus = (): INodeStatus => {
       "liveness.heartbeatsinflight": 0,
       "liveness.heartbeatsuccesses": 475,
       "liveness.livenodes": 1,
+      "logical_replication.commit_latency-p50": 0,
+      "logical_replication.commit_latency-p95": 0,
       "node-id": 1,
       "requests.slow.distsender": 0,
       "round-trip-latency-max": 1114111,
