@@ -6179,6 +6179,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 			doError(catalog.ValidateRolesInDescriptor(descriptor, func(username username.SQLUsername) (bool, error) {
 				if username.IsRootUser() ||
 					username.IsAdminRole() ||
+					username.IsNodeUser() ||
 					username.IsPublicRole() {
 					return true, nil
 				}
@@ -6642,7 +6643,8 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 							array_agg(username) as username_array FROM
 							(SELECT username
 							FROM system.users UNION
-							SELECT 'public' as username)
+							SELECT 'public' as username UNION
+							SELECT 'node' as username)
 						)
 					)
 						AS repaired_descriptor

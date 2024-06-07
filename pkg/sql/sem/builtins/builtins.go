@@ -5513,7 +5513,8 @@ SELECT
 							array_agg(username) as username_array FROM
 							(SELECT username
 							FROM system.users UNION
-							SELECT 'public' as username)
+							SELECT 'public' as username UNION
+							SELECT 'node' as username)
 						)
 					),
 					true

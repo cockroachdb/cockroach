@@ -850,10 +850,14 @@ func TestValidateTypeDesc(t *testing.T) {
 
 func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 	type testCase struct {
-		name                  string
-		input, expectedOutput descpb.TypeDescriptor
-		validIDs              catalog.DescriptorIDSet
+		name                           string
+		input, expectedOutput          descpb.TypeDescriptor
+		validIDs                       catalog.DescriptorIDSet
+		strippedDanglingBackReferences bool
+		strippedNonExistentRoles       bool
 	}
+	badOwnerPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.MakeSQLUsernameFromPreNormalizedString("dropped_user"))
+	goodOwnerPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.AdminRoleName())
 	badPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
 	goodPrivilege := catpb.NewBaseDatabasePrivilegeDescriptor(username.RootUserName())
 	badPrivilege.Users = append(badPrivilege.Users, catpb.UserPrivileges{
@@ -882,7 +886,34 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 				ReferencingDescriptorIDs: []descpb.ID{105},
 				Privileges:               goodPrivilege,
 			},
-			validIDs: catalog.MakeDescriptorIDSet(100, 101, 104, 105),
+			validIDs:                       catalog.MakeDescriptorIDSet(100, 101, 104, 105),
+			strippedDanglingBackReferences: true,
+			strippedNonExistentRoles:       true,
+		},
+		{
+			name: "missing owner",
+			input: descpb.TypeDescriptor{
+				Name:                     "foo",
+				ID:                       104,
+				ParentID:                 100,
+				ParentSchemaID:           101,
+				ArrayTypeID:              105,
+				Kind:                     descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE,
+				ReferencingDescriptorIDs: []descpb.ID{105},
+				Privileges:               badOwnerPrivilege,
+			},
+			expectedOutput: descpb.TypeDescriptor{
+				Name:                     "foo",
+				ID:                       104,
+				ParentID:                 100,
+				ParentSchemaID:           101,
+				ArrayTypeID:              105,
+				Kind:                     descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE,
+				ReferencingDescriptorIDs: []descpb.ID{105},
+				Privileges:               goodOwnerPrivilege,
+			},
+			validIDs:                 catalog.MakeDescriptorIDSet(100, 101, 104, 105),
+			strippedNonExistentRoles: true,
 		},
 	}
 
@@ -899,8 +930,8 @@ func TestStripDanglingBackReferencesAndRoles(t *testing.T) {
 				return role.IsAdminRole() || role.IsPublicRole() || role.IsRootUser()
 			}))
 			desc := b.BuildCreatedMutableType()
-			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
-			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
+			require.Equal(t, test.strippedDanglingBackReferences, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingBackReferences))
+			require.Equal(t, test.strippedNonExistentRoles, desc.GetPostDeserializationChanges().Contains(catalog.StrippedNonExistentRoles))
 			require.Equal(t, out.BuildCreatedMutableType().TypeDesc(), desc.TypeDesc())
 		})
 	}
