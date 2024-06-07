@@ -156,6 +156,10 @@ func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
 	panic("unimplemented")
 }
 
+func (p *Provider) Shrink(*logger.Logger, vm.List, string) error {
+	panic("unimplemented")
+}
+
 func (p *Provider) CreateLoadBalancer(*logger.Logger, vm.List, int) error {
 	panic("unimplemented")
 }
