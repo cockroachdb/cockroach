@@ -632,18 +632,22 @@ var aggregatorHeartbeatFrequency = settings.RegisterDurationSetting(
 var aggregatorFlushJitter = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"changefeed.aggregator.flush_jitter",
-	"jitter aggregator flushes as a fraction of min_checkpoint_frequency",
+	"jitter aggregator flushes as a fraction of min_checkpoint_frequency. This "+
+		"setting has no effect if min_checkpoint_frequency is set to 0.",
 	0, /* disabled by default */
 	settings.NonNegativeFloat,
 	settings.WithPublic,
 )
 
-func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) time.Time {
-	if j == 0 {
-		return s.Now().Add(d)
+func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) (time.Time, error) {
+	if j < 0 || d < 0 {
+		return s.Now(), errors.AssertionFailedf("invalid jitter value: %f, duration: %s", j, d)
+	}
+	if j == 0 || d == 0 {
+		return s.Now().Add(d), nil
 	}
 	nextFlush := d + time.Duration(rand.Int63n(int64(j*float64(d))))
-	return s.Now().Add(nextFlush)
+	return s.Now().Add(nextFlush), nil
 }
 
 // Next is part of the RowSource interface.
@@ -789,7 +793,7 @@ func (ca *changeAggregator) flushBufferedEvents() error {
 // noteResolvedSpan periodically flushes Frontier progress from the current
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
-func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
+func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (returnErr error) {
 	if resolved.Timestamp.IsEmpty() {
 		// @0.0 resolved timestamps could come in from rangefeed checkpoint.
 		// When rangefeed starts running, it emits @0.0 resolved timestamp.
@@ -821,8 +825,11 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	sv := &ca.flowCtx.Cfg.Settings.SV
 	if checkpointFrontier {
 		defer func() {
-			ca.nextHighWaterFlush = nextFlushWithJitter(
+			ca.nextHighWaterFlush, err = nextFlushWithJitter(
 				timeutil.DefaultTimeSource{}, ca.flushFrequency, aggregatorFlushJitter.Get(sv))
+			if err != nil {
+				returnErr = errors.CombineErrors(returnErr, err)
+			}
 		}()
 		return ca.flushFrontier()
 	}
@@ -840,8 +847,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		}()
 		return ca.flushFrontier()
 	}
-
-	return nil
+	return returnErr
 }
 
 // flushFrontier flushes sink and emits resolved timestamp if needed.
