@@ -117,7 +117,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 		})
 		t.Run("subscribe fails", func(t *testing.T) {
-			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
+			subscription, err := client.Subscribe(ctx, targetStreamID, 1, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
 			require.NoError(t, err)
 			err = subscription.Subscribe(ctx)
 			require.ErrorContains(t, err, expectedErr)
@@ -141,7 +141,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.ErrorContains(t, err, "not a replication stream job")
 		})
 		t.Run("subscribe fails", func(t *testing.T) {
-			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
+			subscription, err := client.Subscribe(ctx, targetStreamID, 1, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
 			require.NoError(t, err)
 			err = subscription.Subscribe(ctx)
 			require.ErrorContains(t, err, "not a replication stream job")
@@ -167,7 +167,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_PAUSED, status.StreamStatus)
 		})
 		t.Run("subscribe fails", func(t *testing.T) {
-			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
+			subscription, err := client.Subscribe(ctx, targetStreamID, 1, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
 			require.NoError(t, err)
 			err = subscription.Subscribe(ctx)
 			require.ErrorContains(t, err, "must be running")
@@ -195,7 +195,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
 		})
 		t.Run("subscribe fails", func(t *testing.T) {
-			subscription, err := client.Subscribe(ctx, targetStreamID, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
+			subscription, err := client.Subscribe(ctx, targetStreamID, 1, 1, encodedSpec, initialScanTimstamp, emptyFrontier)
 			require.NoError(t, err)
 			err = subscription.Subscribe(ctx)
 			require.ErrorContains(t, err, "must be running")
@@ -328,7 +328,7 @@ INSERT INTO d.t2 VALUES (2);
 		require.NoError(t, subClient.Close(ctx))
 	}()
 	require.NoError(t, err)
-	sub, err := subClient.Subscribe(ctx, streamID, 1, encodeSpec("t1"),
+	sub, err := subClient.Subscribe(ctx, streamID, 1, 1, encodeSpec("t1"),
 		initialScanTimestamp, nil)
 	require.NoError(t, err)
 

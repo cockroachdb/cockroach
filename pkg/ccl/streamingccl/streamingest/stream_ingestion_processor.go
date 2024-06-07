@@ -458,7 +458,9 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			}
 		}
 
-		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID), int32(sip.flowCtx.NodeID.SQLInstanceID()), token,
+		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID),
+			int32(sip.flowCtx.NodeID.SQLInstanceID()), sip.ProcessorID,
+			token,
 			sip.spec.InitialScanTimestamp, sip.frontier)
 
 		if err != nil {

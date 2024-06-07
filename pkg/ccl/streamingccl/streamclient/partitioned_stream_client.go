@@ -207,7 +207,8 @@ func (p *partitionedStreamClient) Close(ctx context.Context) error {
 func (p *partitionedStreamClient) Subscribe(
 	ctx context.Context,
 	streamID streampb.StreamID,
-	consumerID int32,
+	consumerNode int32,
+	consumerProc int32,
 	spec SubscriptionToken,
 	initialScanTime hlc.Timestamp,
 	previousReplicatedTimes span.Frontier,
@@ -233,7 +234,8 @@ func (p *partitionedStreamClient) Subscribe(
 			return span.ContinueMatch
 		})
 	}
-	sps.ConsumerID = consumerID
+	sps.ConsumerNode = consumerNode
+	sps.ConsumerProc = consumerProc
 	sps.Compressed = true
 	sps.WithFiltering = cfg.withFiltering
 
