@@ -30,8 +30,8 @@ import (
 func (ex *connExecutor) maybeAutoCommitBeforeDDL(
 	ctx context.Context, ast tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
-	if tree.CanModifySchema(ast) &&
-		ex.executorType != executorTypeInternal &&
+	if ex.executorType != executorTypeInternal &&
+		tree.CanModifySchema(ast) &&
 		ex.sessionData().AutoCommitBeforeDDL &&
 		(!ex.planner.EvalContext().TxnIsSingleStmt || !ex.implicitTxn()) &&
 		ex.extraTxnState.firstStmtExecuted {
