@@ -2152,7 +2152,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	storeID := slpb.StoreIdent{NodeID: s.NodeID(), StoreID: s.StoreID()}
 	options := storeliveness.Options{
-		HeartbeatInterval:     1 * time.Second,
+		HeartbeatInterval:     s.cfg.RangeLeaseRenewalDuration(),
 		LivenessInterval:      s.cfg.RangeLeaseDuration,
 		SupportExpiryInterval: 1 * time.Second,
 	}
