@@ -1649,6 +1649,52 @@ func computeGrowDistribution(groups []jsonManagedInstanceGroup, newNodeCount int
 	return addCount
 }
 
+// Shrink shrinks the cluster by deleting the given VMs. This is only supported
+// for managed instance groups. Currently, nodes should only be deleted from the
+// tail of the cluster, because this function does not yet support renaming
+// nodes and re-syncing DNS names to keep the cluster in a consistent state.
+func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName string) error {
+	if !isManaged(vmsToDelete) {
+		return errors.New("shrinking is only supported for managed instance groups")
+	}
+
+	project := vmsToDelete[0].Project
+	groupName := instanceGroupName(clusterName)
+	groups, err := listManagedInstanceGroups(project, groupName)
+	if err != nil {
+		return err
+	}
+	zones := make(map[string]struct{})
+	for _, group := range groups {
+		zones[group.Zone] = struct{}{}
+	}
+
+	g := errgroup.Group{}
+	for _, cVM := range vmsToDelete {
+		args := []string{"compute", "instance-groups", "managed", "delete-instances",
+			instanceGroupName(clusterName), "--project", cVM.Project, "--zone", cVM.Zone, "--instances", cVM.Name}
+		g.Go(func() error {
+			cmd := exec.Command("gcloud", args...)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			}
+			return nil
+		})
+	}
+
+	err = g.Wait()
+	if err != nil {
+		return err
+	}
+
+	err = waitForGroupStability(project, groupName, maps.Keys(zones))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
 	project := vms[0].Project
 	groupName := instanceGroupName(clusterName)
@@ -2282,7 +2328,7 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 
 // deleteManaged deletes the managed instance group for the given VMs. It also
 // deletes any instance templates that were used to create the managed instance
-// group.
+// group and associated load balancers.
 func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 	clusterProjectMap := make(map[string]string)
 	for _, v := range vms {
