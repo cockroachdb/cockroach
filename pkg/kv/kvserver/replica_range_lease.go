@@ -865,13 +865,15 @@ func (r *Replica) leaseStatus(
 		// For leader leases, retrieve the Raft leader support information
 		// associated with the lease.
 		raftStatus := r.raftStatusRLocked()
-		status.LeaderSupport = kvserverpb.RaftLeaderSupport{
-			Term:             raftStatus.Term,
-			Leader:           raftStatus.RaftState == raft.StateLeader,
-			LeadSupportUntil: hlc.Timestamp(raftStatus.LeadSupportUntil),
-		}
-		if lease.Term != status.LeaderSupport.Term || !status.LeaderSupport.Leader {
-			status.LeaderSupport.LeadSupportUntil = hlc.Timestamp{}
+		if raftStatus != nil {
+			status.LeaderSupport = kvserverpb.RaftLeaderSupport{
+				Term:             raftStatus.Term,
+				Leader:           raftStatus.RaftState == raft.StateLeader,
+				LeadSupportUntil: hlc.Timestamp(raftStatus.LeadSupportUntil),
+			}
+			if lease.Term != status.LeaderSupport.Term || !status.LeaderSupport.Leader {
+				status.LeaderSupport.LeadSupportUntil = hlc.Timestamp{}
+			}
 		}
 	}
 	expiration := status.Expiration()
