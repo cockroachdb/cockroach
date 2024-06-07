@@ -75,6 +75,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"sz":     {},
 						"timing": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/jobs": {
+						"RunningStatus": {},
+						"Status":        {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/jobs/jobspb": {
 						"Type": {},
 					},
