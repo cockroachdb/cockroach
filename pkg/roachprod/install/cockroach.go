@@ -43,14 +43,6 @@ var startScript string
 //go:embed files/cockroachdb-logging.yaml
 var loggingConfig string
 
-// sharedProcessVirtualClusterNode is a constant node that is used
-// whenever we register a service descriptor for a shared-process
-// virtual cluster. Since these virtual clusters use the system
-// interface process, the service descriptor just represents the
-// existence of the virtual cluster; at service discovery time, ports
-// are resolved based on existing services for the system interface.
-var sharedProcessVirtualClusterNode = Node(1)
-
 func cockroachNodeBinary(c *SyncedCluster, node Node) string {
 	if filepath.IsAbs(c.Binary) {
 		return c.Binary
@@ -261,29 +253,13 @@ func (c *SyncedCluster) maybeRegisterServices(
 		servicesToRegister, err = c.servicesWithOpenPortSelection(
 			ctx, l, startOpts, ServiceModeExternal, serviceMap, portFunc,
 		)
-	case StartSharedProcessForVirtualCluster:
-		// Specifying a sql instance for shared process virtual clusters
-		// doesn't make sense, so return an error in that case to make it
-		// explicit.
-		if startOpts.SQLInstance != 0 {
-			err = fmt.Errorf("sql instance must be unset for shared process deployments")
-			break
-		}
-
-		for _, serviceType := range []ServiceType{ServiceTypeSQL, ServiceTypeUI} {
-			if _, ok := serviceMap[sharedProcessVirtualClusterNode][serviceType]; !ok {
-				servicesToRegister = append(servicesToRegister, ServiceDesc{
-					VirtualClusterName: startOpts.VirtualClusterName,
-					ServiceType:        serviceType,
-					ServiceMode:        ServiceModeShared,
-					Node:               sharedProcessVirtualClusterNode,
-				})
-			}
-		}
 	case StartServiceForVirtualCluster:
 		servicesToRegister, err = c.servicesWithOpenPortSelection(
 			ctx, l, startOpts, ServiceModeExternal, serviceMap, portFunc,
 		)
+	default:
+		// For shared-process virtual clusters, we don't need to register
+		// services as these will be resolved to the system interface process.
 	}
 
 	if err != nil {
@@ -405,9 +381,15 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}
 
 	if c.allowServiceRegistration() {
-		err := c.maybeRegisterServices(ctx, l, startOpts, c.FindOpenPorts)
-		if err != nil {
-			return err
+		// Only register services when starting a virtual cluster, or using custom
+		// ports, or for local cluster port management to avoid collisions. The
+		// lookup logic will automatically fall back to the default ports if the
+		// service is not found (or has not been registered).
+		if customPortsSpecified() || c.IsLocal() || startOpts.Target != StartDefault {
+			err := c.maybeRegisterServices(ctx, l, startOpts, c.FindOpenPorts)
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		if customPortsSpecified() {
