@@ -7044,29 +7044,37 @@ func TestFlushJitter(t *testing.T) {
 	// min_flush_frequency period, and thus it would be hard to tell if the
 	// difference is due to jitter or not.  Just verify nextFlushWithJitter function
 	// works as expected with controlled time source.
-	const flushFrequency time.Duration = 100 * time.Millisecond
-	ts := timeutil.NewManualTime(timeutil.Now())
 
+	ts := timeutil.NewManualTime(timeutil.Now())
 	const numIters = 100
-	t.Run("disable", func(t *testing.T) {
-		const disableJitter = 0.0
-		for i := 0; i < numIters; i++ {
-			next := nextFlushWithJitter(ts, flushFrequency, disableJitter)
-			require.Equal(t, ts.Now().Add(flushFrequency), next)
-			ts.AdvanceTo(next)
-		}
-	})
-	t.Run("enable", func(t *testing.T) {
-		const jitter = 0.1
-		for i := 0; i < numIters; i++ {
-			next := nextFlushWithJitter(ts, flushFrequency, jitter)
-			// next flush should be at least flushFrequency into the future.
-			require.LessOrEqual(t, ts.Now().Add(flushFrequency), next, t)
-			// and jitter should be at most 10% more than flushFrequency (10ms)
-			require.Less(t, next.Sub(ts.Now()), flushFrequency+flushFrequency/10)
-			ts.AdvanceTo(next)
-		}
-	})
+
+	for _, flushFrequency := range []time.Duration{
+		0,
+		10 * time.Millisecond,
+		100 * time.Millisecond,
+	} {
+		t.Run(fmt.Sprintf("Disabled_FlushFrequency=%s", flushFrequency), func(t *testing.T) {
+			const disableJitter = 0.0
+			for i := 0; i < numIters; i++ {
+				next := nextFlushWithJitter(ts, flushFrequency, disableJitter)
+				require.Equal(t, ts.Now().Add(flushFrequency), next)
+				ts.AdvanceTo(next)
+			}
+		})
+
+		t.Run(fmt.Sprintf("Enabled_FlushFrequency=%s", flushFrequency), func(t *testing.T) {
+			const jitter = 0.1
+			for i := 0; i < numIters; i++ {
+				next := nextFlushWithJitter(ts, flushFrequency, jitter)
+				// next flush should be at least flushFrequency into the future.
+				require.LessOrEqual(t, ts.Now().Add(flushFrequency), next)
+				// Jitter is 10%, so the next flush should be at most 10% more than
+				// flushFrequency.
+				require.LessOrEqual(t, next.Sub(ts.Now()), flushFrequency+flushFrequency/10)
+				ts.AdvanceTo(next)
+			}
+		})
+	}
 }
 
 func TestChangefeedOrderingWithErrors(t *testing.T) {
