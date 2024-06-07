@@ -104,7 +104,7 @@ func computeExpendableOverloadedFollowers(
 	var liveOverloadedNonVoterCandidates map[roachpb.ReplicaID]struct{}
 	var prs map[uint64]tracker.Progress
 
-	for _, replDesc := range d.replDescs.AsProto() {
+	for _, replDesc := range d.replDescs.Descriptors() {
 		if pausable := d.ioOverloadMap.AbovePauseThreshold(replDesc.StoreID); !pausable || replDesc.ReplicaID == d.self {
 			continue
 		}
@@ -230,14 +230,14 @@ func (osm *ioThresholdMap) AbovePauseThreshold(id roachpb.StoreID) bool {
 	return sc > osm.threshold
 }
 
-func (osm *ioThresholdMap) NumAbovePauseThreshold() int {
-	var n int
-	for id := range osm.m {
-		if osm.AbovePauseThreshold(id) {
-			n++
+func (osm *ioThresholdMap) AnyAbovePauseThreshold(repls roachpb.ReplicaSet) bool {
+	descs := repls.Descriptors()
+	for i := range descs {
+		if osm.AbovePauseThreshold(descs[i].StoreID) {
+			return true
 		}
 	}
-	return n
+	return false
 }
 
 func (osm *ioThresholdMap) IOThreshold(id roachpb.StoreID) *admissionpb.IOThreshold {
@@ -299,7 +299,10 @@ func (osm *ioThresholds) Replace(
 func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMap *ioThresholdMap) {
 	r.mu.pausedFollowers = nil
 
-	if ioThresholdMap.NumAbovePauseThreshold() == 0 {
+	desc := r.descRLocked()
+	repls := desc.Replicas()
+
+	if !ioThresholdMap.AnyAbovePauseThreshold(repls) {
 		return
 	}
 
@@ -309,7 +312,7 @@ func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMa
 		return
 	}
 
-	if !quotaPoolEnabledForRange(*r.descRLocked()) {
+	if !quotaPoolEnabledForRange(desc) {
 		// If the quota pool isn't enabled (like for the liveness range), play it
 		// safe. The range is unlikely to be a major contributor to any follower's
 		// I/O and wish to reduce the likelihood of a problem in replication pausing
@@ -340,11 +343,11 @@ func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMa
 	now := r.store.Clock().Now().GoTime()
 	d := computeExpendableOverloadedFollowersInput{
 		self:          r.replicaID,
-		replDescs:     r.descRLocked().Replicas(),
+		replDescs:     repls,
 		ioOverloadMap: ioThresholdMap,
 		getProgressMap: func(_ context.Context) map[uint64]tracker.Progress {
 			prs := r.mu.internalRaftGroup.Status().Progress
-			updateRaftProgressFromActivity(ctx, prs, r.descRLocked().Replicas().AsProto(), func(id roachpb.ReplicaID) bool {
+			updateRaftProgressFromActivity(ctx, prs, repls.Descriptors(), func(id roachpb.ReplicaID) bool {
 				return r.mu.lastUpdateTimes.isFollowerActiveSince(id, now, r.store.cfg.RangeLeaseDuration)
 			})
 			return prs
