@@ -1439,7 +1439,7 @@ func (rrd *replShutdownDriver) getTargetAndWatcherNodes(ctx context.Context) {
 
 func getPhase(rd *replicationDriver, dstJobID jobspb.JobID) c2cPhase {
 	var jobStatus string
-	rd.setup.dst.sysSQL.QueryRow(rd.t, `SELECT status FROM [SHOW JOBS] WHERE job_id=$1`,
+	rd.setup.dst.sysSQL.QueryRow(rd.t, `SELECT status FROM [SHOW JOB $1]`,
 		dstJobID).Scan(&jobStatus)
 	require.Equal(rd.t, jobs.StatusRunning, jobs.Status(jobStatus))
 

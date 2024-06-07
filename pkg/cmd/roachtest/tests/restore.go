@@ -184,7 +184,7 @@ func registerRestore(r registry.Registry) {
 						return nil
 					case <-jobProgressTick.C:
 						var fraction float32
-						sql.QueryRow(t, `SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = $1`,
+						sql.QueryRow(t, `SELECT fraction_completed FROM [SHOW JOB $1]`,
 							jobID).Scan(&fraction)
 						t.L().Printf("RESTORE Progress %.2f", fraction)
 						if fraction < pauseAtProgress[pauseIndex] {
@@ -197,7 +197,7 @@ func registerRestore(r registry.Registry) {
 							// The pause job request should not fail unless the job has already succeeded,
 							// in which case, the test should gracefully succeed.
 							var status string
-							sql.QueryRow(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&status)
+							sql.QueryRow(t, `SELECT status FROM [SHOW JOBS $1]`, jobID).Scan(&status)
 							if status == "succeeded" {
 								return nil
 							}
@@ -205,7 +205,7 @@ func registerRestore(r registry.Registry) {
 						require.NoError(t, err)
 						testutils.SucceedsSoon(t, func() error {
 							var status string
-							sql.QueryRow(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&status)
+							sql.QueryRow(t, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status)
 							if status != "paused" {
 								return errors.Newf("expected status `paused` but found %s", status)
 							}
