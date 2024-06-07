@@ -316,8 +316,8 @@ func startDistChangefeed(
 		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
 
 		// CDC DistSQL flows are long-living, so we want to mark the flow memory
-		// monitor accordingly.
-		planCtx.MarkFlowMonitorAsLongLiving = true
+		// and disk monitors accordingly.
+		planCtx.MarkFlowMonitorsAsLongLiving = true
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
 		// p is the physical plan, recv is the distsqlreceiver

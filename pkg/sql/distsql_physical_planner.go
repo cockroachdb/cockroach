@@ -919,10 +919,11 @@ type PlanningCtx struct {
 	// This is true if plan is a simple insert that can be vectorized.
 	isVectorInsert bool
 
-	// MarkFlowMonitorAsLongLiving, if set, instructs the DistSQL runner to mark
-	// the "flow" memory monitor as long-living one, thus exempting it from
-	// having to be stopped when the txn monitor is stopped.
-	MarkFlowMonitorAsLongLiving bool
+	// MarkFlowMonitorsAsLongLiving, if set, instructs the DistSQL runner to
+	// mark the "flow" memory and disk monitors as long-living ones, thus
+	// exempting them from having to be stopped when the parent monitors are
+	// stopped.
+	MarkFlowMonitorsAsLongLiving bool
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}

@@ -267,10 +267,13 @@ func (ds *ServerImpl) setupFlow(
 		CurCount:   ds.Metrics.CurBytesCount,
 		MaxHist:    ds.Metrics.MaxBytesHist,
 		Settings:   ds.Settings,
-		LongLiving: localState.MarkFlowMonitorAsLongLiving,
+		LongLiving: localState.MarkFlowMonitorsAsLongLiving,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
 	diskMonitor = execinfra.NewMonitor(ctx, ds.ParentDiskMonitor, "flow-disk-monitor")
+	if localState.MarkFlowMonitorsAsLongLiving {
+		diskMonitor.MarkLongLiving()
+	}
 
 	makeLeaf := func() (*kv.Txn, error) {
 		tis := req.LeafTxnInputState
@@ -561,10 +564,11 @@ type LocalState struct {
 	// dependencies.
 	LocalVectorSources map[int32]any
 
-	// MarkFlowMonitorAsLongLiving, if set, instructs the DistSQL runner to mark
-	// the "flow" memory monitor as long-living one, thus exempting it from
-	// having to be stopped when the txn monitor is stopped.
-	MarkFlowMonitorAsLongLiving bool
+	// MarkFlowMonitorsAsLongLiving, if set, instructs the DistSQL runner to
+	// mark the "flow" memory and disk monitors as long-living ones, thus
+	// exempting them from having to be stopped when the parent monitors are
+	// stopped.
+	MarkFlowMonitorsAsLongLiving bool
 }
 
 // MustUseLeafTxn returns true if a LeafTxn must be used. It is valid to call

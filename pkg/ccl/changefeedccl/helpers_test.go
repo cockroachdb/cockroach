@@ -810,17 +810,15 @@ func makeSystemServerWithOptions(
 ) (testServer TestServerWithSystem, cleanup func()) {
 	systemServer, systemDB, clusterCleanup := startTestFullServer(t, options)
 	return TestServerWithSystem{
-			TestServer: TestServer{
-				DB:           systemDB,
-				Server:       systemServer,
-				TestingKnobs: *systemServer.SystemLayer().TestingKnobs(),
-				Codec:        keys.SystemSQLCodec,
-			},
-			SystemServer: systemServer,
-			SystemDB:     systemDB,
-		}, func() {
-			clusterCleanup()
-		}
+		TestServer: TestServer{
+			DB:           systemDB,
+			Server:       systemServer,
+			TestingKnobs: *systemServer.SystemLayer().TestingKnobs(),
+			Codec:        keys.SystemSQLCodec,
+		},
+		SystemServer: systemServer,
+		SystemDB:     systemDB,
+	}, clusterCleanup
 }
 
 func makeTenantServer(
@@ -1103,7 +1101,7 @@ func cdcTestNamed(t *testing.T, name string, testFn cdcTestFn, testOpts ...feedT
 	testFnWithSystem := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		testFn(t, s.TestServer, f)
 	}
-	cdcTestNamedWithSystem(t, "", testFnWithSystem, testOpts...)
+	cdcTestNamedWithSystem(t, name, testFnWithSystem, testOpts...)
 }
 
 func cdcTestWithSystem(t *testing.T, testFn cdcTestWithSystemFn, testOpts ...feedTestOption) {

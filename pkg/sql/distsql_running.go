@@ -696,7 +696,7 @@ func (dsp *DistSQLPlanner) Run(
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
 	localState.LocalVectorSources = plan.LocalVectorSources
-	localState.MarkFlowMonitorAsLongLiving = planCtx.MarkFlowMonitorAsLongLiving
+	localState.MarkFlowMonitorsAsLongLiving = planCtx.MarkFlowMonitorsAsLongLiving
 	if planCtx.planner != nil {
 		// Note that the planner's collection will only be used for local plans.
 		localState.Collection = planCtx.planner.Descriptors()
