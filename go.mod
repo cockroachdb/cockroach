@@ -119,12 +119,12 @@ require (
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go/v2 v2.3.7
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
-	github.com/cockroachdb/datadriven v1.0.3-0.20230801171734-e384cf455877
+	github.com/cockroachdb/datadriven v1.0.3-0.20240530155848-7682d40af056
 	github.com/cockroachdb/errors v1.11.1
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b
-	github.com/cockroachdb/pebble v0.0.0-20240529203325-200f9cf1e217
+	github.com/cockroachdb/pebble v0.0.0-20240605185645-8fb466501b70
 	github.com/cockroachdb/redact v1.1.5
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
@@ -285,7 +285,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
-	github.com/cockroachdb/swiss v0.0.0-20240303172742-c161743eb608 // indirect
+	github.com/cockroachdb/swiss v0.0.0-20240605133600-232b93a2b829 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect

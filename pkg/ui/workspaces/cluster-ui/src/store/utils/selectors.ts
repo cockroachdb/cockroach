@@ -9,10 +9,12 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+
 import {
   LocalStorageKeys,
   LocalStorageState,
 } from "src/store/localStorage/localStorage.reducer";
+
 import { AppState } from "../reducers";
 
 export const adminUISelector = createSelector(

@@ -9,10 +9,12 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME } from "../utils";
 import moment, { Moment } from "moment-timezone";
-import { InsightRecommendation } from "../../insights";
+
 import { SchemaInsightReqParams, SqlApiResponse } from "src/api";
+
+import { DOMAIN_NAME } from "../utils";
+import { InsightRecommendation } from "../../insights";
 
 export type SchemaInsightsState = {
   data: SqlApiResponse<InsightRecommendation[]>;

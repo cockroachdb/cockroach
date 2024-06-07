@@ -11,7 +11,7 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 import { MemoryRouter } from "react-router-dom";
-import { cloneDeep } from "lodash";
+import cloneDeep from "lodash/cloneDeep";
 
 import { StatementsPage } from "./statementsPage";
 import statementsPagePropsFixture, {

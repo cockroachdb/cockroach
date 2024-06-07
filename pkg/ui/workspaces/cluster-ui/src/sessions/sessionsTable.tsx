@@ -8,43 +8,40 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import React from "react";
+import { Link } from "react-router-dom";
+import moment from "moment-timezone";
 import classNames from "classnames/bind";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { Icon, Tooltip } from "@cockroachlabs/ui-components";
 
-import styles from "./sessionsTable.module.scss";
 import {
   DurationToMomentDuration,
   DurationToNumber,
   TimestampToMoment,
 } from "src/util/convert";
 import { BytesWithPrecision, Count, DATE_FORMAT } from "src/util/format";
-import { Link } from "react-router-dom";
-import React from "react";
-
-import moment from "moment-timezone";
-
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-type ISession = cockroach.server.serverpb.Session;
-type Status = cockroach.server.serverpb.Session.Status;
-
-import { TerminateSessionModalRef } from "./terminateSessionModal";
-import { TerminateQueryModalRef } from "./terminateQueryModal";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable/sortedtable";
-
-import { Icon } from "@cockroachlabs/ui-components";
 import { CircleFilled } from "src/icon/circleFilled";
-
 import {
   Dropdown,
   DropdownOption as DropdownItem,
 } from "src/dropdown/dropdown";
 import { Button } from "src/button/button";
-import { Tooltip } from "@cockroachlabs/ui-components";
-import { computeOrUseStmtSummary, FixLong } from "../util";
+
 import {
   statisticsTableTitles,
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
 import { Timestamp } from "../timestamp";
+import { computeOrUseStmtSummary, FixLong } from "../util";
+
+import { TerminateQueryModalRef } from "./terminateQueryModal";
+import { TerminateSessionModalRef } from "./terminateSessionModal";
+import styles from "./sessionsTable.module.scss";
+
+type ISession = cockroach.server.serverpb.Session;
+type Status = cockroach.server.serverpb.Session.Status;
 
 const cx = classNames.bind(styles);
 

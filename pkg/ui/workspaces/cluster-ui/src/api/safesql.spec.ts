@@ -8,12 +8,19 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Format, Identifier, Join, QuoteIdentifier, SQL } from "./safesql";
+import {
+  Format,
+  Identifier,
+  Join,
+  QuoteIdentifier,
+  SQL,
+  SqlFormatArg,
+} from "./safesql";
 
 describe("safesql", () => {
   test("format", () => {
-    type customString = string;
-    type customNum = number;
+    type CustomString = string;
+    type CustomNum = number;
 
     const testCases: {
       expected: string;
@@ -65,11 +72,11 @@ describe("safesql", () => {
       },
       {
         expected: `hello 'world'`,
-        formatted: Format(`hello %1`, ["world" as customString]),
+        formatted: Format(`hello %1`, ["world" as CustomString]),
       },
       {
         expected: `hello 1`,
-        formatted: Format(`hello %1`, [1 as customNum]),
+        formatted: Format(`hello %1`, [1 as CustomNum]),
       },
     ];
 
@@ -82,7 +89,7 @@ describe("safesql", () => {
     const testCases: {
       expected: string;
       format: string;
-      args: any[];
+      args: SqlFormatArg[];
     }[] = [
       { format: `hello %s`, args: null, expected: `invalid placeholder: %s` },
       { format: `hello %`, args: null, expected: `invalid placeholder: %` },
@@ -94,7 +101,7 @@ describe("safesql", () => {
       },
       {
         format: `hello %1`,
-        args: [new Date()],
+        args: [new Date() as any],
         expected: `bad argument 1: unsupported type: object`,
       },
     ];
@@ -141,7 +148,7 @@ describe("safesql", () => {
     ];
 
     testCases.forEach(tc => {
-      expect(tc.got.SQLString()).toEqual(tc.expected);
+      expect(tc.got.sqlString()).toEqual(tc.expected);
     });
   });
 

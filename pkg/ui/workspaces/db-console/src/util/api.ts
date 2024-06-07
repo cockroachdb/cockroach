@@ -12,7 +12,9 @@
  * This module contains all the REST endpoints for communicating with the admin UI.
  */
 
-import _ from "lodash";
+import isEmpty from "lodash/isEmpty";
+import isNil from "lodash/isNil";
+import map from "lodash/map";
 import moment from "moment-timezone";
 
 import * as protos from "src/js/protos";
@@ -349,7 +351,7 @@ export function getUIData(
   req: GetUIDataRequestMessage,
   timeout?: moment.Duration,
 ): Promise<GetUIDataResponseMessage> {
-  const queryString = _.map(
+  const queryString = map(
     req.keys,
     key => "keys=" + encodeURIComponent(key),
   ).join("&");
@@ -443,6 +445,7 @@ export function getJobs(
     (response: JobsResponseMessage) => response,
     (err: Error) => {
       if (err instanceof TimeoutError) {
+        // eslint-disable-next-line no-console
         console.error(
           `Jobs page time out because attempt to retrieve jobs exceeded ${err.timeout.asMilliseconds()}ms.`,
           `URL: ${url}. Request: ${JSON.stringify(req)}`,
@@ -571,7 +574,7 @@ export function getProblemRanges(
   req: ProblemRangesRequestMessage,
   timeout?: moment.Duration,
 ): Promise<ProblemRangesResponseMessage> {
-  const query = !_.isEmpty(req.node_id) ? `?node_id=${req.node_id}` : "";
+  const query = !isEmpty(req.node_id) ? `?node_id=${req.node_id}` : "";
   return timeoutFetch(
     serverpb.ProblemRangesResponse,
     `${STATUS_PREFIX}/problemranges${query}`,
@@ -626,7 +629,7 @@ export function getRangeLog(
 ): Promise<RangeLogResponseMessage> {
   const rangeID = FixLong(req.range_id);
   const rangeIDQuery = rangeID.eq(0) ? "" : `/${rangeID.toString()}`;
-  const limit = !_.isNil(req.limit) ? `?limit=${req.limit}` : "";
+  const limit = !isNil(req.limit) ? `?limit=${req.limit}` : "";
   return timeoutFetch(
     serverpb.RangeLogResponse,
     `${API_PREFIX}/rangelog${rangeIDQuery}${limit}`,

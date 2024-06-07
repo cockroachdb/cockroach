@@ -10,9 +10,9 @@
 
 import { Tooltip } from "@cockroachlabs/ui-components";
 import React from "react";
-import { ColumnDescriptor, SortedTable } from "../sortedtable";
 import classNames from "classnames/bind";
-import styles from "./insightsTable.module.scss";
+import { Link } from "react-router-dom";
+
 import { StatementLink } from "../statementsTable";
 import IdxRecAction from "../insights/indexActionBtn";
 import {
@@ -27,13 +27,15 @@ import {
   stmtPerformanceRules,
 } from "../util";
 import { Anchor } from "../anchor";
-import { Link } from "react-router-dom";
+import { ColumnDescriptor, SortedTable } from "../sortedtable";
 import {
   InsightExecEnum,
   InsightRecommendation,
   InsightType,
 } from "../insights/types";
 import { insightType } from "../insights/utils";
+
+import styles from "./insightsTable.module.scss";
 
 const cx = classNames.bind(styles);
 
@@ -388,8 +390,8 @@ function actionCell(
             query.toLowerCase().includes("drop ")
               ? "ReplaceIndex"
               : query.toLowerCase().includes("alter ")
-              ? "AlterIndex"
-              : "CreateIndex"
+                ? "AlterIndex"
+                : "CreateIndex"
           }
           database={insightRec.database}
         />

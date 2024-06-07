@@ -1,10 +1,17 @@
 show_backup_stmt ::=
-	'SHOW' 'BACKUPS' 'IN' location_opt_list
-	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' subdirectory 'IN' location_opt_list opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'SCHEMAS' location opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder opt_with_show_backup_connection_options_list
+	'SHOW' 'BACKUPS' 'IN' collectionURI
+	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' subdirectory 'IN' collectionURI 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
+	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' subdirectory 'IN' collectionURI 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
+	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' subdirectory 'IN' collectionURI 
+	| 'SHOW' 'BACKUP' collectionURI_path 'IN' string_or_placeholder_opt_list 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
+	| 'SHOW' 'BACKUP' collectionURI_path 'IN' string_or_placeholder_opt_list 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
+	| 'SHOW' 'BACKUP' collectionURI_path 'IN' string_or_placeholder_opt_list 
+	| 'SHOW' 'BACKUP' collectionURI_path 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
+	| 'SHOW' 'BACKUP' collectionURI_path 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
+	| 'SHOW' 'BACKUP' collectionURI_path 
+	| 'SHOW' 'BACKUP' 'SCHEMAS' collectionURI_path 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
+	| 'SHOW' 'BACKUP' 'SCHEMAS' collectionURI_path 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
+	| 'SHOW' 'BACKUP' 'SCHEMAS' collectionURI_path 
+	| 'SHOW' 'BACKUP' 'CONNECTION' collectionURI 'WITH' show_backup_connection_options ( ( ',' show_backup_connection_options ) )*
+	| 'SHOW' 'BACKUP' 'CONNECTION' collectionURI 'WITH' 'OPTIONS' '(' show_backup_connection_options ( ( ',' show_backup_connection_options ) )* ')'
+	| 'SHOW' 'BACKUP' 'CONNECTION' collectionURI 

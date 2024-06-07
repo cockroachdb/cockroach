@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+
 import { adminUISelector, localStorageSelector } from "../utils/selectors";
 import { insightType } from "../../insights";
 

@@ -10,8 +10,9 @@
 
 import Analytics from "analytics-node";
 import { Location } from "history";
-import _ from "lodash";
 import { Store } from "redux";
+import each from "lodash/each";
+import isEmpty from "lodash/isEmpty";
 
 import * as protos from "src/js/protos";
 import { versionsSelector } from "src/redux/nodes";
@@ -157,7 +158,7 @@ export class AnalyticsSync {
     }
 
     // If there are any queued pages, push them.
-    _.each(this.queuedPages, l => this.pushPage(cluster_id, l));
+    each(this.queuedPages, l => this.pushPage(cluster_id, l));
     this.queuedPages = [];
 
     // Push the page that was just accessed.
@@ -188,7 +189,7 @@ export class AnalyticsSync {
     // Do nothing if version information is not yet available.
     const state = this.deprecatedStore.getState();
     const versions = versionsSelector(state);
-    if (_.isEmpty(versions)) {
+    if (isEmpty(versions)) {
       return;
     }
 
@@ -277,7 +278,7 @@ export class AnalyticsSync {
   };
 
   private redact(path: string): string {
-    _.each(this.redactions, r => {
+    each(this.redactions, r => {
       if (r.match.test(path)) {
         // Apparently TypeScript doesn't know how to dispatch functions.
         // If there are two function overloads defined (as with

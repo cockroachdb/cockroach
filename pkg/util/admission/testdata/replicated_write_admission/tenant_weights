@@ -49,7 +49,7 @@ admit tenant=t2 pri=normal-pri create-time=1.005us size=1B range=r2 origin=n1 lo
 print
 ----
 physical-stats: work-count=10 written-bytes=10B ingested-bytes=0B
-[regular work queue]: len(tenant-heap)=2 top-tenant=t1
+[regular work queue]: len(tenant-heap)=2 top-tenant=t2
  tenant=t1 weight=2 fifo-threshold=low-pri used=0B
   [0: pri=normal-pri create-time=1.001µs size=1B range=r1 origin=n1 log-position=4/20]
   [1: pri=normal-pri create-time=1.002µs size=1B range=r1 origin=n1 log-position=4/21]
@@ -75,8 +75,8 @@ granter class=regular adjust-tokens=+7B
 # towards the tenant with the higher weight (t2).
 grant class=regular
 ----
-admitted [tenant=t1 pri=normal-pri create-time=1.001µs size=1B range=r1 origin=n1 log-position=4/20]
 admitted [tenant=t2 pri=normal-pri create-time=1.001µs size=1B range=r2 origin=n1 log-position=5/20]
+admitted [tenant=t1 pri=normal-pri create-time=1.001µs size=1B range=r1 origin=n1 log-position=4/20]
 admitted [tenant=t2 pri=normal-pri create-time=1.002µs size=1B range=r2 origin=n1 log-position=5/21]
 admitted [tenant=t2 pri=normal-pri create-time=1.003µs size=1B range=r2 origin=n1 log-position=5/22]
 admitted [tenant=t1 pri=normal-pri create-time=1.002µs size=1B range=r1 origin=n1 log-position=4/21]

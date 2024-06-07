@@ -9,6 +9,16 @@
 // licenses/APL.txt.
 
 import React from "react";
+import { connect } from "react-redux";
+import {
+  TimeScale,
+  TimeScaleDropdown,
+  TimeScaleOptions,
+  util,
+} from "@cockroachlabs/cluster-ui";
+import { RouteComponentProps } from "react-router-dom";
+import moment from "moment-timezone";
+
 import { cockroach } from "src/js/protos";
 import { getKeyVisualizerSamples } from "src/util/api";
 import KeyVisualizer from "src/views/keyVisualizer/keyVisualizer";
@@ -17,23 +27,18 @@ import {
   KeyVisualizerProps,
   SampleBucket,
 } from "src/views/keyVisualizer/interfaces";
-import { CanvasHeight, XAxisPadding } from "./constants";
 import { AdminUIState } from "src/redux/state";
-import { connect } from "react-redux";
-import {
-  TimeScale,
-  TimeScaleDropdown,
-  TimeScaleOptions,
-  util,
-} from "@cockroachlabs/cluster-ui";
 import { selectClusterSettings } from "src/redux/clusterSettings";
 import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import { refreshSettings } from "src/redux/apiReducers";
+
+
+import { BackToAdvanceDebug } from "../reports/containers/util";
+
+import { CanvasHeight, XAxisPadding } from "./constants";
+
 import KeyVisSamplesRequest = cockroach.server.serverpb.KeyVisSamplesRequest;
 import KeyVisSamplesResponse = cockroach.server.serverpb.KeyVisSamplesResponse;
-import { BackToAdvanceDebug } from "../reports/containers/util";
-import { RouteComponentProps } from "react-router-dom";
-import moment from "moment-timezone";
 
 const EnabledSetting = "keyvisualizer.enabled";
 const IntervalSetting = "keyvisualizer.sample_interval";

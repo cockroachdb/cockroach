@@ -8,7 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { get, isString, isNumber } from "lodash";
+import get from "lodash/get";
+import isString from "lodash/isString";
+import isNumber from "lodash/isNumber";
+
 import { track } from "./trackPaginate";
 
 describe("trackPaginate", () => {

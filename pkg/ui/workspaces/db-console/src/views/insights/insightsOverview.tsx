@@ -17,7 +17,9 @@ import { Tabs } from "antd";
 import "antd/lib/tabs/style";
 import { commonStyles, util } from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router-dom";
+
 import { tabAttr, viewAttr } from "src/util/constants";
+
 import WorkloadInsightsPage from "./workloadInsightsPage";
 import SchemaInsightsPage from "./schemaInsightsPage";
 

@@ -333,7 +333,7 @@ func sshAuthArgs() []string {
 	sshAuthArgsOnce.Do(func() {
 		paths := make([]string, len(config.DefaultPubKeyNames))
 		for idx, name := range config.DefaultPubKeyNames {
-			paths[idx] = filepath.Join(config.SSHDirectory, ".ssh", name)
+			paths[idx] = filepath.Join(config.SSHDirectory, name)
 		}
 		for _, p := range paths {
 			if _, err := os.Stat(p); err == nil {

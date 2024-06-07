@@ -380,7 +380,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 				expr = column.GetComputeExpr()
 			}
 			displayExpr, err := schemaexpr.FormatExprForDisplay(
-				ctx, table, expr, &p.semaCtx, p.SessionData(), tree.FmtPGCatalog,
+				ctx, table, expr, p.EvalContext(), &p.semaCtx, p.SessionData(), tree.FmtPGCatalog,
 			)
 			if err != nil {
 				return err
@@ -995,13 +995,13 @@ func populateTableConstraints(
 				contype = conTypeUnique
 				f.WriteString("UNIQUE (")
 				if err := catformat.FormatIndexElements(
-					ctx, table, uwi.IndexDesc(), f, p.SemaCtx(), p.SessionData(),
+					ctx, table, uwi.IndexDesc(), f, p.EvalContext(), p.SemaCtx(), p.SessionData(),
 				); err != nil {
 					return err
 				}
 				f.WriteByte(')')
 				if uwi.IsPartial() {
-					pred, err := schemaexpr.FormatExprForDisplay(ctx, table, uwi.GetPredicate(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog)
+					pred, err := schemaexpr.FormatExprForDisplay(ctx, table, uwi.GetPredicate(), p.EvalContext(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog)
 					if err != nil {
 						return err
 					}
@@ -1068,7 +1068,7 @@ func populateTableConstraints(
 				f.WriteString(" NOT VALID")
 			}
 			if uwoi.GetPredicate() != "" {
-				pred, err := schemaexpr.FormatExprForDisplay(ctx, table, uwoi.GetPredicate(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog)
+				pred, err := schemaexpr.FormatExprForDisplay(ctx, table, uwoi.GetPredicate(), p.EvalContext(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog)
 				if err != nil {
 					return err
 				}
@@ -1081,7 +1081,7 @@ func populateTableConstraints(
 			if conkey, err = colIDArrayToDatum(ck.CheckDesc().ColumnIDs); err != nil {
 				return err
 			}
-			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, ck.GetExpr(), &p.semaCtx, p.SessionData(), tree.FmtPGCatalog)
+			displayExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, ck.GetExpr(), p.EvalContext(), &p.semaCtx, p.SessionData(), tree.FmtPGCatalog)
 			if err != nil {
 				return err
 			}
@@ -1970,7 +1970,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						if col.IsExpressionIndexColumn() {
 							colAttNums = append(colAttNums, 0)
 							formattedExpr, err := schemaexpr.FormatExprForDisplay(
-								ctx, table, col.GetComputeExpr(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
+								ctx, table, col.GetComputeExpr(), p.EvalContext(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
 							)
 							if err != nil {
 								return err
@@ -2020,7 +2020,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					indpred := tree.DNull
 					if index.IsPartial() {
 						formattedPred, err := schemaexpr.FormatExprForDisplay(
-							ctx, table, index.GetPredicate(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
+							ctx, table, index.GetPredicate(), p.EvalContext(), p.SemaCtx(), p.SessionData(), tree.FmtPGCatalog,
 						)
 						if err != nil {
 							return err
@@ -2116,6 +2116,7 @@ func indexDefFromDescriptor(
 		index,
 		partitionStr,
 		tree.FmtPGCatalog,
+		p.EvalContext(),
 		p.SemaCtx(),
 		p.SessionData(),
 		catformat.IndexDisplayShowCreate,

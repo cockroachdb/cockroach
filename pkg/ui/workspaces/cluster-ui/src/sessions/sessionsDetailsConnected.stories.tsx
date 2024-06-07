@@ -25,9 +25,11 @@ import {
   createStore,
   Store,
 } from "redux";
-import { SessionDetailsPageConnected } from "./sessionDetailsConnected";
-import { AppState, sagas, rootReducer } from "../store";
 import { Route } from "react-router-dom";
+
+import { AppState, sagas, rootReducer } from "../store";
+
+import { SessionDetailsPageConnected } from "./sessionDetailsConnected";
 
 const TEST_ID = "1673deaf-76af-ea86-0000-000000000001";
 
@@ -45,8 +47,8 @@ const store: Store<AppState> = createStore(
   }),
   compose(
     applyMiddleware(sagaMiddleware, routerMiddleware(history)),
-    (window as any).__REDUX_DEVTOOLS_EXTENSION__ &&
-      (window as any).__REDUX_DEVTOOLS_EXTENSION__(),
+    window.__REDUX_DEVTOOLS_EXTENSION__ &&
+      window.__REDUX_DEVTOOLS_EXTENSION__(),
   ),
 );
 

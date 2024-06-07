@@ -5,68 +5,68 @@ current: 1000
 ----
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: 1000
-Average RUs: 0
+Current Tokens: 1000
+Average Tokens: 0
 
 request
-ru: 10
+tokens: 10
 ----
-Granted: 10 RU
+Granted: 10 tokens
 Trickle duration: 0s
-Fallback rate: 100.2777778 RU/s
+Fallback rate: 100.2777778 tokens/s
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: 990
-Average RUs: 250
+Current Tokens: 990
+Average Tokens: 250
 
 request
-ru: 890
+tokens: 890
 ----
-Granted: 890 RU
+Granted: 890 tokens
 Trickle duration: 0s
-Fallback rate: 100.275 RU/s
+Fallback rate: 100.275 tokens/s
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: 100
-Average RUs: 435
+Current Tokens: 100
+Average Tokens: 435
 
 # Go into debt.
 request
-ru: 200
+tokens: 200
 ----
-Granted: 200 RU
+Granted: 200 tokens
 Trickle duration: 10s
-Fallback rate: 100.0277778 RU/s
+Fallback rate: 100.0277778 tokens/s
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: -100
-Average RUs: 351.25
+Current Tokens: -100
+Average Tokens: 351.25
 
 # Request a very large value. We only grant what we get over the next request
 # period (10s by default).
 request
-ru: 10000
+tokens: 10000
 ----
-Granted: 1000 RU
+Granted: 1000 tokens
 Trickle duration: 10s
-Fallback rate: 100 RU/s
+Fallback rate: 100 tokens/s
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: -1100
-Average RUs: 238.4375
+Current Tokens: -1100
+Average Tokens: 238.4375
 
 # Try to request enough that we hit max debt levels. Note that we're temporarily
-# giving out more than the configured rate while Average RUs stabilizes.
+# giving out more than the configured rate while Average Tokens stabilizes.
 request
-ru: 1000
+tokens: 1000
 ----
-Granted: 400 RU
+Granted: 400 tokens
 Trickle duration: 10s
-Fallback rate: 100 RU/s
+Fallback rate: 100 tokens/s
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: -1500
-Average RUs: -96.171875
+Current Tokens: -1500
+Average Tokens: -96.171875
 
 # Fast-forward 10 seconds.
 update
@@ -74,32 +74,32 @@ update
 ----
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: -500
-Average RUs: -96.171875
+Current Tokens: -500
+Average Tokens: -96.171875
 
-# Make a request that is limited by average RUs.
+# Make a request that is limited by average Tokens.
 request
-ru: 1000
+tokens: 1000
 ----
-Granted: 802.8710938 RU
+Granted: 802.8710938 tokens
 Trickle duration: 10s
-Fallback rate: 100 RU/s
+Fallback rate: 100 tokens/s
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: -1302.871094
-Average RUs: -197.1289062
+Current Tokens: -1302.871094
+Average Tokens: -197.1289062
 
 # Make another request that should be granted.
 request
-ru: 100
+tokens: 100
 ----
-Granted: 100 RU
+Granted: 100 tokens
 Trickle duration: 10s
-Fallback rate: 100 RU/s
+Fallback rate: 100 tokens/s
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: -1402.871094
-Average RUs: -473.5644531
+Current Tokens: -1402.871094
+Average Tokens: -473.5644531
 
 # Fast-forward 10 seconds.
 update
@@ -107,40 +107,40 @@ update
 ----
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: -402.8710938
-Average RUs: -473.5644531
+Current Tokens: -402.8710938
+Average Tokens: -473.5644531
 
 request
-ru: 100
+tokens: 100
 ----
-Granted: 100 RU
+Granted: 100 tokens
 Trickle duration: 10s
-Fallback rate: 100 RU/s
+Fallback rate: 100 tokens/s
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: -502.8710938
-Average RUs: -455.8911133
+Current Tokens: -502.8710938
+Average Tokens: -455.8911133
 
 update
 10s
 ----
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: 497.1289062
-Average RUs: -455.8911133
+Current Tokens: 497.1289062
+Average Tokens: -455.8911133
 
 request
-ru: 500
+tokens: 500
 ----
-Granted: 500 RU
+Granted: 500 tokens
 Trickle duration: 10s
-Fallback rate: 100.1380914 RU/s
+Fallback rate: 100.1380914 tokens/s
 Burst Limit: 1000
 Refill Rate: 100
-Current RUs: -2.87109375
-Average RUs: -217.6361084
+Current Tokens: -2.87109375
+Average Tokens: -217.6361084
 
-# No token refill, don't update current RUs.
+# No token refill, don't update current Tokens.
 reconfigure
 limit: 1000
 rate: 0
@@ -148,17 +148,17 @@ current: -1
 ----
 Burst Limit: 1000
 Refill Rate: 0
-Current RUs: -2.87109375
-Average RUs: -217.6361084
+Current Tokens: -2.87109375
+Average Tokens: -217.6361084
 
 # Try to request tokens, expect 0 grant.
 request
-ru: 100
+tokens: 100
 ----
-Granted: 0 RU
+Granted: 0 tokens
 Trickle duration: 0s
-Fallback rate: 0 RU/s
+Fallback rate: 0 tokens/s
 Burst Limit: 1000
 Refill Rate: 0
-Current RUs: -2.87109375
-Average RUs: -163.9448547
+Current Tokens: -2.87109375
+Average Tokens: -163.9448547

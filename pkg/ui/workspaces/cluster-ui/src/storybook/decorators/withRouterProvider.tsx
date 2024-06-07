@@ -13,6 +13,7 @@ import { Provider } from "react-redux";
 import { ConnectedRouter, connectRouter } from "connected-react-router";
 import { createMemoryHistory } from "history";
 import { createStore, combineReducers } from "redux";
+import { PartialStoryFn, StoryContext } from "@storybook/addons";
 
 const history = createMemoryHistory();
 const routerReducer = connectRouter(history);
@@ -23,8 +24,11 @@ const store = createStore(
   }),
 );
 
-export const withRouterProvider = (storyFn: any) => (
+export const withRouterProvider = (
+  storyFn: PartialStoryFn,
+  context: StoryContext,
+) => (
   <Provider store={store}>
-    <ConnectedRouter history={history}>{storyFn()}</ConnectedRouter>
+    <ConnectedRouter history={history}>{storyFn(context)}</ConnectedRouter>
   </Provider>
 );

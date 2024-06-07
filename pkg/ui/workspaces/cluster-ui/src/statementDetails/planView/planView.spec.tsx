@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
-
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import {
   FlatPlanNode,
   FlatPlanNodeAttribute,
@@ -20,6 +20,7 @@ import {
   planNodeToString,
   planNodeAttrsToString,
 } from "./planView";
+
 import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 
 type IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;

@@ -15,21 +15,23 @@ import { Row, Col, Tabs } from "antd";
 import "antd/lib/tabs/style";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
+import classNames from "classnames/bind";
+
 import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { getMatchParamByName, idAttr } from "src/util";
-import { StmtInsightEvent } from "../types";
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
-import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
-import { TimeScale, toDateRange } from "../../timeScaleDropdown";
 import { getStmtInsightsApi } from "src/api/stmtInsightsApi";
-import { InsightsError } from "../insightsErrorComponent";
-
 // Styles
-import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
+
+import { InsightsError } from "../insightsErrorComponent";
+import { TimeScale, toDateRange } from "../../timeScaleDropdown";
+import { StmtInsightEvent } from "../types";
+
+import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
 
 const cx = classNames.bind(insightsDetailsStyles);
 
@@ -51,7 +53,7 @@ export interface StatementInsightDetailsDispatchProps {
 
 export type StatementInsightDetailsProps = StatementInsightDetailsStateProps &
   StatementInsightDetailsDispatchProps &
-  RouteComponentProps<unknown>;
+  RouteComponentProps;
 
 type ExplainPlanState = {
   explainPlan: string;
@@ -160,7 +162,7 @@ export const StatementInsightDetails: React.FC<
             <Row>
               <Col span={24}>
                 <SqlBox
-                  size={SqlBoxSize.custom}
+                  size={SqlBoxSize.CUSTOM}
                   value={details?.query}
                   format={true}
                 />
@@ -195,7 +197,7 @@ export const StatementInsightDetails: React.FC<
                     >
                       <SqlBox
                         value={explainPlanState.explainPlan || "Not available."}
-                        size={SqlBoxSize.custom}
+                        size={SqlBoxSize.CUSTOM}
                       />
                     </Loading>
                   </Col>

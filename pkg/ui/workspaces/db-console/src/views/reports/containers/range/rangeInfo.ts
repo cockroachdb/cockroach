@@ -8,7 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import find from "lodash/find";
+import isNil from "lodash/isNil";
 import Long from "long";
 
 import * as protos from "src/js/protos";
@@ -17,7 +18,7 @@ import { FixLong } from "src/util/fixLong";
 export function GetLocalReplica(
   info: protos.cockroach.server.serverpb.IRangeInfo,
 ): protos.cockroach.roachpb.IReplicaDescriptor {
-  return _.find(
+  return find(
     info.state.state.desc.internal_replicas,
     rep => rep.store_id === info.source_store_id,
   );
@@ -25,7 +26,7 @@ export function GetLocalReplica(
 
 export function IsLeader(info: protos.cockroach.server.serverpb.IRangeInfo) {
   const localRep = GetLocalReplica(info);
-  if (_.isNil(localRep)) {
+  if (isNil(localRep)) {
     return false;
   }
   return Long.fromInt(localRep.replica_id).eq(FixLong(info.raft_state.lead));

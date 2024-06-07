@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import isNil from "lodash/isNil";
 import React from "react";
 
 import { trustIcon } from "src/util/trust";
@@ -62,7 +62,7 @@ export class ExpandableString extends React.Component<
   render() {
     const { short, long } = this.props;
 
-    const neverCollapse = _.isNil(short) && long.length <= truncateLength + 2;
+    const neverCollapse = isNil(short) && long.length <= truncateLength + 2;
     if (neverCollapse) {
       return <span className="expandable__long">{this.props.long}</span>;
     }

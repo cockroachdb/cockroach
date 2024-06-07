@@ -1103,6 +1103,11 @@ func populateSystemJobsTableRows(
 	}
 	defer cleanup(ctx)
 
+	globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(ctx, p)
+	if err != nil {
+		return matched, err
+	}
+
 	for {
 		hasNext, err := it.Next(ctx)
 		if !hasNext || err != nil {
@@ -1120,7 +1125,10 @@ func populateSystemJobsTableRows(
 			return matched, wrapPayloadUnMarshalError(err, currentRow[jobIdIdx])
 		}
 
-		if err := jobsauth.Authorize(ctx, p, jobspb.JobID(jobID), payload, jobsauth.ViewAccess); err != nil {
+		err = jobsauth.Authorize(
+			ctx, p, jobspb.JobID(jobID), payload, jobsauth.ViewAccess, globalPrivileges,
+		)
+		if err != nil {
 			// Filter out jobs which the user is not allowed to see.
 			if IsInsufficientPrivilegeError(err) {
 				continue
@@ -3681,7 +3689,7 @@ func createRoutinePopulate(
 			for i := range treeNode.Options {
 				if body, ok := treeNode.Options[i].(tree.RoutineBodyStr); ok {
 					bodyStr := string(body)
-					bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, p.SessionData(), bodyStr, fnDesc.GetLanguage())
+					bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), bodyStr, fnDesc.GetLanguage())
 					if err != nil {
 						return err
 					}
@@ -3804,13 +3812,13 @@ CREATE TABLE crdb_internal.create_statements (
 		if table.IsView() {
 			descType = typeView
 			stmt, err = ShowCreateView(
-				ctx, &p.semaCtx, p.SessionData(), &name, table, false, /* redactableValues */
+				ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), &name, table, false, /* redactableValues */
 			)
 			if err != nil {
 				return err
 			}
 			createRedactable, err = ShowCreateView(
-				ctx, &p.semaCtx, p.SessionData(), &name, table, true, /* redactableValues */
+				ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), &name, table, true, /* redactableValues */
 			)
 		} else if table.IsSequence() {
 			descType = typeSequence
@@ -3947,7 +3955,7 @@ CREATE TABLE crdb_internal.table_columns (
 						defStr := tree.DNull
 						if col.HasDefault() {
 							defExpr, err := schemaexpr.FormatExprForDisplay(
-								ctx, table, col.GetDefaultExpr(), &p.semaCtx, p.SessionData(), tree.FmtParsable,
+								ctx, table, col.GetDefaultExpr(), p.EvalContext(), &p.semaCtx, p.SessionData(), tree.FmtParsable,
 							)
 							if err != nil {
 								return err
@@ -4058,6 +4066,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							idx,
 							partitionBuf.String(),
 							tree.FmtSimple,
+							p.EvalContext(),
 							p.SemaCtx(),
 							p.SessionData(),
 							catformat.IndexDisplayShowCreate,
@@ -6189,6 +6198,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 			doError(catalog.ValidateRolesInDescriptor(descriptor, func(username username.SQLUsername) (bool, error) {
 				if username.IsRootUser() ||
 					username.IsAdminRole() ||
+					username.IsNodeUser() ||
 					username.IsPublicRole() {
 					return true, nil
 				}
@@ -6652,7 +6662,8 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 							array_agg(username) as username_array FROM
 							(SELECT username
 							FROM system.users UNION
-							SELECT 'public' as username)
+							SELECT 'public' as username UNION
+							SELECT 'node' as username)
 						)
 					)
 						AS repaired_descriptor

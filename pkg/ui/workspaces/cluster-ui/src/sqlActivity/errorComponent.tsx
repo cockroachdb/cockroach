@@ -10,9 +10,11 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import styles from "./sqlActivity.module.scss";
 import moment from "moment-timezone";
+
 import { isRequestError, RequestError } from "../util";
+
+import styles from "./sqlActivity.module.scss";
 
 const cx = classNames.bind(styles);
 
@@ -82,8 +84,8 @@ const LoadingError: React.FC<SQLActivityErrorProps> = props => {
     props.sourceTables?.length === 1
       ? `Source Table: ${props.sourceTables[0]}`
       : props.sourceTables?.length > 1
-      ? `Source Tables: ${props.sourceTables.join(", ")}`
-      : "";
+        ? `Source Tables: ${props.sourceTables.join(", ")}`
+        : "";
 
   const respCode = isRequestError(props?.error)
     ? props?.error?.status

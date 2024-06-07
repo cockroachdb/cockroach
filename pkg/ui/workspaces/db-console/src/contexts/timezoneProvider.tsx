@@ -10,12 +10,13 @@
 
 import React, { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { TimezoneContext } from "@cockroachlabs/cluster-ui";
+
 import {
   selectClusterSettings,
   selectTimezoneSetting,
 } from "src/redux/clusterSettings";
 import { refreshSettings } from "src/redux/apiReducers";
-import { TimezoneContext } from "@cockroachlabs/cluster-ui";
 
 export const TimezoneProvider = (props: any) => {
   // Refresh cluster settings if needed.

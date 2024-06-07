@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/opentelemetry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -204,13 +205,6 @@ func newCluster(
 	}
 
 	return c, nil
-}
-
-// shouldUseLoadBalancer determines if the node selector section in the cluster
-// name is set to select a load balancer.
-func shouldUseLoadBalancer(name string) bool {
-	parts := strings.Split(name, ":")
-	return len(parts) == 2 && strings.ToLower(parts[1]) == "lb"
 }
 
 // userClusterNameRegexp returns a regexp that matches all clusters owned by the
@@ -1053,31 +1047,8 @@ func PgURL(
 	if err != nil {
 		return nil, err
 	}
-
-	if shouldUseLoadBalancer(clusterName) {
-		services, err := c.DiscoverServices(ctx, opts.VirtualClusterName, install.ServiceTypeSQL,
-			install.ServiceInstancePredicate(opts.SQLInstance))
-		if err != nil {
-			return nil, err
-		}
-		port := config.DefaultSQLPort
-		serviceMode := install.ServiceModeExternal
-		if len(services) > 0 {
-			port = services[0].Port
-			serviceMode = services[0].ServiceMode
-		} else {
-			l.Printf("no services found, searching for load balancer on default port %d", port)
-		}
-		addr, err := c.FindLoadBalancer(l, port)
-		if err != nil {
-			return nil, err
-		}
-		return []string{c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth)}, nil
-	}
-
 	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
-
 	if opts.External {
 		for i := 0; i < len(nodes); i++ {
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
@@ -2329,6 +2300,41 @@ func StopFluentBit(ctx context.Context, l *logger.Logger, clusterName string) er
 	return fluentbit.Stop(ctx, l, c)
 }
 
+// StartOpenTelemetry installs, configures, and starts the OpenTelemetry
+// Collector on the cluster identified by clusterName.
+func StartOpenTelemetry(
+	ctx context.Context, l *logger.Logger, clusterName string, config opentelemetry.Config,
+) error {
+	if config.DatadogAPIKey == "" {
+		return errors.New("Datadog API cannot be empty")
+	}
+
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return opentelemetry.Install(ctx, l, c, config)
+}
+
+// Stop stops the OpenTelemetry Collector on the cluster identified by clusterName.
+func StopOpenTelemetry(ctx context.Context, l *logger.Logger, clusterName string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return opentelemetry.Stop(ctx, l, c)
+}
+
 // DestroyDNS destroys the DNS records for the given cluster.
 func DestroyDNS(ctx context.Context, l *logger.Logger, clusterName string) error {
 	c, err := getClusterFromCache(l, clusterName)
@@ -2603,6 +2609,59 @@ func CreateLoadBalancer(
 		}
 	}
 	return nil
+}
+
+// LoadBalancerPgURL generates the postgres URL for a load balancer serving the
+// given cluster.
+func LoadBalancerPgURL(
+	ctx context.Context, l *logger.Logger, clusterName, certsDir string, opts PGURLOptions,
+) (string, error) {
+	c, err := getClusterFromCache(l, clusterName, install.SecureOption(opts.Secure), install.PGUrlCertsDirOption(certsDir))
+	if err != nil {
+		return "", err
+	}
+
+	services, err := c.DiscoverServices(ctx, opts.VirtualClusterName, install.ServiceTypeSQL,
+		install.ServiceInstancePredicate(opts.SQLInstance))
+	if err != nil {
+		return "", err
+	}
+	port := config.DefaultSQLPort
+	serviceMode := install.ServiceModeExternal
+	if len(services) > 0 {
+		port = services[0].Port
+		serviceMode = services[0].ServiceMode
+	}
+	addr, err := c.FindLoadBalancer(l, port)
+	if err != nil {
+		return "", err
+	}
+	return c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth), nil
+}
+
+// LoadBalancerIP resolves the IP of a load balancer serving the
+// given cluster.
+func LoadBalancerIP(
+	ctx context.Context, l *logger.Logger, clusterName, virtualClusterName string, sqlInstance int,
+) (string, error) {
+	c, err := getClusterFromCache(l, clusterName)
+	if err != nil {
+		return "", err
+	}
+	services, err := c.DiscoverServices(ctx, virtualClusterName, install.ServiceTypeSQL,
+		install.ServiceInstancePredicate(sqlInstance))
+	if err != nil {
+		return "", err
+	}
+	port := config.DefaultSQLPort
+	if len(services) > 0 {
+		port = services[0].Port
+	}
+	addr, err := c.FindLoadBalancer(l, port)
+	if err != nil {
+		return "", err
+	}
+	return addr.IP, nil
 }
 
 // Deploy deploys a new version of cockroach to the given cluster. It currently

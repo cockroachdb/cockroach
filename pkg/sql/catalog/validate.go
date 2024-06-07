@@ -202,6 +202,18 @@ func ValidateOutboundTypeRefBackReference(selfID descpb.ID, typ TypeDescriptor) 
 func ValidateRolesInDescriptor(
 	descriptor Descriptor, RoleExists func(username username.SQLUsername) (bool, error),
 ) error {
+	// Validate the owner.
+	exists, err := RoleExists(descriptor.GetPrivileges().Owner())
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errors.AssertionFailedf(
+			"descriptor %q (%d) is owned by a role %q that doesn't exist",
+			descriptor.GetName(), descriptor.GetID(), descriptor.GetPrivileges().Owner(),
+		)
+	}
+	// Validate the privileges.
 	for _, priv := range descriptor.GetPrivileges().Users {
 		exists, err := RoleExists(priv.User())
 		if err != nil {

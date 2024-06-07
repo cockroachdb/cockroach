@@ -11,6 +11,9 @@
 import React, { useEffect, useState, useCallback } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
+import moment from "moment-timezone";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import {
   ISortedTablePagination,
   SortSetting,
@@ -31,7 +34,6 @@ import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { TableStatistics } from "src/tableStatistics";
 import { isSelectedColumn } from "src/columnsSelector/utils";
-
 import {
   filterStatementInsights,
   StmtInsightEvent,
@@ -39,27 +41,26 @@ import {
   makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
 } from "src/insights";
-import { EmptyInsightsTablePlaceholder } from "../util";
-import { StatementInsightsTable } from "./statementInsightsTable";
-import { InsightsError } from "../../insightsErrorComponent";
-import ColumnsSelector from "../../../columnsSelector/columnsSelector";
-import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
+import { StmtInsightsReq } from "src/api/stmtInsightsApi";
+import styles from "src/statementsPage/statementsPage.module.scss";
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import { useScheduleFunction } from "src/util/hooks";
+import { insights } from "src/util";
+import { Anchor } from "src/anchor";
+
+import { commonStyles } from "../../../common";
 import {
   defaultTimeScaleOptions,
   TimeScale,
   TimeScaleDropdown,
   timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
-import { StmtInsightsReq } from "src/api/stmtInsightsApi";
-import moment from "moment-timezone";
+import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
+import ColumnsSelector from "../../../columnsSelector/columnsSelector";
+import { InsightsError } from "../../insightsErrorComponent";
+import { EmptyInsightsTablePlaceholder } from "../util";
 
-import styles from "src/statementsPage/statementsPage.module.scss";
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import { commonStyles } from "../../../common";
-import { useScheduleFunction } from "src/util/hooks";
-import { InlineAlert } from "@cockroachlabs/ui-components";
-import { insights } from "src/util";
-import { Anchor } from "src/anchor";
+import { StatementInsightsTable } from "./statementInsightsTable";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

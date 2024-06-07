@@ -9,15 +9,18 @@
 // licenses/APL.txt.
 
 import React from "react";
-import _ from "lodash";
-import * as protos from "src/js/protos";
+import isEmpty from "lodash/isEmpty";
+import each from "lodash/each";
+import without from "lodash/without";
 import { AxisDomain } from "@cockroachlabs/cluster-ui";
+import uPlot from "uplot";
 
+import * as protos from "src/js/protos";
 import {
   AxisProps,
   MetricProps,
 } from "src/views/shared/components/metricQuery";
-import uPlot from "uplot";
+
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 type TSQueryResult = protos.cockroach.ts.tspb.TimeSeriesQueryResponse.IResult;
@@ -52,7 +55,7 @@ export type formattedSeries = {
 
 // logic to decide when to show a metric based on the query's result
 export function canShowMetric(result: TSQueryResult) {
-  return !_.isEmpty(result.datapoints);
+  return !isEmpty(result.datapoints);
 }
 
 export function formatMetricData(
@@ -61,7 +64,7 @@ export function formatMetricData(
 ): formattedSeries[] {
   const formattedData: formattedSeries[] = [];
 
-  _.each(metrics, (s, idx) => {
+  each(metrics, (s, idx) => {
     const result = data.results[idx];
     if (result && canShowMetric(result)) {
       const transform = s.props.transform ?? (d => d);
@@ -107,7 +110,7 @@ export function configureUPlotLineChart(
   // below to cycle through the colors. This ensures that we always
   // start from the same color for each graph so a single-series
   // graph will always have the first color, etc.
-  const strokeColors = _.without(
+  const strokeColors = without(
     seriesPalette,
     // Exclude custom colors provided in metrics from default list of colors.
     ...formattedRaw.filter(r => !!r.color).map(r => r.color),

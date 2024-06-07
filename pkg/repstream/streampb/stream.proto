@@ -92,9 +92,7 @@ message ReplicationProducerRequest {
 
   // TableNames, if set, are the names of the individual tables that a
   // logical replication ingestion processor are interested in.
-  repeated string table_names = 4 [
-    (gogoproto.nullable) = false
-  ];
+  repeated string table_names = 4;
 }
 
 // StreamPartitionSpec is the stream partition specification.

@@ -13,29 +13,9 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import moment from "moment-timezone";
 import { Link } from "react-router-dom";
-import { isUndefined } from "lodash";
-
-import { Anchor, Button, Text, TextTypes, Tooltip } from "src/components";
-import HeaderSection from "src/views/shared/components/headerSection";
-import { AdminUIState, AppDispatch } from "src/redux/state";
-import { trustIcon } from "src/util/trust";
-import DownloadIcon from "!!raw-loader!assets/download.svg";
+import isUndefined from "lodash/isUndefined";
 import {
-  selectStatementDiagnosticsReports,
-  selectStatementByFingerprint,
-  statementDiagnosticsReportsInFlight,
-} from "src/redux/statements/statementsSelectors";
-import {
-  invalidateStatementDiagnosticsRequests,
-  refreshStatementDiagnosticsRequests,
-} from "src/redux/apiReducers";
-import "./statementDiagnosticsHistoryView.styl";
-import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
-import { statementDiagnostics } from "src/util/docs";
-import { summarize } from "src/util/sql/summarize";
-import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
-import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
-import {
+  api as clusterUiApi,
   DownloadFile,
   DownloadFileRef,
   EmptyTable,
@@ -48,8 +28,30 @@ import {
   util,
   Timestamp,
 } from "@cockroachlabs/cluster-ui";
+
+import { Anchor, Button, Text, TextTypes, Tooltip } from "src/components";
+import HeaderSection from "src/views/shared/components/headerSection";
+import { AdminUIState, AppDispatch } from "src/redux/state";
+import { trustIcon } from "src/util/trust";
+import {
+  selectStatementDiagnosticsReports,
+  selectStatementByFingerprint,
+  statementDiagnosticsReportsInFlight,
+} from "src/redux/statements/statementsSelectors";
+import {
+  invalidateStatementDiagnosticsRequests,
+  refreshStatementDiagnosticsRequests,
+} from "src/redux/apiReducers";
+import { statementDiagnostics } from "src/util/docs";
+import { summarize } from "src/util/sql/summarize";
+import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 import { cancelStatementDiagnosticsReportAction } from "src/redux/statements";
 import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
+
+import "./statementDiagnosticsHistoryView.styl";
+
+import DownloadIcon from "!!raw-loader!assets/download.svg";
+import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps &
   MapDispatchToProps;

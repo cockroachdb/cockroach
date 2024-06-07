@@ -14,16 +14,17 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
+import { util } from "@cockroachlabs/cluster-ui";
 
+import spinner from "assets/spinner.gif";
 import { AdminUIState } from "src/redux/state";
 import { nodeSumsSelector } from "src/redux/nodes";
-import { util } from "@cockroachlabs/cluster-ui";
 import createChartComponent from "src/views/shared/util/d3-react";
-import capacityChart from "./capacity";
-import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import OverviewListAlerts from "src/views/shared/containers/alerts/overviewListAlerts";
 import EmailSubscription from "src/views/dashboard/emailSubscription";
+
+import capacityChart from "./capacity";
 import "./cluster.styl";
 import {
   CapacityUsageTooltip,

@@ -465,19 +465,6 @@ type KVConfig struct {
 	DelayedBootstrapFn func()
 
 	enginesCreated bool
-
-	// SnapshotSendLimit is the number of concurrent snapshots a store will send.
-	SnapshotSendLimit int64
-
-	// SnapshotApplyLimit is the number of concurrent snapshots a store will
-	// apply. The send limit is typically higher than the apply limit for a few
-	// reasons. One is that it keeps "pipelining" of requests in the case where
-	// there is only a single sender and single receiver. As soon as a receiver
-	// finishes a request, there will be another one to start. The performance
-	// impact of sending snapshots is lower than applying. Finally, snapshots are
-	// not sent until the receiver is ready to apply, so the cost of sending is
-	// low until the receiver is ready.
-	SnapshotApplyLimit int64
 }
 
 // MakeKVConfig returns a KVConfig with default values.
@@ -498,8 +485,6 @@ func (kvCfg *KVConfig) SetDefaults() {
 	kvCfg.ScanMinIdleTime = defaultScanMinIdleTime
 	kvCfg.ScanMaxIdleTime = defaultScanMaxIdleTime
 	kvCfg.EventLogEnabled = defaultEventLogEnabled
-	kvCfg.SnapshotSendLimit = kvserver.DefaultSnapshotSendLimit
-	kvCfg.SnapshotApplyLimit = kvserver.DefaultSnapshotApplyLimit
 }
 
 // SQLConfig holds the parameters that (together with a BaseConfig) allow
@@ -804,7 +789,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
-			addCfgOpt(storage.MaxSize(sizeInBytes))
+			addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
 			addCfgOpt(storage.CacheSize(cfg.CacheSize))
 			addCfgOpt(storage.RemoteStorageFactory(cfg.EarlyBootExternalStorageAccessor))
 
@@ -830,9 +815,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return Engines{}, errors.Wrap(err, "creating disk monitor")
 			}
 
-			detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
-
-			addCfgOpt(storage.MaxSize(sizeInBytes))
+			if spec.Size.Percent > 0 {
+				detail(redact.Sprintf("store %d: max size %s (calculated from %.2f percent of total), max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), spec.Size.Percent, openFileLimitPerStore))
+				addCfgOpt(storage.MaxSizePercent(spec.Size.Percent / 100))
+			} else {
+				detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
+				addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
+			}
 			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec, du)))
 			addCfgOpt(storage.Caches(pebbleCache, tableCache))
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
@@ -968,8 +957,6 @@ func (cfg *Config) readEnvironmentVariables() {
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMinIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MIN_IDLE_TIME", cfg.ScanMinIdleTime)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
-	cfg.SnapshotSendLimit = envutil.EnvOrDefaultInt64("COCKROACH_CONCURRENT_SNAPSHOT_SEND_LIMIT", cfg.SnapshotSendLimit)
-	cfg.SnapshotApplyLimit = envutil.EnvOrDefaultInt64("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", cfg.SnapshotApplyLimit)
 }
 
 // parseGossipBootstrapAddresses parses list of gossip bootstrap addresses.

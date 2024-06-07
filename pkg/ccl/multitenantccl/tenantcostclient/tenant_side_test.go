@@ -803,11 +803,11 @@ func (tp *testProvider) TokenBucket(
 
 	rate := tp.mu.cfg.Throttle
 	if rate >= 0 {
-		res.GrantedRU = in.RequestedRU
+		res.GrantedTokens = in.RequestedTokens
 		if rate > 0 {
-			res.TrickleDuration = time.Duration(in.RequestedRU / rate * float64(time.Second))
+			res.TrickleDuration = time.Duration(in.RequestedTokens / rate * float64(time.Second))
 			if res.TrickleDuration > in.TargetRequestPeriod {
-				res.GrantedRU *= in.TargetRequestPeriod.Seconds() / res.TrickleDuration.Seconds()
+				res.GrantedTokens *= in.TargetRequestPeriod.Seconds() / res.TrickleDuration.Seconds()
 				res.TrickleDuration = in.TargetRequestPeriod
 			}
 		}

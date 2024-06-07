@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
+
 import {
   executeInternalSql,
   LARGE_RESULT_SIZE,
@@ -16,7 +18,6 @@ import {
   sqlResultsAreEmpty,
 } from "./sqlApi";
 import { withTimeout } from "./util";
-import moment from "moment-timezone";
 
 export type DatabasesColumns = {
   database_name: string;

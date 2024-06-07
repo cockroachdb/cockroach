@@ -154,13 +154,13 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			WriteBatches           uint64  `yaml:"write_batches"`
 			WriteReq               uint64  `yaml:"write_req"`
 			WriteBytes             uint64  `yaml:"write_bytes"`
-			SQLPodsCPUUsage        float64 `yaml:"sql_pods_cpu_usage"`
+			SQLPodsCPUSeconds      float64 `yaml:"sql_pods_cpu_seconds"`
 			PGWireEgressBytes      uint64  `yaml:"pgwire_egress_bytes"`
 			ExternalIOIngressBytes uint64  `yaml:"external_io_ingress_bytes"`
 			ExternalIOEgressBytes  uint64  `yaml:"external_io_egress_bytes"`
 			CrossRegionNetworkRU   float64 `yaml:"cross_region_network_ru"`
 		}
-		RU     float64 `yaml:"ru"`
+		Tokens float64 `yaml:"tokens"`
 		Period string  `yaml:"period"`
 	}
 	args.SeqNum = -1
@@ -193,13 +193,13 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			WriteBatches:           args.Consumption.WriteBatches,
 			WriteRequests:          args.Consumption.WriteReq,
 			WriteBytes:             args.Consumption.WriteBytes,
-			SQLPodsCPUSeconds:      args.Consumption.SQLPodsCPUUsage,
+			SQLPodsCPUSeconds:      args.Consumption.SQLPodsCPUSeconds,
 			PGWireEgressBytes:      args.Consumption.PGWireEgressBytes,
 			ExternalIOIngressBytes: args.Consumption.ExternalIOIngressBytes,
 			ExternalIOEgressBytes:  args.Consumption.ExternalIOEgressBytes,
 			CrossRegionNetworkRU:   args.Consumption.CrossRegionNetworkRU,
 		},
-		RequestedRU:         args.RU,
+		RequestedTokens:     args.Tokens,
 		TargetRequestPeriod: period,
 	}
 	res := ts.tenantUsage.TokenBucketRequest(
@@ -208,9 +208,9 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 	if res.Error != (errors.EncodedError{}) {
 		return fmt.Sprintf("error: %v", errors.DecodeError(context.Background(), res.Error))
 	}
-	if res.GrantedRU == 0 {
+	if res.GrantedTokens == 0 {
 		if res.TrickleDuration != 0 {
-			d.Fatalf(t, "trickle duration set with 0 granted RUs")
+			d.Fatalf(t, "trickle duration set with 0 granted tokens")
 		}
 		return ""
 	}
@@ -219,8 +219,8 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		trickleStr = fmt.Sprintf("over %s", res.TrickleDuration)
 	}
 	return fmt.Sprintf(
-		"%.10g RUs granted %s. Fallback rate: %.10g RU/s\n",
-		res.GrantedRU, trickleStr, res.FallbackRate,
+		"%.10g tokens granted %s. Fallback rate: %.10g tokens/s\n",
+		res.GrantedTokens, trickleStr, res.FallbackRate,
 	)
 }
 
@@ -242,10 +242,9 @@ func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 func (ts *testState) configure(t *testing.T, d *datadriven.TestData) string {
 	tenantID := ts.tenantID(t, d)
 	var args struct {
-		AvailableRU float64 `yaml:"available_ru"`
-		RefillRate  float64 `yaml:"refill_rate"`
-		MaxBurstRU  float64 `yaml:"max_burst_ru"`
-		// TODO(radu): Add AsOf/AsOfConsumedRU.
+		AvailableTokens float64 `yaml:"available_tokens"`
+		RefillRate      float64 `yaml:"refill_rate"`
+		MaxBurstTokens  float64 `yaml:"max_burst_tokens"`
 	}
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &args); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
@@ -258,11 +257,9 @@ func (ts *testState) configure(t *testing.T, d *datadriven.TestData) string {
 			ctx,
 			txn,
 			roachpb.MustMakeTenantID(tenantID),
-			args.AvailableRU,
+			args.AvailableTokens,
 			args.RefillRate,
-			args.MaxBurstRU,
-			time.Time{},
-			0,
+			args.MaxBurstTokens,
 		)
 	}); err != nil {
 		d.Fatalf(t, "reconfigure error: %v", err)

@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
 import { fetchData } from "src/api";
 
 const RESET_SQL_STATS_PATH = "_status/resetsqlstats";

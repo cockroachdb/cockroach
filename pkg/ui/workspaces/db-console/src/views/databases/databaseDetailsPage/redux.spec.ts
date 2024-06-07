@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import { createMemoryHistory } from "history";
-import _ from "lodash";
+import find from "lodash/find";
 import { RouteComponentProps } from "react-router-dom";
 import { bindActionCreators, Store } from "redux";
 import {
@@ -20,12 +20,13 @@ import {
   ViewMode,
   api as clusterUiApi,
 } from "@cockroachlabs/cluster-ui";
+import moment from "moment-timezone";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr, indexUnusedDuration } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
+
 import { mapStateToProps, mapDispatchToProps } from "./redux";
-import moment from "moment-timezone";
 
 function fakeRouteComponentProps(
   key: string,
@@ -130,7 +131,7 @@ class TestDriver {
   }
 
   private findTable(name: string) {
-    return _.find(this.properties().tables, { name });
+    return find(this.properties().tables, { name });
   }
 }
 

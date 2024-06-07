@@ -127,7 +127,7 @@ func TestSpillingQueue(t *testing.T) {
 						DiskQueueCfg:       queueCfg,
 						FDSemaphore:        colexecop.NewTestingSemaphore(2),
 						DiskAcc:            testDiskAcc,
-						ConverterMemAcc:    testMemAcc,
+						DiskQueueMemAcc:    testMemAcc,
 					},
 				)
 			} else {
@@ -139,7 +139,7 @@ func TestSpillingQueue(t *testing.T) {
 						DiskQueueCfg:       queueCfg,
 						FDSemaphore:        colexecop.NewTestingSemaphore(2),
 						DiskAcc:            testDiskAcc,
-						ConverterMemAcc:    testMemAcc,
+						DiskQueueMemAcc:    testMemAcc,
 					},
 				)
 			}
@@ -296,7 +296,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 			DiskQueueCfg:       queueCfg,
 			FDSemaphore:        colexecop.NewTestingSemaphore(2),
 			DiskAcc:            testDiskAcc,
-			ConverterMemAcc:    testMemAcc,
+			DiskQueueMemAcc:    testMemAcc,
 		},
 	)
 
@@ -363,7 +363,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 				DiskQueueCfg:       queueCfg,
 				FDSemaphore:        colexecop.NewTestingSemaphore(2),
 				DiskAcc:            testDiskAcc,
-				ConverterMemAcc:    testMemAcc,
+				DiskQueueMemAcc:    testMemAcc,
 			}
 			var q *SpillingQueue
 			if rewindable {
@@ -468,7 +468,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 			DiskQueueCfg:       queueCfg,
 			FDSemaphore:        colexecop.NewTestingSemaphore(2),
 			DiskAcc:            testDiskAcc,
-			ConverterMemAcc:    testMemAcc,
+			DiskQueueMemAcc:    testMemAcc,
 		}
 		q := NewSpillingQueue(newQueueArgs)
 

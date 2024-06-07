@@ -10,8 +10,10 @@
 
 import React, { useContext } from "react";
 import classnames from "classnames/bind";
-import styles from "./pageConfig.module.scss";
+
 import { CockroachCloudContext } from "../contexts";
+
+import styles from "./pageConfig.module.scss";
 
 export interface PageConfigProps {
   layout?: "list" | "spread";

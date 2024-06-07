@@ -9,10 +9,11 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
+import { PayloadAction } from "@reduxjs/toolkit";
+
+import { SchemaInsightReqParams, getSchemaInsights } from "../../api";
 
 import { actions } from "./schemaInsights.reducer";
-import { SchemaInsightReqParams, getSchemaInsights } from "../../api";
-import { PayloadAction } from "@reduxjs/toolkit";
 
 export function* refreshSchemaInsightsSaga(
   action: PayloadAction<SchemaInsightReqParams>,

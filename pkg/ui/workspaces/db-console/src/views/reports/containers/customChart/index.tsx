@@ -8,12 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
+import map from "lodash/map";
+import sortBy from "lodash/sortBy";
+import startsWith from "lodash/startsWith";
+import isEmpty from "lodash/isEmpty";
+import keys from "lodash/keys";
+import flatMap from "lodash/flatMap";
+import has from "lodash/has";
+import flow from "lodash/flow";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
+import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 
 import {
   refreshMetricMetadata,
@@ -27,7 +35,6 @@ import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 import TimeScaleDropdown from "oss/src/views/cluster/containers/timeScaleDropdownWithSearchParams";
-import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 import {
   PageConfig,
   PageConfigItem,
@@ -37,13 +44,6 @@ import {
   metricsMetadataSelector,
 } from "src/redux/metricMetadata";
 import { INodeStatus } from "src/util/proto";
-
-import {
-  CustomChartState,
-  CustomChartTable,
-  CustomMetricState,
-} from "./customMetric";
-import "./customChart.styl";
 import { queryByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
@@ -55,6 +55,13 @@ import {
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 import { getCookieValue } from "src/redux/cookies";
 import { tenantDropdownOptions } from "src/redux/tenants";
+
+import {
+  CustomChartState,
+  CustomChartTable,
+  CustomMetricState,
+} from "./customMetric";
+import "./customChart.styl";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -113,15 +120,16 @@ export class CustomChart extends React.Component<
     (nodeStatuses, nodeDisplayNameByID): DropdownOption[] => {
       const base = [{ value: "", label: "Cluster" }];
       return base.concat(
-        _.chain(nodeStatuses)
-          .map(ns => {
-            return {
+        flow(
+          (statuses: INodeStatus[]) => map(
+            statuses,
+            ns => ({
               value: ns.desc.node_id.toString(),
               label: nodeDisplayNameByID[ns.desc.node_id],
-            };
-          })
-          .sortBy(value => _.startsWith(value.label, "[decommissioned]"))
-          .value(),
+            })
+          ),
+          values => sortBy(values, value => startsWith(value.label, "[decommissioned]"))
+        )(nodeStatuses)
       );
     },
   );
@@ -133,11 +141,11 @@ export class CustomChart extends React.Component<
     (_summary: NodesSummary, metricsMetadata: MetricsMetadata) =>
       metricsMetadata,
     (nodeStatuses, metadata = {}): DropdownOption[] => {
-      if (_.isEmpty(nodeStatuses)) {
+      if (isEmpty(nodeStatuses)) {
         return [];
       }
 
-      return _.keys(nodeStatuses[0].metrics).map(k => {
+      return keys(nodeStatuses[0].metrics).map(k => {
         const fullMetricName = isStoreMetric(nodeStatuses[0], k)
           ? "cr.store." + k
           : "cr.node." + k;
@@ -251,7 +259,7 @@ export class CustomChart extends React.Component<
       }
       if (m.perSource && m.perTenant) {
         const sources = GetSources(nodesSummary, m);
-        return _.flatMap(sources, source => {
+        return flatMap(sources, source => {
           return tenants.map(tenant => (
             <Metric
               key={`${index}${i}${source}${tenant.value}`}
@@ -267,7 +275,7 @@ export class CustomChart extends React.Component<
         });
       } else if (m.perSource) {
         const sources = GetSources(nodesSummary, m);
-        return _.map(sources, source => (
+        return map(sources, source => (
           <Metric
             key={`${index}${i}${source}`}
             title={`${source}: ${m.metric} (${i})`}
@@ -334,7 +342,7 @@ export class CustomChart extends React.Component<
   renderCharts() {
     const charts = this.currentCharts();
 
-    if (_.isEmpty(charts)) {
+    if (isEmpty(charts)) {
       return <h3>Click "Add Chart" to add a chart to the custom dashboard.</h3>;
     }
 
@@ -368,10 +376,13 @@ export class CustomChart extends React.Component<
   }
 
   render() {
+    // Note: the vertical spacing below is to ensure we can scroll the page up
+    // enough for the drop-down metric menu to be visible.
+    // TODO(radu): remove this when we upgrade to a better component.
     return (
       <>
-        <Helmet title="Custom Chart | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
+        <Helmet title="Custom Chart | Debug"/>
+        <BackToAdvanceDebug history={this.props.history}/>
         <section className="section">
           <h1 className="base-heading">Custom Chart</h1>
         </section>
@@ -394,10 +405,11 @@ export class CustomChart extends React.Component<
             <div className="chart-group l-columns__left">
               {this.renderCharts()}
             </div>
-            <div className="l-columns__right" />
+            <div className="l-columns__right"/>
           </div>
         </section>
         <section className="section">{this.renderChartTables()}</section>
+        <br/><br/><br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>
       </>
     );
   }
@@ -428,5 +440,5 @@ function isStoreMetric(nodeStatus: INodeStatus, metricName: string) {
   if (metricName?.startsWith("cr.store")) {
     return true;
   }
-  return _.has(nodeStatus.store_statuses[0].metrics, metricName);
+  return has(nodeStatus.store_statuses[0].metrics, metricName);
 }

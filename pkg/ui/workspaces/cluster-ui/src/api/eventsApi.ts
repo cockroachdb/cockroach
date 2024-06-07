@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import moment from "moment-timezone";
+
 import {
   executeInternalSql,
   LARGE_RESULT_SIZE,
@@ -18,7 +20,6 @@ import {
   formatApiResult,
 } from "./sqlApi";
 import { withTimeout } from "./util";
-import moment from "moment-timezone";
 
 // defaultEventsNumLimit is the default number of events to be returned.
 export const defaultEventsNumLimit = 1000;

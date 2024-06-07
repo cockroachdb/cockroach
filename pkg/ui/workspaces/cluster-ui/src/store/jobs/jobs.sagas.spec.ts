@@ -16,15 +16,17 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import moment from "moment-timezone";
 
 import { getJobs } from "src/api/jobsApi";
-import { refreshJobsSaga, requestJobsSaga } from "./jobs.sagas";
-import { actions, reducer, JobsState } from "./jobs.reducer";
+
 import {
   allJobsFixture,
   earliestRetainedTime,
 } from "../../jobs/jobsPage/jobsPage.fixture";
-import moment from "moment-timezone";
+
+import { refreshJobsSaga, requestJobsSaga } from "./jobs.sagas";
+import { actions, reducer, JobsState } from "./jobs.reducer";
 
 describe("jobs sagas", () => {
   const lastUpdated = moment.utc(new Date("2023-02-21T12:00:00.000Z"));

@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import ReactDomServer from "react-dom/server";
+
 import { getHighlightedText } from "./highlightedText";
 
 function elementToString(value: string | JSX.Element): string {

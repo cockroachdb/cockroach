@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,14 +37,14 @@ func TestSQLStatsRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "test is to slow for race")
-	skip.UnderStress(t, "test is too heavy to run under stress")
+	skip.UnderDuress(t, "test is too heavy for special configs")
 
 	// We build a small multiregion cluster, with the proper settings for
 	// multi-region tenants, then run tests over both the system tenant
 	// and a secondary tenant, ensuring that a distsql query across multiple
 	// regions sees those regions reported in sqlstats.
 	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
 
 	numServers := 3
 	regionNames := []string{
@@ -188,6 +189,15 @@ func TestSQLStatsRegions(t *testing.T) {
 				_, err := db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
 				if err != nil {
 					return err
+				}
+
+				if rng.Float64() < 0.5 {
+					// In half of the cases disable DistSQL in order to check
+					// that KV regions information is propagated correctly.
+					_, err = db.DB.ExecContext(ctx, "SET distsql = off;")
+					if err != nil {
+						return err
+					}
 				}
 
 				// Use EXPLAIN ANALYSE (DISTSQL) to get the accurate list of nodes.

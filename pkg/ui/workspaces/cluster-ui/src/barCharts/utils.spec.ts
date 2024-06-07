@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
+
 import { normalizeClosedDomain } from "./utils";
 
 describe("barCharts utils", () => {

@@ -11,14 +11,14 @@
 import classNames from "classnames/bind";
 import Select from "react-select";
 import React from "react";
-import _ from "lodash";
-
-import styles from "./dropdown.module.styl";
+import isNil from "lodash/isNil";
+import includes from "lodash/includes";
 
 import { leftArrow, rightArrow } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
-import ReactSelectClass from "react-select";
 import { CaretDown } from "src/components/icon/caretDown";
+
+import styles from "./dropdown.module.styl";
 
 export interface DropdownOption {
   value: string;
@@ -66,7 +66,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
 
   dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
   titleRef: React.RefObject<HTMLDivElement> = React.createRef();
-  selectRef: React.RefObject<ReactSelectClass> = React.createRef();
+  selectRef: React.RefObject<Select> = React.createRef();
 
   triggerSelectClick = (e: any) => {
     this.props.onDropdownClick && this.props.onDropdownClick();
@@ -117,19 +117,19 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
       `dropdown--type-${type}`,
       {
         _range: isTimeRange,
-        "dropdown--side-arrows": !_.isNil(onArrowClick),
+        "dropdown--side-arrows": !isNil(onArrowClick),
         dropdown__focused: this.state.is_focused,
       },
       this.props.className,
     );
     const leftClassName = cx("dropdown__side-arrow", {
-      "dropdown__side-arrow--disabled": _.includes(
+      "dropdown__side-arrow--disabled": includes(
         disabledArrows,
         ArrowDirection.LEFT,
       ),
     });
     const rightClassName = cx("dropdown__side-arrow", {
-      "dropdown__side-arrow--disabled": _.includes(
+      "dropdown__side-arrow--disabled": includes(
         disabledArrows,
         ArrowDirection.RIGHT,
       ),

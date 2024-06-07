@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+
 import {
   ErrorWithKey,
   SqlApiResponse,
   TableDetailsReqParams,
   TableDetailsResponse,
 } from "../../api";
-import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
 import { generateTableID } from "../../util";
 

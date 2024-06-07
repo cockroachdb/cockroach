@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -1012,27 +1013,33 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 		s.Printf("\n tenant-id: %d used: %d, w: %d, fifo: %d", tenant.id, tenant.used,
 			tenant.weight, tenant.fifoPriorityThreshold)
 		if len(tenant.waitingWorkHeap) > 0 {
+			// Sort items within waitingWorkHeap
+			sortedWaitingWorkHeap := slices.Clone(tenant.waitingWorkHeap)
+			sort.Sort(&sortedWaitingWorkHeap)
 			s.Printf(" waiting work heap:")
-			for i := range tenant.waitingWorkHeap {
+			for i := range sortedWaitingWorkHeap {
 				var workOrdering string
-				if tenant.waitingWorkHeap[i].arrivalTimeWorkOrdering == lifoWorkOrdering {
+				if sortedWaitingWorkHeap[i].arrivalTimeWorkOrdering == lifoWorkOrdering {
 					workOrdering = ", lifo-ordering"
 				}
 				s.Printf(" [%d: pri: %d, ct: %d, epoch: %d, qt: %d%s]", i,
-					tenant.waitingWorkHeap[i].priority,
-					tenant.waitingWorkHeap[i].createTime/int64(time.Millisecond),
-					tenant.waitingWorkHeap[i].epoch,
-					tenant.waitingWorkHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond), workOrdering)
+					sortedWaitingWorkHeap[i].priority,
+					sortedWaitingWorkHeap[i].createTime/int64(time.Millisecond),
+					sortedWaitingWorkHeap[i].epoch,
+					sortedWaitingWorkHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond), workOrdering)
 			}
 		}
 		if len(tenant.openEpochsHeap) > 0 {
+			// Sort items within openEpochsHeap
+			sortedOpenEpochsHeap := slices.Clone(tenant.openEpochsHeap)
+			sort.Sort(&sortedOpenEpochsHeap)
 			s.Printf(" open epochs heap:")
-			for i := range tenant.openEpochsHeap {
+			for i := range sortedOpenEpochsHeap {
 				s.Printf(" [%d: pri: %d, ct: %d, epoch: %d, qt: %d]", i,
-					tenant.openEpochsHeap[i].priority,
-					tenant.openEpochsHeap[i].createTime/int64(time.Millisecond),
-					tenant.openEpochsHeap[i].epoch,
-					tenant.openEpochsHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond))
+					sortedOpenEpochsHeap[i].priority,
+					sortedOpenEpochsHeap[i].createTime/int64(time.Millisecond),
+					sortedOpenEpochsHeap[i].epoch,
+					sortedOpenEpochsHeap[i].enqueueingTime.UnixNano()/int64(time.Millisecond))
 			}
 		}
 	}
@@ -1403,7 +1410,15 @@ func (th *tenantHeap) Len() int {
 }
 
 func (th *tenantHeap) Less(i, j int) bool {
-	// used_i/weight_i < used_j/weight_j
+	// For tenant fairness, use used_i/weight_i < used_j/weight_j to determine
+	// order. In case of a tie, prioritize items with higher weight, and then
+	// items with lower tenant id.
+	if (*th)[i].used*uint64((*th)[j].weight) == (*th)[j].used*uint64((*th)[i].weight) {
+		if (*th)[i].weight == (*th)[j].weight {
+			return (*th)[i].id < (*th)[j].id
+		}
+		return (*th)[i].weight > (*th)[j].weight
+	}
 	return (*th)[i].used*uint64((*th)[j].weight) < (*th)[j].used*uint64((*th)[i].weight)
 }
 

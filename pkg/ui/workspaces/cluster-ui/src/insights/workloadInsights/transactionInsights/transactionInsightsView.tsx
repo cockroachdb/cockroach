@@ -11,6 +11,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
+import { InlineAlert } from "@cockroachlabs/ui-components";
+
 import {
   ISortedTablePagination,
   SortSetting,
@@ -30,31 +32,30 @@ import { Pagination } from "src/pagination";
 import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { TableStatistics } from "src/tableStatistics";
-
 import {
   filterTransactionInsights,
   getAppsFromTransactionInsights,
   WorkloadInsightEventFilters,
   TxnInsightEvent,
 } from "src/insights";
-import { EmptyInsightsTablePlaceholder } from "../util";
-import { TransactionInsightsTable } from "./transactionInsightsTable";
-import { InsightsError } from "../../insightsErrorComponent";
+import { TxnInsightsRequest } from "src/api";
+import styles from "src/statementsPage/statementsPage.module.scss";
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import { useScheduleFunction } from "src/util/hooks";
+import { insights } from "src/util";
+import { Anchor } from "src/anchor";
+
+import { commonStyles } from "../../../common";
 import {
   TimeScale,
   defaultTimeScaleOptions,
   TimeScaleDropdown,
   timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
-import { TxnInsightsRequest } from "src/api";
+import { InsightsError } from "../../insightsErrorComponent";
+import { EmptyInsightsTablePlaceholder } from "../util";
 
-import styles from "src/statementsPage/statementsPage.module.scss";
-import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import { commonStyles } from "../../../common";
-import { useScheduleFunction } from "src/util/hooks";
-import { InlineAlert } from "@cockroachlabs/ui-components";
-import { insights } from "src/util";
-import { Anchor } from "src/anchor";
+import { TransactionInsightsTable } from "./transactionInsightsTable";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);

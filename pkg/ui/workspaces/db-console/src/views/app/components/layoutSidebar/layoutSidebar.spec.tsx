@@ -12,6 +12,7 @@ import React from "react";
 import { shallow } from "enzyme";
 import { createMemoryHistory, History } from "history";
 import { match as Match } from "react-router";
+
 import { Sidebar } from "./index";
 
 describe("LayoutSidebar", () => {

@@ -9,9 +9,9 @@
 // licenses/APL.txt.
 
 import React from "react";
-import _ from "lodash";
 import { Dispatch, Action, bindActionCreators } from "redux";
 import { connect } from "react-redux";
+import map from "lodash/map";
 
 import { AlertBox } from "src/views/shared/components/alertBox";
 import { AdminUIState } from "src/redux/state";
@@ -37,7 +37,7 @@ class OverviewAlertListSection extends React.Component<AlertSectionProps, {}> {
     }
     return (
       <section className="section">
-        {_.map(alerts, (a, i) => {
+        {map(alerts, (a, i) => {
           // Extract values we don't want.
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { dismiss, ...alertProps } = a;

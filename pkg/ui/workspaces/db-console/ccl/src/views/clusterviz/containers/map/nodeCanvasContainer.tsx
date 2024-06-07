@@ -6,11 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import _ from "lodash";
+import isNil from "lodash/isNil";
 import React from "react";
 import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 import { createSelector } from "reselect";
+import { Loading } from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
 import {
@@ -40,7 +41,7 @@ import {
 import { AdminUIState } from "src/redux/state";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { getLocality } from "src/util/localities";
-import { Loading } from "@cockroachlabs/cluster-ui";
+
 import { NodeCanvas } from "./nodeCanvas";
 
 type Liveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
@@ -83,7 +84,7 @@ class NodeCanvasContainer extends React.Component<
       this.props.localityTree,
       this.props.tiers,
     );
-    if (this.props.dataIsValid && _.isNil(currentLocality)) {
+    if (this.props.dataIsValid && isNil(currentLocality)) {
       this.props.history.replace(CLUSTERVIZ_ROOT);
     }
 

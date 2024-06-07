@@ -8,12 +8,25 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import Long from "long";
 import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouteComponentProps, withRouter } from "react-router-dom";
+import { Loading } from "@cockroachlabs/cluster-ui";
+import isNil from "lodash/isNil";
+import flow from "lodash/flow";
+import filter from "lodash/filter";
+import isEmpty from "lodash/isEmpty";
+import flatMap from "lodash/flatMap";
+import map from "lodash/map";
+import sortBy from "lodash/sortBy";
+import sortedUniq from "lodash/sortedUniq";
+import isEqual from "lodash/isEqual";
+import keys from "lodash/keys";
+import pickBy from "lodash/pickBy";
+import values from "lodash/values";
+
 import * as protos from "src/js/protos";
 import {
   problemRangesRequestKey,
@@ -24,7 +37,6 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
-import { Loading } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
@@ -39,7 +51,7 @@ interface ProblemRangesOwnProps {
 type ProblemRangesProps = ProblemRangesOwnProps & RouteComponentProps;
 
 function isLoading(state: CachedDataReducerState<any>) {
-  return _.isNil(state) || (_.isNil(state.data) && _.isNil(state.lastError));
+  return isNil(state) || (isNil(state.data) && isNil(state.lastError));
 }
 
 function ProblemRangeList(props: {
@@ -48,15 +60,15 @@ function ProblemRangeList(props: {
   extract: (p: NodeProblems$Properties) => Long[];
   description?: string;
 }) {
-  const ids = _.chain(props.problems)
-    .filter(problem => _.isEmpty(problem.error_message))
-    .flatMap(problem => props.extract(problem))
-    .map(id => FixLong(id))
-    .sort((a, b) => a.compare(b))
-    .map(id => id.toString())
-    .sortedUniq()
-    .value();
-  if (_.isEmpty(ids)) {
+  const ids = flow(
+    (problems: NodeProblems$Properties[]) => filter(problems, problem => isEmpty(problem.error_message)),
+    (problems: NodeProblems$Properties[]) => flatMap(problems, problem => props.extract(problem)),
+    ids => map(ids, id => FixLong(id)),
+    ids => sortBy(ids, id => id.toNumber()),
+    ids => map(ids, id => id.toString()),
+    sortedUniq
+  )(props.problems);
+  if (isEmpty(ids)) {
     return null;
   }
   return (
@@ -66,7 +78,7 @@ function ProblemRangeList(props: {
         <div className="problems-description">{props.description}</div>
       )}
       <div className="problems-list">
-        {_.map(ids, id => {
+        {map(ids, id => {
           return (
             <Link
               key={id}
@@ -106,7 +118,7 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   }
 
   componentDidUpdate(prevProps: ProblemRangesProps) {
-    if (!_.isEqual(this.props.location, prevProps.location)) {
+    if (!isEqual(this.props.location, prevProps.location)) {
       this.refresh(this.props);
     }
   }
@@ -119,7 +131,7 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
       return null;
     }
 
-    if (!_.isNil(problemRanges.lastError)) {
+    if (!isNil(problemRanges.lastError)) {
       if (nodeId === null) {
         return (
           <div>
@@ -143,9 +155,9 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 
     const { data } = problemRanges;
 
-    const validIDs = _.keys(
-      _.pickBy(data.problems_by_node_id, d => {
-        return _.isEmpty(d.error_message);
+    const validIDs = keys(
+      pickBy(data.problems_by_node_id, d => {
+        return isEmpty(d.error_message);
       }),
     );
     if (validIDs.length === 0) {
@@ -162,13 +174,13 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 
     let titleText: string; // = "Problem Ranges for ";
     if (validIDs.length === 1) {
-      const singleNodeID = _.keys(data.problems_by_node_id)[0];
+      const singleNodeID = keys(data.problems_by_node_id)[0];
       titleText = `Problem Ranges on Node n${singleNodeID}`;
     } else {
       titleText = "Problem Ranges on the Cluster";
     }
 
-    const problems = _.values(data.problems_by_node_id);
+    const problems = values(data.problems_by_node_id);
     return (
       <div>
         <h2 className="base-heading">{titleText}</h2>

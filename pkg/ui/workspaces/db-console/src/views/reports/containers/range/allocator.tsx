@@ -8,14 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import _ from "lodash";
 import React from "react";
+import { Loading } from "@cockroachlabs/cluster-ui";
+import isEmpty from "lodash/isEmpty";
+import map from "lodash/map";
 
 import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import Print from "src/views/reports/containers/range/print";
-import { Loading } from "@cockroachlabs/cluster-ui";
 
 interface AllocatorOutputProps {
   allocator: CachedDataReducerState<protos.cockroach.server.serverpb.AllocatorRangeResponse>;
@@ -30,7 +31,7 @@ export default class AllocatorOutput extends React.Component<
 
     if (
       allocator &&
-      (_.isEmpty(allocator.data) || _.isEmpty(allocator.data.dry_run))
+      (isEmpty(allocator.data) || isEmpty(allocator.data.dry_run))
     ) {
       return <div>No simulated allocator output was returned.</div>;
     }
@@ -46,7 +47,7 @@ export default class AllocatorOutput extends React.Component<
               Message
             </th>
           </tr>
-          {_.map(allocator.data.dry_run.events, (event, key) => (
+          {map(allocator.data.dry_run.events, (event, key) => (
             <tr key={key} className="allocator-table__row">
               <td className="allocator-table__cell allocator-table__cell--date">
                 {Print.Timestamp(event.time)}
@@ -79,7 +80,7 @@ export default class AllocatorOutput extends React.Component<
     }
 
     let fromNodeID = "";
-    if (allocator && !_.isEmpty(allocator.data)) {
+    if (allocator && !isEmpty(allocator.data)) {
       fromNodeID = ` (from n${allocator.data.node_id.toString()})`;
     }
 

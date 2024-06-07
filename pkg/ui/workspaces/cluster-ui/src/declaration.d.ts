@@ -28,5 +28,11 @@ type Dictionary<V> = {
   [key: string]: V;
 };
 
+// Extend Window interface with possible Redux DevTools extension.
+interface Window {
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  __REDUX_DEVTOOLS_EXTENSION__?: () => () => void;
+}
+
 declare module "highlight.js/lib/core";
 declare module "highlight.js/lib/languages/pgsql";

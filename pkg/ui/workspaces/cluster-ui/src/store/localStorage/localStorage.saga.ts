@@ -10,17 +10,19 @@
 
 import { AnyAction } from "redux";
 import { all, call, takeEvery, takeLatest, put } from "redux-saga/effects";
+import { PayloadAction } from "@reduxjs/toolkit";
+
+import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { actions as stmtInsightActions } from "src/store/insights/statementInsights";
+import { actions as txnInsightActions } from "src/store/insights/transactionInsights";
+import { actions as txnStatsActions } from "src/store/transactionStats";
+import { TimeScale } from "src/timeScaleDropdown";
+
 import {
   actions,
   LocalStorageKeys,
   TypedPayload,
 } from "./localStorage.reducer";
-import { actions as sqlStatsActions } from "src/store/sqlStats";
-import { actions as stmtInsightActions } from "src/store/insights/statementInsights";
-import { actions as txnInsightActions } from "src/store/insights/transactionInsights";
-import { actions as txnStatsActions } from "src/store/transactionStats";
-import { PayloadAction } from "@reduxjs/toolkit";
-import { TimeScale } from "src/timeScaleDropdown";
 
 export function* updateLocalStorageItemSaga(action: AnyAction) {
   const { key, value } = action.payload;

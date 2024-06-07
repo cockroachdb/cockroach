@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { assert } from "chai";
+
 import { calculateTotalWorkload } from "./totalWorkload";
 import { aggStatFix } from "./totalWorkload.fixture";
 
