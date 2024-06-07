@@ -162,16 +162,19 @@ func init() {
 // Status represents the status of a job in the system.jobs table.
 type Status string
 
-// SafeFormat implements redact.SafeFormatter.
-func (s Status) SafeFormat(sp redact.SafePrinter, verb rune) {
-	sp.SafeString(redact.SafeString(s))
-}
+// SafeValue implements redact.SafeValue.
+func (s Status) SafeValue() {}
 
-var _ redact.SafeFormatter = Status("")
+var _ redact.SafeValue = Status("")
 
 // RunningStatus represents the more detailed status of a running job in
 // the system.jobs table.
 type RunningStatus string
+
+// SafeValue implements redact.SafeValue.
+func (s RunningStatus) SafeValue() {}
+
+var _ redact.SafeValue = RunningStatus("")
 
 const (
 	// StatusPending is `for jobs that have been created but on which work has
