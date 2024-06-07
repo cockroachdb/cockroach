@@ -36,8 +36,7 @@ func TestSQLStatsRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "test is to slow for race")
-	skip.UnderStress(t, "test is too heavy to run under stress")
+	skip.UnderDuress(t, "test is too heavy for special configs")
 
 	// We build a small multiregion cluster, with the proper settings for
 	// multi-region tenants, then run tests over both the system tenant
