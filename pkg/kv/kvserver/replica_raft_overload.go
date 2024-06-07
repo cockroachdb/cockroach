@@ -231,14 +231,14 @@ func (osm *ioThresholdMap) AbovePauseThreshold(id roachpb.StoreID) bool {
 	return sc > osm.threshold
 }
 
-func (osm *ioThresholdMap) NumAbovePauseThreshold() int {
-	var n int
-	for id := range osm.m {
-		if osm.AbovePauseThreshold(id) {
-			n++
+func (osm *ioThresholdMap) AnyAbovePauseThreshold(repls roachpb.ReplicaSet) bool {
+	descs := repls.Descriptors()
+	for i := range descs {
+		if osm.AbovePauseThreshold(descs[i].StoreID) {
+			return true
 		}
 	}
-	return n
+	return false
 }
 
 func (osm *ioThresholdMap) IOThreshold(id roachpb.StoreID) *admissionpb.IOThreshold {
@@ -300,7 +300,7 @@ func (osm *ioThresholds) Replace(
 func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMap *ioThresholdMap) {
 	r.mu.pausedFollowers = nil
 
-	if ioThresholdMap.NumAbovePauseThreshold() == 0 {
+	if !ioThresholdMap.AnyAbovePauseThreshold(r.descRLocked().Replicas()) {
 		return
 	}
 
