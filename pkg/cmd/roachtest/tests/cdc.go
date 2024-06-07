@@ -1920,44 +1920,34 @@ func registerCDC(r registry.Registry) {
 			})
 
 			const (
-				par     = 8
-				numKeys = 1000
-				n       = 1_000_000
+				parallelism = 8
+				numKeys     = 1000
+				numVals     = 1_000_000
 			)
 
 			var wg sync.WaitGroup
-			wg.Add(par)
-			for wi := 0; wi < par; wi++ {
+			wg.Add(parallelism)
+			for wi := 0; wi < parallelism; wi++ {
 				wi := wi
 				go func() {
+					defer wg.Done()
 					conn, err := ct.DB().Conn(ctx)
 					require.NoError(t, err)
 					defer func() { _ = conn.Close() }()
 
 					// run workload: update keys sequentially
 					// split key space into par parts and each goroutine updates its own part
-					offset := wi * numKeys / par
-					for i := 0; i < n*(numKeys/par); i++ {
-						key := offset + i%numKeys
+					chunkSize := numKeys / parallelism
+					offset := wi * chunkSize
+					for i := 0; i < numVals*chunkSize; i++ {
+						key := offset + i%chunkSize
 						_, err := conn.ExecContext(ctx, "UPDATE t SET x = x + 1 WHERE id = $1", key)
 						require.NoError(t, err)
 					}
 				}()
 			}
 
-			// // Repeatedly update a single row in a table in order to create a large
-			// // number of events with the same key that will span multiple batches.
-			// for i := 0; i < 1000000; i++ {
-			// 	stmt := fmt.Sprintf(`UPDATE t SET x = %d WHERE id = 1;`, i)
-			// 	if i%2 == 0 {
-			// 		_, err = conn1.ExecContext(ctx, stmt)
-			// 	} else {
-			// 		_, err = conn2.ExecContext(ctx, stmt)
-			// 	}
-			// 	if err != nil {
-			// 		t.Fatalf("failed to execute stmt %q: %s", stmt, err)
-			// 	}
-			// }
+			wg.Wait()
 		},
 	})
 

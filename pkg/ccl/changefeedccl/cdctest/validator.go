@@ -14,7 +14,6 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -256,14 +255,22 @@ func (c *eachKeySequentialConsistencyValidator) NoteResolved(partition string, r
 }
 
 func (c *eachKeySequentialConsistencyValidator) NoteRow(partition string, key string, value string, updated hlc.Timestamp) error {
-	ival, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return errors.Wrapf(err, "failed to parse value %s as int", value)
+	// : failed to parse value {"after": {"id": 1, "x": 0}, "updated": "1717790563670214440.0000000000"} as int
+	type val struct {
+		After struct {
+			ID int `json:"id"`
+			X  int `json:"x"`
+		} `json:"after"`
+		Updated string `json:"updated"`
+	}
+	var v val
+	if err := gojson.Unmarshal([]byte(value), &v); err != nil {
+		return fmt.Errorf("failed to parse value %q: %v", value, err)
 	}
 	if _, ok := c.vals[key]; !ok {
 		c.vals[key] = btree.New(2)
 	}
-	c.vals[key].ReplaceOrInsert(btree.Int(ival))
+	c.vals[key].ReplaceOrInsert(btree.Int(v.After.X))
 	return c.inner.NoteRow(partition, key, value, updated)
 }
 
