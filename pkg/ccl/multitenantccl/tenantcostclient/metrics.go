@@ -143,6 +143,22 @@ func (m *metrics) Init() {
 	m.TotalCrossRegionNetworkRU = metric.NewCounterFloat64(metaTotalCrossRegionNetworkRU)
 }
 
+func (m *metrics) getConsumption(consumption *kvpb.TenantConsumption) {
+	consumption.RU = m.TotalRU.Count()
+	consumption.KVRU = m.TotalKVRU.Count()
+	consumption.ReadBatches = uint64(m.TotalReadBatches.Count())
+	consumption.ReadRequests = uint64(m.TotalReadRequests.Count())
+	consumption.ReadBytes = uint64(m.TotalReadBytes.Count())
+	consumption.WriteBatches = uint64(m.TotalWriteBatches.Count())
+	consumption.WriteRequests = uint64(m.TotalWriteRequests.Count())
+	consumption.WriteBytes = uint64(m.TotalWriteBytes.Count())
+	consumption.SQLPodsCPUSeconds = m.TotalSQLPodsCPUSeconds.Count()
+	consumption.PGWireEgressBytes = uint64(m.TotalPGWireEgressBytes.Count())
+	consumption.ExternalIOEgressBytes = uint64(m.TotalExternalIOEgressBytes.Count())
+	consumption.ExternalIOIngressBytes = uint64(m.TotalExternalIOIngressBytes.Count())
+	consumption.CrossRegionNetworkRU = m.TotalCrossRegionNetworkRU.Count()
+}
+
 // incrementConsumption updates consumption-related metrics with the delta
 // consumption.
 func (m *metrics) incrementConsumption(delta kvpb.TenantConsumption) {
