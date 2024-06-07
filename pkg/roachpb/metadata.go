@@ -228,7 +228,7 @@ func (r *RangeDescriptor) Replicas() ReplicaSet {
 // SetReplicas overwrites the set of nodes/stores on which replicas of this
 // range are stored.
 func (r *RangeDescriptor) SetReplicas(replicas ReplicaSet) {
-	r.InternalReplicas = replicas.AsProto()
+	r.InternalReplicas = replicas.Descriptors()
 }
 
 // SetReplicaType changes the type of the replica with the given ID to the given
