@@ -161,17 +161,53 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 statement ok
 ALTER TABLE data RESET (sql_stats_histogram_buckets_count)
 
+# Verify that we dynamically determine the number of samples if
+# unspecified by table and cluster settings.
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.count
+
 # We can verify the number of samples collected based on the number of
 # buckets produced.
 statement ok
 SET CLUSTER SETTING sql.stats.histogram_buckets.count = 20000
 
 statement ok
-SET CLUSTER SETTING sql.stats.histogram_samples.count = 20000
-
-statement ok
 CREATE TABLE big (i INT PRIMARY KEY);
 INSERT INTO big SELECT generate_series(1, 20000)
+
+statement ok
+CREATE STATISTICS s_dynamic FROM big
+
+let $hist_id_dynamic
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_dynamic';
+
+# We expect 10000 samples because there are no previous stats collections
+# with table size estimates.
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_dynamic]
+----
+10000
+
+statement ok
+CREATE STATISTICS s_dynamic FROM big
+
+let $hist_id_dynamic
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_dynamic';
+
+# Now we can dynamically determine the number of samples because we have
+# a table size estimate from the previous stats collection.
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_dynamic]
+----
+10840
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.count = 20000
 
 statement ok
 CREATE STATISTICS s20000 FROM big
