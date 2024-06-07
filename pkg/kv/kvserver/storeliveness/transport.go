@@ -36,7 +36,7 @@ import (
 
 const (
 	// Outgoing messages are queued per-node on a channel of this size.
-	sendBufferSize = 128
+	sendBufferSize = 1000
 
 	// When no message has been queued for this duration, the corresponding
 	// instance of processQueue will shut down.
@@ -219,17 +219,19 @@ func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamC
 		err = errors.Join(err, closeErr)
 	}()
 
-	var it timeutil.Timer
-	defer it.Stop()
+	var idleTimer timeutil.Timer
+	defer idleTimer.Stop()
+	var batchTimer timeutil.Timer
+	defer batchTimer.Stop()
 	batch := &slpb.MessageBatch{}
 	for {
-		it.Reset(idleTimeout)
+		idleTimer.Reset(idleTimeout)
 		select {
 		case <-t.stopper.ShouldQuiesce():
 			return nil
 
-		case <-it.C:
-			it.Read = true
+		case <-idleTimer.C:
+			idleTimer.Read = true
 			return nil
 
 		case msg := <-q.msgs:
@@ -237,13 +239,17 @@ func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamC
 			q.bytes.Add(-size)
 			batch.Messages = append(batch.Messages, msg)
 
-			// Pull off as many queued requests as possible, within reason.
-			select {
-			case msg = <-q.msgs:
-				size := int64(msg.Size())
-				q.bytes.Add(-size)
-				batch.Messages = append(batch.Messages, msg)
-			default:
+			// Pull off as many queued requests as possible within the next 10ms.
+			batchTimer.Reset(10 * time.Millisecond)
+			for !batchTimer.Read {
+				select {
+				case msg = <-q.msgs:
+					size := int64(msg.Size())
+					q.bytes.Add(-size)
+					batch.Messages = append(batch.Messages, msg)
+				case <-batchTimer.C:
+					batchTimer.Read = true
+				}
 			}
 
 			batch.Now = t.clock.NowAsClockTimestamp()
