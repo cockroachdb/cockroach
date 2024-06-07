@@ -10,6 +10,7 @@ package tenantcostclient
 
 import (
 	"context"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -206,19 +206,10 @@ type tenantSideCostController struct {
 	externalUsageFn      multitenant.ExternalUsageFn
 	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn
 
-	mu struct {
-		syncutil.Mutex
-
-		// consumption records the amount of resources consumed by the tenant.
-		// It is read and written on multiple goroutines and so must be protected
-		// by a mutex.
-		consumption kvpb.TenantConsumption
-
-		// avgCPUPerSec is an exponentially-weighted moving average of the CPU usage
-		// per second; used to estimate the CPU usage of a query. It is only written
-		// in the main loop, but can be read by multiple goroutines so is protected.
-		avgCPUPerSec float64
-	}
+	// avgCPUPerSec is an exponentially-weighted moving average of the CPU usage
+	// per second; used to estimate the CPU usage of a query. It is only written
+	// in the main loop, but can be read by multiple goroutines so is an atomic.
+	avgCPUPerSec atomic.Uint64
 
 	// lowTokensNotifyChan is used when the number of available tokens is running
 	// low and we need to send an early token bucket request.
@@ -236,8 +227,10 @@ type tenantSideCostController struct {
 		lastTick time.Time
 		// externalUsage stores the last value returned by externalUsageFn.
 		externalUsage multitenant.ExternalUsage
-		// consumption stores the last value of mu.consumption.
-		consumption kvpb.TenantConsumption
+		// tickTokens stores the total tokens consumed as of the last tick.
+		tickTokens float64
+		// tickBatches stores the total batches consumed as of the last tick.
+		tickBatches int64
 		// targetPeriod stores the value of the TargetPeriodSetting setting at the
 		// last update.
 		targetPeriod time.Duration
@@ -259,12 +252,12 @@ type tenantSideCostController struct {
 		// lastRequestTime is the time that the last token bucket request was
 		// sent to the server.
 		lastRequestTime time.Time
+		// lastReportedTokens is the total number of consumed tokens as of the
+		// last report to the token bucket server.
+		lastReportedTokens float64
 		// lastReportedConsumption is the set of tenant resource consumption
 		// metrics last sent to the token bucket server.
 		lastReportedConsumption kvpb.TenantConsumption
-		// lastExportedConsumption is the set of tenant resource consumption
-		// metrics last sent to the metrics registry.
-		lastExportedConsumption kvpb.TenantConsumption
 		// lastRate is the token bucket fill rate that was last configured.
 		lastRate float64
 
@@ -341,6 +334,7 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 
 	// Update CPU consumption.
 	deltaCPU := newExternalUsage.CPUSecs - c.run.externalUsage.CPUSecs
+	var totalBatches = c.metrics.TotalReadBatches.Count() + c.metrics.TotalWriteBatches.Count()
 
 	deltaTime := newTime.Sub(c.run.lastTick)
 	if deltaTime > 0 {
@@ -348,79 +342,65 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 		allowance := CPUUsageAllowance.Get(&c.settings.SV).Seconds() * deltaTime.Seconds()
 		deltaCPU -= allowance
 
-		avgCPU := deltaCPU / deltaTime.Seconds()
-
-		func() {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			// If total CPU usage is small (less than 3% of a single CPU by default)
-			// and there have been no recent read/write operations, then ignore the
-			// recent usage altogether. This is intended to minimize reported usage
-			// when the cluster is idle.
-			if deltaCPU < allowance*2 {
-				if c.mu.consumption.ReadBatches == c.run.consumption.ReadBatches &&
-					c.mu.consumption.WriteBatches == c.run.consumption.WriteBatches {
-					deltaCPU = 0
-				}
+		// If total CPU usage is small (less than 3% of a single CPU by default)
+		// and there have been no recent read/write operations, then ignore the
+		// recent usage altogether. This is intended to minimize reported usage
+		// when the cluster is idle.
+		if deltaCPU < allowance*2 {
+			if totalBatches == c.run.tickBatches {
+				// There have been no batches since the last tick.
+				deltaCPU = 0
 			}
-			// Keep track of an exponential moving average of CPU usage.
-			c.mu.avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
-			c.mu.avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
-		}()
+		}
+
+		// Keep track of an exponential moving average of CPU usage.
+		avgCPU := deltaCPU / deltaTime.Seconds()
+		avgCPUPerSec := math.Float64frombits(c.avgCPUPerSec.Load())
+		avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
+		avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
+		c.avgCPUPerSec.Store(math.Float64bits(avgCPUPerSec))
 	}
 	if deltaCPU < 0 {
 		deltaCPU = 0
 	}
 
 	costCfg := c.costCfg.Load()
-	ru := costCfg.PodCPUCost(deltaCPU)
+	newTokens := float64(costCfg.PodCPUCost(deltaCPU))
 
-	var deltaPGWireEgressBytes uint64
 	if newExternalUsage.PGWireEgressBytes > c.run.externalUsage.PGWireEgressBytes {
-		deltaPGWireEgressBytes = newExternalUsage.PGWireEgressBytes - c.run.externalUsage.PGWireEgressBytes
-		ru += costCfg.PGWireEgressCost(int64(deltaPGWireEgressBytes))
+		deltaPGWireEgressBytes := int64(newExternalUsage.PGWireEgressBytes - c.run.externalUsage.PGWireEgressBytes)
+		c.metrics.TotalPGWireEgressBytes.Inc(deltaPGWireEgressBytes)
+		newTokens += float64(costCfg.PGWireEgressCost(deltaPGWireEgressBytes))
 	}
 
 	// KV RUs are not included here, these metrics correspond only to the SQL pod.
-	var newConsumption kvpb.TenantConsumption
-	func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		c.mu.consumption.SQLPodsCPUSeconds += deltaCPU
-		c.mu.consumption.PGWireEgressBytes += deltaPGWireEgressBytes
-		c.mu.consumption.RU += float64(ru)
-		newConsumption = c.mu.consumption
-	}()
+	c.metrics.TotalSQLPodsCPUSeconds.Inc(deltaCPU)
+	c.metrics.TotalRU.Inc(newTokens)
 
 	// Update the average tokens consumed per second, based on the latest stats.
-	delta := newConsumption.RU - c.run.consumption.RU
+	totalTokens := c.metrics.TotalRU.Count()
+	delta := totalTokens - c.run.tickTokens
 	avg := delta * float64(time.Second) / float64(deltaTime)
 	c.run.avgTokensPerSec = movingAvgTokensPerSecFactor*avg + (1-movingAvgTokensPerSecFactor)*c.run.avgTokensPerSec
 
 	c.run.lastTick = newTime
 	c.run.externalUsage = newExternalUsage
-	c.run.consumption = newConsumption
+	c.run.tickTokens = totalTokens
+	c.run.tickBatches = totalBatches
 
-	// Remove the tick tokens from the bucket.
-	c.limiter.RemoveTokens(newTime, float64(ru))
+	// Remove the new tokens from the bucket.
+	c.limiter.RemoveTokens(newTime, newTokens)
 
 	// Switch to the fallback rate if needed.
 	if !c.run.fallbackRateStart.IsZero() && !newTime.Before(c.run.fallbackRateStart) &&
 		c.run.fallbackRate != 0 {
-		log.Infof(ctx, "switching to fallback rate %.10g", c.run.fallbackRate)
+		log.Infof(ctx, "switching to fallback rate %.10g tokens/s", c.run.fallbackRate)
 		c.limiter.Reconfigure(c.timeSource.Now(), limiterReconfigureArgs{
 			NewRate:   c.run.fallbackRate,
 			MaxTokens: bufferTokens + c.run.fallbackRate*c.run.targetPeriod.Seconds(),
 		})
 		c.run.fallbackRateStart = time.Time{}
 	}
-
-	// Report consumption metrics. Update local data first before sending a
-	// token bucket request to the KV servers.
-	deltaConsumption := c.run.consumption
-	deltaConsumption.Sub(&c.run.lastExportedConsumption)
-	c.run.lastExportedConsumption = c.run.consumption
-	c.metrics.incrementConsumption(deltaConsumption)
 
 	// Should a token bucket request be sent? It might be for a retry or for
 	// periodic consumption reporting.
@@ -434,7 +414,7 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 func (c *tenantSideCostController) shouldReportConsumption() bool {
 	timeSinceLastRequest := c.run.lastTick.Sub(c.run.lastRequestTime)
 	if timeSinceLastRequest >= c.run.targetPeriod {
-		consumptionToReport := c.run.consumption.RU - c.run.lastReportedConsumption.RU
+		consumptionToReport := c.run.tickTokens - c.run.lastReportedTokens
 		if consumptionToReport >= consumptionReportingThreshold {
 			return true
 		}
@@ -455,8 +435,12 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 	}
 	c.run.shouldSendRequest = false
 
-	deltaConsumption := c.run.consumption
+	// Compute consumption delta since last report to the server.
+	var latestConsumption, deltaConsumption kvpb.TenantConsumption
+	c.metrics.getConsumption(&latestConsumption)
+	deltaConsumption = latestConsumption
 	deltaConsumption.Sub(&c.run.lastReportedConsumption)
+
 	var requested float64
 	now := c.timeSource.Now()
 
@@ -497,7 +481,8 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 	c.run.requestSeqNum++
 
 	c.run.lastRequestTime = now
-	c.run.lastReportedConsumption = c.run.consumption
+	c.run.lastReportedConsumption = latestConsumption
+	c.run.lastReportedTokens = latestConsumption.RU
 
 	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
 	err := c.stopper.RunAsyncTask(ctx, "token-bucket-request", func(ctx context.Context) {
@@ -748,23 +733,20 @@ func (c *tenantSideCostController) OnResponseWait(
 		}
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if req.IsWrite() {
-		c.mu.consumption.WriteBatches += uint64(req.WriteReplicas())
-		c.mu.consumption.WriteRequests += uint64(req.WriteReplicas() * req.WriteCount())
-		c.mu.consumption.WriteBytes += uint64(req.WriteReplicas() * req.WriteBytes())
-		c.mu.consumption.KVRU += float64(writeKVRU)
-		c.mu.consumption.RU += float64(writeKVRU + writeNetworkRU)
-		c.mu.consumption.CrossRegionNetworkRU += float64(writeNetworkRU)
+		c.metrics.TotalWriteBatches.Inc(req.WriteReplicas())
+		c.metrics.TotalWriteRequests.Inc(req.WriteReplicas() * req.WriteCount())
+		c.metrics.TotalWriteBytes.Inc(req.WriteReplicas() * req.WriteBytes())
+		c.metrics.TotalKVRU.Inc(float64(writeKVRU))
+		c.metrics.TotalRU.Inc(float64(writeKVRU + writeNetworkRU))
+		c.metrics.TotalCrossRegionNetworkRU.Inc(float64(writeNetworkRU))
 	} else if resp.IsRead() {
-		c.mu.consumption.ReadBatches++
-		c.mu.consumption.ReadRequests += uint64(resp.ReadCount())
-		c.mu.consumption.ReadBytes += uint64(resp.ReadBytes())
-		c.mu.consumption.KVRU += float64(readKVRU)
-		c.mu.consumption.RU += float64(readKVRU + readNetworkRU)
-		c.mu.consumption.CrossRegionNetworkRU += float64(readNetworkRU)
+		c.metrics.TotalReadBatches.Inc(1)
+		c.metrics.TotalReadRequests.Inc(resp.ReadCount())
+		c.metrics.TotalReadBytes.Inc(resp.ReadBytes())
+		c.metrics.TotalKVRU.Inc(float64(readKVRU))
+		c.metrics.TotalRU.Inc(float64(readKVRU + readNetworkRU))
+		c.metrics.TotalCrossRegionNetworkRU.Inc(float64(readNetworkRU))
 	}
 
 	return nil
@@ -809,11 +791,9 @@ func (c *tenantSideCostController) onExternalIO(
 		c.limiter.RemoveTokens(c.timeSource.Now(), float64(totalRU))
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.mu.consumption.ExternalIOIngressBytes += uint64(usage.IngressBytes)
-	c.mu.consumption.ExternalIOEgressBytes += uint64(usage.EgressBytes)
-	c.mu.consumption.RU += float64(totalRU)
+	c.metrics.TotalExternalIOIngressBytes.Inc(usage.IngressBytes)
+	c.metrics.TotalExternalIOEgressBytes.Inc(usage.EgressBytes)
+	c.metrics.TotalRU.Inc(float64(totalRU))
 
 	return nil
 }
@@ -821,9 +801,7 @@ func (c *tenantSideCostController) onExternalIO(
 // GetCPUMovingAvg is used to obtain an exponential moving average estimate
 // for the CPU usage in seconds per each second of wall-clock time.
 func (c *tenantSideCostController) GetCPUMovingAvg() float64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.mu.avgCPUPerSec
+	return math.Float64frombits(c.avgCPUPerSec.Load())
 }
 
 // GetCostConfig is part of the multitenant.TenantSideCostController interface.
