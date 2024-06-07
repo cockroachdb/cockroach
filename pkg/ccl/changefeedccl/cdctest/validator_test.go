@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -112,7 +111,7 @@ func TestEachKeySequentialConsistencyValidator(t *testing.T) {
 		keys := []string{`k1`, `k2`, `k3`}
 		for _, key := range keys {
 			for i := range 10 {
-				noteRow(t, v, `p1`, key, strconv.Itoa(i), ts(int64(i)))
+				noteRow(t, v, `p1`, key, fmt.Sprintf(`{"after": {"x": %d}}`, i), ts(int64(i)))
 				require.Empty(t, v.Failures())
 			}
 		}
@@ -125,7 +124,7 @@ func TestEachKeySequentialConsistencyValidator(t *testing.T) {
 		sawErr := false
 		for _, key := range keys {
 			for _, i := range []int{0, 1, 2, 3, 5, 6} {
-				noteRow(t, v, `p1`, key, strconv.Itoa(i), ts(int64(i)))
+				noteRow(t, v, `p1`, key, fmt.Sprintf(`{"after": {"x": %d}}`, i), ts(int64(i)))
 				if sawErr || i >= 5 {
 					require.NotEmpty(t, v.Failures(), "key %s, i %d", key, i)
 					sawErr = true
