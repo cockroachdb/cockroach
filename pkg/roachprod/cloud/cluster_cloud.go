@@ -339,10 +339,10 @@ func CreateCluster(
 }
 
 // GrowCluster adds new nodes to an existing cluster.
-func GrowCluster(l *logger.Logger, c *Cluster, NumNodes int) error {
-	names := make([]string, 0, NumNodes)
+func GrowCluster(l *logger.Logger, c *Cluster, numNodes int) error {
+	names := make([]string, 0, numNodes)
 	offset := len(c.VMs) + 1
-	for i := offset; i < offset+NumNodes; i++ {
+	for i := offset; i < offset+numNodes; i++ {
 		vmName := vm.Name(c.Name, i)
 		names = append(names, vmName)
 	}
