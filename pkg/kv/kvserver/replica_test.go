@@ -10083,7 +10083,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	// Verify no quiescence when a follower is paused.
 	test(false, func(q *testQuiescer) *testQuiescer {
 		q.paused = map[roachpb.ReplicaID]struct{}{
-			q.desc.Replicas().AsProto()[0].ReplicaID: {},
+			q.desc.Replicas().Descriptors()[0].ReplicaID: {},
 		}
 		return q
 	})

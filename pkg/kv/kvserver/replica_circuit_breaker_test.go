@@ -47,7 +47,7 @@ func TestReplicaUnavailableError(t *testing.T) {
 	ctx := context.Background()
 
 	rue := errors.Mark(
-		replicaUnavailableError(wrappedErr, desc, desc.Replicas().AsProto()[0], lm, &rs, ts),
+		replicaUnavailableError(wrappedErr, desc, desc.Replicas().Descriptors()[0], lm, &rs, ts),
 		circuit.ErrBreakerOpen)
 
 	// A Protobuf roundtrip retains the error details.
