@@ -273,14 +273,6 @@ func (d ReplicaSet) FilterToDescriptors(
 	return out
 }
 
-// AsProto returns the protobuf representation of these replicas, suitable for
-// setting the InternalReplicas field of a RangeDescriptor. When possible the
-// SetReplicas method of RangeDescriptor should be used instead, this is only
-// here for the convenience of tests.
-func (d ReplicaSet) AsProto() []ReplicaDescriptor {
-	return d.wrapped
-}
-
 // DeepCopy returns a copy of this set of replicas. Modifications to the
 // returned set will not affect this one and vice-versa.
 func (d ReplicaSet) DeepCopy() ReplicaSet {
