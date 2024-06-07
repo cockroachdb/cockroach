@@ -92,7 +92,7 @@ type SupportManager struct {
 	ss supporterState
 	rs requesterState
 	// Metrics
-	loopStopper *stop.Stopper
+	loopStopper chan struct{}
 }
 
 func NewSupportManager(
@@ -154,18 +154,24 @@ func (sm *SupportManager) HandleMessage(ctx context.Context, msg slpb.Message) {
 }
 
 func (sm *SupportManager) Start(ctx context.Context) error {
-	sm.loopStopper = stop.NewStopper()
-	return sm.loopStopper.RunAsyncTaskEx(
-		ctx, stop.TaskOpts{TaskName: "storeliveness-loop"}, func(context.Context) {
-			sm.startLoop(ctx)
-		})
+	if sm.loopStopper != nil {
+		return nil
+	}
+	sm.loopStopper = make(chan struct{})
+	go sm.startLoop(ctx)
+	return nil
 }
 
 func (sm *SupportManager) Stop(ctx context.Context) {
-	sm.loopStopper.Stop(ctx)
+	if sm.loopStopper == nil {
+		return
+	}
+	close(sm.loopStopper)
+	sm.loopStopper = nil
 }
 
 func (sm *SupportManager) startLoop(ctx context.Context) {
+	loopStopper := sm.loopStopper
 	var heartbeatTimer timeutil.Timer
 	var supportExpiryInterval timeutil.Timer
 	defer heartbeatTimer.Stop()
@@ -187,7 +193,7 @@ func (sm *SupportManager) startLoop(ctx context.Context) {
 		case <-sm.stopper.ShouldQuiesce():
 			return
 
-		case <-sm.loopStopper.ShouldQuiesce():
+		case <-loopStopper:
 			return
 
 		case <-heartbeatTimer.C:
