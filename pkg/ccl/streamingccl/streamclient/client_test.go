@@ -83,7 +83,7 @@ func (sc testStreamClient) Close(_ context.Context) error {
 func (sc testStreamClient) Subscribe(
 	_ context.Context,
 	_ streampb.StreamID,
-	_ int32,
+	_, _ int32,
 	_ SubscriptionToken,
 	_ hlc.Timestamp,
 	_ span.Frontier,
@@ -293,7 +293,7 @@ func ExampleClient() {
 
 		for _, partition := range topology.Partitions {
 			// TODO(dt): use Subscribe helper and partition.SrcAddr
-			sub, err := client.Subscribe(ctx, id, 0, partition.SubscriptionToken, hlc.Timestamp{}, ingested)
+			sub, err := client.Subscribe(ctx, id, 0, 0, partition.SubscriptionToken, hlc.Timestamp{}, ingested)
 			if err != nil {
 				panic(err)
 			}

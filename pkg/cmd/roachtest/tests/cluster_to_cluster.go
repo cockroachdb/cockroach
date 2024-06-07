@@ -879,7 +879,7 @@ func (rd *replicationDriver) checkParticipatingNodes(ctx context.Context, ingest
 		}
 		srcTenantSQL := sqlutils.MakeSQLRunner(rd.c.Conn(ctx, rd.t.L(), src))
 		var dstNode int
-		rows := srcTenantSQL.Query(rd.t, `select distinct consumer_id from crdb_internal.cluster_replication_node_streams`)
+		rows := srcTenantSQL.Query(rd.t, `select distinct split_part(consumer, '[', 1) from crdb_internal.cluster_replication_node_streams`)
 		var streams int
 		for rows.Next() {
 			require.NoError(rd.t, rows.Scan(&dstNode))
@@ -1681,7 +1681,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		srcTenantSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), srcNode))
 
 		var dstNode int
-		srcTenantSQL.QueryRow(t, `select consumer_id from crdb_internal.cluster_replication_node_streams order by random() limit 1`).Scan(&dstNode)
+		srcTenantSQL.QueryRow(t, `select split_part(consumer, '[', 1) from crdb_internal.cluster_replication_node_streams order by random() limit 1`).Scan(&dstNode)
 
 		disconnectDuration := sp.additionalDuration
 		rd.t.L().Printf("Disconnecting Src %d, Dest %d for %.2f minutes", srcNode,
