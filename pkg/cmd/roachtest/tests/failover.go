@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1190,7 +1191,7 @@ func makeFailerWithoutLocalNoop(
 			c:             c,
 			m:             m,
 			startSettings: settings,
-			staller:       &dmsetupDiskStaller{t: t, c: c},
+			staller:       roachtestutil.MakeDmsetupDiskStaller(t, c),
 		}
 	case failureModePause:
 		return &pauseFailer{
