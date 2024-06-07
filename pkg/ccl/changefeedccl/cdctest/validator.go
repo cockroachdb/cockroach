@@ -264,7 +264,6 @@ func (c *eachKeySequentialConsistencyValidator) NoteRow(partition string, key st
 		c.vals[key] = btree.New(2)
 	}
 	c.vals[key].ReplaceOrInsert(btree.Int(ival))
-	fmt.Printf("noting row %s: %d\n", key, ival)
 	return c.inner.NoteRow(partition, key, value, updated)
 }
 
