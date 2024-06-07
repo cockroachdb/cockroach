@@ -183,9 +183,6 @@ func newChangeAggregatorProcessor(
 	}()
 
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "changeagg-mem")
-	// CDC DistSQL flows are long-living, so we mark the memory monitors
-	// accordingly.
-	memMonitor.MarkLongLiving()
 	ca := &changeAggregator{
 		flowCtx:           flowCtx,
 		spec:              spec,
@@ -399,10 +396,7 @@ func (ca *changeAggregator) startKVFeed(
 	opts changefeedbase.StatementOptions,
 ) (kvevent.Reader, chan struct{}, chan error, error) {
 	cfg := ca.flowCtx.Cfg
-	// CDC DistSQL flows are long-living, so we mark the memory monitors
-	// accordingly.
-	const longLiving = true
-	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", memLimit, parentMemMon, longLiving)
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", memLimit, parentMemMon, false /* longLiving */)
 	kvFeedMemMon.StartNoReserved(ctx, parentMemMon)
 	buf := kvevent.NewThrottlingBuffer(
 		kvevent.NewMemBuffer(kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
@@ -1122,9 +1116,6 @@ func newChangeFrontierProcessor(
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "changefntr-mem")
-	// CDC DistSQL flows are long-living, so we mark the memory monitors
-	// accordingly.
-	memMonitor.MarkLongLiving()
 	sf, err := makeSchemaChangeFrontier(hlc.Timestamp{}, spec.TrackedSpans...)
 	if err != nil {
 		return nil, err
