@@ -743,7 +743,7 @@ type RangeControllerOptions struct {
 	RaftInterface     RaftInterface
 	// MessageSender is for sending MsgApps mediated by RACv2.
 	MessageSender MessageSender
-	// Scheduler is for scheduing popping from the send-queue.
+	// Scheduler is for scheduling popping from the send-queue.
 	Scheduler Scheduler
 }
 
@@ -825,6 +825,8 @@ func (rc *RangeControllerImpl) updateReplicaSetAndMap(newSet ReplicaSet) {
 			rs.close()
 			delete(rc.replicaMap, r)
 		} else {
+			// TODO: see the comment earlier about voter <=> non-voter transitions.
+			//
 			// It does not matter if the replica has changed from voter to non-voter
 			// or vice-versa, in that we still need to replicate to it.
 			rs := rc.replicaMap[r]
@@ -1482,6 +1484,18 @@ func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
 	// [pav-kv] The raft.Config.{MaxSizePerMsg, MaxInflightMsgs} fields are
 	// relevant. I don't think we need MsgInflightMsgs, but the the bytesToSend
 	// could be paginated MaxSizePerMsg per message, if we need it.
+	//
+	// When bytesToSend is decided by rss.sendQueue.deductedForScheduler.tokens,
+	// it is only based on what is subject to AC. But Raft is unaware of this
+	// linkage between admission control and flow tokens, and MakeMsgApp will
+	// use this bytesToSend to compute across all entries. How harmful is this?
+	// RACv2 will be configured in one of three modes (a) fully disabled, so
+	// this is irrelevant, (b) flow tokens only for elastic work, and
+	// send-queues disabled (analogous to RACv1), so this is irrelevant, (c)
+	// flow tokens for regular and elastic work, and send-queues enabled (can't
+	// have it disabled as that would result in overload based on pacing at
+	// quorum for regular work), in which case the total size of entries not
+	// subject to flow control will be tiny, and this is harmless.
 	msg, err := rss.parent.parent.opts.RaftInterface.MakeMsgApp(
 		rss.parent.desc.ReplicaID, rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex,
 		int64(bytesToSend))

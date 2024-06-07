@@ -17,8 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -443,12 +447,14 @@ func (f *replicaFlowControlIntegrationImpl) clearState(ctx context.Context) {
 	f.disconnectedStreams = nil
 }
 
-// RACv2
+// ===================== RACv2 =====================
 
 type replicaRACv2Integration struct {
 	replica *Replica
 	// This can be 0, if the leaderID is not known.
 	leaderID              roachpb.ReplicaID
+	leaderNodeID          roachpb.NodeID
+	replicas              kvflowconnectedstream.ReplicaSet
 	rcAtLeader            kvflowconnectedstream.RangeController
 	raftAdmittedInterface kvflowconnectedstream.RaftAdmittedInterface
 
@@ -472,6 +478,11 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeader(leaderID roachpb.ReplicaID) 
 	if rr2.destroyed || leaderID == rr2.leaderID {
 		return
 	}
+	rd, ok := rr2.replicas[leaderID]
+	if !ok {
+		panic("")
+	}
+	rr2.leaderNodeID = rd.NodeID
 	// INVARIANT: leaderID != rr2.leaderID
 	if rr2.leaderID == rr2.replica.replicaID && leaderID != rr2.replica.replicaID {
 		// Transition from leader to follower.
@@ -551,10 +562,11 @@ func (rr2 *replicaRACv2Integration) RangeController() kvflowconnectedstream.Rang
 
 // Replica.raftMu and Replica.mu are held.
 func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor) {
+	rr2.replicas = descToReplicaSet(desc)
 	if rr2.rcAtLeader == nil {
 		return
 	}
-	rr2.rcAtLeader.SetReplicas(descToReplicaSet(desc))
+	rr2.rcAtLeader.SetReplicas(rr2.replicas)
 }
 
 func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent() {
@@ -563,7 +575,48 @@ func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent() {
 	}
 }
 
+// entries can be empty, and there may not have been a Ready.
+func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
+	// TODO(racV2-integration):
+
+	/*
+			- MsgStoreAppendResp has already been stepped.
+
+			  - [AH2] In handleRaftReadyRaftMuLocked, this queue is used to remove things from
+			    notAdmitted. Additionally RaftInterface is queried for stableIndex. If a
+			    notAdmitted[i] is empty, admitted[i] = stableIndex, else admitted[i] =
+			    notAdmitted[i][0]-1. RaftInterface.AdvanceAdmitted is called, which may
+			    return a MsgAppResp.
+			  - MsgAppResp is sent.
+
+			We will do a similar piggy-backing:
+
+			- Say m is the raftpb.Message corresponding to the MsgAppResp that was
+			  returned from RaftInterface.AdvanceAdmitted
+			- Wrap it with the RangeID, and enqueue it for the leader's nodeid in the
+			  RaftTransport (this will actually be much simpler than the
+			  current RaftTransport.kvflowControl plumbing).
+			- Every RaftMessageRequest for the node will piggy-back these.
+
+		add to AdmittedPiggybackStateManager.
+	*/
+
+	if rr2.rcAtLeader == nil {
+		return
+	}
+	// TODO(racV2-integration): unnecessary allocation?
+	raftEvent := kvflowconnectedstream.MakeRaftEvent(&raft.Ready{
+		Entries: entries,
+	})
+	rr2.rcAtLeader.HandleRaftEvent(raftEvent)
+}
+
+// ====== For all replicas, leader or follower ======
+
 // Corresponding to raft indices [first,last].
+//
+// Only called when RaftMessageRequest is received with a MsgApp. So never
+// called for leader.
 func (rr2 *replicaRACv2Integration) sideChannelForInheritedPriority(
 	first, last uint64, inheritedPri kvflowconnectedstream.RaftPriority,
 ) {
@@ -574,4 +627,95 @@ func (rr2 *replicaRACv2Integration) sideChannelForInheritedPriority(
 	case kvflowconnectedstream.PriorityNotInheritedForFlowControl:
 	default:
 	}
+}
+
+func (rr2 *replicaRACv2Integration) admittedLogEntry(
+	ctx context.Context,
+	origin roachpb.NodeID,
+	pri admissionpb.WorkPriority,
+	storeID roachpb.StoreID,
+	pos admission.LogPosition,
+) {
+	// TODO(racV2-integration):
+	//
+	// Can be synchronous within handleRaftReadyRaftMuLocked.
+
+	/*
+	   - [AH1] The structs corresponding to the admitted entries are queued in the
+	      Replica akin to how we queue Replica.localMsgs and the raftScheduler will be
+	      told to do ready processing (there may not be a Raft ready, but this is akin
+	      to how handleRaftReadyRaftMuLocked does
+	      deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked).
+
+	*/
+}
+
+// Subset of kvadmission.Controller needed here.
+type acWorkQueue interface {
+	AdmitRaftEntryV1OrV2(
+		ctx context.Context, tenantID roachpb.TenantID, storeID roachpb.StoreID, rangeID roachpb.RangeID,
+		entry raftpb.Entry, meta kvflowcontrolpb.RaftAdmissionMeta, isSideloaded bool)
+}
+
+// TODO(racV2-integration): add a ReplicaID too the struct we hand to AC.
+// (rangeID, storeID) does not uniquely identify a replica. If a store is
+// removed from a range, and then added back in, it will have the same
+// (rangeID, storeID), but notifications for old admitted entries, and the
+// corresponding messages should be ignored.
+//
+// TODO(racV2-integration): we will need to ensure that such piggy-backed
+// MsgAppResp are matched with the ReplicaID on the leader before stepping
+// them into Raft.
+
+// admitRaftEntry is called to admit a raft entry, on any kind of replica. It
+// should use the state in the entry, and the information provided via
+// sideChannelForInheritedPriority, to enqueue onto queue. It is possible that
+// admittedLogEntry will be called while AdmitRaftEntryV1OrV2 is ongoing.
+func (rr2 *replicaRACv2Integration) admitRaftEntry(
+	ctx context.Context,
+	queue acWorkQueue,
+	tenantID roachpb.TenantID,
+	storeID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	entry raftpb.Entry,
+) {
+	// TODO(racV2-integration):
+
+	/*
+		- calls AdmitRaftEntry for the entries in raftpb.MsgStorageAppend. In
+		addition to queueing in the StoreWorkQueue, this will track (on the
+		Replica): notAdmitted [numFlowPri][]uint64, where the []uint64 is in
+		increasing entry index order. We don't bother with the term in the
+		tracking (unlike the RaftLogPosition struct in the current code). These
+			slices are appended to here, based on the entries in MsgStorageAppend.
+	*/
+
+}
+
+// TODO: write the code here and then move it to a file in kvflowconnectedstream.
+
+// AdmittedPiggybackStateManager ...
+//
+// The following is not a replica level object. There is one per node. Move
+// this elsehwere.
+type AdmittedPiggybackStateManager interface {
+	// AddMsgForRange ...
+	// m must be a MsgAppResp.
+	//
+	// Keeps for each rangeID the latest m. There shouldn't be multiple replicas
+	// for a range at this node, so that is sufficient. Also, keys these by leaderNodeID,
+	// so can be grabbed to piggyback to that range.
+	AddMsgForRange(rangeID roachpb.RangeID, leaderNodeID roachpb.NodeID, m raftpb.Message)
+	// PopMsgsForNode ...
+	// TODO: see how kvflowdispatch handles this.
+	PopMsgsForNode(nodeID roachpb.NodeID) []kvflowcontrolpb.AdmittedForRangeRACv2
+	// NodesWithMsgs is used to periodically drop msgs from disconnected nodes.
+	// See RaftTransport.dropFlowTokensForDisconnectedNodes.
+	NodesWithMsgs() []roachpb.NodeID
+}
+
+// TODO: implement.
+
+func NewAdmittedPiggybackStateManager() AdmittedPiggybackStateManager {
+	return nil
 }

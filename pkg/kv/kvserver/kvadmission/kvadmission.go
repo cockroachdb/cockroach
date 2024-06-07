@@ -183,6 +183,9 @@ type Controller interface {
 	// AdmitRaftEntry informs admission control of a raft log entry being
 	// written to storage.
 	AdmitRaftEntry(context.Context, roachpb.TenantID, roachpb.StoreID, roachpb.RangeID, raftpb.Entry)
+	AdmitRaftEntryV1OrV2(
+		ctx context.Context, tenantID roachpb.TenantID, storeID roachpb.StoreID, rangeID roachpb.RangeID,
+		entry raftpb.Entry, meta kvflowcontrolpb.RaftAdmissionMeta, isSideloaded bool)
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -219,7 +222,7 @@ type controllerImpl struct {
 	kvflowController kvflowcontrol.Controller
 	kvflowHandles    kvflowcontrol.Handles
 	// RACv2
-	storesForRACv2 StoresForRACv2
+	storesForRACv2 StoresForEvalRACv2
 
 	settings *cluster.Settings
 	every    log.EveryN
@@ -255,7 +258,7 @@ func (h *Handle) AnnotateCtx(ctx context.Context) context.Context {
 	return ctx
 }
 
-type StoresForRACv2 interface {
+type StoresForEvalRACv2 interface {
 	Lookup(rangeID roachpb.RangeID) RangeControllerProvider
 }
 
@@ -272,7 +275,7 @@ func MakeController(
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	kvflowController kvflowcontrol.Controller,
 	kvflowHandles kvflowcontrol.Handles,
-	storesForRACv2 StoresForRACv2,
+	storesForRACv2 StoresForEvalRACv2,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
@@ -383,7 +386,7 @@ func (n *controllerImpl) AdmitKVWork(
 					ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
 						AdmissionPriority:   int32(kvflowconnectedstream.AdmissionPriorityToRaftPriority(admissionInfo.Priority)),
 						AdmissionCreateTime: admissionInfo.CreateTime,
-						AdmissionOriginNode: n.nodeID.Get(),
+						// AdmissionOriginNode: n.nodeID.Get(),
 					}
 					admitted = true
 				} else {
@@ -608,6 +611,7 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 }
 
 // AdmitRaftEntry implements the Controller interface.
+// Only for RACv1
 func (n *controllerImpl) AdmitRaftEntry(
 	ctx context.Context,
 	tenantID roachpb.TenantID,
@@ -628,10 +632,22 @@ func (n *controllerImpl) AdmitRaftEntry(
 		log.Errorf(ctx, "unable to decode raft command admission data: %v", err)
 		return
 	}
+	n.AdmitRaftEntryV1OrV2(ctx, tenantID, storeID, rangeID, entry, meta, typ.IsSideloaded())
 	// TODO(racV2-integration): handle RACv2 entries differently? Caller of
 	// AdmitRaftEntry is the Replica, so should consider handling most things
 	// there, and then call a AdmitRACv2Entry with specifics.
 
+}
+
+func (n *controllerImpl) AdmitRaftEntryV1OrV2(
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	storeID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	entry raftpb.Entry,
+	meta kvflowcontrolpb.RaftAdmissionMeta,
+	isSideloaded bool,
+) {
 	if log.V(1) {
 		log.Infof(ctx, "decoded raft admission meta below-raft: pri=%s create-time=%d proposer=n%s receiver=[n%d,s%s] tenant=t%d tokens≈%d sideloaded=%t raft-entry=%d/%d",
 			admissionpb.WorkPriority(meta.AdmissionPriority),
@@ -641,7 +657,7 @@ func (n *controllerImpl) AdmitRaftEntry(
 			storeID,
 			tenantID.ToUint64(),
 			kvflowcontrol.Tokens(len(entry.Data)),
-			typ.IsSideloaded(),
+			isSideloaded,
 			entry.Term,
 			entry.Index,
 		)
@@ -671,7 +687,7 @@ func (n *controllerImpl) AdmitRaftEntry(
 			Term:  entry.Term,
 			Index: entry.Index,
 		},
-		Ingested: typ.IsSideloaded(),
+		Ingested: isSideloaded,
 	}
 
 	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{

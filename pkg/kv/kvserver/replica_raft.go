@@ -847,6 +847,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
+	var readyEntries []raftpb.Entry
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		r.deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(ctx, raftGroup)
 
@@ -864,6 +865,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// in raft. This will also eliminate the "side channel" plumbing hack with
 			// this bytesAccount.
 			syncRd := raftGroup.Ready()
+			if kvflowconnectedstream.UseRACv2 {
+				readyEntries = syncRd.Entries
+			}
 			// We apply committed entries during this handleRaftReady, so it is ok to
 			// release the corresponding memory tokens at the end of this func. Next
 			// time we enter this function, the account will be empty again.
@@ -893,6 +897,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	leaseholderReplicaID := r.mu.state.Lease.Replica.ReplicaID
 	r.mu.Unlock()
 	r.raftMu.racV2Integration.tryUpdateLeaseholder(leaseholderReplicaID)
+	if kvflowconnectedstream.UseRACv2 {
+		// NB: must be called even if there was no Ready.
+		r.raftMu.racV2Integration.handleRaftEvent(readyEntries)
+	}
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
 		return stats, nil
@@ -1101,9 +1109,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 					if len(entry.Data) == 0 {
 						continue // nothing to do
 					}
-					r.store.cfg.KVAdmissionController.AdmitRaftEntry(
-						ctx, tenantID, r.StoreID(), r.RangeID, entry,
-					)
+					if kvflowconnectedstream.UseRACv2 {
+						r.raftMu.racV2Integration.admitRaftEntry(ctx, r.store.cfg.KVAdmissionController,
+							tenantID, r.StoreID(), r.RangeID, entry)
+					} else {
+						r.store.cfg.KVAdmissionController.AdmitRaftEntry(
+							ctx, tenantID, r.StoreID(), r.RangeID, entry,
+						)
+					}
 				}
 			}
 
@@ -1666,6 +1679,8 @@ func (r *replicaSyncCallback) OnLogSync(
 //
 // When calling this method, the raftMu may be held, but it does not need to be.
 // The Replica mu must not be held.
+//
+// NB: RACv2 never uses this to send MsgApps that contain entries.
 func (r *Replica) sendRaftMessages(
 	ctx context.Context,
 	messages []raftpb.Message,

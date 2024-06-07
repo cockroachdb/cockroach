@@ -292,6 +292,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 // replica, replacing the existing Raft group if any.
 func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 	ctx := r.AnnotateCtx(context.Background())
+	// TODO(racV2-integration): setup config based on UseRACv2.
 	rg, err := raft.NewRawNode(newRaftConfig(
 		ctx,
 		(*replicaRaftStorage)(r),

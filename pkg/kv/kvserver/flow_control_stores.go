@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -224,15 +226,25 @@ func (NoopStoresFlowControlIntegration) OnRaftTransportDisconnected(
 
 // RACv2
 
-func MakeStoresForRACv2(stores *Stores) kvadmission.StoresForRACv2 {
+type StoresForRACv2 interface {
+	kvadmission.StoresForEvalRACv2
+	admission.OnLogEntryAdmitted
+}
+
+func MakeStoresForRACv2(stores *Stores) StoresForRACv2 {
 	return (*storesForRACv2)(stores)
 }
 
 type storesForRACv2 Stores
 
-var _ kvadmission.StoresForRACv2 = &storesForRACv2{}
+var _ kvadmission.StoresForEvalRACv2 = &storesForRACv2{}
 
+// Lookup implements kvadmission.StoresForEvalRACv2.
 func (ss *storesForRACv2) Lookup(rangeID roachpb.RangeID) kvadmission.RangeControllerProvider {
+	return ss.lookup(rangeID)
+}
+
+func (ss *storesForRACv2) lookup(rangeID roachpb.RangeID) *replicaRACv2Integration {
 	ls := (*Stores)(ss)
 	var rr *replicaRACv2Integration
 	if err := ls.VisitStores(func(s *Store) error {
@@ -249,4 +261,19 @@ func (ss *storesForRACv2) Lookup(rangeID roachpb.RangeID) kvadmission.RangeContr
 		panic("")
 	}
 	return rr
+}
+
+func (ss *storesForRACv2) AdmittedLogEntry(
+	ctx context.Context,
+	origin roachpb.NodeID,
+	pri admissionpb.WorkPriority,
+	storeID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	pos admission.LogPosition,
+) {
+	rr := ss.lookup(rangeID)
+	if rr != nil {
+		rr.admittedLogEntry(ctx, origin, pri, storeID, pos)
+	}
+	// Else range does not have a replica on this store, so ignore.
 }

@@ -575,9 +575,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		/* deterministic */ false,
 	)
 
+	storesForRACv2 := kvserver.MakeStoresForRACv2(stores)
 	storesForFlowControl := kvserver.MakeStoresForFlowControl(stores)
 	kvflowTokenDispatch := kvflowdispatch.New(nodeRegistry, storesForFlowControl, nodeIDContainer)
-	admittedEntryAdaptor := newAdmittedLogEntryAdaptor(kvflowTokenDispatch)
+	var onLogEntryAdmitted admission.OnLogEntryAdmitted
+	if kvflowconnectedstream.UseRACv2 {
+		onLogEntryAdmitted = storesForRACv2
+	} else {
+		onLogEntryAdmitted = newAdmittedLogEntryAdaptor(kvflowTokenDispatch)
+	}
 	admissionKnobs, ok := cfg.TestingKnobs.AdmissionControl.(*admission.TestingKnobs)
 	if !ok {
 		admissionKnobs = &admission.TestingKnobs{}
@@ -587,7 +593,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		st,
 		admissionOptions,
 		nodeRegistry,
-		admittedEntryAdaptor,
+		onLogEntryAdmitted,
 		admissionKnobs,
 	)
 	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
@@ -624,7 +630,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		gcoords.Stores,
 		admissionControl.kvflowController,
 		admissionControl.storesFlowControl,
-		kvserver.MakeStoresForRACv2(stores),
+		storesForRACv2,
 		cfg.Settings,
 	)
 	admissionControl.kvFlowHandleMetrics = kvflowhandle.NewMetrics(nodeRegistry)

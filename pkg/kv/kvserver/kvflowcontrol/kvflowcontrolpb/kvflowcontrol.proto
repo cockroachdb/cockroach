@@ -10,9 +10,11 @@
 
 syntax = "proto3";
 package cockroach.kv.kvserver.kvflowcontrol.kvflowcontrolpb;
+
 option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb";
 
 import "gogoproto/gogo.proto";
+import "raft/raftpb/raft.proto";
 
 // RaftAdmissionMeta contains information used by admission control for the
 // select raft commands that use replication admission control. It contains a
@@ -23,6 +25,12 @@ import "gogoproto/gogo.proto";
 // raftlog.EntryEncoding.
 //
 // [1]: The field tags and types must be kept identical with what's found there.
+//
+// RaftAdmissionMeta is also used by RACv2, with the AdmissionPriority set to
+// a RaftPriority. Also, AdmissionOriginNode is not populated since the leader
+// can change and RaftAdmissionMeta is persisted in the raft log (it was ok
+// for RACv1 since the only tokens were eval tokens and an entry is evaluated
+// once).
 message RaftAdmissionMeta {
   // AdmissionPriority of the command (maps to admission.WorkPriority); used
   // within a tenant below-raft for replication admission control.
@@ -69,6 +77,8 @@ message RaftAdmissionMeta {
   // benchmarks (say, `cockroach workload run kv` with high concurrency and
   // small write sizes). The ideas above are too complicated.
 }
+
+// AdmittedRaftLogEntries is not used by RACv2.
 
 // AdmittedRaftLogEntries represents a set of raft log entries that were
 // admitted below raft. These are identified by:
@@ -118,4 +128,15 @@ message RaftLogPosition {
 
   uint64 term = 1;
   uint64 index = 2;
+}
+
+message AdmittedForRangeRACv2 {
+  option (gogoproto.goproto_stringer) = false;
+
+  // RangeID of the raft group these entries belong to. This is the range on
+  // whose behalf work was admitted.
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+
+  raftpb.Message msg = 2 [(gogoproto.nullable) = false];
 }
