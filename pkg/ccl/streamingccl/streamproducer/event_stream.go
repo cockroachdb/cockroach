@@ -72,6 +72,8 @@ type eventStream struct {
 	lastCheckpointTime time.Time
 	lastCheckpointLen  int
 
+	lastPolled time.Time
+
 	debug streampb.DebugProducerStatus
 }
 
@@ -110,6 +112,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	if s.errCh != nil {
 		return errors.AssertionFailedf("expected to be started once")
 	}
+
+	s.lastPolled = timeutil.Now()
 
 	sourceTenantID, err := s.validateProducerJobAndSpec(ctx)
 	if err != nil {
@@ -215,6 +219,12 @@ func (s *eventStream) setErr(err error) bool {
 
 // Next implements eval.ValueGenerator interface.
 func (s *eventStream) Next(ctx context.Context) (bool, error) {
+	emitWait := int64(timeutil.Since(s.lastPolled))
+
+	s.debug.Flushes.LastEmitWaitNanos.Store(emitWait)
+	s.debug.Flushes.EmitWaitNanos.Add(emitWait)
+	s.lastPolled = timeutil.Now()
+
 	select {
 	case <-ctx.Done():
 		return false, ctx.Err()
@@ -226,6 +236,10 @@ func (s *eventStream) Next(ctx context.Context) (bool, error) {
 		case err := <-s.errCh:
 			return false, err
 		default:
+			produceWait := int64(timeutil.Since(s.lastPolled))
+			s.debug.Flushes.ProduceWaitNanos.Add(produceWait)
+			s.debug.Flushes.LastProduceWaitNanos.Store(produceWait)
+			s.lastPolled = timeutil.Now()
 			return true, nil
 		}
 	}
