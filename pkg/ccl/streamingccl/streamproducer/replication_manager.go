@@ -191,7 +191,7 @@ func (r *replicationStreamManagerImpl) DebugGetProducerStatuses(
 	ctx context.Context,
 ) []*streampb.DebugProducerStatus {
 	// NB: we don't check license here since if a stream started but the license
-	// expired or was removed, we still was visibility into it during debugging.
+	// expired or was removed, we still want visibility into it during debugging.
 
 	// TODO(dt): ideally we store pointers to open readers in a map in some field
 	// of some struct off of server (job registry?) so that each VC just sees the
@@ -216,7 +216,7 @@ func (r *replicationStreamManagerImpl) DebugGetLogicalConsumerStatuses(
 	ctx context.Context,
 ) []*streampb.DebugLogicalConsumerStatus {
 	// NB: we don't check license here since if a stream started but the license
-	// expired or was removed, we still was visibility into it during debugging.
+	// expired or was removed, we still want visibility into it during debugging.
 
 	// TODO(dt): since this is per-process, not per-server, we can only let the
 	// the sys tenant inspect it; remove this when we move this into job registry.
