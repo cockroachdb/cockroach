@@ -36,7 +36,13 @@ import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 type unstable struct {
 	// the incoming unstable snapshot, if any.
 	//
-	// Invariant: snapshot == nil ==> !snapshotInProgress
+	// Invariants:
+	//	- snapshot == nil ==> !snapshotInProgress
+	//	- snapshot != nil ==> offset == snapshot.Metadata.Index + 1
+	//
+	// The last invariant enforces the order of handling a situation when there is
+	// both a snapshot and entries. The snapshot must be acknowledged first,
+	// before entries are acknowledged and offset moves forward.
 	snapshot *pb.Snapshot
 	// all entries that have not yet been written to storage.
 	entries []pb.Entry
@@ -53,6 +59,10 @@ type unstable struct {
 	//
 	// Invariant: offset <= offsetInProgress
 	// Invariant: offsetInProgress - offset <= len(entries)
+	// Invariant: offsetInProgress > offset ==> snapshot == nil || snapshotInProgress
+	//
+	// The last invariant enforces the order of handling a situation when there is
+	// both a snapshot and entries. The snapshot must be sent to storage first.
 	offsetInProgress uint64
 
 	logger Logger
