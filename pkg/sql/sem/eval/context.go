@@ -905,6 +905,7 @@ type ReplicationStreamManager interface {
 	) error
 
 	DebugGetProducerStatuses(ctx context.Context) []*streampb.DebugProducerStatus
+	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
 
 	PartitionSpans(
 		ctx context.Context,

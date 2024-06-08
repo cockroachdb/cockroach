@@ -210,6 +210,22 @@ func (r *replicationStreamManagerImpl) DebugGetProducerStatuses(
 	return res
 }
 
+// DebugGetLogicalConsumerStatuses gets all logical consumer debug statuses in
+// active in this process.
+func (r *replicationStreamManagerImpl) DebugGetLogicalConsumerStatuses(
+	ctx context.Context,
+) []*streampb.DebugLogicalConsumerStatus {
+	// NB: we don't check license here since if a stream started but the license
+	// expired or was removed, we still was visibility into it during debugging.
+
+	// TODO(dt): since this is per-process, not per-server, we can only let the
+	// the sys tenant inspect it; remove this when we move this into job registry.
+	if !r.evalCtx.Codec.ForSystemTenant() {
+		return nil
+	}
+	return streampb.GetActiveLogicalConsumerStatuses()
+}
+
 func newReplicationStreamManagerWithPrivilegesCheck(
 	ctx context.Context,
 	evalCtx *eval.Context,
