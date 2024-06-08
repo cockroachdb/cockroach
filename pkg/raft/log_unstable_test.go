@@ -29,11 +29,16 @@ func (u *unstable) checkInvariants(t testing.TB) {
 	t.Helper()
 	require.GreaterOrEqual(t, u.offsetInProgress, u.offset)
 	require.LessOrEqual(t, u.offsetInProgress-u.offset, uint64(len(u.entries)))
-	if u.snapshot == nil {
+	if u.snapshot != nil {
+		require.Equal(t, u.snapshot.Metadata.Index+1, u.offset)
+	} else {
 		require.False(t, u.snapshotInProgress)
 	}
 	if len(u.entries) != 0 {
 		require.Equal(t, u.entries[0].Index, u.offset)
+	}
+	if u.offsetInProgress > u.offset && u.snapshot != nil {
+		require.True(t, u.snapshotInProgress)
 	}
 }
 
@@ -358,18 +363,6 @@ func TestUnstableAcceptInProgress(t *testing.T) {
 			7, true,
 		},
 		{
-			index(5).terms(1, 1), &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
-			5, 6, // in-progress to the first entry
-			false, // snapshot not already in progress
-			7, true,
-		},
-		{
-			index(5).terms(1, 1), &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
-			5, 7, // in-progress to the second entry
-			false, // snapshot not already in progress
-			7, true,
-		},
-		{
 			[]pb.Entry{}, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			5, 5, // entries not in progress
 			true, // snapshot already in progress
@@ -504,8 +497,13 @@ func TestUnstableStableTo(t *testing.T) {
 			u.snapshot = tt.snap
 			u.entries = tt.entries
 			u.offsetInProgress = tt.offsetInProgress
+			u.snapshotInProgress = u.snapshot != nil && u.offsetInProgress > u.offset
 			u.checkInvariants(t)
 
+			if u.snapshotInProgress {
+				u.stableSnapTo(u.snapshot.Metadata.Index)
+			}
+			u.checkInvariants(t)
 			u.stableTo(entryID{term: tt.term, index: tt.index})
 			u.checkInvariants(t)
 			require.Equal(t, tt.woffset, u.offset)
@@ -583,6 +581,7 @@ func TestUnstableTruncateAndAppend(t *testing.T) {
 			u.snapshot = tt.snap
 			u.entries = tt.entries
 			u.offsetInProgress = tt.offsetInProgress
+			u.snapshotInProgress = u.snapshot != nil && u.offsetInProgress > u.offset
 			u.checkInvariants(t)
 
 			u.truncateAndAppend(tt.toappend)
