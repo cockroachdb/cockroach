@@ -106,26 +106,23 @@ func (l *raftLog) String() string {
 // maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
 // it returns (last index of new entries, true).
 func (l *raftLog) maybeAppend(a logSlice) (lastnewi uint64, ok bool) {
-	if !l.matchTerm(a.prev) {
+	match, ok := l.findConflict(a)
+	if !ok {
 		return 0, false
 	}
-	// TODO(pav-kv): propagate logSlice down the stack. It will be used all the
-	// way down in unstable, for safety checks, and for useful bookkeeping.
-
-	lastnewi = a.prev.index + uint64(len(a.entries))
-	ci := l.findConflict(a.entries)
-	switch {
-	case ci == 0:
-	case ci <= l.committed:
-		l.logger.Panicf("entry %d conflict with committed entry [committed(%d)]", ci, l.committed)
-	default:
-		offset := a.prev.index + 1
-		if ci-offset > uint64(len(a.entries)) {
-			l.logger.Panicf("index, %d, is out of range [%d]", ci-offset, len(a.entries))
-		}
-		l.append(a.entries[ci-offset:]...)
+	if match.index < a.lastIndex() && match.index < l.committed {
+		l.logger.Panicf("entry %d is already committed [committed(%d)]", match.index+1, l.committed)
 	}
-	return lastnewi, true
+
+	// Fast-forward to the first mismatching or missing entry.
+	// NB: prev.index <= match.index <= a.lastIndex(), so the sub-slicing is safe.
+	a.entries = a.entries[match.index-a.prev.index:]
+	a.prev = match
+
+	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
+	// bookkeeping in the unstable structure.
+	l.append(a.entries...)
+	return a.lastIndex(), true
 }
 
 func (l *raftLog) append(ents ...pb.Entry) {
@@ -138,29 +135,51 @@ func (l *raftLog) append(ents ...pb.Entry) {
 	l.unstable.truncateAndAppend(ents)
 }
 
-// findConflict finds the index of the conflict.
-// It returns the first pair of conflicting entries between the existing
-// entries and the given entries, if there are any.
-// If there is no conflicting entries, and the existing entries contains
-// all the given entries, zero will be returned.
-// If there is no conflicting entries, but the given entries contains new
-// entries, the index of the first new entry will be returned.
-// An entry is considered to be conflicting if it has the same index but
-// a different term.
-// The index of the given entries MUST be continuously increasing.
-func (l *raftLog) findConflict(ents []pb.Entry) uint64 {
-	for i := range ents {
-		if id := pbEntryID(&ents[i]); !l.matchTerm(id) {
-			if id.index <= l.lastIndex() {
-				// TODO(pav-kv): can simply print %+v of the id. This will change the
-				// log format though.
-				l.logger.Infof("found conflict at index %d [existing term: %d, conflicting term: %d]",
-					id.index, l.zeroTermOnOutOfBounds(l.term(id.index)), id.term)
-			}
-			return id.index
-		}
+// findConflict finds the last entry in the given log slice that matches the
+// log. The next entry either mismatches, or is missing.
+//
+// If the slice partially/fully matches, this method returns true. The returned
+// entryID is the ID of the last matching entry. It can be s.prev if it is the
+// only matching entry. It is guaranteed that the returned entryID.index is in
+// the [s.prev.index, s.lastIndex()] range.
+//
+// All the entries up to the returned entryID are already present in the log,
+// and do not need to be appended again. The caller can safely fast-forward an
+// append request to the next entry after it.
+//
+// Returns false if the given slice mismatches the log entirely, i.e. the s.prev
+// entry has a mismatching entryID.term. In this case an append request can not
+// proceed.
+func (l *raftLog) findConflict(s logSlice) (entryID, bool) {
+	if !l.matchTerm(s.prev) {
+		return entryID{}, false
 	}
-	return 0
+
+	// TODO(pav-kv): add a fast-path here using the Log Matching property of raft.
+	// Check the term match at min(s.lastIndex(), l.lastIndex()) entry, and fall
+	// back to conflict search only if it mismatches.
+	// TODO(pav-kv): also, there should be no mismatch if s.term == l.accTerm, so
+	// the fast-path can avoid this one check too.
+	//
+	// TODO(pav-kv): every matchTerm call in the linear scan below can fall back
+	// to fetching an entry from storage. This is inefficient, we can improve it.
+	// Logs that don't match at one index, don't match at all indices above. So we
+	// can use binary search to find the fork.
+	match := s.prev
+	for i := range s.entries {
+		id := pbEntryID(&s.entries[i])
+		if l.matchTerm(id) {
+			match = id
+			continue
+		}
+		if id.index <= l.lastIndex() {
+			// TODO(pav-kv): should simply print %+v of the id.
+			l.logger.Infof("found conflict at index %d [existing term: %d, conflicting term: %d]",
+				id.index, l.zeroTermOnOutOfBounds(l.term(id.index)), id.term)
+		}
+		return match, true
+	}
+	return match, true // all entries match
 }
 
 // findConflictByTerm returns a best guess on where this log ends matching
