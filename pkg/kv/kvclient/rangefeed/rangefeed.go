@@ -250,6 +250,13 @@ func (f *RangeFeed) start(
 		defer pprof.SetGoroutineLabels(ctx)
 		ctx = pprof.WithLabels(ctx, pprof.Labels(append(f.extraPProfLabels, "rangefeed", f.name)...))
 		pprof.SetGoroutineLabels(ctx)
+		if f.invoker != nil {
+			_ = f.invoker(func() error {
+				f.run(ctx, frontier, resumeFromFrontier)
+				return nil
+			})
+			return
+		}
 		f.run(ctx, frontier, resumeFromFrontier)
 	}
 
@@ -350,14 +357,30 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 		start := timeutil.Now()
 
 		rangeFeedTask := func(ctx context.Context) error {
-			return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
+			if f.invoker == nil {
+				return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
+			}
+			return f.invoker(func() error {
+				return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
+			})
 		}
+
 		if resumeWithFrontier {
 			rangeFeedTask = func(ctx context.Context) error {
-				return f.client.RangeFeedFromFrontier(ctx, frontier, eventCh, rangefeedOpts...)
+				if f.invoker == nil {
+					return f.client.RangeFeedFromFrontier(ctx, frontier, eventCh, rangefeedOpts...)
+				}
+				return f.invoker(func() error {
+					return f.client.RangeFeedFromFrontier(ctx, frontier, eventCh, rangefeedOpts...)
+				})
 			}
 		}
 		processEventsTask := func(ctx context.Context) error {
+			if f.invoker != nil {
+				return f.invoker(func() error {
+					return f.processEvents(ctx, frontier, eventCh)
+				})
+			}
 			return f.processEvents(ctx, frontier, eventCh)
 		}
 
