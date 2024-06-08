@@ -406,6 +406,12 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"resolved_age",
 		},
 	},
+	`"".crdb_internal.logical_replication_node_processors`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer",
+		},
+	},
 	"crdb_internal.default_privileges": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"database_name",

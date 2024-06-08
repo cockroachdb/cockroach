@@ -209,6 +209,7 @@ const (
 	CrdbInternalPCRStreamsTableID
 	CrdbInternalPCRStreamSpansTableID
 	CrdbInternalPCRStreamCheckpointsTableID
+	CrdbInternalLDRProcessorTableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
