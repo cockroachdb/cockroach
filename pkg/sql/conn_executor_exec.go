@@ -3378,20 +3378,22 @@ func (ex *connExecutor) maybeRecordRetrySerializableContention(
 		return
 	}
 
-	var retryErr *kvpb.TransactionRetryWithProtoRefreshError
-	if txnErr != nil && errors.As(txnErr, &retryErr) && retryErr.ConflictingTxn != nil {
-		contentionEvent := contentionpb.ExtendedContentionEvent{
-			ContentionType: contentionpb.ContentionType_SERIALIZATION_CONFLICT,
-			BlockingEvent: kvpb.ContentionEvent{
-				Key:     retryErr.ConflictingTxn.Key,
-				TxnMeta: *retryErr.ConflictingTxn,
-				// Duration is not relevant for SERIALIZATION conflicts.
-			},
-			WaitingTxnID:            txnID,
-			WaitingTxnFingerprintID: txnFingerprintID,
-			// Waiting statement fields are not relevant at this stage.
+	if txnErr != nil {
+		var retryErr *kvpb.TransactionRetryWithProtoRefreshError
+		if errors.As(txnErr, &retryErr) && retryErr.ConflictingTxn != nil {
+			contentionEvent := contentionpb.ExtendedContentionEvent{
+				ContentionType: contentionpb.ContentionType_SERIALIZATION_CONFLICT,
+				BlockingEvent: kvpb.ContentionEvent{
+					Key:     retryErr.ConflictingTxn.Key,
+					TxnMeta: *retryErr.ConflictingTxn,
+					// Duration is not relevant for SERIALIZATION conflicts.
+				},
+				WaitingTxnID:            txnID,
+				WaitingTxnFingerprintID: txnFingerprintID,
+				// Waiting statement fields are not relevant at this stage.
+			}
+			ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
 		}
-		ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
 	}
 }
 
