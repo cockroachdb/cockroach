@@ -2761,7 +2761,13 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	overrideCapacityFraction := 0.5
 
 	ctx := context.Background()
+
+	// Override the store gossip frequency to zero, so that gossip always
+	// triggers on capacity changes.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.MaxStoreGossipFrequency.Override(ctx, &st.SV, 0*time.Millisecond)
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings: st,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
