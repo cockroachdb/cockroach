@@ -148,6 +148,8 @@ type logicalReplicationWriterProcessor struct {
 	metrics *Metrics
 
 	logBufferEvery log.EveryN
+
+	debug streampb.DebugLogicalConsumerStatus
 }
 
 type queryBuffer struct {
@@ -235,6 +237,10 @@ func newLogicalReplicationWriterProcessor(
 		checkpointCh:   make(chan *jobspb.ResolvedSpans),
 		errCh:          make(chan error, 1),
 		logBufferEvery: log.Every(30 * time.Second),
+		debug: streampb.DebugLogicalConsumerStatus{
+			StreamID:    streampb.StreamID(spec.StreamID),
+			ProcessorID: processorID,
+		},
 	}
 	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -269,6 +275,7 @@ func newLogicalReplicationWriterProcessor(
 // Start implements the RowSource interface.
 func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", lrw.spec.JobID)
+	streampb.RegisterActiveLogicalConsumerStatus(&lrw.debug)
 
 	ctx = lrw.StartInternal(ctx, logicalReplicationWriterProcessorName)
 
@@ -415,6 +422,8 @@ func (lrw *logicalReplicationWriterProcessor) ConsumerClosed() {
 }
 
 func (lrw *logicalReplicationWriterProcessor) close() {
+	streampb.UnregisterActiveLogicalConsumerStatus(&lrw.debug)
+
 	if lrw.Closed {
 		return
 	}
