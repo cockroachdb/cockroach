@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -9057,19 +9058,31 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 			return tree.NewDInterval(duration.Age(now, t), types.DefaultIntervalTypeMetadata)
 		}
 
+		// Transform `.0000000000` to `.0` to shorted/de-noise HLCs.
+		shortenLogical := func(d *tree.DDecimal) *tree.DDecimal {
+			var tmp apd.Decimal
+			d.Modf(nil, &tmp)
+			if tmp.IsZero() {
+				if _, err := tree.DecimalCtx.Quantize(&tmp, &d.Decimal, -1); err == nil {
+					d.Decimal = tmp
+				}
+			}
+			return d
+		}
+
 		for _, s := range sm.DebugGetProducerStatuses(ctx) {
 			resolved := time.UnixMicro(s.RF.ResolvedMicros.Load())
 			resolvedDatum := tree.DNull
 			if resolved.Unix() != 0 {
-				resolvedDatum = eval.TimestampToDecimalDatum(hlc.Timestamp{WallTime: resolved.UnixNano()})
+				resolvedDatum = shortenLogical(eval.TimestampToDecimalDatum(hlc.Timestamp{WallTime: resolved.UnixNano()}))
 			}
 
 			if err := addRow(
 				tree.NewDInt(tree.DInt(s.StreamID)),
 				tree.NewDString(fmt.Sprintf("%d[%d]", s.Spec.ConsumerNode, s.Spec.ConsumerProc)),
 				tree.NewDInt(tree.DInt(len(s.Spec.Spans))),
-				eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp),
-				eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp),
+				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp)),
+				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp)),
 
 				tree.NewDInt(tree.DInt(s.Flushes.Batches.Load())),
 				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),
