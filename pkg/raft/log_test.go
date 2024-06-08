@@ -27,32 +27,30 @@ import (
 
 func TestFindConflict(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
-	tests := []struct {
-		ents      []pb.Entry
-		wconflict uint64
+	for _, tt := range []struct {
+		ents []pb.Entry
+		want uint64
 	}{
-		// no conflict, empty ent
-		{nil, 0},
+		// no conflict, empty entries
+		{ents: nil, want: 0},
 		// no conflict
-		{index(1).terms(1, 2, 3), 0},
-		{index(2).terms(2, 3), 0},
-		{index(3).terms(3), 0},
+		{ents: index(1).terms(1, 2, 3), want: 0},
+		{ents: index(2).terms(2, 3), want: 0},
+		{ents: index(3).terms(3), want: 0},
 		// no conflict, but has new entries
-		{index(1).terms(1, 2, 3, 4, 4), 4},
-		{index(2).terms(2, 3, 4, 5), 4},
-		{index(3).terms(3, 4, 4), 4},
-		{index(4).terms(4, 4), 4},
+		{ents: index(1).terms(1, 2, 3, 4, 4), want: 4},
+		{ents: index(2).terms(2, 3, 4, 5), want: 4},
+		{ents: index(3).terms(3, 4, 4), want: 4},
+		{ents: index(4).terms(4, 4), want: 4},
 		// conflicts with existing entries
-		{index(1).terms(4, 4), 1},
-		{index(2).terms(1, 4, 4), 2},
-		{index(3).terms(1, 2, 4, 4), 3},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			raftLog := newLog(NewMemoryStorage(), raftLogger)
-			raftLog.append(previousEnts...)
-			require.Equal(t, tt.wconflict, raftLog.findConflict(tt.ents))
+		{ents: index(1).terms(4, 4), want: 1},
+		{ents: index(2).terms(1, 4, 4), want: 2},
+		{ents: index(3).terms(1, 2, 4, 4), want: 3},
+	} {
+		t.Run("", func(t *testing.T) {
+			log := newLog(NewMemoryStorage(), discardLogger)
+			log.append(previousEnts...)
+			require.Equal(t, tt.want, log.findConflict(tt.ents))
 		})
 	}
 }
