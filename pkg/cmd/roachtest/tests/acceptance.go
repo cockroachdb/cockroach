@@ -36,6 +36,7 @@ func registerAcceptance(r registry.Registry) {
 		nativeLibs         []string
 		incompatibleClouds []string // Already assumes AWS is incompatible.
 	}{
+		registry.OwnerReleaseEng: {},
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
 			{name: "event-log", fn: runEventLog},
