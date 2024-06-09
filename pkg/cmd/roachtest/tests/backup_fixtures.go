@@ -368,6 +368,19 @@ func registerBackupFixtures(r registry.Registry) {
 			suites:  registry.Suites(registry.Nightly),
 			skip:    "only for fixture generation",
 		},
+		{
+			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
+				backupSpecs: backupSpecs{
+					cloud:              spec.Azure,
+					workload:           tpccRestore{opts: tpccRestoreOptions{warehouses: 5000}},
+					nonRevisionHistory: true,
+				},
+			}),
+			timeout: 1 * time.Hour,
+			suites:  registry.Suites(registry.Nightly),
+			skip:    "only for fixture generation",
+		},
 	} {
 		bf := bf
 		bf.initTestName()
