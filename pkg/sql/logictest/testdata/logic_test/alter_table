@@ -3560,4 +3560,21 @@ create table t_124546(a int);
 statement error pgcode 42601 variable sub-expressions are not allowed in EXPRESSION INDEX ELEMENT
 ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR READ ONLY ) ) DESC ) STORING ( ident , ident );
 
+subtest add_default_empty_array
+
+statement ok
+CREATE TABLE t_114316 (i INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE t_114316 ADD COLUMN a INT[] DEFAULT ARRAY[]::OID[]
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_114316];
+----
+CREATE TABLE public.t_114316 (
+  i INT8 NOT NULL,
+  a INT8[] NULL DEFAULT ARRAY[]:::OID[],
+  CONSTRAINT t_114316_pkey PRIMARY KEY (i ASC)
+)
+
 subtest end
