@@ -28,6 +28,24 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var (
+	testClusterSettings = []string{
+		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
+		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
+		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
+
+		// TODO(ssd): Duplicate these over to logical_replication as well.
+		"SET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency='100ms'",
+		"SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'",
+
+		"SET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency = '100ms'",
+		"SET CLUSTER SETTING logical_replication.consumer.minimum_flush_interval = '10ms'",
+		"SET CLUSTER SETTING logical_replication.consumer.timestamp_granularity = '100ms'",
+	}
+	lwwColumnAdd = "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
+)
+
 func TestLogicalStreamIngestionJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -51,28 +69,16 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	serverASQL := sqlutils.MakeSQLRunner(serverA.Server(0).ApplicationLayer().SQLConn(t))
 	serverBSQL := sqlutils.MakeSQLRunner(serverB.Server(0).ApplicationLayer().SQLConn(t))
 
-	for _, s := range []string{
-		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
-		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
-		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
-		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
-
-		// TODO(ssd): Duplicate these over to logical_replication as well.
-		"SET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency='100ms'",
-		"SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'",
-
-		"SET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency = '100ms'",
-		"SET CLUSTER SETTING logical_replication.consumer.minimum_flush_interval = '10ms'",
-		"SET CLUSTER SETTING logical_replication.consumer.timestamp_granularity = '100ms'",
-	} {
+	for _, s := range testClusterSettings {
 		serverASQL.Exec(t, s)
 		serverBSQL.Exec(t, s)
 	}
 
-	serverASQL.Exec(t, "CREATE TABLE tab (pk int primary key, payload string)")
-	serverBSQL.Exec(t, "CREATE TABLE tab (pk int primary key, payload string)")
-	serverASQL.Exec(t, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
-	serverBSQL.Exec(t, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
+	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
+	serverASQL.Exec(t, createStmt)
+	serverBSQL.Exec(t, createStmt)
+	serverASQL.Exec(t, lwwColumnAdd)
+	serverBSQL.Exec(t, lwwColumnAdd)
 
 	serverASQL.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 	serverBSQL.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
@@ -108,6 +114,62 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 		{"1", "goodbye, again"},
 		{"2", "potato"},
 		{"3", "celeriac"},
+	}
+	serverBSQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
+	serverASQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
+}
+
+func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	serverA := testcluster.StartTestCluster(t, 1, clusterArgs)
+	defer serverA.Stopper().Stop(ctx)
+
+	serverB := testcluster.StartTestCluster(t, 1, clusterArgs)
+	defer serverB.Stopper().Stop(ctx)
+
+	serverASQL := sqlutils.MakeSQLRunner(serverA.Server(0).ApplicationLayer().SQLConn(t))
+	serverBSQL := sqlutils.MakeSQLRunner(serverB.Server(0).ApplicationLayer().SQLConn(t))
+
+	for _, s := range testClusterSettings {
+		serverASQL.Exec(t, s)
+		serverBSQL.Exec(t, s)
+	}
+
+	createStmt := "CREATE TABLE tab (pk int primary key, payload string, other_payload string, family f1(pk, payload), family f2(other_payload))"
+	serverASQL.Exec(t, createStmt)
+	serverBSQL.Exec(t, createStmt)
+	serverASQL.Exec(t, lwwColumnAdd)
+	serverBSQL.Exec(t, lwwColumnAdd)
+
+	serverASQL.Exec(t, "INSERT INTO tab VALUES (1, 'hello', 'ruroh1')")
+
+	serverAURL, cleanup := sqlutils.PGUrl(t, serverA.Server(0).ApplicationLayer().SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+
+	var jobBID jobspb.JobID
+	serverBSQL.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", serverAURL.String(), `ARRAY['tab']`)).Scan(&jobBID)
+
+	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), serverBSQL, jobBID)
+	serverASQL.Exec(t, "INSERT INTO tab VALUES (2, 'potato', 'ruroh2')")
+	serverASQL.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again', 'ruroh3')")
+
+	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), serverBSQL, jobBID)
+
+	expectedRows := [][]string{
+		{"1", "hello, again", "ruroh3"},
+		{"2", "potato", "ruroh2"},
 	}
 	serverBSQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
 	serverASQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
