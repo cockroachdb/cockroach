@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
@@ -30,6 +31,10 @@ type operationImpl struct {
 
 	// l is the logger that the operation will use for its output.
 	l *logger.Logger
+
+	// artifactsDir is the path to the directory holding all the artifacts for
+	// this test. It will contain a test.log file and cluster logs.
+	artifactsDir string
 
 	mu struct {
 		syncutil.RWMutex
@@ -125,7 +130,20 @@ func (o *operationImpl) addFailure(depth int, format string, args ...interface{}
 	msg := reportFailure.Error()
 
 	failureNum := len(o.mu.failures)
-	o.L().Printf("operation failure #%d: %s", failureNum, msg)
+	failureLog := fmt.Sprintf("failure_%d", failureNum)
+	o.L().Printf("operation failure #%d: full stack retained in %s.log: %s", failureNum, failureLog, msg)
+	{
+		cl, err := o.L().ChildLogger(failureLog, logger.QuietStderr, logger.QuietStdout)
+		if err == nil {
+			if cl.File != nil {
+				path := cl.File.Name()
+				if len(path) > 0 {
+					_ = os.WriteFile(path, []byte(fmt.Sprintf("%+v", reportFailure)), 0644)
+				}
+			}
+			cl.Close()
+		}
+	}
 }
 
 func (o *operationImpl) Failed() bool {

@@ -527,7 +527,6 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 	cSpec := spec.ClusterSpec{NodeCount: len(nodes)}
 	op := &operationImpl{
 		cockroach: roachtestflags.CockroachBinaryPath,
-		l:         l,
 	}
 	c := &clusterImpl{
 		name:       clusterName,
@@ -556,6 +555,13 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 		return errors.Errorf("no operations found for filter %s", filter)
 	}
 	op.spec = opSpec
+	operationArtifactsDir := filepath.Join("artifacts", teamCityNameEscape(opSpec.Name))
+	op.artifactsDir = operationArtifactsDir
+	opL, err := logger.RootLogger(filepath.Join(operationArtifactsDir, "operation.log"), logger.NoTee)
+	if err != nil {
+		return err
+	}
+	op.l = opL
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
