@@ -105,8 +105,15 @@ message StatementStatistics {
   // LastExecTimestamp is the last timestamp the statement was executed.
   optional google.protobuf.Timestamp last_exec_timestamp = 23 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 
-  // Nodes is the ordered list of nodes ids on which the statement was executed.
+  // DEPRECATED: Nodes is the ordered list of nodes ids on which the statement
+  // was executed. Use SQLInstanceIDs instead.
+  // TODO(yuzefovich): remove this when compatibility with 24.1 is no longer
+  // needed.
   repeated int64 nodes = 24;
+
+  // SQLInstanceIDs is the ordered list of SQL instance IDs on which the
+  // statement was executed.
+  repeated int32 sql_instance_ids = 35 [(gogoproto.customname) = "SQLInstanceIDs"];
 
   // KVNodeIDs is the ordered list of KV node ids which were used to evaluate KV
   // read requests.

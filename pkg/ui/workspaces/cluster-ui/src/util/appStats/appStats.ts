@@ -13,7 +13,7 @@ import Long from "long";
 
 import { TimestampToNumber, DurationToNumber } from "src/util/convert";
 import { FixLong } from "src/util/fixLong";
-import { uniqueLong, unique } from "src/util/arrays";
+import { unique } from "src/util/arrays";
 
 export type StatementStatistics = cockroach.sql.IStatementStatistics;
 export type ExecStats = cockroach.sql.IExecStats;
@@ -252,7 +252,7 @@ export function addStatementStats(
       a.last_exec_timestamp.seconds > b.last_exec_timestamp.seconds
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
-    nodes: uniqueLong([...a.nodes, ...b.nodes]),
+    sql_instance_ids: unique([...a.sql_instance_ids, ...b.sql_instance_ids]),
     kv_node_ids: unique([...a.kv_node_ids, ...b.kv_node_ids]),
     regions: regions,
     plan_gists: planGists,

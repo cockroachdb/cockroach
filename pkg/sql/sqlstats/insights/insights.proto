@@ -123,7 +123,9 @@ message Statement {
   int64 rows_written = 14;
   int64 retries = 15;
   string auto_retry_reason = 16;
-  // Nodes is the ordered list of nodes ids on which the statement was executed.
+  // DEPRECATED: use SQLInstanceIDs instead.
+  // TODO(yuzefovich): remove this once compatibility with 24.1 is no longer
+  // needed.
   repeated int64 nodes = 17;
   google.protobuf.Duration contention = 18 [(gogoproto.stdduration) = true];
   repeated string index_recommendations = 19;
@@ -138,6 +140,9 @@ message Statement {
   // KVNodeIDs is the ordered list of KV node ids which were used to evaluate KV
   // read requests.
   repeated int32 kv_node_ids = 26 [(gogoproto.customname) = "KVNodeIDs"];
+  // SQLInstanceIDs is the ordered list of SQL instance ids on which the
+  // statement was executed.
+  repeated int32 sql_instance_ids = 27 [(gogoproto.customname) = "SQLInstanceIDs"];
 }
 
 

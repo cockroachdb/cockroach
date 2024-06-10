@@ -1172,7 +1172,7 @@ func verifyNodeID(
 		`
 SELECT
   node_id,
-  statistics -> 'statistics' ->> 'nodes' as nodes
+  statistics -> 'statistics' ->> 'sqlInstanceIds'
 FROM
 	system.statement_statistics
 WHERE

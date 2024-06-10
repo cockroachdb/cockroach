@@ -1586,14 +1586,15 @@ func generateStatement() appstatspb.CollectedStatementStatistics {
 		},
 
 		Stats: appstatspb.StatementStatistics{
-			Count:         10,
-			Indexes:       []string{"15@4"},
-			LastErrorCode: "",
-			MaxRetries:    0,
-			Nodes:         []int64{1},
-			PlanGists:     []string{"AgEeCADnAwIAAAMHEgUUIR4AAA=="},
-			Regions:       []string{"us-east1"},
-			SQLType:       "TypeDDL",
+			Count:          10,
+			Indexes:        []string{"15@4"},
+			LastErrorCode:  "",
+			MaxRetries:     0,
+			Nodes:          []int64{1},
+			SQLInstanceIDs: []int32{1},
+			PlanGists:      []string{"AgEeCADnAwIAAAMHEgUUIR4AAA=="},
+			Regions:        []string{"us-east1"},
+			SQLType:        "TypeDDL",
 		},
 	}
 }
@@ -1650,6 +1651,7 @@ func generateStatisticsColumn(
 		LastExecAt      time.Time              `json:"lastExecAt"`
 		MaxRetries      int                    `json:"maxRetries"`
 		Nodes           []int64                `json:"nodes"`
+		SQLInstanceIDs  []int32                `json:"sqlInstanceIds"`
 		KVNodeIDs       []int32                `json:"kvNodeIds"`
 		NumRows         appstatspb.NumericStat `json:"numRows"`
 		OvhLat          appstatspb.NumericStat `json:"ovhLat"`
@@ -1672,12 +1674,13 @@ func generateStatisticsColumn(
 			Mean:         0,
 			SquaredDiffs: 0,
 		},
-		Indexes:       statement.Stats.Indexes,
-		LastErrorCode: statement.Stats.LastErrorCode,
-		LastExecAt:    statement.AggregatedTs.Add(time.Minute * 10),
-		MaxRetries:    0,
-		Nodes:         statement.Stats.Nodes,
-		KVNodeIDs:     statement.Stats.KVNodeIDs,
+		Indexes:        statement.Stats.Indexes,
+		LastErrorCode:  statement.Stats.LastErrorCode,
+		LastExecAt:     statement.AggregatedTs.Add(time.Minute * 10),
+		MaxRetries:     0,
+		Nodes:          statement.Stats.Nodes,
+		SQLInstanceIDs: statement.Stats.SQLInstanceIDs,
+		KVNodeIDs:      statement.Stats.KVNodeIDs,
 		NumRows: appstatspb.NumericStat{
 			Mean:         0,
 			SquaredDiffs: 0,

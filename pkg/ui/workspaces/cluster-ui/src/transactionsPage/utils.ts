@@ -226,7 +226,7 @@ export const filterTransactions = (
         t.stats_data.statement_fingerprint_ids,
         statements,
       ).some(stmt =>
-        stmt.stats.nodes?.some(node => nodes.includes("n" + node)),
+        stmt.stats.sql_instance_ids?.some(node => nodes.includes("n" + node)),
       );
     });
 
@@ -282,8 +282,8 @@ export const generateRegionNode = (
     transaction.stats_data.statement_fingerprint_ids,
     statements,
   ).forEach(stmt => {
-    stmt.stats.nodes &&
-      stmt.stats.nodes.forEach(n => {
+    stmt.stats.sql_instance_ids &&
+      stmt.stats.sql_instance_ids.forEach(n => {
         const node = n.toString();
         if (Object.keys(regions).includes(nodeRegions[node])) {
           regions[nodeRegions[node]].add(longToInt(n));

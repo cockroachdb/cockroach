@@ -130,9 +130,9 @@ export function filterStatementsData(
       statement =>
         isTenant ||
         nodes.length === 0 ||
-        (statement.stats.nodes &&
+        (statement.stats.sql_instance_ids &&
           containAny(
-            statement.stats.nodes.map(node => "n" + node),
+            statement.stats.sql_instance_ids.map(node => "n" + node),
             nodes,
           )),
     )
