@@ -115,6 +115,8 @@ message RaftMessageRequest {
   // When this value is > 0, the reverse transformation must be applied
   // (UndoRaftPriorityConversionForUnusedZero).
   uint32 inherited_raft_priority = 12;
+  repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedForRangeRACv2 admitted_rac_v2 = 13 [(gogoproto.customname) = "AdmittedRACv2",
+    (gogoproto.nullable) = false];
   reserved 10;
 }
 

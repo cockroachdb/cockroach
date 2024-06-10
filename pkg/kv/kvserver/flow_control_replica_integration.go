@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // replicaFlowControlIntegrationImpl is the canonical implementation of the
@@ -469,7 +471,8 @@ type replicaRACv2Integration struct {
 
 	// leaderNodeID is a function of leaderID and replicas. It is set when
 	// leaderID is non-zero and replicas is initialized.
-	leaderNodeID roachpb.NodeID
+	leaderNodeID  roachpb.NodeID
+	leaderStoreID roachpb.StoreID
 
 	// rcAtLeader is non-nil iff leaderID is equal to Replica.replicaID.
 	rcAtLeader kvflowconnectedstream.RangeController
@@ -478,8 +481,10 @@ type replicaRACv2Integration struct {
 	raftAdmittedInterface kvflowconnectedstream.RaftAdmittedInterface
 
 	// TODO(racV2-integration): synchronization.
-	waitingForAdmission         [kvflowconnectedstream.NumRaftPriorities][]uint64
+	waitingForAdmissionState    waitingForAdmissionState
 	scheduledAdmittedProcessing bool
+
+	priorityInheritanceState priorityInheritanceState
 }
 
 // We considered making this state transition in handleRaftReadyRaftMuLocked:
@@ -507,12 +512,14 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeader(leaderID roachpb.ReplicaID, 
 	}
 	if rr2.leaderID == 0 {
 		rr2.leaderNodeID = 0
+		rr2.leaderStoreID = 0
 	} else {
 		rd, ok := rr2.replicas[leaderID]
 		if !ok {
 			panic("leader is not in the set of replicas")
 		}
 		rr2.leaderNodeID = rd.NodeID
+		rr2.leaderStoreID = rd.StoreID
 	}
 	if rr2.leaderID != rr2.replica.replicaID {
 		if rr2.rcAtLeader != nil {
@@ -574,7 +581,7 @@ func (rr2 *replicaRACv2Integration) onDestroy() {
 	rr2.destroyed = true
 }
 
-// Harmless for this to be eventually consistent, so we do this
+// Harmless for this to be eventually consistent, so we do this in
 // handleRaftReadyRaftMuLocked.
 //
 // Replica.raftMu is held. Replica.mu is not held.
@@ -629,35 +636,22 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
 	if rr2.replicas == nil {
 		return
 	}
-	// TODO(racV2-integration): admitted processing.
+	// Admitted processing, on all replicas.
 	func() {
 		defer func() {
 			rr2.scheduledAdmittedProcessing = false
 		}()
-		// If there was a recent MsgStoreAppendResp, it has already been stepped.
-		rr2.raftAdmittedInterface.GetAdmitted()
-
-		/*
-				- MsgStoreAppendResp has already been stepped.
-
-				  - [AH2] In handleRaftReadyRaftMuLocked, this queue is used to remove things from
-				    notAdmitted. Additionally RaftInterface is queried for stableIndex. If a
-				    notAdmitted[i] is empty, admitted[i] = stableIndex, else admitted[i] =
-				    notAdmitted[i][0]-1. RaftInterface.AdvanceAdmitted is called, which may
-				    return a MsgAppResp.
-				  - MsgAppResp is sent.
-
-				We will do a similar piggy-backing:
-
-				- Say m is the raftpb.Message corresponding to the MsgAppResp that was
-				  returned from RaftInterface.AdvanceAdmitted
-				- Wrap it with the RangeID, and enqueue it for the leader's nodeid in the
-				  RaftTransport (this will actually be much simpler than the
-				  current RaftTransport.kvflowControl plumbing).
-				- Every RaftMessageRequest for the node will piggy-back these.
-
-			add to AdmittedPiggybackStateManager.
-		*/
+		// If there was a recent MsgStoreAppendResp that triggered this Ready
+		// processing, it has already been stepped, so the stable index would have
+		// advanced.
+		sindex := rr2.raftAdmittedInterface.StableIndex()
+		nextAdmitted := rr2.waitingForAdmissionState.computeAdmitted(sindex)
+		if admittedIncreased(rr2.raftAdmittedInterface.GetAdmitted(), nextAdmitted) {
+			msgAppResp := rr2.raftAdmittedInterface.SetAdmitted(nextAdmitted)
+			if rr2.leaderID != rr2.replica.replicaID {
+				rr2.admittedPiggybacker.AddMsgForRange(rr2.replica.RangeID, rr2.leaderNodeID, rr2.leaderStoreID, msgAppResp)
+			}
+		}
 	}()
 
 	if rr2.rcAtLeader == nil {
@@ -670,9 +664,7 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
 	rr2.rcAtLeader.HandleRaftEvent(raftEvent)
 }
 
-// ====== For all replicas, leader or follower ======
-
-// Corresponding to raft indices [first,last].
+// Corresponding to raft indices [first, last].
 //
 // Only called when RaftMessageRequest is received with a MsgApp. So never
 // called for leader.
@@ -683,12 +675,7 @@ func (rr2 *replicaRACv2Integration) sideChannelForInheritedPriority(
 		return
 	}
 	pri := kvflowconnectedstream.UndoRaftPriorityConversionForUnusedZero(inheritedPri)
-	// TODO(racV2-integration):
-	switch pri {
-	case kvflowconnectedstream.NotSubjectToACForFlowControl:
-	case kvflowconnectedstream.PriorityNotInheritedForFlowControl:
-	default:
-	}
+	rr2.priorityInheritanceState.sideChannelForInheritedPriority(first, last, pri)
 }
 
 func (rr2 *replicaRACv2Integration) admittedLogEntry(
@@ -697,25 +684,16 @@ func (rr2 *replicaRACv2Integration) admittedLogEntry(
 	// TODO(racV2-integration): synchronization.
 	// Can be synchronous within handleRaftReadyRaftMuLocked or not. We need
 	// synchronization to handle the latter case.
-	if rr2.removeFromWaitingForAdmission(pri, index) {
+	if rr2.waitingForAdmissionState.remove(index, pri) {
 		if !rr2.scheduledAdmittedProcessing {
+			// TODO(racV2-integration): performance optimization: this ready
+			// enqueueing is wasteful if this is synchronous within
+			// handeRaftReadyRaftMuLocked since we can't advance admitted until the
+			// persisted log advances.
 			rr2.replica.store.scheduler.EnqueueRaftReady(rr2.replica.RangeID)
 			rr2.scheduledAdmittedProcessing = true
 		}
 	}
-}
-
-func (rr2 *replicaRACv2Integration) removeFromWaitingForAdmission(
-	pri kvflowconnectedstream.RaftPriority, index uint64,
-) (admittedMayAdvance bool) {
-	// TODO(racV2-integration):
-	return false
-}
-
-func (rr2 *replicaRACv2Integration) addToWaitingForAdmission(
-	pri kvflowconnectedstream.RaftPriority, index uint64,
-) {
-	// TODO(racV2-integration):
 }
 
 // Subset of kvadmission.Controller needed here.
@@ -737,7 +715,7 @@ type acWorkQueue interface {
 // them into Raft.
 
 // admitRaftEntry is called to admit a raft entry, on any kind of replica. It
-// should use the state in the entry, and the information provided via
+// uses the state in the entry, and the information provided via
 // sideChannelForInheritedPriority, to enqueue onto queue. It is possible that
 // admittedLogEntry will be called while AdmitRaftEntryV1OrV2 is ongoing.
 func (rr2 *replicaRACv2Integration) admitRaftEntry(
@@ -748,43 +726,130 @@ func (rr2 *replicaRACv2Integration) admitRaftEntry(
 	rangeID roachpb.RangeID,
 	entry raftpb.Entry,
 ) {
+	typ, priBits, err := raftlog.EncodingOf(entry)
+	if err != nil {
+		panic(errors.AssertionFailedf("unable to determine raft command encoding: %v", err))
+		return
+	}
+	if !typ.UsesAdmissionControl() {
+		return // nothing to do
+	}
+	if typ != raftlog.EntryEncodingStandardWithRaftPriority &&
+		typ != raftlog.EntryEncodingSideloadedWithRaftPriority {
+		panic("expected a RACv2 encoding")
+	}
+	meta, err := raftlog.DecodeRaftAdmissionMeta(entry.Data)
+	if err != nil {
+		panic(errors.AssertionFailedf("unable to decode raft command admission data: %v", err))
+		return
+	}
+	if kvflowconnectedstream.RaftPriority(meta.AdmissionPriority) != priBits {
+		panic("inconsistent priorities")
+	}
+	pri, doAC := rr2.priorityInheritanceState.getEffectivePriority(entry.Index, priBits)
+	if !doAC {
+		return
+	}
+	meta.AdmissionPriority = int32(kvflowconnectedstream.RaftPriorityToAdmissionPriority(pri))
+	rr2.waitingForAdmissionState.add(entry.Index, pri)
+	queue.AdmitRaftEntryV1OrV2(ctx, tenantID, storeID, rangeID, entry, meta, typ.IsSideloaded())
+}
+
+type priorityInheritanceState struct {
+	intervals []indexInterval
+}
+
+type indexInterval struct {
+	first uint64
+	last  uint64
+	pri   kvflowconnectedstream.RaftPriority
+}
+
+func (p *priorityInheritanceState) sideChannelForInheritedPriority(
+	first, last uint64, inheritedPri kvflowconnectedstream.RaftPriority,
+) {
+	// Overwrite the existing state for [first, last] with interval. Also, drop
+	// anything from before that corresponds to indices >= first.
+	interval := indexInterval{first: first, last: last, pri: inheritedPri}
+	for i := 0; i < len(p.intervals); i++ {
+		if p.intervals[i].last < interval.first {
+			// Earlier than latest info.
+			i++
+		}
+		// Overlap or later.
+
+		// Truncate.
+		p.intervals[i].last = interval.first - 1
+		if p.intervals[i].first > p.intervals[i].last {
+			// Completely subsumed.
+			p.intervals = p.intervals[:i]
+		} else {
+			// Partially subsumed.
+			p.intervals = p.intervals[:i+1]
+		}
+	}
+	p.intervals = append(p.intervals, interval)
+}
+
+func (p *priorityInheritanceState) getEffectivePriority(
+	index uint64, pri kvflowconnectedstream.RaftPriority,
+) (effectivePri kvflowconnectedstream.RaftPriority, doAC bool) {
+	// Also garbage collects any intervals that precede index.
+	i := 0
+	for ; i < len(p.intervals); i++ {
+		if p.intervals[i].first <= index {
+			if p.intervals[i].last >= index {
+				switch p.intervals[i].pri {
+				case kvflowconnectedstream.NotSubjectToACForFlowControl:
+					return 0, false
+				case kvflowconnectedstream.PriorityNotInheritedForFlowControl:
+					return pri, true
+				default:
+					return p.intervals[i].pri, true
+				}
+			} else {
+				continue
+			}
+		} else {
+			break
+		}
+	}
+	p.intervals = p.intervals[i:]
+	return pri, true
+}
+
+type waitingForAdmissionState struct {
+	waiting [kvflowconnectedstream.NumRaftPriorities][]uint64
+}
+
+func (w *waitingForAdmissionState) remove(
+	index uint64, pri kvflowconnectedstream.RaftPriority,
+) (admittedMayAdvance bool) {
 	// TODO(racV2-integration):
 
-	/*
-		- calls AdmitRaftEntry for the entries in raftpb.MsgStorageAppend. In
-		addition to queueing in the StoreWorkQueue, this will track (on the
-		Replica): notAdmitted [numFlowPri][]uint64, where the []uint64 is in
-		increasing entry index order. We don't bother with the term in the
-		tracking (unlike the RaftLogPosition struct in the current code). These
-			slices are appended to here, based on the entries in MsgStorageAppend.
-	*/
-
+	// Is it possible that there isn't state for an index? If so, ignore.
+	return false
 }
 
-// TODO: write the code here and then move it to a file in kvflowconnectedstream.
-
-// AdmittedPiggybackStateManager ...
-//
-// The following is not a replica level object. There is one per node. Move
-// this elsehwere.
-type AdmittedPiggybackStateManager interface {
-	// AddMsgForRange ...
-	// m must be a MsgAppResp.
-	//
-	// Keeps for each rangeID the latest m. There shouldn't be multiple replicas
-	// for a range at this node, so that is sufficient. Also, keys these by leaderNodeID,
-	// so can be grabbed to piggyback to that range.
-	AddMsgForRange(rangeID roachpb.RangeID, leaderNodeID roachpb.NodeID, m raftpb.Message)
-	// PopMsgsForNode ...
-	// TODO: see how kvflowdispatch handles this.
-	PopMsgsForNode(nodeID roachpb.NodeID) []kvflowcontrolpb.AdmittedForRangeRACv2
-	// NodesWithMsgs is used to periodically drop msgs from disconnected nodes.
-	// See RaftTransport.dropFlowTokensForDisconnectedNodes.
-	NodesWithMsgs() []roachpb.NodeID
+func (w *waitingForAdmissionState) add(index uint64, pri kvflowconnectedstream.RaftPriority) {
+	// TODO(racV2-integration):
 }
 
-// TODO: implement.
+func (w *waitingForAdmissionState) computeAdmitted(
+	stableIndex uint64,
+) [kvflowconnectedstream.NumRaftPriorities]uint64 {
+	// TODO(racV2-integration):
 
-func NewAdmittedPiggybackStateManager() AdmittedPiggybackStateManager {
-	return nil
+	// If a notAdmitted[i] is empty, admitted[i] = stableIndex, else admitted[i]
+	// = notAdmitted[i][0]-1.
+	return [kvflowconnectedstream.NumRaftPriorities]uint64{}
+}
+
+func admittedIncreased(prev, next [kvflowconnectedstream.NumRaftPriorities]uint64) bool {
+	for i := range prev {
+		if prev[i] < next[i] {
+			return true
+		}
+	}
+	return false
 }

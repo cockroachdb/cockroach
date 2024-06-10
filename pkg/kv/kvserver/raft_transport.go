@@ -268,6 +268,10 @@ type RaftTransport struct {
 		disconnectListener    RaftTransportDisconnectListener
 	}
 
+	racV2 struct {
+		admittedPiggybacker AdmittedPiggybackStateManager
+	}
+
 	knobs *RaftTransportTestingKnobs
 }
 
@@ -291,7 +295,7 @@ func NewDummyRaftTransport(
 	}
 	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil,
 		kvflowdispatch.NewDummyDispatch(), NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{}, nil,
+		NoopRaftTransportDisconnectListener{}, nil, nil,
 	)
 }
 
@@ -306,6 +310,7 @@ func NewRaftTransport(
 	kvflowTokenDispatch kvflowcontrol.DispatchReader,
 	kvflowHandles kvflowcontrol.Handles,
 	disconnectListener RaftTransportDisconnectListener,
+	admittedPiggybacker AdmittedPiggybackStateManager,
 	knobs *RaftTransportTestingKnobs,
 ) *RaftTransport {
 	if knobs == nil {
@@ -323,6 +328,7 @@ func NewRaftTransport(
 	t.kvflowControl.handles = kvflowHandles
 	t.kvflowControl.disconnectListener = disconnectListener
 	t.kvflowControl.mu.connectionTracker = newConnectionTrackerForFlowControl()
+	t.racV2.admittedPiggybacker = admittedPiggybacker
 
 	t.initMetrics()
 	if grpcServer != nil {
@@ -440,6 +446,23 @@ func (t *RaftTransport) handleRaftRequest(
 
 		if log.V(1) {
 			log.Infof(ctx, "informed of below-raft %s", admittedEntries)
+		}
+	}
+	for _, admitted := range req.AdmittedRACv2 {
+		incomingMessageHandler, ok := t.getIncomingRaftMessageHandler(admitted.LeaderStoreID)
+		if !ok {
+			log.Warningf(ctx, "unable to accept admitted RACv2 message from %+v: no handler registered for store%+v",
+				admitted.LeaderStoreID)
+		} else {
+			// TODO(racV2-integration): we want to do something akin to but lighter
+			// weight than the following, since we don't have a full-fledged
+			// RaftMessageRequest.
+			//
+			// enqueue := s.HandleRaftUncoalescedRequest(ctx, req, respStream)
+			// if enqueue {
+			//	s.scheduler.EnqueueRaftRequest(req.RangeID)
+			// }
+			incomingMessageHandler.HandleRaftRequest(ctx, nil, nil)
 		}
 	}
 	if req.ToReplica.StoreID == roachpb.StoreID(0) && len(req.AdmittedRaftLogEntries) > 0 {
@@ -701,6 +724,10 @@ func (t *RaftTransport) processQueue(
 			}
 		}
 	}
+	maybeAnnotateWithRACv2Admitted := func(
+		req *kvserverpb.RaftMessageRequest, admitted []kvflowcontrolpb.AdmittedForRangeRACv2) {
+		req.AdmittedRACv2 = append(req.AdmittedRACv2, admitted...)
+	}
 
 	var sentInitialStoreIDs, sentAdditionalStoreIDs bool
 	maybeAnnotateWithStoreIDs := func(batch *kvserverpb.RaftMessageRequestBatch) {
@@ -792,6 +819,9 @@ func (t *RaftTransport) processQueue(
 					kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV),
 				)
 				maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
+				admittedRACv2, _ := t.racV2.admittedPiggybacker.PopMsgsForNode(
+					q.nodeID, kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV))
+				maybeAnnotateWithRACv2Admitted(req, admittedRACv2)
 			}
 
 			batch.Requests = append(batch.Requests, *req)
@@ -832,17 +862,21 @@ func (t *RaftTransport) processQueue(
 				q.nodeID,
 				kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV),
 			)
-			if len(pendingDispatches) == 0 {
+			admittedRACv2, remainingAdmittedRACv2 := t.racV2.admittedPiggybacker.PopMsgsForNode(
+				q.nodeID, kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV))
+
+			if len(pendingDispatches) == 0 && len(admittedRACv2) == 0 {
 				continue // nothing to do
 			}
 			// If there are remaining dispatches, schedule them immediately in the
 			// following raft message.
-			if remainingDispatches > 0 {
+			if remainingDispatches > 0 || remainingAdmittedRACv2 > 0 {
 				dispatchPendingFlowTokensTimer.Reset(0)
 			}
 
 			req := newRaftMessageRequest()
 			maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
+			maybeAnnotateWithRACv2Admitted(req, admittedRACv2)
 			batch.Requests = append(batch.Requests, *req)
 			releaseRaftMessageRequest(req)
 
@@ -1119,6 +1153,15 @@ func (t *RaftTransport) dropFlowTokensForDisconnectedNodes() {
 			math.MaxInt64,
 		)
 		t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(pendingDispatches)))
+	}
+	for _, nodeID := range t.racV2.admittedPiggybacker.NodesWithMsgs() {
+		if t.kvflowControl.mu.connectionTracker.isNodeConnected(nodeID) {
+			continue
+		}
+		_, remainingMsgs := t.racV2.admittedPiggybacker.PopMsgsForNode(nodeID, math.MaxInt64)
+		if remainingMsgs > 0 {
+			panic("")
+		}
 	}
 }
 

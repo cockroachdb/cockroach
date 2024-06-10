@@ -615,9 +615,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	var racV2 struct {
 		streamsTokenCounter kvflowconnectedstream.StoreStreamsTokenCounter
 		sendTokensWatcher   kvflowconnectedstream.StoreStreamSendTokensWatcher
+		admittedPiggybacker kvserver.AdmittedPiggybackStateManager
 	}
 	racV2.streamsTokenCounter = kvflowconnectedstream.NewStoreStreamsTokenCounter(st)
 	racV2.sendTokensWatcher = kvflowconnectedstream.NewStoreStreamSendTokensWatcher(stopper)
+	racV2.admittedPiggybacker = kvserver.NewAdmittedPiggybackStateManager()
 
 	admissionControl.schedulerLatencyListener = gcoords.Elastic.SchedulerLatencyListener
 	admissionControl.kvflowController = kvflowcontroller.New(nodeRegistry, st, clock)
@@ -652,6 +654,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionControl.kvflowTokenDispatch,
 		admissionControl.storesFlowControl,
 		admissionControl.storesFlowControl,
+		racV2.admittedPiggybacker,
 		raftTransportKnobs,
 	)
 	nodeRegistry.AddMetricStruct(raftTransport.Metrics())
@@ -889,6 +892,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowHandleMetrics:          admissionControl.kvFlowHandleMetrics,
 		RACv2StreamsTokenCounter:     racV2.streamsTokenCounter,
 		RACv2SendTokensWatcher:       racV2.sendTokensWatcher,
+		RACv2AdmittedPiggybacker:     racV2.admittedPiggybacker,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
 	}

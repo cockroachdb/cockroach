@@ -386,7 +386,7 @@ func (n *controllerImpl) AdmitKVWork(
 					ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
 						AdmissionPriority:   int32(kvflowconnectedstream.AdmissionPriorityToRaftPriority(admissionInfo.Priority)),
 						AdmissionCreateTime: admissionInfo.CreateTime,
-						// AdmissionOriginNode: n.nodeID.Get(),
+						AdmissionOriginNode: n.nodeID.Get(),
 					}
 					admitted = true
 				} else {

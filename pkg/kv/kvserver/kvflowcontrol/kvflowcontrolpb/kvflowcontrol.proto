@@ -133,10 +133,13 @@ message RaftLogPosition {
 message AdmittedForRangeRACv2 {
   option (gogoproto.goproto_stringer) = false;
 
+  uint64 leader_store_id = 1 [(gogoproto.customname) = "LeaderStoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+
   // RangeID of the raft group these entries belong to. This is the range on
   // whose behalf work was admitted.
-  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
 
-  raftpb.Message msg = 2 [(gogoproto.nullable) = false];
+  raftpb.Message msg = 3 [(gogoproto.nullable) = false];
 }
