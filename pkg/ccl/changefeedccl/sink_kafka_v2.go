@@ -54,6 +54,7 @@ func newKafkaSinkClient(
 		Completion:      func(messages []kafka.Message, err error) {}, // ?
 		Compression:     kafka.Compression(kafkaCfg.Producer.Compression),
 		Logger: kafka.LoggerFunc(func(msg string, args ...any) {
+			// TODO: this hits "use of span after finish" error. why?
 			log.Infof(ctx, "kafka: %+v", []any{msg, args})
 		}),
 		ErrorLogger:            nil,

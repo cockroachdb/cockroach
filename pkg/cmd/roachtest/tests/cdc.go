@@ -1932,10 +1932,17 @@ func registerCDC(r registry.Registry) {
 			for wi := 0; wi < parallelism; wi++ {
 				wi := wi
 				go func() {
+					var err error
+					var conn *gosql.Conn
 					defer wg.Done()
-					conn, err := ct.DB().Conn(ctx)
+					defer t.L().Printf("worker %d done", wi)
+					conn, err = ct.DB().Conn(ctx)
 					require.NoError(t, err)
-					defer func() { _ = conn.Close() }()
+					defer func() {
+						if conn != nil {
+							_ = conn.Close()
+						}
+					}()
 
 					// run workload: update keys sequentially
 					// split key space into par parts and each goroutine updates its own part
@@ -1945,21 +1952,31 @@ func registerCDC(r registry.Registry) {
 						key := offset + i%chunkSize
 						// retry because we do crdb chaos too
 						for attempt := 0; ctx.Err() == nil; attempt++ {
+							if conn == nil {
+								conn, err = ct.DB().Conn(ctx)
+								if err != nil {
+									time.Sleep(time.Duration(attempt*10) * time.Millisecond)
+									continue
+								}
+							}
 							_, err := conn.ExecContext(ctx, "INSERT INTO t (id, x) VALUES ($1, 1) ON CONFLICT(id) DO UPDATE SET x = t.x + 1", key)
 							if err == nil {
 								break
 							}
-							if strings.Contains(err.Error(), "connection error") {
-								require.NoError(t, err)
+							if strings.Contains(err.Error(), "connection is already closed") {
+								if conn != nil {
+									_ = conn.Close()
+								}
+								conn = nil
 							}
-							t.L().Printf("retrying insert %d: %s", key, err)
+							t.L().Printf("worker %d retrying insert %d: %s", wi, key, err)
 							time.Sleep(time.Duration(attempt*10) * time.Millisecond)
 						}
 					}
 				}()
 			}
 
-			// ct.startCRDBChaos()
+			ct.startCRDBChaos()
 
 			wg.Wait()
 		},
@@ -3957,4 +3974,17 @@ func (c *topicConsumer) close() {
 		}
 	}
 	_ = c.consumer.Close()
+}
+
+func transientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var transientErrStrs = []string{"connection error", "result is ambiguous", "bad connection"}
+	for _, s := range transientErrStrs {
+		if strings.Contains(err.Error(), s) {
+			return true
+		}
+	}
+	return false
 }
