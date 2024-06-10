@@ -1859,8 +1859,11 @@ func zipArtifacts(t *testImpl) error {
 		// However, if the order is reversed, or 'stats.json' is created directly on the test runner node,
 		// it will be moved to the zip archive. The corresponding CI script (build/teamcity/util/roachtest_util.sh) will
 		// then fail to find 'stats.json' in the artifacts directory, and the roachperf dashboard will be looking rather sad.
-		if !entry.IsDir() && entry.Name() == "stats.json" {
-			// Skip any 'stats.json' files.
+		if (!entry.IsDir() && entry.Name() == "stats.json") ||
+			// N.B. performance artifacts are expected to be in a directory of the form "2.perf",
+			// where 2 is node id; see `getPerfArtifacts`.
+			(entry.IsDir() && strings.HasSuffix(entry.Name(), "."+t.PerfArtifactsDir())) {
+			// Skip 'stats.json' and directories ending in '.perf'.
 			return false
 		}
 		return true
