@@ -765,7 +765,7 @@ func validateSettings(ctx context.Context, needsRangeFeed bool, execCfg *sql.Exe
 	// requires the `kv.rangefeed.enabled` setting to be true.
 	if needsRangeFeed && !kvserver.RangefeedEnabled.Get(&execCfg.Settings.SV) {
 		return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
-			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+			docs.URL(`create-and-configure-changefeeds.html#enable-rangefeeds`))
 	}
 
 	return nil
