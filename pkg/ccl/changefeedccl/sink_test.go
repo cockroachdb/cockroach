@@ -647,7 +647,7 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, cfg.Validate())
 		require.NoError(t, saramaCfg.Validate())
-		require.True(t, cfg.ClientID == "clientID1")
+		require.Equal(t, "clientID1", cfg.ClientID)
 	})
 	t.Run("validate returns error for bad flush configuration", func(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Flush": {"Messages": 1000}}`)
@@ -723,7 +723,7 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, sarama.WaitForAll, saramaCfg.Producer.RequiredAcks)
 
-		opts = changefeedbase.SinkSpecificJSONConfig(`{"RequiredAcks": "-1"}`)
+		opts = `{"RequiredAcks": "-1"}`
 
 		cfg, err = getSaramaConfig(opts)
 		require.NoError(t, err)
@@ -782,6 +782,69 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"Compression": "invalid"}`)
 		_, err := getSaramaConfig(opts)
 		require.Error(t, err)
+	})
+	t.Run("validate returns nil for valid compression codec and level", func(t *testing.T) {
+		tests := []struct {
+			give      changefeedbase.SinkSpecificJSONConfig
+			wantCodec sarama.CompressionCodec
+			wantLevel int
+		}{
+			{
+				give:      `{"Compression": "GZIP"}`,
+				wantCodec: sarama.CompressionGZIP,
+				wantLevel: sarama.CompressionLevelDefault,
+			},
+			{
+				give:      `{"CompressionLevel": 1}`,
+				wantCodec: sarama.CompressionNone,
+				wantLevel: 1,
+			},
+			{
+				give:      `{"Compression": "GZIP", "CompressionLevel": 1}`,
+				wantCodec: sarama.CompressionGZIP,
+				wantLevel: 1,
+			},
+			{
+				give:      `{"Compression": "ZSTD", "CompressionLevel": 1}`,
+				wantCodec: sarama.CompressionZSTD,
+				wantLevel: 1,
+			},
+			{
+				// The maximum supported zstd compression level is 10,
+				// so all higher values are valid and limited by it.
+				give:      `{"Compression": "ZSTD", "CompressionLevel": 11}`,
+				wantCodec: sarama.CompressionZSTD,
+				wantLevel: 11,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(string(tt.give), func(t *testing.T) {
+				cfg, err := getSaramaConfig(tt.give)
+				require.NoError(t, err)
+
+				saramaCfg := sarama.NewConfig()
+				require.NoError(t, cfg.Apply(saramaCfg))
+				require.NoError(t, saramaCfg.Validate())
+				require.Equal(t, tt.wantCodec, saramaCfg.Producer.Compression)
+				require.Equal(t, tt.wantLevel, saramaCfg.Producer.CompressionLevel)
+			})
+		}
+	})
+	t.Run("validate returns err for bad compression level", func(t *testing.T) {
+		opts := changefeedbase.SinkSpecificJSONConfig(`{"Compression": "GZIP", "CompressionLevel": "invalid"}`)
+		_, err := getSaramaConfig(opts)
+		require.ErrorContains(t, err, "field saramaConfig.CompressionLevel of type int")
+
+		// The maximum gzip compression level is gzip.BestCompression,
+		// so use gzip.BestCompression + 1.
+		opts = `{"Compression": "GZIP", "CompressionLevel": 10}`
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+
+		saramaCfg := sarama.NewConfig()
+		require.NoError(t, cfg.Apply(saramaCfg))
+		require.ErrorContains(t, saramaCfg.Validate(), "gzip: invalid compression level: 10")
 	})
 }
 
