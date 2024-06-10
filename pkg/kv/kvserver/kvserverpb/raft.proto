@@ -19,8 +19,9 @@ import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "kv/kvserver/kvflowcontrol/kvflowcontrolpb/kvflowcontrol.proto";
 import "raft/raftpb/raft.proto";
-import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
+import "gogoproto/gogo.proto";
 
 // RaftHeartbeat is a request that contains the barebones information for a
 // raftpb.MsgHeartbeat raftpb.Message. RaftHeartbeats are coalesced and sent
@@ -129,6 +130,15 @@ message RaftMessageRequestBatch {
   //       RaftMessageRequest.
   // [^3]: See I1 from kvflowcontrol/doc.go.
   repeated uint64 store_ids = 2 [(gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+
+  // now is a clock reading from the sender of the batch. It must be used by
+  // the receiver to update its local HLC, which provides causality tracking.
+  //
+  // One way in which this is used is to update the clock of a raft candidate
+  // to the clock of all followers that have voted for it, which is used to
+  // provide a disjointness guarantee to leader leases.
+  util.hlc.Timestamp now = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }
 
 message RaftMessageResponseUnion {

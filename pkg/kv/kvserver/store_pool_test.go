@@ -247,7 +247,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 
-	cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings)
+	cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, cfg.Clock)
 	store := NewStore(ctx, cfg, eng, &node)
 	// Fake an ident because this test doesn't want to start the store
 	// but without an Ident there will be NPEs.

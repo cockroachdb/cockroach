@@ -630,9 +630,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	raftTransport := kvserver.NewRaftTransport(
 		cfg.AmbientCtx,
 		st,
+		stopper,
+		clock,
 		kvNodeDialer,
 		grpcServer.Server,
-		stopper,
 		admissionControl.kvflowTokenDispatch,
 		admissionControl.storesFlowControl,
 		admissionControl.storesFlowControl,
