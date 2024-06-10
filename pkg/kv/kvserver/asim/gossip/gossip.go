@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Gossip collects and updates the storepools of the cluster upon capacity
@@ -53,7 +54,9 @@ type storeGossiper struct {
 	addingStore        bool
 }
 
-func newStoreGossiper(descriptorGetter func(cached bool) roachpb.StoreDescriptor) *storeGossiper {
+func newStoreGossiper(
+	descriptorGetter func(cached bool) roachpb.StoreDescriptor, clock timeutil.TimeSource,
+) *storeGossiper {
 	sg := &storeGossiper{
 		lastIntervalGossip: time.Time{},
 		descriptorGetter:   descriptorGetter,
@@ -61,7 +64,7 @@ func newStoreGossiper(descriptorGetter func(cached bool) roachpb.StoreDescriptor
 
 	desc := sg.descriptorGetter(false /* cached */)
 	knobs := kvserver.StoreGossipTestingKnobs{AsyncDisabled: true}
-	sg.local = kvserver.NewStoreGossip(sg, sg, knobs, &cluster.MakeTestingClusterSettings().SV)
+	sg.local = kvserver.NewStoreGossip(sg, sg, knobs, &cluster.MakeTestingClusterSettings().SV, clock)
 	sg.local.Ident = roachpb.StoreIdent{StoreID: desc.StoreID, NodeID: desc.Node.NodeID}
 
 	return sg
@@ -124,7 +127,7 @@ func (g *gossip) addStoreToGossip(s state.State, storeID state.StoreID) {
 	g.storeGossip[storeID] = &storeGossiper{addingStore: true}
 	g.storeGossip[storeID] = newStoreGossiper(func(cached bool) roachpb.StoreDescriptor {
 		return s.StoreDescriptors(cached, storeID)[0]
-	})
+	}, s.Clock())
 }
 
 // Tick checks for completed gossip updates and triggers new gossip

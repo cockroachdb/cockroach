@@ -13,6 +13,7 @@ package gossip
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -87,11 +88,17 @@ func TestGossip(t *testing.T) {
 	require.Len(t, gossip.exchange.pending, 0)
 	assertStorePool(assertSameFn)
 
+	// Tick state by a large duration to ensure the below capacity changes don't
+	// run into the max gossip frequency limit.
+	storeTick := tick
+
 	// Update the usage info leases for s1 and s2, so that it exceeds the delta
 	// required to trigger a gossip update. We do this by transferring every
 	// lease to s2.
 	for _, rng := range s.Ranges() {
 		s.TransferLease(rng.RangeID(), 2)
+		storeTick = storeTick.Add(3 * time.Second)
+		s.TickClock(storeTick)
 	}
 	gossip.Tick(ctx, tick, s)
 	// There should be just store 1 and 2 pending gossip updates in the exchanger.
@@ -108,6 +115,10 @@ func TestGossip(t *testing.T) {
 	// Assert that the lease counts are as expected after transferring all of
 	// the leases to s2.
 	require.Equal(t, int32(0), (*details[1])[1].Desc.Capacity.LeaseCount)
-	require.Equal(t, int32(100), (*details[1])[2].Desc.Capacity.LeaseCount)
+	// Depending on the capacity delta threshold, s2 may not have gossiped
+	// exactly when it reached 100 leases, as it earlier gossiped at 90+ leases,
+	// so 100 may be < lastGossip * capacityDeltaThreshold, not triggering
+	// gossip. Assert that the lease count gossiped is at least 90.
+	require.Greater(t, (*details[1])[2].Desc.Capacity.LeaseCount, int32(90))
 	require.Equal(t, int32(0), (*details[1])[3].Desc.Capacity.LeaseCount)
 }
