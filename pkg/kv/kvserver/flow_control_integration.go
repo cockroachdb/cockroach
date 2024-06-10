@@ -269,3 +269,123 @@ type StoresForFlowControl interface {
 type RaftTransportDisconnectListener interface {
 	OnRaftTransportDisconnected(context.Context, ...roachpb.StoreID)
 }
+
+// RACv2: The integration code for RACv2 mostly does not utilize the
+// integration code for RACv1, and is overall much simpler.
+//
+// TODO: draw a class diagram.
+//
+// We assume below that the reader is familiar with the structure of the code
+// in kvflowconnectedstream.
+//
+// 1. Protocol changes
+//
+// We first discuss the forward path, from the leader to follower.
+//
+// 1.1 Raft entry encoding
+//
+// See the raflog package. There are two new encoding enum values added
+// labeled *WithRaftPriority. To allow the RaftPriority to be decoded cheaply
+// given an encoded entry, the priority, in addition to being in
+// RaftAdmissionMeta, is encoded in the two most significant bits in the entry
+// type byte.
+//
+// 1.2 RaftAdmissionMeta
+//
+// Reminder, this is part of the encoded entry. The proto is not changed but
+// its usage is changed. The AdmissionPriority is always the RaftPriority. The
+// AdmissionOriginNode is unused.
+//
+// 1.3 Inherited priority
+//
+// RaftMessageRequest.InheritedRaftPriority contains this.
+//
+// Token return path, from follower to leader.
+//
+// 1.4 Piggy-backing of admitted state
+//
+// AdmittedForRangeRACv2 is used for this. It includes the LeaderStoreID and
+// RangeID, to help the leader conveniently route the raftpb.Message in a
+// multi-store setting. Many of these may be included in a RaftMessageRequest.
+//
+// NB: RaftMessageRequestBatch.StoreIDs is no longer used, which is a
+// considerable simplification.
+//
+// 1.5 Effect of these protocol changes on RaftTransport
+//
+// Almost all of the machinery in RaftTransport.kvflowControl is obsolete.
+// RaftTransport only interacts with AdmittedPiggybackStateManager to get the
+// enqueued MsgAppResp that were specifically created for advancing Admitted,
+// when sending to a node. It also periodically iterates over all the nodes
+// with enqueued messages and it the transport to that node is not connected,
+// drops them. It asks the connectionTrackerForFlowControl for this connected
+// state, which is using a small part of the functionality provided by the
+// class -- in the production code we should remove this dependency.
+//
+// 2. Node level objects
+//
+// These are plumbed through directly to RaftTransport when creating it
+// (specifically AdmittedPiggybackStateManager), and placed in each
+// StoreConfig, so that they can be conveniently accessed via the Replica
+// object. The latter are:
+// - StoreStreamsTokenCounter to get the various token counters
+// - StoreStreamSendTokensWatcher
+// - AdmittedPiggybackStateManager: for adding MsgAppResps to be piggy-backed.
+//
+// 2.1 AdmittedPiggybackStateManager
+//
+// This is a new object, and is used by the range-level integration to enqueue
+// messages to be piggybacked and by RaftTransport to dequeue messages when
+// piggy-backing. The implementation is trivial since we only need to track a
+// single (latest) msg per range per leader node.
+//
+// 3. Stores level integration
+//
+// This is done via StoresForRACv2 which encompasses all stores, so there is a single
+// one per node. It's purpose is only to route to the relevant range-level integration in
+// two cases:
+// - At evaluation time, for waiting for eval.
+// - When a raft log entry is admitted by AC.
+//
+// 4. Range-level integration
+//
+// The main class here is replicaRACv2Integration. It is a member of
+// Replica.raftMu. It mediates all access to RangeController (including
+// creating the RangeController), and all integration with AC queues and flow
+// token return. This is where the bulk of the integration code sits. It is
+// created when the uninitialized Replica is created and destroyed by
+// disconnectReplicationRaftMuLocked.
+//
+// It keeps track of the leaderNodeID and leaderStoreID (which is trivial
+// since it already needs to know about these state changes to decide when to
+// create/close the RangeController), in order to construct the piggy-backed
+// flow token return message (AdmittedForRangeRACv2), and to tell the
+// AdmittedPiggybackStateManager which node this message is meant for.
+//
+// In addition to forwarding to RangeController, it needs to provide some
+// functionality that is universal to all replicas. Specifically, it needs to
+// take a raftpb.Entry and submit to the appropriate AC queue for admission,
+// and handle the callback when the admission happens. Additionally, it needs
+// to know if there an inherited priority that should be used for the entry
+// when submitting to the AC queue. These are accomplished by
+//
+// - sideChannelForInheritedPriority: called before Step(ping) the
+//   RaftMessageRequest into RawNode.
+//
+// - admitRaftEntry: called from handleRaftReadyRaftMuLocked when processing
+//   a MsgStorageAppend.
+//
+// - admittedRaftLogEntry: when the entry is admitted.
+//
+// -  advancing admitted: happens in handleRaftEvent, called from
+//   handleRaftReadyRaftMuLocked. The admittedRaftLogEntry method schedules
+//   ready processing if needed, to ensure this advancing happens. When
+//   Admitted is advanced within the RawNode, and this is not the leader, the
+//   returned MsgAppResp is passed to AdmittedPiggybackStateManager.
+//
+// The range-level integration has some simple helper classes: -
+// - waitingForAdmissionState: tracks the indices of entries that are waiting
+//   for admission in the AC queues, so that we can advance Admitted.
+//
+// - priorityInheritanceState: which keeps the state corresponding to the
+//   sideChannelForInheritedPriority call, that is used to alter the priority.
