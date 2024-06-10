@@ -559,23 +559,25 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.noticeSender = res
 	ih := &p.instrumentation
 
-	if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 && ex.executorType != executorTypeInternal {
-		// NB: ex.metrics includes internal executor transactions when executorType
-		// is executorTypeInternal, so that's why we exclude internal executors
-		// in the conditional.
-		if ex.metrics.EngineMetrics.SQLTxnsOpen.Value() > maxOpen {
-			hasAdmin, err := ex.planner.HasAdminRole(ctx)
-			if err != nil {
-				return makeErrEvent(err)
-			}
-			if !hasAdmin {
-				return makeErrEvent(errors.WithHintf(
-					pgerror.Newf(
-						pgcode.ConfigurationLimitExceeded,
-						"cannot execute operation due to server.max_open_transactions_per_gateway cluster setting",
-					),
-					"the maximum number of open transactions is %d", maxOpen,
-				))
+	if ex.executorType != executorTypeInternal {
+		if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 {
+			// NB: ex.metrics includes internal executor transactions when executorType
+			// is executorTypeInternal, so that's why we exclude internal executors
+			// in the conditional.
+			if ex.metrics.EngineMetrics.SQLTxnsOpen.Value() > maxOpen {
+				hasAdmin, err := ex.planner.HasAdminRole(ctx)
+				if err != nil {
+					return makeErrEvent(err)
+				}
+				if !hasAdmin {
+					return makeErrEvent(errors.WithHintf(
+						pgerror.Newf(
+							pgcode.ConfigurationLimitExceeded,
+							"cannot execute operation due to server.max_open_transactions_per_gateway cluster setting",
+						),
+						"the maximum number of open transactions is %d", maxOpen,
+					))
+				}
 			}
 		}
 	}
@@ -722,7 +724,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	})
 
-	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() && ex.executorType != executorTypeInternal {
+	if ex.executorType != executorTypeInternal && ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
 		timerDuration :=
 			ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
 
@@ -1120,9 +1122,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
-	if ex.state.mu.txn.IsoLevel() == isolation.ReadCommitted &&
-		!ex.implicitTxn() &&
-		ex.executorType != executorTypeInternal {
+	if ex.executorType != executorTypeInternal &&
+		ex.state.mu.txn.IsoLevel() == isolation.ReadCommitted &&
+		!ex.implicitTxn() {
 		// If an internal executor query that is run as part of a larger statement
 		// throws a retryable error, that error should be returned up and retried by
 		// the statement's dispatchReadCommittedStmtToExecutionEngine retry loop.
@@ -3378,20 +3380,22 @@ func (ex *connExecutor) maybeRecordRetrySerializableContention(
 		return
 	}
 
-	var retryErr *kvpb.TransactionRetryWithProtoRefreshError
-	if txnErr != nil && errors.As(txnErr, &retryErr) && retryErr.ConflictingTxn != nil {
-		contentionEvent := contentionpb.ExtendedContentionEvent{
-			ContentionType: contentionpb.ContentionType_SERIALIZATION_CONFLICT,
-			BlockingEvent: kvpb.ContentionEvent{
-				Key:     retryErr.ConflictingTxn.Key,
-				TxnMeta: *retryErr.ConflictingTxn,
-				// Duration is not relevant for SERIALIZATION conflicts.
-			},
-			WaitingTxnID:            txnID,
-			WaitingTxnFingerprintID: txnFingerprintID,
-			// Waiting statement fields are not relevant at this stage.
+	if txnErr != nil {
+		var retryErr *kvpb.TransactionRetryWithProtoRefreshError
+		if errors.As(txnErr, &retryErr) && retryErr.ConflictingTxn != nil {
+			contentionEvent := contentionpb.ExtendedContentionEvent{
+				ContentionType: contentionpb.ContentionType_SERIALIZATION_CONFLICT,
+				BlockingEvent: kvpb.ContentionEvent{
+					Key:     retryErr.ConflictingTxn.Key,
+					TxnMeta: *retryErr.ConflictingTxn,
+					// Duration is not relevant for SERIALIZATION conflicts.
+				},
+				WaitingTxnID:            txnID,
+				WaitingTxnFingerprintID: txnFingerprintID,
+				// Waiting statement fields are not relevant at this stage.
+			}
+			ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
 		}
-		ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
 	}
 }
 
