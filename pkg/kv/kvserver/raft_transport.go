@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -170,6 +171,7 @@ type RaftTransport struct {
 	log.AmbientContext
 	st      *cluster.Settings
 	stopper *stop.Stopper
+	clock   *hlc.Clock
 	metrics *RaftTransportMetrics
 
 	// Queues maintains a map[roachpb.NodeID]*raftSendQueue on a per rpc-class
@@ -282,11 +284,13 @@ type raftSendQueue struct {
 
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
-func NewDummyRaftTransport(ambient log.AmbientContext, st *cluster.Settings) *RaftTransport {
+func NewDummyRaftTransport(
+	ambient log.AmbientContext, st *cluster.Settings, clock *hlc.Clock,
+) *RaftTransport {
 	resolver := func(roachpb.NodeID) (net.Addr, error) {
 		return nil, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(ambient, st, nodedialer.New(nil, resolver), nil, nil,
+	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil,
 		kvflowdispatch.NewDummyDispatch(), NoopStoresFlowControlIntegration{},
 		NoopRaftTransportDisconnectListener{}, nil,
 	)
@@ -296,9 +300,10 @@ func NewDummyRaftTransport(ambient log.AmbientContext, st *cluster.Settings) *Ra
 func NewRaftTransport(
 	ambient log.AmbientContext,
 	st *cluster.Settings,
+	stopper *stop.Stopper,
+	clock *hlc.Clock,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
-	stopper *stop.Stopper,
 	kvflowTokenDispatch kvflowcontrol.DispatchReader,
 	kvflowHandles kvflowcontrol.Handles,
 	disconnectListener RaftTransportDisconnectListener,
@@ -311,6 +316,7 @@ func NewRaftTransport(
 		AmbientContext: ambient,
 		st:             st,
 		stopper:        stopper,
+		clock:          clock,
 		dialer:         dialer,
 		knobs:          knobs,
 	}
@@ -504,6 +510,9 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 					batch, err := stream.Recv()
 					if err != nil {
 						return err
+					}
+					if !batch.Now.IsEmpty() {
+						t.clock.Update(batch.Now)
 					}
 					if len(batch.StoreIDs) > 0 {
 						// Collect the set of store IDs from the client side to
@@ -713,6 +722,10 @@ func (t *RaftTransport) processQueue(
 		}
 	}
 
+	annotateWithClockTimestamp := func(batch *kvserverpb.RaftMessageRequestBatch) {
+		batch.Now = t.clock.NowAsClockTimestamp()
+	}
+
 	clearRequestBatch := func(batch *kvserverpb.RaftMessageRequestBatch) {
 		// Reuse the Requests slice, but zero out the contents to avoid delaying
 		// GC of memory referenced from within.
@@ -721,6 +734,7 @@ func (t *RaftTransport) processQueue(
 		}
 		batch.Requests = batch.Requests[:0]
 		batch.StoreIDs = nil
+		batch.Now = hlc.ClockTimestamp{}
 	}
 
 	var raftIdleTimer timeutil.Timer
@@ -799,6 +813,7 @@ func (t *RaftTransport) processQueue(
 			}
 
 			maybeAnnotateWithStoreIDs(batch)
+			annotateWithClockTimestamp(batch)
 			if err := stream.Send(batch); err != nil {
 				t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(pendingDispatches)))
 				return err
@@ -833,6 +848,7 @@ func (t *RaftTransport) processQueue(
 			releaseRaftMessageRequest(req)
 
 			maybeAnnotateWithStoreIDs(batch)
+			annotateWithClockTimestamp(batch)
 			if err := stream.Send(batch); err != nil {
 				t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(pendingDispatches)))
 				return err
