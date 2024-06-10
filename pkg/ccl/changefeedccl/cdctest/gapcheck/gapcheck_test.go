@@ -78,6 +78,7 @@ func TestGapChecker_RandomGaps(t *testing.T) {
 	c := gapcheck.NewGapChecker()
 	for _, n := range nums {
 		c.Add(n)
+		_ = c.Check()
 	}
 	require.Error(t, c.Check())
 }

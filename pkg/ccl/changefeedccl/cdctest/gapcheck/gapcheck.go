@@ -41,8 +41,13 @@ func NewGapChecker() *GapChecker {
 func (c *GapChecker) Add(n int) {
 	gte := c.spans.Find(span{n, n})
 	if gte == nil {
+		// we might be inside the last span, check that.
+		last := c.spans.Back()
+		if last != nil && last.Key().(span).contains(n) {
+			return
+		}
 		// see if we can extend the last span.
-		if last := c.spans.Back(); last != nil && last.Key().(span).end == n-1 {
+		if last != nil && last.Key().(span).end == n-1 {
 			c.spans.Remove(last.Key())
 			c.spans.Set(span{last.Key().(span).start, n}, nil)
 			return
@@ -55,7 +60,7 @@ func (c *GapChecker) Add(n int) {
 
 	// so there's a span that starts at or after n.
 	s := gte.Key().(span)
-	if s.contains(n) {
+	if s.contains(n) || gte.Prev() != nil && gte.Prev().Key().(span).contains(n) {
 		return
 	}
 
@@ -93,7 +98,7 @@ func (c *GapChecker) Check() error {
 		}
 		s := span{e.Prev().Key().(span).end + 1, e.Key().(span).start - 1}
 		if s.start > s.end {
-			panic(fmt.Errorf("gap with start > end: %+v\n%s", s, c.String()))
+			panic(fmt.Errorf("(looking at %v) gap with start > end: %+v\n%s", e.Key(), s, c.String()))
 		}
 		gaps = append(gaps, s)
 	}
