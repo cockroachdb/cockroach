@@ -1121,7 +1121,6 @@ unreserved_keyword ::=
 	| 'DAY'
 	| 'DEALLOCATE'
 	| 'DEBUG_IDS'
-	| 'DEBUG_PAUSE_ON'
 	| 'DEBUG_DUMP_METADATA_SST'
 	| 'DECLARE'
 	| 'DELETE'
@@ -2718,7 +2717,6 @@ restore_options ::=
 	| 'SKIP_MISSING_UDFS'
 	| 'DETACHED'
 	| 'SKIP_LOCALITIES_CHECK'
-	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
 	| 'NEW_DB_NAME' '=' string_or_placeholder
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| virtual_cluster_name '=' string_or_placeholder
@@ -3701,7 +3699,6 @@ bare_label_keywords ::=
 	| 'DEALLOCATE'
 	| 'DEBUG_DUMP_METADATA_SST'
 	| 'DEBUG_IDS'
-	| 'DEBUG_PAUSE_ON'
 	| 'DEC'
 	| 'DECIMAL'
 	| 'DECLARE'

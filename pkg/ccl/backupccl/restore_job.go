@@ -1716,19 +1716,11 @@ func remapPublicSchemas(
 
 // Resume is part of the jobs.Resumer interface.
 func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
 	if err := r.doResume(ctx, execCtx); err != nil {
-		details := r.job.Details().(jobspb.RestoreDetails)
-		if details.DebugPauseOn == "error" {
-			const errorFmt = "job failed with error (%v) but is being paused due to the %s=%s setting"
-			log.Warningf(ctx, errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn)
-
-			return jobs.MarkPauseRequestError(errors.Wrapf(err,
-				"pausing job due to the %s=%s setting",
-				restoreOptDebugPauseOn, details.DebugPauseOn))
-		}
-		return err
+		// Need to return the pause "error" as the main error here
+		return errors.CombineErrors(p.ExecCfg().JobRegistry.CheckPausepoint("restore.after_restore_failure"), err)
 	}
-
 	return nil
 }
 
