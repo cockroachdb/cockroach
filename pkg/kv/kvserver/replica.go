@@ -2545,5 +2545,5 @@ var _ kvflowconnectedstream.MessageSender = &Replica{}
 func (r *Replica) SendRaftMessage(
 	ctx context.Context, priorityInherited kvflowconnectedstream.RaftPriority, msg raftpb.Message,
 ) {
-	r.sendRaftMessage(ctx, msg, priorityInherited)
+	r.sendRaftMessage(ctx, msg, kvflowconnectedstream.RaftPriorityConversionForUnusedZero(priorityInherited))
 }

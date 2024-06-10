@@ -79,9 +79,9 @@ const (
 
 	// EntryEncodingStandardWithRaftPriority is analogous to
 	// EntryEncodingStandardWithAC, but has the most significant bits in the
-	// first byte containing the raft priority minus 1. This is the priority
-	// that is also encoded in the kvflowcontrolpb.RaftAdmissionMeta, but is
-	// cheap to decode.
+	// first byte containing the raft priority. This is the priority that is
+	// also encoded in the kvflowcontrolpb.RaftAdmissionMeta, but is cheap to
+	// decode.
 	EntryEncodingStandardWithRaftPriority
 	// EntryEncodingSideloadedWithRaftPriority ...
 	EntryEncodingSideloadedWithRaftPriority
@@ -104,7 +104,6 @@ func (enc EntryEncoding) UsesAdmissionControl() bool {
 // prefixByte returns the prefix byte used during encoding, applicable only to
 // EntryEncoding{Standard,Sideloaded}With{,out}AC.
 func (enc EntryEncoding) prefixByte(pri kvflowconnectedstream.RaftPriority) byte {
-	pri -= 1
 	if pri > 3 {
 		panic("")
 	}
@@ -221,7 +220,7 @@ func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, er
 	pri := data[0] & priMask
 	switch prefix {
 	case entryEncodingStandardWithRaftPriorityPrefixByte, entryEncodingSideloadedWithRaftPriorityPrefixByte:
-		if kvflowconnectedstream.RaftPriority(pri+1) !=
+		if kvflowconnectedstream.RaftPriority(pri) !=
 			kvflowconnectedstream.RaftPriority(raftAdmissionMeta.AdmissionPriority) {
 			panic("")
 		}

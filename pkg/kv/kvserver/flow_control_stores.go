@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -265,15 +266,15 @@ func (ss *storesForRACv2) lookup(rangeID roachpb.RangeID) *replicaRACv2Integrati
 
 func (ss *storesForRACv2) AdmittedLogEntry(
 	ctx context.Context,
-	origin roachpb.NodeID,
+	_ roachpb.NodeID,
 	pri admissionpb.WorkPriority,
-	storeID roachpb.StoreID,
+	_ roachpb.StoreID,
 	rangeID roachpb.RangeID,
 	pos admission.LogPosition,
 ) {
 	rr := ss.lookup(rangeID)
 	if rr != nil {
-		rr.admittedLogEntry(ctx, origin, pri, storeID, pos)
+		rr.admittedLogEntry(ctx, kvflowconnectedstream.RaftPriority(pri), pos.Index)
 	}
 	// Else range does not have a replica on this store, so ignore.
 }

@@ -655,7 +655,7 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 				// the follower, however now the inherited priority will be persisted.
 				firstIndex := req.Message.Entries[0].Index
 				lastIndex := req.Message.Entries[n-1].Index
-				inheritedPri := kvflowconnectedstream.RaftPriority(req.InheritedRaftPriority)
+				inheritedPri := uint8(req.InheritedRaftPriority)
 				r.raftMu.racV2Integration.sideChannelForInheritedPriority(firstIndex, lastIndex, inheritedPri)
 			}
 		}
@@ -675,7 +675,7 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	if err != nil {
 		return err
 	}
-	r.raftMu.racV2Integration.tryUpdateLeader(leaderID)
+	r.raftMu.racV2Integration.tryUpdateLeader(leaderID, false)
 	return nil
 }
 
@@ -1778,12 +1778,12 @@ func (r *Replica) sendRaftMessages(
 			}
 
 			if !drop {
-				r.sendRaftMessage(ctx, message, kvflowconnectedstream.RaftUnusedZeroValuePriority)
+				r.sendRaftMessage(ctx, message, 0)
 			}
 		}
 	}
 	if lastAppResp.Index > 0 {
-		r.sendRaftMessage(ctx, lastAppResp, kvflowconnectedstream.RaftUnusedZeroValuePriority)
+		r.sendRaftMessage(ctx, lastAppResp, 0)
 	}
 }
 
@@ -1849,9 +1849,7 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 // The Replica mu must not be held.
 //
 // inheritedPri is relevant iff the msg is a MsgApp.
-func (r *Replica) sendRaftMessage(
-	ctx context.Context, msg raftpb.Message, inheritedPri kvflowconnectedstream.RaftPriority,
-) {
+func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message, inheritedPri uint8) {
 	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
 
 	r.mu.RLock()

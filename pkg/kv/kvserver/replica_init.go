@@ -222,6 +222,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		makeStoreFlowControlHandleFactory(r.store),
 		r.store.TestingKnobs().FlowControlTestingKnobs,
 	)
+	// TODO(racV2-integration): initialize admittedPiggybacker.
 	r.raftMu.racV2Integration = replicaRACv2Integration{replica: r}
 	return r
 }

@@ -611,8 +611,7 @@ type FollowerStateInfo struct {
 type RaftPriority uint8
 
 const (
-	RaftUnusedZeroValuePriority RaftPriority = iota
-	RaftLowPri                  RaftPriority = iota + 1
+	RaftLowPri RaftPriority = iota
 	RaftNormalPri
 	RaftAboveNormalPri
 	RaftHighPri
@@ -627,9 +626,19 @@ const (
 	//
 	// TODO: move these elsewhere.
 
-	NotSubjectToACForFlowControl       RaftPriority = math.MaxUint8 - 1
-	PriorityNotInheritedForFlowControl RaftPriority = math.MaxUint8
+	NotSubjectToACForFlowControl       RaftPriority = math.MaxUint8 - 2
+	PriorityNotInheritedForFlowControl RaftPriority = math.MaxUint8 - 1
 )
+
+func RaftPriorityConversionForUnusedZero(pri RaftPriority) uint8 {
+	return uint8(pri + 1)
+}
+
+// UndoRaftPriorityConversionForUnusedZero ...
+// REQUIRES: pri > 0
+func UndoRaftPriorityConversionForUnusedZero(pri uint8) RaftPriority {
+	return RaftPriority(pri - 1)
+}
 
 // RaftAdmittedInterface is used to interact with Raft on all replicas, for
 // the purposes of advancing Admitted for that replica. These methods will

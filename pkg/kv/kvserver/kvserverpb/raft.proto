@@ -109,6 +109,11 @@ message RaftMessageRequest {
   //   AC, regardless of what the entry encoding says.
   // - RaftUnusedZeroValuePriority: completely ignored
   // - None of the above: this is the real priority override.
+  //
+  // The value encoded here is after transformation using
+  // RaftPriorityConversionForUnusedZero, so that the zero value is unused.
+  // When this value is > 0, the reverse transformation must be applied
+  // (UndoRaftPriorityConversionForUnusedZero).
   uint32 inherited_raft_priority = 12;
   reserved 10;
 }
