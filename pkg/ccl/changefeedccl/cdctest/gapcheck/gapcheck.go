@@ -103,7 +103,7 @@ func (c *GapChecker) Check() error {
 		gaps = append(gaps, s)
 	}
 
-	return fmt.Errorf("gap(s) found: %+v", gaps)
+	return fmt.Errorf("gap(s) found: %+v; full sequence: %s", gaps, c.String())
 }
 
 func (c *GapChecker) String() string {

@@ -3919,19 +3919,7 @@ func (c *topicConsumer) validateMessage(partition int32, m *sarama.ConsumerMessa
 		}
 	}
 	if failures := c.validator.Failures(); len(failures) > 0 {
-		// only want to consider consistency failures at the end
-		// TODO: less hacky
-		nonConsistencyFailures := make([]string, 0, len(failures))
-		for _, failure := range failures {
-			// wait.. why do we need to skip this? how can we end up with gaps if things are working correctly?
-			// surely a gap implies out of order too
-			if !strings.HasPrefix(failure, "consistency:") {
-				nonConsistencyFailures = append(nonConsistencyFailures, failure)
-			}
-		}
-		if len(nonConsistencyFailures) > 0 {
-			c.t.Fatalf("topic consumer for %s encountered validator error(s): %s", c.topic, strings.Join(nonConsistencyFailures, ","))
-		}
+		c.t.Fatalf("topic consumer for %s encountered validator error(s): %s", c.topic, strings.Join(failures, ","))
 	}
 	return nil
 }

@@ -219,9 +219,9 @@ type eachKeySequentialConsistencyValidator struct {
 
 func (c *eachKeySequentialConsistencyValidator) Failures() []string {
 	var failures []string
-	for _, gc := range c.gapcheckers {
+	for key, gc := range c.gapcheckers {
 		if err := gc.Check(); err != nil {
-			failures = append(failures, "consistency: "+err.Error()) // TODO: unhack this. can only check for gaps at the end of the test.
+			failures = append(failures, fmt.Sprintf("consistency: key=%v: %v", key, err.Error()))
 		}
 	}
 	return append(failures, c.inner.Failures()...)
