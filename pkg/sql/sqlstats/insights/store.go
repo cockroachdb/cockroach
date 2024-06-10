@@ -12,6 +12,7 @@ package insights
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
@@ -19,6 +20,10 @@ import (
 )
 
 type lockingStore struct {
+	// stmtCount keeps track of the number of statement insights
+	// that have been observed in the underlying cache.
+	stmtCount atomic.Int64
+
 	mu struct {
 		syncutil.RWMutex
 		insights *cache.UnorderedCache
@@ -28,6 +33,7 @@ type lockingStore struct {
 func (s *lockingStore) AddInsight(insight *Insight) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.stmtCount.Add(int64(len(insight.Statements)))
 	s.mu.insights.Add(insight.Transaction.ID, insight)
 }
 
@@ -45,17 +51,19 @@ var _ Reader = &lockingStore{}
 var _ sink = &lockingStore{}
 
 func newStore(st *cluster.Settings) *lockingStore {
+	s := &lockingStore{}
 	config := cache.Config{
 		Policy: cache.CacheFIFO,
 		ShouldEvict: func(size int, key, value interface{}) bool {
-			return int64(size) > ExecutionInsightsCapacity.Get(&st.SV)
+			return s.stmtCount.Load() > ExecutionInsightsCapacity.Get(&st.SV)
 		},
 		OnEvicted: func(_, value interface{}) {
-			releaseInsight(value.(*Insight))
+			i := value.(*Insight)
+			s.stmtCount.Add(-int64(len(i.Statements)))
+			releaseInsight(i)
 		},
 	}
 
-	s := &lockingStore{}
 	s.mu.insights = cache.NewUnorderedCache(config)
 	return s
 }
