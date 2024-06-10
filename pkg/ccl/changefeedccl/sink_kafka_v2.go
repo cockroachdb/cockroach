@@ -128,6 +128,9 @@ func (k *kafkaSinkClient) Close() error {
 	if err := k.producer.Close(); err != nil {
 		return err
 	}
+	if err := k.writer.Close(); err != nil {
+		return err
+	}
 	return k.client.Close()
 }
 

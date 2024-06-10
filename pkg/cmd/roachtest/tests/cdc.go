@@ -1885,10 +1885,10 @@ func registerCDC(r registry.Registry) {
 
 			var err error
 
-			// _, err := ct.DB().ExecContext(ctx, `set cluster setting changefeed.new_kafka_sink.enabled = true;`)
-			// if err != nil {
-			// 	t.Fatal("failed to set cluster setting")
-			// }
+			_, err = ct.DB().ExecContext(ctx, `set cluster setting changefeed.new_kafka_sink.enabled = true;`)
+			if err != nil {
+				t.Fatal("failed to set cluster setting")
+			}
 			_, err = ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
 			if err != nil {
 				t.Fatal("failed to create table")
@@ -1944,13 +1944,17 @@ func registerCDC(r registry.Registry) {
 					for i := 0; i < numVals*chunkSize; i++ {
 						key := offset + i%chunkSize
 						// retry because we do crdb chaos too
-						// for attempt := 0; ctx.Err() == nil; attempt++ {
-						_, err := conn.ExecContext(ctx, "INSERT INTO t (id, x) VALUES ($1, 1) ON CONFLICT(id) DO UPDATE SET x = t.x + 1", key)
-						// if !strings.Contains(err.Error(), "connection error") {
-						require.NoError(t, err)
-						// }
-						// time.Sleep(time.Duration(attempt*10) * time.Millisecond)
-						// }
+						for attempt := 0; ctx.Err() == nil; attempt++ {
+							_, err := conn.ExecContext(ctx, "INSERT INTO t (id, x) VALUES ($1, 1) ON CONFLICT(id) DO UPDATE SET x = t.x + 1", key)
+							if err == nil {
+								break
+							}
+							if strings.Contains(err.Error(), "connection error") {
+								require.NoError(t, err)
+							}
+							t.L().Printf("retrying insert %d: %s", key, err)
+							time.Sleep(time.Duration(attempt*10) * time.Millisecond)
+						}
 					}
 				}()
 			}

@@ -220,7 +220,7 @@ type eachKeySequentialConsistencyValidator struct {
 func (c *eachKeySequentialConsistencyValidator) Failures() []string {
 	var failures []string
 	for key, gc := range c.gapcheckers {
-		if err := gc.Check(); err != nil {
+		if err := gc.Check(); err != nil { // TODO: this can also be a symptom of row reordering. to test that, ignore these errors until the end.
 			failures = append(failures, fmt.Sprintf("consistency: key=%v: %v", key, err.Error()))
 		}
 	}
