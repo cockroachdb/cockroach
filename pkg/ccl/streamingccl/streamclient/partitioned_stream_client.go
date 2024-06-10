@@ -238,6 +238,7 @@ func (p *partitionedStreamClient) Subscribe(
 	sps.ConsumerNode = consumerNode
 	sps.ConsumerProc = consumerProc
 	sps.Compressed = true
+	sps.WithDiff = cfg.withDiff
 	sps.WithFiltering = cfg.withFiltering
 
 	specBytes, err := protoutil.Marshal(&sps)

@@ -127,6 +127,13 @@ type subscribeConfig struct {
 	// should be started with the WithFiltering option which
 	// elides rangefeed events.
 	withFiltering bool
+
+	// withDiff controls wiether the producer-side rangefeeds
+	// should be started with the WithDiff option
+	//
+	// NB: Callers should note that initial scan results will not
+	// contain a diff.
+	withDiff bool
 }
 
 type SubscribeOption func(*subscribeConfig)
@@ -137,6 +144,17 @@ type SubscribeOption func(*subscribeConfig)
 func WithFiltering(filteringEnabled bool) SubscribeOption {
 	return func(cfg *subscribeConfig) {
 		cfg.withFiltering = filteringEnabled
+	}
+}
+
+// WithDiff controls whether the producer-side rangefeeds
+// should be started with the WithDiff option
+//
+// NB: Callers should note that initial scan results will not
+// contain a diff.
+func WithDiff(enableDiff bool) SubscribeOption {
+	return func(cfg *subscribeConfig) {
+		cfg.withDiff = enableDiff
 	}
 }
 
