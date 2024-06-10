@@ -639,16 +639,15 @@ var aggregatorFlushJitter = settings.RegisterFloatSetting(
 	settings.WithPublic,
 )
 
-func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) time.Time {
+func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) (time.Time, error) {
 	if j < 0 || d < 0 {
-		log.Warningf(context.Background(), "invalid jitter value: %f, duration: %s", j, d)
-		return s.Now()
+		return s.Now(), errors.AssertionFailedf("invalid jitter value: %f, duration: %s", j, d)
 	}
 	if j == 0 || d == 0 {
-		return s.Now().Add(d)
+		return s.Now().Add(d), nil
 	}
 	nextFlush := d + time.Duration(rand.Int63n(int64(j*float64(d))))
-	return s.Now().Add(nextFlush)
+	return s.Now().Add(nextFlush), nil
 }
 
 // Next is part of the RowSource interface.
@@ -794,7 +793,7 @@ func (ca *changeAggregator) flushBufferedEvents() error {
 // noteResolvedSpan periodically flushes Frontier progress from the current
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
-func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
+func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (returnErr error) {
 	if resolved.Timestamp.IsEmpty() {
 		// @0.0 resolved timestamps could come in from rangefeed checkpoint.
 		// When rangefeed starts running, it emits @0.0 resolved timestamp.
@@ -830,7 +829,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 	if checkpointFrontier {
 		defer func() {
-			ca.nextHighWaterFlush = nextFlushWithJitter(
+			ca.nextHighWaterFlush, returnErr = nextFlushWithJitter(
 				timeutil.DefaultTimeSource{}, ca.flushFrequency, aggregatorFlushJitter.Get(sv))
 		}()
 		return ca.flushFrontier()
@@ -849,8 +848,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		}()
 		return ca.flushFrontier()
 	}
-
-	return nil
+	return returnErr
 }
 
 // flushFrontier flushes sink and emits resolved timestamp if needed.

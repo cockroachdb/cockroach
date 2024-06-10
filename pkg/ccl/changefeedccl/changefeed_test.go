@@ -7049,29 +7049,48 @@ func TestFlushJitter(t *testing.T) {
 	const numIters = 100
 
 	for _, flushFrequency := range []time.Duration{
+		-1,
 		0,
 		10 * time.Millisecond,
 		100 * time.Millisecond,
 	} {
-		t.Run(fmt.Sprintf("Disabled_FlushFrequency=%s", flushFrequency), func(t *testing.T) {
+		t.Run(fmt.Sprintf("disabled_flushfrequency=%s", flushFrequency), func(t *testing.T) {
 			const disableJitter = 0.0
 			for i := 0; i < numIters; i++ {
-				next := nextFlushWithJitter(ts, flushFrequency, disableJitter)
-				require.Equal(t, ts.Now().Add(flushFrequency), next)
-				ts.AdvanceTo(next)
+				if flushFrequency < 0 {
+					next, err := nextFlushWithJitter(ts, flushFrequency, disableJitter)
+					require.Equal(t, ts.Now(), next)
+					require.Error(t, err,
+						errors.AssertionFailedf("invalid jitter value: %f, duration: %s", disableJitter, flushFrequency))
+					ts.AdvanceTo(next)
+				} else {
+					next, err := nextFlushWithJitter(ts, flushFrequency, disableJitter)
+					require.Equal(t, ts.Now().Add(flushFrequency), next)
+					require.NoError(t, err)
+					ts.AdvanceTo(next)
+				}
 			}
 		})
 
-		t.Run(fmt.Sprintf("Enabled_FlushFrequency=%s", flushFrequency), func(t *testing.T) {
+		t.Run(fmt.Sprintf("enabled_flushfrequency=%s", flushFrequency), func(t *testing.T) {
 			const jitter = 0.1
 			for i := 0; i < numIters; i++ {
-				next := nextFlushWithJitter(ts, flushFrequency, jitter)
-				// next flush should be at least flushFrequency into the future.
-				require.LessOrEqual(t, ts.Now().Add(flushFrequency), next)
-				// Jitter is 10%, so the next flush should be at most 10% more than
-				// flushFrequency.
-				require.LessOrEqual(t, next.Sub(ts.Now()), flushFrequency+flushFrequency/10)
-				ts.AdvanceTo(next)
+				if flushFrequency < 0 {
+					next, err := nextFlushWithJitter(ts, flushFrequency, jitter)
+					require.Equal(t, ts.Now(), next)
+					require.Error(t, err,
+						errors.AssertionFailedf("invalid jitter value: %f, duration: %s", jitter, flushFrequency))
+					ts.AdvanceTo(next)
+				} else {
+					next, err := nextFlushWithJitter(ts, flushFrequency, jitter)
+					// next flush should be at least flushFrequency into the future.
+					require.LessOrEqual(t, ts.Now().Add(flushFrequency), next)
+					// Jitter is 10%, so the next flush should be at most 10% more than
+					// flushFrequency.
+					require.LessOrEqual(t, next.Sub(ts.Now()), flushFrequency+flushFrequency/10)
+					require.NoError(t, err)
+					ts.AdvanceTo(next)
+				}
 			}
 		})
 	}
