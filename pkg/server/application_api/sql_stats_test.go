@@ -1641,26 +1641,27 @@ func generateStatisticsColumn(
 
 	// Create stats JSON
 	stats := struct {
-		BytesRead       appstatspb.NumericStat `json:"bytesRead"`
-		Cnt             int64                  `json:"cnt"`
-		FirstAttemptCnt int64                  `json:"firstAttemptCnt"`
-		IdleLat         appstatspb.NumericStat `json:"idleLat"`
-		Indexes         []string               `json:"indexes"`
-		LastErrorCode   string                 `json:"lastErrorCode"`
-		LastExecAt      time.Time              `json:"lastExecAt"`
-		MaxRetries      int                    `json:"maxRetries"`
-		Nodes           []int64                `json:"nodes"`
-		KVNodeIDs       []int32                `json:"kvNodeIds"`
-		NumRows         appstatspb.NumericStat `json:"numRows"`
-		OvhLat          appstatspb.NumericStat `json:"ovhLat"`
-		ParseLat        appstatspb.NumericStat `json:"parseLat"`
-		PlanGists       []string               `json:"planGists"`
-		PlanLat         appstatspb.NumericStat `json:"planLat"`
-		Regions         []string               `json:"regions"`
-		RowsRead        appstatspb.NumericStat `json:"rowsRead"`
-		RowsWritten     appstatspb.NumericStat `json:"rowsWritten"`
-		RunLat          appstatspb.NumericStat `json:"runLat"`
-		SvcLat          appstatspb.NumericStat `json:"svcLat"`
+		BytesRead        appstatspb.NumericStat `json:"bytesRead"`
+		Cnt              int64                  `json:"cnt"`
+		FirstAttemptCnt  int64                  `json:"firstAttemptCnt"`
+		IdleLat          appstatspb.NumericStat `json:"idleLat"`
+		Indexes          []string               `json:"indexes"`
+		LastErrorCode    string                 `json:"lastErrorCode"`
+		LastExecAt       time.Time              `json:"lastExecAt"`
+		MaxRetries       int                    `json:"maxRetries"`
+		Nodes            []int64                `json:"nodes"`
+		KVNodeIDs        []int32                `json:"kvNodeIds"`
+		NumRows          appstatspb.NumericStat `json:"numRows"`
+		OvhLat           appstatspb.NumericStat `json:"ovhLat"`
+		ParseLat         appstatspb.NumericStat `json:"parseLat"`
+		PlanGists        []string               `json:"planGists"`
+		PlanLat          appstatspb.NumericStat `json:"planLat"`
+		Regions          []string               `json:"regions"`
+		UsedFollowerRead bool                   `json:"usedFollowerRead"`
+		RowsRead         appstatspb.NumericStat `json:"rowsRead"`
+		RowsWritten      appstatspb.NumericStat `json:"rowsWritten"`
+		RunLat           appstatspb.NumericStat `json:"runLat"`
+		SvcLat           appstatspb.NumericStat `json:"svcLat"`
 	}{
 		BytesRead: appstatspb.NumericStat{
 			Mean:         0,
@@ -1695,7 +1696,8 @@ func generateStatisticsColumn(
 			Mean:         0,
 			SquaredDiffs: 0,
 		},
-		Regions: statement.Stats.Regions,
+		Regions:          statement.Stats.Regions,
+		UsedFollowerRead: statement.Stats.UsedFollowerRead,
 		RowsRead: appstatspb.NumericStat{
 			Mean:         0,
 			SquaredDiffs: 0,

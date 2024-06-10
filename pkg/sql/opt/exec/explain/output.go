@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -425,11 +426,23 @@ func (ob *OutputBuilder) AddRegionsStats(regions []string) {
 // AddTxnInfo adds top-level fields for information about the query's
 // transaction.
 func (ob *OutputBuilder) AddTxnInfo(
-	txnIsoLevel isolation.Level, txnPriority roachpb.UserPriority, txnQoSLevel sessiondatapb.QoSLevel,
+	txnIsoLevel isolation.Level,
+	txnPriority roachpb.UserPriority,
+	txnQoSLevel sessiondatapb.QoSLevel,
+	asOfSystemTime *eval.AsOfSystemTime,
 ) {
 	ob.AddTopLevelField("isolation level", txnIsoLevel.StringLower())
 	ob.AddTopLevelField("priority", txnPriority.String())
 	ob.AddTopLevelField("quality of service", txnQoSLevel.String())
+	if asOfSystemTime != nil {
+		var boundedStaleness string
+		if asOfSystemTime.BoundedStaleness {
+			boundedStaleness = " (bounded staleness)"
+		}
+		ts := tree.PGWireFormatTimestamp(asOfSystemTime.Timestamp.GoTime(), nil /* offset */, nil /* tmp */)
+		msg := fmt.Sprintf("AS OF SYSTEM TIME %s%s", ts, boundedStaleness)
+		ob.AddTopLevelField("historical", msg)
+	}
 }
 
 // AddWarning adds the provided string to the list of warnings. Warnings will be

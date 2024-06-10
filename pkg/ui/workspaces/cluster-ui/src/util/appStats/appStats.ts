@@ -255,6 +255,7 @@ export function addStatementStats(
     nodes: uniqueLong([...a.nodes, ...b.nodes]),
     kv_node_ids: unique([...a.kv_node_ids, ...b.kv_node_ids]),
     regions: regions,
+    used_follower_read: a.used_follower_read || b.used_follower_read,
     plan_gists: planGists,
     index_recommendations: indexRec,
     indexes: indexes,
