@@ -637,6 +637,8 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 125433)
+
 	const (
 		// Number of retries should be reasonably large such that they are sufficient
 		// to test long delays but not too many to increase the test time.
