@@ -1830,10 +1830,12 @@ func (expr *Array) TypeCheck(
 	}
 
 	if len(expr.Exprs) == 0 {
-		if desiredParam.Family() == types.AnyFamily {
-			return nil, errAmbiguousArrayType
+		if expr.typ == nil || expr.typ.Family() != types.ArrayFamily {
+			if desiredParam.Family() == types.AnyFamily {
+				return nil, errAmbiguousArrayType
+			}
+			expr.typ = types.MakeArray(desiredParam)
 		}
-		expr.typ = types.MakeArray(desiredParam)
 		return expr, nil
 	}
 
