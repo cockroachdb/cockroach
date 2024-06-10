@@ -1,7 +1,7 @@
-# Test case when provider is completely out of RUs.
+# Test case when provider is completely out of tokens.
 
-# When throttle = -1, the provider will refuse to grant any RUs, either directly
-# or via a trickle.
+# When throttle = -1, the provider will refuse to grant any tokens, either
+# directly or via a trickle.
 configure
 throttle: -1
 ----
@@ -19,7 +19,7 @@ await label=w1
 
 token-bucket
 ----
-0.00 RU filling @ 0.00 RU/s
+0.00 tokens filling @ 0.00 tokens/s
 
 # Advance time and ensure there's no change to the bucket.
 advance wait=true
@@ -29,7 +29,7 @@ advance wait=true
 
 token-bucket
 ----
-0.00 RU filling @ 0.00 RU/s
+0.00 tokens filling @ 0.00 tokens/s
 
 # Issue a blocking read.
 read bytes=1024 label=r1
@@ -51,14 +51,14 @@ not-completed label=r1
 
 token-bucket
 ----
-0.00 RU filling @ 0.00 RU/s (0.64 waiting RU)
+0.00 tokens filling @ 0.00 tokens/s (0.64 waiting tokens)
 
 # Expect maximum delay.
 timers
 ----
 00:33:21.000
 
-# Simulate case where more RUs have been made available.
+# Simulate case where more tokens have been made available.
 configure
 throttle: 0
 ----
