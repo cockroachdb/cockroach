@@ -1138,14 +1138,20 @@ func defaultCmdOpts(debugName string) RunCmdOptions {
 // - specifying the stdin, stdout, and stderr streams
 // - specifying the remote session options
 // - whether the command should be run with the ROACHPROD env variable (true for all user commands)
+//
+// NOTE: do *not* return a `nil` `*RunResultDetails` in this function:
+// we want to support callers being able to use
+// `errors.CombineErrors(err, res.Err)` when they don't care about the
+// origin of the error.
 func (c *SyncedCluster) runCmdOnSingleNode(
 	ctx context.Context, l *logger.Logger, node Node, cmd string, opts RunCmdOptions,
 ) (*RunResultDetails, error) {
+	var noResult RunResultDetails
 	// Argument template expansion is node specific (e.g. for {store-dir}).
 	e := expander{node: node}
 	expandedCmd, err := e.expand(ctx, l, c, cmd)
 	if err != nil {
-		return nil, errors.WithDetailf(err, "error expanding command: %s", cmd)
+		return &noResult, errors.WithDetailf(err, "error expanding command: %s", cmd)
 	}
 
 	nodeCmd := expandedCmd

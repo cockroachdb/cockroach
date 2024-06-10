@@ -408,8 +408,8 @@ func (c *SyncedCluster) FindOpenPorts(
 	}
 
 	res, err := c.runCmdOnSingleNode(ctx, l, node, buf.String(), defaultCmdOpts("find-ports"))
-	if err != nil {
-		return nil, transientFailure(errors.Wrapf(err, "output:\n%s", res.CombinedOut))
+	if findPortsErr := errors.CombineErrors(err, res.Err); findPortsErr != nil {
+		return nil, transientFailure(errors.Wrapf(findPortsErr, "output:\n%s", res.CombinedOut))
 	}
 	ports, err = stringToIntegers(strings.TrimSpace(res.CombinedOut))
 	if err != nil {
