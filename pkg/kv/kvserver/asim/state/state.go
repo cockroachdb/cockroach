@@ -167,6 +167,8 @@ type State interface {
 	ClusterUsageInfo() *ClusterUsageInfo
 	// TickClock modifies the state Clock time to Tick.
 	TickClock(time.Time)
+	// Clock returns the state Clock.
+	Clock() timeutil.TimeSource
 	// UpdateStorePool modifies the state of the StorePool for the Store with
 	// ID StoreID.
 	UpdateStorePool(StoreID, map[roachpb.StoreID]*storepool.StoreDetail)
@@ -290,6 +292,8 @@ type ManualSimClock struct {
 	nanos int64
 }
 
+var _ timeutil.TimeSource = &ManualSimClock{}
+
 // Now returns the current time.
 func (m *ManualSimClock) Now() time.Time {
 	return timeutil.Unix(0, m.nanos)
@@ -298,6 +302,18 @@ func (m *ManualSimClock) Now() time.Time {
 // Set sets the wall time to the supplied timestamp.
 func (m *ManualSimClock) Set(tsNanos int64) {
 	m.nanos = tsNanos
+}
+
+func (m *ManualSimClock) Since(t time.Time) time.Duration {
+	return m.Now().Sub(t)
+}
+
+func (m *ManualSimClock) NewTimer() timeutil.TimerI {
+	panic("unimplemented")
+}
+
+func (m *ManualSimClock) NewTicker(duration time.Duration) timeutil.TickerI {
+	panic("unimplemented")
 }
 
 // Keys in the simulator are 64 bit integers. They are mapped to Keys in
