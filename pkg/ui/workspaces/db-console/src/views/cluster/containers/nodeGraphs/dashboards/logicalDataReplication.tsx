@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import React from "react";
-import map from "lodash/map";
 import { AxisUnits, util } from "@cockroachlabs/cluster-ui";
 
 import LineGraph from "src/views/cluster/components/linegraph";
@@ -31,13 +30,13 @@ export default function (props: GraphDashboardProps) {
       tooltip={`Rate at which the logical bytes (sum of keys + values) are received by all logical replication jobs`}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
-      {map(nodeIDs, node => (
+      {nodeIDs.map( node => (
       <Metric
         key={node}
         name="cr.node.logical_replication.logical_bytes"
         title={nodeDisplayName(nodeDisplayNameByID, node)}
         sources={[node]}
-        downsampleMax
+        nonNegativeRate
       />
     ))}
       </Axis>
@@ -52,7 +51,7 @@ export default function (props: GraphDashboardProps) {
      <Axis label="updates">
        <Metric
          name="cr.node.logical_replication.events_ingested"
-         title="SQL Events Applied"
+         title="Row Updates Applied"
          nonNegativeRate
        />
      </Axis>
@@ -67,14 +66,14 @@ export default function (props: GraphDashboardProps) {
   >
     <Axis units={AxisUnits.Duration} label="latency">
         <Metric
-          name="cr.node.logical_replication.commit_latency-p50"
-          title={"p50"}
-          downsampleMax
+        name="cr.node.logical_replication.commit_latency-p50"
+        title={"p50"}
+        downsampleMax
         />
-         <Metric
-          name="cr.node.logical_replication.commit_latency-p95"
-          title={"p90"}
-          downsampleMax
+        <Metric
+        name="cr.node.logical_replication.commit_latency-p95"
+        title={"p90"}
+        downsampleMax
         />
         <Metric
         name="cr.node.logical_replication.commit_latency-p99"
@@ -122,7 +121,7 @@ export default function (props: GraphDashboardProps) {
   showMetricsInTooltip={true}
   >
   <Axis units={AxisUnits.Duration} label="processing time">
-    {map(nodeIDs, node => (
+    {nodeIDs.map(node => (
       <Metric
         key={node}
         name="cr.node.logical_replication.batch_hist_nanos-p50"
@@ -142,7 +141,7 @@ export default function (props: GraphDashboardProps) {
   showMetricsInTooltip={true}
   >
   <Axis units={AxisUnits.Duration} label="processing time">
-  {map(nodeIDs, node => (
+  {nodeIDs.map( node => (
     <Metric
       key={node}
       name="cr.node.logical_replication.batch_hist_nanos-p99"
