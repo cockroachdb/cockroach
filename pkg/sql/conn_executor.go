@@ -3824,39 +3824,51 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.datumAlloc = &tree.DatumAlloc{}
 }
 
+// maybeAdjustMaxTimestampBound checks
+func (ex *connExecutor) maybeAdjustMaxTimestampBound(p *planner, txn *kv.Txn) {
+	if autoRetryReason := ex.state.mu.autoRetryReason; autoRetryReason != nil {
+		// If we are retrying due to an unsatisfiable timestamp bound which is
+		// retriable, it means we were unable to serve the previous minimum
+		// timestamp as there was a schema update in between. When retrying, we
+		// want to keep the same minimum timestamp for the AOST read, but set
+		// the maximum timestamp to the point just before our failed read to
+		// ensure we don't try to read data which may be after the schema change
+		// when we retry.
+		var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
+		if errors.As(autoRetryReason, &minTSErr) {
+			nextMax := minTSErr.MinTimestampBound
+			ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)
+			return
+		}
+	}
+	// Otherwise, only change the historical timestamps if this is a new txn.
+	// This is because resetPlanner can be called multiple times for the same
+	// txn during the extended protocol.
+	if newTxn := txn == nil || p.extendedEvalCtx.Txn != txn; newTxn {
+		ex.extraTxnState.descCollection.ResetMaxTimestampBound()
+	}
+}
+
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
 	p.resetPlanner(ctx, txn, ex.sessionData(), ex.state.mon, ex.sessionMon)
-	autoRetryReason := ex.state.mu.autoRetryReason
-	// If we are retrying due to an unsatisfiable timestamp bound which is
-	// retriable, it means we were unable to serve the previous minimum timestamp
-	// as there was a schema update in between. When retrying, we want to keep the
-	// same minimum timestamp for the AOST read, but set the maximum timestamp
-	// to the point just before our failed read to ensure we don't try to read
-	// data which may be after the schema change when we retry.
-	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
+	ex.maybeAdjustMaxTimestampBound(p, txn)
 	// Make sure the default locality specifies the actual gateway region at the
 	// start of query compilation. It could have been overridden to a remote
 	// region when the enforce_home_region session setting is true.
 	p.EvalContext().Locality = p.EvalContext().OriginalLocality
-	if err := autoRetryReason; err != nil && errors.As(err, &minTSErr) {
-		nextMax := minTSErr.MinTimestampBound
-		ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)
-	} else if execinfra.IsDynamicQueryHasNoHomeRegionError(autoRetryReason) {
+	if execinfra.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
 		if int(ex.state.mu.autoRetryCounter) <= len(p.EvalContext().RemoteRegions) {
 			// Set a fake gateway region for use by the optimizer to inform its
-			// decision on which region to access first in locality-optimized scan
-			// and join operations. This setting does not affect the distsql planner,
-			// and local plans will continue to be run from the actual gateway region.
-			p.EvalContext().Locality =
-				p.EvalContext().Locality.CopyReplaceKeyValue("region", string(p.EvalContext().RemoteRegions[ex.state.mu.autoRetryCounter-1]))
+			// decision on which region to access first in locality-optimized
+			// scan and join operations. This setting does not affect the
+			// distsql planner, and local plans will continue to be run from the
+			// actual gateway region.
+			p.EvalContext().Locality = p.EvalContext().Locality.CopyReplaceKeyValue(
+				"region" /* key */, string(p.EvalContext().RemoteRegions[ex.state.mu.autoRetryCounter-1]),
+			)
 		}
-	} else if newTxn := txn == nil || p.extendedEvalCtx.Txn != txn; newTxn {
-		// Otherwise, only change the historical timestamps if this is a new txn.
-		// This is because resetPlanner can be called multiple times for the same
-		// txn during the extended protocol.
-		ex.extraTxnState.descCollection.ResetMaxTimestampBound()
 	}
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 }
