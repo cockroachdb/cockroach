@@ -818,7 +818,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Uuid),
 			Fn: func(_ context.Context, evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
-				uv := ulid.MustNew(ulid.Now(), evalCtx.ULIDEntropy)
+				uv := ulid.MustNew(ulid.Now(), evalCtx.GetULIDEntropy())
 				return tree.NewDUuid(tree.DUuid{UUID: uuid.UUID(uv)}), nil
 			},
 			Info:       "Generates a random ULID and returns it as a value of UUID type.",

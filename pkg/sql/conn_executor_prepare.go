@@ -501,6 +501,7 @@ func (ex *connExecutor) execBind(
 						typ,
 						qArgFormatCodes[i],
 						arg,
+						p.datumAlloc,
 					)
 					if err != nil {
 						return pgerror.Wrapf(err, pgcode.ProtocolViolation, "error in argument for %s", k)

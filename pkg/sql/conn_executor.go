@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	crypto_rand "crypto/rand"
 	"fmt"
 	"io"
 	"math"
@@ -86,7 +85,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
-	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -1695,6 +1693,11 @@ type connExecutor struct {
 		// this field by value so that the same RNG is reused throughout the
 		// whole session.
 		external eval.RNGFactory
+		// ulidEntropy is used to power gen_random_ulid builtin. It is important
+		// to store this field by value so that the same source is reused
+		// throughout the whole session. Under the hood it'll use 'external' RNG
+		// as the entropy source.
+		ulidEntropy eval.ULIDEntropyFactory
 	}
 
 	// mu contains of all elements of the struct that can be changed
@@ -3103,9 +3106,7 @@ func (ex *connExecutor) execCopyIn(
 		txn:           ex.state.mu.txn,
 		txnTimestamp:  ex.state.sqlTimestamp,
 		stmtTimestamp: ex.server.cfg.Clock.PhysicalTime(),
-		initPlanner: func(ctx context.Context, p *planner) {
-			ex.initPlanner(ctx, p)
-		},
+		initPlanner:   ex.initPlanner,
 		resetPlanner: func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			ex.resetPlanner(ctx, p, txn, stmtTS)
@@ -3720,8 +3721,8 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			DescIDGenerator:                ex.getDescIDGenerator(),
 			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
 			JobsProfiler:                   p,
-			ULIDEntropy:                    ulid.Monotonic(crypto_rand.Reader, 0),
 			RNGFactory:                     &ex.rng.external,
+			ULIDEntropyFactory:             &ex.rng.ulidEntropy,
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
@@ -3820,6 +3821,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.schemaResolver.descCollection = p.Descriptors()
 	p.schemaResolver.authAccessor = p
 	p.reducedAuditConfig = &auditlogging.ReducedAuditConfig{}
+	p.datumAlloc = &tree.DatumAlloc{}
 }
 
 func (ex *connExecutor) resetPlanner(
