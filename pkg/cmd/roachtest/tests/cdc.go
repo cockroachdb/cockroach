@@ -3923,6 +3923,8 @@ func (c *topicConsumer) validateMessage(partition int32, m *sarama.ConsumerMessa
 		// TODO: less hacky
 		nonConsistencyFailures := make([]string, 0, len(failures))
 		for _, failure := range failures {
+			// wait.. why do we need to skip this? how can we end up with gaps if things are working correctly?
+			// surely a gap implies out of order too
 			if !strings.HasPrefix(failure, "consistency:") {
 				nonConsistencyFailures = append(nonConsistencyFailures, failure)
 			}

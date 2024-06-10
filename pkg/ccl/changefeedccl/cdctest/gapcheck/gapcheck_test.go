@@ -57,6 +57,31 @@ func TestGapChecker_Random(t *testing.T) {
 	require.NoError(t, c.Check())
 }
 
+func TestGapChecker_RandomGaps(t *testing.T) {
+	t.Parallel()
+	const n = 100
+	nums := make([]int, 0, n)
+	for i := 0; i < n; i++ {
+		if rand.IntN(10) > 5 {
+			continue
+		}
+		nums = append(nums, i)
+	}
+	// add dupes
+	for i := 0; i < n; i++ {
+		if rand.IntN(10) > 8 {
+			nums = append(nums, i)
+		}
+	}
+	rand.Shuffle(len(nums), func(i, j int) { nums[i], nums[j] = nums[j], nums[i] })
+
+	c := gapcheck.NewGapChecker()
+	for _, n := range nums {
+		c.Add(n)
+	}
+	require.Error(t, c.Check())
+}
+
 func BenchmarkGapChecker(b *testing.B) {
 	nums := make([]int, b.N)
 	for i := 0; i < b.N; i++ {

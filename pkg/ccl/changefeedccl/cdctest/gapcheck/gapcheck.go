@@ -3,6 +3,7 @@ package gapcheck
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/huandu/skiplist"
@@ -90,16 +91,22 @@ func (c *GapChecker) Check() error {
 		if e == c.spans.Front() {
 			continue
 		}
-		gaps = append(gaps, span{e.Prev().Key().(span).end + 1, e.Key().(span).start - 1})
+		s := span{e.Prev().Key().(span).end + 1, e.Key().(span).start - 1}
+		if s.start > s.end {
+			panic(fmt.Errorf("gap with start > end: %+v\n%s", s, c.String()))
+		}
+		gaps = append(gaps, s)
 	}
 
 	return fmt.Errorf("gap(s) found: %+v", gaps)
 }
 
-func (c *GapChecker) Print() {
-	a := make([]span, 0, c.spans.Len())
+func (c *GapChecker) String() string {
+	b := strings.Builder{}
+	b.WriteString("GapChecker{")
 	for e := c.spans.Front(); e != nil; e = e.Next() {
-		a = append(a, e.Key().(span))
+		b.WriteString(fmt.Sprintf("%+v", e.Key().(span)))
 	}
-	fmt.Printf("%+v\n", a)
+	b.WriteString("}")
+	return b.String()
 }

@@ -221,7 +221,7 @@ func (c *eachKeySequentialConsistencyValidator) Failures() []string {
 	var failures []string
 	for _, gc := range c.gapcheckers {
 		if err := gc.Check(); err != nil {
-			failures = append(failures, err.Error())
+			failures = append(failures, "consistency: "+err.Error()) // TODO: unhack this. can only check for gaps at the end of the test.
 		}
 	}
 	return append(failures, c.inner.Failures()...)
