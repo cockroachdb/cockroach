@@ -23,7 +23,7 @@ import (
 )
 
 // The flags used by the internal loggers.
-const logFlags = log.Lshortfile | log.Ltime | log.LUTC
+const logFlags = log.Lshortfile | log.Ltime | log.LUTC | log.Ldate
 
 // Config configures a logger.
 type Config struct {

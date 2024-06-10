@@ -28,9 +28,9 @@ const (
 	// tick.
 	TickProcessed
 
-	// LowRUNotification indicates that the main loop handled a "low RU"
+	// LowTokensNotification indicates that the main loop handled a "low RU"
 	// notification from the token bucket.
-	LowRUNotification
+	LowTokensNotification
 
 	// TokenBucketResponseProcessed indicates that we have processed a
 	// (successful) request to the global token bucket.

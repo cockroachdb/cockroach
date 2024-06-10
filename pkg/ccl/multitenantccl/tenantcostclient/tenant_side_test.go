@@ -108,7 +108,7 @@ type testState struct {
 
 var eventTypeStr = map[tenantcostclient.TestEventType]string{
 	tenantcostclient.TickProcessed:                "tick",
-	tenantcostclient.LowRUNotification:            "low-ru",
+	tenantcostclient.LowTokensNotification:        "low-tokens",
 	tenantcostclient.TokenBucketResponseProcessed: "token-bucket-response",
 	tenantcostclient.TokenBucketResponseError:     "token-bucket-response-error",
 }
@@ -698,9 +698,9 @@ type testProvider struct {
 }
 
 type testProviderConfig struct {
-	// If zero, the provider always grants RUs immediately. If positive, the
-	// provider grants RUs at this rate. If negative, the provider never grants
-	// RUs.
+	// If zero, the provider always grants tokens immediately. If positive, the
+	// provider grants tokens at this rate. If negative, the provider never grants
+	// tokens.
 	Throttle float64 `yaml:"throttle"`
 
 	// If set, the provider always errors out.
@@ -816,9 +816,9 @@ func (tp *testProvider) TokenBucket(
 	return res, nil
 }
 
-// TestWaitingRU verifies that multiple concurrent requests that stack up in the
-// quota pool are reflected in AvailableRU.
-func TestWaitingRU(t *testing.T) {
+// TestWaitingTokens verifies that multiple concurrent requests that stack up in
+// the quota pool are reflected in AvailableTokens.
+func TestWaitingTokens(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -838,7 +838,7 @@ func TestWaitingRU(t *testing.T) {
 		st, tenantID, testProvider, timeSource, eventWait)
 	require.NoError(t, err)
 
-	// Immediately consume the initial 5K RUs.
+	// Immediately consume the initial 5K tokens.
 	require.NoError(t, ctrl.OnResponseWait(ctx,
 		tenantcostmodel.TestingRequestInfo(1, 1, 5117952, 0), tenantcostmodel.ResponseInfo{}))
 
@@ -855,14 +855,14 @@ func TestWaitingRU(t *testing.T) {
 	// Wait for the initial token bucket response.
 	require.True(t, eventWait.WaitForEvent(tenantcostclient.TokenBucketResponseError))
 
-	// Send 20 KV requests for 1K RU each.
+	// Send 20 KV requests for 1K tokens each.
 	const count = 20
 	const fillRate = 100
 	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952, 0)
 	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0, 0)
 
 	testutils.SucceedsWithin(t, func() error {
-		// Refill the token bucket at a fixed 100 RU/s so that we can limit
+		// Refill the token bucket at a fixed 100 tokens/s so that we can limit
 		// non-determinism in the test.
 		tenantcostclient.TestingSetRate(ctrl, fillRate)
 
@@ -877,13 +877,14 @@ func TestWaitingRU(t *testing.T) {
 			}(i)
 		}
 
-		// Allow some responses to queue up before refilling the available RUs.
+		// Allow some responses to queue up before refilling the available tokens.
 		time.Sleep(time.Millisecond)
 
-		// If available RUs drop below -1K, then multiple responses must be waiting.
+		// If available tokens drop below -1K, then multiple responses must be
+		// waiting.
 		succeeded := false
 		for i := 0; i < count; i++ {
-			available := tenantcostclient.TestingAvailableRU(ctrl)
+			available := tenantcostclient.TestingAvailableTokens(ctrl)
 			if available < -1000 {
 				succeeded = true
 			}
@@ -913,13 +914,13 @@ func TestWaitingRU(t *testing.T) {
 		}, timeout)
 
 		const allowedDelta = 0.01
-		available := tenantcostclient.TestingAvailableRU(ctrl)
+		available := tenantcostclient.TestingAvailableTokens(ctrl)
 		if succeeded {
-			require.InDelta(t, 0, float64(available), allowedDelta)
+			require.InDelta(t, 0, available, allowedDelta)
 			return nil
 		}
 
-		return errors.Errorf("RUs did not drop below 1K: %0.2f", available)
+		return errors.Errorf("Tokens did not drop below 1K: %0.2f", available)
 	}, 2*time.Minute)
 }
 
@@ -1524,7 +1525,7 @@ func TestRUSettingsChanged(t *testing.T) {
 	}
 
 	// Check to make sure the cost of the query increased. Use SucceedsSoon
-	// because the settings propogation is async.
+	// because the settings propagation is async.
 	testutils.SucceedsSoon(t, func() error {
 		currentModel := costClient.GetCostConfig()
 

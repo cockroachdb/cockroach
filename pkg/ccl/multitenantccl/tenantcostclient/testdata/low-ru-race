@@ -20,7 +20,7 @@ write bytes=1021952
 ----
 
 wait-for-event
-low-ru
+low-tokens
 ----
 
 # Unblock the in-progress request.
@@ -42,4 +42,4 @@ token-bucket-response
 
 token-bucket
 ----
-10000.00 RU filling @ 0.00 RU/s
+10000.00 tokens filling @ 0.00 tokens/s
