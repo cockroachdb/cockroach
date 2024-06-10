@@ -338,7 +338,7 @@ func registerBackup(r registry.Registry) {
 					return err
 				}
 				if err := AssertReasonableFractionCompleted(ctx, t.L(), c, jobID, 2); err != nil {
-					return err
+					return errors.CombineErrors(err, skipIfNetworkFlake(ctx, t, c, int(jobID)))
 				}
 				tick()
 
