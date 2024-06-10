@@ -509,6 +509,9 @@ type ExecutionStats struct {
 	// processing.
 	// Only being generated on EXPLAIN ANALYZE.
 	Regions []string
+	// UsedFollowerRead indicates whether at least some reads were served by the
+	// follower replicas.
+	UsedFollowerRead bool
 }
 
 // BuildPlanForExplainFn builds an execution plan against the given

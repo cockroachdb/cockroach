@@ -276,11 +276,12 @@ rows output: 100`,
 					BytesSent:  optional.MakeUint(12345),
 				},
 				KV: KVStats{
-					NodeIDs:    []int32{2, 3},
-					Regions:    []string{"region2", "region3"},
-					KVTime:     optional.MakeTimeValue(time.Second),
-					TuplesRead: optional.MakeUint(10),
-					BytesRead:  optional.MakeUint(12345 * 1000),
+					NodeIDs:          []int32{2, 3},
+					Regions:          []string{"region2", "region3"},
+					KVTime:           optional.MakeTimeValue(time.Second),
+					TuplesRead:       optional.MakeUint(10),
+					BytesRead:        optional.MakeUint(12345 * 1000),
+					UsedFollowerRead: true,
 				},
 				Exec: ExecStats{
 					ExecTime:        optional.MakeTimeValue(time.Second),
@@ -304,6 +305,7 @@ network rows sent: 10
 network bytes sent: 12 KiB
 input rows: 100
 input stall time: 1s
+used follower read
 KV nodes: n1, n2, n3
 KV regions: region1, region2, region3
 KV time: 1s
