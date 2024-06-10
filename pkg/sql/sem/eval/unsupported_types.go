@@ -19,18 +19,24 @@ import (
 )
 
 type unsupportedTypeChecker struct {
-	version clusterversion.Handle
+	// Uncomment this when a new type is introduced.
+	// version clusterversion.Handle
 }
 
 // NewUnsupportedTypeChecker returns a new tree.UnsupportedTypeChecker that can
 // be used to check whether a type is allowed by the current cluster version.
-func NewUnsupportedTypeChecker(handle clusterversion.Handle) tree.UnsupportedTypeChecker {
-	return &unsupportedTypeChecker{version: handle}
+func NewUnsupportedTypeChecker(clusterversion.Handle) tree.UnsupportedTypeChecker {
+	// Right now we don't have any unsupported types, so there is no benefit in
+	// returning a type checker that never errors, so we just return nil. (The
+	// infrastructure is already set up to handle such case gracefully.)
+	return nil
 }
 
 var _ tree.UnsupportedTypeChecker = &unsupportedTypeChecker{}
 
 // CheckType implements the tree.UnsupportedTypeChecker interface.
 func (tc *unsupportedTypeChecker) CheckType(ctx context.Context, typ *types.T) error {
+	// NB: when adding an unsupported type here, change the constructor to not
+	// return nil.
 	return nil
 }
