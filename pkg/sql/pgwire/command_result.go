@@ -287,6 +287,11 @@ func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error
 	return r.conn.bufferBatch(ctx, batch, r)
 }
 
+// SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) SupportsAddBatch() bool {
+	return true
+}
+
 // BufferedResultsLen is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) BufferedResultsLen() int {
 	return r.conn.writerState.buf.Len()
@@ -305,11 +310,6 @@ func (r *commandResult) TruncateBufferedResults(idx int) bool {
 		return true
 	}
 	r.conn.writerState.buf.Truncate(idx)
-	return true
-}
-
-// SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
-func (r *commandResult) SupportsAddBatch() bool {
 	return true
 }
 
@@ -560,16 +560,16 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 	return nil
 }
 
-// RevokePortalPausability is part of the sql.RestrictedCommandResult interface.
-func (r *limitedCommandResult) RevokePortalPausability() error {
-	r.portalPausablity = sql.NotPausablePortalForUnsupportedStmt
-	return nil
-}
-
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
 // TODO(yuzefovich): implement limiting behavior for AddBatch.
 func (r *limitedCommandResult) SupportsAddBatch() bool {
 	return false
+}
+
+// RevokePortalPausability is part of the sql.RestrictedCommandResult interface.
+func (r *limitedCommandResult) RevokePortalPausability() error {
+	r.portalPausablity = sql.NotPausablePortalForUnsupportedStmt
+	return nil
 }
 
 // moreResultsNeeded is a restricted connection handler that waits for more
