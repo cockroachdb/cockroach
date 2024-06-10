@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -152,7 +153,7 @@ type logicalReplicationWriterProcessor struct {
 
 type queryBuffer struct {
 	deleteQueries map[catid.DescID]string
-	insertQueries map[catid.DescID]string
+	insertQueries map[catid.DescID]map[catid.FamilyID]string
 }
 
 var (
@@ -186,7 +187,7 @@ func newLogicalReplicationWriterProcessor(
 
 	qb := queryBuffer{
 		deleteQueries: make(map[catid.DescID]string, len(spec.TableDescriptors)),
-		insertQueries: make(map[catid.DescID]string, len(spec.TableDescriptors)),
+		insertQueries: make(map[catid.DescID]map[catid.FamilyID]string, len(spec.TableDescriptors)),
 	}
 
 	descs := make(map[catid.DescID]catalog.TableDescriptor)
@@ -196,7 +197,11 @@ func newLogicalReplicationWriterProcessor(
 		td := tabledesc.NewBuilder(&desc).BuildImmutableTable()
 		descs[desc.ID] = td
 		qb.deleteQueries[desc.ID] = makeDeleteQuery(name, td)
-		qb.insertQueries[desc.ID] = makeInsertQuery(name, td)
+		var err error
+		qb.insertQueries[desc.ID], err = makeInsertQueries(name, td)
+		if err != nil {
+			return nil, err
+		}
 		cdcEventTargets.Add(changefeedbase.Target{
 			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
 			TableID:           td.GetID(),
@@ -744,7 +749,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBatch(
 		}
 		if !row.IsDeleted() {
 			datums := make([]interface{}, 0, len(row.EncDatums()))
-			err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+			err := row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 				// Ignore crdb_internal_origin_timestamp
 				if col.Name == "crdb_internal_origin_timestamp" {
 					if d != tree.DNull {
@@ -761,7 +766,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBatch(
 				return batchBytes, err
 			}
 			datums = append(datums, eval.TimestampToDecimalDatum(row.MvccTimestamp))
-			insertQuery := lrw.queryBuffer.insertQueries[row.TableID]
+			insertQuery := lrw.queryBuffer.insertQueries[row.TableID][row.FamilyID]
 			if _, err := lrw.ie.Exec(ctx, "replicated-insert", txn.KV(), insertQuery, datums...); err != nil {
 				log.Warningf(ctx, "replicated insert failed (query: %s): %s", insertQuery, err.Error())
 				return batchBytes, err
@@ -802,54 +807,86 @@ func (lrw *logicalReplicationWriterProcessor) flushBatch(
 //  2. The crd_internal_origin_timestamp requires modifying the user's schema.
 //
 // See the design document for possible solutions to both of these problems.
-func makeInsertQuery(fqTableName string, td catalog.TableDescriptor) string {
-	// TODO(ssd): Column families
-	var columnNames strings.Builder
-	var valueStrings strings.Builder
-	var onConflictUpdateClause strings.Builder
-	argIdx := 1
-	for _, col := range td.PublicColumns() {
-		// Virtual columns are not present in the data written to disk and
-		// thus not part of the rangefeed datum.
-		if col.IsVirtual() {
-			continue
+func makeInsertQueries(
+	fqTableName string, td catalog.TableDescriptor,
+) (map[catid.FamilyID]string, error) {
+	queries := make(map[catid.FamilyID]string, td.NumFamilies())
+
+	if err := td.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+		var columnNames strings.Builder
+		var valueStrings strings.Builder
+		var onConflictUpdateClause strings.Builder
+		argIdx := 1
+		seenIds := make(map[catid.ColumnID]struct{})
+		addColumn := func(colName string, colID catid.ColumnID) {
+			// We will set crdb_internal_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
+			// We should never see this on the rangefeed as a non-null value as that would imply we've looped data around.
+			if colName == "crdb_internal_origin_timestamp" {
+				return
+			}
+			if _, seen := seenIds[colID]; seen {
+				return
+			}
+
+			if argIdx == 1 {
+				columnNames.WriteString(colName)
+				fmt.Fprintf(&valueStrings, "$%d", argIdx)
+				fmt.Fprintf(&onConflictUpdateClause, "%s = $%d", colName, argIdx)
+			} else {
+				fmt.Fprintf(&columnNames, ", %s", colName)
+				fmt.Fprintf(&valueStrings, ", $%d", argIdx)
+				fmt.Fprintf(&onConflictUpdateClause, ",\n%s = $%d", colName, argIdx)
+			}
+			seenIds[colID] = struct{}{}
+			argIdx++
 		}
-		// We will set crdb_internal_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
-		// We should never see this on the rangefeed as a non-null value as that would imply we've looped data around.
-		if col.GetName() == "crdb_internal_origin_timestamp" {
-			continue
+
+		publicColumns := td.PublicColumns()
+		colOrd := catalog.ColumnIDToOrdinalMap(publicColumns)
+		primaryIndex := td.GetPrimaryIndex()
+
+		for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
+			for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
+				ord, ok := colOrd.Get(primaryIndex.GetKeyColumnID(i))
+				if !ok {
+					return errors.AssertionFailedf("expected to find column %d", ord)
+				}
+				col := publicColumns[ord]
+				addColumn(col.GetName(), col.GetID())
+
+			}
 		}
-		if argIdx == 1 {
-			columnNames.WriteString(col.GetName())
-			fmt.Fprintf(&valueStrings, "$%d", argIdx)
-			fmt.Fprintf(&onConflictUpdateClause, "%s = $%d", col.GetName(), argIdx)
-		} else {
-			fmt.Fprintf(&columnNames, ", %s", col.GetName())
-			fmt.Fprintf(&valueStrings, ", $%d", argIdx)
-			fmt.Fprintf(&onConflictUpdateClause, ",\n%s = $%d", col.GetName(), argIdx)
+
+		for i, colName := range family.ColumnNames {
+			addColumn(colName, family.ColumnIDs[i])
 		}
-		argIdx++
-	}
-	originTSIdx := argIdx
-	baseQuery := `
+
+		originTSIdx := argIdx
+		baseQuery := `
 INSERT INTO %s (%s, crdb_internal_origin_timestamp)
 VALUES (%s, $%d)
 ON CONFLICT ON CONSTRAINT %s
 DO UPDATE SET
 %s,
 crdb_internal_origin_timestamp=$%[4]d
-WHERE (%[1]s.crdb_internal_mvcc_timestamp < $%[4]d
+WHERE (%[1]s.crdb_internal_mvcc_timestamp <= $%[4]d
        AND %[1]s.crdb_internal_origin_timestamp IS NULL)
-   OR (%[1]s.crdb_internal_origin_timestamp < $%[4]d
+   OR (%[1]s.crdb_internal_origin_timestamp <= $%[4]d
        AND %[1]s.crdb_internal_origin_timestamp IS NOT NULL)`
-	return fmt.Sprintf(baseQuery,
-		fqTableName,
-		columnNames.String(),
-		valueStrings.String(),
-		originTSIdx,
-		td.GetPrimaryIndex().GetName(),
-		onConflictUpdateClause.String(),
-	)
+		queries[family.ID] = fmt.Sprintf(baseQuery,
+			fqTableName,
+			columnNames.String(),
+			valueStrings.String(),
+			originTSIdx,
+			td.GetPrimaryIndex().GetName(),
+			onConflictUpdateClause.String(),
+		)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return queries, nil
+
 }
 
 func makeDeleteQuery(fqTableName string, td catalog.TableDescriptor) string {
