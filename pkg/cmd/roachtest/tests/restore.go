@@ -466,7 +466,11 @@ func registerRestore(r registry.Registry) {
 					t.Status(`running restore`)
 					metricCollector := rd.initRestorePerfMetrics(ctx, durationGauge)
 					if err := rd.run(ctx, ""); err != nil {
-						return err
+						var jobID int
+						if jobIDErr := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&jobID); jobIDErr != nil {
+							return errors.CombineErrors(err, jobIDErr)
+						}
+						return errors.CombineErrors(err, skipIfNetworkFlake(ctx, t, c, jobID))
 					}
 					metricCollector()
 					rd.checkFingerprint(ctx)
@@ -476,6 +480,35 @@ func registerRestore(r registry.Registry) {
 			},
 		})
 	}
+}
+
+// skipIfNetworkFlake skips the test if the job error contains a network flake.
+// This function should only get called after a job terminates unexpectedly.
+func skipIfNetworkFlake(ctx context.Context, t test.Test, c cluster.Cluster, jobId int) error {
+	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var jobError string
+	// Using crdb_internal.jobs because it aggregates errors from paused and
+	// failed jobs neatly into the error column.
+	if err := db.QueryRow(`SELECT error FROM crdb_internal.jobs WHERE id = $1`, jobId).Scan(&jobError); err != nil {
+		return errors.Wrapf(err, "failed to get job error")
+	}
+
+	networkFlakes := []string{
+		"http2: client connection force closed via ClientConn.Close",
+		"HTTP response code 416",
+		"tls: bad record MAC",
+	}
+
+	for _, flake := range networkFlakes {
+		if strings.Contains(jobError, flake) {
+			t.Skipf("skipping test because of network flake %s", jobError)
+		}
+	}
+	return nil
 }
 
 var defaultHardware = hardwareSpecs{
