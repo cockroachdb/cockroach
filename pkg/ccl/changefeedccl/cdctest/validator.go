@@ -16,10 +16,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest/gapcheck"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 )
 
 // Validator checks for violations of our changefeed ordering and delivery
@@ -204,50 +204,26 @@ func NewConsistencyValidator(ct ConsistencyValidationType, topic string, inner V
 		if inner == nil {
 			inner = NoOpValidator
 		}
-		return &eachKeySequentialConsistencyValidator{ct: ct, topic: topic, inner: inner, vals: make(map[string]*btree.BTree)}
+		return &eachKeySequentialConsistencyValidator{ct: ct, topic: topic, inner: inner, gapcheckers: make(map[string]*gapcheck.GapChecker)}
 	default:
 		panic(fmt.Sprintf("unknown consistency validation type: %s", ct))
 	}
 }
 
 type eachKeySequentialConsistencyValidator struct {
-	inner Validator
-	ct    ConsistencyValidationType
-	topic string
-	vals  map[string]*btree.BTree
+	inner       Validator
+	ct          ConsistencyValidationType
+	topic       string
+	gapcheckers map[string]*gapcheck.GapChecker
 }
 
 func (c *eachKeySequentialConsistencyValidator) Failures() []string {
 	var failures []string
-
-	// Check that the values for each key are in order.
-	for key, tree := range c.vals {
-		// toDelete := make([]btree.Item, 0, tree.Len())
-		last := tree.Min().(btree.Int)
-		tree.AscendGreaterOrEqual(last+1, func(i btree.Item) bool {
-			if i == nil {
-				return false
-			}
-			cur := i.(btree.Int)
-			if cur-last != 1 {
-				failures = append(failures, fmt.Sprintf(
-					`consistency: topic %s key %s: saw gap between %d and %d`, c.topic, key, last, cur,
-				))
-				// it's simpler to only accumulate one failure per key
-				return false
-			} else {
-				// remove the last value if it's in order
-				// toDelete = append(toDelete, last)
-				// actually we can't do this because if we see a duplicate we'd think we had a gap :/
-			}
-			last = cur
-			return true
-		})
-		// for _, i := range toDelete {
-		// 	tree.Delete(i)
-		// }
+	for _, gc := range c.gapcheckers {
+		if err := gc.Check(); err != nil {
+			failures = append(failures, err.Error())
+		}
 	}
-
 	return append(failures, c.inner.Failures()...)
 }
 
@@ -267,10 +243,11 @@ func (c *eachKeySequentialConsistencyValidator) NoteRow(partition string, key st
 	if err := gojson.Unmarshal([]byte(value), &v); err != nil {
 		return fmt.Errorf("failed to parse value %q: %v", value, err)
 	}
-	if _, ok := c.vals[key]; !ok {
-		c.vals[key] = btree.New(2)
+	x := v.After.X
+	if _, ok := c.gapcheckers[key]; !ok {
+		c.gapcheckers[key] = gapcheck.NewGapChecker()
 	}
-	c.vals[key].ReplaceOrInsert(btree.Int(v.After.X))
+	c.gapcheckers[key].Add(x)
 	return c.inner.NoteRow(partition, key, value, updated)
 }
 
