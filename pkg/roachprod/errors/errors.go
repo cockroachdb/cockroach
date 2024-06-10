@@ -37,8 +37,9 @@ const (
 )
 
 const (
-	IllegalInstruction        = 132
-	SegmentationFaultExitCode = 139
+	IllegalInstructionExitCode = 132
+	AssertionFailureExitCode   = 134
+	SegmentationFaultExitCode  = 139
 )
 
 // Cmd wraps errors that result from a command run against the cluster.

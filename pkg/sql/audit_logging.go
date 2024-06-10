@@ -149,11 +149,11 @@ func (p *planner) initializeReducedAuditConfig(ctx context.Context) {
 // shouldNotRoleBasedAudit checks if we should do any auditing work for
 // RoleBasedAuditEvents.
 func (p *planner) shouldNotRoleBasedAudit(execType executorType) bool {
+	// Do not emit audit events for internal executors.
 	// Do not do audit work if role-based auditing is not enabled.
 	// Do not emit audit events for reserved users/roles. This does not omit the
 	// root user.
-	// Do not emit audit events for internal executors.
-	return !auditlogging.UserAuditEnabled(p.execCfg.Settings) ||
-		p.User().IsReserved() ||
-		execType == executorTypeInternal
+	return execType == executorTypeInternal ||
+		!auditlogging.UserAuditEnabled(p.execCfg.Settings) ||
+		p.User().IsReserved()
 }
