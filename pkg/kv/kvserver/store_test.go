@@ -242,6 +242,7 @@ func createTestStoreWithoutStart(
 		kvflowdispatch.NewDummyDispatch(),
 		NoopStoresFlowControlIntegration{},
 		NoopRaftTransportDisconnectListener{},
+		nil,
 		nil, /* knobs */
 	)
 
