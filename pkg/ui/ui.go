@@ -170,11 +170,12 @@ func Handler(cfg Config) http.Handler {
 		}
 		licenseTTL := base.LicenseTTL.Value()
 		oidcConf := cfg.OIDC.GetOIDCConf()
+		major, minor := build.BranchReleaseSeries()
 		args := indexHTMLArgs{
 			Insecure:         cfg.Insecure,
 			LoggedInUser:     cfg.GetUser(r.Context()),
 			Tag:              buildInfo.Tag,
-			Version:          build.BinaryVersionPrefix(),
+			Version:          fmt.Sprintf("v%d.%d", major, minor),
 			OIDCAutoLogin:    oidcConf.AutoLogin,
 			OIDCLoginEnabled: oidcConf.Enabled,
 			OIDCButtonText:   oidcConf.ButtonText,
