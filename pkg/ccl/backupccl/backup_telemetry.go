@@ -318,7 +318,6 @@ func logRestoreTelemetry(
 	opts tree.RestoreOptions,
 	descsByTablePattern map[tree.TablePattern]catalog.Descriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
-	debugPauseOn string,
 	applicationName string,
 ) {
 	var requestedTargets []descpb.Descriptor
@@ -419,7 +418,6 @@ func logRestoreTelemetry(
 		HasEncryptionPassphrase: passphrase,
 		KMSType:                 kmsType,
 		KMSCount:                uint32(kmsCount),
-		DebugPauseOn:            debugPauseOn,
 		JobID:                   uint64(jobID),
 		Options:                 options,
 		ApplicationName:         applicationName,

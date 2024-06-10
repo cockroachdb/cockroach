@@ -54,7 +54,6 @@ func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 		SkipMissingUDFs:                  true,
 		Detached:                         true,
 		SkipLocalitiesCheck:              true,
-		DebugPauseOn:                     tree.NewDString("test expr"),
 		AsTenant:                         tree.NewDString("test expr"),
 		ForceTenantID:                    tree.NewDInt(42),
 		SchemaOnly:                       true,
