@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -621,7 +620,7 @@ Loop:
 		switch typ {
 		case pgwirebase.ClientMsgCopyData:
 			if err := c.processCopyData(
-				ctx, unsafeUint8ToString(readBuf.Msg), false, /* final */
+				ctx, encoding.UnsafeConvertBytesToString(readBuf.Msg), false, /* final */
 			); err != nil {
 				return err
 			}
@@ -996,6 +995,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err e
 			c.resultColumns[i].Typ,
 			pgwirebase.FormatBinary,
 			data,
+			c.p.datumAlloc,
 		)
 		if err != nil {
 			return bytesRead, pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
@@ -1277,7 +1277,7 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 func (c *copyMachine) readTextTupleDatum(ctx context.Context, parts [][]byte) error {
 	datums := c.scratchRow
 	for i, part := range parts {
-		s := unsafeUint8ToString(part)
+		s := encoding.UnsafeConvertBytesToString(part)
 		// Disable NULL conversion during file uploads.
 		if !c.forceNotNull && s == c.null {
 			datums[i] = tree.DNull
@@ -1320,7 +1320,7 @@ func (c *copyMachine) readTextTupleDatum(ctx context.Context, parts [][]byte) er
 
 func (c *copyMachine) readTextTupleVec(ctx context.Context, parts [][]byte) error {
 	for i, part := range parts {
-		s := unsafeUint8ToString(part)
+		s := encoding.UnsafeConvertBytesToString(part)
 		// Disable NULL conversion during file uploads.
 		if !c.forceNotNull && s == c.null {
 			c.valueHandlers[i].Null()
@@ -1470,7 +1470,3 @@ const (
 	binaryStateRead
 	binaryStateFoundTrailer
 )
-
-func unsafeUint8ToString(data []uint8) string {
-	return *(*string)(unsafe.Pointer(&data))
-}

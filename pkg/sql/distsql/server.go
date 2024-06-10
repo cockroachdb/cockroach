@@ -12,7 +12,6 @@ package distsql
 
 import (
 	"context"
-	crypto_rand "crypto/rand"
 	"io"
 	"time"
 
@@ -42,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
-	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -362,7 +360,6 @@ func (ds *ServerImpl) setupFlow(
 			SchemaTelemetryController: ds.ServerConfig.SchemaTelemetryController,
 			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,
 			RangeStatsFetcher:         ds.ServerConfig.RangeStatsFetcher,
-			ULIDEntropy:               ulid.Monotonic(crypto_rand.Reader, 0),
 		}
 		// Most processors will override this Context with their own context in
 		// ProcessorBase. StartInternal().

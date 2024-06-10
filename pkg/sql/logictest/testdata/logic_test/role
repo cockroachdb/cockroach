@@ -157,12 +157,12 @@ user root
 statement ok
 GRANT testrole TO testuser
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role      member    isAdmin  role_id  member_id
-admin     root      true     2        1
-testrole  testuser  false    108      100
+role      member    isAdmin
+admin     root      true
+testrole  testuser  false
 
 query TTB colnames,rowsort
 SHOW GRANTS ON ROLE
@@ -258,14 +258,14 @@ statement ok
 GRANT admin TO testuser
 
 # Dropping users/roles deletes all their memberships.
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role      member     isAdmin  role_id  member_id
-admin     root       true     2        1
-admin     testuser   false    2        100
-testrole  testuser   true     108      100
-testrole  testuser2  true     108      107
+role      member     isAdmin
+admin     root       true
+admin     testuser   false
+testrole  testuser   true
+testrole  testuser2  true
 
 query TTB colnames,rowsort
 SHOW GRANTS ON ROLE
@@ -324,21 +324,21 @@ DROP USER testuser
 statement ok
 CREATE USER testuser
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role      member     isAdmin  role_id  member_id
-admin     root       true     2        1
-testrole  testuser2  true     108      107
+role      member     isAdmin
+admin     root       true
+testrole  testuser2  true
 
 statement ok
 DROP ROLE testrole
 
-query TTBOO colnames
-SELECT * FROM system.role_members
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member  isAdmin  role_id  member_id
-admin  root    true     2        1
+role   member  isAdmin
+admin  root    true
 
 # Test cycle detection.
 statement error pq: admin cannot be a member of itself
@@ -462,17 +462,17 @@ testuser
 
 user root
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member    isAdmin  role_id  member_id
-admin  root      true     2        1
-rolea  roleb     true     111      112
-rolea  rolee     false    111      115
-roleb  rolec     false    112      113
-rolec  roled     false    113      114
-rolec  testuser  false    113      110
-roled  testuser  false    114      110
+role   member    isAdmin
+admin  root      true
+rolea  roleb     true
+rolea  rolee     false
+roleb  rolec     false
+rolec  roled     false
+rolec  testuser  false
+roled  testuser  false
 
 statement ok
 DROP ROLE rolea
@@ -480,12 +480,12 @@ DROP ROLE rolea
 statement ok
 DROP ROLE rolec
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member    isAdmin  role_id  member_id
-admin  root      true     2        1
-roled  testuser  false    114      110
+role   member    isAdmin
+admin  root      true
+roled  testuser  false
 
 query TTT rowsort
 SHOW ROLES
@@ -546,13 +546,13 @@ GRANT "" TO rolea
 statement error role/user "" does not exist
 REVOKE "" FROM rolea
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member    isAdmin  role_id  member_id
-admin  root      true     2        1
-rolea  testuser  true     116      110
-roleb  testuser  true     117      110
+role   member    isAdmin
+admin  root      true
+rolea  testuser  true
+roleb  testuser  true
 
 user testuser
 
@@ -561,15 +561,15 @@ GRANT rolea,roleb TO root WITH ADMIN OPTION
 
 user root
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member    isAdmin  role_id  member_id
-admin  root      true     2        1
-rolea  root      true     116      1
-rolea  testuser  true     116      110
-roleb  root      true     117      1
-roleb  testuser  true     117      110
+role   member    isAdmin
+admin  root      true
+rolea  root      true
+rolea  testuser  true
+roleb  root      true
+roleb  testuser  true
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.administrable_role_authorizations
@@ -631,45 +631,45 @@ REVOKE roleb FROM root
 
 user root
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member    isAdmin  role_id  member_id
-admin  root      true     2        1
-rolea  root      true     116      1
-rolea  testuser  false    116      110
-roleb  testuser  true     117      110
+role   member    isAdmin
+admin  root      true
+rolea  root      true
+rolea  testuser  false
+roleb  testuser  true
 
 statement ok
 REVOKE rolea, roleb FROM testuser, root
 
-query TTBOO colnames
-SELECT * FROM system.role_members
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member  isAdmin  role_id  member_id
-admin  root    true     2        1
+role   member  isAdmin
+admin  root    true
 
 # Verify that GRANT/REVOKE are not sensitive to the case of role names.
 
 statement ok
 GRANT roLea,rOleB TO tEstUSER WITH ADMIN OPTION
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member    isAdmin  role_id  member_id
-admin  root      true     2        1
-rolea  testuser  true     116      110
-roleb  testuser  true     117      110
+role   member    isAdmin
+admin  root      true
+rolea  testuser  true
+roleb  testuser  true
 
 statement ok
 REVOKE roleA, roleB FROM TestUser
 
-query TTBOO colnames
-SELECT * FROM system.role_members
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member  isAdmin  role_id  member_id
-admin  root    true     2        1
+role   member  isAdmin
+admin  root    true
 
 # Test privilege checks.
 
@@ -700,13 +700,13 @@ GRANT admin TO newgroup
 
 user testuser
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role      member    isAdmin  role_id  member_id
-admin     newgroup  false    2        118
-admin     root      true     2        1
-newgroup  testuser  false    118      110
+role      member    isAdmin
+admin     newgroup  false
+admin     root      true
+newgroup  testuser  false
 
 
 user root
@@ -740,12 +740,12 @@ CREATE TABLE db2.s1.foo (k int);
 
 user root
 
-query TTBOO colnames,rowsort
-SELECT * FROM system.role_members
+query TTB colnames,rowsort
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role      member    isAdmin  role_id  member_id
-admin     root      true     2        1
-newgroup  testuser  false    118      110
+role      member    isAdmin
+admin     root      true
+newgroup  testuser  false
 
 statement ok
 GRANT ALL ON DATABASE db2 TO newgroup
@@ -825,11 +825,11 @@ DROP TABLE db2.foo
 statement ok
 DROP USER testuser
 
-query TTBOO colnames
-SELECT * FROM system.role_members
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member  isAdmin  role_id  member_id
-admin  root    true     2        1
+role   member  isAdmin
+admin  root    true
 
 statement error cannot drop role/user newgroup: grants still exist on db2
 DROP ROLE newgroup
@@ -883,11 +883,11 @@ REVOKE admin FROM public
 statement ok
 CREATE USER testuser
 
-query TTBOO colnames
-SELECT * FROM system.role_members
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member  isAdmin  role_id  member_id
-admin  root    true     2        1
+role   member  isAdmin
+admin  root    true
 
 
 user testuser
@@ -962,11 +962,11 @@ CREATE ROLE IF NOT EXISTS anotherrolewithcreate2 CREATEROLE
 statement ok
 CREATE ROLE IF NOT EXISTS rolewithoutcreate2 WITH NOCREATEROLE
 
-query TTBOO colnames
-SELECT * FROM system.role_members
+query TTB colnames
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
-role   member  isAdmin  role_id  member_id
-admin  root    true     2        1
+role   member  isAdmin
+admin  root    true
 
 user testuser
 

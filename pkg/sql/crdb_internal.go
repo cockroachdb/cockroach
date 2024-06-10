@@ -227,6 +227,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalPCRStreamsTableID:                  crdbInternalPCRStreamsTable,
 		catconstants.CrdbInternalPCRStreamSpansTableID:              crdbInternalPCRStreamSpansTable,
 		catconstants.CrdbInternalPCRStreamCheckpointsTableID:        crdbInternalPCRStreamCheckpointsTable,
+		catconstants.CrdbInternalLDRProcessorTableID:                crdbInternalLDRProcessorTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -9192,6 +9193,33 @@ CREATE TABLE crdb_internal.cluster_replication_node_stream_checkpoints (
 				); err != nil {
 					return err
 				}
+			}
+		}
+		return nil
+	},
+}
+var crdbInternalLDRProcessorTable = virtualSchemaTable{
+	comment: `node-level table listing all currently running logical replication writer processors`,
+	schema: `
+CREATE TABLE crdb_internal.logical_replication_node_processors (
+	stream_id INT,
+	consumer STRING
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		sm, err := p.EvalContext().StreamManagerFactory.GetReplicationStreamManager(ctx)
+		if err != nil {
+			// A non-CCL binary can't have anything to inspect so just return empty.
+			if err.Error() == "replication streaming requires a CCL binary" {
+				return nil
+			}
+			return err
+		}
+		for _, status := range sm.DebugGetLogicalConsumerStatuses(ctx) {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(status.StreamID)),
+				tree.NewDString(fmt.Sprintf("%d[%d]", p.extendedEvalCtx.ExecCfg.JobRegistry.ID(), status.ProcessorID)),
+			); err != nil {
+				return err
 			}
 		}
 		return nil

@@ -288,11 +288,6 @@ type Context struct {
 	// during local execution. It may be unset.
 	RoutineSender DeferredRoutineSender
 
-	// ULIDEntropy is the entropy source for ULID generation.
-	// TODO(yuzefovich): consider making its allocation lazy, similar to how
-	// RNG is done, or use the RNG somehow.
-	ULIDEntropy ulid.MonotonicReader
-
 	// RNGFactory, if set, provides the random number generator for the "random"
 	// built-in function.
 	//
@@ -300,11 +295,24 @@ type Context struct {
 	// is exported only for the connExecutor to pass its "external" RNGFactory.
 	RNGFactory *RNGFactory
 
-	// internal provides the random number generator for the "random" built-in
-	// function if RNGFactory is not set. This field exists to allow not setting
-	// RNGFactory on the code paths that don't need to preserve usage of the
-	// same RNG within a session.
+	// internalRNGFactory provides the random number generator for the "random"
+	// built-in function if RNGFactory is not set. This field exists to allow
+	// not setting RNGFactory on the code paths that don't need to preserve
+	// usage of the same RNG within a session.
 	internalRNGFactory RNGFactory
+
+	// ULIDEntropyFactory, if set, is the entropy source for ULID generation.
+	//
+	// NB: do not access this field directly - use GetULIDEntropy() instead.
+	// This field is exported only for the connExecutor to pass its "external"
+	// ULIDEntropyFactory.
+	ULIDEntropyFactory *ULIDEntropyFactory
+
+	// internalULIDEntropyFactory is the entropy source for ULID generation if
+	// ULIDEntropyFactory is not set. This field exists to allow not setting
+	// ULIDEntropyFactory on the code paths that don't need to preserve usage of
+	// the same RNG within a session.
+	internalULIDEntropyFactory ULIDEntropyFactory
 }
 
 // RNGFactory is a simple wrapper to preserve the RNG throughout the session.
@@ -326,6 +334,28 @@ func (r *RNGFactory) getOrCreate() *rand.Rand {
 		r.rng, _ = randutil.NewPseudoRand()
 	}
 	return r.rng
+}
+
+// ULIDEntropyFactory is a simple wrapper to preserve the ULID entropy
+// throughout the session.
+type ULIDEntropyFactory struct {
+	entropy ulid.MonotonicReader
+}
+
+// GetULIDEntropy returns the ULID entropy of the Context (which is lazily
+// instantiated if necessary).
+func (ec *Context) GetULIDEntropy() ulid.MonotonicReader {
+	if ec.ULIDEntropyFactory != nil {
+		return ec.ULIDEntropyFactory.getOrCreate(ec.GetRNG())
+	}
+	return ec.internalULIDEntropyFactory.getOrCreate(ec.GetRNG())
+}
+
+func (f *ULIDEntropyFactory) getOrCreate(rng *rand.Rand) ulid.MonotonicReader {
+	if f.entropy == nil {
+		f.entropy = ulid.Monotonic(rng, 0 /* inc */)
+	}
+	return f.entropy
 }
 
 // JobsProfiler is the interface used to fetch job specific execution details
@@ -905,6 +935,7 @@ type ReplicationStreamManager interface {
 	) error
 
 	DebugGetProducerStatuses(ctx context.Context) []*streampb.DebugProducerStatus
+	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
 
 	PartitionSpans(
 		ctx context.Context,
