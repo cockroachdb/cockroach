@@ -41,6 +41,14 @@ func (seb *streamEventBatcher) addSST(sst kvpb.RangeFeedSSTable) {
 	seb.size += sst.Size()
 }
 
+func (seb *streamEventBatcher) addKVWithDiff(kv roachpb.KeyValue, prev roachpb.Value) {
+	seb.batch.KeyValuesWithDiff = append(seb.batch.KeyValuesWithDiff, streampb.StreamEvent_KVWithDiff{
+		KeyValue:  kv,
+		PrevValue: prev,
+	})
+	seb.size += (kv.Size() + prev.Size())
+}
+
 func (seb *streamEventBatcher) addKV(kv roachpb.KeyValue) {
 	seb.batch.KeyValues = append(seb.batch.KeyValues, kv)
 	seb.size += kv.Size()

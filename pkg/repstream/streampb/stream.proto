@@ -142,7 +142,9 @@ message StreamPartitionSpec {
   // set.
   bool with_filtering = 8;
 
-  // NEXT ID: 10.
+  bool with_diff = 10;
+
+  // NEXT ID: 11.
 }
 
 // SpanConfigEventStreamSpec is the span config event stream specification.
@@ -193,12 +195,18 @@ message StreamedSpanConfigEntry {
 // StreamEvent describes a replication stream event
 message StreamEvent {
 
+  message KVWithDiff {
+    roachpb.KeyValue key_value = 1 [(gogoproto.nullable) = false];
+    roachpb.Value prev_value = 2 [(gogoproto.nullable) = false];
+  }
+
   message Batch {
     repeated roachpb.KeyValue key_values = 1 [(gogoproto.nullable) = false];
     repeated roachpb.RangeFeedSSTable ssts = 2 [(gogoproto.nullable) = false];
     repeated roachpb.RangeFeedDeleteRange del_ranges = 3 [(gogoproto.nullable) = false];
     repeated StreamedSpanConfigEntry span_configs = 4 [(gogoproto.nullable) = false];
     repeated bytes split_points = 5 [(gogoproto.casttype) =  "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    repeated KVWithDiff key_values_with_diff = 6 [(gogoproto.nullable) = false];;
   }
 
   // Checkpoint represents stream checkpoint.
