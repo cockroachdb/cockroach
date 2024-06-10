@@ -150,7 +150,7 @@ export const Loading = (props: React.PropsWithChildren<LoadingProps>) => {
     );
   }
   return (
-    (props.children && <>${props.children}</>) ||
+    (props.children && <>{props.children}</>) ||
     (props.render && props.render())
   );
 };
