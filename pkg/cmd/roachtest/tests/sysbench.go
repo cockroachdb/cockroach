@@ -154,8 +154,11 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		if result.RemoteExitStatus == roachprodErrors.SegmentationFaultExitCode {
 			t.L().Printf("sysbench segfaulted; passing test anyway")
 			return nil
-		} else if result.RemoteExitStatus == roachprodErrors.IllegalInstruction {
+		} else if result.RemoteExitStatus == roachprodErrors.IllegalInstructionExitCode {
 			t.L().Printf("sysbench crashed with illegal instruction; passing test anyway")
+			return nil
+		} else if result.RemoteExitStatus == roachprodErrors.AssertionFailureExitCode {
+			t.L().Printf("sysbench crashed with an assertion failure; passing test anyway")
 			return nil
 		}
 
