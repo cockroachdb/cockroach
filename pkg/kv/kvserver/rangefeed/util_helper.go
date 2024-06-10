@@ -62,7 +62,10 @@ func (q *muxEventQueue) pushBack(event sharedMuxEvent) {
 }
 
 func (q *muxEventQueue) popFront() (sharedMuxEvent, bool) {
-	if q.first == q.last && q.read == q.write {
+	//if q.first == q.last && q.read == q.write {
+	//	return sharedMuxEvent{}, false
+	//}
+	if q.size == 0 {
 		return sharedMuxEvent{}, false
 	}
 	if q.read == eventQueueChunkSize {

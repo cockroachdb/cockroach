@@ -128,8 +128,10 @@ type producer struct {
 
 // todo(wenyihu6): check for deadlock
 type StreamMuxer struct {
-	wrapped    kvpb.MuxRangeFeedEventSink
-	capacity   atomic.Int32
+	wrapped  kvpb.MuxRangeFeedEventSink
+	capacity atomic.Int32
+	// TODO(wenyihu6): should we get rid of notify and just always send events ->
+	// there is no way to publish all if overflowed
 	notify     chan struct{}
 	cleanup    chan int64
 	muxErrorsC chan *kvpb.MuxRangeFeedEvent
@@ -168,21 +170,21 @@ func NewStreamMuxer(wrapped kvpb.MuxRangeFeedEventSink) *StreamMuxer {
 	return muxer
 }
 
-func (m *StreamMuxer) sendEventToStream(ctx context.Context, e sharedMuxEvent) (err error) {
-	// alloc could be nil but release is safe to call on nil
-	defer e.alloc.Release(ctx)
-	switch {
-	case e.event != nil:
-		return m.wrapped.Send(&kvpb.MuxRangeFeedEvent{
-			RangeFeedEvent: *e.event,
-			RangeID:        e.rangeID,
-			StreamID:       e.streamID,
-		})
-	default:
-		// producers may be removed and empty event
-	}
-	return nil
-}
+//	func (m *StreamMuxer) sendEventToStream(ctx context.Context, e sharedMuxEvent) (err error) {
+//		// alloc could be nil but release is safe to call on nil
+//		defer e.alloc.Release(ctx)
+//		switch {
+//		case e.event != nil:
+//			return m.wrapped.Send(&kvpb.MuxRangeFeedEvent{
+//				RangeFeedEvent: *e.event,
+//				RangeID:        e.rangeID,
+//				StreamID:       e.streamID,
+//			})
+//		default:
+//			// producers may be removed and empty event
+//		}
+//		return nil
+//	}
 func (m *StreamMuxer) OutputLoop(ctx context.Context, stopper *stop.Stopper) {
 	// TODO(wenyihu6): do we need to watch stopper.ShouldQuiesce
 	for {
@@ -198,29 +200,33 @@ func (m *StreamMuxer) OutputLoop(ctx context.Context, stopper *stop.Stopper) {
 				return
 			}
 		case <-m.notify:
-			e, empty, overflowedAndDone := m.popFront()
-			if empty {
-				// no more events to send
-				break
-			}
-			if overflowedAndDone {
-				// TODO(wenyihu6): rationalize overflow and done should happen before empty
-				m.cleanupProducers(newErrBufferCapacityExceeded())
-				return
-			}
+			for {
+				e, empty, overflow := m.popFront()
+				if overflow && empty {
+					// TODO(wenyihu6): rationalize overflow and done should happen before empty
+					// overflowed and no more events should be added-> handled in pushBack
+					m.cleanupProducers(newErrBufferCapacityExceeded())
+					return
+				}
 
-			e.alloc.Release(ctx)
-			if e.event == nil {
-				continue
-			}
+				if empty {
+					// no more events to send
+					break
+				}
 
-			if err := m.wrapped.Send(&kvpb.MuxRangeFeedEvent{
-				RangeFeedEvent: *e.event,
-				RangeID:        e.rangeID,
-				StreamID:       e.streamID,
-			}); err != nil {
-				m.cleanupProducers(nil)
-				return
+				e.alloc.Release(ctx)
+				if e.event == nil {
+					continue
+				}
+
+				if err := m.wrapped.Send(&kvpb.MuxRangeFeedEvent{
+					RangeFeedEvent: *e.event,
+					RangeID:        e.rangeID,
+					StreamID:       e.streamID,
+				}); err != nil {
+					m.cleanupProducers(nil)
+					return
+				}
 			}
 		case streamId := <-m.cleanup:
 			m.cleanupProducerIfExists(streamId)
@@ -305,6 +311,9 @@ func (m *StreamMuxer) publishEvent(
 		alloc:    alloc,
 	}) {
 		alloc.Release(context.Background())
+		// TODO(wenyihu6): we should either always run draining queue or we should
+		// still notify if overflowed -> we need to send events in the buffer even
+		// during overflow
 		return
 	}
 
@@ -452,12 +461,11 @@ func (m *StreamMuxer) pushBack(event sharedMuxEvent) bool {
 	return true
 }
 
-func (m *StreamMuxer) popFront() (event sharedMuxEvent, empty bool, overflowedAndDone bool) {
+func (m *StreamMuxer) popFront() (event sharedMuxEvent, empty bool, overflow bool) {
 	m.queueMu.Lock()
 	defer m.queueMu.Unlock()
-	event, empty = m.queueMu.buffer.popFront()
-	overflow, remains := m.queueMu.overflow, m.queueMu.buffer.len()
-	return event, empty, overflow && remains == 0
+	event, ok := m.queueMu.buffer.popFront()
+	return event, !ok, m.queueMu.overflow
 }
 
 // TODO(wenyihu6): check if adding back to err overflow should trigger
