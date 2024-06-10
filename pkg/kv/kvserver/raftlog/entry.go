@@ -51,9 +51,9 @@ func EncodingOf(ent raftpb.Entry) (EntryEncoding, kvflowconnectedstream.RaftPrio
 
 	switch encoding {
 	case entryEncodingStandardWithRaftPriorityPrefixByte:
-		return EntryEncodingStandardWithRaftPriority, pri + 1, nil
+		return EntryEncodingStandardWithRaftPriority, pri, nil
 	case entryEncodingSideloadedWithRaftPriorityPrefixByte:
-		return EntryEncodingSideloadedWithRaftPriority, pri + 1, nil
+		return EntryEncodingSideloadedWithRaftPriority, pri, nil
 	case entryEncodingStandardWithACPrefixByte:
 		return EntryEncodingStandardWithAC, pri, nil
 	case entryEncodingSideloadedWithACPrefixByte:

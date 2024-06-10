@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -449,76 +447,109 @@ func (f *replicaFlowControlIntegrationImpl) clearState(ctx context.Context) {
 
 // ===================== RACv2 =====================
 
+// replicaRACv2Integration encapsulated the per-Replica state for integrating
+// with RACv2. It exists on both the leader and followers, and is a field in
+// Replica (Replica.raftMu.racV2Integration).
+//
+// It is partly initialized with only the *Replica. The remaining is lazily
+// initialized, as described below.
 type replicaRACv2Integration struct {
-	replica *Replica
-	// This can be 0, if the leaderID is not known.
-	leaderID              roachpb.ReplicaID
-	leaderNodeID          roachpb.NodeID
-	replicas              kvflowconnectedstream.ReplicaSet
-	rcAtLeader            kvflowconnectedstream.RangeController
+	// The Replica it is a part of.
+	replica             *Replica
+	admittedPiggybacker AdmittedPiggybackStateManager
+
+	// Transitions once from false => true when the Replica is destroyed.
+	destroyed bool
+
+	// Lazily initialized in onDescChanged, which must happen when the Replica
+	// becomes initialized. Until replicas is non-nil, most events are ignored.
+	replicas kvflowconnectedstream.ReplicaSet
+	// leaderID is set in tryUpdateLeader.
+	leaderID roachpb.ReplicaID
+
+	// leaderNodeID is a function of leaderID and replicas. It is set when
+	// leaderID is non-zero and replicas is initialized.
+	leaderNodeID roachpb.NodeID
+
+	// rcAtLeader is non-nil iff leaderID is equal to Replica.replicaID.
+	rcAtLeader kvflowconnectedstream.RangeController
+
+	// raftAdmittedInterface is exercised on all replicas.
 	raftAdmittedInterface kvflowconnectedstream.RaftAdmittedInterface
 
-	destroyed bool
+	// TODO(racV2-integration): synchronization.
+	waitingForAdmission         [kvflowconnectedstream.NumRaftPriorities][]uint64
+	scheduledAdmittedProcessing bool
 }
 
-// Should we make all the state transitions in handleRaftReadyRaftMuLocked?
+// We considered making this state transition in handleRaftReadyRaftMuLocked:
 //
 //   - Transitioning from follower => leader: r.mu.leaderID = leaderID is being set
 //     in handleRaftReadyRaftMuLocked. But Raft knows it is the leader after a Step.
 //     The small lag is ok in that we won't be delaying eval.
 //
 //   - Transitioning from leader => follower: Or the replica getting destroyed.
-//     We need to return the flow tokens immediaely, since we won't have them returned
+//     We need to return the flow tokens immediately, since we won't have them returned
 //     via Raft. And we need to stop WaitForEval.
 //
-// Due to the latter, we call tryUpdateLeader after calling Step.
+// Due to the latter, we call tryUpdateLeader after calling Step, instead of
+// in handleRaftReadyRaftMuLocked.
 //
 // Replica.raftMu is held. Replica.mu is not held.
-func (rr2 *replicaRACv2Integration) tryUpdateLeader(leaderID roachpb.ReplicaID) {
-	if rr2.destroyed || leaderID == rr2.leaderID {
+func (rr2 *replicaRACv2Integration) tryUpdateLeader(leaderID roachpb.ReplicaID, force bool) {
+	if rr2.destroyed || (leaderID == rr2.leaderID && !force) {
 		return
 	}
-	rd, ok := rr2.replicas[leaderID]
-	if !ok {
-		panic("")
-	}
-	rr2.leaderNodeID = rd.NodeID
-	// INVARIANT: leaderID != rr2.leaderID
-	if rr2.leaderID == rr2.replica.replicaID && leaderID != rr2.replica.replicaID {
-		// Transition from leader to follower.
-		rr2.rcAtLeader.Close()
-		rr2.rcAtLeader = nil
-	} else if leaderID == rr2.replica.replicaID {
-		// Transition from follower to leader.
-		var tenantID roachpb.TenantID
-		var rn *raft.RawNode
-		var leaseholderID roachpb.ReplicaID
-		var desc *roachpb.RangeDescriptor
-		func() {
-			rr2.replica.mu.RLock()
-			defer rr2.replica.mu.RUnlock()
-			tenantID = rr2.replica.mu.tenantID
-			rn = rr2.replica.mu.internalRaftGroup
-			leaseholderID = rr2.replica.mu.state.Lease.Replica.ReplicaID
-			desc = rr2.replica.mu.state.Desc
-		}()
-		opts := kvflowconnectedstream.RangeControllerOptions{
-			RangeID:           rr2.replica.RangeID,
-			TenantID:          tenantID,
-			LocalReplicaID:    rr2.replica.replicaID,
-			SSTokenCounter:    rr2.replica.store.cfg.RACv2StreamsTokenCounter,
-			SendTokensWatcher: rr2.replica.store.cfg.RACv2SendTokensWatcher,
-			RaftInterface:     kvflowconnectedstream.NewRaftInterface(rn),
-			MessageSender:     rr2.replica,
-			Scheduler:         (*racV2Scheduler)(rr2.replica.store.scheduler),
-		}
-		state := kvflowconnectedstream.RangeControllerInitState{
-			ReplicaSet:  descToReplicaSet(desc),
-			Leaseholder: leaseholderID,
-		}
-		rr2.rcAtLeader = kvflowconnectedstream.NewRangeControllerImpl(opts, state)
-	}
 	rr2.leaderID = leaderID
+	if rr2.replicas == nil {
+		// The state machine has not been initialized yet, so nothing more to do.
+		return
+	}
+	if rr2.leaderID == 0 {
+		rr2.leaderNodeID = 0
+	} else {
+		rd, ok := rr2.replicas[leaderID]
+		if !ok {
+			panic("leader is not in the set of replicas")
+		}
+		rr2.leaderNodeID = rd.NodeID
+	}
+	if rr2.leaderID != rr2.replica.replicaID {
+		if rr2.rcAtLeader != nil {
+			// Transition from leader to follower.
+			rr2.rcAtLeader.Close()
+			rr2.rcAtLeader = nil
+		}
+	} else {
+		if rr2.rcAtLeader == nil {
+			// Transition from follower to leader.
+			var tenantID roachpb.TenantID
+			var rn *raft.RawNode
+			var leaseholderID roachpb.ReplicaID
+			func() {
+				rr2.replica.mu.RLock()
+				defer rr2.replica.mu.RUnlock()
+				tenantID = rr2.replica.mu.tenantID
+				rn = rr2.replica.mu.internalRaftGroup
+				leaseholderID = rr2.replica.mu.state.Lease.Replica.ReplicaID
+			}()
+			opts := kvflowconnectedstream.RangeControllerOptions{
+				RangeID:           rr2.replica.RangeID,
+				TenantID:          tenantID,
+				LocalReplicaID:    rr2.replica.replicaID,
+				SSTokenCounter:    rr2.replica.store.cfg.RACv2StreamsTokenCounter,
+				SendTokensWatcher: rr2.replica.store.cfg.RACv2SendTokensWatcher,
+				RaftInterface:     kvflowconnectedstream.NewRaftInterface(rn),
+				MessageSender:     rr2.replica,
+				Scheduler:         (*racV2Scheduler)(rr2.replica.store.scheduler),
+			}
+			state := kvflowconnectedstream.RangeControllerInitState{
+				ReplicaSet:  rr2.replicas,
+				Leaseholder: leaseholderID,
+			}
+			rr2.rcAtLeader = kvflowconnectedstream.NewRangeControllerImpl(opts, state)
+		}
+	}
 }
 
 func descToReplicaSet(desc *roachpb.RangeDescriptor) kvflowconnectedstream.ReplicaSet {
@@ -531,15 +562,15 @@ func descToReplicaSet(desc *roachpb.RangeDescriptor) kvflowconnectedstream.Repli
 
 // We need to know when r.mu.destroyStatus is updated, so that we can close,
 // and return tokens. RACv1 is handling this state change in
-// disconnectReplicationRaftMuLocked. Make sure this is not too late in that
-// these flow tokens may be needed by others.
+// disconnectReplicationRaftMuLocked, and so is RACv2. Make sure this is not
+// too late in that these flow tokens may be needed by others.
 //
 // Replica.raftMu is held. Replica.mu is not held.
 func (rr2 *replicaRACv2Integration) onDestroy() {
 	if rr2.rcAtLeader != nil {
 		rr2.rcAtLeader.Close()
-		rr2.rcAtLeader = nil
 	}
+	*rr2 = replicaRACv2Integration{}
 	rr2.destroyed = true
 }
 
@@ -553,7 +584,8 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaseholder(replicaID roachpb.Repli
 	}
 }
 
-// RangeController implements kvadmission.RangeControllerProvider.
+// RangeController implements kvadmission.RangeControllerProvider. This is
+// needed for eval.
 //
 // TODO(racV2-integration): synchronization.
 func (rr2 *replicaRACv2Integration) RangeController() kvflowconnectedstream.RangeController {
@@ -562,11 +594,28 @@ func (rr2 *replicaRACv2Integration) RangeController() kvflowconnectedstream.Rang
 
 // Replica.raftMu and Replica.mu are held.
 func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor) {
-	rr2.replicas = descToReplicaSet(desc)
-	if rr2.rcAtLeader == nil {
-		return
+	wasUninitialized := false
+	if rr2.replicas == nil {
+		wasUninitialized = true
+		var rn *raft.RawNode
+		func() {
+			rr2.replica.mu.RLock()
+			defer rr2.replica.mu.RUnlock()
+			rn = rr2.replica.mu.internalRaftGroup
+		}()
+		rr2.raftAdmittedInterface = kvflowconnectedstream.NewRaftAdmittedInterface(rn)
 	}
-	rr2.rcAtLeader.SetReplicas(rr2.replicas)
+	rr2.replicas = descToReplicaSet(desc)
+	if wasUninitialized {
+		if rr2.leaderID != 0 {
+			rr2.tryUpdateLeader(rr2.leaderID, true)
+		}
+	} else {
+		if rr2.rcAtLeader == nil {
+			return
+		}
+		rr2.rcAtLeader.SetReplicas(rr2.replicas)
+	}
 }
 
 func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent() {
@@ -577,29 +626,39 @@ func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent() {
 
 // entries can be empty, and there may not have been a Ready.
 func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
-	// TODO(racV2-integration):
+	if rr2.replicas == nil {
+		return
+	}
+	// TODO(racV2-integration): admitted processing.
+	func() {
+		defer func() {
+			rr2.scheduledAdmittedProcessing = false
+		}()
+		// If there was a recent MsgStoreAppendResp, it has already been stepped.
+		rr2.raftAdmittedInterface.GetAdmitted()
 
-	/*
-			- MsgStoreAppendResp has already been stepped.
+		/*
+				- MsgStoreAppendResp has already been stepped.
 
-			  - [AH2] In handleRaftReadyRaftMuLocked, this queue is used to remove things from
-			    notAdmitted. Additionally RaftInterface is queried for stableIndex. If a
-			    notAdmitted[i] is empty, admitted[i] = stableIndex, else admitted[i] =
-			    notAdmitted[i][0]-1. RaftInterface.AdvanceAdmitted is called, which may
-			    return a MsgAppResp.
-			  - MsgAppResp is sent.
+				  - [AH2] In handleRaftReadyRaftMuLocked, this queue is used to remove things from
+				    notAdmitted. Additionally RaftInterface is queried for stableIndex. If a
+				    notAdmitted[i] is empty, admitted[i] = stableIndex, else admitted[i] =
+				    notAdmitted[i][0]-1. RaftInterface.AdvanceAdmitted is called, which may
+				    return a MsgAppResp.
+				  - MsgAppResp is sent.
 
-			We will do a similar piggy-backing:
+				We will do a similar piggy-backing:
 
-			- Say m is the raftpb.Message corresponding to the MsgAppResp that was
-			  returned from RaftInterface.AdvanceAdmitted
-			- Wrap it with the RangeID, and enqueue it for the leader's nodeid in the
-			  RaftTransport (this will actually be much simpler than the
-			  current RaftTransport.kvflowControl plumbing).
-			- Every RaftMessageRequest for the node will piggy-back these.
+				- Say m is the raftpb.Message corresponding to the MsgAppResp that was
+				  returned from RaftInterface.AdvanceAdmitted
+				- Wrap it with the RangeID, and enqueue it for the leader's nodeid in the
+				  RaftTransport (this will actually be much simpler than the
+				  current RaftTransport.kvflowControl plumbing).
+				- Every RaftMessageRequest for the node will piggy-back these.
 
-		add to AdmittedPiggybackStateManager.
-	*/
+			add to AdmittedPiggybackStateManager.
+		*/
+	}()
 
 	if rr2.rcAtLeader == nil {
 		return
@@ -618,11 +677,14 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
 // Only called when RaftMessageRequest is received with a MsgApp. So never
 // called for leader.
 func (rr2 *replicaRACv2Integration) sideChannelForInheritedPriority(
-	first, last uint64, inheritedPri kvflowconnectedstream.RaftPriority,
+	first, last uint64, inheritedPri uint8,
 ) {
+	if inheritedPri == 0 {
+		return
+	}
+	pri := kvflowconnectedstream.UndoRaftPriorityConversionForUnusedZero(inheritedPri)
 	// TODO(racV2-integration):
-	switch inheritedPri {
-	case kvflowconnectedstream.RaftUnusedZeroValuePriority:
+	switch pri {
 	case kvflowconnectedstream.NotSubjectToACForFlowControl:
 	case kvflowconnectedstream.PriorityNotInheritedForFlowControl:
 	default:
@@ -630,34 +692,41 @@ func (rr2 *replicaRACv2Integration) sideChannelForInheritedPriority(
 }
 
 func (rr2 *replicaRACv2Integration) admittedLogEntry(
-	ctx context.Context,
-	origin roachpb.NodeID,
-	pri admissionpb.WorkPriority,
-	storeID roachpb.StoreID,
-	pos admission.LogPosition,
+	ctx context.Context, pri kvflowconnectedstream.RaftPriority, index uint64,
+) {
+	// TODO(racV2-integration): synchronization.
+	// Can be synchronous within handleRaftReadyRaftMuLocked or not. We need
+	// synchronization to handle the latter case.
+	if rr2.removeFromWaitingForAdmission(pri, index) {
+		if !rr2.scheduledAdmittedProcessing {
+			rr2.replica.store.scheduler.EnqueueRaftReady(rr2.replica.RangeID)
+			rr2.scheduledAdmittedProcessing = true
+		}
+	}
+}
+
+func (rr2 *replicaRACv2Integration) removeFromWaitingForAdmission(
+	pri kvflowconnectedstream.RaftPriority, index uint64,
+) (admittedMayAdvance bool) {
+	// TODO(racV2-integration):
+	return false
+}
+
+func (rr2 *replicaRACv2Integration) addToWaitingForAdmission(
+	pri kvflowconnectedstream.RaftPriority, index uint64,
 ) {
 	// TODO(racV2-integration):
-	//
-	// Can be synchronous within handleRaftReadyRaftMuLocked.
-
-	/*
-	   - [AH1] The structs corresponding to the admitted entries are queued in the
-	      Replica akin to how we queue Replica.localMsgs and the raftScheduler will be
-	      told to do ready processing (there may not be a Raft ready, but this is akin
-	      to how handleRaftReadyRaftMuLocked does
-	      deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked).
-
-	*/
 }
 
 // Subset of kvadmission.Controller needed here.
+// We don't actually use anything other than the RaftPriority and index
 type acWorkQueue interface {
 	AdmitRaftEntryV1OrV2(
 		ctx context.Context, tenantID roachpb.TenantID, storeID roachpb.StoreID, rangeID roachpb.RangeID,
 		entry raftpb.Entry, meta kvflowcontrolpb.RaftAdmissionMeta, isSideloaded bool)
 }
 
-// TODO(racV2-integration): add a ReplicaID too the struct we hand to AC.
+// TODO(racV2-integration): add a ReplicaID to the struct we hand to AC.
 // (rangeID, storeID) does not uniquely identify a replica. If a store is
 // removed from a range, and then added back in, it will have the same
 // (rangeID, storeID), but notifications for old admitted entries, and the
