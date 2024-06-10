@@ -75,6 +75,7 @@ type Event interface {
 
 // kvEvent is a key value pair that needs to be ingested.
 type kvEvent struct {
+	emptyEvent
 	kv []roachpb.KeyValue
 }
 
@@ -90,38 +91,9 @@ func (kve kvEvent) GetKVs() []roachpb.KeyValue {
 	return kve.kv
 }
 
-// GetSSTable implements the Event interface.
-func (kve kvEvent) GetSSTable() *kvpb.RangeFeedSSTable {
-	return nil
-}
-
-// GetDeleteRange implements the Event interface.
-func (kve kvEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
-	return nil
-}
-
-// GetResolvedSpans implements the Event interface.
-func (kve kvEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return nil
-}
-
-// GetSpanConfigEvent implements the Event interface.
-func (kve kvEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
-	return nil
-}
-
-// GetSplitEvent implements the Event interface.
-func (kve kvEvent) GetSplitEvent() *roachpb.Key {
-	return nil
-}
-
-// GetKVWithDiff implements the Event interface.
-func (kve kvEvent) GetKVWithDiff() []streampb.StreamEvent_KVWithDiff {
-	return nil
-}
-
 // sstableEvent is a sstable that needs to be ingested.
 type sstableEvent struct {
+	emptyEvent
 	sst kvpb.RangeFeedSSTable
 }
 
@@ -130,44 +102,16 @@ func (sste sstableEvent) Type() EventType {
 	return SSTableEvent
 }
 
-// GetKVs implements the Event interface.
-func (sste sstableEvent) GetKVs() []roachpb.KeyValue {
-	return nil
-}
-
 // GetSSTable implements the Event interface.
 func (sste sstableEvent) GetSSTable() *kvpb.RangeFeedSSTable {
 	return &sste.sst
-}
-
-// GetDeleteRange implements the Event interface.
-func (sste sstableEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
-	return nil
-}
-
-// GetResolvedSpans implements the Event interface.
-func (sste sstableEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return nil
-}
-
-// GetSpanConfigEvent implements the Event interface.
-func (sste sstableEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
-	return nil
-}
-
-// GetSplitEvent implements the Event interface.
-func (sste sstableEvent) GetSplitEvent() *roachpb.Key {
-	return nil
-}
-
-func (sste sstableEvent) GetKVWithDiff() []streampb.StreamEvent_KVWithDiff {
-	return nil
 }
 
 var _ Event = sstableEvent{}
 
 // delRangeEvent is a DeleteRange event that needs to be ingested.
 type delRangeEvent struct {
+	emptyEvent
 	delRange kvpb.RangeFeedDeleteRange
 }
 
@@ -176,39 +120,9 @@ func (dre delRangeEvent) Type() EventType {
 	return DeleteRangeEvent
 }
 
-// GetKVs implements the Event interface.
-func (dre delRangeEvent) GetKVs() []roachpb.KeyValue {
-	return nil
-}
-
-// GetSSTable implements the Event interface.
-func (dre delRangeEvent) GetSSTable() *kvpb.RangeFeedSSTable {
-	return nil
-}
-
 // GetDeleteRange implements the Event interface.
 func (dre delRangeEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
 	return &dre.delRange
-}
-
-// GetResolvedSpans implements the Event interface.
-func (dre delRangeEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return nil
-}
-
-// GetSpanConfigEvent implements the Event interface.
-func (dre delRangeEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
-	return nil
-}
-
-// GetSplitEvent implements the Event interface.
-func (dre delRangeEvent) GetSplitEvent() *roachpb.Key {
-	return nil
-}
-
-// GetKVWithDiff implements the Event interface.
-func (dre delRangeEvent) GetKVWithDiff() []streampb.StreamEvent_KVWithDiff {
-	return nil
 }
 
 var _ Event = delRangeEvent{}
@@ -216,6 +130,7 @@ var _ Event = delRangeEvent{}
 // checkpointEvent indicates that the stream has emitted every change for all
 // keys in the span it is responsible for up until this timestamp.
 type checkpointEvent struct {
+	emptyEvent
 	resolvedSpans []jobspb.ResolvedSpan
 }
 
@@ -226,42 +141,13 @@ func (ce checkpointEvent) Type() EventType {
 	return CheckpointEvent
 }
 
-// GetKVs implements the Event interface.
-func (ce checkpointEvent) GetKVs() []roachpb.KeyValue {
-	return nil
-}
-
-// GetSSTable implements the Event interface.
-func (ce checkpointEvent) GetSSTable() *kvpb.RangeFeedSSTable {
-	return nil
-}
-
-// GetDeleteRange implements the Event interface.
-func (ce checkpointEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
-	return nil
-}
-
 // GetResolvedSpans implements the Event interface.
 func (ce checkpointEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
 	return ce.resolvedSpans
 }
 
-// GetSpanConfigEvent implements the Event interface.
-func (ce checkpointEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
-	return nil
-}
-
-// GetSplitEvent implements the Event interface.
-func (ce checkpointEvent) GetSplitEvent() *roachpb.Key {
-	return nil
-}
-
-// GetKVWithDiff implements the Event interface.
-func (ce checkpointEvent) GetKVWithDiff() []streampb.StreamEvent_KVWithDiff {
-	return nil
-}
-
 type spanConfigEvent struct {
+	emptyEvent
 	spanConfig streampb.StreamedSpanConfigEntry
 }
 
@@ -272,42 +158,13 @@ func (spe spanConfigEvent) Type() EventType {
 	return SpanConfigEvent
 }
 
-// GetKVs implements the Event interface.
-func (spe spanConfigEvent) GetKVs() []roachpb.KeyValue {
-	return nil
-}
-
-// GetSSTable implements the Event interface.
-func (spe spanConfigEvent) GetSSTable() *kvpb.RangeFeedSSTable {
-	return nil
-}
-
-// GetDeleteRange implements the Event interface.
-func (spe spanConfigEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
-	return nil
-}
-
-// GetResolvedSpans implements the Event interface.
-func (spe spanConfigEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return nil
-}
-
 // GetSpanConfigEvent implements the Event interface.
 func (spe spanConfigEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
 	return &spe.spanConfig
 }
 
-// GetSplitEvent implements the Event interface.
-func (spe spanConfigEvent) GetSplitEvent() *roachpb.Key {
-	return nil
-}
-
-// GetKVWithDiff implements the Event interface.
-func (spe spanConfigEvent) GetKVWithDiff() []streampb.StreamEvent_KVWithDiff {
-	return nil
-}
-
 type splitEvent struct {
+	emptyEvent
 	splitKey roachpb.Key
 }
 
@@ -318,43 +175,14 @@ func (se splitEvent) Type() EventType {
 	return SplitEvent
 }
 
-// GetKV implements the Event interface.
-func (se splitEvent) GetKVs() []roachpb.KeyValue {
-	return nil
-}
-
-// GetSSTable implements the Event interface.
-func (se splitEvent) GetSSTable() *kvpb.RangeFeedSSTable {
-	return nil
-}
-
-// GetDeleteRange implements the Event interface.
-func (se splitEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
-	return nil
-}
-
-// GetResolvedSpans implements the Event interface.
-func (se splitEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return nil
-}
-
-// GetSpanConfigEvent implements the Event interface.
-func (se splitEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
-	return nil
-}
-
 // GetSplitEvent implements the Event interface.
 func (se splitEvent) GetSplitEvent() *roachpb.Key {
 	return &se.splitKey
 }
 
-// GetKVWithDiff implements the Event interface.
-func (se splitEvent) GetKVWithDiff() []streampb.StreamEvent_KVWithDiff {
-	return nil
-}
-
 // kvEvent is a key value pair that needs to be ingested.
 type kvEventWithDiff struct {
+	emptyEvent
 	kvsWithDiff []streampb.StreamEvent_KVWithDiff
 }
 
@@ -363,36 +191,6 @@ var _ Event = kvEventWithDiff{}
 // Type implements the Event interface.
 func (kve kvEventWithDiff) Type() EventType {
 	return KVWithDiffEvent
-}
-
-// GetKVs implements the Event interface.
-func (kve kvEventWithDiff) GetKVs() []roachpb.KeyValue {
-	return nil
-}
-
-// GetSSTable implements the Event interface.
-func (kve kvEventWithDiff) GetSSTable() *kvpb.RangeFeedSSTable {
-	return nil
-}
-
-// GetDeleteRange implements the Event interface.
-func (kve kvEventWithDiff) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
-	return nil
-}
-
-// GetResolvedSpans implements the Event interface.
-func (kve kvEventWithDiff) GetResolvedSpans() []jobspb.ResolvedSpan {
-	return nil
-}
-
-// GetSpanConfigEvent implements the Event interface.
-func (kve kvEventWithDiff) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
-	return nil
-}
-
-// GetSplitEvent implements the Event interface.
-func (kve kvEventWithDiff) GetSplitEvent() *roachpb.Key {
-	return nil
 }
 
 // GetKVWithDiff implements the Event interface.
@@ -430,4 +228,43 @@ func MakeSplitEvent(splitKey roachpb.Key) Event {
 
 func MakeKVWithDiffEvent(kvsWithDiff []streampb.StreamEvent_KVWithDiff) Event {
 	return kvEventWithDiff{kvsWithDiff: kvsWithDiff}
+}
+
+// emptyEvent is not an event (no Type method) but it is used to
+// reduce the boilerplate above.
+type emptyEvent struct{}
+
+// GetKVs implements the Event interface.
+func (ee emptyEvent) GetKVs() []roachpb.KeyValue {
+	return nil
+}
+
+// GetSSTable implements the Event interface.
+func (ee emptyEvent) GetSSTable() *kvpb.RangeFeedSSTable {
+	return nil
+}
+
+// GetDeleteRange implements the Event interface.
+func (ee emptyEvent) GetDeleteRange() *kvpb.RangeFeedDeleteRange {
+	return nil
+}
+
+// GetResolvedSpans implements the Event interface.
+func (ee emptyEvent) GetResolvedSpans() []jobspb.ResolvedSpan {
+	return nil
+}
+
+// GetSpanConfigEvent implements the Event interface.
+func (ee emptyEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
+	return nil
+}
+
+// GetSplitEvent implements the Event interface.
+func (ee emptyEvent) GetSplitEvent() *roachpb.Key {
+	return nil
+}
+
+// GetKVWithDiff implements the Event interface.
+func (ee emptyEvent) GetKVWithDiff() []streampb.StreamEvent_KVWithDiff {
+	return nil
 }
