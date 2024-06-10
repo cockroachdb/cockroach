@@ -48,8 +48,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	serverB := testcluster.StartTestCluster(t, 1, clusterArgs)
 	defer serverB.Stopper().Stop(ctx)
 
-	source := sqlutils.MakeSQLRunner(serverA.Server(0).ApplicationLayer().SQLConn(t))
-	target := sqlutils.MakeSQLRunner(serverB.Server(0).ApplicationLayer().SQLConn(t))
+	serverASQL := sqlutils.MakeSQLRunner(serverA.Server(0).ApplicationLayer().SQLConn(t))
+	serverBSQL := sqlutils.MakeSQLRunner(serverB.Server(0).ApplicationLayer().SQLConn(t))
 
 	for _, s := range []string{
 		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
@@ -65,17 +65,17 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 		"SET CLUSTER SETTING logical_replication.consumer.minimum_flush_interval = '10ms'",
 		"SET CLUSTER SETTING logical_replication.consumer.timestamp_granularity = '100ms'",
 	} {
-		source.Exec(t, s)
-		target.Exec(t, s)
+		serverASQL.Exec(t, s)
+		serverBSQL.Exec(t, s)
 	}
 
-	source.Exec(t, "CREATE TABLE tab (pk int primary key, payload string)")
-	target.Exec(t, "CREATE TABLE tab (pk int primary key, payload string)")
-	source.Exec(t, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
-	target.Exec(t, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
+	serverASQL.Exec(t, "CREATE TABLE tab (pk int primary key, payload string)")
+	serverBSQL.Exec(t, "CREATE TABLE tab (pk int primary key, payload string)")
+	serverASQL.Exec(t, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
+	serverBSQL.Exec(t, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
 
-	source.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
-	target.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
+	serverASQL.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
+	serverBSQL.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
 
 	serverAURL, cleanup := sqlutils.PGUrl(t, serverA.Server(0).ApplicationLayer().SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
@@ -86,31 +86,31 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 		jobAID jobspb.JobID
 		jobBID jobspb.JobID
 	)
-	target.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", serverAURL.String(), `ARRAY['tab']`)).Scan(&jobAID)
-	source.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", serverBURL.String(), `ARRAY['tab']`)).Scan(&jobBID)
+	serverASQL.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", serverBURL.String(), `ARRAY['tab']`)).Scan(&jobAID)
+	serverBSQL.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", serverAURL.String(), `ARRAY['tab']`)).Scan(&jobBID)
+
+	now := serverA.Server(0).Clock().Now()
 	t.Logf("waiting for replication job %d", jobAID)
-	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), target, jobAID)
+	WaitUntilReplicatedTime(t, now, serverASQL, jobAID)
 	t.Logf("waiting for replication job %d", jobBID)
-	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), source, jobBID)
+	WaitUntilReplicatedTime(t, now, serverBSQL, jobBID)
 
-	source.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
-	target.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
-	source.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
-	target.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
+	serverASQL.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
+	serverBSQL.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
+	serverASQL.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
+	serverBSQL.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
 
-	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), target, jobAID)
-	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), source, jobBID)
+	now = serverA.Server(0).Clock().Now()
+	WaitUntilReplicatedTime(t, now, serverASQL, jobAID)
+	WaitUntilReplicatedTime(t, now, serverBSQL, jobBID)
 
-	target.CheckQueryResults(t, "SELECT * from tab", [][]string{
+	expectedRows := [][]string{
 		{"1", "goodbye, again"},
 		{"2", "potato"},
 		{"3", "celeriac"},
-	})
-	source.CheckQueryResults(t, "SELECT * from tab", [][]string{
-		{"1", "goodbye, again"},
-		{"2", "potato"},
-		{"3", "celeriac"},
-	})
+	}
+	serverBSQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
+	serverASQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
 }
 
 func WaitUntilReplicatedTime(
