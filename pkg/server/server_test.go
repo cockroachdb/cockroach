@@ -700,6 +700,8 @@ func TestServeIndexHTML(t *testing.T) {
 	unlinkFakeUI := func() {
 		ui.HaveUI = false
 	}
+	major, minor := build.BranchReleaseSeries()
+	version := fmt.Sprintf("v%d.%d", major, minor)
 
 	t.Run("Insecure mode", func(t *testing.T) {
 		srv := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -759,7 +761,7 @@ Binary built without web UI.
 			expected := fmt.Sprintf(
 				`{"Insecure":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{"can_view_kv_metric_dashboards":true},"OIDCGenerateJWTAuthTokenEnabled":false,"LicenseType":"OSS","SecondsUntilLicenseExpiry":0,"IsManaged":false}`,
 				build.GetInfo().Tag,
-				build.BinaryVersionPrefix(),
+				version,
 				1,
 			)
 			require.Equal(t, expected, string(respBytes))
@@ -787,7 +789,7 @@ Binary built without web UI.
 				fmt.Sprintf(
 					`{"Insecure":false,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{"can_view_kv_metric_dashboards":true},"OIDCGenerateJWTAuthTokenEnabled":false,"LicenseType":"OSS","SecondsUntilLicenseExpiry":0,"IsManaged":false}`,
 					build.GetInfo().Tag,
-					build.BinaryVersionPrefix(),
+					version,
 					1,
 				),
 			},
@@ -796,7 +798,7 @@ Binary built without web UI.
 				fmt.Sprintf(
 					`{"Insecure":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{"can_view_kv_metric_dashboards":true},"OIDCGenerateJWTAuthTokenEnabled":false,"LicenseType":"OSS","SecondsUntilLicenseExpiry":0,"IsManaged":false}`,
 					build.GetInfo().Tag,
-					build.BinaryVersionPrefix(),
+					version,
 					1,
 				),
 			},

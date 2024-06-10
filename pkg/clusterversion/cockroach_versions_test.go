@@ -169,7 +169,8 @@ func TestReleaseSeries(t *testing.T) {
 	}
 
 	// Verify the latest version.
-	require.Equal(t, fmt.Sprintf("v%s", Latest.ReleaseSeries()), build.BinaryVersionPrefix())
+	major, minor := build.BranchReleaseSeries()
+	require.Equal(t, fmt.Sprintf("v%s", Latest.ReleaseSeries()), fmt.Sprintf("v%d.%d", major, minor))
 
 	// Verify the ReleaseSeries results down to MinSupported.
 	expected := Latest.ReleaseSeries()
