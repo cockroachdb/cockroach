@@ -481,6 +481,7 @@ func (r *Registry) maybeClearLease(job *Job, jobErr error) {
 	if jobErr == nil {
 		return
 	}
+	r.unregister(job.ID())
 	r.clearLeaseForJobID(job.ID(), r.db.Executor(), nil /* txn */)
 }
 
