@@ -2434,7 +2434,11 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 			logFileName = l.File.Name()
 		}
 		createFailedFile(logFileName)
-		return errors.Wrapf(err, "full command output in %s.log", logFile)
+		if c.l.File != nil {
+			return errors.Wrapf(err, "full command output in %s.log", logFile)
+		} else {
+			return err
+		}
 	}
 	l.Printf("> result: <ok>")
 	return nil
