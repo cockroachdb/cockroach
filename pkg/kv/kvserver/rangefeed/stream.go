@@ -34,21 +34,18 @@ type LockedRangefeedStreamAdapter struct {
 
 var _ BufferedStream = (*LockedRangefeedStreamAdapter)(nil)
 
-func (s *LockedRangefeedStreamAdapter) Context() context.Context {
-	return s.Wrapped.Context()
-}
-
 func (s *LockedRangefeedStreamAdapter) SendUnbuffered(e *kvpb.RangeFeedEvent) error {
-	s.sendMu.Lock()
-	defer s.sendMu.Unlock()
-	return s.Wrapped.Send(e)
+	//s.sendMu.Lock()
+	//defer s.sendMu.Unlock()
+	//return s.Wrapped.Send(e)
+	return nil
 }
 
 func (s *LockedRangefeedStreamAdapter) SendBuffered(
 	event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
-	alloc.Release(context.Background())
-	_ = s.SendUnbuffered(event)
+	//alloc.Release(context.Background())
+	//_ = s.SendUnbuffered(event)
 }
 
 func (s *LockedRangefeedStreamAdapter) SendError(_ *kvpb.Error) {
@@ -67,9 +64,8 @@ type MuxFeedStream struct {
 }
 
 type Muxer interface {
-	Register(streamID int64, rangeID roachpb.RangeID)
+	Register(streamID int64, rangeID roachpb.RangeID, rangefeedCleanUp func())
 	// There should be a node level clean up and a rangefeed level clean up.
-	AddRangefeedCleanUpCallback(streamID int64, cleanup func())
 	SendUnbuffered(*kvpb.MuxRangeFeedEvent) error
 	PublishEvent(streamId int64,
 		rangeID roachpb.RangeID,
@@ -91,21 +87,8 @@ func (m *StreamMuxer) PublishEvent(
 	m.publishEvent(streamId, rangeID, event, alloc)
 }
 
-func (m *StreamMuxer) AddRangefeedCleanUpCallback(streamID int64, cleanup func()) {
-	p, ok := m.getProducerIfExists(streamID)
-	if !ok {
-		return
-	}
-	p.rangefeedCleanUp = cleanup
-}
-
-func (m *StreamMuxer) Register(streamID int64, rangeID roachpb.RangeID) {
-	//s := &StreamSink{
-	//	StreamID:    streamID,
-	//	RangeID:     rangeID,
-	//	StreamMuxer: m,
-	//}
-	m.addProducer(streamID, rangeID)
+func (m *StreamMuxer) Register(streamID int64, rangeID roachpb.RangeID, cleanup func()) {
+	m.addProducer(streamID, rangeID, cleanup)
 }
 
 func (s *StreamSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
@@ -283,13 +266,15 @@ func (m *StreamMuxer) HandleRangefeedDisconnectError(
 	streamId int64, rangeId roachpb.RangeID, err *kvpb.Error,
 ) {
 	p, ok := m.getProducerIfExists(streamId)
-	needRangefeedLevelCleanUp := ok && p.isDisconnected()
+	p.Lock()
+	needRangefeedLevelCleanUp := ok && p.disconnected
 	if needRangefeedLevelCleanUp {
 		// check if accessing lock multiple times here is good practise
 		// dont delete producer here
-		p.setDisconnected()
+		p.disconnected = true
 	}
 	m.removeProducerEvent(streamId)
+	p.Unlock()
 	// node level clean up first
 	loaded := m.nodeLevelCleanUp(streamId)
 	if loaded {
@@ -342,14 +327,16 @@ func (m *StreamMuxer) publishEvent(
 	}
 }
 
-func (m *StreamMuxer) addProducer(streamId int64, rangeID roachpb.RangeID) {
+func (m *StreamMuxer) addProducer(
+	streamId int64, rangeID roachpb.RangeID, rangefeedCleanUp func(),
+) {
 	m.prodsMu.Lock()
 	defer m.prodsMu.Unlock()
 	if _, ok := m.prodsMu.prods[streamId]; ok {
 		log.Error(context.Background(), "stream already exists")
 	}
 	m.capacity.Add(defaultEventBufferCapacity)
-	m.prodsMu.prods[streamId] = &producer{streamId: streamId, rangeID: rangeID, rangefeedCleanUp: func() {}}
+	m.prodsMu.prods[streamId] = &producer{streamId: streamId, rangeID: rangeID, rangefeedCleanUp: rangefeedCleanUp}
 }
 
 func (m *StreamMuxer) popAllConnectedProducers() (prods []*producer) {
@@ -369,12 +356,6 @@ func (p *producer) isDisconnected() bool {
 	p.RLock()
 	defer p.RUnlock()
 	return !p.disconnected
-}
-
-func (p *producer) setDisconnected() {
-	p.Lock()
-	defer p.Unlock()
-	p.disconnected = true
 }
 
 // shouldn't happen in the same goroutine as r.disconnect

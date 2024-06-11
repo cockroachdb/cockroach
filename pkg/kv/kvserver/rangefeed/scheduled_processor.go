@@ -317,7 +317,6 @@ func (p *ScheduledProcessor) Register(
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
-	stream.StreamMuxer.Register(stream.StreamID, stream.RangeID)
 	r := newNonBufferedRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
 		p.Config.EventChanCap, p.Metrics, stream)
@@ -346,7 +345,7 @@ func (p *ScheduledProcessor) Register(
 		// make sure disconnect invoke this might disconnect
 
 		// Run an output loop for the registry.
-		stream.StreamMuxer.AddRangefeedCleanUpCallback(stream.StreamID, func() {
+		stream.StreamMuxer.Register(stream.StreamID, stream.RangeID, func() {
 			r.cleanup()
 			if p.unregisterClient(&r) {
 				if disconnectFn != nil {
