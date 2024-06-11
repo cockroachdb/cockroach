@@ -32,6 +32,11 @@ func (p *defaultProvider) Start(ctx context.Context, stopper *stop.Stopper) {
 			p.store.clear()
 		}
 	})
+	AnomalyDetectionEnabled.SetOnChange(&p.anomalyDetector.settings.SV, func(ctx context.Context) {
+		if !AnomalyDetectionEnabled.Get(&p.anomalyDetector.settings.SV) {
+			p.anomalyDetector.reset()
+		}
+	})
 	p.ingester.Start(ctx, stopper)
 }
 
@@ -52,6 +57,13 @@ func (p *defaultProvider) Reader() Reader {
 // LatencyInformation implements the Provider interface.
 func (p *defaultProvider) LatencyInformation() LatencyInformation {
 	return p.anomalyDetector
+}
+
+// Reset implements the Provider interface.
+func (p *defaultProvider) Reset() {
+	p.ingester.Clear()
+	p.anomalyDetector.reset()
+	p.store.clear()
 }
 
 type nullWriter struct{}
