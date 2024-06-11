@@ -567,6 +567,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 
 	t.Run("plan-gist matching", func(t *testing.T) {
 		r.Exec(t, "CREATE TABLE gist (k INT PRIMARY KEY);")
+		r.Exec(t, "INSERT INTO gist SELECT generate_series(1, 10)")
 		const fprint = `SELECT * FROM gist`
 
 		// Come up with a target gist.
@@ -580,20 +581,20 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				if name != "plan.txt" {
 					return nil
 				}
-				// Add a new line at the beginning for cleaner formatting in the
-				// test.
-				contents = "\n" + contents
-				// The gist appears to be somewhat non-deterministic (but its
-				// decoding stays the same), so we populate the expected
-				// contents based on the particular gist.
-				expected := fmt.Sprintf(`
--- plan is incomplete due to gist matching: %s
-
-• scan
-  table: gist@gist_pkey
-  spans: FULL SCAN`, gist)
-				if contents != expected {
-					return errors.Newf("unexpected contents of plan.txn\nexpected:\n%s\ngot:\n%s", expected, contents)
+				// We don't hard-code the full expected output here so that it
+				// doesn't need an update every time we change EXPLAIN ANALYZE
+				// output format. Instead, we only assert that a few lines are
+				// present in the output.
+				for _, expectedLine := range []string{
+					"• scan",
+					"  sql nodes: n1",
+					"  actual row count: 10",
+					"  table: gist@gist_pkey",
+					"  spans: FULL SCAN",
+				} {
+					if !strings.Contains(contents, expectedLine) {
+						return errors.Newf("didn't find %q in the output: %v", expectedLine, contents)
+					}
 				}
 				return nil
 			}, false, /* expectErrors */
