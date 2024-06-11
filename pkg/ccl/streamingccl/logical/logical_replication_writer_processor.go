@@ -10,14 +10,10 @@ package logical
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest"
@@ -26,18 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -101,10 +92,9 @@ type logicalReplicationWriterProcessor struct {
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.LogicalReplicationWriterSpec
 
-	ie          isql.Executor
-	decoder     cdcevent.Decoder
-	queryBuffer queryBuffer
-	buffer      *ingestionBuffer
+	bh BatchHandler
+
+	buffer *ingestionBuffer
 
 	maxFlushRateTimer timeutil.Timer
 
@@ -152,11 +142,6 @@ type logicalReplicationWriterProcessor struct {
 	debug streampb.DebugLogicalConsumerStatus
 }
 
-type queryBuffer struct {
-	deleteQueries map[catid.DescID]string
-	insertQueries map[catid.DescID]string
-}
-
 var (
 	_ execinfra.Processor = &logicalReplicationWriterProcessor{}
 	_ execinfra.RowSource = &logicalReplicationWriterProcessor{}
@@ -185,51 +170,18 @@ func newLogicalReplicationWriterProcessor(
 			return nil, err
 		}
 	}
-
-	qb := queryBuffer{
-		deleteQueries: make(map[catid.DescID]string, len(spec.TableDescriptors)),
-		insertQueries: make(map[catid.DescID]string, len(spec.TableDescriptors)),
-	}
-
-	descs := make(map[catid.DescID]catalog.TableDescriptor)
-
-	cdcEventTargets := changefeedbase.Targets{}
-	for name, desc := range spec.TableDescriptors {
-		td := tabledesc.NewBuilder(&desc).BuildImmutableTable()
-		descs[desc.ID] = td
-		qb.deleteQueries[desc.ID] = makeDeleteQuery(name, td)
-		qb.insertQueries[desc.ID] = makeInsertQuery(name, td)
-		cdcEventTargets.Add(changefeedbase.Target{
-			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-			TableID:           td.GetID(),
-			StatementTimeName: changefeedbase.StatementTimeName(td.GetName()),
-		})
-	}
-
-	rfCache, err := cdcevent.NewFixedRowFetcherCache(ctx, flowCtx.Codec(), flowCtx.Cfg.Settings, cdcEventTargets, descs)
+	rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Codec(), flowCtx.Cfg.Settings, spec.TableDescriptors)
 	if err != nil {
 		return nil, err
 	}
-
-	decoder := cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false)
-
+	bh := &txnBatch{
+		db: flowCtx.Cfg.DB,
+		rp: rp,
+	}
 	lrw := &logicalReplicationWriterProcessor{
-		flowCtx: flowCtx,
-		spec:    spec,
-		ie: flowCtx.Cfg.DB.Executor(isql.WithSessionData(&sessiondata.SessionData{
-			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-				// TODO(ssd): For now, we set DisableChangefeedReplication to
-				// prevent the data from being emitted back to the source.
-				// However, I don't think we want to do this in the long run.
-				// Rather, we want to store the inbound cluster ID and store that
-				// in a way that allows us to choose to filter it out from or not.
-				// Doing it this way means that you can't choose to run CDC just from
-				// one side and not the other.
-				DisableChangefeedReplication: true,
-			},
-		})),
-		queryBuffer:    qb,
-		decoder:        decoder,
+		flowCtx:        flowCtx,
+		spec:           spec,
+		bh:             bh,
 		frontier:       frontier,
 		buffer:         &ingestionBuffer{},
 		stopCh:         make(chan struct{}),
@@ -709,23 +661,19 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	batchSize := int(flushBatchSize.Get(&lrw.EvalCtx.Settings.SV))
 	batchEnd := min(batchStart+batchSize, len(b.buffer.curKVBatch))
 	for batchStart < len(b.buffer.curKVBatch) && batchEnd != 0 {
-		var batchByteSize int
 		preBatchTime := timeutil.Now()
-		if err := lrw.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			txn.KV().SetOmitInRangefeeds()
-			var err error
-			batchByteSize, err = lrw.flushBatch(ctx, txn, b.buffer.curKVBatch[batchStart:batchEnd])
-			return err
-		}); err != nil {
-			// TODO: We'll want to retry this to handle
+		batchStats, err := lrw.bh.HandleBatch(ctx, b.buffer.curKVBatch[batchStart:batchEnd])
+		if err != nil {
+			// TODO(ssd): Handle errors. We should perhaps split the batch and retry a portion of the batch.
+			// If that fails, send the failed application to the dead-letter-queue.
 			return nil, err
 		}
-		flushByteSize += batchByteSize
+		flushByteSize += batchStats.byteSize
 		batchStart = batchEnd
 		batchEnd = min(batchStart+batchSize, len(b.buffer.curKVBatch))
-
-		lrw.metrics.BatchBytesHist.RecordValue(int64(batchByteSize))
+		lrw.metrics.BatchBytesHist.RecordValue(int64(batchStats.byteSize))
 		lrw.metrics.BatchHistNanos.RecordValue(timeutil.Since(preBatchTime).Nanoseconds())
+
 	}
 
 	lrw.metrics.Flushes.Inc(1)
@@ -741,145 +689,48 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	return b.checkpoint, nil
 }
 
-func (lrw *logicalReplicationWriterProcessor) flushBatch(
-	ctx context.Context, txn isql.Txn, batch []roachpb.KeyValue,
-) (int, error) {
-	batchBytes := 0
-	for _, kv := range batch {
-		batchBytes += kv.Size()
-		row, err := lrw.decoder.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
-		if err != nil {
-			return batchBytes, err
-		}
-		if !row.IsDeleted() {
-			datums := make([]interface{}, 0, len(row.EncDatums()))
-			err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-				// Ignore crdb_internal_origin_timestamp
-				if col.Name == "crdb_internal_origin_timestamp" {
-					if d != tree.DNull {
-						// We'd only see this if we are doing an initial-scan of a table that was previously ingested into.
-						log.Infof(ctx, "saw non-null crdb_internal_origin_timestamp: %v", d)
-					}
-					return nil
-				}
-
-				datums = append(datums, d)
-				return nil
-			})
-			if err != nil {
-				return batchBytes, err
-			}
-			datums = append(datums, eval.TimestampToDecimalDatum(row.MvccTimestamp))
-			insertQuery := lrw.queryBuffer.insertQueries[row.TableID]
-			if _, err := lrw.ie.Exec(ctx, "replicated-insert", txn.KV(), insertQuery, datums...); err != nil {
-				log.Warningf(ctx, "replicated insert failed (query: %s): %s", insertQuery, err.Error())
-				return batchBytes, err
-			}
-		} else {
-			datums := make([]interface{}, 0, len(row.TableDescriptor().TableDesc().PrimaryIndex.KeyColumnNames))
-			err := row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-				datums = append(datums, d)
-				return nil
-			})
-			if err != nil {
-				return batchBytes, err
-			}
-			deleteQuery := lrw.queryBuffer.deleteQueries[row.TableID]
-			if _, err := lrw.ie.Exec(ctx, "replicated-delete", txn.KV(), deleteQuery, datums...); err != nil {
-				log.Warningf(ctx, "replicated delete failed (query: %s): %s", deleteQuery, err.Error())
-				return batchBytes, err
-			}
-		}
-	}
-	return batchBytes, nil
+type batchStats struct {
+	byteSize int
 }
 
-// Last-write-wins INSERT and DELETE queries.
-//
-// These implement partial last-write-wins semantics. We assume that the table
-// has an crdb_internal_origin_timestamp column defined as:
-//
-//	crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL
-//
-// This row is explicitly set by the INSERT query using the MVCC timestamp of
-// the inbound write.
-//
-// Known issues:
-//
-//  1. An UPDATE and a DELETE may be applied out of order because we have no way
-//     from SQL of knowing the write timestamp of the deletion tombstone.
-//  2. The crd_internal_origin_timestamp requires modifying the user's schema.
-//
-// See the design document for possible solutions to both of these problems.
-func makeInsertQuery(fqTableName string, td catalog.TableDescriptor) string {
-	// TODO(ssd): Column families
-	var columnNames strings.Builder
-	var valueStrings strings.Builder
-	var onConflictUpdateClause strings.Builder
-	argIdx := 1
-	for _, col := range td.PublicColumns() {
-		// Virtual columns are not present in the data written to disk and
-		// thus not part of the rangefeed datum.
-		if col.IsVirtual() {
-			continue
-		}
-		// We will set crdb_internal_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
-		// We should never see this on the rangefeed as a non-null value as that would imply we've looped data around.
-		if col.GetName() == "crdb_internal_origin_timestamp" {
-			continue
-		}
-		if argIdx == 1 {
-			columnNames.WriteString(col.GetName())
-			fmt.Fprintf(&valueStrings, "$%d", argIdx)
-			fmt.Fprintf(&onConflictUpdateClause, "%s = $%d", col.GetName(), argIdx)
-		} else {
-			fmt.Fprintf(&columnNames, ", %s", col.GetName())
-			fmt.Fprintf(&valueStrings, ", $%d", argIdx)
-			fmt.Fprintf(&onConflictUpdateClause, ",\n%s = $%d", col.GetName(), argIdx)
-		}
-		argIdx++
-	}
-	originTSIdx := argIdx
-	baseQuery := `
-INSERT INTO %s (%s, crdb_internal_origin_timestamp)
-VALUES (%s, $%d)
-ON CONFLICT ON CONSTRAINT %s
-DO UPDATE SET
-%s,
-crdb_internal_origin_timestamp=$%[4]d
-WHERE (%[1]s.crdb_internal_mvcc_timestamp < $%[4]d
-       AND %[1]s.crdb_internal_origin_timestamp IS NULL)
-   OR (%[1]s.crdb_internal_origin_timestamp < $%[4]d
-       AND %[1]s.crdb_internal_origin_timestamp IS NOT NULL)`
-	return fmt.Sprintf(baseQuery,
-		fqTableName,
-		columnNames.String(),
-		valueStrings.String(),
-		originTSIdx,
-		td.GetPrimaryIndex().GetName(),
-		onConflictUpdateClause.String(),
-	)
+type BatchHandler interface {
+	HandleBatch(context.Context, []roachpb.KeyValue) (batchStats, error)
 }
 
-func makeDeleteQuery(fqTableName string, td catalog.TableDescriptor) string {
-	var whereClause strings.Builder
-	names := td.TableDesc().PrimaryIndex.KeyColumnNames
-	for i := 0; i < len(names); i++ {
-		if i == 0 {
-			fmt.Fprintf(&whereClause, "%s = $%d", names[i], i+1)
-		} else {
-			fmt.Fprintf(&whereClause, "AND %s = $%d", names[i], i+1)
-		}
-	}
-	originTSIdx := len(names) + 1
-	baseQuery := `
-DELETE FROM %s WHERE %s
-   AND (%[1]s.crdb_internal_mvcc_timestamp < $%[3]d
-        AND %[1]s.crdb_internal_origin_timestamp IS NULL)
-    OR (%[1]s.crdb_internal_origin_timestamp < $%[3]d
-        AND tab.crdb_internal_origin_timestamp IS NOT NULL)`
+// RowProcessor knows how process a single row from an event stream.
+type RowProcessor interface {
+	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue) error
+}
 
-	return fmt.Sprintf(baseQuery, fqTableName, whereClause.String(), originTSIdx)
+type txnBatch struct {
+	db descs.DB
+	rp RowProcessor
+}
+
+func (t *txnBatch) HandleBatch(ctx context.Context, batch []roachpb.KeyValue) (batchStats, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "txnBatch.HandleBatch")
+	defer sp.Finish()
+
+	stats := batchStats{}
+	err := t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// TODO(ssd): For now, we SetOmitInRangefeeds to
+		// prevent the data from being emitted back to the source.
+		// However, I don't think we want to do this in the long run.
+		// Rather, we want to store the inbound cluster ID and store that
+		// in a way that allows us to choose to filter it out from or not.
+		// Doing it this way means that you can't choose to run CDC just from
+		// one side and not the other.
+		txn.KV().SetOmitInRangefeeds()
+		for _, kv := range batch {
+			stats.byteSize += kv.Size()
+			if err := t.rp.ProcessRow(ctx, txn, kv); err != nil {
+				return err
+			}
+
+		}
+		return nil
+	})
+	return stats, err
 }
 
 type flushableBuffer struct {
@@ -891,7 +742,7 @@ type flushableBuffer struct {
 //
 // TODO(ssd): We want to sort curKVBatch on MVCC timestamp.
 
-// TOOD(ssd): We may wan tto sort curKVBatch based on schema topology.
+// TOOD(ssd): We may want to sort curKVBatch based on schema topology.
 type ingestionBuffer struct {
 	curKVBatch     []roachpb.KeyValue
 	curKVBatchSize int
