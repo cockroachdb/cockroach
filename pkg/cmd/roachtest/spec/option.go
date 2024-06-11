@@ -45,6 +45,12 @@ func WorkloadNode() Option {
 	}
 }
 
+func WorkloadNodeCPU(n int) Option {
+	return func(spec *ClusterSpec) {
+		spec.WorkloadNodeCPUs = n
+	}
+}
+
 // Mem requests nodes with low/standard/high ratio of memory per CPU.
 func Mem(level MemPerCPU) Option {
 	return func(spec *ClusterSpec) {

@@ -884,6 +884,7 @@ func (f *clusterFactory) newCluster(
 	defer setStatus("idle")
 
 	providerOptsContainer := vm.CreateProviderOptionsContainer()
+	workloadProviderOptsContainer := vm.CreateProviderOptionsContainer()
 
 	clusterCloud := roachtestflags.Cloud
 	params := spec.RoachprodClusterConfig{
@@ -898,12 +899,13 @@ func (f *clusterFactory) newCluster(
 	// The ClusterName is set below in the retry loop to ensure
 	// that each create attempt gets a unique cluster name.
 	// N.B. selectedArch may not be the same as PreferredArch, depending on (spec.CPU, spec.Mem)
-	createVMOpts, providerOpts, selectedArch, err := cfg.spec.RoachprodOpts(params)
+	createVMOpts, providerOpts, workloadProviderOpts, selectedArch, err := cfg.spec.RoachprodOpts(params)
 	if err != nil {
 		return nil, nil, err
 	}
 	if clusterCloud != spec.Local {
 		providerOptsContainer.SetProviderOpts(clusterCloud, providerOpts)
+		workloadProviderOptsContainer.SetProviderOpts(clusterCloud, workloadProviderOpts)
 	}
 
 	createFlagsOverride(&createVMOpts)
@@ -955,8 +957,14 @@ func (f *clusterFactory) newCluster(
 
 		l.PrintfCtx(ctx, "Attempting cluster creation (attempt #%d/%d)", i, maxAttempts)
 		createVMOpts.ClusterName = c.name
-		opts := cloud.ClusterCreateOpts{Nodes: cfg.spec.NodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}
-		err = create(ctx, l, cfg.username, &opts)
+		opts := []*cloud.ClusterCreateOpts{{Nodes: cfg.spec.NodeCount, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer}}
+		if cfg.spec.WorkloadNode {
+			opts = []*cloud.ClusterCreateOpts{
+				{Nodes: cfg.spec.NodeCount - 1, CreateOpts: createVMOpts, ProviderOptsContainer: providerOptsContainer},
+				{Nodes: 1, CreateOpts: createVMOpts, ProviderOptsContainer: workloadProviderOptsContainer},
+			}
+		}
+		err = create(ctx, l, cfg.username, opts...)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
 				return nil, nil, err
