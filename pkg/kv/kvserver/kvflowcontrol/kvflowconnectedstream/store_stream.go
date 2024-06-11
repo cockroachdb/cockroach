@@ -16,21 +16,54 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // StoreStreamsTokenCounter is one per node.
-//
-// TODO: use code in kvflowcontroller.Controller to implement this.
 type StoreStreamsTokenCounter interface {
+	// EvalTokenCounterForStrea returns the eval token counter for the given
+	// stream.
 	EvalTokenCounterForStream(kvflowcontrol.Stream) TokenCounter
+	// SendTokenCounterForStream returns the send token counter for the given
+	// stream.
 	SendTokenCounterForStream(kvflowcontrol.Stream) TokenCounter
 }
 
-func NewStoreStreamsTokenCounter(settings *cluster.Settings) StoreStreamsTokenCounter {
-	// TODO:
-	return nil
+type storeStreamsTokenCounter struct {
+	settings *cluster.Settings
+	clock    *hlc.Clock
+
+	counters map[kvflowcontrol.Stream]TokenCounter
+}
+
+func (sstc *storeStreamsTokenCounter) EvalTokenCounterForStream(
+	stream kvflowcontrol.Stream,
+) TokenCounter {
+	if _, ok := sstc.counters[stream]; !ok {
+		sstc.counters[stream] = newTokenCounter(sstc.settings, sstc.clock)
+	}
+	return sstc.counters[stream]
+}
+
+func (sstc *storeStreamsTokenCounter) SendTokenCounterForStream(
+	stream kvflowcontrol.Stream,
+) TokenCounter {
+	if _, ok := sstc.counters[stream]; !ok {
+		sstc.counters[stream] = newTokenCounter(sstc.settings, sstc.clock)
+	}
+	return sstc.counters[stream]
+}
+
+func NewStoreStreamsTokenCounter(
+	settings *cluster.Settings, clock *hlc.Clock,
+) StoreStreamsTokenCounter {
+	return &storeStreamsTokenCounter{
+		settings: settings,
+		clock:    clock,
+		counters: make(map[kvflowcontrol.Stream]TokenCounter),
+	}
 }
 
 // TokenCounter will be implemented by tokenCounter.
@@ -46,6 +79,8 @@ type TokenCounter interface {
 	Deduct(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
 	// Return returns flow tokens for the given priority.
 	Return(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
+	// String returns a string representation of the token counter.
+	String() string
 }
 
 // TokenWaitingHandle is the interface for waiting for positive tokens.

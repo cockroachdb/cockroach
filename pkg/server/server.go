@@ -617,7 +617,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		sendTokensWatcher   kvflowconnectedstream.StoreStreamSendTokensWatcher
 		admittedPiggybacker kvserver.AdmittedPiggybackStateManager
 	}
-	racV2.streamsTokenCounter = kvflowconnectedstream.NewStoreStreamsTokenCounter(st)
+	racV2.streamsTokenCounter = kvflowconnectedstream.NewStoreStreamsTokenCounter(st, clock)
 	racV2.sendTokensWatcher = kvflowconnectedstream.NewStoreStreamSendTokensWatcher(stopper)
 	racV2.admittedPiggybacker = kvserver.NewAdmittedPiggybackStateManager()
 

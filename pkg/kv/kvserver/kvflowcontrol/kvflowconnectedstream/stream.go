@@ -12,8 +12,10 @@ package kvflowconnectedstream
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -21,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -474,6 +478,8 @@ type RangeController interface {
 	// since there is no need to wait for tokens at this replica (which may
 	// still be the leaseholder).
 	Close()
+	// String returns a string representation of the RangeController.
+	String() string
 }
 
 // RaftEvent is an abstraction around raft.Ready, constructed in
@@ -608,6 +614,24 @@ type FollowerStateInfo struct {
 	Admitted [NumRaftPriorities]uint64
 }
 
+func (f FollowerStateInfo) String() string {
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "state=%s, match=%d, next=%d, admitted=[", f.State, f.Match, f.Next)
+	i := 0
+	for pri, a := range f.Admitted {
+		if a == 0 {
+			continue
+		}
+		if i > 0 {
+			fmt.Fprintf(&buf, ",")
+		}
+		fmt.Fprintf(&buf, "%v=%d", RaftPriority(pri), a)
+		i++
+	}
+	buf.WriteString("]")
+	return buf.String()
+}
+
 type RaftPriority uint8
 
 const (
@@ -629,6 +653,21 @@ const (
 	NotSubjectToACForFlowControl       RaftPriority = math.MaxUint8 - 2
 	PriorityNotInheritedForFlowControl RaftPriority = math.MaxUint8 - 1
 )
+
+func (p RaftPriority) String() string {
+	switch p {
+	case RaftLowPri:
+		return "LowPri"
+	case RaftNormalPri:
+		return "NormalPri"
+	case RaftAboveNormalPri:
+		return "AboveNormalPri"
+	case RaftHighPri:
+		return "HighPri"
+	default:
+		return fmt.Sprintf("Invalid(%d)", p)
+	}
+}
 
 func RaftPriorityConversionForUnusedZero(pri RaftPriority) uint8 {
 	return uint8(pri + 1)
@@ -670,24 +709,36 @@ type RaftAdmittedInterface interface {
 
 // AdmissionPriorityToRaftPriority maps the larger set of values in admissionpb.WorkPriority
 // to the smaller set of raft priorities.
-func AdmissionPriorityToRaftPriority(pri admissionpb.WorkPriority) RaftPriority {
-	// TODO:
-
-	// The new priorities are:
-	// pri < NormalPri : RaftLowPri
-	// NormalPri <= pri < LockingNormalPri : RaftNormalPri
-	// LockingNormalPri <= pri < UserHighPri : intent resolution typically RaftAboveNormalPri
-	// UserHighPri <= pri: RaftHighPri
-	return RaftNormalPri
+func AdmissionPriorityToRaftPriority(pri admissionpb.WorkPriority) (rp RaftPriority) {
+	if pri < admissionpb.NormalPri {
+		return RaftLowPri
+	} else if pri < admissionpb.LockingNormalPri {
+		return RaftNormalPri
+	} else if pri < admissionpb.UserHighPri {
+		return RaftAboveNormalPri
+	} else if pri <= admissionpb.HighPri {
+		return RaftHighPri
+	} else {
+		panic("unknown priority")
+	}
 }
 
 // RaftPriorityToAdmissionPriority maps a RaftPriority to the highest
 // admissionpb.WorkPriority that could map to it. This is needed before
 // calling into the admission package, since it is possible for a mix of RACv2
 // entries and other entries to be competing in the same admission WorkQueue.
-func RaftPriorityToAdmissionPriority(rp RaftPriority) admissionpb.WorkPriority {
-	// TODO:
-	return admissionpb.NormalPri
+func RaftPriorityToAdmissionPriority(rp RaftPriority) (pri admissionpb.WorkPriority) {
+	if rp < RaftNormalPri {
+		return admissionpb.LowPri
+	} else if rp < RaftAboveNormalPri {
+		return admissionpb.NormalPri
+	} else if rp < RaftHighPri {
+		return admissionpb.UserHighPri
+	} else if rp < NumRaftPriorities {
+		return admissionpb.HighPri
+	} else {
+		panic("unknown priority")
+	}
 }
 
 // Used for deciding what kind of flow tokens are needed. The result here
@@ -819,10 +870,48 @@ func NewRangeControllerImpl(
 		leaseholder:       init.Leaseholder,
 		replicaMap:        map[roachpb.ReplicaID]*replicaState{},
 		scheduledReplicas: make(map[roachpb.ReplicaID]struct{}),
+		voterSetRefreshCh: make(chan struct{}),
 	}
 	rc.updateReplicaSetAndMap(init.ReplicaSet)
 	rc.updateVoterSets()
 	return rc
+}
+
+func (rc *RangeControllerImpl) String() string {
+	var buf strings.Builder
+
+	fmt.Fprintf(&buf, "controller(%v): lh=%v scheduled=[", rc.opts.RangeID, rc.leaseholder)
+	for i, r := range rc.scheduledReplicas {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		fmt.Fprintf(&buf, "%v", r)
+	}
+	buf.WriteString("] ")
+
+	i := 0
+	buf.WriteString("replica_state=[")
+	for _, r := range rc.replicaMap {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		fmt.Fprintf(&buf, "(%v)", r)
+		i++
+	}
+	buf.WriteString("] ")
+
+	buf.WriteString("replica_info=[")
+	i = 0
+	for replicaID := range rc.replicaMap {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		fmt.Fprintf(&buf, "%v=(%v)", replicaID, rc.opts.RaftInterface.FollowerState(replicaID))
+		i++
+	}
+	buf.WriteString("]")
+
+	return buf.String()
 }
 
 func (rc *RangeControllerImpl) updateReplicaSetAndMap(newSet ReplicaSet) {
@@ -982,6 +1071,8 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		// by FollowerState.
 		info := rc.opts.RaftInterface.FollowerState(r)
 		state := info.State
+		log.VInfof(context.Background(), 1,
+			"HandleRaftEvent(%d): info=(%v) state=(%v)", r, info, rs)
 		switch state {
 		case tracker.StateProbe:
 			if rs.replicaSendStream != nil {
@@ -1152,6 +1243,22 @@ type entryFlowControlState struct {
 	tokens          kvflowcontrol.Tokens
 }
 
+func (e entryFlowControlState) String() string {
+	return fmt.Sprintf("index=%d usesFC=%t pri=%v tokens=%d",
+		e.index, e.usesFlowControl, e.originalPri, kvflowcontrol.Tokens(e.tokens))
+}
+
+func encodeRaftFlowControlState(
+	index uint64, usesFlowControl bool, pri RaftPriority, tokens uint64,
+) raftpb.Entry {
+	entry := raftpb.Entry{
+		Index: index,
+	}
+	entry.Data = append(entry.Data, byte(pri))
+	entry.Data = encoding.EncodeUint64Ascending(entry.Data, uint64(tokens))
+	return entry
+}
+
 func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
 	// TODO: change the payload encoding and parsing, and delegate the priority
 	// parsing to that.
@@ -1159,11 +1266,17 @@ func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
 	// TODO(austen): as a temporary stop-gap, for unit-testing
 	// RangeControllerImpl and all the supporting classes, can hack this to be
 	// some arbitrary trivial encoding.
+	pri := RaftPriority(entry.Data[0])
+	_, tokens, err := encoding.DecodeUint64Ascending(entry.Data[1:])
+	if err != nil {
+		panic(fmt.Sprintf("%v: %v @ idx=%d", err, entry.Data, entry.Index))
+	}
+
 	return entryFlowControlState{
 		index:           entry.Index,
-		usesFlowControl: false,         // TODO:
-		originalPri:     RaftNormalPri, // TODO:
-		tokens:          kvflowcontrol.Tokens(len(entry.Data)),
+		usesFlowControl: true,
+		originalPri:     pri,
+		tokens:          kvflowcontrol.Tokens(tokens),
 	}
 }
 
@@ -1231,6 +1344,11 @@ type replicaState struct {
 	sendTokenCounter  TokenCounter
 	desc              roachpb.ReplicaDescriptor
 	replicaSendStream *replicaSendStream
+}
+
+func (rs *replicaState) String() string {
+	return fmt.Sprintf("%v: stream=%v send_stream=(%v) eval_tokens=(%v) send_tokens=(%v)",
+		rs.desc, rs.stream, rs.replicaSendStream, rs.evalTokenCounter, rs.sendTokenCounter)
 }
 
 func NewReplicaState(parent *RangeControllerImpl, desc roachpb.ReplicaDescriptor) *replicaState {
@@ -1381,6 +1499,12 @@ type replicaSendStream struct {
 	}
 
 	closed bool
+}
+
+func (rss *replicaSendStream) String() string {
+	return fmt.Sprintf("connected_state=%v index_to_send=%d, next_raft_index=%d closed=%v watcher_handle_id=%d",
+		rss.connectedState, rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex, rss.closed,
+		rss.sendQueue.watcherHandleID)
 }
 
 // Initial state provided to constructor of replicaSendStream.
@@ -1664,6 +1788,9 @@ func (rss *replicaSendStream) Notify() {
 	wc := workClassFromRaftPriority(pri)
 	queueSize := rss.queueSize()
 	tokens := rss.parent.sendTokenCounter.TryDeduct(context.TODO(), wc, queueSize)
+	log.VInfof(context.Background(), 1,
+		"notify: tokens=%v queueSize=%v SendTokensWatcher=%v watcherHandleID=%v",
+		tokens, queueSize, rss.parent.parent.opts.SendTokensWatcher, rss.sendQueue.watcherHandleID)
 	if tokens > 0 {
 		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
 		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
@@ -1983,6 +2110,19 @@ const (
 	probeRecentlyReplicate
 	snapshot
 )
+
+func (cs connectedState) String() string {
+	switch cs {
+	case replicate:
+		return "replicate"
+	case probeRecentlyReplicate:
+		return "probe_recently_replicate"
+	case snapshot:
+		return "snapshot"
+	default:
+		panic("")
+	}
+}
 
 func (cs connectedState) shouldWaitForElasticEvalTokens() bool {
 	return cs == replicate || cs == probeRecentlyReplicate
