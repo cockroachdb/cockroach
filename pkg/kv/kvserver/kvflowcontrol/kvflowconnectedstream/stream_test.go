@@ -96,10 +96,8 @@ func scanPriority(t *testing.T, input string) admissionpb.WorkPriority {
 		return admissionpb.LowPri
 	case "NormalPri":
 		return admissionpb.NormalPri
-	case "LockingNormalPri":
-		return admissionpb.LockingNormalPri
-	case "UserHighPri":
-		return admissionpb.UserHighPri
+	case "HighPri":
+		return admissionpb.HighPri
 	default:
 		panic("unknown work class")
 	}
@@ -133,6 +131,7 @@ func scanPriority(t *testing.T, input string) admissionpb.WorkPriority {
 //     state.
 //   - test replica set changes
 //   - test leaseholder changes
+//   - test state transition from <- probe <-> replicate <-> snapshot ->
 func TestRangeController(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -217,17 +216,7 @@ func TestRangeController(t *testing.T) {
 				}
 
 				raftImpl.localReplicaID = roachpb.ReplicaID(localReplicaID)
-				raftImpl.replicas = make(map[roachpb.ReplicaID]testingReplica)
-				for _, rdesc := range replicaSet {
-					raftImpl.replicas[rdesc.ReplicaID] = testingReplica{
-						info: FollowerStateInfo{
-							State: tracker.StateReplicate,
-							Next:  1,
-							Match: 0,
-						},
-						desc: rdesc,
-					}
-				}
+				raftImpl.setReplicas(replicaSet)
 
 				init := RangeControllerInitState{
 					ReplicaSet:  replicaSet,
@@ -237,10 +226,12 @@ func TestRangeController(t *testing.T) {
 				raftImpl.controller = controller
 			case "set_replicas":
 				replicaSet := scanReplicas(t, d.Input)
+				raftImpl.setReplicas(replicaSet)
 				controller.SetReplicas(replicaSet)
 			case "set_leader":
 				var leader int
-				d.ScanArgs(t, "replica_id=%d", &leader)
+				log.Infof(context.Background(), "set_leader: %s", d.CmdArgs)
+				d.ScanArgs(t, "replica_id", &leader)
 				controller.SetLeaseholder(roachpb.ReplicaID(leader))
 			case "admit":
 				for _, line := range strings.Split(d.Input, "\n") {
@@ -345,14 +336,16 @@ func (t *testingRaft) admit(storeID roachpb.StoreID, to uint64, pri admissionpb.
 			break
 		}
 	}
-
 	if replicaID == -1 {
 		panic("store not found")
 	}
 
+	// We admit everything at or above the given priority.
 	replica := t.replicas[replicaID]
 	raftPrio := AdmissionPriorityToRaftPriority(pri)
-	replica.info.Admitted[raftPrio] = to
+	for rp := raftPrio; rp < NumRaftPriorities; rp++ {
+		replica.info.Admitted[rp] = to
+	}
 	t.replicas[replicaID] = replica
 	log.Infof(context.Background(), "admit store=%v to=%v pri=%v(%v) (%v)", storeID, to, pri, raftPrio, replica.info)
 	t.controller.HandleRaftEvent(t.ready())
@@ -362,6 +355,31 @@ func (t *testingRaft) admit(storeID roachpb.StoreID, to uint64, pri admissionpb.
 	// TODO(kvoli): This is a hack, we should have a better way to wait on
 	// potential async notify calls.
 	time.Sleep(1 * time.Millisecond)
+}
+
+// setReplicas updates the replica set tracked by testingRaft. New replicas are
+// assigned match equal to the last entry index.
+func (t *testingRaft) setReplicas(replicaSet ReplicaSet) {
+	if t.replicas == nil {
+		t.replicas = make(map[roachpb.ReplicaID]testingReplica)
+	}
+
+	for _, rdesc := range replicaSet {
+		repl := testingReplica{
+			info: FollowerStateInfo{State: tracker.StateReplicate, Next: t.lastEntryIndex + 1, Match: t.lastEntryIndex},
+			desc: rdesc,
+		}
+		if _, ok := t.replicas[rdesc.ReplicaID]; ok {
+			repl.info = t.replicas[rdesc.ReplicaID].info
+		}
+		t.replicas[rdesc.ReplicaID] = repl
+	}
+
+	for replicaID := range t.replicas {
+		if _, ok := replicaSet[replicaID]; !ok {
+			delete(t.replicas, replicaID)
+		}
+	}
 }
 
 func (t *testingRaft) ready() testingRaftEvent {

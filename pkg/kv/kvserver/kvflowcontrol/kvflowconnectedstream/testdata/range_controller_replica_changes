@@ -1,0 +1,74 @@
+init local_replica_id=1
+store_id=1 replica_id=1 type=VOTER_FULL
+store_id=2 replica_id=2 type=VOTER_FULL
+store_id=3 replica_id=3 type=VOTER_FULL
+----
+(n1,s1):1: match=0 next=1 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+(n2,s2):2: match=0 next=1 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+(n3,s3):3: match=0 next=1 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+
+send
+range_id=1 pri=NormalPri size=1MiB
+range_id=1 pri=NormalPri size=1MiB
+----
+(n1,s1):1: match=2 next=3 admitted=[] eval=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+(n2,s2):2: match=2 next=3 admitted=[] eval=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+(n3,s3):3: match=2 next=3 admitted=[] eval=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+
+admit
+store_id=1 to=1 pri=NormalPri
+store_id=2 to=1 pri=NormalPri
+store_id=3 to=1 pri=NormalPri
+----
+(n1,s1):1: match=2 next=3 admitted=[NormalPri=1,AboveNormalPri=1,HighPri=1] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+(n2,s2):2: match=2 next=3 admitted=[NormalPri=1,AboveNormalPri=1,HighPri=1] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+(n3,s3):3: match=2 next=3 admitted=[NormalPri=1,AboveNormalPri=1,HighPri=1] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+
+# First try a config change with no send queues. The admitted index for the new
+# replica won't be set.
+set_replicas
+store_id=1 replica_id=1 type=VOTER_FULL
+store_id=2 replica_id=2 type=VOTER_FULL
+store_id=4 replica_id=4 type=VOTER_FULL
+----
+(n1,s1):1: match=2 next=3 admitted=[NormalPri=1,AboveNormalPri=1,HighPri=1] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+(n2,s2):2: match=2 next=3 admitted=[NormalPri=1,AboveNormalPri=1,HighPri=1] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+(n4,s4):4: match=2 next=3 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+
+# TODO(kvoli): Figure out why token return isn't showing up here for s1 and s2.
+admit
+store_id=1 to=2 pri=NormalPri
+store_id=2 to=2 pri=NormalPri
+store_id=4 to=2 pri=NormalPri
+----
+(n1,s1):1: match=2 next=3 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+(n2,s2):2: match=2 next=3 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+(n4,s4):4: match=2 next=3 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+
+# Create a send queue on s4 and s2, we will change the replica set again
+# shortly after which should trigger a force flush.
+send
+range_id=1 pri=NormalPri size=16MiB
+range_id=1 pri=NormalPri size=1MiB
+----
+(n1,s1):1: match=4 next=5 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-2.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) send=(reg=-2.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB)
+(n2,s2):2: match=3 next=4 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-2.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) queue=[4,5) size=+1023 KiB pri=NormalPri
+(n4,s4):4: match=3 next=4 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) queue=[4,5) size=+1023 KiB pri=NormalPri
+
+admit
+store_id=1 to=4 pri=NormalPri
+----
+(n1,s1):1: match=4 next=5 admitted=[NormalPri=4,AboveNormalPri=4,HighPri=4] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+(n2,s2):2: match=3 next=4 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-2.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) queue=[4,5) size=+1023 KiB pri=NormalPri
+(n4,s4):4: match=3 next=4 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) queue=[4,5) size=+1023 KiB pri=NormalPri
+
+# TODO(kvoli): Why did the priority switch from NormalPri to LowPri for s4's
+# send queue?
+set_replicas
+store_id=1 replica_id=1 type=VOTER_FULL
+store_id=5 replica_id=5 type=VOTER_FULL
+store_id=4 replica_id=4 type=VOTER_FULL
+----
+(n1,s1):1: match=4 next=5 admitted=[NormalPri=4,AboveNormalPri=4,HighPri=4] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+(n4,s4):4: match=3 next=4 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) queue=[4,5) size=+1000 B pri=LowPri
+(n5,s5):5: match=4 next=5 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
