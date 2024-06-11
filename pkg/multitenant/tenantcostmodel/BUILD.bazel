@@ -3,7 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "tenantcostmodel",
     srcs = [
-        "model.go",
+        "ecpu_model.go",
+        "ru_model.go",
         "settings.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel",
@@ -18,7 +19,10 @@ go_library(
 
 go_test(
     name = "tenantcostmodel_test",
-    srcs = ["settings_test.go"],
+    srcs = [
+        "ecpu_model_test.go",
+        "settings_test.go",
+    ],
     embed = [":tenantcostmodel"],
     deps = [
         "//pkg/util/leaktest",

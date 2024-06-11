@@ -2096,7 +2096,7 @@ func populateQueryLevelStats(
 		// usage and network egress to the client.
 		if execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil {
 			if costController := cfg.DistSQLSrv.TenantCostController; costController != nil {
-				if costCfg := costController.GetCostConfig(); costCfg != nil {
+				if costCfg := costController.GetRequestUnitModel(); costCfg != nil {
 					networkEgressRUEstimate := costCfg.PGWireEgressCost(topLevelStats.networkEgressEstimate)
 					ih.queryLevelStatsWithErr.Stats.RUEstimate += float64(networkEgressRUEstimate)
 					ih.queryLevelStatsWithErr.Stats.RUEstimate += cpuStats.EndCollection(ctx)

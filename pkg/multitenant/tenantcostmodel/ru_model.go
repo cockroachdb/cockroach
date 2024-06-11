@@ -23,8 +23,8 @@ type RU float64
 // bytes_transmitted * NetworkCost is the RU cost of the network traffic.
 type NetworkCost float64
 
-// Config contains the cost model parameters. The values are controlled by
-// cluster settings.
+// RequestUnitModel contains the cost model parameters for computing request
+// units (RUs). The values are controlled by cluster settings.
 //
 // The aim of the model is to provide a reasonable estimate of the resource
 // utilization of a tenant, excluding storage. A tenant uses resources on the
@@ -49,7 +49,7 @@ type NetworkCost float64
 //   - Writes to external storage services such as S3.
 //
 //   - Count of bytes returned from SQL to the client (network egress).
-type Config struct {
+type RequestUnitModel struct {
 	// KVReadBatch is the baseline cost of a batch of KV reads.
 	KVReadBatch RU
 
@@ -88,40 +88,40 @@ type Config struct {
 }
 
 // KVReadCost calculates the cost of a KV read operation.
-func (c *Config) KVReadCost(count, bytes int64) RU {
+func (c *RequestUnitModel) KVReadCost(count, bytes int64) RU {
 	return c.KVReadBatch + RU(count)*c.KVReadRequest + RU(bytes)*c.KVReadByte
 }
 
 // KVWriteCost calculates the cost of a KV write operation.
-func (c *Config) KVWriteCost(count, bytes int64) RU {
+func (c *RequestUnitModel) KVWriteCost(count, bytes int64) RU {
 	return c.KVWriteBatch + RU(count)*c.KVWriteRequest + RU(bytes)*c.KVWriteByte
 }
 
 // PodCPUCost calculates the cost of CPU seconds consumed in the SQL pod.
-func (c *Config) PodCPUCost(seconds float64) RU {
+func (c *RequestUnitModel) PodCPUCost(seconds float64) RU {
 	return RU(seconds) * c.PodCPUSecond
 }
 
 // PGWireEgressCost calculates the cost of bytes leaving the SQL pod to external
 // services.
-func (c *Config) PGWireEgressCost(bytes int64) RU {
+func (c *RequestUnitModel) PGWireEgressCost(bytes int64) RU {
 	return RU(bytes) * c.PGWireEgressByte
 }
 
 // ExternalIOEgressCost calculates the cost of an external write operation.
-func (c *Config) ExternalIOEgressCost(bytes int64) RU {
+func (c *RequestUnitModel) ExternalIOEgressCost(bytes int64) RU {
 	return RU(bytes) * c.ExternalIOEgressByte
 }
 
 // ExternalIOIngressCost calculates the cost of an external read operation.
-func (c *Config) ExternalIOIngressCost(bytes int64) RU {
+func (c *RequestUnitModel) ExternalIOIngressCost(bytes int64) RU {
 	return RU(bytes) * c.ExternalIOIngressByte
 }
 
 // NetworkCost retrieves the RU per byte cost for inter-region transfers from
 // the source to the destination region. The order of this relationship matters
 // because some clouds have asymetric networking charging.
-func (c *Config) NetworkCost(path NetworkPath) NetworkCost {
+func (c *RequestUnitModel) NetworkCost(path NetworkPath) NetworkCost {
 	return c.NetworkCostTable.Matrix[path]
 }
 
@@ -130,7 +130,7 @@ func (c *Config) NetworkCost(path NetworkPath) NetworkCost {
 // multiplied by the number of replicas plus the cost of the cross region
 // networking. If it is a read, then the cost is zero, since reads can only be
 // costed by examining the ResponseInfo.
-func (c *Config) RequestCost(bri RequestInfo) (kv RU, network RU) {
+func (c *RequestUnitModel) RequestCost(bri RequestInfo) (kv RU, network RU) {
 	if !bri.IsWrite() {
 		return 0, 0
 	}
@@ -153,7 +153,7 @@ func (c *Config) RequestCost(bri RequestInfo) (kv RU, network RU) {
 // read, that includes the per-batch, per-request, and per-byte costs, and the
 // cross region networking cost. If it is a write, then the cost is zero, since
 // writes can only be costed by examining the RequestInfo.
-func (c *Config) ResponseCost(bri ResponseInfo) (kv RU, network RU) {
+func (c *RequestUnitModel) ResponseCost(bri ResponseInfo) (kv RU, network RU) {
 	if !bri.IsRead() {
 		return 0, 0
 	}
@@ -264,7 +264,7 @@ type ResponseInfo struct {
 	// it is a write batch.
 	readCount int64
 	// readBytes is the total size of all batched reads in the response, in
-	// bytee, or 0 if it is a write batch.
+	// bytes, or 0 if it is a write batch.
 	readBytes int64
 	// networkCost is RU/byte cost for this read request.
 	networkCost NetworkCost

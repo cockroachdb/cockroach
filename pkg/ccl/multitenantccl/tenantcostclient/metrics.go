@@ -100,6 +100,18 @@ var (
 		Measurement: "Request Units",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaTotalEstimatedKVCPUSeconds = metric.Metadata{
+		Name:        "tenant.sql_usage.estimated_kv_cpu_seconds",
+		Help:        "Estimated amount of CPU consumed by a virtual cluster, in the KV layer",
+		Measurement: "CPU Seconds",
+		Unit:        metric.Unit_SECONDS,
+	}
+	metaTotalEstimatedCPUSeconds = metric.Metadata{
+		Name:        "tenant.sql_usage.estimated_cpu_seconds",
+		Help:        "Estimated amount of CPU consumed by a virtual cluster",
+		Measurement: "CPU Seconds",
+		Unit:        metric.Unit_SECONDS,
+	}
 )
 
 // metrics manage the metrics used by the tenant cost client.
@@ -118,6 +130,8 @@ type metrics struct {
 	TotalExternalIOEgressBytes  *metric.Counter
 	TotalExternalIOIngressBytes *metric.Counter
 	TotalCrossRegionNetworkRU   *metric.CounterFloat64
+	TotalEstimatedKVCPUSeconds  *metric.CounterFloat64
+	TotalEstimatedCPUSeconds    *metric.CounterFloat64
 }
 
 var _ metric.Struct = (*metrics)(nil)
@@ -141,22 +155,22 @@ func (m *metrics) Init() {
 	m.TotalExternalIOEgressBytes = metric.NewCounter(metaTotalExternalIOEgressBytes)
 	m.TotalExternalIOIngressBytes = metric.NewCounter(metaTotalExternalIOIngressBytes)
 	m.TotalCrossRegionNetworkRU = metric.NewCounterFloat64(metaTotalCrossRegionNetworkRU)
+	m.TotalEstimatedKVCPUSeconds = metric.NewCounterFloat64(metaTotalEstimatedKVCPUSeconds)
+	m.TotalEstimatedCPUSeconds = metric.NewCounterFloat64(metaTotalEstimatedCPUSeconds)
 }
 
-// incrementConsumption updates consumption-related metrics with the delta
-// consumption.
-func (m *metrics) incrementConsumption(delta kvpb.TenantConsumption) {
-	m.TotalRU.Inc(delta.RU)
-	m.TotalKVRU.Inc(delta.KVRU)
-	m.TotalReadBatches.Inc(int64(delta.ReadBatches))
-	m.TotalReadRequests.Inc(int64(delta.ReadRequests))
-	m.TotalReadBytes.Inc(int64(delta.ReadBytes))
-	m.TotalWriteBatches.Inc(int64(delta.WriteBatches))
-	m.TotalWriteRequests.Inc(int64(delta.WriteRequests))
-	m.TotalWriteBytes.Inc(int64(delta.WriteBytes))
-	m.TotalSQLPodsCPUSeconds.Inc(delta.SQLPodsCPUSeconds)
-	m.TotalPGWireEgressBytes.Inc(int64(delta.PGWireEgressBytes))
-	m.TotalExternalIOEgressBytes.Inc(int64(delta.ExternalIOEgressBytes))
-	m.TotalExternalIOIngressBytes.Inc(int64(delta.ExternalIOIngressBytes))
-	m.TotalCrossRegionNetworkRU.Inc(delta.CrossRegionNetworkRU)
+func (m *metrics) getConsumption(consumption *kvpb.TenantConsumption) {
+	consumption.RU = m.TotalRU.Count()
+	consumption.KVRU = m.TotalKVRU.Count()
+	consumption.ReadBatches = uint64(m.TotalReadBatches.Count())
+	consumption.ReadRequests = uint64(m.TotalReadRequests.Count())
+	consumption.ReadBytes = uint64(m.TotalReadBytes.Count())
+	consumption.WriteBatches = uint64(m.TotalWriteBatches.Count())
+	consumption.WriteRequests = uint64(m.TotalWriteRequests.Count())
+	consumption.WriteBytes = uint64(m.TotalWriteBytes.Count())
+	consumption.SQLPodsCPUSeconds = m.TotalSQLPodsCPUSeconds.Count()
+	consumption.PGWireEgressBytes = uint64(m.TotalPGWireEgressBytes.Count())
+	consumption.ExternalIOEgressBytes = uint64(m.TotalExternalIOEgressBytes.Count())
+	consumption.ExternalIOIngressBytes = uint64(m.TotalExternalIOIngressBytes.Count())
+	consumption.CrossRegionNetworkRU = m.TotalCrossRegionNetworkRU.Count()
 }
