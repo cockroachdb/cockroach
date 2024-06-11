@@ -89,6 +89,10 @@ case $1 in
       roachprod sql $A -- -e "select * from crdb_internal.cluster_replication_node_streams;"  --format=table
       roachprod sql $B -- -e "select * from crdb_internal.cluster_replication_node_streams;"  --format=table
       ;;
+    "flushes")
+      roachprod sql $A -- -e "select * from crdb_internal.logical_replication_node_processors;"  --format=table
+      roachprod sql $B -- -e "select * from crdb_internal.logical_replication_node_processors;"  --format=table
+      ;;
     *)
       echo "unknown command '$1'; useage: $0 {start|pause|resume|cancel|stats}"
       exit 1

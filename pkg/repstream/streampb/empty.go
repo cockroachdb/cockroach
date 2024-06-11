@@ -12,6 +12,7 @@ package streampb
 
 import (
 	"sync/atomic"
+	time "time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -121,4 +122,85 @@ type DebugLogicalConsumerStatus struct {
 	// Identification info.
 	StreamID    StreamID
 	ProcessorID int32
+	mu          struct {
+		syncutil.Mutex
+		stats DebugLogicalConsumerStats
+	}
+}
+
+type DebugLogicalConsumerStats struct {
+	Recv struct {
+		LastWaitNanos, TotalWaitNanos int64
+	}
+
+	Flushes struct {
+		Count, Nanos, KVs, Bytes, Batches int64
+
+		Current struct {
+			StartedUnixMicros, ProcessedKVs, TotalKVs, Batches, SlowestBatchNanos int64
+			// TODO(dt):  BatchErrors atomic.Int64
+			// TODO(dt): LastBatchErr atomic.Value
+		}
+		Last struct {
+			Nanos, KVs, Bytes, Batches, SlowestBatchNanos int64
+			// TODO(dt): Errors     atomic.Int64
+		}
+	}
+}
+
+func (d *DebugLogicalConsumerStatus) GetStats() DebugLogicalConsumerStats {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.mu.stats
+}
+
+func (d *DebugLogicalConsumerStatus) RecordRecv(wait time.Duration) {
+	nanos := wait.Nanoseconds()
+	d.mu.Lock()
+	d.mu.stats.Recv.LastWaitNanos = nanos
+	d.mu.stats.Recv.TotalWaitNanos += nanos
+	d.mu.Unlock()
+}
+
+func (d *DebugLogicalConsumerStatus) RecordFlushStart(start time.Time, keyCount int64) {
+	micros := start.UnixMicro()
+	d.mu.Lock()
+	d.mu.stats.Flushes.Current.TotalKVs = keyCount
+	d.mu.stats.Flushes.Current.StartedUnixMicros = micros
+	d.mu.Unlock()
+}
+
+func (d *DebugLogicalConsumerStatus) RecordBatchApplied(t time.Duration, keyCount int64) {
+	nanos := t.Nanoseconds()
+	d.mu.Lock()
+	d.mu.stats.Flushes.Current.Batches++
+	d.mu.stats.Flushes.Current.ProcessedKVs += keyCount
+	if d.mu.stats.Flushes.Current.SlowestBatchNanos < nanos { // nolint:deferunlockcheck
+		d.mu.stats.Flushes.Current.SlowestBatchNanos = nanos
+	}
+	d.mu.Unlock() // nolint:deferunlockcheck
+}
+
+func (d *DebugLogicalConsumerStatus) RecordFlushComplete(totalNanos, keyCount, byteSize int64) {
+	d.mu.Lock()
+
+	d.mu.stats.Flushes.Count++
+	d.mu.stats.Flushes.Nanos += totalNanos
+	d.mu.stats.Flushes.KVs += keyCount
+	d.mu.stats.Flushes.Bytes += byteSize
+	d.mu.stats.Flushes.Batches += d.mu.stats.Flushes.Current.Batches
+
+	d.mu.stats.Flushes.Last.Nanos = totalNanos
+	d.mu.stats.Flushes.Last.Batches = d.mu.stats.Flushes.Current.Batches
+	d.mu.stats.Flushes.Last.SlowestBatchNanos = d.mu.stats.Flushes.Current.SlowestBatchNanos
+	d.mu.stats.Flushes.Last.KVs = keyCount
+	d.mu.stats.Flushes.Last.Bytes = byteSize
+
+	d.mu.stats.Flushes.Current.StartedUnixMicros = 0
+	d.mu.stats.Flushes.Current.SlowestBatchNanos = 0
+	d.mu.stats.Flushes.Current.Batches = 0
+	d.mu.stats.Flushes.Current.TotalKVs = 0
+	d.mu.stats.Flushes.Current.ProcessedKVs = 0
+
+	d.mu.Unlock() // nolint:deferunlockcheck
 }

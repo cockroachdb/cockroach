@@ -9205,7 +9205,23 @@ var crdbInternalLDRProcessorTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.logical_replication_node_processors (
 	stream_id INT,
-	consumer STRING
+	consumer STRING,
+	recv_wait INTERVAL,
+	last_recv_wait INTERVAL,
+	flush_count INT,
+	flush_time INTERVAL,
+	flush_kvs INT,
+	flush_bytes INT,
+	flush_batches INT,
+	last_time INTERVAL,
+	last_kvs INT,
+	last_bytes INT,
+	last_slowest INTERVAL,
+	cur_time INTERVAL,
+	cur_kvs_done INT,
+	cur_kvs_todo INT,
+	cur_batches INT,
+	cur_slowest INTERVAL
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		sm, err := p.EvalContext().StreamManagerFactory.GetReplicationStreamManager(ctx)
@@ -9216,10 +9232,44 @@ CREATE TABLE crdb_internal.logical_replication_node_processors (
 			}
 			return err
 		}
-		for _, status := range sm.DebugGetLogicalConsumerStatuses(ctx) {
+		now := p.EvalContext().GetStmtTimestamp()
+		age := func(t time.Time) tree.Datum {
+			if t.Unix() == 0 {
+				return tree.DNull
+			}
+			return tree.NewDInterval(duration.Age(now, t), types.DefaultIntervalTypeMetadata)
+		}
+		dur := func(nanos int64) tree.Datum {
+			return tree.NewDInterval(duration.MakeDuration(nanos, 0, 0), types.DefaultIntervalTypeMetadata)
+		}
+
+		for _, container := range sm.DebugGetLogicalConsumerStatuses(ctx) {
+			status := container.GetStats()
+			nullCur := func(x tree.Datum) tree.Datum {
+				if status.Flushes.Current.StartedUnixMicros == 0 {
+					return tree.DNull
+				}
+				return x
+			}
 			if err := addRow(
-				tree.NewDInt(tree.DInt(status.StreamID)),
-				tree.NewDString(fmt.Sprintf("%d[%d]", p.extendedEvalCtx.ExecCfg.JobRegistry.ID(), status.ProcessorID)),
+				tree.NewDInt(tree.DInt(container.StreamID)),
+				tree.NewDString(fmt.Sprintf("%d[%d]", p.extendedEvalCtx.ExecCfg.JobRegistry.ID(), container.ProcessorID)),
+				dur(status.Recv.TotalWaitNanos),
+				dur(status.Recv.LastWaitNanos),
+				tree.NewDInt(tree.DInt(status.Flushes.Count)),
+				dur(status.Flushes.Nanos),
+				tree.NewDInt(tree.DInt(status.Flushes.KVs)),
+				tree.NewDInt(tree.DInt(status.Flushes.Bytes)),
+				tree.NewDInt(tree.DInt(status.Flushes.Batches)),
+				dur(status.Flushes.Last.Nanos),
+				tree.NewDInt(tree.DInt(status.Flushes.Last.KVs)),
+				tree.NewDInt(tree.DInt(status.Flushes.Last.Bytes)),
+				dur(status.Flushes.Last.SlowestBatchNanos),
+				nullCur(age(time.UnixMicro(status.Flushes.Current.StartedUnixMicros))),
+				nullCur(tree.NewDInt(tree.DInt(status.Flushes.Current.TotalKVs))),
+				nullCur(tree.NewDInt(tree.DInt(status.Flushes.Current.ProcessedKVs))),
+				nullCur(tree.NewDInt(tree.DInt(status.Flushes.Current.Batches))),
+				nullCur(dur(status.Flushes.Current.SlowestBatchNanos)),
 			); err != nil {
 				return err
 			}
