@@ -15,6 +15,18 @@ a LIKE 'A\BC%'
 ----
 [/'ABC' - /'ABD')
 
+# A backslash escaping a backslash just becomes a backslash.
+index-constraints vars=(a string) index=a
+a LIKE '\\ABC%'
+----
+[/e'\\ABC' - /e'\\ABD')
+
+# A backslash escaping a backslash just becomes a backslash.
+index-constraints vars=(a string) index=a
+a LIKE '\\ABC\\%'
+----
+[/e'\\ABC\\' - /e'\\ABC]')
+
 # Currently we punt on custom ESCAPE clauses.
 index-constraints vars=(a string) index=a
 a LIKE '\aABC%' ESCAPE '|'
@@ -67,6 +79,24 @@ index-constraints vars=(a string) index=a
 a LIKE 'ABC\_Z'
 ----
 [/'ABC_Z' - /'ABC_Z']
+
+# A backslash that is escaping a wildcard becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE '\%ABC'
+----
+[/'%ABC' - /'%ABC']
+
+# A backslash that is escaping a wildcard becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE '\_ABC'
+----
+[/'_ABC' - /'_ABC']
+
+# A backslash that is escaping a backslash becomes equality.
+index-constraints vars=(a string) index=a
+a LIKE '\\ABC'
+----
+[/e'\\ABC' - /e'\\ABC']
 
 # Invalid pattern does not generate index constraints.
 index-constraints vars=(a string) index=a
