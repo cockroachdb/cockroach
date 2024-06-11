@@ -1830,7 +1830,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
-			err = ex.makeExecPlan(ctx, planner)
+			ctx, err = ex.makeExecPlan(ctx, planner)
 			if flags := planner.curPlan.flags; err == nil && (flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
 				telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
 				// We don't allow mutations in a pausable portal. Set it back to
@@ -1851,21 +1851,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	} else {
 		// Prepare the plan. Note, the error is processed below. Everything
 		// between here and there needs to happen even if there's an error.
-		err = ex.makeExecPlan(ctx, planner)
+		ctx, err = ex.makeExecPlan(ctx, planner)
 		defer planner.curPlan.close(ctx)
 	}
 
 	// Include gist in error reports.
-	planGist := planner.instrumentation.planGist.String()
-	ctx = withPlanGist(ctx, planGist)
-	if ppInfo := getPausablePortalInfo(); ppInfo == nil || !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
-		// If we're not using pausable portals, or it's the first execution of
-		// the pausable portal, and we're not collecting a bundle yet, check
-		// whether we should get a bundle for this particular plan gist.
-		if ih := &planner.instrumentation; !ih.collectBundle && ih.outputMode == unmodifiedOutput {
-			ctx = ih.setupWithPlanGist(ctx, ex.server.cfg, stmt.StmtNoConstants, planGist, &planner.curPlan)
-		}
-	}
+	ctx = withPlanGist(ctx, planner.instrumentation.planGist.String())
 
 	if planner.extendedEvalCtx.TxnImplicit {
 		planner.curPlan.flags.Set(planFlagImplicitTxn)
@@ -2297,14 +2288,16 @@ var txnSchemaChangeErr = pgerror.Newf(
 // makeExecPlan creates an execution plan and populates planner.curPlan using
 // the cost-based optimizer. This is used to create the plan when executing a
 // query in the "simple" pgwire protocol.
-func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
+func (ex *connExecutor) makeExecPlan(
+	ctx context.Context, planner *planner,
+) (context.Context, error) {
 	if err := ex.maybeUpgradeToSerializable(ctx, planner.stmt); err != nil {
-		return err
+		return ctx, err
 	}
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
-		return err
+		return ctx, err
 	}
 
 	flags := planner.curPlan.flags
@@ -2321,7 +2314,7 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 				// - the scan is considered large.
 				// - the query is not an internal query.
 				ex.metrics.EngineMetrics.FullTableOrIndexScanRejectedCount.Inc(1)
-				return errors.WithHint(
+				return ctx, errors.WithHint(
 					pgerror.Newf(pgcode.TooManyRows,
 						"query `%s` contains a full table/index scan which is explicitly disallowed",
 						planner.stmt.SQL),
@@ -2343,7 +2336,13 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 		ctx, ex.server.idxRecommendationsCache, planner, ex.executorType == executorTypeInternal,
 	)
 
-	return nil
+	// Now that we have the plan gist, check whether we should get a bundle for
+	// it.
+	if ih := &planner.instrumentation; !ih.collectBundle && ih.outputMode == unmodifiedOutput {
+		ctx = ih.setupWithPlanGist(ctx, planner, ex.server.cfg)
+	}
+
+	return ctx, nil
 }
 
 // topLevelQueryStats returns some basic statistics about the run of the query.

@@ -263,6 +263,20 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	}
 
 	// Build the plan tree.
+	const disableTelemetryAndPlanGists = false
+	result, err := p.runExecBuild(ctx, execMemo, disableTelemetryAndPlanGists)
+	if err == nil {
+		p.curPlan.planComponents = *result
+	}
+	return err
+}
+
+// runExecBuild builds the plan tree for the given memo. It assumes that the
+// optPlanningCtx of the planner has been properly set up.
+func (p *planner) runExecBuild(
+	ctx context.Context, execMemo *memo.Memo, disableTelemetryAndPlanGists bool,
+) (*planComponents, error) {
+	opc := &p.optPlanningCtx
 	if mode := p.SessionData().ExperimentalDistSQLPlanningMode; mode != sessiondatapb.ExperimentalDistSQLPlanningOff {
 		planningMode := distSQLDefaultPlanning
 		// If this transaction has modified or created any types, it is not safe to
@@ -271,7 +285,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		if p.Descriptors().HasUncommittedTypes() {
 			planningMode = distSQLLocalOnlyPlanning
 		}
-		err := opc.runExecBuilder(
+		result, err := opc.runExecBuilder(
 			ctx,
 			&p.curPlan,
 			&p.stmt,
@@ -280,6 +294,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 			p.SemaCtx(),
 			p.EvalContext(),
 			p.autoCommit,
+			disableTelemetryAndPlanGists,
 		)
 		if err != nil {
 			if mode == sessiondatapb.ExperimentalDistSQLPlanningAlways &&
@@ -291,7 +306,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				// regardless of whether they are supported by the new factory.
 				// TODO(yuzefovich): update this once SET statements are
 				// supported (see #47473).
-				return err
+				return result, err
 			}
 			// We will fallback to the old path.
 		} else {
@@ -307,7 +322,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				// that forces local planning.
 				// TODO(yuzefovich): remove this logic when deleting old
 				// execFactory.
-				err = opc.runExecBuilder(
+				result, err = opc.runExecBuilder(
 					ctx,
 					&p.curPlan,
 					&p.stmt,
@@ -316,10 +331,11 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 					p.SemaCtx(),
 					p.EvalContext(),
 					p.autoCommit,
+					disableTelemetryAndPlanGists,
 				)
 			}
 			if err == nil {
-				return nil
+				return result, nil
 			}
 		}
 		// TODO(yuzefovich): make the logging conditional on the verbosity
@@ -338,6 +354,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		p.SemaCtx(),
 		p.EvalContext(),
 		p.autoCommit,
+		disableTelemetryAndPlanGists,
 	)
 }
 
@@ -866,9 +883,8 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	return f.ReleaseMemo(), nil
 }
 
-// runExecBuilder execbuilds a plan using the given factory and stores the
-// result in planTop. If required, also captures explain data using the explain
-// factory.
+// runExecBuilder execbuilds a plan using the given factory. If required, also
+// captures explain data using the explain factory.
 func (opc *optPlanningCtx) runExecBuilder(
 	ctx context.Context,
 	planTop *planTop,
@@ -878,10 +894,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
 	allowAutoCommit bool,
-) error {
-	var result *planComponents
+	disableTelemetryAndPlanGists bool,
+) (result *planComponents, _ error) {
 	var gf *explain.PlanGistFactory
-	if !opc.p.SessionData().DisablePlanGists {
+	if !opc.p.SessionData().DisablePlanGists && !disableTelemetryAndPlanGists {
 		gf = explain.NewPlanGistFactory(f)
 		f = gf
 	}
@@ -891,9 +907,12 @@ func (opc *optPlanningCtx) runExecBuilder(
 			ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
 			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
 		)
+		if disableTelemetryAndPlanGists {
+			bld.DisableTelemetry()
+		}
 		plan, err := bld.Build()
 		if err != nil {
-			return err
+			return result, err
 		}
 		result = plan.(*planComponents)
 	} else {
@@ -903,9 +922,12 @@ func (opc *optPlanningCtx) runExecBuilder(
 			ctx, explainFactory, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
 			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
 		)
+		if disableTelemetryAndPlanGists {
+			bld.DisableTelemetry()
+		}
 		plan, err := bld.Build()
 		if err != nil {
-			return err
+			return result, err
 		}
 		explainPlan := plan.(*explain.Plan)
 		result = explainPlan.WrappedPlan.(*planComponents)
@@ -934,11 +956,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")
+			return result, pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")
 		}
 	}
 
-	planTop.planComponents = *result
 	planTop.stmt = stmt
 	planTop.flags |= opc.flags
 	if planTop.flags.IsSet(planFlagIsDDL) {
@@ -947,13 +968,15 @@ func (opc *optPlanningCtx) runExecBuilder(
 		// DDLs (e.g. CREATE TABLE) are built non-opaquely, so we need to set the
 		// mode here if it wasn't already set.
 		if planTop.instrumentation.schemaChangerMode == schemaChangerModeNone {
-			telemetry.Inc(sqltelemetry.LegacySchemaChangerCounter)
+			if !disableTelemetryAndPlanGists {
+				telemetry.Inc(sqltelemetry.LegacySchemaChangerCounter)
+			}
 			planTop.instrumentation.schemaChangerMode = schemaChangerModeLegacy
 		}
 	}
 	planTop.mem = mem
 	planTop.catalog = opc.catalog
-	return nil
+	return result, nil
 }
 
 // DecodeGist Avoid an import cycle by keeping the cat out of the tree. If
