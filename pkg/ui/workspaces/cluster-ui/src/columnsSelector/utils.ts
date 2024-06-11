@@ -17,9 +17,9 @@ import { ColumnDescriptor } from "src/sortedtable/sortedtable";
 // the column is set to 'showByDefault'
 // b. If the column appears in the selectedColumns list
 // c. If the column is labelled as 'alwaysShow'
-export const isSelectedColumn = (
+export const isSelectedColumn = <T>(
   selectedColumns: string[] | null | undefined,
-  c: ColumnDescriptor<unknown>,
+  c: ColumnDescriptor<T>,
 ): boolean => {
   return (
     (isEmpty(selectedColumns) && c.showByDefault !== false) ||

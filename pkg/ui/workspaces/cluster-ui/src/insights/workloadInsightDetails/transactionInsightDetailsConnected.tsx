@@ -77,7 +77,8 @@ export const TransactionInsightDetailsConnected = withRouter(
   connect<
     TransactionInsightDetailsStateProps,
     TransactionInsightDetailsDispatchProps,
-    RouteComponentProps
+    RouteComponentProps,
+    AppState
   >(
     mapStateToProps,
     mapDispatchToProps,

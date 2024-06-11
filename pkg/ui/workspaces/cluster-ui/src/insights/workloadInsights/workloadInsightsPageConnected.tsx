@@ -230,7 +230,8 @@ export const WorkloadInsightsPageConnected = withRouter(
     StateProps,
     DispatchProps,
     RouteComponentProps,
-    WorkloadInsightsViewProps
+    WorkloadInsightsViewProps,
+    AppState
   >(
     (state: AppState, props: RouteComponentProps) => ({
       transactionInsightsViewStateProps: transactionMapStateToProps(

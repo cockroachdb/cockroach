@@ -18,6 +18,7 @@ import {
   TxnInsightDetailsRequest,
   TxnInsightDetailsResponse,
 } from "../../../api/txnInsightDetailsApi";
+import { maybeError } from "../../../util";
 
 import { actions } from "./transactionInsightDetails.reducer";
 
@@ -35,7 +36,7 @@ export function* requestTransactionInsightDetailsSaga(
     yield put(actions.received(result));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: maybeError(e),
       key: action.payload.txnExecutionID,
     };
     yield put(actions.failed(err));

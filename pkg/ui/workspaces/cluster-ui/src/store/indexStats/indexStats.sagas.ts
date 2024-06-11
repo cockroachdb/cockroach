@@ -29,6 +29,7 @@ import {
   TableIndexStatsRequest,
   TableIndexStatsResponseWithKey,
 } from "../../api/indexDetailsApi";
+import { maybeError } from "../../util";
 
 import {
   actions as indexStatsActions,
@@ -56,7 +57,7 @@ export function* requestIndexStatsSaga(
     yield put(indexStatsActions.received(resultWithKey));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: maybeError(e),
       key,
     };
     yield put(indexStatsActions.failed(err));
@@ -96,7 +97,7 @@ export function* resetIndexStatsSaga(
     );
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: maybeError(e),
       key,
     };
     yield put(indexStatsActions.failed(err));

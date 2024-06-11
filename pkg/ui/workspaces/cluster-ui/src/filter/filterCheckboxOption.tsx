@@ -24,7 +24,7 @@ export type FilterCheckboxOptionProps = {
   // onSelectionChanged callback function is called with all selected options.
   onSelectionChanged?: (options: OptionsType<FilterCheckboxOptionItem>) => void;
   triggerClear?: (fn: () => void) => void;
-} & Props;
+} & Props<FilterCheckboxOptionItem, true>;
 
 export const FilterCheckboxOption = (
   props: FilterCheckboxOptionProps,
@@ -69,7 +69,7 @@ export const FilterCheckboxOption = (
   return (
     <div>
       <div className={filterLabel.margin}>{label}</div>
-      <Select
+      <Select<FilterCheckboxOptionItem, true>
         {...selectProps}
         isMulti
         options={options}
