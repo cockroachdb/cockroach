@@ -64,5 +64,5 @@ store_id=1 to=3 pri=NormalPri
 store_id=2 to=3 pri=NormalPri
 ----
 (n1,s1):1: match=4 next=5 admitted=[LowPri=2,NormalPri=3] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
-(n2,s2):2: match=3 next=4 admitted=[LowPri=2,NormalPri=3] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) queue=[4,5) size=+1021 KiB pri=NormalPri
+(n2,s2):2: match=4 next=5 admitted=[LowPri=2,NormalPri=3] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
 (n3,s3):3: match=3 next=4 admitted=[LowPri=2] eval=(reg=-2.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) queue=[4,5) size=+1021 KiB pri=NormalPri

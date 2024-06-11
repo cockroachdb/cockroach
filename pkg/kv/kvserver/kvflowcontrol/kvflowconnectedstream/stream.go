@@ -1507,9 +1507,10 @@ type replicaSendStream struct {
 }
 
 func (rss *replicaSendStream) String() string {
-	return fmt.Sprintf("connected_state=%v index_to_send=%d, next_raft_index=%d closed=%v watcher_handle_id=%d",
-		rss.connectedState, rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex, rss.closed,
-		rss.sendQueue.watcherHandleID)
+	return fmt.Sprintf("[%v,%v) conn=%v closed=%v handle_id=%d size=%v pri=%v force=%v",
+		rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex, rss.connectedState, rss.closed,
+		rss.sendQueue.watcherHandleID, rss.queueSize(), rss.queuePriority(),
+		rss.sendQueue.forceFlushScheduled)
 }
 
 // Initial state provided to constructor of replicaSendStream.
@@ -1792,9 +1793,6 @@ func (rss *replicaSendStream) Notify() {
 	wc := workClassFromRaftPriority(pri)
 	queueSize := rss.queueSize()
 	tokens := rss.parent.sendTokenCounter.TryDeduct(context.TODO(), wc, queueSize)
-	log.VInfof(context.TODO(), 1,
-		"notify: tokens=%v queueSize=%v SendTokensWatcher=%v watcherHandleID=%v",
-		tokens, queueSize, rss.parent.parent.opts.SendTokensWatcher, rss.sendQueue.watcherHandleID)
 	if tokens > 0 {
 		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
 		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
@@ -1802,6 +1800,10 @@ func (rss *replicaSendStream) Notify() {
 		rss.sendQueue.deductedForScheduler.tokens = tokens
 		rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 	}
+	log.VInfof(context.TODO(), 1,
+		"Notify(%v): deduct=%v watcher=%v %v",
+		rss.parent.desc.ReplicaID, tokens,
+		rss.parent.parent.opts.SendTokensWatcher, rss)
 }
 
 func (rss *replicaSendStream) isEmptySendQueue() bool {

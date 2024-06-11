@@ -12,6 +12,9 @@ package kvflowconnectedstream
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -122,6 +125,9 @@ type StoreStreamSendTokensWatcher interface {
 	// CancelHandle cancels the given handle, stopping it from being notified
 	// when tokens are available.
 	CancelHandle(handle StoreStreamSendTokenHandleID)
+	// String returns a string representation of the store stream send tokens
+	// watcher.
+	String() string
 }
 
 const InvalidStoreStreamSendTokenHandleID StoreStreamSendTokenHandleID = 0
@@ -153,6 +159,33 @@ func NewStoreStreamSendTokensWatcher(stopper *stop.Stopper) *storeStreamSendToke
 	ssstw.mu.handles = make(map[StoreStreamSendTokenHandleID]*StoreStreamSendTokenHandle)
 	ssstw.mu.idSeq = 1
 	return ssstw
+}
+
+func (s *storeStreamSendTokensWatcher) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var buf strings.Builder
+	handleIDs := make([]StoreStreamSendTokenHandleID, 0, len(s.mu.handles))
+	for id := range s.mu.handles {
+		handleIDs = append(handleIDs, id)
+	}
+	sort.Slice(handleIDs, func(i, j int) bool {
+		return handleIDs[i] < handleIDs[j]
+	})
+
+	buf.WriteString("handles [")
+	i := 0
+	for _, handle := range s.mu.handles {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		fmt.Fprintf(&buf, "(%v,%v)", handle.id, handle.wc)
+		i++
+	}
+
+	buf.WriteString("]")
+	return buf.String()
 }
 
 // storeStreamSendTokensWatcher implements the StoreStreamSendTokensWatcher

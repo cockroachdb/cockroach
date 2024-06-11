@@ -128,7 +128,7 @@ func scanPriority(t *testing.T, input string) admissionpb.WorkPriority {
 //   - add multi-tenant throughout commands, this is currently mostly ignored.
 //   - add multi-range support, this test currently assumes only a single range
 //     controller.
-//   - add stringer functions to print the send_queue / tracker state.
+//   - add stringer functions to print the tracker state.
 //   - print the appropriate state after each command, rather than all the
 //     state.
 //   - test replica set changes
@@ -356,6 +356,12 @@ func (t *testingRaft) admit(storeID roachpb.StoreID, to uint64, pri admissionpb.
 	t.replicas[replicaID] = replica
 	log.Infof(context.Background(), "admit store=%v to=%v pri=%v(%v) (%v)", storeID, to, pri, raftPrio, replica.info)
 	t.controller.HandleRaftEvent(t.ready())
+	// There may be some number of Notify() calls that result from the
+	// HandleRaftEvent call, so we wait a short duration to ensure they finish
+	// before proceeding.
+	// TODO(kvoli): This is a hack, we should have a better way to wait on
+	// potential async notify calls.
+	time.Sleep(1 * time.Millisecond)
 }
 
 func (t *testingRaft) ready() testingRaftEvent {
@@ -412,8 +418,10 @@ func (t *testingRaft) ScheduleControllerEvent(rangeID roachpb.RangeID) {
 		// have an associated controller.
 		return
 	}
-	log.Infof(context.Background(), "schedule range %d", rangeID)
-	t.controller.HandleRaftEvent(t.ready())
+	log.Infof(context.Background(), "schedule rangeID=%d", rangeID)
+	if err := t.controller.HandleControllerSchedulerEvent(); err != nil {
+		panic(err)
+	}
 }
 
 type testingRaftEvent struct {
