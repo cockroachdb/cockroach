@@ -3195,7 +3195,6 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 	ex.extraTxnState.transactionStatementFingerprintIDs = nil
 	ex.extraTxnState.numRows = 0
-	ex.extraTxnState.shouldCollectTxnExecutionStats = false
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 	ex.extraTxnState.idleLatency = 0
 	ex.extraTxnState.rowsRead = 0
@@ -3203,9 +3202,10 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.rowsWritten = 0
 	ex.extraTxnState.rowsWrittenLogged = false
 	ex.extraTxnState.rowsReadLogged = false
-	if txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); txnExecStatsSampleRate > 0 {
-		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
-	}
+
+	txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV)
+	ex.extraTxnState.shouldCollectTxnExecutionStats = !ex.server.cfg.TestingKnobs.DisableProbabilisticSampling &&
+		txnExecStatsSampleRate > ex.rng.Float64()
 
 	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 	// client connection, and is Server.InternalMetrics for internal executors.
@@ -3248,12 +3248,6 @@ func (ex *connExecutor) recordTransactionFinish(
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.totalActiveTimeStopWatch.Stop()
-
-	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
-		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(
-			ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL,
-		)
-	}
 
 	// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 	// client connection, and is Server.InternalMetrics for internal executors.
@@ -3308,6 +3302,12 @@ func (ex *connExecutor) recordTransactionFinish(
 		// TODO(107318): add readonly
 		SessionData: ex.sessionData(),
 		TxnErr:      txnErr,
+	}
+
+	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
+		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(
+			ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL, recordedTxnStats,
+		)
 	}
 
 	ex.maybeRecordRetrySerializableContention(ev.txnID, transactionFingerprintID, txnErr)

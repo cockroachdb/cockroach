@@ -1681,7 +1681,7 @@ type ExecutorTestingKnobs struct {
 
 	// OnRecordTxnFinish, if set, will be called as we record a transaction
 	// finishing.
-	OnRecordTxnFinish func(isInternal bool, phaseTimes *sessionphase.Times, stmt string)
+	OnRecordTxnFinish func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, txnStats sqlstats.RecordedTxnStats)
 
 	// UseTransactionDescIDGenerator is used to force descriptor ID generation
 	// to use a transaction, and, in doing so, more deterministically allocate
@@ -1703,6 +1703,13 @@ type ExecutorTestingKnobs struct {
 	// ForceSQLLivenessSession will force the use of a sqlliveness session for
 	// transaction deadlines even in the system tenant.
 	ForceSQLLivenessSession bool
+
+	// DisableProbabilisticSampling, if set to true, will disable
+	// probabilistic transaction sampling. This is important for tests that
+	// want to deterministically test cases where we turn on transaction sampling
+	// due to some other condition. We can't set the probability to 0 since
+	// that would disable the feature entirely.
+	DisableProbabilisticSampling bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

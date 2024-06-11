@@ -461,6 +461,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		appStats,
 		insightsProvider.Writer(false /* internal */),
 		sessionphase.NewTimes(),
+		sqlStats.GetCounters(),
 		nil, /* knobs */
 	)
 
@@ -592,6 +593,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			appStats,
 			insightsProvider.Writer(false /* internal */),
 			sessionphase.NewTimes(),
+			sqlStats.GetCounters(),
 			nil, /* knobs */
 		)
 
@@ -742,7 +744,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 				finishedExecute.Set(true)
 			}
 		},
-		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string) {
+		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, _ sqlstats.RecordedTxnStats) {
 			tc.Lock()
 			defer tc.Unlock()
 			if !isInternal && tc.query == stmt && finishedExecute.Get() {

@@ -108,6 +108,10 @@ func (s *SQLStats) GetTotalFingerprintBytes() int64 {
 	return s.mu.mon.AllocBytes()
 }
 
+func (s *SQLStats) GetCounters() *ssmemstorage.SQLStatsAtomicCounters {
+	return s.atomic
+}
+
 func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Container {
 	s.mu.Lock()
 	defer s.mu.Unlock()

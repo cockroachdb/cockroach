@@ -175,3 +175,9 @@ func (s *SQLStatsAtomicCounters) freeByCnt(
 func (s *SQLStatsAtomicCounters) GetTotalFingerprintCount() int64 {
 	return atomic.LoadInt64(&s.uniqueStmtFingerprintCount) + atomic.LoadInt64(&s.uniqueTxnFingerprintCount)
 }
+
+// GetStatementCount returns the number of unique statement fingerprints stored
+// in the current SQLStats.
+func (s *SQLStatsAtomicCounters) GetStatementCount() int64 {
+	return atomic.LoadInt64(&s.uniqueStmtFingerprintCount)
+}

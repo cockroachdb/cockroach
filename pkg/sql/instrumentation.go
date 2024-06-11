@@ -470,18 +470,23 @@ func (ih *instrumentationHelper) Setup(
 		}
 	}
 
-	ih.collectExecStats = collectTxnExecStats
+	shouldSampleFirstEncounter := func() bool {
+		// If this is the first time we see this statement in the current stats
+		// container, we'll collect its execution stats anyway (unless the user
+		// disabled txn or stmt stats collection entirely).
+		// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
+		if collectTxnStatsSampleRate.Get(&cfg.Settings.SV) == 0 ||
+			!sqlstats.StmtStatsEnable.Get(&cfg.Settings.SV) {
+			return false
+		}
 
-	// Don't collect it if Stats Collection is disabled. If it is disabled the
-	// stats are not stored, so it always returns false for previouslySampled.
-	if !collectTxnExecStats && (!previouslySampled && sqlstats.StmtStatsEnable.Get(&cfg.Settings.SV)) {
-		// We don't collect the execution stats for statements in this txn, but
-		// this is the first time we see this statement ever, so we'll collect
-		// its execution stats anyway (unless the user disabled txn stats
-		// collection entirely).
-		statsCollectionDisabled := collectTxnStatsSampleRate.Get(&cfg.Settings.SV) == 0
-		ih.collectExecStats = !statsCollectionDisabled
+		// We don't want to collect the stats if the stats container is full,
+		// since previouslySampled will always return false for statements
+		// not already in the container.
+		return !previouslySampled && !statsCollector.StatementsContainerFull()
 	}
+
+	ih.collectExecStats = collectTxnExecStats || shouldSampleFirstEncounter()
 
 	if !ih.collectBundle && ih.withStatementTrace == nil && ih.outputMode == unmodifiedOutput {
 		if ih.collectExecStats {
