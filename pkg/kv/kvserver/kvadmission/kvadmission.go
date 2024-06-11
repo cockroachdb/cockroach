@@ -633,12 +633,9 @@ func (n *controllerImpl) AdmitRaftEntry(
 		return
 	}
 	n.AdmitRaftEntryV1OrV2(ctx, tenantID, storeID, rangeID, entry, meta, typ.IsSideloaded())
-	// TODO(racV2-integration): handle RACv2 entries differently? Caller of
-	// AdmitRaftEntry is the Replica, so should consider handling most things
-	// there, and then call a AdmitRACv2Entry with specifics.
-
 }
 
+// AdmitRaftEntryV1OrV2 is shared code for either RACv1 or RACv2.
 func (n *controllerImpl) AdmitRaftEntryV1OrV2(
 	ctx context.Context,
 	tenantID roachpb.TenantID,

@@ -755,7 +755,16 @@ func (rr2 *replicaRACv2Integration) admitRaftEntry(
 	queue.AdmitRaftEntryV1OrV2(ctx, tenantID, storeID, rangeID, entry, meta, typ.IsSideloaded())
 }
 
+// priorityInheritanceState records state provided via the side-channel,
+// regarding priority inheritance.
 type priorityInheritanceState struct {
+	// Non-overlapping intervals in increasing order.
+	//
+	// A new interval added here will throw away existing state for indices >=
+	// indexInterva.first.
+	//
+	// A read at index i will cause a prefix of intervals with
+	// indexInterval.last < i to be discarded.
 	intervals []indexInterval
 }
 
@@ -818,31 +827,52 @@ func (p *priorityInheritanceState) getEffectivePriority(
 	return pri, true
 }
 
+// waitingForAdmissionState records the indices of individual entries that are
+// waiting for admission in the AC queues.
 type waitingForAdmissionState struct {
+	// The indices for each priority are in increasing index order.
+	//
+	// Say the indices for a priority are 3, 6, 10. We track the individual
+	// indices since when 3 is popped, we can advance admitted for that priority
+	// to 5. When 6 is popped, admitted can advance to 9. We should never have a
+	// situation where indices are popped out of order, but we tolerate that by
+	// popping the prefix upto the index being popped.
 	waiting [kvflowconnectedstream.NumRaftPriorities][]uint64
 }
 
 func (w *waitingForAdmissionState) remove(
 	index uint64, pri kvflowconnectedstream.RaftPriority,
 ) (admittedMayAdvance bool) {
-	// TODO(racV2-integration):
-
-	// Is it possible that there isn't state for an index? If so, ignore.
-	return false
+	pos, found := slices.BinarySearch(w.waiting[pri], index)
+	if !found {
+		return false
+	}
+	w.waiting[pri] = w.waiting[pri][pos+1:]
+	return true
 }
 
 func (w *waitingForAdmissionState) add(index uint64, pri kvflowconnectedstream.RaftPriority) {
-	// TODO(racV2-integration):
+	pos, found := slices.BinarySearch(w.waiting[pri], index)
+	if found {
+		return
+	}
+	slices.Insert(w.waiting[pri], pos, index)
 }
 
 func (w *waitingForAdmissionState) computeAdmitted(
 	stableIndex uint64,
 ) [kvflowconnectedstream.NumRaftPriorities]uint64 {
-	// TODO(racV2-integration):
-
-	// If a notAdmitted[i] is empty, admitted[i] = stableIndex, else admitted[i]
-	// = notAdmitted[i][0]-1.
-	return [kvflowconnectedstream.NumRaftPriorities]uint64{}
+	var admitted [kvflowconnectedstream.NumRaftPriorities]uint64
+	for i := range w.waiting {
+		admitted[i] = stableIndex
+		if len(w.waiting) > 0 {
+			upperBoundAdmitted := w.waiting[i][0] - 1
+			if upperBoundAdmitted < admitted[i] {
+				admitted[i] = upperBoundAdmitted
+			}
+		}
+	}
+	return admitted
 }
 
 func admittedIncreased(prev, next [kvflowconnectedstream.NumRaftPriorities]uint64) bool {
