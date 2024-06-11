@@ -153,9 +153,32 @@ func MakeClusterSpec(nodeCount int, opts ...Option) ClusterSpec {
 
 // ClustersCompatible returns true if the clusters are compatible, i.e. the test
 // asking for s2 can reuse s1.
-func ClustersCompatible(s1, s2 ClusterSpec) bool {
+func ClustersCompatible(s1, s2 ClusterSpec, cloud string) bool {
 	s1.Lifetime = 0
 	s2.Lifetime = 0
+	// only consider the specification of the cloud that we are running in
+	if cloud != GCE {
+		s1.GCE.VolumeType = ""
+		s1.GCE.Zones = ""
+		s1.GCE.MachineType = ""
+		s1.GCE.MinCPUPlatform = ""
+		s2.GCE.VolumeType = ""
+		s2.GCE.Zones = ""
+		s2.GCE.MachineType = ""
+		s2.GCE.MinCPUPlatform = ""
+	}
+	if cloud != AWS {
+		s1.AWS.Zones = ""
+		s1.AWS.VolumeThroughput = 0
+		s1.AWS.MachineType = ""
+		s2.AWS.Zones = ""
+		s2.AWS.VolumeThroughput = 0
+		s2.AWS.MachineType = ""
+	}
+	if cloud != Azure {
+		s1.Azure.Zones = ""
+		s2.Azure.Zones = ""
+	}
 	return s1 == s2
 }
 
