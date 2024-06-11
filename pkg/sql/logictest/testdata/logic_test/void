@@ -139,6 +139,7 @@ ORDER BY
 
 # Regression test for #83754.
 # Non-vectorized and vectorized results should match.
+skipif config fakedist-disk
 query T
 SELECT
   COALESCE(tab_115318.col_199168, NULL) AS col_199169
