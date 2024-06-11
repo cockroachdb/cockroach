@@ -12,7 +12,7 @@ import moment from "moment-timezone";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { IndexUsageStatistic, recommendDropUnusedIndex } from "../insights";
-import { getLogger, indexUnusedDuration } from "../util";
+import { getLogger, indexUnusedDuration, maybeError } from "../util";
 
 import {
   combineQueryErrors,
@@ -295,7 +295,7 @@ const getDatabaseZoneConfig: DatabaseDetailsQuery<DatabaseZoneConfigRow> = {
           e,
         );
         // Catch and assign the error if we encounter one decoding.
-        resp.zoneConfigResp.error = e;
+        resp.zoneConfigResp.error = maybeError(e);
         resp.zoneConfigResp.zone_config_level = ZoneConfigurationLevel.UNKNOWN;
       }
     }
@@ -457,11 +457,23 @@ type DatabaseDetailsQuery<RowType> = {
 };
 
 const databaseDetailQueries: DatabaseDetailsQuery<DatabaseDetailsRow>[] = [
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getDatabaseId,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getDatabaseGrantsQuery,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getDatabaseTablesQuery,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getDatabaseReplicasAndRegions,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getDatabaseIndexUsageStats,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getDatabaseZoneConfig,
 ];
 

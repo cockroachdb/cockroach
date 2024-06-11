@@ -23,6 +23,7 @@ import { getSessions } from "src/api/sessionsApi";
 
 import { actions as clusterLockActions } from "../clusterLocks/clusterLocks.reducer";
 import { selectIsTenant } from "../uiConfig";
+import { maybeError } from "../../util";
 
 import { actions } from "./sessions.reducer";
 
@@ -42,7 +43,7 @@ export function* requestSessionsSaga(): any {
     const result = yield call(getSessions);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(maybeError(e)));
   }
 }
 

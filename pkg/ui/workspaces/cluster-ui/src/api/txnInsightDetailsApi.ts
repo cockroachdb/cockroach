@@ -15,6 +15,7 @@ import {
   StmtFailureCodesStr,
   TxnInsightDetails,
 } from "../insights";
+import { maybeError } from "../util";
 
 import {
   executeInternalSql,
@@ -108,7 +109,7 @@ export async function getTxnInsightDetailsApi(
         );
       }
     } catch (e) {
-      errors.txnDetailsErr = e;
+      errors.txnDetailsErr = maybeError(e);
     }
   }
 
@@ -135,7 +136,7 @@ export async function getTxnInsightDetailsApi(
         txnInsightDetails.statements = formatStmtInsights(stmts);
       }
     } catch (e) {
-      errors.statementsErr = e;
+      errors.statementsErr = maybeError(e);
     }
   }
 
@@ -157,7 +158,7 @@ export async function getTxnInsightDetailsApi(
         contentionInfo?.blockingContentionDetails;
     }
   } catch (e) {
-    errors.contentionErr = e;
+    errors.contentionErr = maybeError(e);
   }
 
   return {

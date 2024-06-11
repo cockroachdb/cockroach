@@ -18,6 +18,7 @@ import {
 import { resetSQLStats } from "src/api/sqlStatsApi";
 import { actions as localStorageActions } from "src/store/localStorage";
 
+import { maybeError } from "../../util";
 import { actions as txnStatsActions } from "../transactionStats";
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
 
@@ -37,7 +38,7 @@ export function* requestSQLStatsSaga(
     const result = yield call(getCombinedStatements, action.payload);
     yield put(sqlStatsActions.received(result));
   } catch (e) {
-    yield put(sqlStatsActions.failed(e));
+    yield put(sqlStatsActions.failed(maybeError(e)));
   }
 }
 
@@ -61,7 +62,7 @@ export function* resetSQLStatsSaga() {
       put(txnStatsActions.invalidated()),
     ]);
   } catch (e) {
-    yield put(sqlStatsActions.failed(e));
+    yield put(sqlStatsActions.failed(maybeError(e)));
   }
 }
 

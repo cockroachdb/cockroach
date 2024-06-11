@@ -16,7 +16,7 @@ import {
   StmtInsightsReq,
   getStmtInsightsApi,
 } from "../../../api";
-import { HexStringToInt64String } from "../../../util";
+import { HexStringToInt64String, maybeError } from "../../../util";
 
 import {
   actions,
@@ -42,7 +42,7 @@ export function* requestStatementFingerprintInsightsSaga(
     yield put(actions.received(resultWithKey));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: maybeError(e),
       key: action.payload.stmtFingerprintId,
     };
     yield put(actions.failed(err));

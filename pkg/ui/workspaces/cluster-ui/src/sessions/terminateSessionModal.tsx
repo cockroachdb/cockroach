@@ -28,10 +28,10 @@ interface TerminateSessionModalProps {
   cancel: (payload: ICancelSessionRequest) => void;
 }
 
-const TerminateSessionModal = (
-  props: TerminateSessionModalProps,
-  ref: React.RefObject<TerminateSessionModalRef>,
-) => {
+const TerminateSessionModal: React.ForwardRefRenderFunction<
+  TerminateSessionModalRef,
+  TerminateSessionModalProps
+> = (props, ref) => {
   const { cancel } = props;
   const [visible, setVisible] = useState(false);
   const [req, setReq] = useState<ICancelSessionRequest>();

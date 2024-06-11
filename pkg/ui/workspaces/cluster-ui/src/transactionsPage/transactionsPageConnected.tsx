@@ -73,7 +73,8 @@ export const TransactionsPageConnected = withRouter(
     StateProps,
     DispatchProps,
     RouteComponentProps,
-    TransactionsPageRootProps
+    TransactionsPageRootProps,
+    AppState
   >(
     (state: AppState, props) => ({
       fingerprintsPageProps: {
