@@ -243,6 +243,16 @@ func newTokenCounter(settings *cluster.Settings, clock *hlc.Clock) *tokenCounter
 	return b
 }
 
+func (b *tokenCounter) String() string {
+  b.mu.RLock()
+  defer b.mu.RUnlock()
+  return fmt.Sprintf("regular=%v/%v elastic=%v/%v",
+    b.mu.counters[admissionpb.RegularWorkClass].tokens,
+    b.mu.limit.regular,
+    b.mu.counters[admissionpb.ElasticWorkClass].tokens,
+    b.mu.limit.elastic)
+}
+
 func (b *tokenCounter) tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
