@@ -82,7 +82,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 			if err != nil {
 				return nil, err
 			}
-			if err := opc.runExecBuilder(
+			if result, err := opc.runExecBuilder(
 				ctx,
 				&pt,
 				&stmt,
@@ -91,8 +91,11 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				p.SemaCtx(),
 				p.EvalContext(),
 				p.autoCommit,
+				false, /* disableTelemetryAndPlanGists */
 			); err != nil {
 				return nil, err
+			} else {
+				pt.planComponents = *result
 			}
 			if pt.flags.IsSet(planFlagContainsMutation) {
 				// Cursors with mutations are invalid.
