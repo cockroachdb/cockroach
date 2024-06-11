@@ -217,7 +217,7 @@ DELETE FROM %s WHERE %s
    AND (%[1]s.crdb_internal_mvcc_timestamp < $%[3]d
         AND %[1]s.crdb_internal_origin_timestamp IS NULL)
     OR (%[1]s.crdb_internal_origin_timestamp < $%[3]d
-        AND tab.crdb_internal_origin_timestamp IS NOT NULL)`
+        AND %[1]s.crdb_internal_origin_timestamp IS NOT NULL)`
 
 	return fmt.Sprintf(baseQuery, fqTableName, whereClause.String(), originTSIdx)
 }
