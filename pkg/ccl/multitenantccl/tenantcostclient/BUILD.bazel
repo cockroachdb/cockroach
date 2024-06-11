@@ -27,7 +27,6 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/quotapool",
         "//pkg/util/stop",
-        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
