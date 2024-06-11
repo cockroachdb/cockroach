@@ -42,7 +42,7 @@ export function* requestSessionsSaga(): any {
     const result = yield call(getSessions);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(e as Error));
   }
 }
 

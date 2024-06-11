@@ -108,7 +108,7 @@ export async function getTxnInsightDetailsApi(
         );
       }
     } catch (e) {
-      errors.txnDetailsErr = e;
+      errors.txnDetailsErr = e as Error;
     }
   }
 
@@ -135,7 +135,7 @@ export async function getTxnInsightDetailsApi(
         txnInsightDetails.statements = formatStmtInsights(stmts);
       }
     } catch (e) {
-      errors.statementsErr = e;
+      errors.statementsErr = e as Error;
     }
   }
 
@@ -157,7 +157,7 @@ export async function getTxnInsightDetailsApi(
         contentionInfo?.blockingContentionDetails;
     }
   } catch (e) {
-    errors.contentionErr = e;
+    errors.contentionErr = e as Error;
   }
 
   return {

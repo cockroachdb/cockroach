@@ -47,7 +47,7 @@ export function* requestSQLDetailsStatsSaga(
     yield put(sqlDetailsStatsActions.received(resultWithKey));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: e as Error,
       key,
     };
     yield put(sqlDetailsStatsActions.failed(err));

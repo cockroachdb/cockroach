@@ -28,7 +28,7 @@ export function* requestSchemaInsightsSaga(
     const result = yield call(getSchemaInsights, action.payload);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(e as Error));
   }
 }
 

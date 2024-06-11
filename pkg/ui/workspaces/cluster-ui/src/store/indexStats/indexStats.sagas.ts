@@ -56,7 +56,7 @@ export function* requestIndexStatsSaga(
     yield put(indexStatsActions.received(resultWithKey));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: e as Error,
       key,
     };
     yield put(indexStatsActions.failed(err));
@@ -96,7 +96,7 @@ export function* resetIndexStatsSaga(
     );
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: e as Error,
       key,
     };
     yield put(indexStatsActions.failed(err));

@@ -28,7 +28,11 @@ export function* requestUserSQLRolesSaga(): any {
       yield call(getUserSQLRoles);
     yield put(actions.receivedUserSQLRoles(result.roles));
   } catch (e) {
-    getLogger().warn(e.message, /* additional context */ undefined, e);
+    getLogger().warn(
+      (e as Error).message,
+      /* additional context */ undefined,
+      e,
+    );
   }
 }
 

@@ -33,7 +33,7 @@ export function* terminateSessionSaga(
     yield put(sessionsActions.invalidated());
     yield put(sessionsActions.refresh());
   } catch (e) {
-    yield put(terminateQueryActions.terminateSessionFailed(e));
+    yield put(terminateQueryActions.terminateSessionFailed(e as Error));
   }
 }
 
@@ -47,7 +47,7 @@ export function* terminateQuerySaga(
     yield put(sessionsActions.invalidated());
     yield put(sessionsActions.refresh());
   } catch (e) {
-    yield put(terminateQueryActions.terminateQueryFailed(e));
+    yield put(terminateQueryActions.terminateQueryFailed(e as Error));
   }
 }
 

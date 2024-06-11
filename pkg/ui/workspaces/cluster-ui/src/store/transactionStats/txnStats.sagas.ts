@@ -31,7 +31,7 @@ export function* requestTxnStatsSaga(
     const result = yield call(getFlushedTxnStatsApi, action.payload);
     yield put(txnStatsActions.received(result));
   } catch (e) {
-    yield put(txnStatsActions.failed(e));
+    yield put(txnStatsActions.failed(e as Error));
   }
 }
 

@@ -44,7 +44,7 @@ export function* requestDatabaseDetailsSaga(
     );
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: e as Error,
       key: action.payload.database,
     };
     yield put(actions.failed(err));

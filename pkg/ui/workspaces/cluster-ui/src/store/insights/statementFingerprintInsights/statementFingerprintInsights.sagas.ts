@@ -42,7 +42,7 @@ export function* requestStatementFingerprintInsightsSaga(
     yield put(actions.received(resultWithKey));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: e as Error,
       key: action.payload.stmtFingerprintId,
     };
     yield put(actions.failed(err));

@@ -24,7 +24,7 @@ export function* requestJobsSaga(action: PayloadAction<JobsRequest>): any {
     const result = yield call(getJobs, action.payload);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(e as Error));
   }
 }
 

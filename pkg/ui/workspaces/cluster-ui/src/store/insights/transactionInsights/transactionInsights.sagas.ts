@@ -28,7 +28,7 @@ export function* requestTransactionInsightsSaga(
     const result = yield call(getTxnInsightsApi, action?.payload);
     yield put(txnActions.received(result));
   } catch (e) {
-    yield put(txnActions.failed(e));
+    yield put(txnActions.failed(e as Error));
   }
 }
 

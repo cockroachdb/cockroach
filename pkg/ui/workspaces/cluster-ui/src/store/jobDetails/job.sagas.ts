@@ -32,7 +32,7 @@ export function* requestJobSaga(action: PayloadAction<JobRequest>): any {
     yield put(actions.received(resultWithKey));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: e as Error,
       key,
     };
     yield put(actions.failed(err));

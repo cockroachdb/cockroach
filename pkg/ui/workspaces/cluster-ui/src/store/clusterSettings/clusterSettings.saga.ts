@@ -31,7 +31,7 @@ export function* requestClusterSettingsSaga(
     const result = yield call(getClusterSettings, action.payload, "1M");
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(e as Error));
   }
 }
 

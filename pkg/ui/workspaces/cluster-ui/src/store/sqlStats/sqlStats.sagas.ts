@@ -37,7 +37,7 @@ export function* requestSQLStatsSaga(
     const result = yield call(getCombinedStatements, action.payload);
     yield put(sqlStatsActions.received(result));
   } catch (e) {
-    yield put(sqlStatsActions.failed(e));
+    yield put(sqlStatsActions.failed(e as Error));
   }
 }
 
@@ -61,7 +61,7 @@ export function* resetSQLStatsSaga() {
       put(txnStatsActions.invalidated()),
     ]);
   } catch (e) {
-    yield put(sqlStatsActions.failed(e));
+    yield put(sqlStatsActions.failed(e as Error));
   }
 }
 

@@ -67,7 +67,8 @@ export const StatementInsightDetailsConnected = withRouter(
   connect<
     StatementInsightDetailsStateProps,
     StatementInsightDetailsDispatchProps,
-    RouteComponentProps
+    RouteComponentProps,
+    AppState
   >(
     mapStateToProps,
     mapDispatchToProps,

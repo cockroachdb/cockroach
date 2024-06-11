@@ -26,7 +26,7 @@ export function* requestLivenessSaga(): any {
     const result = yield call(getLiveness);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(e as Error));
   }
 }
 

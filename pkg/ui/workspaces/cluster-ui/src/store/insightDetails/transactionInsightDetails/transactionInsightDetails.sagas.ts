@@ -35,7 +35,7 @@ export function* requestTransactionInsightDetailsSaga(
     yield put(actions.received(result));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: e as Error,
       key: action.payload.txnExecutionID,
     };
     yield put(actions.failed(err));

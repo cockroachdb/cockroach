@@ -24,7 +24,7 @@ export function* requestDatabasesListSaga(): any {
     const result = yield call(getDatabasesList, moment.duration(10, "m"));
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(e as Error));
   }
 }
 

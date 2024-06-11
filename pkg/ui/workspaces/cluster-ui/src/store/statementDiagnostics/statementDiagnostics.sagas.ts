@@ -38,7 +38,7 @@ export function* createDiagnosticsReportSaga(
     // requested statement.
     yield put(actions.request());
   } catch (e) {
-    yield put(actions.createReportFailed(e));
+    yield put(actions.createReportFailed(e as Error));
   }
 }
 
@@ -56,7 +56,7 @@ export function* cancelDiagnosticsReportSaga(
     yield put(actions.cancelReportCompleted());
     yield put(actions.request());
   } catch (e) {
-    yield put(actions.cancelReportFailed(e));
+    yield put(actions.cancelReportFailed(e as Error));
   }
 }
 
@@ -69,7 +69,7 @@ export function* requestStatementsDiagnosticsSaga(): any {
     const response = yield call(getStatementDiagnosticsReports);
     yield put(actions.received(response));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(e as Error));
   }
 }
 

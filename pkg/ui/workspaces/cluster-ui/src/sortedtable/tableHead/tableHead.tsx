@@ -25,13 +25,8 @@ interface TableHeadProps {
   firstCellBordered: boolean;
 }
 
-export const TableHead: React.FC<TableHeadProps> = ({
-  expandableConfig,
-  columns,
-  sortSetting,
-  onChangeSortSetting,
-  firstCellBordered,
-}) => {
+export const TableHead: React.FC<TableHeadProps> = props => {
+  const { expandableConfig, columns, sortSetting, firstCellBordered } = props;
   const trClass = cx("head-wrapper__row", "head-wrapper__row--header");
   const thClass = cx("head-wrapper__cell");
   const cellContentWrapper = cx("inner-content-wrapper");
@@ -46,10 +41,11 @@ export const TableHead: React.FC<TableHeadProps> = ({
     // descending. If is the same columnTitle the value is updated.
 
     const ascending = newColumnSelected ? false : !prevValue;
-    onChangeSortSetting({
-      ascending,
-      columnTitle,
-    });
+    props.onChangeSortSetting &&
+      props.onChangeSortSetting({
+        ascending,
+        columnTitle,
+      });
   }
 
   return (
@@ -57,12 +53,12 @@ export const TableHead: React.FC<TableHeadProps> = ({
       <tr className={trClass}>
         {expandableConfig && <th className={thClass} />}
         {columns.map((c: SortableColumn, idx: number) => {
-          const sortable = c.columnTitle !== (null || undefined);
+          const sortable = !!c.columnTitle;
           const newColumnSelected = c.name !== sortSetting.columnTitle;
           const style = { textAlign: c.titleAlign };
-          const cellAction = sortable
-            ? () => handleSort(newColumnSelected, c.name, sortSetting.ascending)
-            : null;
+          const cellAction = () =>
+            sortable &&
+            handleSort(newColumnSelected, c.name, sortSetting.ascending);
           const cellClasses = cx(
             "head-wrapper__cell",
             "sorted__cell",
@@ -81,7 +77,7 @@ export const TableHead: React.FC<TableHeadProps> = ({
             <th
               className={cx(cellClasses)}
               key={"headCell" + idx}
-              onClick={cellAction}
+              onClick={_ => cellAction()}
               style={style}
             >
               <div className={cellContentWrapper}>

@@ -322,7 +322,7 @@ const getTableZoneConfig: TableDetailsQuery<TableZoneConfigRow> = {
           e,
         );
         // Catch and assign the error if we encounter one decoding.
-        resp.zoneConfigResp.error = e;
+        resp.zoneConfigResp.error = e as Error;
         resp.zoneConfigResp.zone_config_level = ZoneConfigurationLevel.UNKNOWN;
       }
     }
@@ -547,15 +547,35 @@ export type TableDetailsRow =
   | TableReplicasRow;
 
 const tableDetailQueries: TableDetailsQuery<TableDetailsRow>[] = [
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getTableId,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getTableGrants,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getTableSchemaDetails,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getTableCreateStatement,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getTableZoneConfigStmt,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getTableHeuristicsDetails,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getTableSpanStats,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getTableIndexUsageStats,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getTableZoneConfig,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   getTableReplicaStoreIDs,
 ];
 
@@ -614,8 +634,7 @@ async function fetchTableDetails(
     if (txnResult.error) {
       errs.push(txnResult.error);
     }
-    const query: TableDetailsQuery<TableDetailsRow> =
-      tableDetailQueries[txnResult.statement - 1];
+    const query = tableDetailQueries[txnResult.statement - 1];
     query.addToTableDetail(txnResult, detailsResponse);
   });
   if (resp.error) {

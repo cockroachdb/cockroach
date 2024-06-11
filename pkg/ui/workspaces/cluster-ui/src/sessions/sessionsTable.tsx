@@ -40,7 +40,7 @@ import { TerminateQueryModalRef } from "./terminateQueryModal";
 import { TerminateSessionModalRef } from "./terminateSessionModal";
 import styles from "./sessionsTable.module.scss";
 
-type ISession = cockroach.server.serverpb.Session;
+type ISession = cockroach.server.serverpb.ISession;
 type Status = cockroach.server.serverpb.Session.Status;
 
 const cx = classNames.bind(styles);
@@ -265,7 +265,7 @@ export function makeSessionsColumns(
       className: cx("cl-table__col-session-actions"),
       titleAlign: "right",
       cell: ({ session }) => {
-        const menuItems: DropdownItem[] = [
+        const menuItems: DropdownItem<"cancelStatement" | "cancelSession">[] = [
           {
             value: "cancelStatement",
             name: "Cancel Statement",

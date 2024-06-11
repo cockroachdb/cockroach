@@ -37,7 +37,7 @@ export function* requestTableDetailsSaga(
     yield put(actions.received({ key, tableDetailsResponse: result }));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: e as Error,
       key,
     };
     yield put(actions.failed(err));

@@ -28,7 +28,7 @@ export function* requestNodesSaga() {
       yield call(getNodes);
     yield put(actions.received(result.nodes));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(e as Error));
   }
 }
 

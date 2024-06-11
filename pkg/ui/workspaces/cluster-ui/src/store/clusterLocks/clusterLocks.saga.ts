@@ -26,7 +26,7 @@ export function* requestClusterLocksSaga(): any {
     const result = yield call(getClusterLocksState);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(e as Error));
   }
 }
 
