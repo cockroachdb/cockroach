@@ -275,7 +275,14 @@ subtest control_job_priv
 user testuser
 
 statement ok
-CREATE TABLE t_control_job_priv(x INT);
+CREATE TABLE t_control_job_priv(x INT)
+
+# Add a row into the table so that the GC job does not complete immediately;
+# it must wait for the table data gc.ttl before removing the descriptor.
+statement ok
+INSERT INTO t_control_job_priv VALUES (1)
+
+statement ok
 DROP TABLE t_control_job_priv
 
 let $job_id
@@ -306,7 +313,14 @@ subtest control_job_priv_inherited
 user testuser
 
 statement ok
-CREATE TABLE t_control_job_priv_inherited(x INT);
+CREATE TABLE t_control_job_priv_inherited(x INT)
+
+# Add a row into the table so that the GC job does not complete immediately;
+# it must wait for the table data gc.ttl before removing the descriptor.
+statement ok
+INSERT INTO t_control_job_priv_inherited VALUES (1)
+
+statement ok
 DROP TABLE t_control_job_priv_inherited
 
 let $job_id
