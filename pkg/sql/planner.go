@@ -410,18 +410,6 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	p := &planner{execCfg: execCfg}
-
-	p.txn = txn
-	p.stmt = Statement{}
-	p.cancelChecker.Reset(ctx)
-
-	p.semaCtx = tree.MakeSemaContext(p)
-	p.semaCtx.SearchPath = &sd.SearchPath
-	p.semaCtx.DateStyle = sd.GetDateStyle()
-	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
-	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(execCfg.Settings.Version)
-
 	plannerMon := mon.NewMonitor(mon.Options{
 		Name:     redact.Sprintf("internal-planner.%s.%s", user, opName),
 		CurCount: memMetrics.CurBytesCount,
@@ -429,7 +417,9 @@ func newInternalPlanner(
 		Settings: execCfg.Settings,
 	})
 	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
-	p.monitor = plannerMon
+
+	p := &planner{execCfg: execCfg}
+	p.resetPlanner(ctx, txn, sd, plannerMon, nil /* sessionMon */)
 
 	smi := &sessionDataMutatorIterator{
 		sds: sds,
@@ -461,7 +451,6 @@ func newInternalPlanner(
 	p.extendedEvalCtx.OriginalLocality = execCfg.Locality
 
 	p.sessionDataMutatorIterator = smi
-	p.autoCommit = false
 
 	p.extendedEvalCtx.MemMetrics = memMetrics
 	p.extendedEvalCtx.ExecCfg = execCfg
@@ -891,7 +880,6 @@ func (p *planner) QueryBufferedExWithCols(
 func (p *planner) resetPlanner(
 	ctx context.Context,
 	txn *kv.Txn,
-	stmtTS time.Time,
 	sd *sessiondata.SessionData,
 	plannerMon *mon.BytesMonitor,
 	sessionMon *mon.BytesMonitor,
