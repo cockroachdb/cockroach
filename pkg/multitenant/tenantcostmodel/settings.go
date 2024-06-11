@@ -20,14 +20,7 @@ import (
 )
 
 // Settings for the cost model parameters. These determine the values for a
-// Config, though not directly (some settings have user-friendlier units).
-//
-// The KV operation parameters are set based on experiments, where 1000 Request
-// Units correspond to one CPU second of usage on the host cluster.
-//
-// TODO(radu): these settings are not currently used on the tenant side; there,
-// only the defaults are used. Ideally, the tenant would always get the values
-// from the host cluster.
+// model, though not directly (some settings have user-friendlier units).
 var (
 	ReadBatchCost = settings.RegisterFloatSetting(
 		settings.SystemVisible,
@@ -118,8 +111,16 @@ var (
 		settings.WithReportable(true),
 	)
 
-	// List of config settings, used by SetOnChange.
-	configSettings = [...]settings.NonMaskedSetting{
+	EstimatedCPUCostSetting = settings.RegisterStringSetting(
+		settings.SystemVisible,
+		"tenant_cost_model.estimated_cpu",
+		"parameters for KV CPU prediction model, in json format",
+		"",
+		settings.WithValidateString(validateEstimatedCPUSetting),
+	)
+
+	// List of cost model settings, used by SetOnChange.
+	costModelSettings = [...]settings.NonMaskedSetting{
 		ReadBatchCost,
 		ReadRequestCost,
 		ReadPayloadCostPerMiB,
@@ -131,12 +132,21 @@ var (
 		ExternalIOEgressCostPerMiB,
 		ExternalIOIngressCostPerMiB,
 		CrossRegionNetworkCostSetting,
+		EstimatedCPUCostSetting,
 	}
 )
 
 func validateRegionalCostMultiplierTableSetting(values *settings.Values, tableStr string) error {
 	_, err := NewNetworkCostTable(tableStr)
 	return err
+}
+
+func validateEstimatedCPUSetting(values *settings.Values, jsonStr string) error {
+	if jsonStr == "" {
+		return nil
+	}
+	var model EstimatedCPUModel
+	return json.Unmarshal([]byte(jsonStr), &model)
 }
 
 // networkCostTableSetting is the json structure of the
@@ -230,8 +240,9 @@ func newEmptyCostTable() *NetworkCostTable {
 
 const perMiBToPerByte = float64(1) / (1024 * 1024)
 
-// ConfigFromSettings constructs a Config using the cluster setting values.
-func ConfigFromSettings(sv *settings.Values) Config {
+// RequestUnitModelFromSettings constructs a RequestUnitModel using the cluster
+// setting values.
+func RequestUnitModelFromSettings(sv *settings.Values) RequestUnitModel {
 	tableStr := CrossRegionNetworkCostSetting.Get(sv)
 
 	networkTable, err := NewNetworkCostTable(tableStr)
@@ -249,7 +260,7 @@ func ConfigFromSettings(sv *settings.Values) Config {
 		networkTable = newEmptyCostTable()
 	}
 
-	return Config{
+	return RequestUnitModel{
 		KVReadBatch:           RU(ReadBatchCost.Get(sv)),
 		KVReadRequest:         RU(ReadRequestCost.Get(sv)),
 		KVReadByte:            RU(ReadPayloadCostPerMiB.Get(sv) * perMiBToPerByte),
@@ -264,22 +275,28 @@ func ConfigFromSettings(sv *settings.Values) Config {
 	}
 }
 
-// DefaultConfig returns the configuration that corresponds to the default
-// setting values.
-func DefaultConfig() Config {
-	return Config{
-		KVReadBatch:           RU(ReadBatchCost.Default()),
-		KVReadRequest:         RU(ReadRequestCost.Default()),
-		KVReadByte:            RU(ReadPayloadCostPerMiB.Default() * perMiBToPerByte),
-		KVWriteBatch:          RU(WriteBatchCost.Default()),
-		KVWriteRequest:        RU(WriteRequestCost.Default()),
-		KVWriteByte:           RU(WritePayloadCostPerMiB.Default() * perMiBToPerByte),
-		PodCPUSecond:          RU(SQLCPUSecondCost.Default()),
-		PGWireEgressByte:      RU(PgwireEgressCostPerMiB.Default() * perMiBToPerByte),
-		ExternalIOIngressByte: RU(ExternalIOEgressCostPerMiB.Default() * perMiBToPerByte),
-		ExternalIOEgressByte:  RU(ExternalIOIngressCostPerMiB.Default() * perMiBToPerByte),
-		NetworkCostTable:      *newEmptyCostTable(),
+// EstimatedCPUModelFromSettings constructs a EstimatedCPUModel using the
+// tenant_cost_model.estimated_cpu cluster setting value.
+func EstimatedCPUModelFromSettings(sv *settings.Values) EstimatedCPUModel {
+	var cpuModel EstimatedCPUModel
+	jsonStr := EstimatedCPUCostSetting.Get(sv)
+	if len(jsonStr) == 0 {
+		cpuModel = DefaultEstimatedCPUModel
+	} else {
+		err := json.Unmarshal([]byte(jsonStr), &cpuModel)
+		if err != nil {
+			// This should not happen unless someone manually updates the settings
+			// table, bypassing the validation.
+			log.Errorf(
+				context.Background(),
+				"failed to parse the estimated cpu model %q: err=%v",
+				jsonStr,
+				err,
+			)
+			cpuModel = DefaultEstimatedCPUModel
+		}
 	}
+	return cpuModel
 }
 
 // SetOnChange installs a callback that is run whenever a cost model cluster
@@ -287,10 +304,10 @@ func DefaultConfig() Config {
 //
 // It calls SetOnChange on the relevant cluster settings.
 func SetOnChange(sv *settings.Values, fn func(context.Context)) {
-	for _, s := range configSettings {
+	for _, s := range costModelSettings {
 		s.SetOnChange(sv, fn)
 	}
 }
 
 var _ = SetOnChange
-var _ = ConfigFromSettings
+var _ = RequestUnitModelFromSettings

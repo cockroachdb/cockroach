@@ -35,35 +35,45 @@ import (
 	"github.com/cockroachdb/errors/errorspb"
 )
 
+// ProvisionedVCPUs limits the amount of CPU that can be used by a tenant. If
+// zero, then provisioned vCPUs are not being used by the tenant (e.g. it's an
+// on-demand tenant).
+var ProvisionedVCPUs = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"tenant_cost_control.provisioned_vcpus",
+	"number of estimated vCPUs available to the cluster; operations may "+
+		"be throttled when total CPU usage across SQL and KV layers exceeds "+
+		"this level",
+	0,
+	settings.NonNegativeInt,
+)
+
 // InitialRequestSetting is exported for testing purposes.
 var InitialRequestSetting = settings.RegisterFloatSetting(
 	settings.SystemVisible,
-	"tenant_initial_request",
+	"tenant_cost_control.initial_request",
 	"number of tokens to get from server on first request (requires restart)",
 	bufferTokens/5,
-	settings.WithName("tenant_cost_control.initial_request"),
 	settings.FloatInRange(0, bufferTokens*10),
 )
 
 // TargetPeriodSetting is exported for testing purposes.
 var TargetPeriodSetting = settings.RegisterDurationSetting(
 	settings.SystemVisible,
-	"tenant_cost_control_period",
+	"tenant_cost_control.token_request_period",
 	"target duration between token bucket requests (requires restart)",
 	10*time.Second,
-	settings.WithName("tenant_cost_control.token_request_period"),
 	settings.DurationInRange(5*time.Second, 120*time.Second),
 )
 
 // CPUUsageAllowance is exported for testing purposes.
 var CPUUsageAllowance = settings.RegisterDurationSetting(
 	settings.SystemVisible,
-	"tenant_cpu_usage_allowance",
+	"tenant_cost_control.cpu_usage_allowance",
 	"this much CPU usage per second is considered background usage and "+
 		"doesn't contribute to consumption; for example, if it is set to 10ms, "+
 		"that corresponds to 1% of a CPU",
 	10*time.Millisecond,
-	settings.WithName("tenant_cost_control.cpu_usage_allowance"),
 	settings.DurationInRange(0, 1000*time.Millisecond),
 )
 
@@ -102,6 +112,22 @@ const extendedReportingPeriodFactor = 4
 // estimated usage. This is intended to support usage spikes without blocking.
 const bufferTokens = 5000
 
+// defaultWriteBatchRate specifies the write batch rate that will be used to
+// estimate KV CPU when an actual measurement of the rate is not available.
+const defaultWriteBatchRate = 1000
+
+// tokensPerCPUSecond is the factor used to convert from estimated KV CPU
+// seconds to tokens in the distributed token bucket. This factor was chosen to
+// convert from seconds to milliseconds, as that measurement has a similar
+// magnitude as request units.
+const tokensPerCPUSecond = 1000
+
+// vCPUsPerNode is the number of vCPUs that each "node" in a tenant cluster is
+// assumed to have. This number is independent of the actual vCPUs per node in
+// the underlying host cluster, so that estimated CPU will not change when host
+// cluster hardware changes.
+const vCPUsPerNode = 8
+
 func newTenantSideCostController(
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
@@ -132,12 +158,20 @@ func newTenantSideCostController(
 		NotifyThreshold: bufferTokens,
 	})
 
+	// If any of the cost settings change, reload both models.
 	tenantcostmodel.SetOnChange(&st.SV, func(ctx context.Context) {
-		config := tenantcostmodel.ConfigFromSettings(&st.SV)
-		c.costCfg.Swap(&config)
+		ruModel := tenantcostmodel.RequestUnitModelFromSettings(&st.SV)
+		c.ruModel.Store(&ruModel)
+
+		cpuModel := tenantcostmodel.EstimatedCPUModelFromSettings(&st.SV)
+		c.cpuModel.Store(&cpuModel)
 	})
-	initialConfig := tenantcostmodel.ConfigFromSettings(&st.SV)
-	c.costCfg.CompareAndSwap(nil, &initialConfig)
+
+	ruModel := tenantcostmodel.RequestUnitModelFromSettings(&st.SV)
+	c.ruModel.CompareAndSwap(nil, &ruModel)
+
+	cpuModel := tenantcostmodel.EstimatedCPUModelFromSettings(&st.SV)
+	c.cpuModel.CompareAndSwap(nil, &cpuModel)
 
 	return c, nil
 }
@@ -196,7 +230,8 @@ type tenantSideCostController struct {
 	timeSource           timeutil.TimeSource
 	testInstr            TestInstrumentation
 	settings             *cluster.Settings
-	costCfg              atomic.Pointer[tenantcostmodel.Config]
+	ruModel              atomic.Pointer[tenantcostmodel.RequestUnitModel]
+	cpuModel             atomic.Pointer[tenantcostmodel.EstimatedCPUModel]
 	tenantID             roachpb.TenantID
 	provider             kvtenant.TokenBucketProvider
 	limiter              limiter
@@ -206,10 +241,11 @@ type tenantSideCostController struct {
 	externalUsageFn      multitenant.ExternalUsageFn
 	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn
 
-	// avgCPUPerSec is an exponentially-weighted moving average of the CPU usage
-	// per second; used to estimate the CPU usage of a query. It is only written
-	// in the main loop, but can be read by multiple goroutines so is an atomic.
-	avgCPUPerSec atomic.Uint64
+	// avgSQLCPUPerSec is an exponentially-weighted moving average of the SQL CPU
+	// usage per second; used to estimate the CPU usage of a query. It is only
+	// written in the main loop, but can be read by multiple goroutines so is an
+	// atomic.
+	avgSQLCPUPerSec atomic.Uint64
 
 	// lowTokensNotifyChan is used when the number of available tokens is running
 	// low and we need to send an early token bucket request.
@@ -316,6 +352,10 @@ func (c *tenantSideCostController) Start(
 	})
 }
 
+func (c *tenantSideCostController) useRequestUnitModel() bool {
+	return ProvisionedVCPUs.Get(&c.settings.SV) == 0
+}
+
 func (c *tenantSideCostController) initRunState(ctx context.Context) {
 	c.run.targetPeriod = TargetPeriodSetting.Get(&c.settings.SV)
 
@@ -355,30 +395,42 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 
 		// Keep track of an exponential moving average of CPU usage.
 		avgCPU := deltaCPU / deltaTime.Seconds()
-		avgCPUPerSec := math.Float64frombits(c.avgCPUPerSec.Load())
+		avgCPUPerSec := math.Float64frombits(c.avgSQLCPUPerSec.Load())
 		avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
 		avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
-		c.avgCPUPerSec.Store(math.Float64bits(avgCPUPerSec))
+		c.avgSQLCPUPerSec.Store(math.Float64bits(avgCPUPerSec))
 	}
 	if deltaCPU < 0 {
 		deltaCPU = 0
 	}
 
-	costCfg := c.costCfg.Load()
-	newTokens := float64(costCfg.PodCPUCost(deltaCPU))
-
+	var deltaPGWireEgressBytes int64
 	if newExternalUsage.PGWireEgressBytes > c.run.externalUsage.PGWireEgressBytes {
-		deltaPGWireEgressBytes := int64(newExternalUsage.PGWireEgressBytes - c.run.externalUsage.PGWireEgressBytes)
+		deltaPGWireEgressBytes = int64(newExternalUsage.PGWireEgressBytes - c.run.externalUsage.PGWireEgressBytes)
 		c.metrics.TotalPGWireEgressBytes.Inc(deltaPGWireEgressBytes)
-		newTokens += float64(costCfg.PGWireEgressCost(deltaPGWireEgressBytes))
 	}
 
-	// KV RUs are not included here, these metrics correspond only to the SQL pod.
+	// KV RUs and estimated KV CPU are not included here, since the CPU metric
+	// corresponds only to the SQL layer.
 	c.metrics.TotalSQLPodsCPUSeconds.Inc(deltaCPU)
-	c.metrics.TotalRU.Inc(newTokens)
 
-	// Update the average tokens consumed per second, based on the latest stats.
-	totalTokens := c.metrics.TotalRU.Count()
+	var newTokens, totalTokens float64
+	if c.useRequestUnitModel() {
+		// Compute consumed RU.
+		ruModel := c.ruModel.Load()
+		newTokens = float64(ruModel.PodCPUCost(deltaCPU))
+		newTokens += float64(ruModel.PGWireEgressCost(deltaPGWireEgressBytes))
+		c.metrics.TotalRU.Inc(newTokens)
+		totalTokens = c.metrics.TotalRU.Count()
+	} else {
+		// Compute estimated CPU and convert CPU into tokens in order to adjust
+		// the token bucket.
+		c.metrics.TotalEstimatedCPUSeconds.Inc(deltaCPU)
+		newTokens = deltaCPU * tokensPerCPUSecond
+		totalTokens = c.metrics.TotalEstimatedCPUSeconds.Count() * tokensPerCPUSecond
+	}
+
+	// Update the average newTokens consumed per second, based on the latest stats.
 	delta := totalTokens - c.run.tickTokens
 	avg := delta * float64(time.Second) / float64(deltaTime)
 	c.run.avgTokensPerSec = movingAvgTokensPerSecFactor*avg + (1-movingAvgTokensPerSecFactor)*c.run.avgTokensPerSec
@@ -482,7 +534,12 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 
 	c.run.lastRequestTime = now
 	c.run.lastReportedConsumption = latestConsumption
-	c.run.lastReportedTokens = latestConsumption.RU
+
+	if c.useRequestUnitModel() {
+		c.run.lastReportedTokens = latestConsumption.RU
+	} else {
+		c.run.lastReportedTokens = c.metrics.TotalEstimatedCPUSeconds.Count() * tokensPerCPUSecond
+	}
 
 	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
 	err := c.stopper.RunAsyncTask(ctx, "token-bucket-request", func(ctx context.Context) {
@@ -711,42 +768,56 @@ func (c *tenantSideCostController) OnResponseWait(
 	}
 
 	// Account for the cost of write requests and read responses.
-	costCfg := c.costCfg.Load()
-	writeKVRU, writeNetworkRU := costCfg.RequestCost(req)
-	readKVRU, readNetworkRU := costCfg.ResponseCost(resp)
-	totalRU := writeKVRU + readKVRU + writeNetworkRU + readNetworkRU
+	var tokens float64
+	vCPUs := ProvisionedVCPUs.Get(&c.settings.SV)
+	if vCPUs == 0 {
+		// Calculate RU consumption for the operation.
+		ruModel := c.ruModel.Load()
+		writeKVRU, writeNetworkRU := ruModel.RequestCost(req)
+		readKVRU, readNetworkRU := ruModel.ResponseCost(resp)
+		totalRU := writeKVRU + readKVRU + writeNetworkRU + readNetworkRU
+		tokens = float64(totalRU)
 
-	// TODO(andyk): Consider breaking up huge acquisition requests into chunks
-	// that can be fulfilled separately and reported separately. This would make
-	// it easier to stick within a constrained tokens/s budget.
-	if err := c.limiter.Wait(ctx, float64(totalRU)); err != nil {
-		return err
-	}
+		c.metrics.TotalKVRU.Inc(float64(writeKVRU + readKVRU))
+		c.metrics.TotalRU.Inc(float64(totalRU))
+		c.metrics.TotalCrossRegionNetworkRU.Inc(float64(writeNetworkRU + readNetworkRU))
 
-	// Record the number of RUs consumed by the IO request.
-	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&c.settings.SV) {
-		if sp := tracing.SpanFromContext(ctx); sp != nil &&
-			sp.RecordingType() != tracingpb.RecordingOff {
-			sp.RecordStructured(&kvpb.TenantConsumption{
-				RU: float64(totalRU),
-			})
+		// Record the number of RUs consumed by the IO request.
+		if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&c.settings.SV) {
+			if sp := tracing.SpanFromContext(ctx); sp != nil &&
+				sp.RecordingType() != tracingpb.RecordingOff {
+				sp.RecordStructured(&kvpb.TenantConsumption{
+					RU: float64(totalRU),
+				})
+			}
 		}
+	} else {
+		// Estimated CPU usage for the operation.
+		cpuModel := c.cpuModel.Load()
+		nodeCount := math.Max(float64(vCPUs)/vCPUsPerNode, 3)
+		estimatedCPU := cpuModel.RequestCost(req, defaultWriteBatchRate/nodeCount)
+		estimatedCPU += cpuModel.ResponseCost(resp)
+		tokens = float64(estimatedCPU) * tokensPerCPUSecond
+
+		c.metrics.TotalEstimatedKVCPUSeconds.Inc(float64(estimatedCPU))
+		c.metrics.TotalEstimatedCPUSeconds.Inc(float64(estimatedCPU))
 	}
 
 	if req.IsWrite() {
 		c.metrics.TotalWriteBatches.Inc(req.WriteReplicas())
 		c.metrics.TotalWriteRequests.Inc(req.WriteReplicas() * req.WriteCount())
 		c.metrics.TotalWriteBytes.Inc(req.WriteReplicas() * req.WriteBytes())
-		c.metrics.TotalKVRU.Inc(float64(writeKVRU))
-		c.metrics.TotalRU.Inc(float64(writeKVRU + writeNetworkRU))
-		c.metrics.TotalCrossRegionNetworkRU.Inc(float64(writeNetworkRU))
 	} else if resp.IsRead() {
 		c.metrics.TotalReadBatches.Inc(1)
 		c.metrics.TotalReadRequests.Inc(resp.ReadCount())
 		c.metrics.TotalReadBytes.Inc(resp.ReadBytes())
-		c.metrics.TotalKVRU.Inc(float64(readKVRU))
-		c.metrics.TotalRU.Inc(float64(readKVRU + readNetworkRU))
-		c.metrics.TotalCrossRegionNetworkRU.Inc(float64(readNetworkRU))
+	}
+
+	// TODO(andyk): Consider breaking up huge acquisition requests into chunks
+	// that can be fulfilled separately and reported separately. This would make
+	// it easier to stick within a constrained tokens/s budget.
+	if err := c.limiter.Wait(ctx, tokens); err != nil {
+		return err
 	}
 
 	return nil
@@ -779,21 +850,23 @@ func (c *tenantSideCostController) onExternalIO(
 		return nil
 	}
 
-	costCfg := c.costCfg.Load()
-	totalRU := costCfg.ExternalIOIngressCost(usage.IngressBytes) +
-		costCfg.ExternalIOEgressCost(usage.EgressBytes)
-
-	if wait {
-		if err := c.limiter.Wait(ctx, float64(totalRU)); err != nil {
-			return err
-		}
-	} else {
-		c.limiter.RemoveTokens(c.timeSource.Now(), float64(totalRU))
-	}
-
 	c.metrics.TotalExternalIOIngressBytes.Inc(usage.IngressBytes)
 	c.metrics.TotalExternalIOEgressBytes.Inc(usage.EgressBytes)
-	c.metrics.TotalRU.Inc(float64(totalRU))
+
+	if c.useRequestUnitModel() {
+		costCfg := c.ruModel.Load()
+		totalRU := costCfg.ExternalIOIngressCost(usage.IngressBytes) +
+			costCfg.ExternalIOEgressCost(usage.EgressBytes)
+		c.metrics.TotalRU.Inc(float64(totalRU))
+
+		if wait {
+			if err := c.limiter.Wait(ctx, float64(totalRU)); err != nil {
+				return err
+			}
+		} else {
+			c.limiter.RemoveTokens(c.timeSource.Now(), float64(totalRU))
+		}
+	}
 
 	return nil
 }
@@ -801,12 +874,19 @@ func (c *tenantSideCostController) onExternalIO(
 // GetCPUMovingAvg is used to obtain an exponential moving average estimate
 // for the CPU usage in seconds per each second of wall-clock time.
 func (c *tenantSideCostController) GetCPUMovingAvg() float64 {
-	return math.Float64frombits(c.avgCPUPerSec.Load())
+	return math.Float64frombits(c.avgSQLCPUPerSec.Load())
 }
 
-// GetCostConfig is part of the multitenant.TenantSideCostController interface.
-func (c *tenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
-	return c.costCfg.Load()
+// GetRequestUnitModel is part of the multitenant.TenantSideCostController
+// interface.
+func (c *tenantSideCostController) GetRequestUnitModel() *tenantcostmodel.RequestUnitModel {
+	return c.ruModel.Load()
+}
+
+// GetEstimatedCPUModel is part of the multitenant.TenantSideCostController
+// interface.
+func (c *tenantSideCostController) GetEstimatedCPUModel() *tenantcostmodel.EstimatedCPUModel {
+	return c.cpuModel.Load()
 }
 
 // Metrics returns a metric.Struct which holds metrics for the controller.
