@@ -7955,8 +7955,8 @@ def go_deps():
         build_file_proto_mode = "disable_global",
         importpath = "github.com/segmentio/kafka-go",
         # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
-        sum = "h1:IqziR4pA3vrZq7YdRxaT3w1/5fvIH5qpCwstUanQQB0=",
-        version = "v0.4.47",
+        sum = "h1:HtCSf6B4gN/87yc5qTl7WsxPKQIIGXLPPM1bMCPOsoY=",
+        version = "v0.2.0",
     )
     go_repository(
         name = "com_github_sergi_go_diff",
@@ -8465,6 +8465,14 @@ def go_deps():
         # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
         sum = "h1:hawgCx5ejDHkLe6IwAtFWwxi3OU4OztSTl7ZV5rwkYk=",
         version = "v1.17.0",
+    )
+    go_repository(
+        name = "com_github_twmb_franz_go_pkg_kadm",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/twmb/franz-go/pkg/kadm",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:I8P/gpXFzhl73QcAYmJu+1fOXvrynyH/MAotr2udEg4=",
+        version = "v1.12.0",
     )
     go_repository(
         name = "com_github_twmb_franz_go_pkg_kmsg",
