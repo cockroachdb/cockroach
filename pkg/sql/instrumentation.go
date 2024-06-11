@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -632,7 +633,7 @@ func (ih *instrumentationHelper) Finish(
 			ob := ih.emitExplainAnalyzePlanToOutputBuilder(ctx, ih.explainFlags, phaseTimes, queryLevelStats)
 			warnings = ob.GetWarnings()
 			var payloadErr error
-			if pwe, ok := retPayload.(payloadWithError); ok {
+			if pwe, ok2 := retPayload.(payloadWithError); ok2 {
 				payloadErr = pwe.errorCause()
 			}
 			bundleCtx := ctx
@@ -665,7 +666,42 @@ func (ih *instrumentationHelper) Finish(
 			if ih.planGistMatchingBundle {
 				// We don't have the plan string available since the stmt bundle
 				// collection was enabled _after_ the optimizer was done.
-				planString = "-- plan elided due to gist matching"
+				// Instead, we do have the gist available, so we'll decode it
+				// and use that as the plan string.
+				var sb strings.Builder
+				sb.WriteString("-- plan is incomplete due to gist matching: ")
+				sb.WriteString(ih.planGist.String())
+				// Perform best-effort decoding ignoring all errors.
+				if it, err := ie.QueryIterator(
+					bundleCtx, "plan-gist-decoding" /* opName */, nil, /* txn */
+					fmt.Sprintf("SELECT * FROM crdb_internal.decode_plan_gist('%s')", ih.planGist.String()),
+				); err == nil {
+					defer func() {
+						_ = it.Close()
+					}()
+					sb.WriteString("\n")
+					// Ignore the errors returned on Next call.
+					for ok, _ = it.Next(bundleCtx); ok; ok, _ = it.Next(bundleCtx) {
+						row := it.Cur()
+						var line string
+						// Be conservative in case the output format changes.
+						if len(row) == 1 {
+							var ds tree.DString
+							ds, ok = tree.AsDString(row[0])
+							line = string(ds)
+						} else {
+							ok = false
+						}
+						if !ok && buildutil.CrdbTestBuild {
+							return errors.AssertionFailedf("unexpected output format for decoding plan gist %s", ih.planGist.String())
+						}
+						if ok {
+							sb.WriteString("\n")
+							sb.WriteString(line)
+						}
+					}
+				}
+				planString = sb.String()
 			}
 			bundle = buildStatementBundle(
 				bundleCtx, ih.explainFlags, cfg.DB, p, ie.(*InternalExecutor),
