@@ -521,7 +521,7 @@ func buildKgoConfig(
 	case sarama.CompressionZSTD:
 		opts = append(opts, kgo.ProducerBatchCompression(kgo.ZstdCompression()))
 	default:
-		return nil, errors.Errorf(`unknown compression codec: %s`, sinkCfg.Compression)
+		return nil, errors.Errorf(`unknown compression codec: %v`, sinkCfg.Compression)
 	}
 
 	if sinkCfg.Version != "" {
@@ -532,7 +532,7 @@ func buildKgoConfig(
 		// TODO: make sure this is right. i think the intention of the setting is just to support really old versions, which is what the Max is for
 		opts = append(opts, kgo.MaxVersions(v))
 	}
-	return nil, nil
+	return opts, nil
 }
 
 type kgoLogAdapter struct {
