@@ -1133,11 +1133,15 @@ func (c *clusterImpl) lister() option.NodeLister {
 	if c.t != nil { // accommodates poorly set up tests
 		fatalf = c.t.Fatalf
 	}
-	return option.NodeLister{NodeCount: c.spec.NodeCount, Fatalf: fatalf}
+	return option.NodeLister{NodeCount: c.spec.NodeCount, WorkloadNodeProvisioned: c.spec.WorkloadNode, Fatalf: fatalf}
 }
 
 func (c *clusterImpl) All() option.NodeListOption {
 	return c.lister().All()
+}
+
+func (c *clusterImpl) CRDBNodes() option.NodeListOption {
+	return c.lister().CRDBNodes()
 }
 
 func (c *clusterImpl) Range(begin, end int) option.NodeListOption {
@@ -1150,6 +1154,10 @@ func (c *clusterImpl) Nodes(ns ...int) option.NodeListOption {
 
 func (c *clusterImpl) Node(i int) option.NodeListOption {
 	return c.lister().Node(i)
+}
+
+func (c *clusterImpl) WorkloadNode() option.NodeListOption {
+	return c.lister().WorkloadNode()
 }
 
 // FetchLogs downloads the logs from the cluster using `roachprod get`.
