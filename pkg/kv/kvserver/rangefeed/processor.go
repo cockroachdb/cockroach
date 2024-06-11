@@ -207,9 +207,8 @@ type Processor interface {
 		catchUpIter *CatchUpIterator,
 		withDiff bool,
 		withFiltering bool,
-		stream Stream,
+		stream BufferedStream,
 		disconnectFn func(),
-		done *future.ErrorFuture,
 	) (bool, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
@@ -254,10 +253,8 @@ type Processor interface {
 func NewProcessor(cfg Config) Processor {
 	cfg.SetDefaults()
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
-	if cfg.Scheduler != nil {
-		return NewScheduledProcessor(cfg)
-	}
-	return NewLegacyProcessor(cfg)
+	return NewScheduledProcessor(cfg)
+	//return NewLegacyProcessor(cfg)
 }
 
 type LegacyProcessor struct {
@@ -361,7 +358,7 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 // IntentScannerConstructor is used to construct an IntentScanner. It
 // should be called from underneath a stopper task to ensure that the
 // engine has not been closed.
-type IntentScannerConstructor func() IntentScanner
+type IntentScannerConstructor func() (IntentScanner, error)
 
 // Start implements Processor interface.
 //
@@ -404,7 +401,7 @@ func (p *LegacyProcessor) run(
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
 	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+		rtsIter, _ := rtsIterFunc()
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
@@ -589,23 +586,24 @@ func (p *LegacyProcessor) Register(
 	disconnectFn func(),
 	done *future.ErrorFuture,
 ) (bool, *Filter) {
-	// Synchronize the event channel so that this registration doesn't see any
-	// events that were consumed before this registration was called. Instead,
-	// it should see these events during its catch up scan.
-	p.syncEventC()
-
-	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
-	)
-	select {
-	case p.regC <- r:
-		// Wait for response.
-		return true, <-p.filterResC
-	case <-p.stoppedC:
-		return false, nil
-	}
+	//// Synchronize the event channel so that this registration doesn't see any
+	//// events that were consumed before this registration was called. Instead,
+	//// it should see these events during its catch up scan.
+	//p.syncEventC()
+	//
+	//blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
+	//r := newRegistration(
+	//	span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
+	//	p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
+	//)
+	//select {
+	//case p.regC <- r:
+	//	// Wait for response.
+	//	return true, <-p.filterResC
+	//case <-p.stoppedC:
+	//	return false, nil
+	//}
+	return false, nil
 }
 
 // Len implements Processor interface.

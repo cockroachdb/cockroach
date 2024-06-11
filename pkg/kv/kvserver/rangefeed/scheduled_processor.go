@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -117,11 +116,17 @@ func (p *ScheduledProcessor) Start(
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue.
 	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+		rtsIter, err := rtsIterFunc()
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
+		// TODO(wenyihu6): check what should be done here
+		if err != nil {
+			initScan.Cancel()
+			p.scheduler.StopProcessor()
+			return err
+		}
 		// TODO(oleg): we need to cap number of tasks that we can fire up across
 		// all feeds as they could potentially generate O(n) tasks during start.
-		err := stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
+		err = stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
 			initScan.Cancel()
 			p.scheduler.StopProcessor()
@@ -307,9 +312,8 @@ func (p *ScheduledProcessor) Register(
 	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
-	stream Stream,
+	stream BufferedStream,
 	disconnectFn func(),
-	done *future.ErrorFuture,
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -319,7 +323,7 @@ func (p *ScheduledProcessor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 	)
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
@@ -342,6 +346,17 @@ func (p *ScheduledProcessor) Register(
 		// catch-up scan has completed. This allows clients to rely on stronger ordering semantics
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
+
+		stream.Register(func() {
+			r.cleanup()
+			if p.unregisterClient(&r) {
+				// unreg callback is set by replica to tear down processors that have
+				// zero registrations left and to update event filters.
+				if r.unreg != nil {
+					r.unreg()
+				}
+			}
+		})
 
 		// Run an output loop for the registry.
 		runOutputLoop := func(ctx context.Context) {

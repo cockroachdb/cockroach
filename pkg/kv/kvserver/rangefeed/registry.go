@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -83,8 +82,7 @@ type registration struct {
 	metrics          *Metrics
 
 	// Output.
-	stream Stream
-	done   *future.ErrorFuture
+	stream BufferedStream
 	unreg  func()
 	// Internal.
 	id            int64
@@ -122,9 +120,8 @@ func newRegistration(
 	bufferSz int,
 	blockWhenFull bool,
 	metrics *Metrics,
-	stream Stream,
+	stream BufferedStream,
 	unregisterFn func(),
-	done *future.ErrorFuture,
 ) registration {
 	r := registration{
 		span:             span,
@@ -133,7 +130,6 @@ func newRegistration(
 		withFiltering:    withFiltering,
 		metrics:          metrics,
 		stream:           stream,
-		done:             done,
 		unreg:            unregisterFn,
 		buf:              make(chan *sharedEvent, bufferSz),
 		blockWhenFull:    blockWhenFull,
@@ -284,11 +280,7 @@ func (r *registration) maybeStripEvent(
 	}
 	return ret
 }
-
-// disconnect cancels the output loop context for the registration and passes an
-// error to the output error stream for the registration.
-// Safe to run multiple times, but subsequent errors would be discarded.
-func (r *registration) disconnect(pErr *kvpb.Error) {
+func (r *registration) cleanup() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.mu.disconnected {
@@ -300,8 +292,16 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 			r.mu.outputLoopCancelFn()
 		}
 		r.mu.disconnected = true
-		r.done.Set(pErr.GoError())
 	}
+}
+
+// disconnect cancels the output loop context for the registration and passes an
+// error to the output error stream for the registration.
+// Safe to run multiple times, but subsequent errors would be discarded.
+func (r *registration) disconnect(pErr *kvpb.Error) {
+	r.cleanup()
+	// repeatedly send error shouldbe fine
+	r.stream.SendError(pErr)
 }
 
 // outputLoop is the operational loop for a single registration. The behavior
@@ -343,7 +343,7 @@ func (r *registration) outputLoop(ctx context.Context) error {
 		firstIteration = false
 		select {
 		case nextEvent := <-r.buf:
-			err := r.stream.Send(nextEvent.event)
+			err := r.stream.SendUnbuffered(nextEvent.event)
 			nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
 			if err != nil {
@@ -351,8 +351,8 @@ func (r *registration) outputLoop(ctx context.Context) error {
 			}
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-r.stream.Context().Done():
-			return r.stream.Context().Err()
+			//case <-r.stream.Context().Done():
+			//	return r.stream.Context().Err()
 		}
 	}
 }
@@ -405,7 +405,7 @@ func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff, r.withFiltering)
+	return catchUpIter.CatchUpScan(ctx, r.stream.SendUnbuffered, r.withDiff, r.withFiltering)
 }
 
 // ID implements interval.Interface.
