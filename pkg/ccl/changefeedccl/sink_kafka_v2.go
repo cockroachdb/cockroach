@@ -2,7 +2,8 @@ package changefeedccl
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/tls"
+	"crypto/x509"
 	"hash/fnv"
 	"os"
 	"path"
@@ -19,65 +20,54 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/rcrowley/go-metrics"
+	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/kversion"
+	"github.com/twmb/franz-go/pkg/sasl"
+	sasloauth "github.com/twmb/franz-go/pkg/sasl/oauth"
+	saslplain "github.com/twmb/franz-go/pkg/sasl/plain"
+	saslscram "github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
 func newKafkaSinkClient(
 	ctx context.Context,
-	kafkaCfg []kgo.Opt,
+	clientOpts []kgo.Opt,
 	batchCfg sinkBatchConfig,
 	bootstrapAddrs string,
 	topics *TopicNamer,
 	settings *cluster.Settings,
 	knobs kafkaSinkKnobs,
 ) (*kafkaSinkClient, error) {
-	kafkaCfg = append([]kgo.Opt{
+	clientOpts = append([]kgo.Opt{
 		// TODO: hooks for metrics / metric support at all
 		kgo.SeedBrokers(bootstrapAddrs),
-		kgo.AllowAutoTopicCreation(), // is this configurable?
 		kgo.ClientID(`cockroach`),
 		// kgo.DefaultProduceTopic(topic), // TODO: maybe, depending on if we end up sharing producers
 		kgo.WithLogger(kgoLogAdapter{ctx: ctx}),
-		// TODO: or use the recommended kgo.StickyKeyPartitioner(kgo.SaramaCompatHasher(fnv.New32a())) (but still need to override for resolved ts so this is probably fine)
-		kgo.RecordPartitioner(kgo.BasicConsistentPartitioner(func(topic string) func(r *kgo.Record, n int) int {
-			// this must (and should) have the same behaviour as our old partitioner which wraps sarama.NewCustomHashPartitioner(fnv.New32a)
-			hasher := fnv.New32a()
-			// rand := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-			return func(r *kgo.Record, n int) int {
-				if r.Key == nil {
-					// TODO: how to handle resolved msgs? the docs suggest that we can't/shouldnt use r.Partition, but
-					// then there exists the ManualPartitioner which uses it sooooo idk
-					// return rand.Intn(n)
-					return int(r.Partition)
-				}
-				hasher.Reset()
-				_, _ = hasher.Write(r.Key)
-				part := int32(hasher.Sum32()) % int32(n)
-				if part < 0 {
-					part = -part
-				}
-				return int(part)
-			}
-		})),
+		kgo.RecordPartitioner(newKgoChangefeedPartitioner()),
 		kgo.ProducerBatchMaxBytes(2 << 27), // nearly parity - this is the max the library allows
 		kgo.BrokerMaxWriteBytes(2 << 27),   // have to bump this as well
 		// idempotent production is strictly a win, but does require the IDEMPOTENT_WRITE permission on CLUSTER (pre Kafka 3.0), and not all clients can have that permission.
 		// i think sarama also transparently enables this and we dont disable it there so we shouldnt need to here.. right?
+		// also does this gracefully disable it or error if the permission is missing?
 		// kgo.DisableIdempotentWrite(),
-	}, kafkaCfg...)
+	}, clientOpts...)
 
 	// TODO: test hook
-	client, err := kgo.NewClient(kafkaCfg...)
+	client, err := kgo.NewClient(clientOpts...)
 	if err != nil {
 		return nil, err
 	}
 
 	return &kafkaSinkClient{
-		client:         client,
-		knobs:          knobs,
-		topics:         topics,
-		batchCfg:       batchCfg,
-		canTryResizing: changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
+		client:             client,
+		knobs:              knobs,
+		topics:             topics,
+		batchCfg:           batchCfg,
+		canTryResizing:     changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
+		allTopicPartitions: make(map[string][]int32),
 	}, nil
 }
 
@@ -92,6 +82,8 @@ type kafkaSinkClient struct {
 	knobs          kafkaSinkKnobs
 	canTryResizing bool
 
+	// we need to fetch and keep track of this ourselves since kgo doesnt expose metadata to us
+	allTopicPartitions  map[string][]int32
 	lastMetadataRefresh time.Time
 
 	debuggingId int64
@@ -181,14 +173,56 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 	forEachTopic func(func(topic string) error) error,
 	retryOpts retry.Options,
 ) error {
+	if err := k.maybeUpdateTopicPartitions(ctx, forEachTopic); err != nil {
+		return err
+	}
+	msgs := make([]*kgo.Record, 0, len(k.allTopicPartitions))
+	err := forEachTopic(func(topic string) error {
+		for _, partition := range k.allTopicPartitions[topic] {
+			msgs = append(msgs, &kgo.Record{
+				Topic:     topic,
+				Partition: partition,
+				Key:       nil,
+				Value:     body,
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return k.Flush(ctx, msgs)
+}
+
+// update metadata ourselves since kgo doesnt expose it to us :/
+func (k *kafkaSinkClient) maybeUpdateTopicPartitions(ctx context.Context, forEachTopic func(func(topic string) error) error) error {
+	// TODO: use a mutex if this struct becomes multithreaded
+	const metadataRefreshMinDuration = time.Minute
+	if k.lastMetadataRefresh.Sub(timeutil.Now()) < metadataRefreshMinDuration {
+		return nil
+	}
+
+	// Build list of topics.
+	topics := make([]string, 0, len(k.topics.DisplayNames))
+	if err := forEachTopic(func(topic string) error {
+		topics = append(topics, topic)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	// NOTE: don't close this! it's just a wrapper around the kgo.Client and Close() will close the inner
+	adminClient := kadm.NewClient(k.client)
+	topicDetails, err := adminClient.ListTopics(ctx, topics...)
+	if err != nil {
+		return err
+	}
+	for _, td := range topicDetails.TopicsList() {
+		k.allTopicPartitions[td.Topic] = td.Partitions
+	}
+
 	return nil
-	// TODO
-	// msgs := []*kgo.Record{{
-	// 	Topic:     topic,
-	// 	Partition: int(partition), // this wont be honored. have to use the partitioner api?
-	// 	Key:       nil,
-	// 	Value:     sarama.ByteEncoder(body),
-	// }}
 }
 
 // MakeBatchBuffer implements SinkClient.
@@ -262,12 +296,10 @@ func makeKafkaSinkV2(ctx context.Context,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
-		// TODO[rachael]: Change to kafka defaults
-		// ..but the defaults for these are all zero -- flush immediately.
+		// Defaults from the old kafka sink (nearly -- we require Frequency to be nonzero if anything else is, but the old sink did not. Set it low.)
 		Flush: sinkBatchConfig{
-			Frequency: jsonDuration(10 * time.Millisecond),
-			Messages:  100,
-			Bytes:     1e6,
+			Frequency: jsonDuration(1 * time.Millisecond),
+			Messages:  1000,
 		},
 	})
 	if err != nil {
@@ -280,12 +312,32 @@ func makeKafkaSinkV2(ctx context.Context,
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
+	// TODO: redo config stuff incl auth, batchingsink stuff
+	// kafka json config options:
+	// "ClientID"
+	// "Flush"."MaxMessages"
+	// "Flush"."Messages"
+	// "Flush"."Bytes"
+	// "Flush"."Frequency"
+	// "Version"
+	// "RequiredAcks"
+	// "ONE":
+	// "NONE":
+	// "ALL":
+	// "Compression"
+
+	// webhooks', for reference
+	// Flush.Messages
+	// Flush.Bytes
+	// Flush.Frequency
+	// Retry.Max
+	// Retry.Backoff
+
 	m := mb(requiresResourceAccounting)
-	oldKafkaCfg, err := buildKafkaConfig(ctx, u, jsonConfig, m.getKafkaThrottlingMetrics(settings))
+	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, m.getKafkaThrottlingMetrics(settings))
 	if err != nil {
 		return nil, err
 	}
-	_ = oldKafkaCfg
 
 	topicNamer, err := MakeTopicNamer(
 		targets,
@@ -312,22 +364,7 @@ func makeKafkaSinkV2(ctx context.Context,
 		}
 
 		// TODO: how to handle knobs
-		// TODO: parse into this
-		kafkaCfg := []kgo.Opt{
-			// set the below from the config
-			// TODO: tls stuff, etc. retry stuff
-			// kgo.MaxVersions() TODO: required if interacting with kafka <0.10
-			// kgo.MaxBufferedBytes(), // default unlimited
-			// kgo.MaxBufferedRecords(), // default 10k
-			// kgo.ProducerLinger(kafkaCfg.Producer.Flush.Frequency), // ?
-			// kgo.MaxProduceRequestsInflightPerBroker(1) // default is 1, or 5 if idempotent is enabled (it is by default)
-			kgo.ProducerBatchCompression(kgo.NoCompression()), // NOTE: unlike sarama this is not the default. maintain parity etc.
-			// kgo.RecordRetries() // do we want to set this? The default is to always retry records forever, but this can be dropped with the RecordRetries and RecordDeliveryTimeout opt
-			kgo.RequiredAcks(kgo.AllISRAcks()), // TODO: use kafkaCfg.Producer.RequiredAcks
-			// kgo.ManualFlushing() ?
-			// kgo.RecordRetries(10), // this seems like a can of worms with idempotency on. default unlimited but we don't want that, do we?
-		}
-		client, err := newKafkaSinkClient(ctx, kafkaCfg, batchCfg, u.Host, topicNamer2, settings, kafkaSinkKnobs{})
+		client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, topicNamer2, settings, kafkaSinkKnobs{})
 		if err != nil {
 			return nil, err
 		}
@@ -344,20 +381,266 @@ func makeKafkaSinkV2(ctx context.Context,
 		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
 }
 
+func buildKgoConfig(
+	ctx context.Context,
+	u sinkURL,
+	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	kafkaThrottlingMetrics metrics.Histogram,
+) ([]kgo.Opt, error) {
+	// TODO: parse into this
+	// TODO: what's the equivalent of the frequency option? is there even one? like maybe not
+	opts := []kgo.Opt{}
+	// 	// set the below from the config
+	// 	// TODO: tls stuff, etc. retry stuff
+	// 	// kgo.MaxVersions() TODO: required if interacting with kafka <0.10
+	// 	// kgo.MaxBufferedBytes(), // default unlimited
+	// 	// kgo.MaxBufferedRecords(), // default 10k
+	// 	// kgo.ProducerLinger(kafkaCfg.Producer.Flush.Frequency), // ?
+	// 	// kgo.MaxProduceRequestsInflightPerBroker(1) // default is 1, or 5 if idempotent is enabled (it is by default)
+	// 	// kgo.NoCompression().WithLevel(0)
+	// 	// kgo.GzipCompression().WithLevel(42)
+	// 	kgo.ProducerBatchCompression(kgo.NoCompression()), // NOTE: unlike sarama this is not the default. maintain parity etc.
+	// 	// kgo.RecordRetries() // do we want to set this? The default is to always retry records forever, but this can be dropped with the RecordRetries and RecordDeliveryTimeout opt
+	// 	kgo.RequiredAcks(kgo.AllISRAcks()), // TODO: use kafkaCfg.Producer.RequiredAcks
+	// 	// kgo.ManualFlushing() ?
+	// 	// kgo.RecordRetries(10), // this seems like a can of worms with idempotency on. default unlimited but we don't want that, do we?
+	// 	// kgo.ClientID(oldKafkaCfg.ClientID),
+	// }
+
+	dialConfig, err := buildDialConfig(u)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: metrics
+	// config.MetricRegistry = newMetricsRegistryInterceptor(kafkaThrottlingMetrics)
+
+	if dialConfig.tlsEnabled {
+		tlsCfg := &tls.Config{InsecureSkipVerify: dialConfig.tlsSkipVerify}
+		if dialConfig.caCert != nil {
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(dialConfig.caCert)
+			tlsCfg.RootCAs = caCertPool
+		}
+
+		// TODO: not sure why this validation is here and not in buildDialConfig()
+		if dialConfig.clientCert != nil && dialConfig.clientKey == nil {
+			return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamClientKey)
+		} else if dialConfig.clientKey != nil && dialConfig.clientCert == nil {
+			return nil, errors.Errorf(`%s requires %s to be set`, changefeedbase.SinkParamClientKey, changefeedbase.SinkParamClientCert)
+		}
+
+		if dialConfig.clientCert != nil && dialConfig.clientKey != nil {
+			cert, err := tls.X509KeyPair(dialConfig.clientCert, dialConfig.clientKey)
+			if err != nil {
+				return nil, errors.Wrap(err, `invalid client certificate data provided`)
+			}
+			tlsCfg.Certificates = []tls.Certificate{cert}
+		}
+		opts = append(opts, kgo.DialTLSConfig(tlsCfg))
+	} else {
+		// ditto
+		if dialConfig.caCert != nil {
+			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamCACert, changefeedbase.SinkParamTLSEnabled)
+		}
+		if dialConfig.clientCert != nil {
+			return nil, errors.Errorf(`%s requires %s=true`, changefeedbase.SinkParamClientCert, changefeedbase.SinkParamTLSEnabled)
+		}
+	}
+
+	if dialConfig.saslEnabled {
+		var sasl sasl.Mechanism
+		switch dialConfig.saslMechanism {
+		case "OAUTHBEARER":
+			tp, err := newKgoOauthTokenProvider(ctx, dialConfig)
+			if err != nil {
+				return nil, err
+			}
+			sasl = sasloauth.Oauth(tp)
+		case "PLAIN", "":
+			sasl = saslplain.Plain(func(ctc context.Context) (saslplain.Auth, error) {
+				return saslplain.Auth{
+					User: dialConfig.saslUser,
+					Pass: dialConfig.saslPassword,
+				}, nil
+			})
+		case "SCRAM-SHA-256":
+			sasl = saslscram.Sha256(func(ctx context.Context) (saslscram.Auth, error) {
+				return saslscram.Auth{
+					User: dialConfig.saslUser,
+					Pass: dialConfig.saslPassword,
+					// IsToken: false,  // ?
+				}, nil
+			})
+		case "SCRAM-SHA-512":
+			sasl = saslscram.Sha512(func(ctx context.Context) (saslscram.Auth, error) {
+				return saslscram.Auth{
+					User: dialConfig.saslUser,
+					Pass: dialConfig.saslPassword,
+					// IsToken: false,  // ?
+				}, nil
+			})
+		default:
+			return nil, errors.Errorf(`unsupported SASL mechanism: %s`, dialConfig.saslMechanism)
+		}
+		opts = append(opts, kgo.SASL(sasl))
+	}
+
+	// Apply some statement level overrides. The flush related ones (Messages, MaxMessages, Bytes) are not applied here, but on the sinkBatchConfig instead.
+	sinkCfg, err := getSaramaConfig(jsonStr)
+	if err != nil {
+		return nil, errors.Wrapf(err,
+			"failed to parse sink config; check %s option", changefeedbase.OptKafkaSinkConfig)
+	}
+
+	if sinkCfg.ClientID != "" {
+		opts = append(opts, kgo.ClientID(sinkCfg.ClientID))
+	}
+
+	switch sinkCfg.RequiredAcks {
+	case ``, `ONE`:
+		opts = append(opts, kgo.RequiredAcks(kgo.LeaderAck()))
+	case `ALL`:
+		opts = append(opts, kgo.RequiredAcks(kgo.AllISRAcks()))
+	case `NONE`:
+		opts = append(opts, kgo.RequiredAcks(kgo.NoAck()))
+	default:
+		return nil, errors.Errorf(`unknown required acks value: %s`, sinkCfg.RequiredAcks)
+	}
+
+	// TODO: remove this sarama dep
+	switch sarama.CompressionCodec(sinkCfg.Compression) {
+	case sarama.CompressionNone:
+		opts = append(opts, kgo.ProducerBatchCompression(kgo.NoCompression()))
+	case sarama.CompressionGZIP:
+		opts = append(opts, kgo.ProducerBatchCompression(kgo.GzipCompression()))
+	case sarama.CompressionSnappy:
+		opts = append(opts, kgo.ProducerBatchCompression(kgo.SnappyCompression()))
+	case sarama.CompressionLZ4:
+		opts = append(opts, kgo.ProducerBatchCompression(kgo.Lz4Compression()))
+	case sarama.CompressionZSTD:
+		opts = append(opts, kgo.ProducerBatchCompression(kgo.ZstdCompression()))
+	default:
+		return nil, errors.Errorf(`unknown compression codec: %s`, sinkCfg.Compression)
+	}
+
+	if sinkCfg.Version != "" {
+		v := kversion.FromString(sinkCfg.Version)
+		if v == nil {
+			return nil, errors.Errorf(`unknown kafka version: %s`, sinkCfg.Version)
+		}
+		// TODO: make sure this is right. i think the intention of the setting is just to support really old versions, which is what the Max is for
+		opts = append(opts, kgo.MaxVersions(v))
+	}
+	return nil, nil
+}
+
 type kgoLogAdapter struct {
 	ctx context.Context
 }
 
 func (k kgoLogAdapter) Level() kgo.LogLevel {
+	if log.V(2) {
+		return kgo.LogLevelDebug
+	}
 	return kgo.LogLevelInfo
 }
 
+// TODO: this will hit the "used span after finished" thing. probably. consider using a context.Backgound() with stuff on, like in the sarama log adapter
 func (k kgoLogAdapter) Log(level kgo.LogLevel, msg string, keyvals ...any) {
-	kvbs, err := json.Marshal(keyvals)
-	if err != nil {
-		kvbs = []byte(`["error marshalling keyvals"]`)
+	format := `kafka(kgo): %s %s`
+	for i := 0; i < len(keyvals); i += 2 {
+		format += ` %s=%v`
 	}
-	log.Infof(k.ctx, `kafka: %s: %s: %s`, level, msg, string(kvbs))
+	log.InfofDepth(k.ctx, 1, format, append([]any{redact.SafeString(level.String()), redact.SafeString(msg)}, keyvals...)...) //nolint:fmtsafe
 }
 
 var _ kgo.Logger = kgoLogAdapter{}
+
+// wrappers around the recommended sarama compat approach to pass thru record partitions when key is nil, like current sarama impl
+func newKgoChangefeedPartitioner() kgo.Partitioner {
+	hasher := fnv.New32a()
+	return &kgoChangefeedPartitioner{
+		inner: kgo.StickyKeyPartitioner(kgo.SaramaCompatHasher(func(bs []byte) uint32 {
+			hasher.Reset()
+			_, _ = hasher.Write(bs)
+			return hasher.Sum32()
+		})),
+	}
+}
+
+type kgoChangefeedPartitioner struct {
+	inner kgo.Partitioner
+}
+
+func (p *kgoChangefeedPartitioner) ForTopic(topic string) kgo.TopicPartitioner {
+	return &kgoChangefeedTopicPartitioner{inner: p.inner.ForTopic(topic)}
+}
+
+type kgoChangefeedTopicPartitioner struct {
+	inner kgo.TopicPartitioner
+}
+
+func (p *kgoChangefeedTopicPartitioner) RequiresConsistency(*kgo.Record) bool { return true }
+func (p *kgoChangefeedTopicPartitioner) Partition(r *kgo.Record, n int) int {
+	if r.Key == nil {
+		return int(r.Partition)
+	}
+	return p.inner.Partition(r, n)
+}
+
+// OR:
+// kgo.BasicConsistentPartitioner(func(topic string) func(r *kgo.Record, n int) int {
+// 	// this must (and should) have the same behaviour as our old partitioner which wraps sarama.NewCustomHashPartitioner(fnv.New32a)
+// 	hasher := fnv.New32a()
+// 	// rand := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
+// 	return func(r *kgo.Record, n int) int {
+// 		if r.Key == nil {
+// 			// TODO: how to handle resolved msgs? the docs suggest that we can't/shouldnt use r.Partition, but
+// 			// then there exists the ManualPartitioner which uses it sooooo idk
+// 			// return rand.Intn(n)
+// 			return int(r.Partition)
+// 		}
+// 		hasher.Reset()
+// 		_, _ = hasher.Write(r.Key)
+// 		part := int32(hasher.Sum32()) % int32(n)
+// 		if part < 0 {
+// 			part = -part
+// 		}
+// 		return int(part)
+// 	}
+// })
+
+func newKgoOauthTokenProvider(
+	ctx context.Context, dialConfig kafkaDialConfig,
+) (func(ctx context.Context) (sasloauth.Auth, error), error) {
+	return nil, errors.New("TODO")
+
+	// // grant_type is by default going to be set to 'client_credentials' by the
+	// // clientcredentials library as defined by the spec, however non-compliant
+	// // auth server implementations may want a custom type
+	// var endpointParams url.Values
+	// if dialConfig.saslGrantType != `` {
+	// 	endpointParams = url.Values{"grant_type": {dialConfig.saslGrantType}}
+	// }
+
+	// tokenURL, err := url.Parse(dialConfig.saslTokenURL)
+	// if err != nil {
+	// 	return nil, errors.Wrap(err, "malformed token url")
+	// }
+
+	// // the clientcredentials.Config's TokenSource method creates an
+	// // oauth2.TokenSource implementation which returns tokens for the given
+	// // endpoint, returning the same cached result until its expiration has been
+	// // reached, and then once expired re-requesting a new token from the endpoint.
+	// cfg := clientcredentials.Config{
+	// 	ClientID:       dialConfig.saslClientID,
+	// 	ClientSecret:   dialConfig.saslClientSecret,
+	// 	TokenURL:       tokenURL.String(),
+	// 	Scopes:         dialConfig.saslScopes,
+	// 	EndpointParams: endpointParams,
+	// }
+	// return &tokenProvider{
+	// 	tokenSource: cfg.TokenSource(ctx),
+	// }, nil
+}

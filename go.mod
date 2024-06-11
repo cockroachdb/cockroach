@@ -216,7 +216,6 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529
 	github.com/sasha-s/go-deadlock v0.3.1
-	github.com/segmentio/kafka-go v0.4.47
 	github.com/shirou/gopsutil/v3 v3.21.12
 	github.com/slack-go/slack v0.9.5
 	github.com/snowflakedb/gosnowflake v1.3.4
@@ -225,6 +224,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
 	github.com/twmb/franz-go v1.17.0
+	github.com/twmb/franz-go/pkg/kadm v1.12.0
 	github.com/twpayne/go-geom v1.4.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/xdg-go/pbkdf2 v1.0.0
