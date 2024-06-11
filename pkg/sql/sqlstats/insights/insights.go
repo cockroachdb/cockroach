@@ -187,6 +187,9 @@ type Provider interface {
 	// LatencyInformation returns an object that offers read access to latency information,
 	// such as percentiles.
 	LatencyInformation() LatencyInformation
+
+	// Reset resets the provider, clearing all information tracked by insights.
+	Reset()
 }
 
 // New builds a new Provider.
