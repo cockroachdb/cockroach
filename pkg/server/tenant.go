@@ -1481,7 +1481,11 @@ func (noopTenantSideCostController) GetCPUMovingAvg() float64 {
 	return 0
 }
 
-func (noopTenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
+func (noopTenantSideCostController) GetRequestUnitModel() *tenantcostmodel.RequestUnitModel {
+	return nil
+}
+
+func (noopTenantSideCostController) GetEstimatedCPUModel() *tenantcostmodel.EstimatedCPUModel {
 	return nil
 }
 

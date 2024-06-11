@@ -3182,7 +3182,9 @@ func (ds *DistSender) getLocalityComparison(
 // getCostControllerConfig returns the config for the tenant cost model. This
 // returns nil if no KV interceptors are associated with the DistSender, or the
 // KV interceptor is not a multitenant.TenantSideCostController.
-func (ds *DistSender) getCostControllerConfig(ctx context.Context) *tenantcostmodel.Config {
+func (ds *DistSender) getCostControllerConfig(
+	ctx context.Context,
+) *tenantcostmodel.RequestUnitModel {
 	if ds.kvInterceptor == nil {
 		return nil
 	}
@@ -3191,7 +3193,7 @@ func (ds *DistSender) getCostControllerConfig(ctx context.Context) *tenantcostmo
 		log.VErrEvent(ctx, 2, "kvInterceptor is not a TenantSideCostController")
 		return nil
 	}
-	cfg := costController.GetCostConfig()
+	cfg := costController.GetRequestUnitModel()
 	if cfg == nil {
 		log.VErrEvent(ctx, 2, "cost controller does not have a cost config")
 	}

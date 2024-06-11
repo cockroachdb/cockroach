@@ -124,3 +124,56 @@ func TestRegionalCostMultiplierTable_CostMultiplier(t *testing.T) {
 	}]
 	require.Equal(t, cost, NetworkCost(0))
 }
+
+func TestEstimatedCPUSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, tc := range []struct {
+		name    string
+		jsonStr string
+		err     string
+	}{
+		{
+			name:    "empty string",
+			jsonStr: ``,
+		},
+		{
+			name:    "invalid JSON",
+			jsonStr: `{"foo":`,
+			err:     "unexpected end of JSON input",
+		},
+		{
+			name:    "valid JSON",
+			jsonStr: `{"ReadBatchCost": 1}`,
+		},
+		{
+			name:    "mismatched ReadBytesCost field lengths",
+			jsonStr: `{"ReadBytesCost": {"PayloadSize": [1], "CPUPerByte": [1, 2]}}`,
+			err:     "failed to validate estimated_cpu model",
+		},
+		{
+			name:    "mismatched WriteBatchCost field lengths",
+			jsonStr: `{"WriteBatchCost": {"RatePerNode": [1, 2], "CPUPerBatch": [1]}}`,
+			err:     "failed to validate estimated_cpu model",
+		},
+		{
+			name:    "mismatched WriteRequestCost field lengths",
+			jsonStr: `{"WriteRequestCost": {"BatchSize": [], "CPUPerRequest": [1]}}`,
+			err:     "failed to validate estimated_cpu model",
+		},
+		{
+			name:    "mismatched WriteBytesCost field lengths",
+			jsonStr: `{"WriteBytesCost": {"PayloadSize": [1], "CPUPerByte": []}}`,
+			err:     "failed to validate estimated_cpu model",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := EstimatedCPUCostSetting.Validate(nil, tc.jsonStr)
+			if tc.err != "" {
+				require.Regexp(t, tc.err, err.Error())
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
