@@ -2,6 +2,7 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/json"
 	"hash/fnv"
 	"os"
 	"path"
@@ -30,14 +31,14 @@ func newKafkaSinkClient(
 	settings *cluster.Settings,
 	knobs kafkaSinkKnobs,
 ) (*kafkaSinkClient, error) {
-	baseKafkaCfg := []kgo.Opt{
+	kafkaCfg = append([]kgo.Opt{
 		// TODO: hooks for metrics / metric support at all
 		kgo.SeedBrokers(bootstrapAddrs),
 		kgo.AllowAutoTopicCreation(), // is this configurable?
 		kgo.ClientID(`cockroach`),
 		// kgo.DefaultProduceTopic(topic), // TODO: maybe, depending on if we end up sharing producers
 		kgo.WithLogger(kgoLogAdapter{ctx: ctx}),
-		// TODO: this guy
+		// TODO: or use the recommended kgo.StickyKeyPartitioner(kgo.SaramaCompatHasher(fnv.New32a())) (but still need to override for resolved ts so this is probably fine)
 		kgo.RecordPartitioner(kgo.BasicConsistentPartitioner(func(topic string) func(r *kgo.Record, n int) int {
 			// this must (and should) have the same behaviour as our old partitioner which wraps sarama.NewCustomHashPartitioner(fnv.New32a)
 			hasher := fnv.New32a()
@@ -63,11 +64,10 @@ func newKafkaSinkClient(
 		// idempotent production is strictly a win, but does require the IDEMPOTENT_WRITE permission on CLUSTER (pre Kafka 3.0), and not all clients can have that permission.
 		// i think sarama also transparently enables this and we dont disable it there so we shouldnt need to here.. right?
 		// kgo.DisableIdempotentWrite(),
-	}
+	}, kafkaCfg...)
 
-	fullKafkaCfg := append(baseKafkaCfg, kafkaCfg...)
 	// TODO: test hook
-	client, err := kgo.NewClient(fullKafkaCfg...)
+	client, err := kgo.NewClient(kafkaCfg...)
 	if err != nil {
 		return nil, err
 	}
@@ -325,6 +325,7 @@ func makeKafkaSinkV2(ctx context.Context,
 			// kgo.RecordRetries() // do we want to set this? The default is to always retry records forever, but this can be dropped with the RecordRetries and RecordDeliveryTimeout opt
 			kgo.RequiredAcks(kgo.AllISRAcks()), // TODO: use kafkaCfg.Producer.RequiredAcks
 			// kgo.ManualFlushing() ?
+			// kgo.RecordRetries(10), // this seems like a can of worms with idempotency on. default unlimited but we don't want that, do we?
 		}
 		client, err := newKafkaSinkClient(ctx, kafkaCfg, batchCfg, u.Host, topicNamer2, settings, kafkaSinkKnobs{})
 		if err != nil {
@@ -352,7 +353,11 @@ func (k kgoLogAdapter) Level() kgo.LogLevel {
 }
 
 func (k kgoLogAdapter) Log(level kgo.LogLevel, msg string, keyvals ...any) {
-	log.Infof(k.ctx, `kafka: %s: %s`, level, msg)
+	kvbs, err := json.Marshal(keyvals)
+	if err != nil {
+		kvbs = []byte(`["error marshalling keyvals"]`)
+	}
+	log.Infof(k.ctx, `kafka: %s: %s: %s`, level, msg, string(kvbs))
 }
 
 var _ kgo.Logger = kgoLogAdapter{}
