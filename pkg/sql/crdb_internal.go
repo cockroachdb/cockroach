@@ -9205,7 +9205,19 @@ var crdbInternalLDRProcessorTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.logical_replication_node_processors (
 	stream_id INT,
-	consumer STRING
+	consumer STRING,
+	recv_wait INTERVAL,
+	last_recv_wait INTERVAL,
+	flushes INT,
+	flush_time INTERVAL,
+	last_flush_time INTERVAL,
+	last_flush_kvs INT,
+	last_flush_bytes INT,
+	last_flush_slowest_batch INTERVAL,
+	cur_flush_running INTERVAL,
+	cur_flush_kvs INT,
+	cur_flush_processed INT,
+	cur_flush_batches INT
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		sm, err := p.EvalContext().StreamManagerFactory.GetReplicationStreamManager(ctx)
@@ -9216,10 +9228,33 @@ CREATE TABLE crdb_internal.logical_replication_node_processors (
 			}
 			return err
 		}
+		now := p.EvalContext().GetStmtTimestamp()
+		age := func(t time.Time) tree.Datum {
+			if t.Unix() == 0 {
+				return tree.DNull
+			}
+			return tree.NewDInterval(duration.Age(now, t), types.DefaultIntervalTypeMetadata)
+		}
+		dur := func(nanos int64) tree.Datum {
+			return tree.NewDInterval(duration.MakeDuration(nanos, 0, 0), types.DefaultIntervalTypeMetadata)
+		}
+
 		for _, status := range sm.DebugGetLogicalConsumerStatuses(ctx) {
 			if err := addRow(
 				tree.NewDInt(tree.DInt(status.StreamID)),
 				tree.NewDString(fmt.Sprintf("%d[%d]", p.extendedEvalCtx.ExecCfg.JobRegistry.ID(), status.ProcessorID)),
+				dur(status.Recv.TotalWaitNanos.Load()),
+				dur(status.Recv.LastWaitNanos.Load()),
+				tree.NewDInt(tree.DInt(status.Flushes.Count.Load())),
+				dur(status.Flushes.Nanos.Load()),
+				dur(status.Flushes.Last.Nanos.Load()),
+				tree.NewDInt(tree.DInt(status.Flushes.Last.KVs.Load())),
+				tree.NewDInt(tree.DInt(status.Flushes.Last.Bytes.Load())),
+				dur(status.Flushes.Last.SlowestBatchNanos.Load()),
+				age(time.UnixMicro(status.Flushes.Current.StartedUnixMicros.Load())),
+				tree.NewDInt(tree.DInt(status.Flushes.Current.TotalKVs.Load())),
+				tree.NewDInt(tree.DInt(status.Flushes.Current.ProcessedKVs.Load())),
+				tree.NewDInt(tree.DInt(status.Flushes.Current.Batches.Load())),
 			); err != nil {
 				return err
 			}

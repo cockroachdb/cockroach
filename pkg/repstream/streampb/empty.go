@@ -121,4 +121,25 @@ type DebugLogicalConsumerStatus struct {
 	// Identification info.
 	StreamID    StreamID
 	ProcessorID int32
+
+	Recv struct {
+		LastWaitNanos, TotalWaitNanos atomic.Int64
+	}
+
+	Flushes struct {
+		Count, Nanos atomic.Int64
+		Last         struct {
+			Nanos             atomic.Int64
+			KVs, Bytes        atomic.Int64
+			SlowestBatchNanos atomic.Int64
+			// TODO(dt): Errors     atomic.Int64
+		}
+		Current struct {
+			StartedUnixMicros      atomic.Int64
+			ProcessedKVs, TotalKVs atomic.Int64
+			Batches                atomic.Int64
+			// TODO(dt):  BatchErrors atomic.Int64
+			// TODO(dt): LastBatchErr atomic.Value
+		}
+	}
 }

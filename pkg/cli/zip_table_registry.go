@@ -414,6 +414,18 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		nonSensitiveCols: NonSensitiveColumns{
 			"stream_id",
 			"consumer",
+			"recv_wait",
+			"last_recv_wait",
+			"flushes",
+			"flush_time",
+			"last_flush_time",
+			"last_flush_kvs",
+			"last_flush_bytes",
+			"last_flush_slowest_batch",
+			"cur_flush_running",
+			"cur_flush_kvs",
+			"cur_flush_processed",
+			"cur_flush_batches",
 		},
 	},
 	"crdb_internal.default_privileges": {

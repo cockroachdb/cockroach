@@ -456,6 +456,7 @@ func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context)
 	minFlushInterval := minimumFlushInterval.Get(&lrw.flowCtx.Cfg.Settings.SV)
 	lrw.maxFlushRateTimer.Reset(minFlushInterval)
 	for {
+		before := timeutil.Now()
 		select {
 		case event, ok := <-lrw.mergedSubscription.Events():
 			if !ok {
@@ -465,6 +466,9 @@ func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context)
 				}
 				return nil
 			}
+			waited := timeutil.Since(before).Nanoseconds()
+			lrw.debug.Recv.LastWaitNanos.Store(waited)
+			lrw.debug.Recv.TotalWaitNanos.Add(waited)
 			if err := lrw.handleEvent(event); err != nil {
 				return err
 			}
@@ -652,6 +656,9 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	// Ensure the batcher is always reset, even on early error returns.
 	preFlushTime := timeutil.Now()
+	lrw.debug.Flushes.Current.StartedUnixMicros.Store(preFlushTime.UnixMicro())
+	lrw.debug.Flushes.Current.TotalKVs.Store(int64(len(b.buffer.curKVBatch)))
+
 	// TODO: The batching here in production would need to be much
 	// smarter. Namely, we don't want to include updates to the
 	// same key in the same batch. Also, it's possible batching
@@ -660,6 +667,8 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	batchStart := 0
 	batchSize := int(flushBatchSize.Get(&lrw.EvalCtx.Settings.SV))
 	batchEnd := min(batchStart+batchSize, len(b.buffer.curKVBatch))
+	var slowestBatch time.Duration
+
 	for batchStart < len(b.buffer.curKVBatch) && batchEnd != 0 {
 		preBatchTime := timeutil.Now()
 		batchStats, err := lrw.bh.HandleBatch(ctx, b.buffer.curKVBatch[batchStart:batchEnd])
@@ -668,16 +677,35 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 			// If that fails, send the failed application to the dead-letter-queue.
 			return nil, err
 		}
+
 		flushByteSize += batchStats.byteSize
 		batchStart = batchEnd
-		batchEnd = min(batchStart+batchSize, len(b.buffer.curKVBatch))
-		lrw.metrics.BatchBytesHist.RecordValue(int64(batchStats.byteSize))
-		lrw.metrics.BatchHistNanos.RecordValue(timeutil.Since(preBatchTime).Nanoseconds())
 
+		batchEnd = min(batchStart+batchSize, len(b.buffer.curKVBatch))
+		batchTime := timeutil.Since(preBatchTime)
+		if batchTime > slowestBatch {
+			slowestBatch = batchTime
+		}
+		lrw.debug.Flushes.Current.Batches.Add(1)
+		lrw.debug.Flushes.Current.ProcessedKVs.Add(int64(batchEnd - batchStart))
+		lrw.metrics.BatchBytesHist.RecordValue(int64(batchStats.byteSize))
+		lrw.metrics.BatchHistNanos.RecordValue(batchTime.Nanoseconds())
 	}
 
+	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
+	lrw.debug.Flushes.Count.Add(1)
+	lrw.debug.Flushes.Current.StartedUnixMicros.Store(0)
+	lrw.debug.Flushes.Current.Batches.Store(0)
+	lrw.debug.Flushes.Current.TotalKVs.Store(0)
+	lrw.debug.Flushes.Current.ProcessedKVs.Store(0)
+
+	lrw.debug.Flushes.Last.Nanos.Store(flushTime)
+	lrw.debug.Flushes.Last.KVs.Store(int64(len(b.buffer.curKVBatch)))
+	lrw.debug.Flushes.Last.Bytes.Store(int64(flushByteSize))
+	lrw.debug.Flushes.Last.SlowestBatchNanos.Store(slowestBatch.Nanoseconds())
+
 	lrw.metrics.Flushes.Inc(1)
-	lrw.metrics.FlushHistNanos.RecordValue(timeutil.Since(preFlushTime).Nanoseconds())
+	lrw.metrics.FlushHistNanos.RecordValue(flushTime)
 	lrw.metrics.FlushRowCountHist.RecordValue(int64(len(b.buffer.curKVBatch)))
 	lrw.metrics.FlushBytesHist.RecordValue(int64(flushByteSize))
 	lrw.metrics.IngestedLogicalBytes.Inc(int64(flushByteSize))
