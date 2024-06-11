@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/replay"
@@ -127,6 +128,24 @@ var MinCapacityForBulkIngest = settings.RegisterFloatSetting(
 	"kv.bulk_io_write.min_capacity_remaining_fraction",
 	"remaining store capacity fraction below which bulk ingestion requests are rejected",
 	0.05,
+)
+
+// readaheadModeInformed controls the pebble.ReadaheadConfig.Informed setting.
+var readaheadModeInformed = settings.RegisterIntSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.readahead_mode.informed",
+	"the readahead mode for operations which are known to read through large chunks of data (0=off, 1=SYS_READAHEAD, 2=FADV_SEQUENTIAL)",
+	2,
+	settings.IntInRange(0, 2),
+)
+
+// readaheadModeSpeculative controls the pebble.ReadaheadConfig.Speculative setting.
+var readaheadModeSpeculative = settings.RegisterIntSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.informed_readahead_mode.speculative",
+	"the readahead mode that is used automatically when sequential reads are detected (0=off, 1=SYS_READAHEAD, 2=FADV_SEQUENTIAL)",
+	2,
+	settings.IntInRange(0, 2),
 )
 
 // CompressionAlgorithm is an enumeration of available compression algorithms
@@ -1166,6 +1185,27 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	storeIDContainer := &base.StoreIDContainer{}
 	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
 	logCtx = logtags.AddTag(logCtx, "pebble", nil)
+
+	cfg.opts.Local.ReadaheadConfigFn = func() pebble.ReadaheadConfig {
+		var c pebble.ReadaheadConfig
+		switch readaheadModeInformed.Get(&cfg.settings.SV) {
+		case 0:
+			c.Informed = objstorageprovider.NoReadahead
+		case 1:
+			c.Informed = objstorageprovider.SysReadahead
+		case 2:
+			c.Informed = objstorageprovider.FadviseSequential
+		}
+		switch readaheadModeSpeculative.Get(&cfg.settings.SV) {
+		case 0:
+			c.Speculative = objstorageprovider.NoReadahead
+		case 1:
+			c.Speculative = objstorageprovider.SysReadahead
+		case 2:
+			c.Speculative = objstorageprovider.FadviseSequential
+		}
+		return c
+	}
 
 	cfg.opts.WALMinSyncInterval = func() time.Duration {
 		return minWALSyncInterval.Get(&cfg.settings.SV)
