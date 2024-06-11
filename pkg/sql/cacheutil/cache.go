@@ -24,12 +24,11 @@ import (
 
 // Cache is a shared cache for hashed passwords and other information used
 // during user authentication and session initialization.
-type Cache struct {
+type Cache[K comparable, V any] struct {
 	syncutil.Mutex
-	boundAccount  mon.BoundAccount
-	tableVersions []descpb.DescriptorVersion
-	// TODO(richardjcai): In go1.18 we can use generics.
-	cache              map[interface{}]interface{}
+	boundAccount       mon.BoundAccount
+	tableVersions      []descpb.DescriptorVersion
+	cache              map[K]V
 	populateCacheGroup *singleflight.Group
 	stopper            *stop.Stopper
 }
@@ -37,9 +36,11 @@ type Cache struct {
 // NewCache initializes a new Cache.
 // numSystemTables is the number of system tables backing the cache.
 // We use it to initialize the tableVersions slice to 0 for each table.
-func NewCache(account mon.BoundAccount, stopper *stop.Stopper, numSystemTables int) *Cache {
+func NewCache[K comparable, V any](
+	account mon.BoundAccount, stopper *stop.Stopper, numSystemTables int,
+) *Cache[K, V] {
 	tableVersions := make([]descpb.DescriptorVersion, numSystemTables)
-	return &Cache{
+	return &Cache[K, V]{
 		tableVersions:      tableVersions,
 		boundAccount:       account,
 		populateCacheGroup: singleflight.NewGroup("load-value", "key"),
@@ -49,7 +50,7 @@ func NewCache(account mon.BoundAccount, stopper *stop.Stopper, numSystemTables i
 
 // GetValueLocked returns the value and if the key is found in the cache.
 // The cache lock must be held while calling this.
-func (c *Cache) GetValueLocked(key interface{}) (interface{}, bool) {
+func (c *Cache[K, V]) GetValueLocked(key K) (V, bool) {
 	val, ok := c.cache[key]
 	return val, ok
 }
@@ -57,9 +58,9 @@ func (c *Cache) GetValueLocked(key interface{}) (interface{}, bool) {
 // LoadValueOutsideOfCacheSingleFlight loads the value for the given requestKey using the provided
 // function. It ensures that there is only at most one in-flight request for
 // each key at any time.
-func (c *Cache) LoadValueOutsideOfCacheSingleFlight(
+func (c *Cache[K, V]) LoadValueOutsideOfCacheSingleFlight(
 	ctx context.Context, requestKey string, fn func(loadCtx context.Context) (interface{}, error),
-) (interface{}, error) {
+) (*V, error) {
 	future, _ := c.populateCacheGroup.DoChan(ctx,
 		requestKey,
 		singleflight.DoOpts{
@@ -72,7 +73,8 @@ func (c *Cache) LoadValueOutsideOfCacheSingleFlight(
 	if res.Err != nil {
 		return nil, res.Err
 	}
-	return res.Val, nil
+	val := res.Val.(*V)
+	return val, nil
 }
 
 // MaybeWriteBackToCache tries to put the key, value into the
@@ -82,12 +84,8 @@ func (c *Cache) LoadValueOutsideOfCacheSingleFlight(
 // Note that reading from system tables may give us data from a newer table
 // version than the one we pass in here, that is okay since the cache will
 // be invalidated upon the next read.
-func (c *Cache) MaybeWriteBackToCache(
-	ctx context.Context,
-	tableVersions []descpb.DescriptorVersion,
-	key interface{},
-	value interface{},
-	entrySize int64,
+func (c *Cache[K, V]) MaybeWriteBackToCache(
+	ctx context.Context, tableVersions []descpb.DescriptorVersion, key K, value V, entrySize int64,
 ) bool {
 	c.Lock()
 	defer c.Unlock()
@@ -117,7 +115,7 @@ func (c *Cache) MaybeWriteBackToCache(
 // cached versions are newer, then false is returned to indicate that the
 // cached data should not be used.
 // The cache must be locked while this is called.
-func (c *Cache) ClearCacheIfStaleLocked(
+func (c *Cache[K, V]) ClearCacheIfStaleLocked(
 	ctx context.Context, tableVersions []descpb.DescriptorVersion,
 ) (isEligibleForCache bool) {
 	if len(c.tableVersions) != len(tableVersions) {
@@ -129,7 +127,7 @@ func (c *Cache) ClearCacheIfStaleLocked(
 			// If the cache is based on old table versions,
 			// then update versions and drop the map.
 			c.tableVersions = tableVersions
-			c.cache = make(map[interface{}]interface{})
+			c.cache = make(map[K]V)
 			c.boundAccount.Empty(ctx)
 			return false
 		}
