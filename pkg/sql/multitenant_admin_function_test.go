@@ -377,13 +377,27 @@ func (te tenantExpected) validate(
 	testutils.SucceedsSoon(t, func() error {
 		rows, err := runQuery()
 		if expectedErrorMessage == "" {
-			require.NoErrorf(t, err, message)
+			if err != nil {
+				return errors.WithMessage(err, message)
+			}
 			actualResults, err := sqlutils.RowsToStrMatrix(rows)
-			require.NoErrorf(t, err, message)
-			require.Equalf(t, len(expectedResults), len(actualResults), message)
+			if err != nil {
+				return errors.WithMessage(err, message)
+			}
+			if len(expectedResults) != len(actualResults) {
+				return errors.Newf(
+					"wrong number of results; %s expected=%d got=%d",
+					message, len(expectedResults), len(actualResults),
+				)
+			}
 			for i, actualRowResult := range actualResults {
 				expectedRowResult := expectedResults[i]
-				require.Equalf(t, len(expectedRowResult), len(actualRowResult), "%s row=%d\nexpected=%v\n  actual=%v", message, expectedRowResult, actualRowResult, i)
+				if len(expectedRowResult) != len(actualRowResult) {
+					return errors.Newf(
+						"wrong number of columns; %s row=%d expected=%v actual=%v",
+						message, i, len(expectedRowResult), len(actualRowResult),
+					)
+				}
 				for j, actualColResult := range actualRowResult {
 					expectedColResult := expectedRowResult[j]
 					switch expectedColResult {
@@ -403,8 +417,9 @@ func (te tenantExpected) validate(
 				}
 			}
 		} else {
-			require.Errorf(t, err, message)
-			require.Containsf(t, err.Error(), expectedErrorMessage, message)
+			if !testutils.IsError(err, expectedErrorMessage) {
+				return errors.Errorf("%s expected error %q, got %v", message, expectedErrorMessage, err)
+			}
 		}
 		return nil
 	})
