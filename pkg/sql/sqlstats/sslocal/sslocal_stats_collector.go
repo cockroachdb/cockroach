@@ -216,7 +216,8 @@ func getInsightStatus(statementError error) insights.Statement_Status {
 }
 
 func (s *StatsCollector) shouldObserveInsights() bool {
-	return sqlstats.StmtStatsEnable.Get(&s.st.SV) && sqlstats.TxnStatsEnable.Get(&s.st.SV)
+	return sqlstats.StmtStatsEnable.Get(&s.st.SV) && sqlstats.TxnStatsEnable.Get(&s.st.SV) &&
+		s.insightsWriter.Enabled()
 }
 
 // ObserveStatement sends the recorded statement stats to the insights system
