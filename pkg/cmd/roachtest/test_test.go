@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -449,12 +450,12 @@ func TestNewCluster(t *testing.T) {
 
 	testCases := []struct {
 		name                string
-		createMock          func(ctx context.Context, l *logger.Logger, username string, numNodes int, createVMOpts vm.CreateOpts, providerOptsContainer vm.ProviderOptionsContainer) (retErr error)
+		createMock          func(ctx context.Context, l *logger.Logger, username string, opts []cloud.ClusterCreateOpts) (retErr error)
 		expectedCreateCalls int
 	}{
 		{
 			"Malformed Cluster Name Error",
-			func(ctx context.Context, l *logger.Logger, username string, numNodes int, createVMOpts vm.CreateOpts, providerOptsContainer vm.ProviderOptionsContainer) (retErr error) {
+			func(ctx context.Context, l *logger.Logger, username string, opts []cloud.ClusterCreateOpts) (retErr error) {
 				createCallsCounter++
 				return &roachprod.MalformedClusterNameError{}
 			},
@@ -462,7 +463,7 @@ func TestNewCluster(t *testing.T) {
 		},
 		{
 			"Cluster Already Exists Error",
-			func(ctx context.Context, l *logger.Logger, username string, numNodes int, createVMOpts vm.CreateOpts, providerOptsContainer vm.ProviderOptionsContainer) (retErr error) {
+			func(ctx context.Context, l *logger.Logger, username string, opts []cloud.ClusterCreateOpts) (retErr error) {
 				createCallsCounter++
 				return &roachprod.ClusterAlreadyExistsError{}
 			},
