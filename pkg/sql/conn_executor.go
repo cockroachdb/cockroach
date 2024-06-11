@@ -2208,9 +2208,16 @@ func (ex *connExecutor) run(
 
 	defer func() {
 		ex.server.cfg.SessionRegistry.deregister(sessionID, ex.queryCancelKey)
-		addErr := ex.server.cfg.ClosedSessionCache.add(ctx, sessionID, ex.serialize())
-		if addErr != nil {
-			err = errors.CombineErrors(err, addErr)
+		addToClosedSessionCache := ex.executorType == executorTypeExec
+		if ex.executorType == executorTypeInternal {
+			rate := closedSessionCacheInternalSamplingProbability.Get(&ex.server.cfg.Settings.SV)
+			addToClosedSessionCache = ex.rng.internal.Float64() < rate
+		}
+		if addToClosedSessionCache {
+			addErr := ex.server.cfg.ClosedSessionCache.add(ctx, sessionID, ex.serialize())
+			if addErr != nil {
+				err = errors.CombineErrors(err, addErr)
+			}
 		}
 	}()
 
