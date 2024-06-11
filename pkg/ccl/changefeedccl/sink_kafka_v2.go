@@ -212,7 +212,7 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 func (k *kafkaSinkClient) maybeUpdateTopicPartitions(ctx context.Context, forEachTopic func(func(topic string) error) error) error {
 	// TODO: use a mutex if this struct becomes multithreaded
 	const metadataRefreshMinDuration = time.Minute
-	if k.lastMetadataRefresh.Sub(timeutil.Now()) < metadataRefreshMinDuration {
+	if timeutil.Now().Sub(k.lastMetadataRefresh) < metadataRefreshMinDuration {
 		return nil
 	}
 
