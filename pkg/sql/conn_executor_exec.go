@@ -1863,7 +1863,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		// the pausable portal, and we're not collecting a bundle yet, check
 		// whether we should get a bundle for this particular plan gist.
 		if ih := &planner.instrumentation; !ih.collectBundle && ih.outputMode == unmodifiedOutput {
-			ctx = ih.setupWithPlanGist(ctx, ex.server.cfg, stmt.StmtNoConstants, planGist, &planner.curPlan)
+			ctx = ih.setupWithPlanGist(ctx, planner, ex.server.cfg, planGist)
 		}
 	}
 

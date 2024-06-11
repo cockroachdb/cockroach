@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -29,7 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -91,12 +93,6 @@ type instrumentationHelper struct {
 	// collectBundle is set when we are collecting a diagnostics bundle for a
 	// statement; it triggers saving of extra information like the plan string.
 	collectBundle bool
-
-	// planGistMatchingBundle is set when the bundle collection was enabled for
-	// a request with plan-gist matching enabled. In particular, such a bundle
-	// will be somewhat incomplete (it'll miss the plan string as well as the
-	// trace will miss all the events that happened in the optimizer).
-	planGistMatchingBundle bool
 
 	// collectExecStats is set when we are collecting execution statistics for a
 	// statement.
@@ -534,16 +530,15 @@ func (ih *instrumentationHelper) Setup(
 // provided fingerprint and plan gist. It assumes that the bundle is not
 // currently being collected.
 func (ih *instrumentationHelper) setupWithPlanGist(
-	ctx context.Context, cfg *ExecutorConfig, fingerprint, planGist string, plan *planTop,
+	ctx context.Context, p *planner, cfg *ExecutorConfig, planGist string,
 ) context.Context {
 	ih.collectBundle, ih.diagRequestID, ih.diagRequest =
-		ih.stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, fingerprint, planGist)
+		ih.stmtDiagnosticsRecorder.ShouldCollectDiagnostics(ctx, p.stmt.StmtNoConstants, planGist)
 	// IsRedacted will be false when ih.collectBundle is false.
 	ih.explainFlags.RedactValues = ih.explainFlags.RedactValues || ih.diagRequest.IsRedacted()
 	if ih.collectBundle {
 		ih.needFinish = true
 		ih.collectExecStats = true
-		ih.planGistMatchingBundle = true
 		if ih.sp == nil || !ih.sp.IsVerbose() {
 			// We will create a verbose span
 			// - if we don't have a span yet, or
@@ -567,12 +562,52 @@ func (ih *instrumentationHelper) setupWithPlanGist(
 			)
 			ih.shouldFinishSpan = true
 			ih.finalizeSetup(ctx, cfg)
-			log.VEventf(ctx, 1, "plan-gist matching bundle collection began after the optimizer finished its part")
+		}
+		log.VEventf(ctx, 1, "plan-gist matching bundle collection began after the optimizer finished its part")
+		if cfg.TestingKnobs.DeterministicExplain {
+			ih.explainFlags.Deflake = explain.DeflakeAll
+		}
+		// Since we haven't enabled the bundle collection before the
+		// optimization, explain plan wasn't populated. We'll rerun the
+		// execbuilder with the explain factory to get that, on the copy of the
+		// memo (to be safe to not mutate the original memo).
+		copiedMemo := func(o *xform.Optimizer, mem *memo.Memo) *memo.Memo {
+			f := o.Factory()
+			f.CopyAndReplace(
+				mem.RootExpr().(memo.RelExpr),
+				mem.RootProps(),
+				f.CopyWithoutAssigningPlaceholders,
+			)
+			return f.DetachMemo()
+		}(&p.optPlanningCtx.optimizer, p.curPlan.mem)
+
+		explainFactory := explain.NewFactory(newExecFactory(ctx, p), p.SemaCtx(), p.EvalContext())
+		bld := execbuilder.New(
+			ctx, explainFactory, &p.optPlanningCtx.optimizer, copiedMemo,
+			p.curPlan.catalog, copiedMemo.RootExpr(),
+			p.SemaCtx(), p.EvalContext(), p.autoCommit, statements.IsANSIDML(p.stmt.AST),
+		)
+		// Disable telemetry in order to not double count things since we've
+		// already built the plan once.
+		bld.DisableTelemetry()
+		if plan, err := bld.Build(); err != nil {
+			log.VEventf(ctx, 1, "hit an error when using explain factory: %v", err)
+		} else {
+			ep := plan.(*explain.Plan)
+			ih.RecordExplainPlan(ep)
+			// We need to close the original plan since we're going to overwrite
+			// it. Note that the new plan will be closed correctly by the defer
+			// in dispatchToExecutionEngine.
+			p.curPlan.close(ctx)
+			// We need to use the newly-created plan going forward in order for
+			// execution stats to be attributed correctly (execNodeTraceMetadata
+			// is a map from pointers to plan nodes).
+			p.curPlan.planComponents = *ep.WrappedPlan.(*planComponents)
 		}
 	} else {
 		// We won't need the memo and the catalog, so free it up.
-		plan.mem = nil
-		plan.catalog = nil
+		p.curPlan.mem = nil
+		p.curPlan.catalog = nil
 	}
 	return ctx
 }
@@ -675,45 +710,10 @@ func (ih *instrumentationHelper) Finish(
 				}
 			}
 			planString := ob.BuildString()
-			if ih.planGistMatchingBundle {
-				// We don't have the plan string available since the stmt bundle
-				// collection was enabled _after_ the optimizer was done.
-				// Instead, we do have the gist available, so we'll decode it
-				// and use that as the plan string.
-				var sb strings.Builder
-				sb.WriteString("-- plan is incomplete due to gist matching: ")
-				sb.WriteString(ih.planGist.String())
-				// Perform best-effort decoding ignoring all errors.
-				if it, err := ie.QueryIterator(
-					bundleCtx, "plan-gist-decoding" /* opName */, nil, /* txn */
-					fmt.Sprintf("SELECT * FROM crdb_internal.decode_plan_gist('%s')", ih.planGist.String()),
-				); err == nil {
-					defer func() {
-						_ = it.Close()
-					}()
-					sb.WriteString("\n")
-					// Ignore the errors returned on Next call.
-					for ok, _ = it.Next(bundleCtx); ok; ok, _ = it.Next(bundleCtx) {
-						row := it.Cur()
-						var line string
-						// Be conservative in case the output format changes.
-						if len(row) == 1 {
-							var ds tree.DString
-							ds, ok = tree.AsDString(row[0])
-							line = string(ds)
-						} else {
-							ok = false
-						}
-						if !ok && buildutil.CrdbTestBuild {
-							return errors.AssertionFailedf("unexpected output format for decoding plan gist %s", ih.planGist.String())
-						}
-						if ok {
-							sb.WriteString("\n")
-							sb.WriteString(line)
-						}
-					}
-				}
-				planString = sb.String()
+			if planString == "" {
+				// This should only happen with plan-gist matching where we hit
+				// an error when using the explain factory.
+				planString = "-- plan is missing, probably hit an error with gist matching: " + ih.planGist.String()
 			}
 			bundle = buildStatementBundle(
 				bundleCtx, ih.explainFlags, cfg.DB, p, ie.(*InternalExecutor),
