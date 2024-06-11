@@ -193,8 +193,18 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 				panic(errors.AssertionFailedf("expected %d tuple elements in insert fast path uniqueness check, found %d", len(c.InsertCols), len(tuple.Elems)))
 			}
 			for k := 0; k < len(tuple.Elems); k++ {
-				constExpr, _ := tuple.Elems[k].(*memo.ConstExpr)
-				execFastPathCheck.DatumsFromConstraint[j][execFastPathCheck.InsertCols[k]] = constExpr.Value
+				var constDatum tree.Datum
+				switch e := tuple.Elems[k].(type) {
+				case *memo.ConstExpr:
+					constDatum = e.Value
+				case *memo.TrueExpr:
+					constDatum = tree.DBoolTrue
+				case *memo.FalseExpr:
+					constDatum = tree.DBoolFalse
+				default:
+					return execPlan{}, colOrdMap{}, false, nil
+				}
+				execFastPathCheck.DatumsFromConstraint[j][execFastPathCheck.InsertCols[k]] = constDatum
 			}
 		}
 		uniqCheck := &ins.UniqueChecks[i]
