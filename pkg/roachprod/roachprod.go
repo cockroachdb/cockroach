@@ -1541,18 +1541,17 @@ func RemoveLabels(l *logger.Logger, clusterName string, labels []string) error {
 
 // Create TODO
 func Create(
-	ctx context.Context,
-	l *logger.Logger,
-	username string,
-	numNodes int,
-	createVMOpts vm.CreateOpts,
-	providerOptsContainer vm.ProviderOptionsContainer,
+	ctx context.Context, l *logger.Logger, username string, opts ...*cloud.ClusterCreateOpts,
 ) (retErr error) {
+	var numNodes int
+	for _, o := range opts {
+		numNodes = numNodes + o.Nodes
+	}
 	if numNodes <= 0 || numNodes >= 1000 {
 		// Upper limit is just for safety.
 		return fmt.Errorf("number of nodes must be in [1..999]")
 	}
-	clusterName := createVMOpts.ClusterName
+	clusterName := opts[0].CreateOpts.ClusterName
 	if err := verifyClusterName(l, clusterName, username); err != nil {
 		return err
 	}
@@ -1599,23 +1598,27 @@ func Create(
 		}
 
 		// If the local cluster is being created, force the local Provider to be used
-		createVMOpts.VMProviders = []string{local.ProviderName}
+		for _, o := range opts {
+			o.CreateOpts.VMProviders = []string{local.ProviderName}
+		}
 	}
 
-	if createVMOpts.SSDOpts.FileSystem == vm.Zfs {
-		for _, provider := range createVMOpts.VMProviders {
-			// TODO(DarrylWong): support zfs on other providers, see: #123775.
-			// Once done, revisit all tests that set zfs to see if they can run on non GCE.
-			if !(provider == gce.ProviderName || provider == aws.ProviderName) {
-				return fmt.Errorf(
-					"creating a node with --filesystem=zfs is currently not supported in %q", provider,
-				)
+	for _, o := range opts {
+		if o.CreateOpts.SSDOpts.FileSystem == vm.Zfs {
+			for _, provider := range o.CreateOpts.VMProviders {
+				// TODO(DarrylWong): support zfs on other providers, see: #123775.
+				// Once done, revisit all tests that set zfs to see if they can run on non GCE.
+				if !(provider == gce.ProviderName || provider == aws.ProviderName) {
+					return fmt.Errorf(
+						"creating a node with --filesystem=zfs is currently not supported in %q", provider,
+					)
+				}
 			}
 		}
 	}
 
 	l.Printf("Creating cluster %s with %d nodes...", clusterName, numNodes)
-	if createErr := cloud.CreateCluster(l, numNodes, createVMOpts, providerOptsContainer); createErr != nil {
+	if createErr := cloud.CreateCluster(l, opts); createErr != nil {
 		return createErr
 	}
 
