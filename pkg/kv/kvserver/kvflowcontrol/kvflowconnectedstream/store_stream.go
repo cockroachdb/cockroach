@@ -35,34 +35,35 @@ type storeStreamsTokenCounter struct {
 	settings *cluster.Settings
 	clock    *hlc.Clock
 
-	counters map[kvflowcontrol.Stream]TokenCounter
+	sendCounters, evalCounters map[kvflowcontrol.Stream]TokenCounter
 }
 
 func (sstc *storeStreamsTokenCounter) EvalTokenCounterForStream(
 	stream kvflowcontrol.Stream,
 ) TokenCounter {
-	if _, ok := sstc.counters[stream]; !ok {
-		sstc.counters[stream] = newTokenCounter(sstc.settings, sstc.clock)
+	if _, ok := sstc.evalCounters[stream]; !ok {
+		sstc.evalCounters[stream] = newTokenCounter(sstc.settings, sstc.clock)
 	}
-	return sstc.counters[stream]
+	return sstc.evalCounters[stream]
 }
 
 func (sstc *storeStreamsTokenCounter) SendTokenCounterForStream(
 	stream kvflowcontrol.Stream,
 ) TokenCounter {
-	if _, ok := sstc.counters[stream]; !ok {
-		sstc.counters[stream] = newTokenCounter(sstc.settings, sstc.clock)
+	if _, ok := sstc.sendCounters[stream]; !ok {
+		sstc.sendCounters[stream] = newTokenCounter(sstc.settings, sstc.clock)
 	}
-	return sstc.counters[stream]
+	return sstc.sendCounters[stream]
 }
 
 func NewStoreStreamsTokenCounter(
 	settings *cluster.Settings, clock *hlc.Clock,
 ) StoreStreamsTokenCounter {
 	return &storeStreamsTokenCounter{
-		settings: settings,
-		clock:    clock,
-		counters: make(map[kvflowcontrol.Stream]TokenCounter),
+		settings:     settings,
+		clock:        clock,
+		sendCounters: make(map[kvflowcontrol.Stream]TokenCounter),
+		evalCounters: make(map[kvflowcontrol.Stream]TokenCounter),
 	}
 }
 

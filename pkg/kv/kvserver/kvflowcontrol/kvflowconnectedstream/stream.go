@@ -1071,7 +1071,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		// by FollowerState.
 		info := rc.opts.RaftInterface.FollowerState(r)
 		state := info.State
-		log.VInfof(context.Background(), 1,
+		log.VInfof(context.TODO(), 1,
 			"HandleRaftEvent(%d): info=(%v) state=(%v)", r, info, rs)
 		switch state {
 		case tracker.StateProbe:
@@ -1730,7 +1730,6 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 		if remainingTokens[i] > 0 {
 			rss.sendQueue.deductedForScheduler.tokens = remainingTokens[i]
 		} else if remainingTokens[i] < 0 {
-			// Deduct
 			rss.parent.sendTokenCounter.Deduct(
 				context.TODO(), admissionpb.WorkClass(i), -remainingTokens[i])
 		}
@@ -1788,7 +1787,7 @@ func (rss *replicaSendStream) Notify() {
 	wc := workClassFromRaftPriority(pri)
 	queueSize := rss.queueSize()
 	tokens := rss.parent.sendTokenCounter.TryDeduct(context.TODO(), wc, queueSize)
-	log.VInfof(context.Background(), 1,
+	log.VInfof(context.TODO(), 1,
 		"notify: tokens=%v queueSize=%v SendTokensWatcher=%v watcherHandleID=%v",
 		tokens, queueSize, rss.parent.parent.opts.SendTokensWatcher, rss.sendQueue.watcherHandleID)
 	if tokens > 0 {

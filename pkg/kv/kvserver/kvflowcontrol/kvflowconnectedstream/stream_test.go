@@ -134,8 +134,6 @@ func scanPriority(t *testing.T, input string) admissionpb.WorkPriority {
 //     state.
 //   - test replica set changes
 //   - test leaseholder changes
-//   - bug squash spurious token deltas, see comment in
-//     testdata/range_controller_basic.
 func TestRangeController(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
