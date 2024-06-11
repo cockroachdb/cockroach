@@ -106,6 +106,7 @@ go_test(
         "//pkg/cmd/roachtest/test",
         "//pkg/internal/team",
         "//pkg/roachprod",
+        "//pkg/roachprod/cloud",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
