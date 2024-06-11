@@ -37,9 +37,13 @@ type TenantSideCostController interface {
 	// the CPU usage (in CPU secs) per wall-clock second.
 	GetCPUMovingAvg() float64
 
-	// GetCostConfig returns the cost model config this TenantSideCostController
-	// is using.
-	GetCostConfig() *tenantcostmodel.Config
+	// GetRequestUnitModel returns the request unit cost model that this
+	// TenantSideCostController is using.
+	GetRequestUnitModel() *tenantcostmodel.RequestUnitModel
+
+	// GetEstimatedCPUModel returns the estimated CPU cost model that this
+	// TenantSideCostController is using.
+	GetEstimatedCPUModel() *tenantcostmodel.EstimatedCPUModel
 
 	// Metrics returns a metric.Struct which holds metrics for the controller.
 	Metrics() metric.Struct
