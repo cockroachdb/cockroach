@@ -784,7 +784,7 @@ Currently available application options are:
 			versionArg = args[2]
 		}
 		return roachprod.Deploy(context.Background(), config.Logger, args[0], args[1],
-			versionArg, pause, sig, waitFlag, maxWait, secure)
+			versionArg, pause, deploySig, deployWaitFlag, deployMaxWait, secure)
 	}),
 }
 
