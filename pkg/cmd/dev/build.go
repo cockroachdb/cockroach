@@ -110,7 +110,6 @@ var buildTargetMapping = map[string]string{
 	"sql-bootstrap-data":   "//pkg/cmd/sql-bootstrap-data:sql-bootstrap-data",
 	"staticcheck":          "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
 	"tests":                "//pkg:all_tests",
-	"roachtest-selector":   "//pkg/cmd/roachtest-selector:roachtest-selector",
 	"workload":             "//pkg/cmd/workload:workload",
 }
 
