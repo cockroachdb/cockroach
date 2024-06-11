@@ -35,6 +35,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// NOTE: the caller is expected to pass the same seed on `init` and
+// `run` when using this workload.
 var RandomSeed = workload.NewInt64RandomSeed()
 
 type random struct {
