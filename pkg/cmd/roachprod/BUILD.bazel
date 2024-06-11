@@ -14,6 +14,7 @@ go_library(
         "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachprod/update",
         "//pkg/roachprod",
+        "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/fluentbit",
