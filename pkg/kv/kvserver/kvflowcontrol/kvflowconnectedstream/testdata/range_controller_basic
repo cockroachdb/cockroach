@@ -14,12 +14,12 @@ store_id=3 replica_id=3 type=VOTER_FULL
 # the other an elastic work class. Neither of these should wait for tokens
 # before sending, as there are ample tokens available.
 send
-range_id=1 pri=NormalPri size=1mb
-range_id=1 pri=LowPri size=1mb
+range_id=1 pri=NormalPri size=1MiB
+range_id=1 pri=LowPri size=1MiB
 ----
-(n1,s1):1: state=StateReplicate, match=2, next=3, admitted=[] eval=(regular=+14 MiB/+16 MiB elastic=+4.2 MiB/+8.0 MiB) send=(regular=+14 MiB/+16 MiB elastic=+4.2 MiB/+8.0 MiB)
-(n2,s2):2: state=StateReplicate, match=2, next=3, admitted=[] eval=(regular=+14 MiB/+16 MiB elastic=+4.2 MiB/+8.0 MiB) send=(regular=+14 MiB/+16 MiB elastic=+4.2 MiB/+8.0 MiB)
-(n3,s3):3: state=StateReplicate, match=2, next=3, admitted=[] eval=(regular=+14 MiB/+16 MiB elastic=+4.2 MiB/+8.0 MiB) send=(regular=+14 MiB/+16 MiB elastic=+4.2 MiB/+8.0 MiB)
+(n1,s1):1: state=StateReplicate, match=2, next=3, admitted=[] eval=(regular=+15 MiB/+16 MiB elastic=+6.0 MiB/+8.0 MiB) send=(regular=+15 MiB/+16 MiB elastic=+6.0 MiB/+8.0 MiB)
+(n2,s2):2: state=StateReplicate, match=2, next=3, admitted=[] eval=(regular=+15 MiB/+16 MiB elastic=+6.0 MiB/+8.0 MiB) send=(regular=+15 MiB/+16 MiB elastic=+6.0 MiB/+8.0 MiB)
+(n3,s3):3: state=StateReplicate, match=2, next=3, admitted=[] eval=(regular=+15 MiB/+16 MiB elastic=+6.0 MiB/+8.0 MiB) send=(regular=+15 MiB/+16 MiB elastic=+6.0 MiB/+8.0 MiB)
 
 # Admit the regular entries on stores 1 and 2, store 3 is not admitted here and
 # should have less than full tokens.
@@ -27,28 +27,34 @@ admit
 store_id=1 to=2 pri=NormalPri
 store_id=2 to=2 pri=NormalPri
 ----
-(n1,s1):1: state=StateReplicate, match=2, next=3, admitted=[NormalPri=2] eval=(regular=+16 MiB/+16 MiB elastic=+6.1 MiB/+8.0 MiB) send=(regular=+16 MiB/+16 MiB elastic=+6.1 MiB/+8.0 MiB)
-(n2,s2):2: state=StateReplicate, match=2, next=3, admitted=[NormalPri=2] eval=(regular=+16 MiB/+16 MiB elastic=+6.1 MiB/+8.0 MiB) send=(regular=+16 MiB/+16 MiB elastic=+6.1 MiB/+8.0 MiB)
-(n3,s3):3: state=StateReplicate, match=2, next=3, admitted=[] eval=(regular=+14 MiB/+16 MiB elastic=+4.2 MiB/+8.0 MiB) send=(regular=+14 MiB/+16 MiB elastic=+4.2 MiB/+8.0 MiB)
+(n1,s1):1: state=StateReplicate, match=2, next=3, admitted=[NormalPri=2] eval=(regular=+16 MiB/+16 MiB elastic=+7.0 MiB/+8.0 MiB) send=(regular=+16 MiB/+16 MiB elastic=+7.0 MiB/+8.0 MiB)
+(n2,s2):2: state=StateReplicate, match=2, next=3, admitted=[NormalPri=2] eval=(regular=+16 MiB/+16 MiB elastic=+7.0 MiB/+8.0 MiB) send=(regular=+16 MiB/+16 MiB elastic=+7.0 MiB/+8.0 MiB)
+(n3,s3):3: state=StateReplicate, match=2, next=3, admitted=[] eval=(regular=+15 MiB/+16 MiB elastic=+6.0 MiB/+8.0 MiB) send=(regular=+15 MiB/+16 MiB elastic=+6.0 MiB/+8.0 MiB)
+
+# Admit the elastic entries on all stores.
+admit
+store_id=1 to=2 pri=LowPri
+store_id=2 to=2 pri=LowPri
+store_id=3 to=2 pri=LowPri
+----
+(n1,s1):1: state=StateReplicate, match=2, next=3, admitted=[LowPri=2,NormalPri=2] eval=(regular=+16 MiB/+16 MiB elastic=+8.0 MiB/+8.0 MiB) send=(regular=+16 MiB/+16 MiB elastic=+8.0 MiB/+8.0 MiB)
+(n2,s2):2: state=StateReplicate, match=2, next=3, admitted=[LowPri=2,NormalPri=2] eval=(regular=+16 MiB/+16 MiB elastic=+8.0 MiB/+8.0 MiB) send=(regular=+16 MiB/+16 MiB elastic=+8.0 MiB/+8.0 MiB)
+(n3,s3):3: state=StateReplicate, match=2, next=3, admitted=[LowPri=2] eval=(regular=+15 MiB/+16 MiB elastic=+7.0 MiB/+8.0 MiB) send=(regular=+15 MiB/+16 MiB elastic=+7.0 MiB/+8.0 MiB)
 
 # Send another regular entry, this entry will consume all of the remaining
 # tokens available for regular work on s1 and s2;
-#
-# TODO(kvoli): This is broken, the regular tokens goes from +16mb to -14mb
-# after a 1mb entry, when it should go to 0mib. The elastic tokens also appear
-# to decrease by a multiple of the entry size, which doesn't appear correct.
 send
-range_id=1 pri=NormalPri size=16mb
+range_id=1 pri=NormalPri size=16MiB
 ----
-(n1,s1):1: state=StateReplicate, match=3, next=4, admitted=[NormalPri=2] eval=(regular=-14 MiB/+16 MiB elastic=-24 MiB/+8.0 MiB) send=(regular=-14 MiB/+16 MiB elastic=-24 MiB/+8.0 MiB)
-(n2,s2):2: state=StateReplicate, match=3, next=4, admitted=[NormalPri=2] eval=(regular=-14 MiB/+16 MiB elastic=-24 MiB/+8.0 MiB) send=(regular=-14 MiB/+16 MiB elastic=-24 MiB/+8.0 MiB)
-(n3,s3):3: state=StateReplicate, match=3, next=4, admitted=[] eval=(regular=-16 MiB/+16 MiB elastic=-26 MiB/+8.0 MiB) send=(regular=-16 MiB/+16 MiB elastic=-26 MiB/+8.0 MiB)
+(n1,s1):1: state=StateReplicate, match=3, next=4, admitted=[LowPri=2,NormalPri=2] eval=(regular=+0 B/+16 MiB elastic=-8.0 MiB/+8.0 MiB) send=(regular=+0 B/+16 MiB elastic=-8.0 MiB/+8.0 MiB)
+(n2,s2):2: state=StateReplicate, match=3, next=4, admitted=[LowPri=2,NormalPri=2] eval=(regular=+0 B/+16 MiB elastic=-8.0 MiB/+8.0 MiB) send=(regular=+0 B/+16 MiB elastic=-8.0 MiB/+8.0 MiB)
+(n3,s3):3: state=StateReplicate, match=3, next=4, admitted=[LowPri=2] eval=(regular=-1.0 MiB/+16 MiB elastic=-9.0 MiB/+8.0 MiB) send=(regular=-1.0 MiB/+16 MiB elastic=-9.0 MiB/+8.0 MiB)
 
 # Send another regular entry, this entry will encounter no available tokens and
 # should queue on s2 and s3: the match does not increase for s2 or s3.
 send
-range_id=1 pri=NormalPri size=1mb
+range_id=1 pri=NormalPri size=1MiB
 ----
-(n1,s1):1: state=StateReplicate, match=4, next=5, admitted=[NormalPri=2] eval=(regular=-16 MiB/+16 MiB elastic=-26 MiB/+8.0 MiB) send=(regular=-16 MiB/+16 MiB elastic=-26 MiB/+8.0 MiB)
-(n2,s2):2: state=StateReplicate, match=3, next=4, admitted=[NormalPri=2] eval=(regular=-16 MiB/+16 MiB elastic=-25 MiB/+8.0 MiB) send=(regular=-16 MiB/+16 MiB elastic=-25 MiB/+8.0 MiB)
-(n3,s3):3: state=StateReplicate, match=3, next=4, admitted=[] eval=(regular=-17 MiB/+16 MiB elastic=-27 MiB/+8.0 MiB) send=(regular=-17 MiB/+16 MiB elastic=-27 MiB/+8.0 MiB)
+(n1,s1):1: state=StateReplicate, match=4, next=5, admitted=[LowPri=2,NormalPri=2] eval=(regular=-1.0 MiB/+16 MiB elastic=-9.0 MiB/+8.0 MiB) send=(regular=-1.0 MiB/+16 MiB elastic=-9.0 MiB/+8.0 MiB)
+(n2,s2):2: state=StateReplicate, match=3, next=4, admitted=[LowPri=2,NormalPri=2] eval=(regular=-1.0 MiB/+16 MiB elastic=-9.0 MiB/+8.0 MiB) send=(regular=+0 B/+16 MiB elastic=-8.0 MiB/+8.0 MiB)
+(n3,s3):3: state=StateReplicate, match=3, next=4, admitted=[LowPri=2] eval=(regular=-2.0 MiB/+16 MiB elastic=-10 MiB/+8.0 MiB) send=(regular=-1.0 MiB/+16 MiB elastic=-9.0 MiB/+8.0 MiB)
