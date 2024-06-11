@@ -329,11 +329,36 @@ func equiDepthHistogramWithoutAdjustment(
 	return h, nil
 }
 
+// TS represents a timestamp when stats were created. It is like a type union.
+// Only one of s and t should be set. Use TSFromTime or TSFromString to create
+// a TS.
+type TS struct {
+	t time.Time
+	s string
+}
+
+// TSFromTime creates a TS from a time.Time.
+func TSFromTime(t time.Time) TS {
+	return TS{t: t}
+}
+
+// TSFromString creates a TS from a string.
+func TSFromString(s string) TS {
+	return TS{s: s}
+}
+
+// String formats a TS as a string.
+func (ts TS) String() string {
+	if ts.s != "" {
+		return ts.s
+	}
+	return string(tree.PGWireFormatTimestamp(ts.t, nil /* offset */, nil /* tmp */))
+}
+
 // TypeCheck returns an error if the type of the histogram does not match the
-// type of the column. Only one of createdAt and createdAtTime should be
-// specified.
+// type of the column.
 func (histogramData *HistogramData) TypeCheck(
-	colType *types.T, table, column, createdAt string, createdAtTime time.Time,
+	colType *types.T, table, column string, createdAt TS,
 ) error {
 	if histogramData == nil || histogramData.ColumnType == nil {
 		return nil
@@ -343,11 +368,8 @@ func (histogramData *HistogramData) TypeCheck(
 		return nil
 	}
 	if !histogramData.ColumnType.Equivalent(colType) {
-		if createdAt == "" {
-			createdAt = string(tree.PGWireFormatTimestamp(createdAtTime, nil /* offset */, nil /* tmp */))
-		}
 		return errors.Newf(
-			"histogram for table %v column %v created_at %v does not match column type %v: %v",
+			"histogram for table %v column %v created_at %s does not match column type %v: %v",
 			table, column, createdAt, colType.SQLStringForError(),
 			histogramData.ColumnType.SQLStringForError(),
 		)
