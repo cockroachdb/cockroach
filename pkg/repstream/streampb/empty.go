@@ -37,6 +37,43 @@ type DebugProducerStatus struct {
 	}
 }
 
+// TODO(dt): this really should be per server instead of process-global, i.e. if
+// we added a generic map to the job registry -- which is per server -- in which
+// every components of a job could register itself while it is running.
+var activeProducerStatuses = struct {
+	syncutil.Mutex
+	m map[*DebugProducerStatus]struct{}
+}{m: make(map[*DebugProducerStatus]struct{})}
+
+// RegisterProducerStatus registers a DebugProducerStatus so that it is returned
+// by GetActiveProducerStatuses. It *must* be unregistered with
+// UnregisterProducerStatus when its processor closes to prevent leaks.
+func RegisterProducerStatus(s *DebugProducerStatus) {
+	activeProducerStatuses.Lock()
+	defer activeProducerStatuses.Unlock()
+	activeProducerStatuses.m[s] = struct{}{}
+}
+
+// UnregisterProducerStatus unregisters a previously registered
+// DebugProducerStatus. It is idempotent.
+func UnregisterProducerStatus(s *DebugProducerStatus) {
+	activeProducerStatuses.Lock()
+	defer activeProducerStatuses.Unlock()
+	delete(activeProducerStatuses.m, s)
+}
+
+// GetActiveProducerStatuses gets the DebugProducerStatus for all registered
+// stream producers in the process.
+func GetActiveProducerStatuses() []*DebugProducerStatus {
+	activeProducerStatuses.Lock()
+	defer activeProducerStatuses.Unlock()
+	res := make([]*DebugProducerStatus, 0, len(activeProducerStatuses.m))
+	for e := range activeProducerStatuses.m {
+		res = append(res, e)
+	}
+	return res
+}
+
 // activeLogicalConsumerStatuses is the debug statuses of all active logical
 // writer processors in the process at any given time, across all jobs in all
 // shared service tenants.

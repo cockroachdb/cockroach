@@ -41,11 +41,6 @@ import (
 	"github.com/golang/snappy"
 )
 
-var activeStreams = struct {
-	syncutil.Mutex
-	m map[*eventStream]*eventStream
-}{m: make(map[*eventStream]*eventStream)}
-
 type eventStream struct {
 	streamID streampb.StreamID
 	execCfg  *sql.ExecutorConfig
@@ -199,9 +194,9 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		return err
 	}
 
-	activeStreams.Lock()
-	activeStreams.m[s] = s
-	activeStreams.Unlock()
+	s.debug.StreamID = s.streamID
+	s.debug.Spec = s.spec
+	streampb.RegisterProducerStatus(&s.debug)
 	return nil
 }
 
@@ -253,9 +248,7 @@ func (s *eventStream) Values() (tree.Datums, error) {
 
 // Close implements eval.ValueGenerator interface.
 func (s *eventStream) Close(ctx context.Context) {
-	activeStreams.Lock()
-	defer activeStreams.Unlock()
-	delete(activeStreams.m, s)
+	streampb.UnregisterProducerStatus(&s.debug)
 
 	if s.rf != nil {
 		s.rf.Close()
@@ -522,12 +515,6 @@ func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.T
 		}
 	}
 	return sourceTenantID, nil
-}
-
-func (s *eventStream) DebugGetProducerStatus() *streampb.DebugProducerStatus {
-	s.debug.StreamID = s.streamID
-	s.debug.Spec = s.spec
-	return &s.debug
 }
 
 const defaultBatchSize = 1 << 20
