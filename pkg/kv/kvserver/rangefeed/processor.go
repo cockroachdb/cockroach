@@ -206,7 +206,7 @@ type Processor interface {
 		catchUpIter *CatchUpIterator,
 		withDiff bool,
 		withFiltering bool,
-		stream StreamSink,
+		stream *StreamSink,
 		disconnectFn func(),
 	) (bool, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
@@ -587,7 +587,7 @@ func (p *LegacyProcessor) Register(
 	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
-	stream StreamSink,
+	stream *StreamSink,
 	disconnectFn func(),
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
@@ -595,20 +595,21 @@ func (p *LegacyProcessor) Register(
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
-	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
+	//blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 
-	streamSink := stream.StreamMuxer.Register(stream.StreamID, stream.RangeID)
+	//streamSink := stream.StreamMuxer.Register(stream.StreamID, stream.RangeID)
 	// TODO(wenyihu6): add done handling for legacy
-	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, streamSink, disconnectFn)
-	select {
-	case p.regC <- r:
-		// Wait for response.
-		return true, <-p.filterResC
-	case <-p.stoppedC:
-		return false, nil
-	}
+	//r := newRegistration(
+	//	span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
+	//	p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn)
+	//select {
+	//case p.regC <- r:
+	//	// Wait for response.
+	//	return true, <-p.filterResC
+	//case <-p.stoppedC:
+	//	return false, nil
+	//}
+	return false, nil
 }
 
 // Len implements Processor interface.

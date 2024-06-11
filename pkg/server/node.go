@@ -2046,7 +2046,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		n.metrics.NumMuxRangeFeed.Inc(1)
 		n.metrics.ActiveMuxRangeFeed.Inc(1)
 
-		if n.stores.RangeFeed(streamCtx, req, rangefeed.StreamSink{
+		if n.stores.RangeFeed(streamCtx, req, &rangefeed.StreamSink{
 			RangeID:     req.RangeID,
 			StreamID:    req.StreamID,
 			StreamMuxer: streamMuxer,

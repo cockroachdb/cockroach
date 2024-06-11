@@ -211,7 +211,7 @@ func (ls *Stores) SendWithWriteBytes(
 // updates to the provided stream and returns a future with an optional error
 // when the rangefeed is complete.
 func (ls *Stores) RangeFeed(
-	ctx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.StreamSink,
+	ctx context.Context, args *kvpb.RangeFeedRequest, stream *rangefeed.StreamSink,
 ) error {
 	if args.RangeID == 0 {
 		log.Fatal(ctx, "rangefeed request missing range ID")

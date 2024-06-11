@@ -3110,7 +3110,7 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // the provided stream and returns a future with an optional error when the rangefeed is
 // complete.
 func (s *Store) RangeFeed(
-	ctx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.StreamSink,
+	ctx context.Context, args *kvpb.RangeFeedRequest, stream *rangefeed.StreamSink,
 ) error {
 	// rethink how to do this for legacy processor
 	//if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {

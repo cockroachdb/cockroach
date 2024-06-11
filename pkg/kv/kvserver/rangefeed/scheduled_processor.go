@@ -309,7 +309,7 @@ func (p *ScheduledProcessor) Register(
 	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
-	stream StreamSink,
+	stream *StreamSink,
 	disconnectFn func(),
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
@@ -317,10 +317,10 @@ func (p *ScheduledProcessor) Register(
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
-	streamSink := stream.StreamMuxer.Register(stream.StreamID, stream.RangeID)
+	stream.StreamMuxer.Register(stream.StreamID, stream.RangeID)
 	r := newNonBufferedRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
-		p.Config.EventChanCap, p.Metrics, streamSink)
+		p.Config.EventChanCap, p.Metrics, stream)
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
 		if p.stopping {

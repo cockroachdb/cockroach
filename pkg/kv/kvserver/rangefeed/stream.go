@@ -67,9 +67,28 @@ type MuxFeedStream struct {
 }
 
 type Muxer interface {
-	Register(streamID int64, rangeID roachpb.RangeID) BufferedStream
+	Register(streamID int64, rangeID roachpb.RangeID)
 	// There should be a node level clean up and a rangefeed level clean up.
 	AddRangefeedCleanUpCallback(streamID int64, cleanup func())
+	SendUnbuffered(*kvpb.MuxRangeFeedEvent) error
+	PublishEvent(streamId int64,
+		rangeID roachpb.RangeID,
+		event *kvpb.RangeFeedEvent,
+		alloc *SharedBudgetAllocation)
+	HandleRangefeedDisconnectError(streamId int64, rangeId roachpb.RangeID, err *kvpb.Error)
+}
+
+func (m *StreamMuxer) SendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
+	return m.wrapped.Send(event)
+}
+
+func (m *StreamMuxer) PublishEvent(
+	streamId int64,
+	rangeID roachpb.RangeID,
+	event *kvpb.RangeFeedEvent,
+	alloc *SharedBudgetAllocation,
+) {
+	m.publishEvent(streamId, rangeID, event, alloc)
 }
 
 func (m *StreamMuxer) AddRangefeedCleanUpCallback(streamID int64, cleanup func()) {
@@ -80,34 +99,33 @@ func (m *StreamMuxer) AddRangefeedCleanUpCallback(streamID int64, cleanup func()
 	p.rangefeedCleanUp = cleanup
 }
 
-func (m *StreamMuxer) Register(streamID int64, rangeID roachpb.RangeID) BufferedStream {
-	s := &MuxFeedStream{
-		streamID: streamID,
-		rangeID:  rangeID,
-		muxer:    m,
-	}
+func (m *StreamMuxer) Register(streamID int64, rangeID roachpb.RangeID) {
+	//s := &StreamSink{
+	//	StreamID:    streamID,
+	//	RangeID:     rangeID,
+	//	StreamMuxer: m,
+	//}
 	m.addProducer(streamID, rangeID)
-	return s
 }
 
-func (s *MuxFeedStream) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
-	return s.muxer.wrapped.Send(&kvpb.MuxRangeFeedEvent{
+func (s *StreamSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
+	return s.StreamMuxer.SendUnbuffered(&kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
-		RangeID:        s.rangeID,
-		StreamID:       s.streamID,
+		RangeID:        s.RangeID,
+		StreamID:       s.StreamID,
 	})
 }
 
-func (s *MuxFeedStream) SendBuffered(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation) {
-	s.muxer.publishEvent(s.streamID, s.rangeID, event, alloc)
+func (s *StreamSink) SendBuffered(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation) {
+	s.StreamMuxer.PublishEvent(s.StreamID, s.RangeID, event, alloc)
 }
 
 // different help-er function  for err from rangefeed level and from node level
-func (s *MuxFeedStream) SendError(err *kvpb.Error) {
-	s.muxer.HandleRangefeedDisconnectError(s.streamID, s.rangeID, err)
+func (s *StreamSink) SendError(err *kvpb.Error) {
+	s.StreamMuxer.HandleRangefeedDisconnectError(s.StreamID, s.RangeID, err)
 }
 
-var _ BufferedStream = (*MuxFeedStream)(nil)
+var _ BufferedStream = (*StreamSink)(nil)
 
 type sharedMuxEvent struct {
 	streamID int64

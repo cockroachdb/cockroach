@@ -260,7 +260,7 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 func (r *Replica) RangeFeed(
 	ctx context.Context,
 	args *kvpb.RangeFeedRequest,
-	stream rangefeed.StreamSink,
+	stream *rangefeed.StreamSink,
 	pacer *admission.Pacer,
 ) error {
 	ctx = r.AnnotateCtx(ctx)
@@ -441,7 +441,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	catchUpIter *rangefeed.CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
-	stream rangefeed.StreamSink,
+	stream *rangefeed.StreamSink,
 ) (rangefeed.Processor, error) {
 	defer logSlowRangefeedRegistration(ctx)()
 
