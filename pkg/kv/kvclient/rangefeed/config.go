@@ -39,6 +39,8 @@ type config struct {
 	// be sane depending on your use case.
 	useRowTimestampInInitialScan bool
 
+	invoker func(func() error) error
+
 	withDiff             bool
 	withFiltering        bool
 	onUnrecoverableError OnUnrecoverableError
@@ -152,6 +154,16 @@ func WithDiff(withDiff bool) Option {
 func WithFiltering(withFiltering bool) Option {
 	return optionFunc(func(c *config) {
 		c.withFiltering = withFiltering
+	})
+}
+
+// WithInvoker makes an option to invoke the rangefeed tasks such as running the
+// the client and processing events emitted by the client with a caller-supplied
+// function, which can make it easier to introspect into work done by a given
+// caller as the stacks for these tasks will now include the caller's invoker.
+func WithInvoker(invoker func(func() error) error) Option {
+	return optionFunc(func(c *config) {
+		c.invoker = invoker
 	})
 }
 

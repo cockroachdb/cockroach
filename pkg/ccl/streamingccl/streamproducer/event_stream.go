@@ -153,6 +153,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
 		rangefeed.WithOnValues(s.onValues),
 		rangefeed.WithFiltering(s.spec.WithFiltering),
+		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
 	}
 	if emitMetadata.Get(&s.execCfg.Settings.SV) {
 		opts = append(opts, rangefeed.WithOnMetadata(s.onMetadata))
