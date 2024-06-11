@@ -156,7 +156,7 @@ func (p *workPool) selectTest(
 		smallestTestCPU := math.MaxInt64
 		smallestTestIdx := -1
 		for i, t := range p.mu.tests {
-			cpu := t.spec.Cluster.NodeCount * t.spec.Cluster.CPUs
+			cpu := t.spec.Cluster.TotalCPUs()
 			if cpu < smallestTestCPU {
 				smallestTestCPU = cpu
 				smallestTestIdx = i
@@ -189,7 +189,7 @@ func (p *workPool) selectTest(
 			runNum:          runNum,
 			canReuseCluster: false,
 		}
-		cpu := tc.spec.Cluster.NodeCount * tc.spec.Cluster.CPUs
+		cpu := tc.spec.Cluster.TotalCPUs()
 		return uint64(cpu), nil
 	})
 
