@@ -147,13 +147,21 @@ func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
 		serverBSQL.Exec(t, s)
 	}
 
-	createStmt := "CREATE TABLE tab (pk int primary key, payload string, other_payload string, family f1(pk, payload), family f2(other_payload))"
+	createStmt := `CREATE TABLE tab (
+pk int primary key,
+payload string,
+v1 int as (pk + 9000) virtual,
+v2 int as (pk + 42) stored,
+other_payload string,
+family f1(pk, payload),
+family f2(other_payload, v2))
+`
 	serverASQL.Exec(t, createStmt)
 	serverBSQL.Exec(t, createStmt)
 	serverASQL.Exec(t, lwwColumnAdd)
 	serverBSQL.Exec(t, lwwColumnAdd)
 
-	serverASQL.Exec(t, "INSERT INTO tab VALUES (1, 'hello', 'ruroh1')")
+	serverASQL.Exec(t, "INSERT INTO tab(pk, payload, other_payload) VALUES (1, 'hello', 'ruroh1')")
 
 	serverAURL, cleanup := sqlutils.PGUrl(t, serverA.Server(0).ApplicationLayer().SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
@@ -162,14 +170,14 @@ func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
 	serverBSQL.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", serverAURL.String(), `ARRAY['tab']`)).Scan(&jobBID)
 
 	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), serverBSQL, jobBID)
-	serverASQL.Exec(t, "INSERT INTO tab VALUES (2, 'potato', 'ruroh2')")
-	serverASQL.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again', 'ruroh3')")
+	serverASQL.Exec(t, "INSERT INTO tab(pk, payload, other_payload) VALUES (2, 'potato', 'ruroh2')")
+	serverASQL.Exec(t, "UPSERT INTO tab(pk, payload, other_payload) VALUES (1, 'hello, again', 'ruroh3')")
 
 	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), serverBSQL, jobBID)
 
 	expectedRows := [][]string{
-		{"1", "hello, again", "ruroh3"},
-		{"2", "potato", "ruroh2"},
+		{"1", "hello, again", "9001", "43", "ruroh3"},
+		{"2", "potato", "9002", "44", "ruroh2"},
 	}
 	serverBSQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
 	serverASQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)

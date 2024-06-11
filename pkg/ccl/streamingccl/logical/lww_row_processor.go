@@ -114,6 +114,9 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 ) error {
 	datums := make([]interface{}, 0, len(row.EncDatums()))
 	err := row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		if col.Computed {
+			return nil
+		}
 		// Ignore crdb_internal_origin_timestamp
 		if col.Name == "crdb_internal_origin_timestamp" {
 			if d != tree.DNull {
@@ -202,18 +205,28 @@ func makeInsertQueries(
 		primaryIndex := td.GetPrimaryIndex()
 
 		for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
-			for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
-				ord, ok := colOrd.Get(primaryIndex.GetKeyColumnID(i))
-				if !ok {
-					return errors.AssertionFailedf("expected to find column %d", ord)
-				}
-				col := publicColumns[ord]
-				addColumn(col.GetName(), col.GetID())
-
+			colID := primaryIndex.GetKeyColumnID(i)
+			ord, ok := colOrd.Get(colID)
+			if !ok {
+				return errors.AssertionFailedf("expected to find column %d", colID)
 			}
+			col := publicColumns[ord]
+			if col.IsComputed() {
+				continue
+			}
+			addColumn(col.GetName(), col.GetID())
 		}
 
 		for i, colName := range family.ColumnNames {
+			colID := family.ColumnIDs[i]
+			ord, ok := colOrd.Get(colID)
+			if !ok {
+				return errors.AssertionFailedf("expected to find column %d", colID)
+			}
+			col := publicColumns[ord]
+			if col.IsComputed() {
+				continue
+			}
 			addColumn(colName, family.ColumnIDs[i])
 		}
 
