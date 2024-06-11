@@ -5399,7 +5399,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 	require.NoError(t, tenantcostmodel.CrossRegionNetworkCostSetting.Validate(nil, costTable))
 	tenantcostmodel.CrossRegionNetworkCostSetting.Override(ctx, &st.SV, costTable)
 
-	modelCfg := tenantcostmodel.ConfigFromSettings(&st.SV)
+	ruModel := tenantcostmodel.RequestUnitModelFromSettings(&st.SV)
 
 	newRangeDescriptor := func(numReplicas int) *roachpb.RangeDescriptor {
 		desc := &roachpb.RangeDescriptor{
@@ -5468,7 +5468,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 		{
 			name: "no locality in current node",
 			cfg: &DistSenderConfig{
-				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
+				KVInterceptor: &mockTenantSideCostController{ruModel: &ruModel},
 			},
 			desc:          newRangeDescriptor(1),
 			expectedRead:  0,
@@ -5477,7 +5477,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 		{
 			name: "replicas=nil/replicas no locality",
 			cfg: &DistSenderConfig{
-				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
+				KVInterceptor: &mockTenantSideCostController{ruModel: &ruModel},
 				NodeDescs: &mockNodeStore{
 					nodes: []roachpb.NodeDescriptor{
 						{NodeID: 1, Address: util.UnresolvedAddr{}},
@@ -5500,7 +5500,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 		{
 			name: "replicas!=nil/replicas no locality",
 			cfg: &DistSenderConfig{
-				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
+				KVInterceptor: &mockTenantSideCostController{ruModel: &ruModel},
 				NodeDescs: &mockNodeStore{
 					nodes: []roachpb.NodeDescriptor{
 						{NodeID: 1, Address: util.UnresolvedAddr{}},
@@ -5525,7 +5525,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 		{
 			name: "some node descriptors not in gossip",
 			cfg: &DistSenderConfig{
-				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
+				KVInterceptor: &mockTenantSideCostController{ruModel: &ruModel},
 				NodeDescs: &mockNodeStore{
 					nodes: []roachpb.NodeDescriptor{
 						makeNodeDescriptor(1, "us-east1"),        // 2.0
@@ -5547,7 +5547,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 		{
 			name: "all node descriptors in gossip",
 			cfg: &DistSenderConfig{
-				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
+				KVInterceptor: &mockTenantSideCostController{ruModel: &ruModel},
 				NodeDescs: &mockNodeStore{
 					nodes: []roachpb.NodeDescriptor{
 						makeNodeDescriptor(1, "us-east1"), // 3.0
@@ -5566,7 +5566,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 		{
 			name: "local operations on global table",
 			cfg: &DistSenderConfig{
-				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
+				KVInterceptor: &mockTenantSideCostController{ruModel: &ruModel},
 				NodeDescs: &mockNodeStore{
 					nodes: []roachpb.NodeDescriptor{
 						makeNodeDescriptor(1, "us-east1"),        // 0 * 3
@@ -5593,7 +5593,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 		{
 			name: "remote operations on global table",
 			cfg: &DistSenderConfig{
-				KVInterceptor: &mockTenantSideCostController{cfg: &modelCfg},
+				KVInterceptor: &mockTenantSideCostController{ruModel: &ruModel},
 				NodeDescs: &mockNodeStore{
 					nodes: []roachpb.NodeDescriptor{
 						makeNodeDescriptor(1, "us-east1"),        // 3.0
@@ -6313,9 +6313,10 @@ func (m mockFirstRangeProvider) OnFirstRangeChanged(f func(*roachpb.RangeDescrip
 var _ FirstRangeProvider = (*mockFirstRangeProvider)(nil)
 
 // mockTenantSideCostController is an implementation of TenantSideCostController
-// that has a cost config object.
+// that has model objects.
 type mockTenantSideCostController struct {
-	cfg *tenantcostmodel.Config
+	ruModel  *tenantcostmodel.RequestUnitModel
+	cpuModel *tenantcostmodel.EstimatedCPUModel
 }
 
 var _ multitenant.TenantSideCostController = &mockTenantSideCostController{}
@@ -6356,8 +6357,12 @@ func (mockTenantSideCostController) GetCPUMovingAvg() float64 {
 	return 0
 }
 
-func (m *mockTenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
-	return m.cfg
+func (m *mockTenantSideCostController) GetRequestUnitModel() *tenantcostmodel.RequestUnitModel {
+	return m.ruModel
+}
+
+func (m *mockTenantSideCostController) GetEstimatedCPUModel() *tenantcostmodel.EstimatedCPUModel {
+	return m.cpuModel
 }
 
 func (m *mockTenantSideCostController) Metrics() metric.Struct {

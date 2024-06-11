@@ -52,7 +52,7 @@ func (h *CPUUsageHelper) StartCollection(
 // get the estimated number of RUs consumed due to CPU usage. It returns zero
 // for non-tenants. It is a no-op if StartCollection was never called.
 func (h *CPUUsageHelper) EndCollection(ctx context.Context) (ruFomCPU float64) {
-	if h.costController == nil || h.costController.GetCostConfig() == nil {
+	if h.costController == nil || h.costController.GetRequestUnitModel() == nil {
 		return 0
 	}
 	cpuDelta := GetCPUSeconds(ctx) - h.startCPU
@@ -67,7 +67,7 @@ func (h *CPUUsageHelper) EndCollection(ctx context.Context) (ruFomCPU float64) {
 		// bound the estimate above to reduce the possibility of gross error.
 		cpuUsageSeconds = timeElapsed
 	}
-	return float64(h.costController.GetCostConfig().PodCPUCost(cpuUsageSeconds))
+	return float64(h.costController.GetRequestUnitModel().PodCPUCost(cpuUsageSeconds))
 }
 
 // GetCPUSeconds returns the total CPU usage of the current process in seconds.

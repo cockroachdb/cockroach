@@ -279,6 +279,7 @@ var testStateCommands = map[string]func(
 	"configure":        (*testState).configure,
 	"token-bucket":     (*testState).tokenBucket,
 	"unblock-request":  (*testState).unblockRequest,
+	"estimated-nodes":  (*testState).estimatedNodes,
 }
 
 // runOperation invokes the given operation function on a background goroutine.
@@ -467,6 +468,13 @@ func (ts *testState) unblockRequest(t *testing.T, _ *datadriven.TestData, _ cmdA
 	return ""
 }
 
+// estimatedNodes switches to the estimated CPU model.
+func (ts *testState) estimatedNodes(t *testing.T, _ *datadriven.TestData, args cmdArgs) string {
+	ctx := context.Background()
+	tenantcostclient.EstimatedNodesSetting.Override(ctx, &ts.settings.SV, float64(args.count))
+	return ""
+}
+
 // timers waits for the set of open timers to match the expected output.
 // timers is critical to avoid synchronization problems in testing. The command
 // outputs the set of timers in increasing order with each timer's deadline on
@@ -593,6 +601,8 @@ func (ts *testState) metrics(*testing.T, *datadriven.TestData, cmdArgs) string {
 		"tenant.sql_usage.external_io_ingress_bytes",
 		"tenant.sql_usage.external_io_egress_bytes",
 		"tenant.sql_usage.cross_region_network_ru",
+		"tenant.sql_usage.estimated_kv_cpu_seconds",
+		"tenant.sql_usage.estimated_cpu_seconds",
 	}
 	state := make(map[string]interface{})
 	v := reflect.ValueOf(ts.controller.Metrics()).Elem()
@@ -1337,7 +1347,7 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	hostServer, _, _ := serverutils.StartServer(b,
+	hostServer := serverutils.StartServerOnly(b,
 		base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
@@ -1484,7 +1494,7 @@ func TestRUSettingsChanged(t *testing.T) {
 	costClient, err := tenantcostclient.NewTenantSideCostController(tenant1.ClusterSettings(), tenantID, nil)
 	require.NoError(t, err)
 
-	initialModel := costClient.GetCostConfig()
+	initialModel := costClient.GetRequestUnitModel()
 
 	// Increase the RU cost of everything by 100x
 	settings := []*settings.FloatSetting{
@@ -1506,9 +1516,9 @@ func TestRUSettingsChanged(t *testing.T) {
 	// Check to make sure the cost of the query increased. Use SucceedsSoon
 	// because the settings propagation is async.
 	testutils.SucceedsSoon(t, func() error {
-		currentModel := costClient.GetCostConfig()
+		currentModel := costClient.GetRequestUnitModel()
 
-		expect100x := func(name string, getter func(model *tenantcostmodel.Config) tenantcostmodel.RU) error {
+		expect100x := func(name string, getter func(model *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU) error {
 			before := getter(initialModel)
 			after := getter(currentModel)
 			expect := before * 100
@@ -1518,76 +1528,143 @@ func TestRUSettingsChanged(t *testing.T) {
 			return nil
 		}
 
-		err = expect100x("KVReadBatch", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+		err = expect100x("KVReadBatch", func(m *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU {
 			return m.KVReadBatch
 		})
 		if err != nil {
 			return err
 		}
 
-		err = expect100x("KVReadRequest", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+		err = expect100x("KVReadRequest", func(m *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU {
 			return m.KVReadRequest
 		})
 		if err != nil {
 			return err
 		}
 
-		err = expect100x("KVReadByte", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+		err = expect100x("KVReadByte", func(m *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU {
 			return m.KVReadByte
 		})
 		if err != nil {
 			return err
 		}
 
-		err = expect100x("KVWriteBatch", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+		err = expect100x("KVWriteBatch", func(m *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU {
 			return m.KVWriteBatch
 		})
 		if err != nil {
 			return err
 		}
 
-		err = expect100x("KVWriteRequest", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+		err = expect100x("KVWriteRequest", func(m *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU {
 			return m.KVWriteRequest
 		})
 		if err != nil {
 			return err
 		}
 
-		err = expect100x("KVWriteByte", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+		err = expect100x("KVWriteByte", func(m *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU {
 			return m.KVWriteByte
 		})
 		if err != nil {
 			return err
 		}
 
-		err = expect100x("PodCPUSecond", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+		err = expect100x("PodCPUSecond", func(m *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU {
 			return m.PodCPUSecond
 		})
 		if err != nil {
 			return err
 		}
 
-		err = expect100x("PGWireEgressByte", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+		err = expect100x("PGWireEgressByte", func(m *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU {
 			return m.PGWireEgressByte
 		})
 		if err != nil {
 			return err
 		}
 
-		err = expect100x("ExternalIOEgressByte", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+		err = expect100x("ExternalIOEgressByte", func(m *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU {
 			return m.ExternalIOEgressByte
 		})
 		if err != nil {
 			return err
 		}
 
-		err = expect100x("ExternalIOIngressByte", func(m *tenantcostmodel.Config) tenantcostmodel.RU {
+		err = expect100x("ExternalIOIngressByte", func(m *tenantcostmodel.RequestUnitModel) tenantcostmodel.RU {
 			return m.ExternalIOIngressByte
 		})
 		if err != nil {
 			return err
 		}
 
+		return nil
+	})
+}
+
+func TestCPUModelSettingsChanged(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	params := base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	}
+
+	s, mainDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	sysDB := sqlutils.MakeSQLRunner(mainDB)
+
+	tenantID := serverutils.TestTenantID()
+	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{
+		TenantID: tenantID,
+	})
+	defer tenant1.AppStopper().Stop(ctx)
+	defer tenantDB1.Close()
+
+	costClient, err := tenantcostclient.NewTenantSideCostController(tenant1.ClusterSettings(), tenantID, nil)
+	require.NoError(t, err)
+
+	newModel := `
+	{
+	  "ReadBatchCost": 1,
+	  "ReadRequestCost": 2,
+	  "ReadBytesCost": {
+		"PayloadSize": [1, 2, 3],
+		"CPUPerByte": [0.5, 1, 1.5]
+	  },
+	  "WriteBatchCost": {
+		"RatePerNode": [100, 200, 300],
+		"CPUPerBatch": [500, 600, 700]
+	  },
+	  "WriteRequestCost": {
+		"BatchSize": [1, 2, 3],
+		"CPUPerRequest": [0.1, 0.2, 0.3]
+	  },
+	  "WriteBytesCost": {
+		"PayloadSize": [1000, 2000, 3000],
+		"CPUPerByte": [0.2, 0.3, 0.4]
+	  }
+	}`
+
+	// Get existing model, then update it to the new model.
+	initialModel := costClient.GetEstimatedCPUModel()
+
+	sysDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING tenant_cost_model.estimated_cpu = $1", newModel)
+
+	// Check to make sure the cost of the query increased. Use SucceedsSoon
+	// because the settings propagation is async.
+	testutils.SucceedsSoon(t, func() error {
+		currentModel := costClient.GetEstimatedCPUModel()
+		if currentModel.ReadBatchCost != 1 {
+			return errors.Newf("expected ReadBatchCost to be %f found %f",
+				initialModel.ReadBatchCost, currentModel.ReadBatchCost)
+		}
+		if len(currentModel.WriteBatchCost.RatePerNode) != 3 {
+			return errors.Newf("expected WriteBatchCost to be %f found %f",
+				initialModel.WriteBatchCost, currentModel.WriteBatchCost)
+		}
 		return nil
 	})
 }
