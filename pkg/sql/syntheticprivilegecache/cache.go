@@ -41,7 +41,7 @@ import (
 type Cache struct {
 	settings       *cluster.Settings
 	db             *kv.DB
-	c              *cacheutil.Cache
+	c              *cacheutil.Cache[string, catpb.PrivilegeDescriptor]
 	virtualSchemas catalog.VirtualSchemas
 	ief            descs.DB
 	warmed         chan struct{}
@@ -61,7 +61,7 @@ func New(
 		settings:       settings,
 		stopper:        stopper,
 		db:             db,
-		c:              cacheutil.NewCache(account, stopper, 1),
+		c:              cacheutil.NewCache[string, catpb.PrivilegeDescriptor](account, stopper, 1),
 		virtualSchemas: virtualSchemas,
 		ief:            ief,
 		warmed:         make(chan struct{}),
@@ -88,14 +88,13 @@ func (c *Cache) Get(
 	if err := c.waitForWarmed(ctx); err != nil {
 		return nil, err
 	}
-	val, err := c.c.LoadValueOutsideOfCacheSingleFlight(ctx, fmt.Sprintf("%s-%d", spo.GetPath(), desc.GetVersion()),
+	privDesc, err := c.c.LoadValueOutsideOfCacheSingleFlight(ctx, fmt.Sprintf("%s-%d", spo.GetPath(), desc.GetVersion()),
 		func(loadCtx context.Context) (_ interface{}, retErr error) {
 			return c.readFromStorage(ctx, txn, spo)
 		})
 	if err != nil {
 		return nil, err
 	}
-	privDesc := val.(*catpb.PrivilegeDescriptor)
 	entrySize := int64(len(spo.GetPath())) + computePrivDescSize(privDesc)
 	// Only write back to the cache if the table version is committed.
 	c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc, entrySize)
@@ -112,7 +111,7 @@ func (c *Cache) getFromCache(
 	); isEligibleForCache {
 		val, ok := c.c.GetValueLocked(path)
 		if ok {
-			return true, val.(catpb.PrivilegeDescriptor), nil
+			return true, val, nil
 		}
 	}
 	return false, catpb.PrivilegeDescriptor{}, nil
