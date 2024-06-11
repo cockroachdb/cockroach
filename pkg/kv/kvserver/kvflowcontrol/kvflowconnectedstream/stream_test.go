@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -165,16 +164,25 @@ func TestRangeController(t *testing.T) {
 			sort.Slice(replicaIDs, func(i, j int) bool {
 				return replicaIDs[i] < replicaIDs[j]
 			})
+
+			// Grab out the controllerImpl from the controller interface in order to
+			// inspect the send queue state.
+			controllerImpl := controller.(*RangeControllerImpl)
 			for _, replicaID := range replicaIDs {
 				replica := raftImpl.replicas[replicaID]
-				stream := kvflowcontrol.Stream{
-					TenantID: roachpb.MustMakeTenantID(1),
-					StoreID:  replica.desc.StoreID,
+				controllerRepl := controllerImpl.replicaMap[replicaID]
+				fmt.Fprintf(&buf, "%v: %v eval=(%v) send=(%v)",
+					replica.desc, replica.info, controllerRepl.evalTokenCounter, controllerRepl.sendTokenCounter)
+				// Only include the send queue state if non-empty.
+				if controllerRepl.replicaSendStream.queueSize() > 0 {
+					fmt.Fprintf(&buf, " queue=[%v,%v) size=%v pri=%v",
+						controllerRepl.replicaSendStream.sendQueue.indexToSend,
+						controllerRepl.replicaSendStream.sendQueue.nextRaftIndex,
+						controllerRepl.replicaSendStream.queueSize(),
+						controllerRepl.replicaSendStream.queuePriority(),
+					)
 				}
-				evalTokenCounter := tokenCounter.EvalTokenCounterForStream(stream)
-				sendTokenCounter := tokenCounter.SendTokenCounterForStream(stream)
-				fmt.Fprintf(&buf, "%v: %v eval=(%v) send=(%v)\n",
-					replica.desc, replica.info, evalTokenCounter, sendTokenCounter)
+				buf.WriteString("\n")
 			}
 			return buf.String()
 		}

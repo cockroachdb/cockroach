@@ -616,7 +616,12 @@ type FollowerStateInfo struct {
 
 func (f FollowerStateInfo) String() string {
 	var buf strings.Builder
-	fmt.Fprintf(&buf, "state=%s, match=%d, next=%d, admitted=[", f.State, f.Match, f.Next)
+	// Avoid cluttering the message, only include the state if it is not
+	// StateReplicate.
+	if f.State != tracker.StateReplicate {
+		fmt.Fprintf(&buf, "%s ", f.State)
+	}
+	fmt.Fprintf(&buf, "match=%d next=%d admitted=[", f.Match, f.Next)
 	i := 0
 	for pri, a := range f.Admitted {
 		if a == 0 {
