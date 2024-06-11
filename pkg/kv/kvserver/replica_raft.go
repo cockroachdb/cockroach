@@ -941,7 +941,23 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	if hasMsg(msgStorageAppend) {
+		// The msgStorageAppend can contain both the Snapshot and Entries. If both
+		// are present, the invariant is:
+		//
+		//	Entries[0].Index == Snapshot.Metadata.Index + 1
+		//
+		// We must store/sync the snapshot first, and then we can pass the Entries
+		// to log storage. This guarantees that, when the log storage syncs the log,
+		// all indices up to Entries[len(Entries)-1].Index, including ones covered
+		// by the snapshot, are persisted.
 		if msgStorageAppend.Snapshot != nil {
+			snap := *msgStorageAppend.Snapshot
+			if len(msgStorageAppend.Entries) != 0 && msgStorageAppend.Entries[0].Index != snap.Metadata.Index+1 {
+				return stats, errors.AssertionFailedf(
+					"first entry not contiguous with the snapshot: %d != %d+1",
+					msgStorageAppend.Entries[0].Index, snap.Metadata.Index)
+			}
+
 			if inSnap.Desc == nil {
 				// If we didn't expect Raft to have a snapshot but it has one
 				// regardless, that is unexpected and indicates a programming
@@ -963,14 +979,18 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
 			}
 
-			snap := *msgStorageAppend.Snapshot
+			if commit, si := msgStorageAppend.Commit, snap.Metadata.Index; commit < si {
+				return stats, errors.AssertionFailedf(
+					"commit index %s below the snapshot index %d", commit, si)
+			}
+			// NB: we don't use msgStorageAppend.Commit verbatim here. It can only be
+			// higher than the snapshot's index if this msgStorageAppend also contains
+			// Entries at higher indices. A higher Commit index will thus be stored
+			// below, when we send the Entries/HardState to log storage.
 			hs := raftpb.HardState{
 				Term:   msgStorageAppend.Term,
 				Vote:   msgStorageAppend.Vote,
-				Commit: msgStorageAppend.Commit,
-			}
-			if len(msgStorageAppend.Entries) != 0 {
-				log.Fatalf(ctx, "found Entries in MsgStorageAppend with non-empty Snapshot")
+				Commit: snap.Metadata.Index,
 			}
 
 			// Applying this snapshot may require us to subsume one or more of our right
@@ -1022,9 +1042,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				refreshReason = reasonSnapshotApplied
 			}
 
-			// Send MsgStorageAppend's responses.
-			r.sendRaftMessages(ctx, msgStorageAppend.Responses, nil /* blocked */, true /* willDeliverLocal */)
-		} else {
+			// If this ready only contains a Snapshot, send MsgStorageAppend's
+			// responses now. Otherwise, the responses contain MsgAppResp and
+			// MsgStorageAppendResp for higher log indices than the snapshot index. It
+			// is unsafe to send them all before we persist the Entries too, so we
+			// will do it below.
+			if len(msgStorageApply.Entries) == 0 {
+				r.sendRaftMessages(ctx, msgStorageAppend.Responses, nil /* blocked */, true /* willDeliverLocal */)
+			}
+		}
+		if msgStorageAppend.Snapshot == nil || len(msgStorageAppend.Entries) != 0 {
 			// TODO(pavelkalinnikov): find a way to move it to storeEntries.
 			if msgStorageAppend.Commit != 0 && !r.IsInitialized() {
 				log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s", r)
