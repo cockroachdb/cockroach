@@ -279,6 +279,11 @@ func New(
 	return b
 }
 
+// DisableTelemetry disables telemetry on this Builder.
+func (b *Builder) DisableTelemetry() {
+	b.disableTelemetry = true
+}
+
 // Build constructs the execution node tree and returns its root node if no
 // error occurred.
 func (b *Builder) Build() (_ exec.Plan, err error) {

@@ -91,6 +91,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				p.SemaCtx(),
 				p.EvalContext(),
 				p.autoCommit,
+				false, /* disableTelemetryAndPlanGists */
 			); err != nil {
 				return nil, err
 			}
