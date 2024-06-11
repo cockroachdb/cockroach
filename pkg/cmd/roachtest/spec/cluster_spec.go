@@ -153,10 +153,44 @@ func MakeClusterSpec(nodeCount int, opts ...Option) ClusterSpec {
 
 // ClustersCompatible returns true if the clusters are compatible, i.e. the test
 // asking for s2 can reuse s1.
-func ClustersCompatible(s1, s2 ClusterSpec) bool {
-	s1.Lifetime = 0
-	s2.Lifetime = 0
+func ClustersCompatible(s1, s2 ClusterSpec, cloud string) bool {
+	// only consider the specification of the cloud that we are running in
+	clearClusterSpecFields(&s1, cloud)
+	clearClusterSpecFields(&s2, cloud)
 	return s1 == s2
+}
+
+func clearClusterSpecFields(c *ClusterSpec, cloud string) {
+	c.Lifetime = 0
+	switch cloud {
+	// only consider the specification of the cloud that we are running in
+	case GCE:
+		clearAWS(c)
+		clearAzure(c)
+	case AWS:
+		clearGCE(c)
+		clearAzure(c)
+	case Azure:
+		clearGCE(c)
+		clearAWS(c)
+	}
+}
+
+func clearAWS(c *ClusterSpec) {
+	c.AWS.Zones = ""
+	c.AWS.VolumeThroughput = 0
+	c.AWS.MachineType = ""
+}
+
+func clearGCE(c *ClusterSpec) {
+	c.GCE.VolumeType = ""
+	c.GCE.Zones = ""
+	c.GCE.MachineType = ""
+	c.GCE.MinCPUPlatform = ""
+}
+
+func clearAzure(c *ClusterSpec) {
+	c.Azure.Zones = ""
 }
 
 // String implements fmt.Stringer.
