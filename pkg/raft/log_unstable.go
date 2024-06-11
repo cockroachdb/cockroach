@@ -133,12 +133,12 @@ func (u *unstable) nextSnapshot() *pb.Snapshot {
 // entries/snapshots added after a call to acceptInProgress will be returned
 // from those methods, until the next call to acceptInProgress.
 func (u *unstable) acceptInProgress() {
+	if u.snapshot != nil {
+		u.snapshotInProgress = true
+	}
 	if len(u.entries) > 0 {
 		// NOTE: +1 because offsetInProgress is exclusive, like offset.
 		u.offsetInProgress = u.entries[len(u.entries)-1].Index + 1
-	}
-	if u.snapshot != nil {
-		u.snapshotInProgress = true
 	}
 }
 
@@ -168,6 +168,10 @@ func (u *unstable) stableTo(id entryID) {
 		u.logger.Infof("entry at (index,term)=(%d,%d) mismatched with "+
 			"entry at (%d,%d) in unstable log; ignoring", id.index, id.term, id.index, gt)
 		return
+	}
+	if u.snapshot != nil {
+		u.logger.Panicf("entry %+v acked earlier than the snapshot(in-progress=%t): %s",
+			id, u.snapshotInProgress, DescribeSnapshot(*u.snapshot))
 	}
 	num := int(id.index + 1 - u.offset)
 	u.entries = u.entries[num:]
