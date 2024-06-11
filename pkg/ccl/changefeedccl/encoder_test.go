@@ -1285,6 +1285,10 @@ func TestAvroWithRegionalTable(t *testing.T) {
 			// are used. With one worker, the cache is forced to be used during
 			// encoding for the second row.
 			testutils.RunTrueAndFalse(t, "overrideWithSingleWorker", func(t *testing.T, overrideWithSingleWorker bool) {
+				// Clear the singleton cache to avoid pollution from other tests.
+				// This needs to be done here since this test doesn't use the
+				// cdcTest helper function.
+				TestingClearSchemaRegistrySingleton()
 				cluster, db, cleanup := startTestCluster(t)
 				defer cleanup()
 				if overrideWithSingleWorker {
