@@ -966,3 +966,61 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 		return nil
 	}, 1*time.Second)
 }
+
+func TestInsightsDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+	connE := ts.SQLConn(t)
+	conn := sqlutils.MakeSQLRunner(connE)
+
+	verifyInsightsCount := func(expected int) {
+		testutils.SucceedsSoon(t, func() error {
+			row := conn.QueryRow(t, "SELECT COUNT(*) FROM crdb_internal.node_execution_insights")
+			var count int
+			row.Scan(&count)
+			if count != expected {
+				return fmt.Errorf("expected %d insights, found %d", expected, count)
+			}
+			return nil
+		})
+	}
+
+	insertTenInsights := func() {
+		// Insert a bunch of insights.
+		for i := 0; i < 5; i++ {
+			conn.Exec(t, "SELECT pg_sleep(0.2)")
+			connE.Exec("SELECT 1/0")
+		}
+	}
+
+	t.Run("disabling insights collection via capacity should clear the store", func(t *testing.T) {
+		// Disable insights collection, but doesn't clear the cache.
+		insertTenInsights()
+		verifyInsightsCount(10)
+
+		conn.Exec(t, "SET CLUSTER SETTING sql.insights.execution_insights_capacity = 0")
+
+		insertTenInsights()
+		verifyInsightsCount(0)
+
+		conn.Exec(t, "RESET CLUSTER SETTING sql.insights.execution_insights_capacity")
+	})
+
+	t.Run("disable insights collection via detectors", func(t *testing.T) {
+		// Disable insights collection, but doesn't clear the cache.
+		insertTenInsights()
+		verifyInsightsCount(10)
+
+		conn.Exec(t, "SET CLUSTER SETTING sql.insights.latency_threshold = '0s'")
+		conn.Exec(t, "SET CLUSTER SETTING sql.insights.anomaly_detection.enabled = f")
+
+		insertTenInsights()
+		verifyInsightsCount(10)
+	})
+
+}

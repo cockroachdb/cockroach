@@ -265,7 +265,7 @@ sql.index_recommendation.drop_unused_duration	duration	168h0m0s	the index unused
 sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection	application
 sql.insights.anomaly_detection.latency_threshold	duration	50ms	statements must surpass this threshold to trigger anomaly detection and identification	application
 sql.insights.anomaly_detection.memory_limit	byte size	1.0 MiB	the maximum amount of memory allowed for tracking statement latencies	application
-sql.insights.execution_insights_capacity	integer	1000	the size of the per-node store of execution insights	application
+sql.insights.execution_insights_capacity	integer	1000	the size of the per-node store of execution insights. Use 0 to disable insightsand clear the store.	application
 sql.insights.high_retry_count.threshold	integer	10	the number of retries a slow statement must have undergone for its high retry count to be highlighted as a potential problem	application
 sql.insights.latency_threshold	duration	100ms	amount of time after which an executing statement is considered slow. Use 0 to disable.	application
 sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.	application
