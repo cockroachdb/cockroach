@@ -10,6 +10,7 @@ package streamproducer
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -201,12 +202,12 @@ func (r *replicationStreamManagerImpl) DebugGetProducerStatuses(
 	if !r.evalCtx.Codec.ForSystemTenant() {
 		return nil
 	}
-	activeStreams.Lock()
-	defer activeStreams.Unlock()
-	res := make([]*streampb.DebugProducerStatus, 0, len(activeStreams.m))
-	for _, e := range activeStreams.m {
-		res = append(res, e.DebugGetProducerStatus())
-	}
+
+	res := streampb.GetActiveProducerStatuses()
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Spec.ConsumerNode < res[j].Spec.ConsumerNode ||
+			(res[i].Spec.ConsumerNode == res[j].Spec.ConsumerNode && res[i].Spec.ConsumerProc < res[j].Spec.ConsumerProc)
+	})
 	return res
 }
 
@@ -223,7 +224,14 @@ func (r *replicationStreamManagerImpl) DebugGetLogicalConsumerStatuses(
 	if !r.evalCtx.Codec.ForSystemTenant() {
 		return nil
 	}
-	return streampb.GetActiveLogicalConsumerStatuses()
+
+	res := streampb.GetActiveLogicalConsumerStatuses()
+
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].ProcessorID < res[j].ProcessorID
+	})
+
+	return res
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
