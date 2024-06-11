@@ -98,6 +98,9 @@ const (
 type ClusterSpec struct {
 	Arch      vm.CPUArch // CPU architecture; auto-chosen if left empty
 	NodeCount int
+	// WorkloadNode indicates that the last node of the cluster should be a
+	// workload node.
+	WorkloadNode bool
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
 	Mem                  MemPerCPU

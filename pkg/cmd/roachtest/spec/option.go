@@ -38,6 +38,13 @@ func CPU(n int) Option {
 	}
 }
 
+// WorkloadNode indicates that the last node is a workload node.
+func WorkloadNode() Option {
+	return func(spec *ClusterSpec) {
+		spec.WorkloadNode = true
+	}
+}
+
 // Mem requests nodes with low/standard/high ratio of memory per CPU.
 func Mem(level MemPerCPU) Option {
 	return func(spec *ClusterSpec) {
