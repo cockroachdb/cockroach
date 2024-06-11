@@ -97,9 +97,8 @@ func makeTestKafkaSinkV2(
 		WithPrefix(topicPrefix), WithSingleName(topicNameOverride), WithSanitizeFn(SQLNameToKafkaName))
 	require.NoError(t, err)
 
-	kcfg := &sarama.Config{}
 	bcfg := sinkBatchConfig{}
-	s, err = newKafkaSinkClient(context.TODO(), kcfg, bcfg, "no addrs", topics, nil, kafkaSinkKnobs{
+	s, err = newKafkaSinkClient(context.TODO(), nil, bcfg, "no addrs", topics, nil, kafkaSinkKnobs{
 		OverrideAsyncProducerFromClient: func(client kafkaClient) (sarama.AsyncProducer, error) {
 			return p, nil
 		},
