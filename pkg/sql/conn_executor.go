@@ -3827,7 +3827,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
-	p.resetPlanner(ctx, txn, stmtTS, ex.sessionData(), ex.state.mon, ex.sessionMon)
+	p.resetPlanner(ctx, txn, ex.sessionData(), ex.state.mon, ex.sessionMon)
 	autoRetryReason := ex.state.mu.autoRetryReason
 	// If we are retrying due to an unsatisfiable timestamp bound which is
 	// retriable, it means we were unable to serve the previous minimum timestamp
