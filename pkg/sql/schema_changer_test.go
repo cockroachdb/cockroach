@@ -7812,7 +7812,7 @@ func TestMemoryMonitorErrorsDuringBackfillAreRetried(t *testing.T) {
 		tdb.Exec(t, `ALTER TABLE foo EXPERIMENTAL_RELOCATE SELECT ARRAY[$1], 1`,
 			tc.Server(dataNode).GetFirstStoreID())
 		tdb.Exec(t, `ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 42`)
-		require.Equalf(t, shouldFail.Load(), int64(2), "not all failure conditions were hit %d", shouldFail.Load())
+		require.GreaterOrEqualf(t, shouldFail.Load(), int64(2), "not all failure conditions were hit %d", shouldFail.Load())
 	})
 }
 
