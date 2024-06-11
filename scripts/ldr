@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+A="$USER-a"
+B="$USER-b"
+
+
+if [ "$#" -lt 1 ]; then
+  cat << EOF
+usage: $0 <command>
+
+'command' can be:
+  * create
+    creates two clusters, \$USER-a and \$USER-b, defaulting to 3x16vCPU but any optional extra args
+    including overriding those defaults are passed through to 'roachprod create'. It stages cockroach
+    and workload from master but these can be overwritten with put if desired before starting.
+
+  * 'workload <init|run|stop> [...]'
+    manages the workload on both clusters
+      'init'    sets up the workload dataset on each cluster.
+      'start'   will start the ycsb workload on first node of each cluster and any optional extra args
+      passed, e.g. --duration or --concurrency, are passed through to workload.
+
+  * 'jobs <start|pause|resume|stop|stats>'
+    manages the ldr jobs on both clusters.
+      NB: 'workload init' must run before 'jobs start'
+
+  * 'settings <fast,reset>'
+    alters some clusters settings for experimentation.
+
+  * '<any valid roachprod command>'
+    runs command for each cluster with cluster name as first arg and all arguments passed through. E.g.:
+      ldr destroy
+      ldr put artifacts/cockroach
+      ldr run -- whoami
+
+  A typical test run with all defaults and staged binaries might thus look like:
+    ldr create
+    ldr start
+    ldr workload init
+    ldr jobs start
+    ldr workload run --concurrency 100
+    ...
+    ldr adminurl --path /debug/pprof/ui/cpu/?node=1&seconds=5&labels=true --open
+    ...
+    ldr destroy
+EOF
+  exit 0
+fi
+
+
+case $1 in
+  "create")
+    shift
+    roachprod create $A \
+      --clouds gce --gce-machine-type n2-standard-16 --nodes 3 --username "$USER" --lifetime 24h "$@"
+    roachprod create $B \
+      --clouds gce --gce-machine-type n2-standard-16 --nodes 3 --username "$USER" --lifetime 24h "$@"
+    roachprod stage $A cockroach
+    roachprod stage $A cockroach
+    roachprod stage $B workload
+    roachprod stage $B workload
+    ;;
+
+  "jobs")
+    shift
+    case "${1:-}" in
+    "start")
+      roachprod sql $A:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+      roachprod sql $B:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+      roachprod sql $A:1 -- -e "USE ycsb; SELECT crdb_internal.start_logical_replication_job($(roachprod pgurl --insecure $B:1), ARRAY['usertable']);"
+      roachprod sql $B:1 -- -e "USE ycsb; SELECT crdb_internal.start_logical_replication_job($(roachprod pgurl --insecure $A:1), ARRAY['usertable']);"
+      ;;
+    "pause")
+      roachprod sql $A:1 -- -e "PAUSE JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running');"
+      roachprod sql $B:1 -- -e "PAUSE JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running');"
+      ;;
+    "resume")
+      roachprod sql $A:1 -- -e "RESUME JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'paused');"
+      roachprod sql $B:1 -- -e "RESUME JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'paused');"
+      ;;
+    "cancel")
+      roachprod sql $A:1 -- -e "CANCEL JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running' OR status = 'paused');"
+      roachprod sql $B:1 -- -e "CANCEL JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running' OR status = 'paused');"
+      ;;
+    "stats")
+      roachprod sql $A -- -e "select * from crdb_internal.cluster_replication_node_streams;"  --format=table
+      roachprod sql $B -- -e "select * from crdb_internal.cluster_replication_node_streams;"  --format=table
+      ;;
+    *)
+      echo "unknown command '$1'; useage: $0 {start|pause|resume|cancel|stats}"
+      exit 1
+      ;;
+    esac
+    ;;
+
+  "workload")
+    shift
+    case "${1:-}" in
+      "init")
+        roachprod run $A:1 "./workload init ycsb --drop --families=false --splits 1000 --seed 1665361151361545632 $(roachprod pgurl --insecure $A)"
+        roachprod run $B:1 "./workload init ycsb --drop --families=false --splits 1000 --seed 665361151356328 $(roachprod pgurl --insecure $B)"
+        roachprod sql $A:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
+        roachprod sql $B:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
+        ;;
+      "run")
+        OUTPUT_FILE_A="a-ycsb-$(date '+%Y-%m-%d-%H:%M:%S').log"
+        OUTPUT_FILE_B="b-ycsb-$(date '+%Y-%m-%d-%H:%M:%S').log"
+        shift
+        roachprod run $A:1 "nohup ./workload run ycsb --tolerate-errors --workload='F' --families=false --duration=24h --concurrency=100 --seed 1665361151361545632 --ramp=5s $@ $(roachprod pgurl $A) > $OUTPUT_FILE_A 2> $OUTPUT_FILE_A &" &
+        roachprod run $B:1 "nohup ./workload run ycsb --tolerate-errors --workload='F' --families=false --duration=24h --concurrency=100 --seed 665361151356328 --ramp=5s $@ $(roachprod pgurl $B) > $OUTPUT_FILE_B 2> $OUTPUT_FILE_B &" &
+        ;;
+      "stop")
+        roachprod run $A:1 -- "killall -9 workload"
+        roachprod run $B:1 -- "killall -9 workload"
+        ;;
+      *)
+        echo "unknown command '$1'; useage: $0 {start|stop}"
+        exit 1
+        ;;
+    esac
+    ;;
+
+  "settings")
+    shift
+    case "${1:-}" in
+    "fast")
+    for s in \
+        "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'" \
+        "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'" \
+        "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'" \
+        "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'" \
+        "SET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency='100ms'" \
+        "SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'" \
+        "SET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency = '100ms'" \
+        "SET CLUSTER SETTING logical_replication.consumer.minimum_flush_interval = '10ms'" \
+        "SET CLUSTER SETTING logical_replication.consumer.timestamp_granularity = '100ms'" \
+      ; do
+        echo $s
+        roachprod sql $A:1 -- -e "$s"
+        roachprod sql $B:1 -- -e "$s"
+      done
+      ;;
+    "reset")
+      for s in \
+        "RESET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval" \
+        "RESET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval" \
+        "RESET CLUSTER SETTING kv.closed_timestamp.target_duration" \
+        "RESET CLUSTER SETTING kv.closed_timestamp.side_transport_interval" \
+        "RESET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency" \
+        "RESET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency" \
+        "RESET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency" \
+        "RESET CLUSTER SETTING logical_replication.consumer.minimum_flush_interval" \
+        "RESET CLUSTER SETTING logical_replication.consumer.timestamp_granularity" \
+      ; do
+        echo $s
+        roachprod sql $A:1 -- -e "$s"
+        roachprod sql $B:1 -- -e "$s"
+      done
+      ;;
+    *)
+      echo "unknown settings action: $1; usage $1 {fast,reset}"
+      exit 1
+      ;;
+    esac
+    ;;
+
+  *)
+    cmd="${1}"
+    shift
+    echo "${A}:"
+    roachprod "${cmd}" $A "$@"
+    echo "${B}:"
+    roachprod "${cmd}" $B "$@"
+  ;;
+esac
