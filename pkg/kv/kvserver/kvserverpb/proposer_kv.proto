@@ -408,7 +408,7 @@ message RaftCommand {
   // to inform said node of this raft command's (virtual) admission in order for
   // it to release flow tokens for subsequent commands.
   //
-  // Used in both RACv1 and RACv2.
+  // Only used in RACv1.
   int32 admission_origin_node = 20 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
   reserved 1, 2, 10001 to 10014;

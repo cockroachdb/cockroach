@@ -36,19 +36,6 @@ const (
 	BulkNormalPri WorkPriority = -30
 	// NormalPri is normal priority work.
 	NormalPri WorkPriority = 0
-
-	// UnusedPri* are not real priorities in admission control. They are
-	// reserved for communicating special information inside layers above
-	// admission control
-
-	// UnusedPri1 is used by PriorityNotOverriddenForFlowControl.
-	UnusedPri1 WorkPriority = 1
-	// UnusedPri2 is used by NotSubjectToACForFlowControl.
-	UnusedPri2 WorkPriority = 2
-	// UnusedPri3 is not currently used by a higher layer.
-	UnusedPri3 WorkPriority = 3
-	// UnusedPri4 is not currently used by a higher layer.
-	UnusedPri4 WorkPriority = 4
 	// LockingNormalPri is used for user normal priority transactions that are
 	// acquiring locks.
 	LockingNormalPri WorkPriority = 10
