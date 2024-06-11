@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/replay"
@@ -127,6 +128,43 @@ var MinCapacityForBulkIngest = settings.RegisterFloatSetting(
 	"kv.bulk_io_write.min_capacity_remaining_fraction",
 	"remaining store capacity fraction below which bulk ingestion requests are rejected",
 	0.05,
+)
+
+// readaheadModeInformed controls the pebble.ReadaheadConfig.Informed setting.
+//
+// Note that the setting is taken into account when a table enters the Pebble
+// table cache; it can take a while for an updated setting to take effect.
+var readaheadModeInformed = settings.RegisterEnumSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.readahead_mode.informed",
+	"the readahead mode for operations which are known to read through large chunks of data; "+
+		"sys-readahead performs explicit prefetching via the readahead syscall; "+
+		"fadv-sequential lets the OS perform prefetching via fadvise(FADV_SEQUENTIAL)",
+	"fadv-sequential",
+	map[int64]string{
+		int64(objstorageprovider.NoReadahead):       "off",
+		int64(objstorageprovider.SysReadahead):      "sys-readahead",
+		int64(objstorageprovider.FadviseSequential): "fadv-sequential",
+	},
+)
+
+// readaheadModeSpeculative controls the pebble.ReadaheadConfig.Speculative setting.
+//
+// Note that the setting is taken into account when a table enters the Pebble
+// table cache; it can take a while for an updated setting to take effect.
+var readaheadModeSpeculative = settings.RegisterEnumSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.readahead_mode.speculative",
+	"the readahead mode that is used automatically when sequential reads are detected; "+
+		"sys-readahead performs explicit prefetching via the readahead syscall; "+
+		"fadv-sequential starts with explicit prefetching vua the readahead syscall then automatically "+
+		"switches to OS-driven prefetching via fadvise(FADV_SEQUENTIAL)",
+	"fadv-sequential",
+	map[int64]string{
+		int64(objstorageprovider.NoReadahead):       "off",
+		int64(objstorageprovider.SysReadahead):      "sys-readahead",
+		int64(objstorageprovider.FadviseSequential): "fadv-sequential",
+	},
 )
 
 // CompressionAlgorithm is an enumeration of available compression algorithms
@@ -1166,6 +1204,13 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	storeIDContainer := &base.StoreIDContainer{}
 	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
 	logCtx = logtags.AddTag(logCtx, "pebble", nil)
+
+	cfg.opts.Local.ReadaheadConfigFn = func() pebble.ReadaheadConfig {
+		return pebble.ReadaheadConfig{
+			Informed:    objstorageprovider.ReadaheadMode(readaheadModeInformed.Get(&cfg.settings.SV)),
+			Speculative: objstorageprovider.ReadaheadMode(readaheadModeSpeculative.Get(&cfg.settings.SV)),
+		}
+	}
 
 	cfg.opts.WALMinSyncInterval = func() time.Duration {
 		return minWALSyncInterval.Get(&cfg.settings.SV)
