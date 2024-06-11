@@ -32,7 +32,7 @@ import (
 )
 
 func TestClusterNodes(t *testing.T) {
-	c := &clusterImpl{spec: spec.MakeClusterSpec(10)}
+	c := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNode())}
 	opts := func(opts ...option.Option) []option.Option {
 		return opts
 	}
@@ -49,6 +49,8 @@ func TestClusterNodes(t *testing.T) {
 		{opts(c.Range(2, 5), c.Range(6, 8)), ":2-8"},
 		{opts(c.Node(2), c.Node(4), c.Node(6)), ":2,4,6"},
 		{opts(c.Node(2), c.Node(3), c.Node(4)), ":2-4"},
+		{opts(c.CRDBNodes()), ":1-9"},
+		{opts(c.WorkloadNode()), ":10"},
 	}
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {

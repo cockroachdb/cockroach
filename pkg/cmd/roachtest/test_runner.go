@@ -876,7 +876,6 @@ func (r *testRunner) runWorker(
 				}
 
 				c.goCoverDir = t.GoCoverArtifactsDir()
-
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
 
