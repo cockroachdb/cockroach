@@ -877,6 +877,10 @@ func (r *testRunner) runWorker(
 
 				c.goCoverDir = t.GoCoverArtifactsDir()
 
+				if c.Spec().WorkloadNode {
+					c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
+				}
+
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
 
