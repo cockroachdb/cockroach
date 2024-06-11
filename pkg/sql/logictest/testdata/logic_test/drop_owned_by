@@ -488,7 +488,7 @@ crdb_internal       node
 information_schema  node
 pg_catalog          node
 pg_extension        node
-public              admin
+public              root
 s1                  root
 s2                  root
 s3                  testuser
@@ -530,7 +530,7 @@ crdb_internal       node
 information_schema  node
 pg_catalog          node
 pg_extension        node
-public              admin
+public              root
 s1                  root
 s2                  root
 
@@ -564,7 +564,7 @@ crdb_internal       node
 information_schema  node
 pg_catalog          node
 pg_extension        node
-public              admin
+public              root
 s1                  root
 s2                  testuser
 
@@ -591,7 +591,7 @@ crdb_internal       node
 information_schema  node
 pg_catalog          node
 pg_extension        node
-public              admin
+public              root
 s1                  root
 
 query TTTTIT

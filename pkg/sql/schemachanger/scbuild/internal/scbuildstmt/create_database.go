@@ -107,10 +107,10 @@ func addCreateDatabaseElements(
 	})
 	b.Add(&scpb.Owner{
 		DescriptorID: publicSchemaID,
-		Owner:        username.AdminRoleName().Normalized(),
+		Owner:        dbOwner.Normalized(),
 	})
 	includeCreatePriv := sqlclustersettings.PublicSchemaCreatePrivilegeEnabled.Get(&b.ClusterSettings().SV)
-	for _, up := range catpb.NewPublicSchemaPrivilegeDescriptor(includeCreatePriv).Users {
+	for _, up := range catpb.NewPublicSchemaPrivilegeDescriptor(dbOwner, includeCreatePriv).Users {
 		b.Add(&scpb.UserPrivileges{
 			DescriptorID:    publicSchemaID,
 			UserName:        up.User().Normalized(),

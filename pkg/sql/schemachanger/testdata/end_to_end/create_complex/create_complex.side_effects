@@ -56,7 +56,7 @@ upsert descriptor #105
   +  name: public
   +  parentId: 104
   +  privileges:
-  +    ownerProto: admin
+  +    ownerProto: root
   +    users:
   +    - privileges: "2"
   +      userProto: admin
@@ -281,7 +281,7 @@ upsert descriptor #105
   +  name: public
   +  parentId: 104
   +  privileges:
-  +    ownerProto: admin
+  +    ownerProto: root
   +    users:
   +    - privileges: "2"
   +      userProto: admin

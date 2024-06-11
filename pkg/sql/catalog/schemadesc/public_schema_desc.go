@@ -12,6 +12,7 @@ package schemadesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -55,7 +56,10 @@ var _ syntheticBase = publicBase{}
 func (publicBase) kindName() string                 { return "public" }
 func (publicBase) kind() catalog.ResolvedSchemaKind { return catalog.SchemaPublic }
 func (publicBase) GetPrivileges() *catpb.PrivilegeDescriptor {
-	return catpb.NewPublicSchemaPrivilegeDescriptor(true /*includeCreatePriv*/)
+	// As of this writing (May 2024), it has been the case for many releases that
+	// the only usage of this synthetic public schema is for the system database,
+	// so it is owned by node.
+	return catpb.NewPublicSchemaPrivilegeDescriptor(username.NodeUserName(), true /*includeCreatePriv*/)
 }
 
 // publicDesc is a singleton returned by GetPublicSchema.

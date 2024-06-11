@@ -544,6 +544,7 @@ testdb public admin ALL true
 testdb public public CREATE false
 testdb public public USAGE false
 testdb public root ALL true
+testdb public testuser ALL true
 
 query-sql
 SHOW GRANTS ON testdb.sc.othertable
@@ -597,7 +598,7 @@ testuser
 query-sql
 SELECT owner FROM [SHOW SCHEMAS] WHERE schema_name = 'public'
 ----
-admin
+testuser
 
 # Ensure that testuser is the owner of the type.
 query-sql

@@ -120,7 +120,7 @@ func getIngestingPrivilegesForTableOrSchema(
 		switch privilegeType {
 		case privilege.Schema:
 			if desc.GetName() == catconstants.PublicSchemaName {
-				updatedPrivileges = catpb.NewPublicSchemaPrivilegeDescriptor(includePublicSchemaCreatePriv)
+				updatedPrivileges = catpb.NewPublicSchemaPrivilegeDescriptor(user, includePublicSchemaCreatePriv)
 			} else {
 				updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
 			}
