@@ -315,7 +315,13 @@ func registerKV(r registry.Registry) {
 		if opts.encryption {
 			encryption = registry.EncryptionAlwaysEnabled
 		}
-		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.WorkloadNode(), spec.CPU(opts.cpus), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
+		// Save some money and CPU quota by using a smaller workload CPU. Only
+		// do this for cluster of size 3 or smaller to avoid regressions.
+		workloadNodeCPUs := 4
+		if opts.nodes > 3 {
+			workloadNodeCPUs = opts.cpus
+		}
+		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(workloadNodeCPUs), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
 
 		var clouds registry.CloudSet
 		tags := make(map[string]struct{})
@@ -959,7 +965,7 @@ func registerKVRestartImpact(r registry.Registry) {
 		Suites:           registry.Suites(registry.Weekly),
 		Owner:            registry.OwnerAdmissionControl,
 		Timeout:          4 * time.Hour,
-		Cluster:          r.MakeClusterSpec(13, spec.WorkloadNode(), spec.CPU(8), spec.DisableLocalSSD()),
+		Cluster:          r.MakeClusterSpec(13, spec.CPU(8), spec.DisableLocalSSD()),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
