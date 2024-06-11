@@ -1230,7 +1230,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 			// Not in StateReplicate, or have an existing send-queue. Need to queue.
 			for i := range entries {
 				entryFCState := getFlowControlState(entries[i])
-				rs.replicaSendStream.advanceNextRaftIndexAndSent(entryFCState)
+				rs.replicaSendStream.advanceNextRaftIndexAndQueued(entryFCState)
 			}
 		}
 	}
