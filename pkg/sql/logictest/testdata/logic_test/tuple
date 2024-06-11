@@ -1283,3 +1283,27 @@ NULL
 (,,1100)
 (,1.1,)
 (1,,)
+
+# Regression test for incorrectly spilling tuples to disk which produces
+# "encoding corruption" of other columns (#125367).
+statement ok
+CREATE TABLE t125367 AS SELECT
+    g AS _int8, g * '1 day'::INTERVAL AS _interval, g::DECIMAL AS _decimal
+    FROM generate_series(1, 5) AS g;
+UPDATE t125367 SET _interval = '7 years 1 mon 887 days 18:22:39.99567';
+SET testing_optimizer_random_seed = 1481092000980190599;
+SET testing_optimizer_disable_rule_probability = 1.000000;
+SET vectorize = off;
+SET distsql_workmem = '2B';
+
+statement error pgcode 0A000 unimplemented: can't spill column type RECORD to disk
+SELECT tab_1._interval AS col_1, (NULL:::STRING, NULL:::JSONB, NULL:::TIME) AS col_2
+    FROM t125367 AS tab_2 JOIN t125367 AS tab_1 ON (tab_2._int8) = (tab_1._int8)
+    ORDER BY col_2, tab_2._interval, tab_2._decimal, col_1 DESC
+    LIMIT 1000;
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;
+RESET vectorize;
+RESET distsql_workmem;
