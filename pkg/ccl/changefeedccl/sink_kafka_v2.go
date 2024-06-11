@@ -53,6 +53,19 @@ func newKafkaSinkClient(
 		// i think sarama also transparently enables this and we dont disable it there so we shouldnt need to here.. right?
 		// also does this gracefully disable it or error if the permission is missing?
 		// kgo.DisableIdempotentWrite(),
+
+		// kgo.MaxProduceRequestsInflightPerBroker(1) // default is 1, or 5 if idempotent is enabled (it is by default)
+		// kgo.ManualFlushing() ?
+
+		// we do need to fail eventually.. right?
+		// NOTE: If idempotency is enabled (as it is by default), this option is
+		// only enforced if it is safe to do so without creating invalid
+		// sequence numbers. It is safe to enforce if a record was never issued
+		// in a request to Kafka, or if it was requested and received a
+		// response.
+		// kgo.RecordRetries(5),
+		// TODO: test that produce will indeed fail eventually if it keeps getting errors
+
 	}, clientOpts...)
 
 	// TODO: test hook
@@ -387,25 +400,8 @@ func buildKgoConfig(
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	kafkaThrottlingMetrics metrics.Histogram,
 ) ([]kgo.Opt, error) {
-	// TODO: parse into this
 	// TODO: what's the equivalent of the frequency option? is there even one? like maybe not
-	opts := []kgo.Opt{}
-	// 	// set the below from the config
-	// 	// TODO: tls stuff, etc. retry stuff
-	// 	// kgo.MaxVersions() TODO: required if interacting with kafka <0.10
-	// 	// kgo.MaxBufferedBytes(), // default unlimited
-	// 	// kgo.MaxBufferedRecords(), // default 10k
-	// 	// kgo.ProducerLinger(kafkaCfg.Producer.Flush.Frequency), // ?
-	// 	// kgo.MaxProduceRequestsInflightPerBroker(1) // default is 1, or 5 if idempotent is enabled (it is by default)
-	// 	// kgo.NoCompression().WithLevel(0)
-	// 	// kgo.GzipCompression().WithLevel(42)
-	// 	kgo.ProducerBatchCompression(kgo.NoCompression()), // NOTE: unlike sarama this is not the default. maintain parity etc.
-	// 	// kgo.RecordRetries() // do we want to set this? The default is to always retry records forever, but this can be dropped with the RecordRetries and RecordDeliveryTimeout opt
-	// 	kgo.RequiredAcks(kgo.AllISRAcks()), // TODO: use kafkaCfg.Producer.RequiredAcks
-	// 	// kgo.ManualFlushing() ?
-	// 	// kgo.RecordRetries(10), // this seems like a can of worms with idempotency on. default unlimited but we don't want that, do we?
-	// 	// kgo.ClientID(oldKafkaCfg.ClientID),
-	// }
+	var opts []kgo.Opt
 
 	dialConfig, err := buildDialConfig(u)
 	if err != nil {
