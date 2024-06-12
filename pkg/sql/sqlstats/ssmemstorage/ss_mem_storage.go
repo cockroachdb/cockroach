@@ -322,8 +322,6 @@ func NewTempContainerFromExistingTxnStats(
 // NewApplicationStatsWithInheritedOptions implements the
 // sqlstats.ApplicationStats interface.
 func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.ApplicationStats {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	return New(
 		s.st,
 		// There is no need to constraint txn fingerprint limit since in temporary
