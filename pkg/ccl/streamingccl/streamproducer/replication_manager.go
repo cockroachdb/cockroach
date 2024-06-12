@@ -126,10 +126,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	}, nil
 }
 
-// TODO(ssd): This should probably just be an overload of
-// getReplicationStreamSpec once we are re-using the producer job rather than
-// the start history retention job.
-func (r *replicationStreamManagerImpl) PartitionSpans(
+func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	ctx context.Context, spans []roachpb.Span,
 ) (*streampb.ReplicationStreamSpec, error) {
 	_, tenID, err := keys.DecodeTenantPrefix(r.evalCtx.Codec.TenantPrefix())
@@ -159,14 +156,14 @@ func (r *replicationStreamManagerImpl) StreamPartition(
 	return streamPartition(r.evalCtx, streamID, opaqueSpec)
 }
 
-// GetReplicationStreamSpec implements streaming.ReplicationStreamManager interface.
-func (r *replicationStreamManagerImpl) GetReplicationStreamSpec(
+// GetPhysicalReplicationStreamSpec implements streaming.ReplicationStreamManager interface.
+func (r *replicationStreamManagerImpl) GetPhysicalReplicationStreamSpec(
 	ctx context.Context, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	if err := r.checkLicense(); err != nil {
 		return nil, err
 	}
-	return getReplicationStreamSpec(ctx, r.evalCtx, r.txn, streamID)
+	return getPhysicalReplicationStreamSpec(ctx, r.evalCtx, r.txn, streamID)
 }
 
 // CompleteReplicationStream implements ReplicationStreamManager interface.
