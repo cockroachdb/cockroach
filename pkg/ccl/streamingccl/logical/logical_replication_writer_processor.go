@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -170,7 +172,12 @@ func newLogicalReplicationWriterProcessor(
 			return nil, err
 		}
 	}
-	rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Codec(), flowCtx.Cfg.Settings, spec.TableDescriptors)
+	const udfName = "defaultdb.public.resolve"
+	// rp, err := makeSQLLastWriteWinsProcessor(ctx, flowCtx.Codec(), flowCtx.Cfg.Settings, spec.TableDescriptors)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	rp, err := makeSQLUDFProcessor(ctx, flowCtx.Codec(), flowCtx.Cfg.Settings, udfName, spec.TableDescriptors)
 	if err != nil {
 		return nil, err
 	}
@@ -729,7 +736,11 @@ func (t *txnBatch) HandleBatch(ctx context.Context, batch []roachpb.KeyValue) (b
 
 		}
 		return nil
-	})
+	}, isql.WithSessionData(&sessiondata.SessionData{
+		SessionData: sessiondatapb.SessionData{
+			Database: "defaultdb",
+		},
+	}))
 	return stats, err
 }
 

@@ -75,10 +75,27 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	}
 
 	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
+	createFuncStmt := `CREATE OR REPLACE FUNCTION resolve(local tab, remote tab, local_mvcc_timestamp DECIMAL, local_origin_timestamp DECIMAL, remote_mvcc_timestamp DECIMAL) RETURNS tab STABLE AS $$
+BEGIN
+if (local_mvcc_timestamp <= remote_mvcc_timestamp AND local_origin_timestamp IS NULL)
+   OR (local_origin_timestamp <= remote_mvcc_timestamp AND local_origin_timestamp IS NOT NULL) then
+   RETURN ((remote).pk, (remote).payload);
+else
+   RETURN NULL;
+end if;
+END;
+$$ LANGUAGE plpgsql;`
+
 	serverASQL.Exec(t, createStmt)
 	serverBSQL.Exec(t, createStmt)
+
 	serverASQL.Exec(t, lwwColumnAdd)
 	serverBSQL.Exec(t, lwwColumnAdd)
+
+	t.Logf("creating functions")
+	serverASQL.Exec(t, createFuncStmt)
+	serverBSQL.Exec(t, createFuncStmt)
+	t.Logf("done creating functions")
 
 	serverASQL.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 	serverBSQL.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
