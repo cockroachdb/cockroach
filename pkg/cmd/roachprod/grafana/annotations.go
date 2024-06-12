@@ -13,9 +13,9 @@ package grafana
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 	"github.com/go-openapi/strfmt"
@@ -24,14 +24,10 @@ import (
 	"google.golang.org/api/idtoken"
 )
 
-const ServiceAccountJson = "GRAFANA_SERVICE_ACCOUNT_JSON"
-const ServiceAccountAudience = "GRAFANA_SERVICE_ACCOUNT_AUDIENCE"
-
 // newGrafanaClient is a helper function that creates an HTTP client to
 // create grafana api calls with.  If secure is true, it tries to get a
-// GCS identity token by using the service account specified by the env
-// variable ServiceAccountJson. This identity token is passed in
-// every request to authenticate with grafana.
+// GCS identity token by using the service account helpers in `roachprodutil/identity.go`.
+// This identity token is passed in every request to authenticate with grafana.
 func newGrafanaClient(
 	ctx context.Context, host string, secure bool,
 ) (*grafana.GrafanaHTTPAPI, error) {
@@ -42,25 +38,15 @@ func newGrafanaClient(
 		scheme = "https"
 
 		// Read in the service account key and audience, so we can retrieve the identity token.
-		grafanaKey := os.Getenv(ServiceAccountJson)
-		if grafanaKey == "" {
-			return nil, errors.Newf("%s env variable was not found", ServiceAccountJson)
-		}
-		grafanaAudience := os.Getenv(ServiceAccountAudience)
-		if grafanaAudience == "" {
-			return nil, errors.Newf("%s env variable was not found", ServiceAccountAudience)
+		if _, err := roachprodutil.SetServiceAccountCredsEnv(ctx, false); err != nil {
+			return nil, err
 		}
 
-		ts, err := idtoken.NewTokenSource(ctx, grafanaAudience, idtoken.WithCredentialsJSON([]byte(grafanaKey)))
+		token, err := roachprodutil.GetServiceAccountToken(ctx, idtoken.NewTokenSource)
 		if err != nil {
-			return nil, errors.Wrap(err, "Error creating GCS oauth token source from specified credential")
+			return nil, err
 		}
-		token, err := ts.Token()
-		if err != nil {
-			return nil, errors.Wrap(err, "Error getting identity token")
-		}
-
-		headers["Authorization"] = fmt.Sprintf("Bearer %s", token.AccessToken)
+		headers["Authorization"] = fmt.Sprintf("Bearer %s", token)
 	}
 
 	headers[httputil.ContentTypeHeader] = httputil.JSONContentType
