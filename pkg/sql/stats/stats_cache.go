@@ -37,8 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -72,6 +72,7 @@ type TableStatisticsCache struct {
 	}
 	db       descs.DB
 	settings *cluster.Settings
+	stopper  *stop.Stopper
 
 	// Used when decoding KV from the range feed.
 	datumAlloc tree.DatumAlloc
@@ -120,11 +121,12 @@ type cacheEntry struct {
 // NewTableStatisticsCache creates a new TableStatisticsCache that can hold
 // statistics for <cacheSize> tables.
 func NewTableStatisticsCache(
-	cacheSize int, settings *cluster.Settings, db descs.DB,
+	cacheSize int, settings *cluster.Settings, db descs.DB, stopper *stop.Stopper,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
 		db:       db,
 		settings: settings,
+		stopper:  stopper,
 	}
 	tableStatsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
 		Policy:      cache.CacheLRU,
@@ -520,12 +522,11 @@ func (sc *TableStatisticsCache) refreshTableStats(
 	ctx context.Context, tableID descpb.ID, ts hlc.Timestamp,
 ) {
 	log.VEventf(ctx, 1, "refreshing statistics for table %d", tableID)
-	ctx, span := tracing.ForkSpan(ctx, "refresh-table-stats")
-	// Perform an asynchronous refresh of the cache.
-	go func() {
-		defer span.Finish()
+	// Perform an asynchronous refresh of the cache. An error is returned only
+	// on the server shutdown at which point we don't care about the refresh.
+	_ = sc.stopper.RunAsyncTask(ctx, "refresh-table-stats", func(ctx context.Context) {
 		sc.refreshCacheEntry(ctx, tableID, ts)
-	}()
+	})
 }
 
 // InvalidateTableStats invalidates the cached statistics for the given table ID.

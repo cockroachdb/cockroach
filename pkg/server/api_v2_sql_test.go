@@ -72,18 +72,12 @@ func TestExecSQL(t *testing.T) {
 			require.NoError(t, err)
 
 			if d.HasArg("expect-error") {
-				type jsonError struct {
-					Code    string `json:"code"`
-					Message string `json:"message"`
-				}
-				type errorResp struct {
-					Error jsonError `json:"error"`
-				}
-
-				er := errorResp{}
-				err := json.Unmarshal(r, &er)
-				require.NoError(t, err)
-				return fmt.Sprintf("%s|%s", er.Error.Code, er.Error.Message)
+				code, msg := getErrorResponse(t, r)
+				return fmt.Sprintf("%s|%s", code, msg)
+			} else if d.HasArg("expect-no-error") {
+				code, msg := getErrorResponse(t, r)
+				require.True(t, code == "" && msg == "", code, msg)
+				return ""
 			}
 			return getMarshalledResponse(t, r)
 		},
@@ -125,4 +119,19 @@ func getMarshalledResponse(t *testing.T, r []byte) string {
 	s, err := json.MarshalIndent(u, "", " ")
 	require.NoError(t, err)
 	return string(s)
+}
+
+func getErrorResponse(t *testing.T, r []byte) (code, message string) {
+	type jsonError struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	type errorResp struct {
+		Error jsonError `json:"error"`
+	}
+
+	er := errorResp{}
+	err := json.Unmarshal(r, &er)
+	require.NoError(t, err)
+	return er.Error.Code, er.Error.Message
 }

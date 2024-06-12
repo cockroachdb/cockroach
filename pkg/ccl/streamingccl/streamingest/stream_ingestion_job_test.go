@@ -386,7 +386,7 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	canContinue <- struct{}{}
 	srcTime = c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(replicationJobID))
-	c.Cutover(producerJobID, replicationJobID, srcTime.GoTime(), false)
+	c.Cutover(ctx, producerJobID, replicationJobID, srcTime.GoTime(), false)
 	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(replicationJobID))
 }
 
@@ -592,7 +592,7 @@ func TestCutoverCheckpointing(t *testing.T) {
 	// Ensure there are no remaining cutover spans before cutover begins.
 	require.Equal(t, len(getCutoverRemainingSpans()), 0)
 
-	c.Cutover(producerJobIDInt, replicationJobIDInt, cutoverTime.GoTime(), true)
+	c.Cutover(ctx, producerJobIDInt, replicationJobIDInt, cutoverTime.GoTime(), true)
 	<-progressUpdated
 
 	c.DestSysSQL.Exec(t, `PAUSE JOB $1`, &replicationJobID)

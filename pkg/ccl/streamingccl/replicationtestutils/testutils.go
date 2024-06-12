@@ -263,13 +263,16 @@ ORDER BY created DESC LIMIT 1`, c.Args.DestTenantName)
 // stop eventually. If the provided cutover time is the zero value, cutover to
 // the latest replicated time.
 func (c *TenantStreamingClusters) Cutover(
-	producerJobID, ingestionJobID int, cutoverTime time.Time, async bool,
-) {
+	ctx context.Context, producerJobID, ingestionJobID int, cutoverTime time.Time, async bool,
+) string {
 	// Cut over the ingestion job and the job will stop eventually.
 	var cutoverStr string
 	if cutoverTime.IsZero() {
 		c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`,
 			c.Args.DestTenantName).Scan(&cutoverStr)
+		cutoverOutput := DecimalTimeToHLC(c.T, cutoverStr)
+		protectedTimestamp := replicationutils.TestingGetPTSFromReplicationJob(c.T, ctx, c.SrcSysSQL, c.SrcSysServer, producerJobID)
+		require.LessOrEqual(c.T, protectedTimestamp.GoTime(), cutoverOutput.GoTime())
 	} else {
 		c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 			c.Args.DestTenantName, cutoverTime).Scan(&cutoverStr)
@@ -281,6 +284,8 @@ func (c *TenantStreamingClusters) Cutover(
 		jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 		c.WaitForPostCutoverRetentionJob()
 	}
+
+	return cutoverStr
 }
 
 // StartStreamReplication producer job ID and ingestion job ID.

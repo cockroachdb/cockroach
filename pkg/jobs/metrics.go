@@ -297,6 +297,10 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 // ccl code.
 var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
 
+// MakeChangefeedMemoryMetricsHook allows for registration of changefeed memory
+// metrics from ccl code.
+var MakeChangefeedMemoryMetricsHook func(time.Duration) (curCount *metric.Gauge, maxHist metric.IHistogram)
+
 // MakeStreamIngestMetricsHook allows for registration of streaming metrics from
 // ccl code.
 var MakeStreamIngestMetricsHook func(duration time.Duration) metric.Struct

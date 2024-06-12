@@ -1062,3 +1062,12 @@ sql admin
  },
  "num_statements": 4
 }
+
+# Note that we don't verify the contents of the response because it's not
+# deterministic, so we only check that it didn't result in an error.
+sql admin expect-no-error
+{
+  "execute": true,
+  "statements": [{"sql": "EXPLAIN ANALYZE SELECT 1"}]
+}
+----

@@ -116,6 +116,9 @@ type ServerConfig struct {
 	// used during restore.
 	RestoreMonitor *mon.BytesMonitor
 
+	// ChangefeedMonitor is the parent monitor for all CDC DistSQL flows.
+	ChangefeedMonitor *mon.BytesMonitor
+
 	// BulkSenderLimiter is the concurrency limiter that is shared across all of
 	// the processes in a given sql server when sending bulk ingest (AddSST) reqs.
 	BulkSenderLimiter limit.ConcurrentRequestLimiter
