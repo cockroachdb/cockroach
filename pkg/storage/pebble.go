@@ -48,9 +48,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/fifo"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/replay"
@@ -131,6 +133,60 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	"set to true to enable lazy ingestion of sstables",
 	metamorphic.ConstantWithTestBool(
 		"storage.ingest_as_flushable.enabled", true))
+
+// BlockLoadConcurrencyLimit controls the maximum number of outstanding
+// filesystem read operations for loading sstable blocks. This limit is a
+// last-resort queueing mechanism to avoid memory issues or running against the
+// Go OS system threads limit (see runtime.SetMaxThreads() with default value
+// 10,000).
+//
+// The limit is distributed evenly between all stores (rounding up). This is to
+// provide isolation between the stores - we don't want one bad disk blocking
+// other stores.
+var BlockLoadConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.block_load.node_max_active",
+	"maximum number of outstanding sstable block reads per host",
+	7500,
+	settings.IntInRange(1, 9000),
+)
+
+// readaheadModeInformed controls the pebble.ReadaheadConfig.Informed setting.
+//
+// Note that the setting is taken into account when a table enters the Pebble
+// table cache; it can take a while for an updated setting to take effect.
+var readaheadModeInformed = settings.RegisterEnumSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.readahead_mode.informed",
+	"the readahead mode for operations which are known to read through large chunks of data; "+
+		"sys-readahead performs explicit prefetching via the readahead syscall; "+
+		"fadv-sequential lets the OS perform prefetching via fadvise(FADV_SEQUENTIAL)",
+	"fadv-sequential",
+	map[int64]string{
+		int64(objstorageprovider.NoReadahead):       "off",
+		int64(objstorageprovider.SysReadahead):      "sys-readahead",
+		int64(objstorageprovider.FadviseSequential): "fadv-sequential",
+	},
+)
+
+// readaheadModeSpeculative controls the pebble.ReadaheadConfig.Speculative setting.
+//
+// Note that the setting is taken into account when a table enters the Pebble
+// table cache; it can take a while for an updated setting to take effect.
+var readaheadModeSpeculative = settings.RegisterEnumSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.readahead_mode.speculative",
+	"the readahead mode that is used automatically when sequential reads are detected; "+
+		"sys-readahead performs explicit prefetching via the readahead syscall; "+
+		"fadv-sequential starts with explicit prefetching via the readahead syscall then automatically "+
+		"switches to OS-driven prefetching via fadvise(FADV_SEQUENTIAL)",
+	"fadv-sequential",
+	map[int64]string{
+		int64(objstorageprovider.NoReadahead):       "off",
+		int64(objstorageprovider.SysReadahead):      "sys-readahead",
+		int64(objstorageprovider.FadviseSequential): "fadv-sequential",
+	},
+)
 
 const (
 	compressionAlgorithmSnappy int64 = 1
@@ -894,6 +950,20 @@ type engineConfig struct {
 	beforeClose []func(*Pebble)
 	// afterClose is a slice of functions to be invoked after the engine is closed.
 	afterClose []func()
+
+	// blockConcurrencyLimitDivisor is used to calculate the block load
+	// concurrency limit: it is the current valuer of the
+	// BlockLoadConcurrencyLimit setting divided by this value. It should be set
+	// to the number of stores.
+	//
+	// This is necessary because we want separate limiters per stores (we don't
+	// want one bad disk to block other stores)
+	//
+	// This is necessary because we want separate limiters per stores (we don't
+	// want one bad disk to block other stores)
+	//
+	// A value of 0 disables the limit.
+	blockConcurrencyLimitDivisor int
 }
 
 // Pebble is a wrapper around a Pebble database instance.
@@ -1108,6 +1178,13 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
 	logCtx = logtags.AddTag(logCtx, "pebble", nil)
 
+	cfg.opts.Local.ReadaheadConfigFn = func() pebble.ReadaheadConfig {
+		return pebble.ReadaheadConfig{
+			Informed:    objstorageprovider.ReadaheadMode(readaheadModeInformed.Get(&cfg.settings.SV)),
+			Speculative: objstorageprovider.ReadaheadMode(readaheadModeSpeculative.Get(&cfg.settings.SV)),
+		}
+	}
+
 	cfg.opts.WALMinSyncInterval = func() time.Duration {
 		return minWALSyncInterval.Get(&cfg.settings.SV)
 	}
@@ -1140,6 +1217,14 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		}
 	}
 	ballastPath := base.EmergencyBallastFile(cfg.env.PathJoin, cfg.env.Dir)
+
+	if d := int64(cfg.blockConcurrencyLimitDivisor); d != 0 {
+		val := (BlockLoadConcurrencyLimit.Get(&cfg.settings.SV) + d - 1) / d
+		cfg.opts.LoadBlockSema = fifo.NewSemaphore(val)
+		BlockLoadConcurrencyLimit.SetOnChange(&cfg.settings.SV, func(ctx context.Context) {
+			cfg.opts.LoadBlockSema.UpdateCapacity((BlockLoadConcurrencyLimit.Get(&cfg.settings.SV) + d - 1) / d)
+		})
+	}
 
 	cfg.opts.Logger = nil // Defensive, since LoggerAndTracer will be used.
 	if cfg.opts.LoggerAndTracer == nil {
@@ -2021,6 +2106,12 @@ func (p *Pebble) GetMetrics() Metrics {
 		SingleDelIneffectualCount:        atomic.LoadInt64(&p.singleDelIneffectualCount),
 		SharedStorageReadBytes:           atomic.LoadInt64(&p.sharedBytesRead),
 		SharedStorageWriteBytes:          atomic.LoadInt64(&p.sharedBytesWritten),
+	}
+	if sema := p.cfg.opts.LoadBlockSema; sema != nil {
+		semaStats := sema.Stats()
+		m.BlockLoadConcurrencyLimit = semaStats.Capacity
+		m.BlockLoadsInProgress = semaStats.Outstanding
+		m.BlockLoadsQueued = semaStats.NumHadToWait
 	}
 	p.iterStats.Lock()
 	m.Iterator = p.iterStats.AggregatedIteratorStats
