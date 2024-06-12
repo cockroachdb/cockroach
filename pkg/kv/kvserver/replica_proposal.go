@@ -940,9 +940,9 @@ func (r *Replica) evaluateProposal(
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
-) (*result.Result, bool, *kvpb.Error) {
+) (*kvpb.BatchRequest, *result.Result, bool, *kvpb.Error) {
 	if ba.Timestamp.IsEmpty() {
-		return nil, false, kvpb.NewErrorf("can't propose Raft command with zero timestamp")
+		return ba, nil, false, kvpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
 	// Evaluate the commands. If this returns without an error, the batch should
@@ -955,7 +955,7 @@ func (r *Replica) evaluateProposal(
 	//
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
-	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, g, st, ui)
+	ba, batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, g, st, ui)
 
 	// Note: reusing the proposer's batch when applying the command on the
 	// proposer was explored as an optimization but resulted in no performance
@@ -966,7 +966,7 @@ func (r *Replica) evaluateProposal(
 
 	if pErr != nil {
 		if _, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
-			return &res, false /* needConsensus */, pErr
+			return ba, &res, false /* needConsensus */, pErr
 		}
 
 		txn := pErr.GetTxn()
@@ -982,7 +982,7 @@ func (r *Replica) evaluateProposal(
 			Metrics:            res.Local.Metrics,
 		}
 		res.Replicated.Reset()
-		return &res, false /* needConsensus */, pErr
+		return ba, &res, false /* needConsensus */, pErr
 	}
 
 	// Set the local reply, which is held only on the proposing replica and is
@@ -1037,7 +1037,7 @@ func (r *Replica) evaluateProposal(
 		}
 	}
 
-	return &res, needConsensus, nil
+	return ba, &res, needConsensus, nil
 }
 
 // requestToProposal converts a BatchRequest into a ProposalData, by
@@ -1052,7 +1052,7 @@ func (r *Replica) requestToProposal(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 ) (*ProposalData, *kvpb.Error) {
-	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, g, st, ui)
+	ba, res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, g, st, ui)
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{
