@@ -22,8 +22,8 @@ SELECT id FROM system.namespace WHERE name='t2'
 # We expect there to be span config entries for tables t1 and t2.
 translate  database=db
 ----
-/Tenant/10/Table/10{6-7}                   range default
-/Tenant/10/Table/11{0-1}                   range default
+/Tenant/10/Table/10{6-7}                   rangefeed_enabled=true
+/Tenant/10/Table/11{0-1}                   rangefeed_enabled=true
 
 # Alter zone config fields on the database and one of the tables to ensure
 # things are cascading.
@@ -34,15 +34,15 @@ ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
 
 translate  database=db
 ----
-/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5
-/Tenant/10/Table/11{0-1}                   num_replicas=7
+/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/11{0-1}                   num_replicas=7 rangefeed_enabled=true
 
 # Translating the tables in the database individually should result in the same
 # config as above.
 translate  database=db table=t1
 ----
-/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5
+/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 rangefeed_enabled=true
 
 translate  database=db table=t2
 ----
-/Tenant/10/Table/11{0-1}                   num_replicas=7
+/Tenant/10/Table/11{0-1}                   num_replicas=7 rangefeed_enabled=true

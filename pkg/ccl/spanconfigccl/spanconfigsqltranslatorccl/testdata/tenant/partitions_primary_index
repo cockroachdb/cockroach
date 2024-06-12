@@ -55,7 +55,7 @@ TABLE db.public.t ALTER TABLE db.public.t CONFIGURE ZONE USING
 # there is just one entry here which covers the entire table's span.
 translate database=db table=t
 ----
-/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5
+/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 rangefeed_enabled=true
 
 
 exec-sql
@@ -68,10 +68,10 @@ ALTER PARTITION one_two OF TABLE db.t CONFIGURE ZONE USING global_reads=true
 # have the table's zone configuration.
 translate database=db table=t
 ----
-/Tenant/10/Table/106{-/1/1}                num_replicas=7 num_voters=5
-/Tenant/10/Table/106/1/{1-2}               global_reads=true num_replicas=7 num_voters=5
-/Tenant/10/Table/106/1/{2-3}               global_reads=true num_replicas=7 num_voters=5
-/Tenant/10/Table/10{6/1/3-7}               num_replicas=7 num_voters=5
+/Tenant/10/Table/106{-/1/1}                num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{1-2}               global_reads=true num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{2-3}               global_reads=true num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/10{6/1/3-7}               num_replicas=7 num_voters=5 rangefeed_enabled=true
 
 # Change two fields on the second partition. One of them (num_voters) is an
 # override on the value set on the database's zone config. The other, gc.ttlseconds,
@@ -85,12 +85,12 @@ ALTER PARTITION three_four OF TABLE db.t CONFIGURE ZONE USING num_voters=3
 # have the correct values of gc.ttlseconds (5) and num_voters (3).
 translate database=db table=t
 ----
-/Tenant/10/Table/106{-/1/1}                num_replicas=7 num_voters=5
-/Tenant/10/Table/106/1/{1-2}               global_reads=true num_replicas=7 num_voters=5
-/Tenant/10/Table/106/1/{2-3}               global_reads=true num_replicas=7 num_voters=5
-/Tenant/10/Table/106/1/{3-4}               ttl_seconds=5 num_replicas=7 num_voters=3
-/Tenant/10/Table/106/1/{4-5}               ttl_seconds=5 num_replicas=7 num_voters=3
-/Tenant/10/Table/10{6/1/5-7}               num_replicas=7 num_voters=5
+/Tenant/10/Table/106{-/1/1}                num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{1-2}               global_reads=true num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{2-3}               global_reads=true num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{3-4}               ttl_seconds=5 num_replicas=7 num_voters=3 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{4-5}               ttl_seconds=5 num_replicas=7 num_voters=3 rangefeed_enabled=true
+/Tenant/10/Table/10{6/1/5-7}               num_replicas=7 num_voters=5 rangefeed_enabled=true
 
 exec-sql
 ALTER PARTITION default OF TABLE db.t CONFIGURE ZONE USING num_voters=6
@@ -107,14 +107,14 @@ ALTER PARTITION default OF TABLE db.t CONFIGURE ZONE USING num_voters=6
 # set to 6, as that's what we did above.
 translate database=db table=t
 ----
-/Tenant/10/Table/106{-/1}                  num_replicas=7 num_voters=5
-/Tenant/10/Table/106/1{-/1}                num_replicas=7 num_voters=6
-/Tenant/10/Table/106/1/{1-2}               global_reads=true num_replicas=7 num_voters=5
-/Tenant/10/Table/106/1/{2-3}               global_reads=true num_replicas=7 num_voters=5
-/Tenant/10/Table/106/1/{3-4}               ttl_seconds=5 num_replicas=7 num_voters=3
-/Tenant/10/Table/106/1/{4-5}               ttl_seconds=5 num_replicas=7 num_voters=3
-/Tenant/10/Table/106/{1/5-2}               num_replicas=7 num_voters=6
-/Tenant/10/Table/10{6/2-7}                 num_replicas=7 num_voters=5
+/Tenant/10/Table/106{-/1}                  num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/106/1{-/1}                num_replicas=7 num_voters=6 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{1-2}               global_reads=true num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{2-3}               global_reads=true num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{3-4}               ttl_seconds=5 num_replicas=7 num_voters=3 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{4-5}               ttl_seconds=5 num_replicas=7 num_voters=3 rangefeed_enabled=true
+/Tenant/10/Table/106/{1/5-2}               num_replicas=7 num_voters=6 rangefeed_enabled=true
+/Tenant/10/Table/10{6/2-7}                 num_replicas=7 num_voters=5 rangefeed_enabled=true
 
 # Discard the table's zone configuration. This essentially means that the table
 # has a "placeholder" zone config (to capture partition subzone configs).
@@ -128,11 +128,11 @@ ALTER TABLE db.t CONFIGURE ZONE DISCARD
 # table above (which is where num_voters=5 was coming from).
 translate database=db table=t
 ----
-/Tenant/10/Table/106{-/1}                  num_replicas=7
-/Tenant/10/Table/106/1{-/1}                num_replicas=7 num_voters=6
-/Tenant/10/Table/106/1/{1-2}               global_reads=true num_replicas=7
-/Tenant/10/Table/106/1/{2-3}               global_reads=true num_replicas=7
-/Tenant/10/Table/106/1/{3-4}               ttl_seconds=5 num_replicas=7 num_voters=3
-/Tenant/10/Table/106/1/{4-5}               ttl_seconds=5 num_replicas=7 num_voters=3
-/Tenant/10/Table/106/{1/5-2}               num_replicas=7 num_voters=6
-/Tenant/10/Table/10{6/2-7}                 num_replicas=7
+/Tenant/10/Table/106{-/1}                  num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/1{-/1}                num_replicas=7 num_voters=6 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{1-2}               global_reads=true num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{2-3}               global_reads=true num_replicas=7 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{3-4}               ttl_seconds=5 num_replicas=7 num_voters=3 rangefeed_enabled=true
+/Tenant/10/Table/106/1/{4-5}               ttl_seconds=5 num_replicas=7 num_voters=3 rangefeed_enabled=true
+/Tenant/10/Table/106/{1/5-2}               num_replicas=7 num_voters=6 rangefeed_enabled=true
+/Tenant/10/Table/10{6/2-7}                 num_replicas=7 rangefeed_enabled=true
