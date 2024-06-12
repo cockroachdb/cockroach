@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
@@ -1358,7 +1359,7 @@ creates an annotation over time range.
 Example:
 # Create an annotation over time range 1-100 on the centralized grafana instance, which needs authentication.
 roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --tags my-cluster --tags test-run-1 --dashboard-uid overview --time-range 1,100
-`, grafana.ServiceAccountJson, grafana.ServiceAccountAudience),
+`, promhelperclient.ServiceAccountJson, promhelperclient.ServiceAccountAudience),
 	Args: cobra.ExactArgs(2),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		req := grafana.AddAnnotationRequest{

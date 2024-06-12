@@ -12,14 +12,15 @@ package promhelperclient
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"cloud.google.com/go/storage"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/errors"
+	"golang.org/x/oauth2"
+	"google.golang.org/api/idtoken"
 	"google.golang.org/api/option"
 )
 
@@ -47,9 +48,9 @@ const (
 	objectLocation = "promhelpers-secrets"
 )
 
-// setPromHelperCredsEnv sets the environment variables serviceAccountAudience and
-// serviceAccountJson based on the following conditions:
-// > check if forFetch is false
+// SetPromHelperCredsEnv sets the environment variables ServiceAccountAudience and
+// ServiceAccountJson based on the following conditions:
+// > check if forceFetch is false
 //
 //	> forceFetch is false
 //	  > if env is set return
@@ -58,64 +59,76 @@ const (
 //	> read the creds from secrets manager
 //
 // > set the env variable and save the creds to the promCredFile
-func setPromHelperCredsEnv(
-	ctx context.Context, forceFetch bool, l *logger.Logger,
-) (FetchedFrom, error) {
+func SetPromHelperCredsEnv(ctx context.Context, forceFetch bool) (FetchedFrom, error) {
 	creds := ""
 	fetchedFrom := Env
 	if !forceFetch { // bypass environment and creds file if forceFetch is false
 		// check if environment is set
-		audience := os.Getenv(serviceAccountAudience)
-		saJson := os.Getenv(serviceAccountJson)
+		audience := os.Getenv(ServiceAccountAudience)
+		saJson := os.Getenv(ServiceAccountJson)
 		if audience != "" && saJson != "" {
-			l.Printf("Secrets obtained from environment.")
 			return fetchedFrom, nil
 		}
 		// check if the secrets file is available
 		b, err := os.ReadFile(promCredFile)
 		if err == nil {
-			l.Printf("Secrets obtained from temp file: %s", promCredFile)
 			creds = string(b)
 			fetchedFrom = File
 		}
 	}
 	if creds == "" {
 		// creds == "" means (env is not set and the file does not have the creds) or forceFetch is true
-		l.Printf("creds need to be fetched from store.")
 		options := []option.ClientOption{option.WithScopes(storage.ScopeReadOnly)}
 		cj := os.Getenv("GOOGLE_EPHEMERAL_CREDENTIALS")
-		if len(cj) != 0 {
-			options = append(options, option.WithCredentialsJSON([]byte(cj)))
-		} else {
-			l.Printf("GOOGLE_EPHEMERAL_CREDENTIALS env is not set.")
+		if cj == "" {
+			return "", errors.New("SetPromHelperCredsEnv: GOOGLE_EPHEMERAL_CREDENTIALS env is not set")
 		}
+		options = append(options, option.WithCredentialsJSON([]byte(cj)))
+
 		client, err := storage.NewClient(ctx, options...)
 		if err != nil {
-			return fetchedFrom, err
+			return "", err
 		}
 		defer func() { _ = client.Close() }()
 		fetchedFrom = Store
 		obj := client.Bucket(bucket).Object(objectLocation)
 		r, err := obj.NewReader(ctx)
 		if err != nil {
-			return fetchedFrom, err
+			return "", err
 		}
 		defer func() { _ = r.Close() }()
 		body, err := io.ReadAll(r)
 		creds = string(body)
 		if err != nil {
-			return fetchedFrom, err
+			return "", err
 		}
-		err = os.WriteFile(promCredFile, body, 0700)
-		if err != nil {
-			l.Errorf("error writing to the credential file: %v", err)
-		}
+		_ = os.WriteFile(promCredFile, body, 0700)
 	}
 	secretValues := strings.Split(creds, secretsDelimiter)
 	if len(secretValues) == 2 {
-		_ = os.Setenv(serviceAccountAudience, secretValues[0])
-		_ = os.Setenv(serviceAccountJson, secretValues[1])
+		_ = os.Setenv(ServiceAccountAudience, secretValues[0])
+		_ = os.Setenv(ServiceAccountJson, secretValues[1])
 		return fetchedFrom, nil
 	}
-	return fetchedFrom, fmt.Errorf("invalid secret values - %s", creds)
+	return "", errors.Newf("invalid secret values - %s", creds)
+}
+
+// GetToken returns a GCS oauth token based on the service account key and audience
+// set through the ServiceAccountJson and ServiceAccountAudience env vars.
+// Assumes that the env vars have been set already, i.e. through SetPromHelperCredsEnv.
+func GetToken(
+	ctx context.Context,
+	tokenSource func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error),
+) (string, error) {
+	key := os.Getenv(ServiceAccountJson)
+	audience := os.Getenv(ServiceAccountAudience)
+	ts, err := tokenSource(ctx, audience, idtoken.WithCredentialsJSON([]byte(key)))
+	if err != nil {
+		return "", errors.Wrap(err, "error creating GCS oauth token source from specified credential")
+	}
+	token, err := ts.Token()
+	if err != nil {
+		return "", errors.Wrap(err, "error getting identity token")
+	}
+	return token.AccessToken, nil
 }

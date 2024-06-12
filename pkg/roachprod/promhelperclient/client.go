@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -37,8 +36,8 @@ import (
 const (
 	resourceName           = "instance-configs"
 	resourceVersion        = "v1"
-	serviceAccountJson     = "PROM_HELPER_SERVICE_ACCOUNT_JSON"
-	serviceAccountAudience = "PROM_HELPER_SERVICE_ACCOUNT_AUDIENCE"
+	ServiceAccountJson     = "PROM_HELPER_SERVICE_ACCOUNT_JSON"
+	ServiceAccountAudience = "PROM_HELPER_SERVICE_ACCOUNT_AUDIENCE"
 )
 
 // SupportedPromProjects are the projects supported for prometheus target
@@ -228,18 +227,14 @@ func (c *PromClient) getToken(
 		return "", nil
 	}
 	// Read in the service account key and audience, so we can retrieve the identity token.
-	if _, err := setPromHelperCredsEnv(ctx, forceFetchCreds, l); err != nil {
+	if credSrc, err := SetPromHelperCredsEnv(ctx, forceFetchCreds); err != nil {
+		return "", err
+	} else {
+		l.Printf("Prometheus credentials obtained from %s", credSrc)
+	}
+	token, err := GetToken(ctx, c.newTokenSource)
+	if err != nil {
 		return "", err
 	}
-	grafanaKey := os.Getenv(serviceAccountJson)
-	grafanaAudience := os.Getenv(serviceAccountAudience)
-	ts, err := c.newTokenSource(ctx, grafanaAudience, idtoken.WithCredentialsJSON([]byte(grafanaKey)))
-	if err != nil {
-		return "", errors.Wrap(err, "error creating GCS oauth token source from specified credential")
-	}
-	token, err := ts.Token()
-	if err != nil {
-		return "", errors.Wrap(err, "error getting identity token")
-	}
-	return fmt.Sprintf("Bearer %s", token.AccessToken), nil
+	return fmt.Sprintf("Bearer %s", token), nil
 }
