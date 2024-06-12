@@ -21,7 +21,6 @@
 // The untested_go_version flag enables building on any go version, intended to
 // ease testing against Go at tip.
 //go:build (gc && go1.23 && !go1.24) || untested_go_version
-// +build gc,go1.23,!go1.24 untested_go_version
 
 package goschedstats
 
