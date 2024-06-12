@@ -428,16 +428,12 @@ func (ca *changeAggregator) startKVFeed(
 		defer kvFeedMemMon.Stop(ctx)
 		errCh <- kvfeed.Run(ctx, kvfeedCfg)
 	}); err != nil {
+		// Ensure that the memory monitor is closed properly.
+		kvFeedMemMon.Stop(ctx)
 		return nil, nil, nil, err
 	}
 
 	return buf, doneCh, errCh, nil
-}
-
-func (ca *changeAggregator) waitForKVFeedDone() {
-	if ca.kvFeedDoneCh != nil {
-		<-ca.kvFeedDoneCh
-	}
 }
 
 func (ca *changeAggregator) checkKVFeedErr() error {
@@ -596,14 +592,16 @@ func (ca *changeAggregator) close() {
 	if ca.Closed {
 		return
 	}
-	if ca.cancel == nil {
-		// consumer close may be called even before Start is called.
-		// If that's the case, cancel is not initialized.
-		return
+	if ca.cancel != nil {
+		// consumer close may be called even before Start is called. If that's
+		// the case, cancel is not initialized. We still need to perform the
+		// remainder to the cleanup though.
+		ca.cancel()
 	}
-	ca.cancel()
-	// Wait for the poller to finish shutting down.
-	ca.waitForKVFeedDone()
+	// Wait for the poller to finish shutting down if it was started.
+	if ca.kvFeedDoneCh != nil {
+		<-ca.kvFeedDoneCh
+	}
 
 	if ca.eventConsumer != nil {
 		_ = ca.eventConsumer.Close() // context cancellation expected here.
@@ -625,7 +623,6 @@ func (ca *changeAggregator) close() {
 	}
 
 	ca.memAcc.Close(ca.Ctx())
-
 	ca.MemMonitor.Stop(ca.Ctx())
 	ca.InternalClose()
 }
