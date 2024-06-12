@@ -3645,6 +3645,7 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 	// Disable lease renewals so that the TTL time is shorter
 	// for rangefeed problems
 	lease.LeaseMonitorRangeFeedTimeout.Override(ctx, &settings.SV, 30*time.Second)
+	lease.LeaseMonitorRangeFeedResetTime.Override(ctx, &settings.SV, 10*time.Second)
 	// Expire leases to make this test run faster.
 	lease.LeaseDuration.Override(ctx, &settings.SV, 0)
 	srv := serverutils.StartCluster(t, 3, base.TestClusterArgs{
@@ -3654,15 +3655,15 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	firstConn := sqlutils.MakeSQLRunner(srv.ServerConn(0))
 	secondConn := sqlutils.MakeSQLRunner(srv.ServerConn(1))
+	// On node 1 intentionally disable the rangefeed, so that the watch dog
+	// detects a problem.
+	srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(true)
+	defer srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(false)
 	firstConn.Exec(t, "CREATE TABLE t1(n int)")
 	require.NoError(t, srv.WaitForFullReplication())
 	tx := secondConn.Begin(t)
 	_, err := tx.Exec("SELECT * FROM t1;")
 	require.NoError(t, err)
-	// On node 1 intentionally disable the rangefeed, so that the watch dog
-	// detects a problem.
-	srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(true)
-	defer srv.ApplicationLayer(1).LeaseManager().(*lease.Manager).TestingSetDisableRangeFeedCheckpointFn(false)
 	// This schema change will wait for the connection on
 	// node 1 to release the lease. Because the rangefeed is
 	// disabled it will never know about the new version.
