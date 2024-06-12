@@ -257,17 +257,17 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
 
   const getSearchParams = useCallback(() => {
     const params = new URLSearchParams();
-    [
+    const filters: Array<[string, FilterCheckboxOptionsType | string]> = [
       [nodeIds, filterNodeIds],
       [storeId, filterStoreId],
       [dbNames, filterDbNames],
       [table, filterTableName],
       [indexName, filterIndexName],
       [localities, filterLocalities],
-    ]
-      .filter(f => !isEmpty(f[1]))
+    ];
+    filters.filter(f => !isEmpty(f[1]))
       .forEach(
-        ([name, value]: [string, FilterCheckboxOptionsType | string]) => {
+        ([name, value]) => {
           if (isArray(value)) {
             params.set(name, value.map(f => f.value).join("|"));
           }

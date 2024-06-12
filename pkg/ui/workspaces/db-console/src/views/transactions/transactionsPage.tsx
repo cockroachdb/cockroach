@@ -32,10 +32,8 @@ import {
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { selectHasAdminRole } from "src/redux/user";
-import { StatementsResponseMessage } from "src/util/api";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
@@ -52,7 +50,7 @@ import {
 // statistics were reset.
 export const selectLastReset = createSelector(
   (state: AdminUIState) => state.cachedData.transactions,
-  (state: CachedDataReducerState<StatementsResponseMessage>) => {
+  (state) => {
     if (!state?.data) {
       return "unknown";
     }
@@ -63,7 +61,7 @@ export const selectLastReset = createSelector(
 
 const selectOldestDate = createSelector(
   (state: AdminUIState) => state.cachedData.transactions,
-  (txns: CachedDataReducerState<StatementsResponseMessage>) => {
+  (txns) => {
     return txns?.data?.oldest_aggregated_ts_returned;
   },
 );
@@ -159,7 +157,8 @@ const TransactionsPageConnected = withRouter(
     StateProps,
     DispatchProps,
     RouteComponentProps,
-    TransactionsPageRootProps
+    TransactionsPageRootProps,
+    AdminUIState
   >(
     (state: AdminUIState, props: RouteComponentProps) => ({
       fingerprintsPageProps: {
