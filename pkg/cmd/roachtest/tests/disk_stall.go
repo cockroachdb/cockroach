@@ -109,7 +109,6 @@ func runDiskStalledWALFailover(
 			`{pgurl:1-3}`)
 		return nil
 	})
-	defer m.Wait()
 
 	const pauseBetweenStalls = 10 * time.Minute
 	t.Status("pausing ", pauseBetweenStalls, " before simulated disk stall on n1")
@@ -182,6 +181,8 @@ func runDiskStalledWALFailover(
 	if durInFailover < 60*time.Second {
 		t.Errorf("expected s1 to spend at least 60s writing to secondary, but spent %s", durInFailover)
 	}
+	// Wait for the workload to finish (if it hasn't already).
+	m.Wait()
 
 	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 3))
@@ -297,7 +298,6 @@ func runDiskStalledDetection(
 			`{pgurl:2-3}`)
 		return nil
 	})
-	defer m.Wait()
 
 	// Wait between [3m,6m) before stalling the disk.
 	pauseDur := 3*time.Minute + time.Duration(rand.Intn(3))*time.Minute
@@ -395,6 +395,8 @@ func runDiskStalledDetection(
 	} else if ok && exit > 0 {
 		t.Fatal("no stall induced, but process exited")
 	}
+	// Wait for the workload to finish (if it hasn't already).
+	m.Wait()
 
 	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 3))
