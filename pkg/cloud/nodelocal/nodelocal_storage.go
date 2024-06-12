@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -180,7 +181,7 @@ func (l *localFileStorage) ReadFile(
 func (l *localFileStorage) List(
 	ctx context.Context, prefix, delim string, fn cloud.ListingFn,
 ) error {
-	dest := cloud.JoinPathPreservingTrailingSlash(l.base, prefix)
+	dest := uris.JoinPathPreservingTrailingSlash(l.base, prefix)
 
 	res, err := l.blobClient.List(ctx, dest)
 	if err != nil {

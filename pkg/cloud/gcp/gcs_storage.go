@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -78,14 +79,14 @@ var gcsChunkRetryTimeout = settings.RegisterDurationSetting(
 )
 
 func parseGSURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
-	gsURL := cloud.ConsumeURL{URL: uri}
+	gsURL := uris.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_gs
-	assumeRole, delegateRoles := cloud.ParseRoleString(gsURL.ConsumeParam(AssumeRoleParam))
+	assumeRole, delegateRoles := uris.ParseRoleString(gsURL.ConsumeParam(AssumeRoleParam))
 	conf.GoogleCloudConfig = &cloudpb.ExternalStorage_GCS{
 		Bucket:              uri.Host,
 		Prefix:              uri.Path,
-		Auth:                gsURL.ConsumeParam(cloud.AuthParam),
+		Auth:                gsURL.ConsumeParam(uris.AuthParam),
 		BillingProject:      gsURL.ConsumeParam(GoogleBillingProjectParam),
 		Credentials:         gsURL.ConsumeParam(CredentialsParam),
 		AssumeRole:          assumeRole,
@@ -145,14 +146,14 @@ func makeGCSStorage(
 	// "specified": the JSON object for authentication is given by the CREDENTIALS param.
 	// "implicit": only use the environment data.
 	// "": if default key is in the settings use it; otherwise use environment data.
-	if args.IOConf.DisableImplicitCredentials && conf.Auth == cloud.AuthParamImplicit {
+	if args.IOConf.DisableImplicitCredentials && conf.Auth == uris.AuthParamImplicit {
 		return nil, errors.New(
 			"implicit credentials disallowed for gs due to --external-io-disable-implicit-credentials flag")
 	}
 
 	var credentialsOpt []option.ClientOption
 	switch conf.Auth {
-	case cloud.AuthParamImplicit:
+	case uris.AuthParamImplicit:
 		// Do nothing; use implicit params:
 		// https://godoc.org/golang.org/x/oauth2/google#FindDefaultCredentials
 	default:
@@ -169,8 +170,8 @@ func makeGCSStorage(
 				"%s or %s must be set if %q is %q",
 				CredentialsParam,
 				BearerTokenParam,
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
+				uris.AuthParam,
+				uris.AuthParamSpecified,
 			)
 		}
 	}
@@ -339,7 +340,7 @@ func (g *gcsStorage) ReadFile(
 }
 
 func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
-	dest := cloud.JoinPathPreservingTrailingSlash(g.prefix, prefix)
+	dest := uris.JoinPathPreservingTrailingSlash(g.prefix, prefix)
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.List")
 	defer sp.Finish()
 	sp.SetTag("path", attribute.StringValue(dest))

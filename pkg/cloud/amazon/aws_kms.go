@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -71,8 +72,8 @@ var kmsClientCache struct {
 	kms *awsKMS
 }
 
-func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
-	assumeRoleProto, delegateRoleProtos := cloud.ParseRoleProvidersString(kmsURI.ConsumeParam(AssumeRoleParam))
+func resolveKMSURIParams(kmsURI uris.ConsumeURL) (kmsURIParams, error) {
+	assumeRoleProto, delegateRoleProtos := uris.ParseRoleProvidersString(kmsURI.ConsumeParam(AssumeRoleParam))
 	assumeRoleProvider := makeRoleProvider(assumeRoleProto)
 	delegateProviders := make([]roleProvider, len(delegateRoleProtos))
 	for i := range delegateRoleProtos {
@@ -86,7 +87,7 @@ func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
 		tempToken:             kmsURI.ConsumeParam(AWSTempTokenParam),
 		endpoint:              kmsURI.ConsumeParam(AWSEndpointParam),
 		region:                kmsURI.ConsumeParam(KMSRegionParam),
-		auth:                  kmsURI.ConsumeParam(cloud.AuthParam),
+		auth:                  kmsURI.ConsumeParam(uris.AuthParam),
 		roleProvider:          assumeRoleProvider,
 		delegateRoleProviders: delegateProviders,
 		verbose:               log.V(2),
@@ -121,7 +122,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	}
 
 	// Extract the URI parameters required to setup the AWS KMS session.
-	kmsConsumeURL := cloud.ConsumeURL{URL: kmsURI}
+	kmsConsumeURL := uris.ConsumeURL{URL: kmsURI}
 	kmsURIParams, err := resolveKMSURIParams(kmsConsumeURL)
 	if err != nil {
 		return nil, err
@@ -161,32 +162,32 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	// "": default to `specified`.
 	opts := session.Options{}
 	switch kmsURIParams.auth {
-	case "", cloud.AuthParamSpecified:
+	case "", uris.AuthParamSpecified:
 		if kmsURIParams.accessKey == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
+				uris.AuthParam,
+				uris.AuthParamSpecified,
 				AWSAccessKeyParam,
 			)
 		}
 		if kmsURIParams.secret == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
+				uris.AuthParam,
+				uris.AuthParamSpecified,
 				AWSSecretParam,
 			)
 		}
 		opts.Config.MergeIn(awsConfig)
-	case cloud.AuthParamImplicit:
+	case uris.AuthParamImplicit:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-disable-implicit-credentials flag")
 		}
 		opts.SharedConfigState = session.SharedConfigEnable
 	default:
-		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
+		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, uris.AuthParam)
 	}
 
 	sess, err := session.NewSessionWithOptions(opts)

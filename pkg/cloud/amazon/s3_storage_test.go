@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -100,8 +101,8 @@ func TestPutS3(t *testing.T) {
 				)
 				require.EqualError(t, err, fmt.Sprintf(
 					`%s is set to '%s', but %s is not set`,
-					cloud.AuthParam,
-					cloud.AuthParamSpecified,
+					uris.AuthParam,
+					uris.AuthParamSpecified,
 					AWSAccessKeyParam,
 				))
 			})
@@ -120,7 +121,7 @@ func TestPutS3(t *testing.T) {
 				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 					"s3://%s/%s-%d?%s=%s",
 					bucket, "backup-test-default", testID,
-					cloud.AuthParam, cloud.AuthParamImplicit,
+					uris.AuthParam, uris.AuthParamImplicit,
 				), false, user,
 					nil, /* db */
 					testSettings)
@@ -153,7 +154,7 @@ func TestPutS3(t *testing.T) {
 				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 					"s3://%s/%s-%d?%s=%s&%s=%s",
 					bucket, "backup-test-sse-256", testID,
-					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+					uris.AuthParam, uris.AuthParamImplicit, AWSServerSideEncryptionMode,
 					"AES256",
 				),
 					false,
@@ -169,7 +170,7 @@ func TestPutS3(t *testing.T) {
 				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
 					"s3://%s/%s-%d?%s=%s&%s=%s&%s=%s",
 					bucket, "backup-test-sse-kms", testID,
-					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+					uris.AuthParam, uris.AuthParamImplicit, AWSServerSideEncryptionMode,
 					"aws:kms", AWSServerSideEncryptionKMSID, v,
 				),
 					false,
@@ -194,7 +195,7 @@ func TestPutS3(t *testing.T) {
 				invalidSSEModeURI := fmt.Sprintf(
 					"s3://%s/%s?%s=%s&%s=%s",
 					bucket, "backup-test-sse-256",
-					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+					uris.AuthParam, uris.AuthParamImplicit, AWSServerSideEncryptionMode,
 					"unsupported-algorithm")
 
 				_, err = makeS3Storage(ctx, invalidSSEModeURI, user)
@@ -204,7 +205,7 @@ func TestPutS3(t *testing.T) {
 				invalidKMSURI := fmt.Sprintf(
 					"s3://%s/%s?%s=%s&%s=%s",
 					bucket, "backup-test-sse-256",
-					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+					uris.AuthParam, uris.AuthParamImplicit, AWSServerSideEncryptionMode,
 					"aws:kms")
 				_, err = makeS3Storage(ctx, invalidKMSURI, user)
 				require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
@@ -247,7 +248,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 		}
 		uri := S3URI(bucket, testPath,
-			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamImplicit, RoleARN: roleArn, Region: "us-east-1"},
+			&cloudpb.ExternalStorage_S3{Auth: uris.AuthParamImplicit, RoleARN: roleArn, Region: "us-east-1"},
 		)
 		cloudtestutils.CheckExportStore(
 			t, uri, false, user, nil /* db */, testSettings,
@@ -259,7 +260,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 
 	t.Run("auth-specified", func(t *testing.T) {
 		uri := S3URI(bucket, testPath,
-			&cloudpb.ExternalStorage_S3{Auth: cloud.AuthParamSpecified, RoleARN: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+			&cloudpb.ExternalStorage_S3{Auth: uris.AuthParamSpecified, RoleARN: roleArn, AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
 		)
 		cloudtestutils.CheckExportStore(
 			t, uri, false, user, nil /* db */, testSettings,
@@ -275,15 +276,15 @@ func TestPutS3AssumeRole(t *testing.T) {
 			skip.IgnoreLint(t, "AWS_ROLE_ARN_CHAIN env var must be set")
 		}
 
-		assumeRoleProvider, delegateRoleProviders := cloud.ParseRoleProvidersString(roleChainStr)
+		assumeRoleProvider, delegateRoleProviders := uris.ParseRoleProvidersString(roleChainStr)
 		providerChain := append(delegateRoleProviders, assumeRoleProvider)
 		for _, tc := range []struct {
 			auth      string
 			accessKey string
 			secretKey string
 		}{
-			{cloud.AuthParamSpecified, creds.AccessKeyID, creds.SecretAccessKey},
-			{cloud.AuthParamImplicit, "", ""},
+			{uris.AuthParamSpecified, creds.AccessKeyID, creds.SecretAccessKey},
+			{uris.AuthParamImplicit, "", ""},
 		} {
 			t.Run(tc.auth, func(t *testing.T) {
 				// First verify that none of the individual roles in the chain can be used to access the storage.
@@ -417,7 +418,7 @@ func TestS3DisallowImplicitCredentials(t *testing.T) {
 		skip.IgnoreLint(t, "No AWS credentials")
 	}
 
-	dest := cloudpb.ExternalStorage{S3Config: &cloudpb.ExternalStorage_S3{Endpoint: "http://do-not-go-there", Auth: cloud.AuthParamImplicit}}
+	dest := cloudpb.ExternalStorage{S3Config: &cloudpb.ExternalStorage_S3{Endpoint: "http://do-not-go-there", Auth: uris.AuthParamImplicit}}
 
 	testSettings := cluster.MakeTestingClusterSettings()
 
@@ -542,7 +543,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 			"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
 	}
 	q := make(url.Values)
-	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	q.Add(uris.AuthParam, uris.AuthParamImplicit)
 	q.Add(S3RegionParam, "us-east-1")
 
 	// Very long, very random bucket name, that hopefully nobody will ever create.
@@ -605,7 +606,7 @@ func TestAntagonisticS3Read(t *testing.T) {
 
 	s3file := fmt.Sprintf(
 		"s3://%s/%s?%s=%s", bucket, "antagonistic-read",
-		cloud.AuthParam, cloud.AuthParamImplicit)
+		uris.AuthParam, uris.AuthParamImplicit)
 	conf, err := cloud.ExternalStorageConfFromURI(s3file, username.RootUserName())
 	require.NoError(t, err)
 
@@ -628,7 +629,7 @@ func TestNewClientErrorsOnBucketRegion(t *testing.T) {
 	ctx := context.Background()
 	cfg := s3ClientConfig{
 		bucket: "bucket-does-not-exist-v1i3m",
-		auth:   cloud.AuthParamImplicit,
+		auth:   uris.AuthParamImplicit,
 	}
 	_, _, err = newClient(ctx, cfg, testSettings)
 	require.Regexp(t, "could not find s3 bucket's region", err)
