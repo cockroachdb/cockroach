@@ -76,7 +76,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		kvflowdispatch.NewDummyDispatch(),
 		NoopStoresFlowControlIntegration{},
 		NoopRaftTransportDisconnectListener{},
-		nil,
+		nil, nil,
 		nil, /* knobs */
 	)
 

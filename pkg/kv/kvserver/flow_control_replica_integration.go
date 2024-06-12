@@ -485,6 +485,8 @@ type replicaRACv2Integration struct {
 	scheduledAdmittedProcessing bool
 
 	priorityInheritanceState priorityInheritanceState
+
+	enqueuedPiggybackedResponses map[roachpb.ReplicaID]raftpb.Message
 }
 
 // We considered making this state transition in handleRaftReadyRaftMuLocked:
@@ -629,6 +631,28 @@ func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent() {
 	if rr2.rcAtLeader != nil {
 		rr2.rcAtLeader.HandleControllerSchedulerEvent()
 	}
+}
+
+func (rr2 *replicaRACv2Integration) enqueuePiggybackedAdmitted(msg raftpb.Message) {
+	// Only need to keep the latest message from a replica.
+	rr2.enqueuedPiggybackedResponses[roachpb.ReplicaID(msg.From)] = msg
+}
+
+func (rr2 *replicaRACv2Integration) processPiggybackedAdmitted() bool {
+	if len(rr2.enqueuedPiggybackedResponses) == 0 {
+		return false
+	}
+	_ = rr2.replica.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
+		for k, m := range rr2.enqueuedPiggybackedResponses {
+			err := raftGroup.Step(m)
+			if err != nil {
+				log.Errorf(context.TODO(), "%s", err)
+			}
+			delete(rr2.enqueuedPiggybackedResponses, k)
+		}
+		return true, nil
+	})
+	return true
 }
 
 // entries can be empty, and there may not have been a Ready.
