@@ -320,20 +320,18 @@ func TestSenderSameRangeDifferentStores(t *testing.T) {
 
 // mockReceiver is a SideTransportServer.
 type mockReceiver struct {
-	stop chan struct{}
-	mu   struct {
-		syncutil.Mutex
-		called bool
-	}
+	stop     chan struct{}
+	called   atomic.Bool
+	calledCh chan struct{}
 }
 
 var _ ctpb.SideTransportServer = &mockReceiver{}
 
 // PushUpdates is the streaming RPC handler.
 func (s *mockReceiver) PushUpdates(stream ctpb.SideTransport_PushUpdatesServer) error {
-	s.mu.Lock()
-	s.mu.called = true
-	s.mu.Unlock()
+	if s.called.CompareAndSwap(false, true) {
+		close(s.calledCh)
+	}
 	// Block the RPC until close() is called.
 	<-s.stop
 	return nil
@@ -341,14 +339,9 @@ func (s *mockReceiver) PushUpdates(stream ctpb.SideTransport_PushUpdatesServer) 
 
 func newMockReceiver() *mockReceiver {
 	return &mockReceiver{
-		stop: make(chan struct{}),
+		stop:     make(chan struct{}),
+		calledCh: make(chan struct{}),
 	}
-}
-
-func (s *mockReceiver) getCalled() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.mu.called
 }
 
 // sideTransportGRPCServer wraps a Receiver (a real one of a mock) in a gRPC
@@ -520,6 +513,9 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 
 	s.publish(ctx)
 	require.Len(t, s.connsMu.conns, 1)
+	// Wait until at least one update has been delivered. This means the rpcConn
+	// task has been started.
+	<-srv.mockReceiver().calledCh
 
 	// Now get the rpcConn to keep sending messages by calling s.publish()
 	// repeatedly. We'll detect when the rpcConn is blocked (because the Receiver
@@ -549,8 +545,6 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 	// Stop the stopper. If this doesn't timeout, then the rpcConn's task must
 	// have been unblocked.
 	stopper.Stop(ctx)
-
-	require.True(t, srv.mockReceiver().getCalled())
 }
 
 // Test a Sender and Receiver talking gRPC to each other.
