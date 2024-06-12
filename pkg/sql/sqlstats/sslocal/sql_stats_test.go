@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -464,7 +466,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		insightsProvider.Writer(false /* internal */),
 		sessionphase.NewTimes(),
 		sqlStats.GetCounters(),
-		false,
 		nil, /* knobs */
 	)
 
@@ -592,7 +593,6 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			insightsProvider.Writer(false /* internal */),
 			sessionphase.NewTimes(),
 			sqlStats.GetCounters(),
-			false,
 			nil, /* knobs */
 		)
 
@@ -1774,4 +1774,68 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+// TestSQLStatsInternalStatements verifies SQL stats are captured
+// for internal statements.
+func TestSQLStatsInternalStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				// Disable to make the test deterministic.
+				// We'll be checking to ensure that the internal
+				// statements are only sampled once.
+				DisableProbabilisticSampling: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+	conn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
+
+	getStmtRow := func(appName string) (query string, cnt, sampledCnt int) {
+		row := conn.QueryRow(t, `
+SELECT
+  metadata ->> 'query',
+  statistics -> 'statistics' ->> 'cnt',
+  statistics -> 'execution_statistics' ->> 'cnt'
+FROM crdb_internal.statement_statistics WHERE app_name = $1`, "$ internal-"+appName)
+		row.Scan(&query, &cnt, &sampledCnt)
+		return
+	}
+
+	t.Run("internal statement without a transaction", func(t *testing.T) {
+		appName := "stmt-without-txn"
+		for i := 0; i < 10; i++ {
+			_, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(ctx, appName, nil /* txn */, "SELECT 1")
+			require.NoError(t, err)
+		}
+
+		// Verify that the internal statement is captured.
+		query, cnt, sampledCnt := getStmtRow(appName)
+		require.Equal(t, "SELECT _", query)
+		require.Equal(t, 10, cnt)
+		require.Equal(t, 1, sampledCnt)
+	})
+
+	t.Run("internal statement with a transaction", func(t *testing.T) {
+		appName := "stmt-with-txn"
+		for i := 0; i < 10; i++ {
+			err := ts.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				_, err := txn.Exec(ctx, appName, txn.KV(), "SELECT 1")
+				return err
+			})
+			require.NoError(t, err)
+		}
+
+		// Verify that the internal statement is captured.
+		query, cnt, sampledCnt := getStmtRow(appName)
+		require.Equal(t, "SELECT _", query)
+		require.Equal(t, 10, cnt)
+		require.Equal(t, 1, sampledCnt)
+	})
 }

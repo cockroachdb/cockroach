@@ -364,6 +364,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		if ie.extraTxnState != nil {
 			ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
 			ex.extraTxnState.fromOuterTxn = true
+			ex.statsCollector.SetCollectForOuterTransaction(true)
 			ex.extraTxnState.jobs = ie.extraTxnState.jobs
 			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
