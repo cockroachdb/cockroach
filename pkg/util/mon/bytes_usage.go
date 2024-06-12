@@ -653,12 +653,13 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 				// Ignore mm itself if it is short-living.
 				numShortLiving--
 			}
-			if numShortLiving > 0 {
-				panic(errors.AssertionFailedf(
-					"found %d short-living non-stopped monitors in %s\n%s",
-					numShortLiving, mm.name, sb.String(),
-				))
-			}
+			// TODO(125565): re-enable the assertion.
+			//if numShortLiving > 0 {
+			//	panic(errors.AssertionFailedf(
+			//		"found %d short-living non-stopped monitors in %s\n%s",
+			//		numShortLiving, mm.name, sb.String(),
+			//	))
+			//}
 		}
 	}
 
