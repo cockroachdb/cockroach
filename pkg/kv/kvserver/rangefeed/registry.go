@@ -14,32 +14,17 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// Stream is a object capable of transmitting RangeFeedEvents.
-type Stream interface {
-	// Context returns the context for this stream.
-	Context() context.Context
-	// Send blocks until it sends m, the stream is done, or the stream breaks.
-	// Send must be safe to call on the same stream in different goroutines.
-	Send(*kvpb.RangeFeedEvent) error
-}
-
-// Shared event is an entry stored in registration channel. Each entry is
-// specific to registration but allocation is shared between all registrations
-// to track memory budgets. event itself could either be shared or not in case
-// we optimized unused fields in it based on registration options.
 type sharedEvent struct {
 	event *kvpb.RangeFeedEvent
 	alloc *SharedBudgetAllocation
@@ -62,51 +47,24 @@ func putPooledSharedEvent(e *sharedEvent) {
 	sharedEventSyncPool.Put(e)
 }
 
-// registration is an instance of a rangefeed subscriber who has
-// registered to receive updates for a specific range of keys.
-// Updates are delivered to its stream until one of the following
-// conditions is met:
-// 1. a Send to the Stream returns an error
-// 2. the Stream's context is canceled
-// 3. the registration is manually unregistered
-//
-// In all cases, when a registration is unregistered its error
-// channel is sent an error to inform it that the registration
-// has finished.
 type registration struct {
-	// Input.
 	span             roachpb.Span
 	catchUpTimestamp hlc.Timestamp // exclusive
 	withDiff         bool
 	withFiltering    bool
 	metrics          *Metrics
 
-	// Output.
 	stream BufferedStream
-	// Internal.
-	id            int64
-	keys          interval.Range
-	buf           chan *sharedEvent
-	blockWhenFull bool // if true, block when buf is full (for tests)
+	id     int64
+	keys   interval.Range
 
 	mu struct {
 		sync.Locker
-		// True if this registration buffer has overflowed, dropping a live event.
-		// This will cause the registration to exit with an error once the buffer
-		// has been emptied.
-		overflowed bool
-		// Boolean indicating if all events have been output to stream. Used only
-		// for testing.
-		caughtUp bool
-		// Management of the output loop goroutine, used to ensure proper teardown.
-		outputLoopCancelFn func()
-		disconnected       bool
-
-		// catchUpIter is created by replcia under raftMu lock when registration is
-		// created. It is detached by output loop for processing and closed.
-		// If output loop was not started and catchUpIter is non-nil at the time
-		// that disconnect is called, it is closed by disconnect.
-		catchUpIter *CatchUpIterator
+		catchUpOverflow     bool
+		catchUpScanCancelFn func()
+		disconnected        bool
+		catchUpIter         *CatchUpIterator
+		catchUpBuf          chan *sharedEvent
 	}
 }
 
@@ -117,68 +75,106 @@ func newRegistration(
 	withDiff bool,
 	withFiltering bool,
 	bufferSz int,
-	blockWhenFull bool,
 	metrics *Metrics,
 	stream BufferedStream,
 ) registration {
 	r := registration{
 		span:             span,
 		catchUpTimestamp: startTS,
-		withDiff:         withDiff,
 		withFiltering:    withFiltering,
+		withDiff:         withDiff,
 		metrics:          metrics,
 		stream:           stream,
-		buf:              make(chan *sharedEvent, bufferSz),
-		blockWhenFull:    blockWhenFull,
 	}
 	r.mu.Locker = &syncutil.Mutex{}
-	r.mu.caughtUp = true
+	r.mu.catchUpBuf = make(chan *sharedEvent, bufferSz)
 	r.mu.catchUpIter = catchUpIter
 	return r
 }
 
-// publish attempts to send a single event to the output buffer for this
-// registration. If the output buffer is full, the overflowed flag is set,
-// indicating that live events were lost and a catch-up scan should be initiated.
-// If overflowed is already set, events are ignored and not written to the
-// buffer.
+func newPooledSharedEvent() *sharedEvent {
+	ev := sharedEventSyncPool.Get().(*sharedEvent)
+	return ev
+}
+
+func (r *registration) maybePutInCatchUpBuffer(
+	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
+) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.catchUpBuf == nil {
+		return false
+	}
+
+	if !r.mu.catchUpOverflow {
+		// don't put in stream -> just skip the value we will publish error after
+		// draining everything in catch up buf later
+		return true
+	}
+	e := newPooledSharedEvent()
+	e.event = event
+	e.alloc = alloc
+
+	alloc.Use(ctx)
+	select {
+	case r.mu.catchUpBuf <- e:
+	default:
+		alloc.Release(ctx)
+		putPooledSharedEvent(e)
+		r.mu.catchUpOverflow = true
+	}
+	return true
+}
+
+func validateEvent(event *kvpb.RangeFeedEvent) {
+	switch t := event.GetValue().(type) {
+	case *kvpb.RangeFeedValue:
+		if t.Key == nil {
+			panic(fmt.Sprintf("unexpected empty RangeFeedValue.Key: %v", t))
+		}
+		if t.Value.RawBytes == nil {
+			panic(fmt.Sprintf("unexpected empty RangeFeedValue.Value.RawBytes: %v", t))
+		}
+		if t.Value.Timestamp.IsEmpty() {
+			panic(fmt.Sprintf("unexpected empty RangeFeedValue.Value.Timestamp: %v", t))
+		}
+	case *kvpb.RangeFeedCheckpoint:
+		if t.Span.Key == nil {
+			panic(fmt.Sprintf("unexpected empty RangeFeedCheckpoint.Span.Key: %v", t))
+		}
+	case *kvpb.RangeFeedSSTable:
+		if len(t.Data) == 0 {
+			panic(fmt.Sprintf("unexpected empty RangeFeedSSTable.Data: %v", t))
+		}
+		if len(t.Span.Key) == 0 {
+			panic(fmt.Sprintf("unexpected empty RangeFeedSSTable.Span: %v", t))
+		}
+		if t.WriteTS.IsEmpty() {
+			panic(fmt.Sprintf("unexpected empty RangeFeedSSTable.Timestamp: %v", t))
+		}
+	case *kvpb.RangeFeedDeleteRange:
+		if len(t.Span.Key) == 0 || len(t.Span.EndKey) == 0 {
+			panic(fmt.Sprintf("unexpected empty key in RangeFeedDeleteRange.Span: %v", t))
+		}
+		if t.Timestamp.IsEmpty() {
+			panic(fmt.Sprintf("unexpected empty RangeFeedDeleteRange.Timestamp: %v", t))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
+	}
+}
+
 func (r *registration) publish(
 	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
-	r.assertEvent(ctx, event)
-	e := getPooledSharedEvent(sharedEvent{event: r.maybeStripEvent(ctx, event), alloc: alloc})
+	validateEvent(event)
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.mu.overflowed {
+	if r.maybePutInCatchUpBuffer(ctx, event, alloc) {
 		return
 	}
-	alloc.Use(ctx)
-	select {
-	case r.buf <- e:
-		r.mu.caughtUp = false
-	default:
-		// If we're asked to block (in tests), do a blocking send after releasing
-		// the mutex -- otherwise, the output loop won't be able to consume from the
-		// channel. We optimistically attempt the non-blocking send above first,
-		// since we're already holding the mutex.
-		if r.blockWhenFull {
-			r.mu.Unlock()
-			select {
-			case r.buf <- e:
-				r.mu.Lock()
-				r.mu.caughtUp = false
-			case <-ctx.Done():
-				r.mu.Lock()
-				alloc.Release(ctx)
-			}
-			return
-		}
-		// Buffer exceeded and we are dropping this event. Registration will need
-		// a catch-up scan.
-		r.mu.overflowed = true
-		alloc.Release(ctx)
-	}
+
+	// should we check for disconnected here? -> we need a way to stop writes once disconnected
+	r.stream.SendBuffered(r.maybeStripEvent(ctx, event), alloc)
 }
 
 // assertEvent asserts that the event contains the necessary data.
@@ -280,113 +276,103 @@ func (r *registration) maybeStripEvent(
 func (r *registration) cleanup() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !r.mu.disconnected {
-		if r.mu.catchUpIter != nil {
-			r.mu.catchUpIter.Close()
-			r.mu.catchUpIter = nil
-		}
-		if r.mu.outputLoopCancelFn != nil {
-			r.mu.outputLoopCancelFn()
-		}
-		r.mu.disconnected = true
+	if r.mu.disconnected {
+		return
 	}
+	r.mu.disconnected = true
+
+	if r.mu.catchUpIter != nil {
+		r.mu.catchUpIter.Close()
+		r.mu.catchUpIter = nil
+	}
+	if r.mu.catchUpScanCancelFn != nil {
+		r.mu.catchUpScanCancelFn()
+		r.mu.catchUpScanCancelFn = nil
+	}
+
+	// TODO(wenyihu6): check where we should drain
+	r.drainCatchUpBufferRLocked()
 }
 
-// disconnect cancels the output loop context for the registration and passes an
-// error to the output error stream for the registration.
-// Safe to run multiple times, but subsequent errors would be discarded.
 func (r *registration) disconnect(pErr *kvpb.Error) {
 	r.cleanup()
-	// repeatedly send error shouldbe fine
 	r.stream.SendError(pErr)
 }
 
-// outputLoop is the operational loop for a single registration. The behavior
-// is as thus:
-//
-// 1. If a catch-up scan is indicated, run one before beginning the proper
-// output loop.
-// 2. After catch-up is complete, begin reading from the registration buffer
-// channel and writing to the output stream until the buffer is empty *and*
-// the overflow flag has been set.
-//
-// The loop exits with any error encountered, if the provided context is
-// canceled, or when the buffer has overflowed and all pre-overflow entries
-// have been emitted.
-func (r *registration) outputLoop(ctx context.Context) error {
-	// If the registration has a catch-up scan, run it.
-	if err := r.maybeRunCatchUpScan(ctx); err != nil {
-		err = errors.Wrap(err, "catch-up scan failed")
-		log.Errorf(ctx, "%v", err)
-		return err
+func (r *registration) drainCatchUpBufferRLocked() {
+	if r.mu.catchUpBuf == nil {
+		return
 	}
-
-	firstIteration := true
-	// Normal buffered output loop.
-	for {
-		overflowed := false
-		r.mu.Lock()
-		if len(r.buf) == 0 {
-			overflowed = r.mu.overflowed
-			r.mu.caughtUp = true
-		}
-		r.mu.Unlock()
-		if overflowed {
-			if firstIteration {
-				log.Warningf(ctx, "rangefeed on %s was already overflowed by the time that first iteration (after catch up scan from %s) ran", r.span, r.catchUpTimestamp)
+	func() {
+		for {
+			select {
+			case e := <-r.mu.catchUpBuf:
+				e.alloc.Release(context.Background())
+				putPooledSharedEvent(e)
+			default:
+				return
 			}
-			return newErrBufferCapacityExceeded().GoError()
 		}
-		firstIteration = false
+	}()
+	r.mu.catchUpBuf = nil
+}
+
+func (r *registration) drainAndPublishCatchUpBuffer(ctx context.Context) error {
+	for {
 		select {
-		case nextEvent := <-r.buf:
-			// TODO(wenyihu6): check memory accounting
-			r.stream.SendBuffered(nextEvent.event, nextEvent.alloc)
-		case <-ctx.Done():
+		case e := <-r.mu.catchUpBuf:
+			// TODO(wenyihu6): check if we need ok
+			r.stream.SendBuffered(e.event, e.alloc)
+			e.alloc.Release(ctx)
+			putPooledSharedEvent(e)
+		case <-ctx.Done(): // watch catch up scan cancel context
 			return ctx.Err()
-			//case <-r.stream.Context().Done():
-			//	return r.stream.Context().Err()
+		default:
+			// catch up buffer drained already possibly disconnected before this happens
+			return nil
 		}
 	}
 }
 
-func (r *registration) runOutputLoop(ctx context.Context, _forStacks roachpb.RangeID) {
+func (r *registration) publishCatchUpBuffer(ctx context.Context) error {
+	// TODO(wenyihu6): check how we can do it less pessimistic and without holding
+	// lock to avoid unnecessary blocking during publish
+	//
+	// possible that we are already disconnected and catch up buffer would just be nil here
+	// also possible that ctx is already cancelled and we should return ctx.Err() instead
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.drainAndPublishCatchUpBuffer(ctx); err != nil {
+		// check if we need to set anything before returning err like catch up scan cancel
+		return err
+	}
+
+	// still drain them and publish but publish error after it
+	if r.mu.catchUpOverflow {
+		return newErrBufferCapacityExceeded().GoError()
+	}
+
+	// success: make sure no future writes go to catch up buffer
+	r.mu.catchUpScanCancelFn = nil
+	r.mu.catchUpBuf = nil
+	return nil
+}
+
+func (r *registration) setUpAndMaybeRunCatchUpScan(ctx context.Context) error {
 	r.mu.Lock()
 	if r.mu.disconnected {
 		// The registration has already been disconnected.
 		r.mu.Unlock()
-		return
+		return nil
+		// TODO(wenyihu6): disconnected but still has more clean up to do for catch
+		// up iter and catch up buf -> make sure r.disconnect take care of it
 	}
-	ctx, r.mu.outputLoopCancelFn = context.WithCancel(ctx)
+
+	ctx, r.mu.catchUpScanCancelFn = context.WithCancel(ctx)
 	r.mu.Unlock()
-	err := r.outputLoop(ctx)
-	r.disconnect(kvpb.NewError(err))
+	return r.maybeRunCatchUpScan(ctx)
 }
 
-// drainAllocations should be done after registration is disconnected from
-// processor to release all memory budget that its pending events hold.
-func (r *registration) drainAllocations(ctx context.Context) {
-	for {
-		select {
-		case e, ok := <-r.buf:
-			if !ok {
-				return
-			}
-			e.alloc.Release(ctx)
-			putPooledSharedEvent(e)
-		default:
-			return
-		}
-	}
-}
-
-// maybeRunCatchUpScan starts a catch-up scan which will output entries for all
-// recorded changes in the replica that are newer than the catchUpTimestamp.
-// This uses the iterator provided when the registration was originally created;
-// after the scan completes, the iterator will be closed.
-//
-// If the registration does not have a catchUpIteratorConstructor, this method
-// is a no-op.
 func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 	catchUpIter := r.detachCatchUpIter()
 	if catchUpIter == nil {
@@ -398,7 +384,15 @@ func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, r.stream.SendUnbuffered, r.withDiff, r.withFiltering)
+	err := catchUpIter.CatchUpScan(ctx, r.stream.SendUnbuffered, r.withDiff, r.withFiltering)
+
+	if err != nil || ctx.Err() != nil {
+		err = errors.Wrap(errors.CombineErrors(err, ctx.Err()), "catch-up scan failed")
+		log.Errorf(ctx, "%v", err)
+		return err
+	}
+
+	return r.publishCatchUpBuffer(ctx)
 }
 
 // ID implements interval.Interface.
@@ -411,7 +405,7 @@ func (r *registration) Range() interval.Range {
 	return r.keys
 }
 
-func (r registration) String() string {
+func (r *registration) String() string {
 	return fmt.Sprintf("[%s @ %s+]", r.span, r.catchUpTimestamp)
 }
 
@@ -508,7 +502,8 @@ func (reg *registry) Unregister(ctx context.Context, r *registration) {
 	if err := reg.tree.Delete(r, false /* fast */); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-	r.drainAllocations(ctx)
+	//r.drainAllocations(ctx)
+	// r.drainCatchUpBuffer(ctx) is now called as part of rangefeed level cleanup
 }
 
 // DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.
@@ -581,28 +576,6 @@ func (reg *registry) forOverlappingRegs(
 	}
 }
 
-// Wait for this registration to completely process its internal buffer.
-func (r *registration) waitForCaughtUp(ctx context.Context) error {
-	opts := retry.Options{
-		InitialBackoff: 5 * time.Millisecond,
-		Multiplier:     2,
-		MaxBackoff:     10 * time.Second,
-		MaxRetries:     50,
-	}
-	for re := retry.StartWithCtx(ctx, opts); re.Next(); {
-		r.mu.Lock()
-		caughtUp := len(r.buf) == 0 && r.mu.caughtUp
-		r.mu.Unlock()
-		if caughtUp {
-			return nil
-		}
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return errors.Errorf("registration %v failed to empty in time", r.Range())
-}
-
 // detachCatchUpIter detaches the catchUpIter that was previously attached.
 func (r *registration) detachCatchUpIter() *CatchUpIterator {
 	r.mu.Lock()
@@ -610,17 +583,4 @@ func (r *registration) detachCatchUpIter() *CatchUpIterator {
 	catchUpIter := r.mu.catchUpIter
 	r.mu.catchUpIter = nil
 	return catchUpIter
-}
-
-// waitForCaughtUp waits for all registrations overlapping the given span to
-// completely process their internal buffers.
-func (reg *registry) waitForCaughtUp(ctx context.Context, span roachpb.Span) error {
-	var outerErr error
-	reg.forOverlappingRegs(ctx, span, func(r *registration) (bool, *kvpb.Error) {
-		if outerErr == nil {
-			outerErr = r.waitForCaughtUp(ctx)
-		}
-		return false, nil
-	})
-	return outerErr
 }

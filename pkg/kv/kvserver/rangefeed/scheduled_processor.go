@@ -320,18 +320,16 @@ func (p *ScheduledProcessor) Register(
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
-	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream,
-	)
+		p.Config.EventChanCap, p.Metrics, stream)
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
 		if p.stopping {
 			return nil
 		}
 		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
-			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
+			log.Fatalf(ctx, "registration %s not in Processor's key range %v", &r, p.Span)
 		}
 
 		// Add the new registration to the registry.
@@ -357,23 +355,18 @@ func (p *ScheduledProcessor) Register(
 		})
 
 		// Run an output loop for the registry.
-		runOutputLoop := func(ctx context.Context) {
-			r.runOutputLoop(ctx, p.RangeID)
-			if p.unregisterClient(&r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if disconnectFn != nil {
-					disconnectFn()
-				}
+		maybeRunCatchUpScan := func(ctx context.Context) {
+			err := r.setUpAndMaybeRunCatchUpScan(ctx)
+			if err != nil {
+				r.disconnect(kvpb.NewError(err))
 			}
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
-		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
+		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: catch up scan", maybeRunCatchUpScan); err != nil {
 			// If we can't schedule internally, processor is already stopped which
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
 			r.disconnect(kvpb.NewError(err))
-			p.reg.Unregister(ctx, &r)
 		}
 		return f
 	})
@@ -657,15 +650,15 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 	case e.sst != nil:
 		p.consumeSSTable(ctx, e.sst.data, e.sst.span, e.sst.ts, e.alloc)
 	case e.sync != nil:
-		if e.sync.testRegCatchupSpan != nil {
-			if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
-				log.Errorf(
-					ctx,
-					"error waiting for registries to catch up during test, results might be impacted: %s",
-					err,
-				)
-			}
-		}
+		//if e.sync.testRegCatchupSpan != nil {
+		//	if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
+		//		log.Errorf(
+		//			ctx,
+		//			"error waiting for registries to catch up during test, results might be impacted: %s",
+		//			err,
+		//		)
+		//	}
+		//}
 		close(e.sync.c)
 	default:
 		log.Fatalf(ctx, "missing event variant: %+v", e)

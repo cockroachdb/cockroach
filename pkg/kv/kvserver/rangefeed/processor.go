@@ -429,7 +429,7 @@ func (p *LegacyProcessor) run(
 		// Handle new registrations.
 		case r := <-p.regC:
 			if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
-				log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
+				log.Fatalf(ctx, "registration %v not in Processor's key range %v", r, p.Span)
 			}
 
 			// Add the new registration to the registry.
@@ -582,7 +582,7 @@ func (p *LegacyProcessor) Register(
 	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
-	stream Stream,
+	//stream Stream,
 	disconnectFn func(),
 	done *future.ErrorFuture,
 ) (bool, *Filter) {
@@ -793,15 +793,15 @@ func (p *LegacyProcessor) consumeEvent(ctx context.Context, e *event) {
 	case e.sst != nil:
 		p.consumeSSTable(ctx, e.sst.data, e.sst.span, e.sst.ts, e.alloc)
 	case e.sync != nil:
-		if e.sync.testRegCatchupSpan != nil {
-			if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
-				log.Errorf(
-					ctx,
-					"error waiting for registries to catch up during test, results might be impacted: %s",
-					err,
-				)
-			}
-		}
+		//if e.sync.testRegCatchupSpan != nil {
+		//	if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
+		//		log.Errorf(
+		//			ctx,
+		//			"error waiting for registries to catch up during test, results might be impacted: %s",
+		//			err,
+		//		)
+		//	}
+		//}
 		close(e.sync.c)
 	default:
 		panic(fmt.Sprintf("missing event variant: %+v", e))
