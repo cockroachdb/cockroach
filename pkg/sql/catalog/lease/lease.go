@@ -84,8 +84,16 @@ var LeaseMonitorRangeFeedTimeout = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_monitor_range_feed.timeout",
 	"if the leasing subsystem does not receive any checkpoints for this timeout,"+
-		" then the node is brought down (a setting of 0 means off).",
+		" then the node is brought down (a setting of 0 means off)",
 	time.Minute*10,
+)
+
+var LeaseMonitorRangeFeedResetTime = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"sql.catalog.descriptor_lease_monitor_range_feed.reset_time",
+	"once the range feed has stopped receiving checkpoints for this "+
+		"period of time the range feed will be restarted",
+	time.Minute*30,
 )
 
 //go:generate stringer -type=SessionBasedLeasingMode
@@ -885,13 +893,24 @@ type Manager struct {
 		// the number of observed checkpoints.
 		rangeFeedCheckpoints int
 
+		// rangeFeedIsUnavailableStartTime is the start of a timer to track
+		// how long the unavailability has been occurring, which is reset
+		// every time the range feed is restarted.
+		rangeFeedIsUnavailableResetTimer time.Time
+
 		// rangeFeedIsUnavailableTime tracks the time when the unavailability
-		// even was detected, Each the range feed timer detects no check points
+		// event was detected. Each time the range feed timer detects no check points
 		// this time gets reset. This will be used to refresh stale descriptors.
 		rangeFeedIsUnavailableTime time.Time
 
-		// rangeFeedIsUnavailable tracks if the range feed is currently gunavailable.
+		// rangeFeedIsUnavailable tracks if the range feed is currently unavailable.
+		// Instead of just keying off the unavailable time, this flag allows us to
+		// provide one last update after the range feed recovers, which will ensure
+		// that no stale data exists.
 		rangeFeedIsUnavailable bool
+
+		// rangeFeed current range feed on system.descriptors.
+		rangeFeed *rangefeed.RangeFeed
 	}
 
 	draining atomic.Value
@@ -906,6 +925,11 @@ type Manager struct {
 	stopper          *stop.Stopper
 	sem              *quotapool.IntPool
 	refreshAllLeases chan struct{}
+
+	// descUpdateCh receives updated descriptors from the range feed.
+	descUpdateCh chan catalog.Descriptor
+	// descDelCh receives deleted descriptors from the range feed.
+	descDelCh chan descpb.ID
 }
 
 const leaseConcurrencyLimit = 5
@@ -995,6 +1019,8 @@ func NewLeaseManager(
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
 	lm.draining.Store(false)
+	lm.descUpdateCh = make(chan catalog.Descriptor)
+	lm.descDelCh = make(chan descpb.ID)
 	return lm
 }
 
@@ -1345,13 +1371,13 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 // rangefeeds. This function must be passed a non-nil gossip if
 // RangefeedLeases is not active.
 func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB) {
-	descUpdateCh := make(chan catalog.Descriptor)
-	descDelCh := make(chan descpb.ID)
-	m.watchForUpdates(ctx, descUpdateCh, descDelCh)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.watchForUpdates(ctx)
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
 			select {
-			case id := <-descDelCh:
+			case id := <-m.descDelCh:
 				// Descriptor is marked as deleted, so mark it for deletion or
 				// remove it if it's no longer in use.
 				_ = s.RunAsyncTask(ctx, "purge deleted descriptor", func(ctx context.Context) {
@@ -1363,7 +1389,7 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 						}
 					}
 				})
-			case desc := <-descUpdateCh:
+			case desc := <-m.descUpdateCh:
 				// NB: We allow nil descriptors to be sent to synchronize the updating of
 				// descriptors.
 				if desc == nil {
@@ -1436,9 +1462,7 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 
 // watchForUpdates will watch a rangefeed on the system.descriptor table for
 // updates.
-func (m *Manager) watchForUpdates(
-	ctx context.Context, descUpdateCh chan<- catalog.Descriptor, descDelCh chan<- descpb.ID,
-) {
+func (m *Manager) watchForUpdates(ctx context.Context) {
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
 	}
@@ -1462,7 +1486,7 @@ func (m *Manager) watchForUpdates(
 			}
 			select {
 			case <-ctx.Done():
-			case descDelCh <- descpb.ID(id):
+			case m.descDelCh <- descpb.ID(id):
 			}
 			return
 		}
@@ -1481,7 +1505,7 @@ func (m *Manager) watchForUpdates(
 		}
 		select {
 		case <-ctx.Done():
-		case descUpdateCh <- mut:
+		case m.descUpdateCh <- mut:
 		}
 	}
 
@@ -1496,10 +1520,15 @@ func (m *Manager) watchForUpdates(
 		m.mu.rangeFeedCheckpoints += 1
 	}
 
+	// If we already started a range feed terminate it first
+	if m.mu.rangeFeed != nil {
+		m.mu.rangeFeed.Close()
+		m.mu.rangeFeed = nil
+	}
 	// Ignore errors here because they indicate that the server is shutting down.
 	// Also note that the range feed automatically shuts down when the server
 	// shuts down, so we don't need to call Close() ourselves.
-	_, _ = m.rangeFeedFactory.RangeFeed(
+	m.mu.rangeFeed, _ = m.rangeFeedFactory.RangeFeed(
 		ctx, "lease", []roachpb.Span{descriptorTableSpan}, hlc.Timestamp{}, handleEvent,
 		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithOnCheckpoint(handleCheckpoint),
@@ -1543,11 +1572,16 @@ func (m *Manager) checkRangeFeedStatus(ctx context.Context) {
 		// Keep on updating the timestamp, so that expired descriptors
 		// can catch up.
 		m.mu.rangeFeedIsUnavailableTime = timeutil.Now()
+		// Start the timer only on the first unavailability event.
+		if !m.mu.rangeFeedIsUnavailable {
+			m.mu.rangeFeedIsUnavailableResetTimer = timeutil.Now()
+		}
 		m.mu.rangeFeedIsUnavailable = true
 		log.Warningf(ctx, "lease manager range feed has stopped making progress, switching to manual refreshes.")
 	} else if !m.mu.rangeFeedIsUnavailableTime.IsZero() {
 		// Note: The recovery logic will clear out the time.
 		m.mu.rangeFeedIsUnavailable = false
+		m.mu.rangeFeedIsUnavailableResetTimer = time.Time{}
 		log.Warningf(ctx, "lease manager range feed has recovered and can make progress.")
 	}
 }
@@ -1642,6 +1676,8 @@ func (m *Manager) getStaleLeasesForRangeFeed(
 	sort.SliceStable(staleLeases, func(i, j int) bool {
 		return staleLeases[i].id < staleLeases[j].id
 	})
+	// If the rangefeed becomes available again, we want to refresh
+	// the stale leases one last time, so that we are all caught up.
 	return staleLeases, !m.mu.rangeFeedIsUnavailable
 }
 
@@ -1673,27 +1709,24 @@ func (m *Manager) pollAndMaybeRefreshOldLeases(
 	wg := sync.WaitGroup{}
 	// Loop over the leases that are "stale" and drop ones which are
 	// unused and refresh ones that have a newer version in storage.
-	maybeCleanupOldVersions := func(desc *descriptorState) []*storedLease {
+	maybeCleanupOldVersions := func(desc *descriptorState) (leasesToDelete []*storedLease, entryToDelete *descriptorState) {
 		desc.mu.Lock()
 		defer desc.mu.Unlock()
 		latestVersion := desc.mu.active.findNewest()
 		if latestVersion == nil {
 			desc.lastRefreshTime.Store(timeutil.Now().Unix())
-			return nil
+			return nil, nil
 		}
 		latestVersionOfDesc := staleDescs.LookupDescriptor(desc.id)
 		// If the descriptor has been deleted, try to clean it up.
 		if latestVersionOfDesc == nil {
 			desc.lastRefreshTime.Store(timeutil.Now().Unix())
 			storedLeases := desc.removeInactiveVersions()
+			// Prepare to delete this once the locks are released.
 			if len(desc.mu.active.data) == 0 && atomic.LoadInt32(&desc.renewalInProgress) == 0 {
-				func() {
-					m.mu.Lock()
-					defer m.mu.Unlock()
-					delete(m.mu.descriptors, desc.id)
-				}()
+				entryToDelete = desc
 			}
-			return storedLeases
+			return storedLeases, entryToDelete
 		} else if latestVersion.GetVersion() != latestVersionOfDesc.GetVersion() {
 			// Refresh the descriptor if a new version is available.
 			wg.Add(1)
@@ -1717,18 +1750,33 @@ func (m *Manager) pollAndMaybeRefreshOldLeases(
 				}); err != nil {
 				log.Infof(ctx, "didnt refresh descriptor: %d lease: %s", desc.id, err)
 			}
-			return nil
+			return nil, nil
 		} else {
 			// Otherwise, update the refresh timestamp, since no
 			// change has occurred.
 			desc.lastRefreshTime.Store(timeutil.Now().Unix())
 		}
-		return nil
+		return nil, nil
 	}
 	for _, desc := range staleLeases {
-		storedLeases := maybeCleanupOldVersions(desc)
+		storedLeases, entryToDelete := maybeCleanupOldVersions(desc)
 		for _, s := range storedLeases {
 			m.storage.release(ctx, m.stopper, s)
+		}
+		// If we need to remove an entry grab all the locks
+		// and clean things up.
+		if entryToDelete != nil {
+			func() {
+				m.mu.Lock()
+				defer m.mu.Unlock()
+				entryToDelete.mu.Lock()
+				defer entryToDelete.mu.Unlock()
+				// Before removing make sure no one is trying to renew
+				// right now, otherwise they will clean this up.
+				if atomic.LoadInt32(&desc.renewalInProgress) == 0 {
+					delete(m.mu.descriptors, entryToDelete.id)
+				}
+			}()
 		}
 	}
 	wg.Wait()
@@ -1745,6 +1793,7 @@ func (m *Manager) handleRangeFeedAvailability(ctx context.Context) error {
 	// Loop over the stale leases in limited batch sizes, and
 	// refresh them as needed.
 	var MaxBatchSize = int(leaseRefreshLimit.Get(&m.settings.SV))
+	hasStaleLeases := len(staleLeases) > 0
 	for i := 0; i < len(staleLeases); i += MaxBatchSize {
 		batchSize := min(len(staleLeases), MaxBatchSize)
 		nextBatch := staleLeases[i : i+batchSize]
@@ -1753,12 +1802,20 @@ func (m *Manager) handleRangeFeedAvailability(ctx context.Context) error {
 			return err
 		}
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	// If the range feed has returned, we do one last manual refresh
 	// to have everything catch up.
 	if resetAvailableTime {
-		m.mu.Lock()
 		m.mu.rangeFeedIsUnavailableTime = time.Time{}
-		defer m.mu.Unlock()
+	} else if hasStaleLeases &&
+		timeutil.Since(m.mu.rangeFeedIsUnavailableResetTimer) >=
+			LeaseMonitorRangeFeedResetTime.Get(&m.settings.SV) {
+		log.Warning(ctx, "attempting restart of leasing range feed")
+		// Attempt a range feed restart if it has been down too long.
+		m.watchForUpdates(ctx)
+		m.mu.rangeFeedIsUnavailableResetTimer = timeutil.Now()
 	}
 	return nil
 }
