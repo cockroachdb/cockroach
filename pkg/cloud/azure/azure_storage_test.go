@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -76,7 +77,7 @@ func (a *azureConfig) filePathWithSchemeImplicitAuth(scheme string, f string) st
 	values := uri.Query()
 	values.Add(AzureAccountNameParam, a.account)
 	values.Add(AzureEnvironmentKeyParam, a.environment)
-	values.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	values.Add(uris.AuthParam, uris.AuthParamImplicit)
 	uri.RawQuery = values.Encode()
 	return uri.String()
 }

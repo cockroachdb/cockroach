@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -234,13 +234,13 @@ func getPassphraseAndKMS(
 
 func parseStorageAndAuth(uri string) (string, string, error) {
 	var storageType string
-	authType := cloud.AuthParamSpecified
+	authType := uris.AuthParamSpecified
 	parsedURI, err := url.Parse(uri)
 	if err != nil {
 		return "", "", errors.Wrapf(err, "failed to parse URI %s for telemetry", uri)
 	}
 	storageType = parsedURI.Scheme
-	auth := parsedURI.Query().Get(cloud.AuthParam)
+	auth := parsedURI.Query().Get(uris.AuthParam)
 	if auth != "" {
 		authType = auth
 	}

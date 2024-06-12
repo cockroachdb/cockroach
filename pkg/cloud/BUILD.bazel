@@ -10,7 +10,6 @@ go_library(
         "kms_test_utils.go",
         "metrics.go",
         "options.go",
-        "uris.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud",
     visibility = ["//visibility:public"],
@@ -18,6 +17,7 @@ go_library(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/cloud/cloudpb",
+        "//pkg/cloud/uris",
         "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -38,13 +38,9 @@ go_library(
 
 go_test(
     name = "cloud_test",
-    srcs = [
-        "cloud_io_test.go",
-        "uris_test.go",
-    ],
+    srcs = ["cloud_io_test.go"],
     embed = [":cloud"],
     deps = [
-        "//pkg/cloud/cloudpb",
         "//pkg/util/ioctx",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

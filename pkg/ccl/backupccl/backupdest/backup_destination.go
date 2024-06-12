@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -420,9 +421,9 @@ func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
 		return "", "", err
 	}
 	q := parsedURI.Query()
-	localityKV := q.Get(cloud.LocalityURLParam)
+	localityKV := q.Get(uris.LocalityURLParam)
 	// Remove the backup locality parameter.
-	q.Del(cloud.LocalityURLParam)
+	q.Del(uris.LocalityURLParam)
 	parsedURI.RawQuery = q.Encode()
 
 	parsedURI.Path = backuputils.JoinURLPath(parsedURI.Path, appendPath)
@@ -447,7 +448,7 @@ func GetURIsByLocalityKV(
 		}
 		if localityKV != "" && localityKV != DefaultLocalityValue {
 			return "", nil, errors.Errorf("%s %s is invalid for a single BACKUP location",
-				cloud.LocalityURLParam, localityKV)
+				uris.LocalityURLParam, localityKV)
 		}
 		return baseURI, urisByLocalityKV, nil
 	}
@@ -460,7 +461,7 @@ func GetURIsByLocalityKV(
 		if localityKV == "" {
 			return "", nil, errors.Errorf(
 				"multiple URLs are provided for partitioned BACKUP, but %s is not specified",
-				cloud.LocalityURLParam,
+				uris.LocalityURLParam,
 			)
 		}
 		if localityKV == DefaultLocalityValue {

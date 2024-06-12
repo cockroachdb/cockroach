@@ -19,6 +19,7 @@ import (
 	kms "cloud.google.com/go/kms/apiv1"
 	kmspb "cloud.google.com/go/kms/apiv1/kmspb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -49,11 +50,11 @@ type kmsURIParams struct {
 }
 
 // resolveKMSURIParams parses the `kmsURI` for all the supported KMS parameters.
-func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
-	assumeRole, delegateRoles := cloud.ParseRoleString(kmsURI.ConsumeParam(AssumeRoleParam))
+func resolveKMSURIParams(kmsURI uris.ConsumeURL) (kmsURIParams, error) {
+	assumeRole, delegateRoles := uris.ParseRoleString(kmsURI.ConsumeParam(AssumeRoleParam))
 	params := kmsURIParams{
 		credentials:   kmsURI.ConsumeParam(CredentialsParam),
-		auth:          kmsURI.ConsumeParam(cloud.AuthParam),
+		auth:          kmsURI.ConsumeParam(uris.AuthParam),
 		assumeRole:    assumeRole,
 		delegateRoles: delegateRoles,
 		bearerToken:   kmsURI.ConsumeParam(BearerTokenParam),
@@ -82,7 +83,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		return nil, errors.Newf("path component of the KMS cannot be empty; must contain the Customer Managed Key")
 	}
 
-	kmsConsumeURL := cloud.ConsumeURL{URL: kmsURI}
+	kmsConsumeURL := uris.ConsumeURL{URL: kmsURI}
 	// Extract the URI parameters required to setup the GCS KMS session.
 	kmsURIParams, err := resolveKMSURIParams(kmsConsumeURL)
 	if err != nil {
@@ -94,7 +95,7 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	var credentialsOpt []option.ClientOption
 
 	switch kmsURIParams.auth {
-	case "", cloud.AuthParamSpecified:
+	case "", uris.AuthParamSpecified:
 		if kmsURIParams.credentials != "" {
 			authOption, err := createAuthOptionFromServiceAccountKey(kmsURIParams.credentials)
 			if err != nil {
@@ -108,18 +109,18 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				"%s or %s must be set if %q is %q",
 				CredentialsParam,
 				BearerTokenParam,
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
+				uris.AuthParam,
+				uris.AuthParamSpecified,
 			)
 		}
-	case cloud.AuthParamImplicit:
+	case uris.AuthParamImplicit:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for gcs due to --external-io-disable-implicit-credentials flag")
 		}
 		// If implicit credentials used, no client options needed.
 	default:
-		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
+		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, uris.AuthParam)
 	}
 
 	opts := []option.ClientOption{option.WithScopes(kms.DefaultAuthScopes()...)}

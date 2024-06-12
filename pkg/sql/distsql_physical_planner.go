@@ -18,7 +18,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -4747,7 +4747,7 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 }
 
 func logAndSanitizeExportDestination(ctx context.Context, dest string) error {
-	clean, err := cloud.SanitizeExternalStorageURI(dest, nil)
+	clean, err := uris.SanitizeExternalStorageURI(dest, nil)
 	if err != nil {
 		return err
 	}

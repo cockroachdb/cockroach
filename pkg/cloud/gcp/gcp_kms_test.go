@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -56,7 +57,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 	t.Run("auth-empty-no-cred", func(t *testing.T) {
 		// Set AUTH to specified but don't provide CREDENTIALS params.
 		params := make(url.Values)
-		params.Add(cloud.AuthParam, cloud.AuthParamSpecified)
+		params.Add(uris.AuthParam, uris.AuthParamSpecified)
 
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, params.Encode())
 
@@ -65,8 +66,8 @@ func TestEncryptDecryptGCS(t *testing.T) {
 			"%s or %s must be set if %q is %q",
 			CredentialsParam,
 			BearerTokenParam,
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
+			uris.AuthParam,
+			uris.AuthParamSpecified,
 		))
 	})
 
@@ -77,7 +78,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 
 		// Set the AUTH to implicit.
 		params := make(url.Values)
-		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+		params.Add(uris.AuthParam, uris.AuthParamImplicit)
 
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, params.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
@@ -96,7 +97,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 		q.Set(CredentialsParam, url.QueryEscape(encoded))
 
 		// Set AUTH to specified.
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
@@ -122,7 +123,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 		q.Set(BearerTokenParam, token.AccessToken)
 
 		// Set AUTH to specified.
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
@@ -155,10 +156,10 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 			Settings:         gcpKMSTestSettings,
 		}
-		cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s=%s", keyID, cloud.AuthParam, cloud.AuthParamImplicit), testEnv)
+		cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s=%s", keyID, uris.AuthParam, uris.AuthParamImplicit), testEnv)
 
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
+		q.Set(uris.AuthParam, uris.AuthParamImplicit)
 		q.Set(AssumeRoleParam, assumedAccount)
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
@@ -169,11 +170,11 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 			Settings:         gcpKMSTestSettings,
 		}
-		cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s=%s&%s=%s", keyID, cloud.AuthParam,
-			cloud.AuthParamSpecified, CredentialsParam, url.QueryEscape(encodedCredentials)), testEnv)
+		cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s=%s&%s=%s", keyID, uris.AuthParam,
+			uris.AuthParamSpecified, CredentialsParam, url.QueryEscape(encodedCredentials)), testEnv)
 
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 		q.Set(AssumeRoleParam, assumedAccount)
 		q.Set(CredentialsParam, encodedCredentials)
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
@@ -192,7 +193,7 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 		}
 
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 		q.Set(CredentialsParam, encodedCredentials)
 
 		// First verify that none of the individual roles in the chain can be used
@@ -218,7 +219,7 @@ func TestGCSKMSDisallowImplicitCredentials(t *testing.T) {
 	q := make(url.Values)
 
 	// Set AUTH to implicit.
-	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	q.Add(uris.AuthParam, uris.AuthParamImplicit)
 	keyID := os.Getenv("GOOGLE_KMS_KEY_NAME")
 	if keyID == "" {
 		skip.IgnoreLint(t, "GOOGLE_KMS_KEY_NAME env var must be set")
@@ -254,13 +255,13 @@ func TestGCPKMSInaccessibleError(t *testing.T) {
 
 	t.Run("success-sanity-check", func(t *testing.T) {
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
+		q.Set(uris.AuthParam, uris.AuthParamImplicit)
 		q.Set(AssumeRoleParam, roleChainStr)
 
 		uriImplicit := fmt.Sprintf("%s:///%s?%s", gcpScheme, limitedKeyID, q.Encode())
 		cloudtestutils.RequireSuccessfulKMS(ctx, t, uriImplicit)
 
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 		q.Set(CredentialsParam, base64.StdEncoding.EncodeToString([]byte(os.Getenv("GOOGLE_CREDENTIALS_JSON"))))
 		uriSpecified := fmt.Sprintf("%s:///%s?%s", gcpScheme, limitedKeyID, q.Encode())
 		cloudtestutils.RequireSuccessfulKMS(ctx, t, uriSpecified)
@@ -279,7 +280,7 @@ func TestGCPKMSInaccessibleError(t *testing.T) {
 		encodedCredentials := base64.StdEncoding.EncodeToString(badCreds)
 
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 		q.Set(CredentialsParam, encodedCredentials)
 		uri := fmt.Sprintf("%s:///%s?%s", gcpScheme, limitedKeyID, q.Encode())
 
@@ -288,7 +289,7 @@ func TestGCPKMSInaccessibleError(t *testing.T) {
 
 	t.Run("incorrect-kms", func(t *testing.T) {
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
+		q.Set(uris.AuthParam, uris.AuthParamImplicit)
 		q.Set(AssumeRoleParam, roleChainStr)
 		incorrectKey := limitedKeyID + "-non-existent"
 
@@ -299,7 +300,7 @@ func TestGCPKMSInaccessibleError(t *testing.T) {
 
 	t.Run("no-kms-permission", func(t *testing.T) {
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
+		q.Set(uris.AuthParam, uris.AuthParamImplicit)
 		uri := fmt.Sprintf("%s:///%s?%s", gcpScheme, limitedKeyID, q.Encode())
 
 		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "PermissionDenied")
@@ -307,7 +308,7 @@ func TestGCPKMSInaccessibleError(t *testing.T) {
 
 	t.Run("cannot-assume-role", func(t *testing.T) {
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
+		q.Set(uris.AuthParam, uris.AuthParamImplicit)
 		q.Set(AssumeRoleParam, roleChain[len(roleChain)-1])
 
 		uri := fmt.Sprintf("%s:///%s?%s", gcpScheme, limitedKeyID, q.Encode())

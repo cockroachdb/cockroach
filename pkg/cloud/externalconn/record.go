@@ -16,8 +16,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -188,12 +188,12 @@ func (e *MutableExternalConnection) RedactedConnectionURI() string {
 	var err error
 	switch e.rec.ConnectionType {
 	case connectionpb.TypeStorage.String():
-		redactedURI, err := cloud.SanitizeExternalStorageURI(unredactedURI, nil)
+		redactedURI, err := uris.SanitizeExternalStorageURI(unredactedURI, nil)
 		if err == nil {
 			return redactedURI
 		}
 	case connectionpb.TypeKMS.String():
-		redactedURI, err := cloud.RedactKMSURI(unredactedURI)
+		redactedURI, err := uris.RedactKMSURI(unredactedURI)
 		if err == nil {
 			return redactedURI
 		}
