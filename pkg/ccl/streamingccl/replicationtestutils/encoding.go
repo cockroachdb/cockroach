@@ -23,7 +23,7 @@ import (
 // EncodeKV encodes primary key with the specified "values".  Values must be
 // specified in the same order as the columns in the primary family.
 func EncodeKV(
-	t *testing.T, codec keys.SQLCodec, descr catalog.TableDescriptor, pkeyVals ...interface{},
+	t testing.TB, codec keys.SQLCodec, descr catalog.TableDescriptor, pkeyVals ...interface{},
 ) roachpb.KeyValue {
 	require.Equal(t, 1, descr.NumFamilies(), "there can be only one")
 	indexEntries := encodeKVImpl(t, codec, descr, pkeyVals...)
@@ -34,7 +34,7 @@ func EncodeKV(
 // EncodeKVs is similar to EncodeKV, but can be used for a table with multiple
 // column families, in which case up to one KV is returned per family.
 func EncodeKVs(
-	t *testing.T, codec keys.SQLCodec, descr catalog.TableDescriptor, pkeyVals ...interface{},
+	t testing.TB, codec keys.SQLCodec, descr catalog.TableDescriptor, pkeyVals ...interface{},
 ) []roachpb.KeyValue {
 	indexEntries := encodeKVImpl(t, codec, descr, pkeyVals...)
 	require.GreaterOrEqual(t, len(indexEntries), 1)
@@ -46,7 +46,7 @@ func EncodeKVs(
 }
 
 func encodeKVImpl(
-	t *testing.T, codec keys.SQLCodec, descr catalog.TableDescriptor, pkeyVals ...interface{},
+	t testing.TB, codec keys.SQLCodec, descr catalog.TableDescriptor, pkeyVals ...interface{},
 ) []rowenc.IndexEntry {
 	primary := descr.GetPrimaryIndex()
 	var datums tree.Datums
@@ -68,7 +68,7 @@ func encodeKVImpl(
 	return indexEntries
 }
 
-func nativeToDatum(t *testing.T, native interface{}) tree.Datum {
+func nativeToDatum(t testing.TB, native interface{}) tree.Datum {
 	t.Helper()
 	switch v := native.(type) {
 	case bool:
