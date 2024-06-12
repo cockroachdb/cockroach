@@ -3004,7 +3004,7 @@ func TestUnsplittableRange(t *testing.T) {
 	ttl := 1 * time.Hour
 	defer zonepb.TestingSetMinRangeMaxBytes(1 << 16)()
 	const minBytes = 1 << 12
-	const maxBytes = 1 << 17
+	const maxBytes = 1 << 18
 	manualClock := hlc.NewHybridManualClock()
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMinBytes = proto.Int64(minBytes)
