@@ -102,7 +102,7 @@ func MakeDiskRowContainer(
 	typs []*types.T,
 	ordering colinfo.ColumnOrdering,
 	e diskmap.Factory,
-) (DiskRowContainer, error) {
+) (_ DiskRowContainer, retErr error) {
 	diskMap := e.NewSortedDiskMap()
 	d := DiskRowContainer{
 		diskMap:      diskMap,
@@ -114,6 +114,13 @@ func MakeDiskRowContainer(
 		engine:       e,
 		datumAlloc:   &tree.DatumAlloc{},
 	}
+	defer func() {
+		if retErr != nil {
+			// Ensure to close the container since we're not returning it to the
+			// caller.
+			d.Close(ctx)
+		}
+	}()
 
 	// The ordering is specified for a subset of the columns. These will be
 	// encoded as a key in the given order according to the given direction so
@@ -144,11 +151,12 @@ func MakeDiskRowContainer(
 		d.encodings[i] = rowenc.EncodingDirToDatumEncoding(orderInfo.Direction)
 		switch t := typs[orderInfo.ColIdx]; t.Family() {
 		case types.TSQueryFamily, types.TSVectorFamily:
-			// Ensure to close the container since we're not returning it to the
-			// caller.
-			d.Close(ctx)
 			return DiskRowContainer{}, unimplemented.NewWithIssueDetailf(
 				92165, "", "can't order by column type %s", t.SQLStringForError(),
+			)
+		case types.TupleFamily:
+			return DiskRowContainer{}, unimplemented.NewWithIssueDetailf(
+				49975, "", "can't spill column type %s to disk", t.SQLStringForError(),
 			)
 		}
 	}

@@ -696,17 +696,26 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(bulkMetrics)
 	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
-	bulkMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
+	bulkMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
 
 	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backfill-mon")
 	backfillMemoryMonitor.MarkLongLiving()
 	backupMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backup-mon")
 	backupMemoryMonitor.MarkLongLiving()
 
+	changefeedMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		"changefeed-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
+	)
+	if jobs.MakeChangefeedMemoryMetricsHook != nil {
+		changefeedCurCount, changefeedMaxHist := jobs.MakeChangefeedMemoryMetricsHook(cfg.HistogramWindowInterval())
+		changefeedMemoryMonitor.SetMetrics(changefeedCurCount, changefeedMaxHist)
+	}
+	changefeedMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
+
 	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"server-cache-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
 	)
-	serverCacheMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
+	serverCacheMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
 
 	// Set up the DistSQL temp engine.
 
@@ -821,6 +830,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ParentDiskMonitor: cfg.TempStorageConfig.Mon,
 		BackfillerMonitor: backfillMemoryMonitor,
 		BackupMonitor:     backupMemoryMonitor,
+		ChangefeedMonitor: changefeedMemoryMonitor,
 		BulkSenderLimiter: bulkSenderLimiter,
 
 		ParentMemoryMonitor: rootSQLMemoryMonitor,
@@ -1024,6 +1034,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.TableStatCacheSize,
 			cfg.Settings,
 			cfg.internalDB,
+			cfg.stopper,
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
