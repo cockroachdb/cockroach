@@ -41,23 +41,9 @@ import (
 
 const originTimestampColumnName = "crdb_replication_origin_timestamp"
 
-// sqlLastWriteWinsRowProcessor is a row processor that implements partial
-// last-write-wins semantics using SQL queries. We assume that the table has an
-// crdb_replication_origin_timestamp column defined as:
-//
-//	crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL
-//
-// This row is explicitly set by the INSERT query using the MVCC timestamp of
-// the inbound write.
-//
-// Known issues:
-//
-//  1. An UPDATE and a DELETE may be applied out of order because we have no way
-//     from SQL of knowing the write timestamp of the deletion tombstone.
-//  2. The crdb_replication_origin_timestamp requires modifying the user's schema.
-//
-// See the design document for possible solutions to both of these problems.
-type sqlLastWriteWinsRowProcessor struct {
+// A sqlRowProcessor is a row processor that handles rows using the queries in
+// its queryBuffer.
+type sqlRowProcessor struct {
 	decoder     cdcevent.Decoder
 	queryBuffer queryBuffer
 	settings    *cluster.Settings
@@ -131,52 +117,7 @@ const (
 	deleteQueryStd = 0
 )
 
-func makeSQLLastWriteWinsHandler(
-	ctx context.Context,
-	settings *cluster.Settings,
-	tableDescs map[int32]descpb.TableDescriptor,
-	ie isql.Executor,
-) (*sqlLastWriteWinsRowProcessor, error) {
-	descs := make(map[catid.DescID]catalog.TableDescriptor)
-	qb := queryBuffer{
-		deleteQueries: make(map[catid.DescID]queryBuilder, len(tableDescs)),
-		insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
-	}
-	cdcEventTargets := changefeedbase.Targets{}
-	var err error
-	for name, desc := range tableDescs {
-		td := tabledesc.NewBuilder(&desc).BuildImmutableTable()
-		descs[desc.ID] = td
-		qb.deleteQueries[desc.ID], err = makeDeleteQuery(name, td)
-		if err != nil {
-			return nil, err
-		}
-		qb.insertQueries[desc.ID], err = makeInsertQueries(name, td)
-		if err != nil {
-			return nil, err
-		}
-		cdcEventTargets.Add(changefeedbase.Target{
-			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-			TableID:           td.GetID(),
-			StatementTimeName: changefeedbase.StatementTimeName(td.GetName()),
-		})
-	}
-
-	prefixlessCodec := keys.SystemSQLCodec
-	rfCache, err := cdcevent.NewFixedRowFetcherCache(ctx, prefixlessCodec, settings, cdcEventTargets, descs)
-	if err != nil {
-		return nil, err
-	}
-
-	return &sqlLastWriteWinsRowProcessor{
-		queryBuffer: qb,
-		decoder:     cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
-		settings:    settings,
-		ie:          ie,
-	}, nil
-}
-
-func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
+func (srp *sqlRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, kv roachpb.KeyValue, prevValue roachpb.Value,
 ) (batchStats, error) {
 	var err error
@@ -185,15 +126,15 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 		return batchStats{}, errors.Wrap(err, "stripping tenant prefix")
 	}
 
-	row, err := lww.decoder.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
+	row, err := srp.decoder.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
 		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
 	}
 	var stats batchStats
 	if row.IsDeleted() {
-		stats, err = lww.deleteRow(ctx, txn, row)
+		stats, err = srp.deleteRow(ctx, txn, row)
 	} else {
-		stats, err = lww.insertRow(ctx, txn, row, prevValue)
+		stats, err = srp.insertRow(ctx, txn, row, prevValue)
 	}
 	stats.byteSize = int64(kv.Size())
 	return stats, err
@@ -224,7 +165,7 @@ var tryOptimisticInsertEnabled = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("logical_replication.consumer.try_optimistic_insert.enabled", true),
 )
 
-func (lww *sqlLastWriteWinsRowProcessor) insertRow(
+func (srp *sqlRowProcessor) insertRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row, prevValue roachpb.Value,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
@@ -233,7 +174,7 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 		kvTxn = txn.KV()
 		ieOverrides = explicitTxnOverrides
 	}
-	insertQueriesForTable, ok := lww.queryBuffer.insertQueries[row.TableID]
+	insertQueriesForTable, ok := srp.queryBuffer.insertQueries[row.TableID]
 	if !ok {
 		return batchStats{}, errors.Errorf("no pre-generated insert query for table %d", row.TableID)
 	}
@@ -246,12 +187,12 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 		return batchStats{}, err
 	}
 	var optimisticInsertConflicts int64
-	if prevValue.RawBytes == nil && tryOptimisticInsertEnabled.Get(&lww.settings.SV) {
+	if prevValue.RawBytes == nil && tryOptimisticInsertEnabled.Get(&srp.settings.SV) {
 		stmt, datums, err := insertQueryBuilder.Query(insertQueriesOptimisticIndex)
 		if err != nil {
 			return batchStats{}, err
 		}
-		if _, err = lww.ie.ExecParsed(ctx, "replicated-optimistic-insert", kvTxn, ieOverrides, stmt, datums...); err != nil {
+		if _, err = srp.ie.ExecParsed(ctx, "replicated-optimistic-insert", kvTxn, ieOverrides, stmt, datums...); err != nil {
 			// If the optimistic insert failed with unique violation, we have to
 			// fall back to the pessimistic path. If we got a different error,
 			// then we bail completely.
@@ -270,14 +211,14 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 	if err != nil {
 		return batchStats{}, err
 	}
-	if _, err = lww.ie.ExecParsed(ctx, "replicated-insert", kvTxn, ieOverrides, stmt, datums...); err != nil {
+	if _, err = srp.ie.ExecParsed(ctx, "replicated-insert", kvTxn, ieOverrides, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
 	return batchStats{optimisticInsertConflicts: optimisticInsertConflicts}, nil
 }
 
-func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
+func (srp *sqlRowProcessor) deleteRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
@@ -287,7 +228,7 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 		ieOverrides = explicitTxnOverrides
 	}
 
-	deleteQuery, ok := lww.queryBuffer.deleteQueries[row.TableID]
+	deleteQuery, ok := srp.queryBuffer.deleteQueries[row.TableID]
 	if !ok {
 		return batchStats{}, errors.Errorf("no pre-generated delete query for table %d", row.TableID)
 	}
@@ -301,7 +242,7 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 		return batchStats{}, err
 	}
 
-	if _, err := lww.ie.ExecParsed(ctx, "replicated-delete", kvTxn, ieOverrides, stmt, datums...); err != nil {
+	if _, err := srp.ie.ExecParsed(ctx, "replicated-delete", kvTxn, ieOverrides, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
@@ -322,7 +263,68 @@ WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_replication_origin_timest
      AND t.crdb_replication_origin_timestamp IS NOT NULL)`
 )
 
-func makeInsertQueries(
+// makeSQLLastWriteWinsProcessor creates a sqlRowProcessor that implements partial
+// last-write-wins semantics using SQL queries. We assume that the table has an
+// crdb_replication_origin_timestamp column defined as:
+//
+//	crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL
+//
+// This row is explicitly set by the INSERT query using the MVCC timestamp of
+// the inbound write.
+//
+// Known issues:
+//
+//  1. An UPDATE and a DELETE may be applied out of order because we have no way
+//     from SQL of knowing the write timestamp of the deletion tombstone.
+//  2. The crdb_replication_origin_timestamp requires modifying the user's schema.
+//
+// See the design document for possible solutions to both of these problems.
+func makeSQLLastWriteWinsProcessor(
+	ctx context.Context,
+	settings *cluster.Settings,
+	tableDescs map[int32]descpb.TableDescriptor,
+	ie isql.Executor,
+) (*sqlRowProcessor, error) {
+	descs := make(map[catid.DescID]catalog.TableDescriptor)
+	qb := queryBuffer{
+		deleteQueries: make(map[catid.DescID]queryBuilder, len(tableDescs)),
+		insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
+	}
+	cdcEventTargets := changefeedbase.Targets{}
+	var err error
+	for name, desc := range tableDescs {
+		td := tabledesc.NewBuilder(&desc).BuildImmutableTable()
+		descs[desc.ID] = td
+		qb.deleteQueries[desc.ID], err = makeLWWDeleteQuery(name, td)
+		if err != nil {
+			return nil, err
+		}
+		qb.insertQueries[desc.ID], err = makeLWWInsertQueries(name, td)
+		if err != nil {
+			return nil, err
+		}
+		cdcEventTargets.Add(changefeedbase.Target{
+			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
+			TableID:           td.GetID(),
+			StatementTimeName: changefeedbase.StatementTimeName(td.GetName()),
+		})
+	}
+
+	prefixlessCodec := keys.SystemSQLCodec
+	rfCache, err := cdcevent.NewFixedRowFetcherCache(ctx, prefixlessCodec, settings, cdcEventTargets, descs)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sqlRowProcessor{
+		queryBuffer: qb,
+		decoder:     cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
+		settings:    settings,
+		ie:          ie,
+	}, nil
+}
+
+func makeLWWInsertQueries(
 	dstTableDescID int32, td catalog.TableDescriptor,
 ) (map[catid.FamilyID]queryBuilder, error) {
 	queryBuilders := make(map[catid.FamilyID]queryBuilder, td.NumFamilies())
@@ -424,7 +426,221 @@ func makeInsertQueries(
 	return queryBuilders, nil
 }
 
-func makeDeleteQuery(dstTableDescID int32, td catalog.TableDescriptor) (queryBuilder, error) {
+func makeLWWDeleteQuery(dstTableDescID int32, td catalog.TableDescriptor) (queryBuilder, error) {
+	var whereClause strings.Builder
+	names := td.TableDesc().PrimaryIndex.KeyColumnNames
+	for i := range names {
+		colName := lexbase.EscapeSQLIdent(names[i])
+		if i == 0 {
+			fmt.Fprintf(&whereClause, "%s = $%d", colName, i+1)
+		} else {
+			fmt.Fprintf(&whereClause, "AND %s = $%d", colName, i+1)
+		}
+	}
+	originTSIdx := len(names) + 1
+	baseQuery := `
+DELETE FROM [%d as t] WHERE %s
+   AND ((t.crdb_internal_mvcc_timestamp < $%[3]d
+        AND t.crdb_internal_origin_timestamp IS NULL)
+    OR (t.crdb_internal_origin_timestamp < $%[3]d
+        AND t.crdb_internal_origin_timestamp IS NOT NULL))`
+	stmt, err := parser.ParseOne(
+		fmt.Sprintf(baseQuery, dstTableDescID, whereClause.String(), originTSIdx))
+	if err != nil {
+		return queryBuilder{}, err
+	}
+
+	return queryBuilder{
+		stmts:                []statements.Statement[tree.Statement]{stmt},
+		inputColumns:         names,
+		needsOriginTimestamp: true,
+		scratchDatums:        make([]interface{}, len(names)+1),
+	}, nil
+}
+
+// makeSQLUDFProcessor creates a sqlRowProcessor that allows a user-controlled
+// UDF to control whether what happens if an INSERT conflicts.
+//
+// Like the LWW processor it assumes the existence of a
+// crdb_internal_origin_timestamp that is currently used in the DELETE handling.
+//
+//	crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL
+//
+// We assume that the function named by udfName has the signature:
+//
+//	resolve(local tab,
+//	       remote tab,
+//	       local_mvcc_timestamp DECIMAL,
+//	       local_origin_timestamp DECIMAL,
+//	       remote_mvcc_timestamp DECIMAL) RETURNS
+//
+// We are passing the timestamps to make it possible to implement LWW as a
+// UDF.
+func makeSQLUDFProcessor(
+	ctx context.Context,
+	settings *cluster.Settings,
+	udfName string,
+	tableDescs map[int32]descpb.TableDescriptor,
+	ie isql.Executor,
+) (*sqlRowProcessor, error) {
+	descs := make(map[catid.DescID]catalog.TableDescriptor)
+	qb := queryBuffer{
+		deleteQueries: make(map[catid.DescID]queryBuilder, len(tableDescs)),
+		insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
+	}
+	cdcEventTargets := changefeedbase.Targets{}
+	var err error
+	for name, desc := range tableDescs {
+		td := tabledesc.NewBuilder(&desc).BuildImmutableTable()
+		descs[desc.ID] = td
+		qb.deleteQueries[desc.ID], err = makeUDFDeleteQuery(name, td)
+		if err != nil {
+			return nil, err
+		}
+		qb.insertQueries[desc.ID], err = makeUDFInsertQueries(name, udfName, td)
+		if err != nil {
+			return nil, err
+		}
+		cdcEventTargets.Add(changefeedbase.Target{
+			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
+			TableID:           td.GetID(),
+			StatementTimeName: changefeedbase.StatementTimeName(td.GetName()),
+		})
+	}
+
+	prefixlessCodec := keys.SystemSQLCodec
+	rfCache, err := cdcevent.NewFixedRowFetcherCache(ctx, prefixlessCodec, settings, cdcEventTargets, descs)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sqlRowProcessor{
+		queryBuffer: qb,
+		decoder:     cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
+		settings:    settings,
+		ie:          ie,
+	}, nil
+}
+
+func makeUDFInsertQueries(
+	dstTableDescID int32, udfName string, td catalog.TableDescriptor,
+) (map[catid.FamilyID]queryBuilder, error) {
+	queries := make(map[catid.FamilyID]queryBuilder, td.NumFamilies())
+	if err := td.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+		var columnNames strings.Builder
+		var valueStrings strings.Builder
+		var onConflictUpdateClause strings.Builder
+		argIdx := 1
+		inputColumnNames := make([]string, 0)
+		seenIds := make(map[catid.ColumnID]struct{})
+
+		resolveFuncCall := fmt.Sprintf(
+			"%s(t, excluded, t.crdb_internal_mvcc_timestamp, t.crdb_internal_origin_timestamp, excluded.crdb_internal_origin_timestamp)",
+			udfName,
+		)
+
+		addColumn := func(colName string, colID catid.ColumnID) {
+			// We will set crdb_internal_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
+			// We should never see this on the rangefeed as a non-null value as that would imply we've looped data around.
+			if colName == originTimestampColumnName {
+				return
+			}
+			if _, seen := seenIds[colID]; seen {
+				return
+			}
+
+			inputColumnNames = append(inputColumnNames, colName)
+			if argIdx == 1 {
+				columnNames.WriteString(colName)
+				fmt.Fprintf(&valueStrings, "$%d", argIdx)
+				fmt.Fprintf(&onConflictUpdateClause, "%s = (%s).%[1]s", colName, resolveFuncCall)
+			} else {
+				fmt.Fprintf(&columnNames, ", %s", colName)
+				fmt.Fprintf(&valueStrings, ", $%d", argIdx)
+				fmt.Fprintf(&onConflictUpdateClause, ",\n%s = (%s).%[1]s", colName, resolveFuncCall)
+			}
+			seenIds[colID] = struct{}{}
+			argIdx++
+		}
+
+		publicColumns := td.PublicColumns()
+		colOrd := catalog.ColumnIDToOrdinalMap(publicColumns)
+		primaryIndex := td.GetPrimaryIndex()
+
+		for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
+			colID := primaryIndex.GetKeyColumnID(i)
+			ord, ok := colOrd.Get(colID)
+			if !ok {
+				return errors.AssertionFailedf("expected to find column %d", colID)
+			}
+			col := publicColumns[ord]
+			if col.IsComputed() {
+				continue
+			}
+			addColumn(col.GetName(), col.GetID())
+		}
+
+		for i, colName := range family.ColumnNames {
+			colID := family.ColumnIDs[i]
+			ord, ok := colOrd.Get(colID)
+			if !ok {
+				return errors.AssertionFailedf("expected to find column %d", colID)
+			}
+			col := publicColumns[ord]
+			if col.IsComputed() {
+				continue
+			}
+			addColumn(colName, family.ColumnIDs[i])
+		}
+
+		parsedOptimisticQuery, err := parser.ParseOne(fmt.Sprintf(insertQueryOptimistic,
+			dstTableDescID,
+			columnNames.String(),
+			valueStrings.String(),
+		))
+		if err != nil {
+			return err
+		}
+
+		originTSIdx := argIdx
+		baseQuery := `
+INSERT INTO [%d as t] (%s, crdb_internal_origin_timestamp)
+VALUES (%s, $%d)
+ON CONFLICT ON CONSTRAINT %s
+DO UPDATE SET
+%s,
+crdb_internal_origin_timestamp=$%[4]d
+WHERE %[7]s IS NOT NULL`
+		parsedQuery, err := parser.ParseOne(fmt.Sprintf(baseQuery,
+			dstTableDescID,
+			columnNames.String(),
+			valueStrings.String(),
+			originTSIdx,
+			td.GetPrimaryIndex().GetName(),
+			onConflictUpdateClause.String(),
+			resolveFuncCall,
+		))
+		if err != nil {
+			return err
+		}
+		queries[family.ID] = queryBuilder{
+			stmts: []statements.Statement[tree.Statement]{
+				parsedOptimisticQuery,
+				parsedQuery,
+			},
+			needsOriginTimestamp: true,
+			inputColumns:         inputColumnNames,
+			scratchDatums:        make([]interface{}, len(inputColumnNames)+1),
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return queries, nil
+}
+
+// TODO(ssd): This just does the LWR delete since it isn't clear what we want here.
+func makeUDFDeleteQuery(dstTableDescID int32, td catalog.TableDescriptor) (queryBuilder, error) {
 	var whereClause strings.Builder
 	names := td.TableDesc().PrimaryIndex.KeyColumnNames
 	for i := range names {
