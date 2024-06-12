@@ -441,3 +441,6 @@ replace github.com/docker/docker => github.com/moby/moby v24.0.6+incompatible
 replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c
 
 replace google.golang.org/protobuf => google.golang.org/protobuf v1.29.1
+
+// Take etcd-io/raft from the branch corresponding to release-23.2 in our fork.
+replace go.etcd.io/raft/v3 => github.com/cockroachdb/raft/v3 v3.0.0-20230717153924-72a6e6c9f3ee

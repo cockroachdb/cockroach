@@ -495,6 +495,8 @@ github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b h1:r6VH0faHjZe
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
 github.com/cockroachdb/pebble v1.1.1-0.20240611180105-26e702194e71 h1:CESuRSXknEtTgOaLGTKCc5gaJzBMUCBcekJRYTxE88Q=
 github.com/cockroachdb/pebble v1.1.1-0.20240611180105-26e702194e71/go.mod h1:CnHUPUo2XSUfriPdNcyweFtE9dnZMSU8Gt10sXRGoJg=
+github.com/cockroachdb/raft/v3 v3.0.0-20230717153924-72a6e6c9f3ee h1:xdEpudubtzPqZH7KPyHS7Evz3aR3R1LcXHimcF2sYGg=
+github.com/cockroachdb/raft/v3 v3.0.0-20230717153924-72a6e6c9f3ee/go.mod h1:tP6U+sRzrl75ltgmFcdZg9reZVEyM3vKTxAWmwpHtB8=
 github.com/cockroachdb/redact v1.1.3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/redact v1.1.5 h1:u1PMllDkdFfPWaNGMyLD1+so+aq3uUItthCFqzwPJ30=
 github.com/cockroachdb/redact v1.1.5/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
@@ -2334,8 +2336,6 @@ go.etcd.io/etcd v0.5.0-alpha.5.0.20200910180754-dd1b699fc489/go.mod h1:yVHk9ub3C
 go.etcd.io/etcd/api/v3 v3.5.0/go.mod h1:cbVKeC6lCfl7j/8jBhAK6aIYO9XOjdptoxU/nLQcPvs=
 go.etcd.io/etcd/client/pkg/v3 v3.5.0/go.mod h1:IJHfcCEKxYu1Os13ZdwCwIUTUVGYTSAM3YSwc9/Ac1g=
 go.etcd.io/etcd/client/v2 v2.305.0/go.mod h1:h9puh54ZTgAKtEbut2oe9P4L/oqKCVB6xsXlzd7alYQ=
-go.etcd.io/raft/v3 v3.0.0-20230717153924-72a6e6c9f3ee h1:7KfWqaO+jirXdEFWpwK1fa2NIm1nmBf3fP0AH6NydCk=
-go.etcd.io/raft/v3 v3.0.0-20230717153924-72a6e6c9f3ee/go.mod h1:tP6U+sRzrl75ltgmFcdZg9reZVEyM3vKTxAWmwpHtB8=
 go.mongodb.org/mongo-driver v1.0.3/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.1/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.2/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
