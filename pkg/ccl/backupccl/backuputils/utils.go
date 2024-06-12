@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 )
 
 // URLSeparator represents the standard separator used in backup URLs.
@@ -21,7 +21,7 @@ const URLSeparator = '/'
 // RedactURIForErrorMessage redacts any storage secrets before returning a URI which is safe to
 // return to the client in an error message.
 func RedactURIForErrorMessage(uri string) string {
-	redactedURI, err := cloud.SanitizeExternalStorageURI(uri, []string{})
+	redactedURI, err := uris.SanitizeExternalStorageURI(uri, []string{})
 	if err != nil {
 		return "<uri_failed_to_redact>"
 	}

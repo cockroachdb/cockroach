@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -268,7 +269,7 @@ func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 	setIf(AWSTempTokenParam, conf.TempToken)
 	setIf(AWSEndpointParam, conf.Endpoint)
 	setIf(S3RegionParam, conf.Region)
-	setIf(cloud.AuthParam, conf.Auth)
+	setIf(uris.AuthParam, conf.Auth)
 	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
 	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
 	setIf(S3StorageClassParam, conf.StorageClass)
@@ -292,7 +293,7 @@ func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 }
 
 func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
-	s3URL := cloud.ConsumeURL{URL: uri}
+	s3URL := uris.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	if s3URL.Host == "" {
 		return conf, errors.New("empty host component; s3 URI must specify a target bucket")
@@ -305,8 +306,8 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	// version cluster with nodes on 22.2.0 and 22.2.1+. The logic around the
 	// RoleARN fields can be removed in 23.2.
 	assumeRoleValue := s3URL.ConsumeParam(AssumeRoleParam)
-	assumeRoleProvider, delegateRoleProviders := cloud.ParseRoleProvidersString(assumeRoleValue)
-	assumeRole, delegateRoles := cloud.ParseRoleString(assumeRoleValue)
+	assumeRoleProvider, delegateRoleProviders := uris.ParseRoleProvidersString(assumeRoleValue)
+	assumeRole, delegateRoles := uris.ParseRoleString(assumeRoleValue)
 
 	conf.S3Config = &cloudpb.ExternalStorage_S3{
 		Bucket:                s3URL.Host,
@@ -316,7 +317,7 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 		TempToken:             s3URL.ConsumeParam(AWSTempTokenParam),
 		Endpoint:              s3URL.ConsumeParam(AWSEndpointParam),
 		Region:                s3URL.ConsumeParam(S3RegionParam),
-		Auth:                  s3URL.ConsumeParam(cloud.AuthParam),
+		Auth:                  s3URL.ConsumeParam(uris.AuthParam),
 		ServerEncMode:         s3URL.ConsumeParam(AWSServerSideEncryptionMode),
 		ServerKMSID:           s3URL.ConsumeParam(AWSServerSideEncryptionKMSID),
 		StorageClass:          s3URL.ConsumeParam(S3StorageClassParam),
@@ -344,27 +345,27 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 
 	// Validate the authentication parameters are set correctly.
 	switch conf.S3Config.Auth {
-	case "", cloud.AuthParamSpecified:
+	case "", uris.AuthParamSpecified:
 		if conf.S3Config.AccessKey == "" {
 			return cloudpb.ExternalStorage{}, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
+				uris.AuthParam,
+				uris.AuthParamSpecified,
 				AWSAccessKeyParam,
 			)
 		}
 		if conf.S3Config.Secret == "" {
 			return cloudpb.ExternalStorage{}, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
+				uris.AuthParam,
+				uris.AuthParamSpecified,
 				AWSSecretParam,
 			)
 		}
-	case cloud.AuthParamImplicit:
+	case uris.AuthParamImplicit:
 	default:
 		return cloudpb.ExternalStorage{}, errors.Errorf("unsupported value %s for %s",
-			conf.S3Config.Auth, cloud.AuthParam)
+			conf.S3Config.Auth, uris.AuthParam)
 	}
 
 	// Ensure that a KMS ID is specified if server side encryption is set to use
@@ -404,30 +405,30 @@ func MakeS3Storage(
 	}
 
 	switch conf.Auth {
-	case "", cloud.AuthParamSpecified:
+	case "", uris.AuthParamSpecified:
 		if conf.AccessKey == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
+				uris.AuthParam,
+				uris.AuthParamSpecified,
 				AWSAccessKeyParam,
 			)
 		}
 		if conf.Secret == "" {
 			return nil, errors.Errorf(
 				"%s is set to '%s', but %s is not set",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
+				uris.AuthParam,
+				uris.AuthParamSpecified,
 				AWSSecretParam,
 			)
 		}
-	case cloud.AuthParamImplicit:
+	case uris.AuthParamImplicit:
 		if args.IOConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-disable-implicit-credentials flag")
 		}
 	default:
-		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
+		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, uris.AuthParam)
 	}
 
 	// Ensure that a KMS ID is specified if server side encryption is set to use
@@ -506,7 +507,7 @@ func newClient(
 	ctx context.Context, conf s3ClientConfig, settings *cluster.Settings,
 ) (s3Client, string, error) {
 	// Open a span if client creation will do IO/RPCs to find creds/bucket region.
-	if conf.region == "" || conf.auth == cloud.AuthParamImplicit {
+	if conf.region == "" || conf.auth == uris.AuthParamImplicit {
 		var sp *tracing.Span
 		ctx, sp = tracing.ChildSpan(ctx, "s3.newClient")
 		defer sp.Finish()
@@ -549,13 +550,13 @@ func newClient(
 	var sess *session.Session
 
 	switch conf.auth {
-	case "", cloud.AuthParamSpecified:
+	case "", uris.AuthParamSpecified:
 		sess, err = session.NewSessionWithOptions(opts)
 		if err != nil {
 			return s3Client{}, "", errors.Wrap(err, "new aws session")
 		}
 		sess.Config.Credentials = credentials.NewStaticCredentials(conf.accessKey, conf.secret, conf.tempToken)
-	case cloud.AuthParamImplicit:
+	case uris.AuthParamImplicit:
 		opts.SharedConfigState = session.SharedConfigEnable
 		sess, err = session.NewSessionWithOptions(opts)
 		if err != nil {
@@ -814,7 +815,7 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 	ctx, sp := tracing.ChildSpan(ctx, "s3.List")
 	defer sp.Finish()
 
-	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
+	dest := uris.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
 
 	client, err := s.getClient(ctx)

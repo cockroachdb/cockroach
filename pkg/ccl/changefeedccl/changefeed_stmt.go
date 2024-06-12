@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -971,7 +971,7 @@ func changefeedJobDescription(
 	opts changefeedbase.StatementOptions,
 ) (string, error) {
 	// Redacts user sensitive information from job description.
-	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, nil)
+	cleanedSinkURI, err := uris.SanitizeExternalStorageURI(sinkURI, nil)
 	if err != nil {
 		return "", err
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/errors"
 )
 
@@ -62,7 +63,7 @@ type kmsURIParams struct {
 
 // resolveKMSURIParams parses the `kmsURI` for all the supported KMS parameters.
 func resolveKMSURIParams(kmsURI *url.URL) (kmsURIParams, error) {
-	kmsConsumeURL := cloud.ConsumeURL{URL: kmsURI}
+	kmsConsumeURL := uris.ConsumeURL{URL: kmsURI}
 	auth, err := azureAuthMethod(kmsURI, &kmsConsumeURL)
 	if err != nil {
 		return kmsURIParams{}, err

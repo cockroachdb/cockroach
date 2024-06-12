@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -120,7 +121,7 @@ func init() {
 		)
 	}
 
-	cloud.RegisterRedactedParams(cloud.RedactedParams(
+	uris.RegisterRedactedParams(cloud.RedactedParams(
 		changefeedbase.SinkParamSASLPassword,
 		changefeedbase.SinkParamCACert,
 		changefeedbase.SinkParamClientCert,

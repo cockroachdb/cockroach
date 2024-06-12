@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -88,7 +88,7 @@ func resolveOptionsForBackupJobDescription(
 	}
 
 	var err error
-	// TODO(msbutler): use cloud.RedactKMSURI(uri) here instead?
+	// TODO(msbutler): use uris.RedactKMSURI(uri) here instead?
 	newOpts.EncryptionKMSURI, err = sanitizeURIList(kmsURIs)
 	if err != nil {
 		return tree.BackupOptions{}, err
@@ -153,10 +153,10 @@ func GetRedactedBackupNode(
 }
 
 // sanitizeURIList sanitizes a list of URIS in order to build an AST
-func sanitizeURIList(uris []string) ([]tree.Expr, error) {
+func sanitizeURIList(uriList []string) ([]tree.Expr, error) {
 	var sanitizedURIs []tree.Expr
-	for _, uri := range uris {
-		sanitizedURI, err := cloud.SanitizeExternalStorageURI(uri, nil /* extraParams */)
+	for _, uri := range uriList {
+		sanitizedURI, err := uris.SanitizeExternalStorageURI(uri, nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
@@ -802,7 +802,7 @@ func backupPlanHook(
 
 func logAndSanitizeKmsURIs(ctx context.Context, kmsURIs ...string) error {
 	for _, dest := range kmsURIs {
-		clean, err := cloud.RedactKMSURI(dest)
+		clean, err := uris.RedactKMSURI(dest)
 		if err != nil {
 			return err
 		}
@@ -813,7 +813,7 @@ func logAndSanitizeKmsURIs(ctx context.Context, kmsURIs ...string) error {
 
 func logAndSanitizeBackupDestinations(ctx context.Context, backupDestinations ...string) error {
 	for _, dest := range backupDestinations {
-		clean, err := cloud.SanitizeExternalStorageURI(dest, nil)
+		clean, err := uris.SanitizeExternalStorageURI(dest, nil)
 		if err != nil {
 			return err
 		}

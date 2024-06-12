@@ -581,8 +581,9 @@ func (Type) SafeValue() {}
 const NumJobTypes = 28
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
-// cloud.SanitizeExternalStorageURI to avoid the dependency from this
+// SanitizeExternalStorageURI to avoid the dependency from this
 // package on cloud. The value is injected in the changefeedccl package.
+// TODO(michae2): We should be able to remove this injection now.
 var ChangefeedDetailsMarshaler func(*ChangefeedDetails, *jsonpb.Marshaler) ([]byte, error)
 
 // MarshalJSONPB implements jsonpb.JSONPBMarshaller to redact sensitive sink URI

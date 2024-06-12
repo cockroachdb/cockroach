@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -107,7 +108,7 @@ func TestEncryptDecryptAzure(t *testing.T) {
 		redactedParams.Del(AzureClientIDParam)
 		redactedParams.Del(AzureClientSecretParam)
 		redactedParams.Del(AzureTenantIDParam)
-		redactedParams.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+		redactedParams.Add(uris.AuthParam, uris.AuthParamImplicit)
 
 		uri := fmt.Sprintf("azure-kms:///%s/%s?%s", cfg.keyName, cfg.keyVersion, redactedParams.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
@@ -124,7 +125,7 @@ func TestEncryptDecryptAzure(t *testing.T) {
 		redactedParams.Del(AzureClientIDParam)
 		redactedParams.Del(AzureClientSecretParam)
 		redactedParams.Del(AzureTenantIDParam)
-		redactedParams.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+		redactedParams.Add(uris.AuthParam, uris.AuthParamImplicit)
 
 		kmsEnv := &cloud.TestKMSEnv{
 			Settings:         azureKMSTestSettings,

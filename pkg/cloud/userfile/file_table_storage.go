@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile/filetable"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -44,7 +45,7 @@ const (
 func parseUserfileURL(
 	args cloud.ExternalStorageURIContext, uri *url.URL,
 ) (cloudpb.ExternalStorage, error) {
-	userfileURL := cloud.ConsumeURL{URL: uri}
+	userfileURL := uris.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	qualifiedTableName := uri.Host
 	if args.CurrentUser.Undefined() {
@@ -246,7 +247,7 @@ func (f *fileTableStorage) Writer(ctx context.Context, basename string) (io.Writ
 func (f *fileTableStorage) List(
 	ctx context.Context, prefix, delim string, fn cloud.ListingFn,
 ) error {
-	dest := cloud.JoinPathPreservingTrailingSlash(f.prefix, prefix)
+	dest := uris.JoinPathPreservingTrailingSlash(f.prefix, prefix)
 
 	res, err := f.fs.ListFiles(ctx, dest)
 	if err != nil {

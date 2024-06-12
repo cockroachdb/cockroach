@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloud
+package uris
 
 import (
 	"net/url"
@@ -34,6 +34,11 @@ const (
 
 	redactionMarker = "redacted"
 )
+
+// redactedQueryParams is the set of query parameter names registered by the
+// external storage providers that should be redacted from external storage URIs
+// whenever they are displayed to a user.
+var redactedQueryParams = map[string]struct{}{}
 
 // GetPrefixBeforeWildcard gets the prefix of a path that does not contain glob-
 // style matchers, up to the last path segment before the first one which has a
@@ -199,4 +204,10 @@ func (u *ConsumeURL) RemainingQueryParams() (res []string) {
 		res = append(res, p)
 	}
 	return
+}
+
+func RegisterRedactedParams(params map[string]struct{}) {
+	for param := range params {
+		redactedQueryParams[param] = struct{}{}
+	}
 }
