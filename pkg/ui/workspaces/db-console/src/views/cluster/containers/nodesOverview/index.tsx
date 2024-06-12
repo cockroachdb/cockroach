@@ -427,7 +427,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     // Remove "Nodes Count" column If nodes are not partitioned by regions,
     if (regionsCount === 1) {
       columns = columns.filter(
-        (column: NodeStatusRow) => column.key !== "nodesCount",
+        column => column.key !== "nodesCount",
       );
       dataSource = head(dataSource).children;
     }

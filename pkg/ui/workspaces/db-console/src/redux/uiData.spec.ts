@@ -328,12 +328,16 @@ describe("UIData reducer", function () {
     const uiObj2 = 1234;
 
     const saveUIData = function (...values: uidata.KeyValue[]): Promise<void> {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
       return uidata.saveUIData.apply(this, values)(dispatch, () => {
         return { uiData: state };
       });
     };
 
     const loadUIData = function (...keys: string[]): Promise<void> {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
       return uidata.loadUIData.apply(this, keys)(dispatch, () => {
         return { uiData: state };
       });

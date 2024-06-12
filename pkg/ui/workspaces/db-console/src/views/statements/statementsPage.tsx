@@ -35,7 +35,6 @@ import {
 } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState, AppDispatch } from "src/redux/state";
-import { StatementsResponseMessage } from "src/util/api";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import {
   createStatementDiagnosticsAlertLocalSetting,
@@ -85,7 +84,7 @@ export const selectDatabases = createSelector(
 // statistics were reset.
 export const selectLastReset = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
-  (state: CachedDataReducerState<StatementsResponseMessage>) => {
+  (state) => {
     if (!state?.data) {
       return "unknown";
     }
@@ -227,7 +226,8 @@ export default withRouter(
     StateProps,
     DispatchProps,
     RouteComponentProps,
-    StatementsPageRootProps
+    StatementsPageRootProps,
+    AdminUIState
   >(
     (state: AdminUIState, props: RouteComponentProps) => ({
       fingerprintsPageProps: {

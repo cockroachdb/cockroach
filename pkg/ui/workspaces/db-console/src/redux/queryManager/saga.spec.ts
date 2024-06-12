@@ -88,6 +88,8 @@ describe("Query Management Saga", function () {
       });
       it("correctly records error (and does not retry).", function () {
         return expectSaga(queryManagerSaga)
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
           .withReducer(queryManagerReducer)
           .dispatch(refresh(testQueryError))
           .silentRun()
@@ -180,6 +182,7 @@ describe("Query Management Saga", function () {
           },
         };
         return expectSaga(queryManagerSaga)
+          // @ts-ignore
           .withReducer(queryManagerReducer)
           .dispatch(refresh(neverResolveQuery))
           .dispatch(refresh(testQueryCounter))

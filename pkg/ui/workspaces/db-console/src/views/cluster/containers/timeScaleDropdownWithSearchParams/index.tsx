@@ -124,12 +124,21 @@ const scaleSelector = createSelector(
   tw => tw?.scale,
 );
 
+type MapStateToProps = {
+  currentScale: TimeScale
+};
+
+type MapDispatchToProps = {
+  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>
+};
+
 export default connect<
-  { currentScale: TimeScale },
-  { setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale> },
-  Partial<TimeScaleDropdownProps>
+  MapStateToProps,
+  MapDispatchToProps,
+  Partial<TimeScaleDropdownProps>,
+  AdminUIState
 >(
-  (state: AdminUIState) => ({
+  (state: AdminUIState): MapStateToProps => ({
     currentScale: scaleSelector(state),
   }),
   {

@@ -41,6 +41,9 @@ export function renderWithProviders(
       hover: hoverReducer,
       localSettings: localSettingsReducer,
       metrics: metricsReducer,
+      // TODO (koorosh): cannot properly cast Query Manager Action types to AnyAction.
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
       queryManager: queryManagerReducer,
       router: routerReducer,
       timeScale: timeScaleReducer,

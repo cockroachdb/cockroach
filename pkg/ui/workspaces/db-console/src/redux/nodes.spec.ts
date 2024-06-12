@@ -8,7 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createHashHistory } from "history";
+import { createHashHistory, createMemoryHistory } from "history";
+import merge from "lodash/merge";
 
 import { MetricConstants, INodeStatus } from "src/util/proto";
 import * as protos from "src/js/protos";
@@ -22,7 +23,7 @@ import {
   numNodesByVersionsTagSelector,
 } from "./nodes";
 import { nodesReducerObj, livenessReducerObj } from "./apiReducers";
-import { createAdminUIStore } from "./state";
+import { AdminUIState, createAdminUIStore } from "./state";
 
 function makeNodesState(
   ...addresses: { id: number; address: string; status?: LivenessStatus }[]
@@ -230,8 +231,9 @@ describe("selectCommissionedNodeStatuses", function () {
 
   function makeStateForLiveness(livenessStatuses: {
     [id: string]: LivenessStatus;
-  }) {
-    return {
+  }): AdminUIState {
+    const store = createAdminUIStore(createMemoryHistory());
+    return merge<AdminUIState, RecursivePartial<AdminUIState>>(store.getState(), {
       cachedData: {
         nodes: {
           data: nodeStatuses,
@@ -248,7 +250,7 @@ describe("selectCommissionedNodeStatuses", function () {
           unauthorized: false,
         },
       },
-    };
+    })
   }
 
   it("selects all nodes when liveness status missing", function () {

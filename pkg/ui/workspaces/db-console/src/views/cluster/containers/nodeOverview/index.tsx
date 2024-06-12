@@ -35,7 +35,6 @@ import {
   SummaryLabel,
   SummaryValue,
 } from "src/views/shared/components/summaryBar";
-import { TooltipProps } from "src/components/tooltip/tooltip";
 
 import "./nodeOverview.styl";
 
@@ -50,6 +49,7 @@ import {
   NodeMaximumCapacityTooltip,
   MVCCRangeKeyBytesTooltip,
   MVCCRangeValueBytesTooltip,
+  CellTooltipProps,
 } from "./tooltips";
 
 /**
@@ -62,7 +62,7 @@ function TableRow(props: {
   data: INodeStatus;
   title: string;
   valueFn: (s: StatusMetrics) => React.ReactNode;
-  CellTooltip?: React.FC<TooltipProps>;
+  CellTooltip?: React.FC<CellTooltipProps>;
   nodeName?: string;
 }) {
   const { data, title, valueFn, CellTooltip } = props;

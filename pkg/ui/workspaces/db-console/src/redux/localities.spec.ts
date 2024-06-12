@@ -8,13 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import merge from "lodash/merge";
+import { createMemoryHistory } from "history";
+
+import { AdminUIState, createAdminUIStore } from "src/redux/state";
+
 import {
   selectLocalityTree,
   LocalityTier,
   selectNodeLocalities,
 } from "./localities";
 
-function makeStateWithLocalities(localities: LocalityTier[][]) {
+function makeStateWithLocalities(localities: LocalityTier[][]): AdminUIState {
   const nodes = localities.map((locality, i) => {
     return {
       desc: {
@@ -23,8 +28,8 @@ function makeStateWithLocalities(localities: LocalityTier[][]) {
       },
     };
   });
-
-  return {
+  const store = createAdminUIStore(createMemoryHistory());
+  return merge<AdminUIState, RecursivePartial<AdminUIState>>(store.getState(), {
     cachedData: {
       nodes: {
         data: nodes,
@@ -34,7 +39,7 @@ function makeStateWithLocalities(localities: LocalityTier[][]) {
       },
       liveness: {},
     },
-  };
+  });
 }
 
 describe("selectLocalityTree", function () {

@@ -64,11 +64,11 @@ const tooltipsStack = (components: object) => (
   </>
 );
 
-const statusTooltipsStack = (statusNames: object, descriptionGetter: any) => (
+const statusTooltipsStack = (statusNames: Record<string, unknown>, descriptionGetter: any) => (
   <>
     {Object.keys(statusNames)
       .filter(status => isNaN(Number(status)))
-      .map((status: keyof typeof statusNames, idx) => (
+      .map((status, idx) => (
         <Tooltip
           key={idx}
           title={descriptionGetter(statusNames[status])}

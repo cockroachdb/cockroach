@@ -11,7 +11,7 @@
 import React, { useEffect, useState } from "react";
 import Helmet from "react-helmet";
 import { useParams } from "react-router-dom";
-import Select from "react-select";
+import Select, { Option } from "react-select";
 import { Spinner } from "@cockroachlabs/ui-components";
 
 import ErrorCircle from "assets/error-circle.svg";
@@ -37,6 +37,11 @@ export type ConnectionInfo = {
   Port: number;
   Expiry: Date;
 };
+
+type OptionValue = {
+  label: string;
+  value: string;
+}
 
 export const JwtAuthToken = (props: {
   loading: boolean;
@@ -66,7 +71,7 @@ export const JwtAuthToken = (props: {
       setUsername(info.Usernames[0]);
     }
 
-    const usernameOptions = info.Usernames.map(u => {
+    const usernameOptions: OptionValue[] = info.Usernames.map(u => {
       return { label: u, value: u };
     });
 
@@ -85,7 +90,7 @@ export const JwtAuthToken = (props: {
             clearable={false}
             value={username}
             options={usernameOptions}
-            onChange={(option: { value: string }) => setUsername(option.value)}
+            onChange={(option: Option<string>) => setUsername(option.value)}
           />
         </div>
         <TextInput
