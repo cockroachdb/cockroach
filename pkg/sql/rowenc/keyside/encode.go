@@ -144,15 +144,15 @@ func Encode(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 			return encoding.EncodeBytesAscending(b, data), nil
 		}
 		return encoding.EncodeBytesDescending(b, data), nil
-	case *tree.DTuple:
-		for _, datum := range t.D {
-			var err error
-			b, err = Encode(b, datum, dir)
-			if err != nil {
-				return nil, err
-			}
-		}
-		return b, nil
+	//case *tree.DTuple:
+	//	for _, datum := range t.D {
+	//		var err error
+	//		b, err = Encode(b, datum, dir)
+	//		if err != nil {
+	//			return nil, err
+	//		}
+	//	}
+	//	return b, nil
 	case *tree.DArray:
 		return encodeArrayKey(b, t, dir)
 	case *tree.DCollatedString:
