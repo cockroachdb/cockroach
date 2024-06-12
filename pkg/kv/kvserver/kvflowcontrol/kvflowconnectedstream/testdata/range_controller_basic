@@ -53,7 +53,9 @@ range_id=1 pri=NormalPri size=16MiB
 # should queue on s2 and s3: the match does not increase for s2 or s3. 
 #
 # TODO(kvoli): Should this force-flush? There is a now a send queue on s2 and
-# s3, meaning a quorum is delayed.
+# s3, meaning a quorum is delayed. Need to implement force flush. Already have
+# a no quorum with no queue, we should just send the entries to s2 instead of
+# building a queue.
 send
 range_id=1 pri=NormalPri size=1MiB
 ----
