@@ -47,10 +47,10 @@ func TestEventDescriptor(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
 	sqlDB.Exec(t, `
 CREATE TABLE foo (
-  a INT, 
-  b STRING, 
+  a INT,
+  b STRING,
   c STRING,
-  d STRING AS (concat(b, c)) VIRTUAL, 
+  d STRING AS (concat(b, c)) VIRTUAL,
   e status,
   PRIMARY KEY (b, a),
   FAMILY main (a, b, e),
@@ -153,10 +153,10 @@ func TestEventDecoder(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
 	sqlDB.Exec(t, `
 CREATE TABLE foo (
-  a INT, 
-  b STRING, 
+  a INT,
+  b STRING,
   c STRING,
-  d STRING AS (concat(b, c)) VIRTUAL, 
+  d STRING AS (concat(b, c)) VIRTUAL,
   e status DEFAULT 'inactive',
   PRIMARY KEY (b, a),
   FAMILY main (a, b, e),
@@ -682,6 +682,7 @@ func expectResultColumns(
 				TableID:        desc.GetID(),
 				PGAttributeNum: uint32(col.GetPGAttributeNum()),
 			},
+			Computed:  col.IsComputed(),
 			ord:       colNamesSet[colName],
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
 		})
@@ -780,8 +781,8 @@ func BenchmarkEventDecoder(b *testing.B) {
 	sqlDB.Exec(b, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 	sqlDB.Exec(b, `
 CREATE TABLE foo (
-  a INT, 
-  b STRING, 
+  a INT,
+  b STRING,
   c STRING,
   PRIMARY KEY (b, a)
 )`)
