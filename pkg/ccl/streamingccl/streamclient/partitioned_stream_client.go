@@ -63,8 +63,8 @@ func NewPartitionedStreamClient(
 
 var _ Client = &partitionedStreamClient{}
 
-// Create implements Client interface.
-func (p *partitionedStreamClient) Create(
+// CreateForTenant implements Client interface.
+func (p *partitionedStreamClient) CreateForTenant(
 	ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
@@ -138,8 +138,8 @@ func (p *partitionedStreamClient) postgresURL(servingAddr string) (url.URL, erro
 	return res, nil
 }
 
-// Plan implements Client interface.
-func (p *partitionedStreamClient) Plan(
+// PlanPhysicalReplication implements Client interface.
+func (p *partitionedStreamClient) PlanPhysicalReplication(
 	ctx context.Context, streamID streampb.StreamID,
 ) (Topology, error) {
 	var spec streampb.ReplicationStreamSpec
@@ -275,7 +275,7 @@ func (p *partitionedStreamClient) Complete(
 	return nil
 }
 
-func (p *partitionedStreamClient) PartitionSpans(
+func (p *partitionedStreamClient) PlanLogicalReplication(
 	ctx context.Context, spans []roachpb.Span,
 ) (Topology, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.PartitionSpans")

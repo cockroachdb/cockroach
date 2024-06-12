@@ -43,8 +43,8 @@ func (sc testStreamClient) Dial(_ context.Context) error {
 	return nil
 }
 
-// Create implements the Client interface.
-func (sc testStreamClient) Create(
+// CreateForTenant implements the Client interface.
+func (sc testStreamClient) CreateForTenant(
 	_ context.Context, _ roachpb.TenantName, _ streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
 	return streampb.ReplicationProducerSpec{
@@ -53,8 +53,10 @@ func (sc testStreamClient) Create(
 	}, nil
 }
 
-// Plan implements the Client interface.
-func (sc testStreamClient) Plan(_ context.Context, _ streampb.StreamID) (Topology, error) {
+// PlanForPhysicalReplication implements the Client interface.
+func (sc testStreamClient) PlanPhysicalReplication(
+	_ context.Context, _ streampb.StreamID,
+) (Topology, error) {
 	return Topology{
 		Partitions: []PartitionInfo{
 			{
@@ -255,7 +257,7 @@ func ExampleClient() {
 		_ = client.Close(ctx)
 	}()
 
-	prs, err := client.Create(ctx, "system", streampb.ReplicationProducerRequest{})
+	prs, err := client.CreateForTenant(ctx, "system", streampb.ReplicationProducerRequest{})
 	if err != nil {
 		panic(err)
 	}
@@ -286,7 +288,7 @@ func ExampleClient() {
 	grp.GoCtx(func(ctx context.Context) error {
 		defer close(done)
 
-		topology, err := client.Plan(ctx, id)
+		topology, err := client.PlanPhysicalReplication(ctx, id)
 		if err != nil {
 			panic(err)
 		}
