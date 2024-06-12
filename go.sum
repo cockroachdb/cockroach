@@ -509,8 +509,8 @@ github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b h1:r6VH0faHjZe
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
 github.com/cockroachdb/metamorphic v0.0.0-20231108215700-4ba948b56895 h1:XANOgPYtvELQ/h4IrmPAohXqe2pWA8Bwhejr3VQoZsA=
 github.com/cockroachdb/metamorphic v0.0.0-20231108215700-4ba948b56895/go.mod h1:aPd7gM9ov9M8v32Yy5NJrDyOcD8z642dqs+F0CeNXfA=
-github.com/cockroachdb/pebble v0.0.0-20240611174702-1b67ad5a51f4 h1:FxUinpPnMfpJAH82VX6Z5REKzLtll7Pk0pItFOjWgPk=
-github.com/cockroachdb/pebble v0.0.0-20240611174702-1b67ad5a51f4/go.mod h1:EgMWYC+g41AMpa5tK8SngX+WmrA3rKl3jZu02F3AwtU=
+github.com/cockroachdb/pebble v0.0.0-20240612212459-29f4bd633d14 h1:3WnHLyEjGRDaJ3pXonnKce3T1lZcF1dueNSQebndc3Q=
+github.com/cockroachdb/pebble v0.0.0-20240612212459-29f4bd633d14/go.mod h1:BHSbiFbRxKTBZqH5f0kBf96YcV02fICfUnad2CufWOo=
 github.com/cockroachdb/redact v1.1.3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/redact v1.1.5 h1:u1PMllDkdFfPWaNGMyLD1+so+aq3uUItthCFqzwPJ30=
 github.com/cockroachdb/redact v1.1.5/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
@@ -518,8 +518,8 @@ github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd h1:KFOt5I9
 github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd/go.mod h1:AN708GD2FFeLgUHMbD58YPe4Nw8GG//3rwgyG4L9gR0=
 github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b h1:JbkTu68NpiczWOaciC2QSy33RFEnnq6H2pz7viQp0rc=
 github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b/go.mod h1:oapRqABg5KA/TaAikQH53fpP5nvCe9sftYmYV/F/yVE=
-github.com/cockroachdb/swiss v0.0.0-20240605133600-232b93a2b829 h1:sU50KSd7d+GRu+5r5K3WPXRqmmSGerLZ6p3kFosYpFA=
-github.com/cockroachdb/swiss v0.0.0-20240605133600-232b93a2b829/go.mod h1:yBRu/cnL4ks9bgy4vAASdjIW+/xMlFwuHKqtmh3GZQg=
+github.com/cockroachdb/swiss v0.0.0-20240612210725-f4de07ae6964 h1:Ew0znI2JatzKy52N1iS5muUsHkf2UJuhocH7uFW7jjs=
+github.com/cockroachdb/swiss v0.0.0-20240612210725-f4de07ae6964/go.mod h1:yBRu/cnL4ks9bgy4vAASdjIW+/xMlFwuHKqtmh3GZQg=
 github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847 h1:c7yLgqcm/3c9lYtpWeVD9NYqA9cKsKHdpQM62PHtTUM=
 github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847/go.mod h1:zq6QwlOf5SlnkVbMSr5EoBv3636FWnp+qbPhuoO21uA=
 github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 h1:zuQyyAKVxetITBuuhv3BI9cMrmStnpT18zmgmTxunpo=
