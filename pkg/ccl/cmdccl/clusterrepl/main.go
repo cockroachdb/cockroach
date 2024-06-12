@@ -97,7 +97,7 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 		return err
 	}
 
-	replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(*tenant), streampb.ReplicationProducerRequest{})
+	replicationProducerSpec, err := client.CreateForTenant(ctx, roachpb.TenantName(*tenant), streampb.ReplicationProducerRequest{})
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 	}()
 
 	// We ignore most of this plan. But, it gives us the tenant ID.
-	plan, err := client.Plan(ctx, replicationProducerSpec.StreamID)
+	plan, err := client.PlanPhysicalReplication(ctx, replicationProducerSpec.StreamID)
 	if err != nil {
 		return err
 	}

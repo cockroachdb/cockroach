@@ -59,10 +59,10 @@ type Dialer interface {
 type Client interface {
 	Dialer
 
-	// Create initializes a stream with the source, potentially reserving any
+	// CreateForTenant initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
-	Create(ctx context.Context, tenant roachpb.TenantName, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
+	CreateForTenant(ctx context.Context, tenant roachpb.TenantName, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
 
 	// Destroy informs the source of the stream that it may terminate production
 	// and release resources such as protected timestamps.
@@ -78,9 +78,9 @@ type Client interface {
 		consumed hlc.Timestamp,
 	) (streampb.StreamReplicationStatus, error)
 
-	// Plan returns a Topology for this stream.
+	// PlanPhysicalReplication returns a Topology for this stream.
 	// TODO(dt): separate target argument from address argument.
-	Plan(ctx context.Context, streamID streampb.StreamID) (Topology, error)
+	PlanPhysicalReplication(ctx context.Context, streamID streampb.StreamID) (Topology, error)
 
 	// Subscribe opens and returns a subscription for the specified partition from
 	// the specified remote address. This is used by each consumer processor to
@@ -118,8 +118,8 @@ type Client interface {
 type LogicalReplicationClient interface {
 	Client
 
-	PartitionSpans([]roachpb.Span) (Topology, error)
-	CreateForTables(ctx context.Context, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
+	PlanLogicalReplication(ctx context.Context, spans []roachpb.Span) (Topology, error)
+	CreateForTables(ctx context.Context, req *streampb.ReplicationProducerRequest) (*streampb.ReplicationProducerSpec, error)
 }
 
 type subscribeConfig struct {
