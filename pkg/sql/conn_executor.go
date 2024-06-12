@@ -834,8 +834,8 @@ func (s *Server) SetupConn(
 		&s.Metrics,
 		s.sqlStats.GetApplicationStats(sd.ApplicationName, false /* internal */),
 		sessionID,
-		nil, /* postSetupFn */
-	)
+		false, /* fromOuterTxn */
+		nil)
 	return ConnectionHandler{ex}, nil
 }
 
@@ -1020,6 +1020,7 @@ func (s *Server) newConnExecutor(
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
 	sessionID clusterunique.ID,
+	fromOuterTxn bool,
 	// postSetupFn is to override certain field of a conn executor.
 	// It is set when conn executor is init under an internal executor
 	// with a not-nil txn.
@@ -1143,7 +1144,7 @@ func (s *Server) newConnExecutor(
 		ex.server.insights.Writer(ex.sessionData().Internal),
 		ex.phaseTimes,
 		s.sqlStats.GetCounters(),
-		ex.extraTxnState.fromOuterTxn,
+		fromOuterTxn,
 		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
@@ -1153,6 +1154,7 @@ func (s *Server) newConnExecutor(
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
 
+	ex.extraTxnState.fromOuterTxn = fromOuterTxn
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts:    make(map[string]*PreparedStatement),
 		prepStmtsLRU: make(map[string]struct{ prev, next string }),
