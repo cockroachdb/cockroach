@@ -1244,7 +1244,18 @@ type Metrics struct {
 	// distinguished in the pebble logs.
 	WriteStallCount    int64
 	WriteStallDuration time.Duration
-	DiskWriteStats     []vfs.DiskWriteStatsAggregate
+
+	// BlockLoadConcurrencyLimit is the current limit on the number of concurrent
+	// sstable block reads.
+	BlockLoadConcurrencyLimit int64
+	// BlockLoadsInProgress is the (instantaneous) number of sstable blocks that
+	// are being read from disk.
+	BlockLoadsInProgress int64
+	// BlockLoadsQueued is the cumulative total number of sstable block reads
+	// that had to wait on the BlockLoadConcurrencyLimit.
+	BlockLoadsQueued int64
+
+	DiskWriteStats []vfs.DiskWriteStatsAggregate
 }
 
 // AggregatedIteratorStats holds cumulative stats, collected and summed over all
