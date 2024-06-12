@@ -1132,3 +1132,41 @@ func Test_makeFakeNodeStatuses(t *testing.T) {
 		})
 	}
 }
+
+// TestStorageBlockLoadConcurrencyLimit verifies that the server correctly
+// distributes the limit set by the "storage.block_load.node_max_active"
+// cluster setting between the stores.
+func TestStorageBlockLoadConcurrencyLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, n := range []int{1, 2, 5} {
+		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
+			storeSpecs := make([]base.StoreSpec, n)
+			for i := range storeSpecs {
+				storeSpecs[i] = base.DefaultTestStoreSpec
+			}
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{StoreSpecs: storeSpecs})
+			defer s.Stopper().Stop(context.Background())
+
+			check := func(expected int64) error {
+				return s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+					metrics := s.TODOEngine().GetMetrics()
+					if metrics.BlockLoadConcurrencyLimit != expected {
+						return fmt.Errorf("expected %d, got %d", expected, metrics.BlockLoadConcurrencyLimit)
+					}
+					return nil
+				})
+			}
+
+			require.NoError(t, check((storage.BlockLoadConcurrencyLimit.Default()+int64(n)-1)/int64(n)))
+
+			db := s.SQLConn(t)
+			_, err := db.Exec("SET CLUSTER SETTING storage.block_load.node_max_active = 13")
+			require.NoError(t, err)
+			testutils.SucceedsSoon(t, func() error {
+				return check((13 + int64(n) - 1) / int64(n))
+			})
+		})
+	}
+}
