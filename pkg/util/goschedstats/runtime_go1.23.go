@@ -17,9 +17,11 @@
 // The rest was copied verbatim from `runtime_go1.20_21_22.go`.
 //
 // [1] https://github.com/golang/go/commit/552faa8927a23fd5967435295c14af1741ac3653
-
-//go:build gc && go1.23 && !go1.24
-// +build gc,go1.23,!go1.24
+//
+// The untested_go_version flag enables building on any go version, intended to
+// ease testing against Go at tip.
+//go:build (gc && go1.23 && !go1.24) || untested_go_version
+// +build gc,go1.23,!go1.24 untested_go_version
 
 package goschedstats
 
