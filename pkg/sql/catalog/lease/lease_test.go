@@ -3645,6 +3645,7 @@ func TestLeaseDescriptorRangeFeedFailure(t *testing.T) {
 	// Disable lease renewals so that the TTL time is shorter
 	// for rangefeed problems
 	lease.LeaseMonitorRangeFeedTimeout.Override(ctx, &settings.SV, 30*time.Second)
+	lease.LeaseMonitorRangeFeedResetTime.Override(ctx, &settings.SV, 10*time.Second)
 	// Expire leases to make this test run faster.
 	lease.LeaseDuration.Override(ctx, &settings.SV, 0)
 	srv := serverutils.StartCluster(t, 3, base.TestClusterArgs{
