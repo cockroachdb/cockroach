@@ -21,11 +21,11 @@ import (
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // import External Connection providers.
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register ExternalStorage providers.
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -89,7 +89,7 @@ func TestGCPKMSExternalConnection(t *testing.T) {
 	testID := cloudtestutils.NewTestID()
 	// Create an external connection where we will write the backup.
 	backupURI := fmt.Sprintf("gs://%s/backup-%d?%s=%s", bucket, testID,
-		cloud.AuthParam, cloud.AuthParamImplicit)
+		uris.AuthParam, uris.AuthParamImplicit)
 	backupExternalConnectionName := "backup"
 	createExternalConnection(backupExternalConnectionName, backupURI)
 
@@ -100,7 +100,7 @@ func TestGCPKMSExternalConnection(t *testing.T) {
 
 		// Set the AUTH to implicit.
 		params := make(url.Values)
-		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+		params.Add(uris.AuthParam, uris.AuthParamImplicit)
 
 		kmsURI := fmt.Sprintf("gcp-kms:///%s?%s", keyID, params.Encode())
 		createExternalConnection("auth-implicit-kms", kmsURI)
@@ -118,7 +118,7 @@ func TestGCPKMSExternalConnection(t *testing.T) {
 		q.Set(gcp.CredentialsParam, url.QueryEscape(encoded))
 
 		// Set AUTH to specified.
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 
 		kmsURI := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
 		createExternalConnection("auth-specified-kms", kmsURI)
@@ -143,7 +143,7 @@ func TestGCPKMSExternalConnection(t *testing.T) {
 		q.Set(gcp.BearerTokenParam, token.AccessToken)
 
 		// Set AUTH to specified.
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 
 		kmsURI := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
 		createExternalConnection("auth-specified-bearer-token", kmsURI)
@@ -228,17 +228,17 @@ func TestGCPKMSExternalConnectionAssumeRole(t *testing.T) {
 
 	// Create an external connection where we will write the backup.
 	backupURI := fmt.Sprintf("gs://%s/backup-%d?%s=%s", bucket, testID,
-		cloud.AuthParam, cloud.AuthParamImplicit)
+		uris.AuthParam, uris.AuthParamImplicit)
 	backupExternalConnectionName := "backup"
 	createExternalConnection(backupExternalConnectionName, backupURI)
 
 	t.Run("auth-assume-role-implicit", func(t *testing.T) {
-		disallowedKMSURI := fmt.Sprintf("gcp-kms:///%s?%s=%s", keyID, cloud.AuthParam, cloud.AuthParamImplicit)
+		disallowedKMSURI := fmt.Sprintf("gcp-kms:///%s?%s=%s", keyID, uris.AuthParam, uris.AuthParamImplicit)
 		disallowedECName := "auth-assume-role-implicit-disallowed"
 		disallowedCreateExternalConnection(disallowedECName, disallowedKMSURI)
 
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamImplicit)
+		q.Set(uris.AuthParam, uris.AuthParamImplicit)
 		q.Set(gcp.AssumeRoleParam, assumedAccount)
 		uri := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
 		createExternalConnection("auth-assume-role-implicit", uri)
@@ -246,13 +246,13 @@ func TestGCPKMSExternalConnectionAssumeRole(t *testing.T) {
 	})
 
 	t.Run("auth-assume-role-specified", func(t *testing.T) {
-		disallowedKMSURI := fmt.Sprintf("gcp-kms:///%s?%s=%s&%s=%s", keyID, cloud.AuthParam,
-			cloud.AuthParamSpecified, gcp.CredentialsParam, url.QueryEscape(encodedCredentials))
+		disallowedKMSURI := fmt.Sprintf("gcp-kms:///%s?%s=%s&%s=%s", keyID, uris.AuthParam,
+			uris.AuthParamSpecified, gcp.CredentialsParam, url.QueryEscape(encodedCredentials))
 		disallowedECName := "auth-assume-role-specified-disallowed"
 		disallowedCreateExternalConnection(disallowedECName, disallowedKMSURI)
 
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 		q.Set(gcp.AssumeRoleParam, assumedAccount)
 		q.Set(gcp.CredentialsParam, encodedCredentials)
 		uri := fmt.Sprintf("gcp-kms:///%s?%s", keyID, q.Encode())
@@ -268,7 +268,7 @@ func TestGCPKMSExternalConnectionAssumeRole(t *testing.T) {
 		roleChain := strings.Split(roleChainStr, ",")
 
 		q := make(url.Values)
-		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+		q.Set(uris.AuthParam, uris.AuthParamSpecified)
 		q.Set(gcp.CredentialsParam, encodedCredentials)
 
 		// First verify that none of the individual roles in the chain can be used
@@ -350,8 +350,8 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 			limitedBucket,
 			ecName,
 			testID,
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
+			uris.AuthParam,
+			uris.AuthParamSpecified,
 			gcp.AssumeRoleParam,
 			assumedAccount, gcp.CredentialsParam,
 			url.QueryEscape(encoded),
@@ -367,15 +367,15 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 		ecName := "ec-assume-role-implicit"
 		disallowedECName := "ec-assume-role-implicit-disallowed"
 		disallowedURI := fmt.Sprintf("gs://%s/%s-%d?%s=%s", limitedBucket, disallowedECName, testID,
-			cloud.AuthParam, cloud.AuthParamImplicit)
+			uris.AuthParam, uris.AuthParamImplicit)
 		disallowedCreateExternalConnection(t, disallowedECName, disallowedURI)
 
 		uri := fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s",
 			limitedBucket,
 			ecName,
 			testID,
-			cloud.AuthParam,
-			cloud.AuthParamImplicit,
+			uris.AuthParam,
+			uris.AuthParamImplicit,
 			gcp.AssumeRoleParam,
 			assumedAccount,
 		)
@@ -401,12 +401,12 @@ func TestGCPAssumeRoleExternalConnection(t *testing.T) {
 			auth        string
 			credentials string
 		}{
-			{cloud.AuthParamSpecified, encoded},
-			{cloud.AuthParamImplicit, ""},
+			{uris.AuthParamSpecified, encoded},
+			{uris.AuthParamImplicit, ""},
 		} {
 			t.Run(tc.auth, func(t *testing.T) {
 				q := make(url.Values)
-				q.Set(cloud.AuthParam, tc.auth)
+				q.Set(uris.AuthParam, tc.auth)
 				q.Set(gcp.CredentialsParam, tc.credentials)
 
 				// First verify that none of the individual roles in the chain can be used
@@ -479,8 +479,8 @@ func TestGCPExternalConnection(t *testing.T) {
 		}
 
 		ecName := "ec-auth-implicit"
-		backupURI := fmt.Sprintf("gs://%s/%s-%d?%s=%s", bucket, ecName, testID, cloud.AuthParam,
-			cloud.AuthParamImplicit)
+		backupURI := fmt.Sprintf("gs://%s/%s-%d?%s=%s", bucket, ecName, testID, uris.AuthParam,
+			uris.AuthParamImplicit)
 		createExternalConnection(ecName, backupURI)
 		backupAndRestoreFromExternalConnection(ecName)
 	})

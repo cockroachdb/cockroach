@@ -17,6 +17,7 @@ go_library(
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/cloud/externalconn/utils",
+        "//pkg/cloud/uris",
         "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",

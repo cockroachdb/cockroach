@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -61,7 +62,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			url.QueryEscape(encoded),
 		)
 		if specified {
-			uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
+			uri += fmt.Sprintf("&%s=%s", uris.AuthParam, uris.AuthParamSpecified)
 		}
 		cloudtestutils.CheckExportStore(
 			t,
@@ -76,8 +77,8 @@ func TestPutGoogleCloud(t *testing.T) {
 			"backup-test-specified",
 			testID,
 			"listing-test",
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
+			uris.AuthParam,
+			uris.AuthParamSpecified,
 			CredentialsParam,
 			url.QueryEscape(encoded),
 		), username.RootUserName(),
@@ -93,7 +94,7 @@ func TestPutGoogleCloud(t *testing.T) {
 		cloudtestutils.CheckExportStore(
 			t,
 			fmt.Sprintf("gs://%s/%s-%d?%s=%s", bucket, "backup-test-implicit", testID,
-				cloud.AuthParam, cloud.AuthParamImplicit),
+				uris.AuthParam, uris.AuthParamImplicit),
 			false,
 			user,
 			nil, /* db */
@@ -103,8 +104,8 @@ func TestPutGoogleCloud(t *testing.T) {
 			"backup-test-implicit",
 			testID,
 			"listing-test",
-			cloud.AuthParam,
-			cloud.AuthParamImplicit,
+			uris.AuthParam,
+			uris.AuthParamImplicit,
 		), username.RootUserName(),
 			nil, /* db */
 			testSettings,
@@ -132,7 +133,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			BearerTokenParam,
 			token.AccessToken,
 		)
-		uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
+		uri += fmt.Sprintf("&%s=%s", uris.AuthParam, uris.AuthParamSpecified)
 		cloudtestutils.CheckExportStore(
 			t,
 			uri,
@@ -145,8 +146,8 @@ func TestPutGoogleCloud(t *testing.T) {
 			"backup-test-specified",
 			testID,
 			"listing-test",
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
+			uris.AuthParam,
+			uris.AuthParamSpecified,
 			BearerTokenParam,
 			token.AccessToken,
 		), username.RootUserName(),
@@ -192,8 +193,8 @@ func TestGCSAssumeRole(t *testing.T) {
 				limitedBucket,
 				"backup-test-assume-role",
 				testID,
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
+				uris.AuthParam,
+				uris.AuthParamSpecified,
 				AssumeRoleParam,
 				assumedAccount, CredentialsParam,
 				url.QueryEscape(encoded),
@@ -206,8 +207,8 @@ func TestGCSAssumeRole(t *testing.T) {
 			"backup-test-assume-role",
 			testID,
 			"listing-test",
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
+			uris.AuthParam,
+			uris.AuthParamSpecified,
 			AssumeRoleParam,
 			assumedAccount,
 			CredentialsParam,
@@ -226,13 +227,13 @@ func TestGCSAssumeRole(t *testing.T) {
 		// Verify that implicit permissions with the credentials do not give us
 		// access to the bucket.
 		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
-			cloud.AuthParam, cloud.AuthParamImplicit), user,
+			uris.AuthParam, uris.AuthParamImplicit), user,
 			nil, /* db */
 			testSettings,
 		)
 
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role", testID,
-			cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount), false, user,
+			uris.AuthParam, uris.AuthParamImplicit, AssumeRoleParam, assumedAccount), false, user,
 			nil, /* db */
 			testSettings,
 		)
@@ -241,8 +242,8 @@ func TestGCSAssumeRole(t *testing.T) {
 			"backup-test-assume-role",
 			testID,
 			"listing-test",
-			cloud.AuthParam,
-			cloud.AuthParamImplicit,
+			uris.AuthParam,
+			uris.AuthParamImplicit,
 			AssumeRoleParam,
 			assumedAccount,
 		), username.RootUserName(),
@@ -269,12 +270,12 @@ func TestGCSAssumeRole(t *testing.T) {
 			auth        string
 			credentials string
 		}{
-			{cloud.AuthParamSpecified, encoded},
-			{cloud.AuthParamImplicit, ""},
+			{uris.AuthParamSpecified, encoded},
+			{uris.AuthParamImplicit, ""},
 		} {
 			t.Run(tc.auth, func(t *testing.T) {
 				q := make(url.Values)
-				q.Set(cloud.AuthParam, tc.auth)
+				q.Set(uris.AuthParam, tc.auth)
 				q.Set(CredentialsParam, tc.credentials)
 
 				// First verify that none of the individual roles in the chain can be used

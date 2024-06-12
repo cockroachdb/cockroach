@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package cloud_test
+package uris_test
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -63,7 +64,7 @@ func TestSanitizeExternalStorageURI(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			actualOutput, err := cloud.SanitizeExternalStorageURI(tc.inputURI, tc.inputExtraParams)
+			actualOutput, err := uris.SanitizeExternalStorageURI(tc.inputURI, tc.inputExtraParams)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, actualOutput)
 		})

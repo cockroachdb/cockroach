@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1097,7 +1098,7 @@ func resolveOptionsForRestoreJobDescription(
 	}
 
 	for _, uri := range kmsURIs {
-		redactedURI, err := cloud.RedactKMSURI(uri)
+		redactedURI, err := uris.RedactKMSURI(uri)
 		if err != nil {
 			return tree.RestoreOptions{}, err
 		}

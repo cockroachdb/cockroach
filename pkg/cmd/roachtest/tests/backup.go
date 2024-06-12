@@ -24,9 +24,9 @@ import (
 	"strings"
 	"time"
 
-	cloudstorage "github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -897,7 +897,7 @@ func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
 	}
 
 	// Set AUTH to specified
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
+	q.Add(uris.AuthParam, uris.AuthParamSpecified)
 	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 
 	return correctURI, nil
@@ -926,7 +926,7 @@ func getAWSKMSAssumeRoleURI() (string, error) {
 	}
 
 	// Set AUTH to specified.
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
+	q.Add(uris.AuthParam, uris.AuthParamSpecified)
 	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 
 	return correctURI, nil
@@ -952,7 +952,7 @@ func getGCSKMSURI(keyIDEnvVariable string) (string, error) {
 	}
 
 	// Set AUTH to specified
-	q.Set(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
+	q.Set(uris.AuthParam, uris.AuthParamSpecified)
 	correctURI := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 
 	return correctURI, nil
@@ -983,7 +983,7 @@ func getGCSKMSAssumeRoleURI() (string, error) {
 	}
 
 	// Set AUTH to specified
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
+	q.Add(uris.AuthParam, uris.AuthParamSpecified)
 	correctURI := fmt.Sprintf("gs:///%s?%s", keyName, q.Encode())
 
 	return correctURI, nil
@@ -1009,7 +1009,7 @@ func getGCSBackupPath(dest string) (string, error) {
 	}
 
 	// Set AUTH to specified
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
+	q.Add(uris.AuthParam, uris.AuthParamSpecified)
 	uri := fmt.Sprintf("gs://"+backupTestingBucket+"/gcs/%s?%s", dest, q.Encode())
 
 	return uri, nil
@@ -1030,7 +1030,7 @@ func getAWSBackupPath(dest string) (string, error) {
 		}
 		q.Add(param, v)
 	}
-	q.Add(cloudstorage.AuthParam, cloudstorage.AuthParamSpecified)
+	q.Add(uris.AuthParam, uris.AuthParamSpecified)
 
 	return fmt.Sprintf("s3://"+backupTestingBucket+"/%s?%s", dest, q.Encode()), nil
 }

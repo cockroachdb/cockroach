@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -235,7 +236,7 @@ func importJobDescription(
 	stmt := *orig
 	stmt.Files = nil
 	for _, file := range files {
-		clean, err := cloud.SanitizeExternalStorageURI(file, nil /* extraParams */)
+		clean, err := uris.SanitizeExternalStorageURI(file, nil /* extraParams */)
 		if err != nil {
 			return "", err
 		}
@@ -442,7 +443,7 @@ func importPlanHook(
 					files = append(files, file)
 					continue
 				}
-				prefix := cloud.GetPrefixBeforeWildcard(uri.Path)
+				prefix := uris.GetPrefixBeforeWildcard(uri.Path)
 				if len(prefix) < len(uri.Path) {
 					pattern := uri.Path[len(prefix):]
 					uri.Path = prefix

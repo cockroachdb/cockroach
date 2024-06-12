@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/gcp"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -4310,7 +4311,7 @@ func getAWSKMSURI(t *testing.T, regionEnvVariable, keyIDEnvVariable string) (str
 	}
 
 	// Set AUTH to implicit
-	q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+	q.Set(uris.AuthParam, uris.AuthParamSpecified)
 	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 	incorrectURI := fmt.Sprintf("aws:///%s?%s", "gibberish", q.Encode())
 
@@ -4562,7 +4563,7 @@ func MakeTestKMS(_ context.Context, uri string, _ cloud.KMSEnv) (cloud.KMS, erro
 
 func constructMockKMSURIsWithKeyID(keyIDs []string) []string {
 	q := make(url.Values)
-	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	q.Add(uris.AuthParam, uris.AuthParamImplicit)
 	q.Add(amazon.KMSRegionParam, "blah")
 
 	var uris []string

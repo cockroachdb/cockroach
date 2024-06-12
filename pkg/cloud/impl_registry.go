@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -33,11 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 )
-
-// redactedQueryParams is the set of query parameter names registered by the
-// external storage providers that should be redacted from external storage URIs
-// whenever they are displayed to a user.
-var redactedQueryParams = map[string]struct{}{}
 
 // confParsers maps URI schemes to a ExternalStorageURIParser for that scheme.
 var confParsers = map[string]ExternalStorageURIParser{}
@@ -160,7 +156,7 @@ func registerExternalStorageProviderImpls(
 			earlyBootConfParsers[scheme] = provider.EarlyBootParseFn
 		}
 
-		RegisterRedactedParams(provider.RedactedParams)
+		uris.RegisterRedactedParams(provider.RedactedParams)
 	}
 
 	if _, ok := implementations[providerType]; ok {
@@ -611,11 +607,5 @@ func ReplaceProviderForTesting(
 		if oldEaryParser != nil {
 			earlyBootConfParsers[scheme] = oldEaryParser
 		}
-	}
-}
-
-func RegisterRedactedParams(params map[string]struct{}) {
-	for param := range params {
-		redactedQueryParams[param] = struct{}{}
 	}
 }
