@@ -655,6 +655,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionControl.storesFlowControl,
 		admissionControl.storesFlowControl,
 		racV2.admittedPiggybacker,
+		storesForRACv2,
 		raftTransportKnobs,
 	)
 	nodeRegistry.AddMetricStruct(raftTransport.Metrics())

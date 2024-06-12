@@ -728,6 +728,14 @@ func (s *Store) processRACv2RangeController(rangeID roachpb.RangeID) {
 	r.processRACv2RangeController()
 }
 
+func (s *Store) processRACv2PiggybackedAdmitted(rangeID roachpb.RangeID) bool {
+	r, ok := s.mu.replicasByRangeID.Load(rangeID)
+	if !ok {
+		return false
+	}
+	return r.processRACv2PiggybackedAdmitted()
+}
+
 // nodeIsLiveCallback is invoked when a node transitions from non-live to live.
 // Iterate through all replicas and find any which belong to ranges containing
 // the implicated node. Unquiesce if currently quiesced and the node's replica

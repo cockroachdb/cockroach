@@ -343,9 +343,11 @@ type RaftTransportDisconnectListener interface {
 //
 // This is done via StoresForRACv2 which encompasses all stores, so there is a single
 // one per node. It's purpose is only to route to the relevant range-level integration in
-// two cases:
-// - At evaluation time, for waiting for eval.
-// - When a raft log entry is admitted by AC.
+// three cases:
+// - At evaluation time, for waiting for eval (interface is kvadmission.StoresForEvalRACv2).
+// - When a raft log entry is admitted by AC (interface is admission.OnLogEntryAdmitted).
+// - When piggybacked RaftMessageRequest.AdmittedRACv2 are received (interface
+//   is PiggybackedAdmittedProcessor).
 //
 // 4. Range-level integration
 //
@@ -377,7 +379,7 @@ type RaftTransportDisconnectListener interface {
 //
 // - admittedRaftLogEntry: when the entry is admitted.
 //
-// -  advancing admitted: happens in handleRaftEvent, called from
+// - advancing admitted: happens in handleRaftEvent, called from
 //   handleRaftReadyRaftMuLocked. The admittedRaftLogEntry method schedules
 //   ready processing if needed, to ensure this advancing happens. When
 //   Admitted is advanced within the RawNode, and this is not the leader, the
@@ -389,3 +391,20 @@ type RaftTransportDisconnectListener interface {
 //
 // - priorityInheritanceState: which keeps the state corresponding to the
 //   sideChannelForInheritedPriority call, that is used to alter the priority.
+//
+// 5. RaftTransport changes
+//
+// RaftTransport is much simpler for RACv2 than RACv1. It uses two interfaces,
+// AdmittedPiggybackStateManager, to pop MsgAppResp messages that need to be
+// piggybacked, and PiggybackedAdmittedProcessor to handoff incoming
+// piggybacked messages.
+//
+// 6. raftScheduler
+//
+// raftScheduler has two additional processing kinds for a range.
+// - stateRACv2RangeController: this is used by the RangeController to schedule
+//   dequeuing work from send-queues. RangeController internally tracks which
+//   replicas were scheduled.
+//
+// - stateRACv2PiggybackedAdmitted: to schedule stepping of the RawNode with
+//   enqueued piggybacked MsgAppResps.

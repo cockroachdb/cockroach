@@ -198,7 +198,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 		kvflowTokenDispatch,
 		kvflowHandles,
 		disconnectListener,
-		nil,
+		nil, nil,
 		knobs,
 	)
 	rttc.transports[nodeID] = transport

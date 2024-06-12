@@ -2540,6 +2540,12 @@ func (r *Replica) processRACv2RangeController() {
 	r.raftMu.racV2Integration.processRangeControllerSchedulerEvent()
 }
 
+func (r *Replica) processRACv2PiggybackedAdmitted() bool {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	return r.raftMu.racV2Integration.processPiggybackedAdmitted()
+}
+
 var _ kvflowconnectedstream.MessageSender = &Replica{}
 
 func (r *Replica) SendRaftMessage(

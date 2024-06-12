@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -227,9 +228,18 @@ func (NoopStoresFlowControlIntegration) OnRaftTransportDisconnected(
 
 // RACv2
 
+// StoresForRACv2 implements various methods to route to the relevant range's
+// replicaRACv2Integration.
 type StoresForRACv2 interface {
 	kvadmission.StoresForEvalRACv2
 	admission.OnLogEntryAdmitted
+	PiggybackedAdmittedProcessor
+}
+
+// PiggybackedAdmittedProcessor routes to the relevant range's
+// replicaRACv2Integration.
+type PiggybackedAdmittedProcessor interface {
+	ProcessAdmittedForRangeRACv2(msgs []kvflowcontrolpb.AdmittedForRangeRACv2)
 }
 
 func MakeStoresForRACv2(stores *Stores) StoresForRACv2 {
@@ -243,6 +253,26 @@ var _ kvadmission.StoresForEvalRACv2 = &storesForRACv2{}
 // Lookup implements kvadmission.StoresForEvalRACv2.
 func (ss *storesForRACv2) Lookup(rangeID roachpb.RangeID) kvadmission.RangeControllerProvider {
 	return ss.lookup(rangeID)
+}
+
+// ProcessAdmittedForRangeRACv2 implements PiggybackedAdmittedProcessor.
+func (ss *storesForRACv2) ProcessAdmittedForRangeRACv2(
+	msgs []kvflowcontrolpb.AdmittedForRangeRACv2,
+) {
+	ls := (*Stores)(ss)
+	for _, m := range msgs {
+		s, err := ls.GetStore(m.LeaderStoreID)
+		if err != nil {
+			log.Errorf(context.TODO(), "store %s not found", m.LeaderStoreID)
+			continue
+		}
+		repl := s.GetReplicaIfExists(m.RangeID)
+		if repl == nil {
+			continue
+		}
+		repl.raftMu.racV2Integration.enqueuePiggybackedAdmitted(m.Msg)
+		s.scheduler.EnqueueRACv2PiggybackAdmitted(m.RangeID)
+	}
 }
 
 func (ss *storesForRACv2) lookup(rangeID roachpb.RangeID) *replicaRACv2Integration {
@@ -264,6 +294,7 @@ func (ss *storesForRACv2) lookup(rangeID roachpb.RangeID) *replicaRACv2Integrati
 	return rr
 }
 
+// AdmittedLogEntry implements admission.OnLogEntryAdmitted.
 func (ss *storesForRACv2) AdmittedLogEntry(
 	ctx context.Context,
 	_ roachpb.NodeID,

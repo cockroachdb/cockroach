@@ -134,9 +134,13 @@ func (n NoopRaftTransportDisconnectListener) OnRaftTransportDisconnected(
 
 // RACv2
 
-// AdmittedPiggybackStateManager ...
+// AdmittedPiggybackStateManager manages the state for piggybacking
+// MsgAppResps that specifically try to advance Admitted.
 type AdmittedPiggybackStateManager interface {
-	// AddMsgForRange ...
+	// AddMsgForRange is called with a MsgAppResp that should be piggybacked on
+	// RaftMessageRequests flowing to leaderNodeID. The leaderStoreID and
+	// rangeID are for demultiplexing once the message reached the leaderNodeID.
+	//
 	// m must be a MsgAppResp.
 	//
 	// Keeps for each rangeID the latest m. There shouldn't be multiple replicas
@@ -144,7 +148,8 @@ type AdmittedPiggybackStateManager interface {
 	// so can be grabbed to piggyback to that range.
 	AddMsgForRange(
 		rangeID roachpb.RangeID, leaderNodeID roachpb.NodeID, leaderStoreID roachpb.StoreID, m raftpb.Message)
-	// PopMsgsForNode ...
+	// PopMsgsForNode is used by RaftTransport to grab messages to piggyback
+	// when it is sending a message to nodeID.
 	PopMsgsForNode(nodeID roachpb.NodeID, maxBytes int64) (msgs []kvflowcontrolpb.AdmittedForRangeRACv2, remainingMsgs int)
 	// NodesWithMsgs is used to periodically drop msgs from disconnected nodes.
 	// See RaftTransport.dropFlowTokensForDisconnectedNodes.

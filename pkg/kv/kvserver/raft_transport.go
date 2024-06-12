@@ -269,7 +269,8 @@ type RaftTransport struct {
 	}
 
 	racV2 struct {
-		admittedPiggybacker AdmittedPiggybackStateManager
+		admittedPiggybacker  AdmittedPiggybackStateManager
+		piggybackedProcessor PiggybackedAdmittedProcessor
 	}
 
 	knobs *RaftTransportTestingKnobs
@@ -295,7 +296,7 @@ func NewDummyRaftTransport(
 	}
 	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil,
 		kvflowdispatch.NewDummyDispatch(), NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{}, nil, nil,
+		NoopRaftTransportDisconnectListener{}, nil, nil, nil,
 	)
 }
 
@@ -311,6 +312,7 @@ func NewRaftTransport(
 	kvflowHandles kvflowcontrol.Handles,
 	disconnectListener RaftTransportDisconnectListener,
 	admittedPiggybacker AdmittedPiggybackStateManager,
+	piggbackedProcessor PiggybackedAdmittedProcessor,
 	knobs *RaftTransportTestingKnobs,
 ) *RaftTransport {
 	if knobs == nil {
@@ -329,6 +331,7 @@ func NewRaftTransport(
 	t.kvflowControl.disconnectListener = disconnectListener
 	t.kvflowControl.mu.connectionTracker = newConnectionTrackerForFlowControl()
 	t.racV2.admittedPiggybacker = admittedPiggybacker
+	t.racV2.piggybackedProcessor = piggbackedProcessor
 
 	t.initMetrics()
 	if grpcServer != nil {
@@ -448,22 +451,14 @@ func (t *RaftTransport) handleRaftRequest(
 			log.Infof(ctx, "informed of below-raft %s", admittedEntries)
 		}
 	}
-	for _, admitted := range req.AdmittedRACv2 {
-		incomingMessageHandler, ok := t.getIncomingRaftMessageHandler(admitted.LeaderStoreID)
-		if !ok {
-			log.Warningf(ctx, "unable to accept admitted RACv2 message from %+v: no handler registered for store%+v",
-				admitted.LeaderStoreID)
-		} else {
-			// TODO(racV2-integration): we want to do something akin to but lighter
-			// weight than the following, since we don't have a full-fledged
-			// RaftMessageRequest.
-			//
-			// enqueue := s.HandleRaftUncoalescedRequest(ctx, req, respStream)
-			// if enqueue {
-			//	s.scheduler.EnqueueRaftRequest(req.RangeID)
-			// }
-			incomingMessageHandler.HandleRaftRequest(ctx, nil, nil)
-		}
+	if len(req.AdmittedRACv2) > 0 {
+		// NB: we do this via this special path instead of using the
+		// incomingMessageHandler since we don't have a full-fledged
+		// RaftMessageRequest for each range (each of these AdmittedRACv2 could be
+		// for a different range), and because what we need to do wrt queueing is
+		// much simpler (we don't need to worry about queue size since we only
+		// keep the latest message from each replica).
+		t.racV2.piggybackedProcessor.ProcessAdmittedForRangeRACv2(req.AdmittedRACv2)
 	}
 	if req.ToReplica.StoreID == roachpb.StoreID(0) && len(req.AdmittedRaftLogEntries) > 0 {
 		// The fallback token dispatch mechanism does not specify a destination
