@@ -455,6 +455,28 @@ refers to the name of the node bound to that variable:
 In this pattern, Join is a tag that refers to a group of nodes. The replace
 expression will construct a node having the same name as the matched join node.
 
+# Accessing Relational Properties of Root Expression
+
+The built-in "Root" function returns the root of the group that is currently
+being explored. This allows exploration rules to access the relational
+properties of the group during matching.
+
+	[AssociateJoin, Explore]
+	(InnerJoin
+	  $left:(InnerJoin
+	    $innerLeft:*
+	    $innerRight:*
+	    $innerOn:*
+	  )
+	  $right:* & (ShouldReorderJoins (Root))
+	  $on:*
+	)
+	=>
+	...
+
+The "Root" function cannot be used in
+normalization rules - Optgen will fail to compile such a rule.
+
 # Name Parameters
 
 The OpName built-in function can also be a parameter to a custom match or
