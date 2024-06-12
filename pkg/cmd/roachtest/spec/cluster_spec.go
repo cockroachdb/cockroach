@@ -12,6 +12,7 @@ package spec
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -125,7 +126,7 @@ type ClusterSpec struct {
 		MinCPUPlatform string
 		VolumeType     string
 		Zones          string
-	}
+	} `cloud:"gce"`
 
 	// AWS-specific arguments. These values apply only on clusters instantiated on AWS.
 	AWS struct {
@@ -133,12 +134,12 @@ type ClusterSpec struct {
 		// VolumeThroughput is the min provisioned EBS volume throughput.
 		VolumeThroughput int
 		Zones            string
-	}
+	} `cloud:"aws"`
 
 	// Azure-specific arguments. These values apply only on clusters instantiated on Azure.
 	Azure struct {
 		Zones string
-	}
+	} `cloud:"azure"`
 }
 
 // MakeClusterSpec makes a ClusterSpec.
@@ -153,10 +154,31 @@ func MakeClusterSpec(nodeCount int, opts ...Option) ClusterSpec {
 
 // ClustersCompatible returns true if the clusters are compatible, i.e. the test
 // asking for s2 can reuse s1.
-func ClustersCompatible(s1, s2 ClusterSpec) bool {
-	s1.Lifetime = 0
-	s2.Lifetime = 0
+func ClustersCompatible(s1, s2 ClusterSpec, cloud string) bool {
+	// only consider the specification of the cloud that we are running in
+	clearClusterSpecFields(&s1, cloud)
+	clearClusterSpecFields(&s2, cloud)
 	return s1 == s2
+}
+
+// clearClusterSpecFields clears the cloud specific specification from the cluster spec
+// if the cloud specification dos not match the target cloud. This is done to ensure that
+// the specification for other clouds are not considered while comparing the cluster specifications.
+func clearClusterSpecFields(cs *ClusterSpec, targetCloud string) {
+	cs.Lifetime = 0
+	structType := reflect.TypeOf(*cs)
+	for i := 0; i < structType.NumField(); i++ {
+		// Get field
+		field := structType.Field(i)
+		// Check if the "cloud" tag exists
+		if tag, ok := field.Tag.Lookup("cloud"); ok {
+			// zero out struct if it is not the target cloud
+			if tag != targetCloud {
+				fieldValue := reflect.ValueOf(cs).Elem().FieldByName(field.Name)
+				fieldValue.Set(reflect.Zero(fieldValue.Type()))
+			}
+		}
+	}
 }
 
 // String implements fmt.Stringer.
