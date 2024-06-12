@@ -293,7 +293,7 @@ func (p *partitionedStreamClient) PlanLogicalReplication(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	row := p.mu.srcConn.QueryRow(ctx, "SELECT crdb_internal.partition_spans($1)", encodedSpans)
+	row := p.mu.srcConn.QueryRow(ctx, "SELECT crdb_internal.plan_logical_replication($1)", encodedSpans)
 
 	streamSpecBytes := []byte{}
 	if err := row.Scan(&streamSpecBytes); err != nil {
