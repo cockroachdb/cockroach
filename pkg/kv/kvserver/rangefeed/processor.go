@@ -446,20 +446,20 @@ func (p *LegacyProcessor) run(
 			r.publish(ctx, p.newCheckpointEvent(), nil)
 
 			// Run an output loop for the registry.
-			runOutputLoop := func(ctx context.Context) {
-				r.runOutputLoop(ctx, p.RangeID)
-				select {
-				case p.unregC <- &r:
-					if r.unreg != nil {
-						r.unreg()
-					}
-				case <-p.stoppedC:
-				}
-			}
-			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.disconnect(kvpb.NewError(err))
-				p.reg.Unregister(ctx, &r)
-			}
+			//runOutputLoop := func(ctx context.Context) {
+			//	r.runOutputLoop(ctx, p.RangeID)
+			//	select {
+			//	//case p.unregC <- &r:
+			//	//	if r.unreg != nil {
+			//	//		r.unreg()
+			//	//	}
+			//	//case <-p.stoppedC:
+			//	//}
+			//}
+			//if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
+			//	r.disconnect(kvpb.NewError(err))
+			//	p.reg.Unregister(ctx, &r)
+			//}
 
 		// Respond to unregistration requests; these come from registrations that
 		// encounter an error during their output loop.

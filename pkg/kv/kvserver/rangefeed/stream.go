@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"go.uber.org/atomic"
 )
 
 // Responsible to coordinate rangefeed level shutdown.
@@ -43,12 +44,19 @@ type StreamMuxer struct {
 		syncutil.RWMutex
 		prods map[int64]*producer
 	}
+
+	capacity atomic.Int32
+	queueMu  struct {
+		syncutil.Mutex
+		buffer   muxEventQueue
+		overflow bool
+	}
 }
 
+const defaultEventBufferCapacity = 4096
+
 // Responsible for sending errors, node and rangefeed level cleanups.
-func NewStreamMuxer(
-	wrapped kvpb.MuxRangeFeedEventSink, nodeLevelCleanUp func(int64) bool,
-) *StreamMuxer {
+func NewStreamMuxer(wrapped kvpb.MuxRangeFeedEventSink, nodeLevelCleanUp func(int64) bool) Muxer {
 	muxer := &StreamMuxer{
 		wrapped: wrapped,
 		notify:  make(chan struct{}, 1),
@@ -59,13 +67,91 @@ func NewStreamMuxer(
 	}
 	//TODO(wenyihu6): check if int32 is enough
 	muxer.prodsMu.prods = make(map[int64]*producer)
+	muxer.capacity.Store(defaultEventBufferCapacity)
+	muxer.queueMu.buffer = newMuxEventQueue()
 	return muxer
 }
 
 type Muxer interface {
 	Register(streamID int64, rangeID roachpb.RangeID, rangefeedCleanUp func())
+	PublishEvent(streamId int64, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
 	SendUnbuffered(*kvpb.MuxRangeFeedEvent) error
 	HandleRangefeedDisconnectError(streamId int64, rangeId roachpb.RangeID, err *kvpb.Error)
+	OutputLoop(ctx context.Context, stopper *stop.Stopper)
+}
+
+func (m *StreamMuxer) PublishEvent(
+	streamId int64,
+	rangeID roachpb.RangeID,
+	event *kvpb.RangeFeedEvent,
+	alloc *SharedBudgetAllocation,
+) {
+	m.publishEvent(streamId, rangeID, event, alloc)
+}
+
+func (m *StreamMuxer) publishEvent(
+	streamId int64,
+	rangeID roachpb.RangeID,
+	event *kvpb.RangeFeedEvent,
+	alloc *SharedBudgetAllocation,
+) {
+	p, ok := m.getProducerIfExists(streamId)
+	if !ok || p.isDisconnected() {
+		return
+	}
+
+	//TODO(wenyihu6): check if alloc.Use() is needed
+	//TODO(wenyihu6): put sharedMuxEvent in pool
+	if !m.pushBack(sharedMuxEvent{
+		streamID: streamId,
+		rangeID:  rangeID,
+		event:    event,
+		alloc:    alloc,
+	}) {
+		// TODO(wenyihu6): we should either always run draining queue or we should
+		// still notify if overflowed -> we need to send events in the buffer even
+		// during overflow
+		return
+	}
+
+	// notify data incoming unless the signal is already there
+	select {
+	case m.notify <- struct{}{}:
+	default:
+	}
+}
+
+func (m *StreamMuxer) removeAll() {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	m.queueMu.buffer.removeAll(context.Background())
+}
+
+func (m *StreamMuxer) removeProducerEvent(streamId int64) {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	m.queueMu.buffer.remove(context.Background(), streamId)
+}
+
+func (m *StreamMuxer) pushBack(event sharedMuxEvent) bool {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	if m.queueMu.overflow {
+		return false
+	}
+	if int32(m.queueMu.buffer.len()) >= m.capacity.Load() {
+		m.queueMu.overflow = true
+		return false
+	}
+	m.queueMu.buffer.pushBack(event)
+	return true
+}
+
+func (m *StreamMuxer) popFront() (event sharedMuxEvent, empty bool, overflow bool) {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	event, ok := m.queueMu.buffer.popFront()
+	return event, !ok, m.queueMu.overflow
 }
 
 func (m *StreamMuxer) SendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
@@ -76,6 +162,34 @@ func (m *StreamMuxer) OutputLoop(ctx context.Context, stopper *stop.Stopper) {
 	// TODO(wenyihu6): do we need to watch stopper.ShouldQuiesce
 	for {
 		select {
+		case <-m.notify:
+			for {
+				e, empty, overflow := m.popFront()
+				if overflow && empty {
+					// TODO(wenyihu6): rationalize overflow and done should happen before empty
+					// overflowed and no more events should be added-> handled in pushBack
+					m.cleanupProducers(newErrBufferCapacityExceeded())
+					return
+				}
+
+				if empty {
+					// no more events to send
+					break
+				}
+
+				if e.event == nil {
+					continue
+				}
+
+				if err := m.wrapped.Send(&kvpb.MuxRangeFeedEvent{
+					RangeFeedEvent: *e.event,
+					RangeID:        e.rangeID,
+					StreamID:       e.streamID,
+				}); err != nil {
+					m.cleanupProducers(nil)
+					return
+				}
+			}
 		case muxErr := <-m.muxErrorsC:
 			// nothing we could do if stream is broken TODO(wenyihu6): future send
 			// would also fail and just clean up -> check if we need to do any
@@ -93,22 +207,28 @@ func (m *StreamMuxer) OutputLoop(ctx context.Context, stopper *stop.Stopper) {
 			return
 		// case <-m.output.Context().Done(): check if this is needed
 		case <-stopper.ShouldQuiesce():
-			// m.cleanupProducers(ctx, nil)
+			m.cleanupProducers(nil)
 			return
 		}
 	}
 }
 
+// TODO(wenyihu6): think again about how to handle rangefeed shutdown
 func (m *StreamMuxer) HandleRangefeedDisconnectError(
 	streamId int64, rangeId roachpb.RangeID, err *kvpb.Error,
 ) {
-	p, _ := m.getProducerIfExists(streamId)
+	p, ok := m.getProducerIfExists(streamId)
 	// even if producer is not found we should still clean up node level
 	// if producer has been removed, then it shouldn't exist in map in node level
 	// and we will ignore
 	// if producer found but disconnected, we should do nothing
 	// repeatedly clean up producer should have no side effects
-	needRangefeedCleanUp := p.setDisconnected()
+	needRangefeedCleanUp := ok && p.setDisconnected()
+
+	// TODO(wenyihu6): check if this is critical section
+	if needRangefeedCleanUp {
+		m.removeProducerEvent(streamId)
+	}
 
 	// node level clean up first
 	loaded := m.nodeLevelCleanUp(streamId)
@@ -135,6 +255,7 @@ func (m *StreamMuxer) cleanupProducerIfExists(streamId int64) {
 	p.rangefeedLevelCleanUp()
 }
 func (m *StreamMuxer) cleanupProducers(streamErr *kvpb.Error) {
+	m.removeAll()
 	prods := m.popAllConnectedProducers()
 	for _, p := range prods {
 		loaded := m.nodeLevelCleanUp(p.streamId)
@@ -238,11 +359,8 @@ func (m *StreamMuxer) getProducerIfExists(streamId int64) (*producer, bool) {
 }
 
 func (p *producer) setDisconnected() (needCleanUp bool) {
-	if p == nil {
-		return false
-	}
-	p.RLock()
-	defer p.RUnlock()
+	p.Lock()
+	defer p.Unlock()
 	if p.disconnected {
 		return false
 	}
@@ -257,6 +375,7 @@ func (p *producer) isDisconnected() bool {
 }
 
 type BufferedStream interface {
+	SendBuffered(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
 	SendUnbuffered(event *kvpb.RangeFeedEvent) error
 	SendError(err *kvpb.Error)
 	Register(rangefeedCleanUp func())
@@ -282,6 +401,10 @@ func (s *StreamSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 		RangeID:        s.RangeID,
 		StreamID:       s.StreamID,
 	})
+}
+
+func (s *StreamSink) SendBuffered(event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation) {
+	s.StreamMuxer.PublishEvent(s.StreamID, s.RangeID, event, alloc)
 }
 
 var _ BufferedStream = (*StreamSink)(nil)

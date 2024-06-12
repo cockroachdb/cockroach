@@ -83,7 +83,6 @@ type registration struct {
 
 	// Output.
 	stream BufferedStream
-	unreg  func()
 	// Internal.
 	id            int64
 	keys          interval.Range
@@ -121,7 +120,6 @@ func newRegistration(
 	blockWhenFull bool,
 	metrics *Metrics,
 	stream BufferedStream,
-	unregisterFn func(),
 ) registration {
 	r := registration{
 		span:             span,
@@ -130,7 +128,6 @@ func newRegistration(
 		withFiltering:    withFiltering,
 		metrics:          metrics,
 		stream:           stream,
-		unreg:            unregisterFn,
 		buf:              make(chan *sharedEvent, bufferSz),
 		blockWhenFull:    blockWhenFull,
 	}
@@ -343,12 +340,8 @@ func (r *registration) outputLoop(ctx context.Context) error {
 		firstIteration = false
 		select {
 		case nextEvent := <-r.buf:
-			err := r.stream.SendUnbuffered(nextEvent.event)
-			nextEvent.alloc.Release(ctx)
-			putPooledSharedEvent(nextEvent)
-			if err != nil {
-				return err
-			}
+			// TODO(wenyihu6): check memory accounting
+			r.stream.SendBuffered(nextEvent.event, nextEvent.alloc)
 		case <-ctx.Done():
 			return ctx.Err()
 			//case <-r.stream.Context().Done():

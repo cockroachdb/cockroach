@@ -323,7 +323,7 @@ func (p *ScheduledProcessor) Register(
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
+		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream,
 	)
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
@@ -350,10 +350,8 @@ func (p *ScheduledProcessor) Register(
 		stream.Register(func() {
 			r.cleanup()
 			if p.unregisterClient(&r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if r.unreg != nil {
-					r.unreg()
+				if disconnectFn != nil {
+					disconnectFn()
 				}
 			}
 		})
@@ -364,8 +362,8 @@ func (p *ScheduledProcessor) Register(
 			if p.unregisterClient(&r) {
 				// unreg callback is set by replica to tear down processors that have
 				// zero registrations left and to update event filters.
-				if r.unreg != nil {
-					r.unreg()
+				if disconnectFn != nil {
+					disconnectFn()
 				}
 			}
 		}
