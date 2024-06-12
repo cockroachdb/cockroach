@@ -742,7 +742,6 @@ func TestEngineScan1(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	engine := NewDefaultInMemForTesting()
-	defer engine.Close()
 
 	testCases := []struct {
 		key   MVCCKey
@@ -815,8 +814,8 @@ func TestEngineScan1(t *testing.T) {
 	stats := iter.Stats().Stats
 	// Setting non-deterministic InternalStats to empty.
 	stats.InternalStats = pebble.InternalIteratorStats{}
-	require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 5), (rev, 0, 0)), "+
-		"(internal (dir, seek, step): (fwd, 1, 5), (rev, 0, 0))", stats.String())
+	require.Equal(t, "seeked 1 times (1 internal); stepped 5 times (5 internal)", stats.String())
+
 	iter.Close()
 	iter, err = ro.NewMVCCIterator(MVCCKeyIterKind,
 		IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
@@ -825,17 +824,17 @@ func TestEngineScan1(t *testing.T) {
 	stats = iter.Stats().Stats
 	// Setting non-deterministic InternalStats to empty.
 	stats.InternalStats = pebble.InternalIteratorStats{}
-	require.Equal(t, "(interface (dir, seek, step): (fwd, 0, 0), (rev, 0, 0)), "+
-		"(internal (dir, seek, step): (fwd, 0, 0), (rev, 0, 0))", stats.String())
+	require.Equal(t, "seeked 0 times (0 internal); stepped 0 times (0 internal)", stats.String())
+
 	iter.SeekGE(MVCCKey{Key: roachpb.Key("french")})
 	iter.SeekLT(MVCCKey{Key: roachpb.Key("server")})
 	stats = iter.Stats().Stats
 	// Setting non-deterministic InternalStats to empty.
 	stats.InternalStats = pebble.InternalIteratorStats{}
-	require.Equal(t, "(interface (dir, seek, step): (fwd, 1, 0), (rev, 1, 0)), "+
-		"(internal (dir, seek, step): (fwd, 1, 0), (rev, 1, 1))", stats.String())
+	require.Equal(t, "seeked 2 times (1 fwd/1 rev, internal: 1 fwd/1 rev); stepped 0 times (0 fwd/0 rev, internal: 0 fwd/1 rev)", stats.String())
 	iter.Close()
 	ro.Close()
+	engine.Close()
 }
 
 func verifyScan(start, end roachpb.Key, max int64, expKeys []MVCCKey, engine Engine, t *testing.T) {
