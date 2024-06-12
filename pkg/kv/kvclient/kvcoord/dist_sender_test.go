@@ -386,6 +386,7 @@ func TestSendRPCOrder(t *testing.T) {
 	old := CanSendToFollower
 	defer func() { CanSendToFollower = old }()
 	CanSendToFollower = func(
+		_ context.Context,
 		_ *cluster.Settings,
 		_ *hlc.Clock,
 		p roachpb.RangeClosedTimestampPolicy,
@@ -974,6 +975,7 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 	old := CanSendToFollower
 	defer func() { CanSendToFollower = old }()
 	CanSendToFollower = func(
+		_ context.Context,
 		_ *cluster.Settings,
 		_ *hlc.Clock,
 		_ roachpb.RangeClosedTimestampPolicy,
@@ -3984,6 +3986,7 @@ func TestCanSendToFollower(t *testing.T) {
 	defer func() { CanSendToFollower = old }()
 	canSend := true
 	CanSendToFollower = func(
+		_ context.Context,
 		_ *cluster.Settings,
 		_ *hlc.Clock,
 		_ roachpb.RangeClosedTimestampPolicy,
