@@ -590,6 +590,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			// txnState.mu.priority, so we don't need to get a mutex here.
 			ex.state.mu.priority,
 			ex.extraTxnState.shouldCollectTxnExecutionStats,
+			ex.executorType,
 		)
 	} else {
 		ctx = portal.pauseInfo.execStmtInOpenState.ihWrapper.ctx

@@ -418,6 +418,7 @@ func (ih *instrumentationHelper) Setup(
 	implicitTxn bool,
 	txnPriority roachpb.UserPriority,
 	collectTxnExecStats bool,
+	execType executorType,
 ) (newCtx context.Context) {
 	ih.fingerprint = fingerprint
 	ih.implicitTxn = implicitTxn
@@ -479,7 +480,12 @@ func (ih *instrumentationHelper) Setup(
 	shouldSampleFirstEncounter := func() bool {
 		// If this is the first time we see this statement in the current stats
 		// container, we'll collect its execution stats anyway (unless the user
-		// disabled txn or stmt stats collection entirely).
+		// disabled txn or stmt stats collection entirely). We don't do apply
+		// this heuristic to internal executors since they only execute a single
+		// statement during their "session".
+		if execType == executorTypeInternal {
+			return false
+		}
 		// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 		if collectTxnStatsSampleRate.Get(&cfg.Settings.SV) == 0 ||
 			!sqlstats.StmtStatsEnable.Get(&cfg.Settings.SV) {
