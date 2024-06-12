@@ -108,7 +108,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 		targetStreamID := streampb.StreamID(999)
 		expectedErr := fmt.Sprintf("job with ID %d does not exist", targetStreamID)
 		t.Run("plan fails", func(t *testing.T) {
-			_, err := client.Plan(ctx, targetStreamID)
+			_, err := client.PlanPhysicalReplication(ctx, targetStreamID)
 			require.ErrorContains(t, err, expectedErr)
 		})
 		t.Run("heartbeat returns STREAM_INACTIVE", func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 		h.SysSQL.QueryRow(t, "SELECT crdb_internal.create_sql_schema_telemetry_job()").Scan(&targetStreamID)
 
 		t.Run("plan fails", func(t *testing.T) {
-			_, err := client.Plan(ctx, targetStreamID)
+			_, err := client.PlanPhysicalReplication(ctx, targetStreamID)
 			require.ErrorContains(t, err, "not a replication stream job")
 		})
 		t.Run("heartbeat fails", func(t *testing.T) {
@@ -152,13 +152,13 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 		})
 	})
 	t.Run("paused-job", func(t *testing.T) {
-		rps, err := client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
+		rps, err := client.CreateForTenant(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 		require.NoError(t, err)
 		targetStreamID := rps.StreamID
 		h.SysSQL.Exec(t, `PAUSE JOB $1`, targetStreamID)
 		expectStreamState(targetStreamID, jobs.StatusPaused)
 		t.Run("plan fails", func(t *testing.T) {
-			_, err := client.Plan(ctx, targetStreamID)
+			_, err := client.PlanPhysicalReplication(ctx, targetStreamID)
 			require.ErrorContains(t, err, "must be running")
 		})
 		t.Run("heartbeat returns STREAM_PAUSED", func(t *testing.T) {
@@ -178,13 +178,13 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 		})
 	})
 	t.Run("cancelled-job", func(t *testing.T) {
-		rps, err := client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
+		rps, err := client.CreateForTenant(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 		require.NoError(t, err)
 		targetStreamID := rps.StreamID
 		h.SysSQL.Exec(t, `CANCEL JOB $1`, targetStreamID)
 		expectStreamState(targetStreamID, jobs.StatusCanceled)
 		t.Run("plan fails", func(t *testing.T) {
-			_, err := client.Plan(ctx, targetStreamID)
+			_, err := client.PlanPhysicalReplication(ctx, targetStreamID)
 			require.ErrorContains(t, err, "must be running")
 		})
 		t.Run("heartbeat returns STREAM_INACTIVE", func(t *testing.T) {
@@ -276,15 +276,15 @@ INSERT INTO d.t2 VALUES (2);
 	require.Equal(t, "00000000-0000-0000-0000-000000000001:99", from)
 	require.True(t, ts.Equal(hlc.Timestamp{WallTime: 1}), ts)
 
-	rps, err := client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
+	rps, err := client.CreateForTenant(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 	streamID := rps.StreamID
 	// We can create multiple replication streams for the same tenant.
-	_, err = client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
+	_, err = client.CreateForTenant(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 	expectStreamState(streamID, jobs.StatusRunning)
 
-	top, err := client.Plan(ctx, streamID)
+	top, err := client.PlanPhysicalReplication(ctx, streamID)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(top.Partitions))
 
@@ -373,7 +373,7 @@ INSERT INTO d.t2 VALUES (2);
 	// Makes producer job exit quickly.
 	h.SysSQL.Exec(t, `
 SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms'`)
-	rps, err = client.Create(ctx, testTenantName, streampb.ReplicationProducerRequest{})
+	rps, err = client.CreateForTenant(ctx, testTenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 	streamID = rps.StreamID
 	jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
