@@ -272,8 +272,8 @@ func heartbeatReplicationStream(
 		streamID, frontier, txn)
 }
 
-// getReplicationStreamSpec gets a replication stream specification for the specified stream.
-func getReplicationStreamSpec(
+// getPhysicalReplicationStreamSpec gets a replication stream specification for the specified stream.
+func getPhysicalReplicationStreamSpec(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
