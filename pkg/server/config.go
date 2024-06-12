@@ -768,6 +768,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storage.Attributes(spec.Attributes),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 			storage.DiskWriteStatsCollector(cfg.DiskWriteStatsCollector),
+			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores.Specs)),
 		}
 		if len(storeKnobs.EngineKnobs) > 0 {
 			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)
