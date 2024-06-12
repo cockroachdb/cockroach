@@ -279,3 +279,24 @@
     []
     (OutputCols $input)
 )
+
+# TODO
+[PlaceholderJoin, Explore]
+(Select
+    $input:*
+    $filters:* &
+        (Let
+            (
+                $values
+                $newFilters
+                $ok
+            ):(PlaceholderValuesAndFilters $filters)
+            $ok
+        )
+)
+=>
+(Project
+    (InnerJoin $input $values $newFilters (EmptyJoinPrivate))
+    []
+    (OutputCols (Root))
+)
