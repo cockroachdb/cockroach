@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -70,9 +71,10 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	tp := NewRaftTransport(
 		log.MakeTestingAmbientCtxWithNewTracer(),
 		cluster.MakeTestingClusterSettings(),
+		stopper,
+		hlc.NewClockForTesting(nil),
 		nodedialer.New(rpcC, resolver),
 		grpcServer,
-		stopper,
 		kvflowdispatch.NewDummyDispatch(),
 		NoopStoresFlowControlIntegration{},
 		NoopRaftTransportDisconnectListener{},
