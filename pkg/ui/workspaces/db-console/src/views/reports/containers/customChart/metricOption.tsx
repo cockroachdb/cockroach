@@ -14,7 +14,7 @@ import classnames from "classnames";
 
 import "./metricOption.styl";
 
-export function MetricOption(props: OptionComponentProps) {
+export const MetricOption = (props: OptionComponentProps<string>) => {
   const { option, className, onSelect, onFocus } = props;
   const { label, description } = option;
   const classes = classnames("metric-option", className);

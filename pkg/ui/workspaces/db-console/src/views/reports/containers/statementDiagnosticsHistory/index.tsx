@@ -63,7 +63,7 @@ interface StatementDiagnosticsHistoryViewState {
   };
 }
 
-class StatementDiagnosticsHistoryTable extends SortedTable<{}> {}
+class StatementDiagnosticsHistoryTable extends SortedTable<clusterUiApi.StatementDiagnosticsReport> {}
 
 const StatementColumn: React.FC<{ fingerprint: string }> = ({
   fingerprint,
@@ -318,7 +318,8 @@ const mapDispatchToProps = (dispatch: AppDispatch): MapDispatchToProps => ({
 export default connect<
   MapStateToProps,
   MapDispatchToProps,
-  StatementDiagnosticsHistoryViewProps
+  StatementDiagnosticsHistoryViewProps,
+  AdminUIState
 >(
   mapStateToProps,
   mapDispatchToProps,

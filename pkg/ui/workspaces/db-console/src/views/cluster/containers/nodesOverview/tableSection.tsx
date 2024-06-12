@@ -51,9 +51,8 @@ class TableSection extends React.Component<
   TableSectionProps & MapStateToProps & MapDispatchToProps,
   TableSectionState
 > {
-  static defaultProps: Partial<TableSectionProps> = {
+  static defaultProps = {
     isCollapsible: false,
-    footer: null,
     className: "",
   };
 
@@ -92,7 +91,7 @@ class TableSection extends React.Component<
   };
 
   render() {
-    const { children, title, footer, className } = this.props;
+    const { children, title, className } = this.props;
     const { isCollapsed } = this.state;
     const rootClass = cn("table-section", className);
     const contentClass = cn("table-section__content", {
@@ -108,7 +107,7 @@ class TableSection extends React.Component<
         </section>
         <div className={contentClass}>
           {children}
-          {footer && <div className="table-section__footer">{footer}</div>}
+          {this.props.footer && <div className="table-section__footer">{this.props.footer}</div>}
         </div>
       </div>
     );
@@ -118,7 +117,7 @@ class TableSection extends React.Component<
 const getTableSectionKey = (id: string) =>
   `cluster_overview/table_section/${id}/is_expanded`;
 
-const mapStateToProps = (state: AdminUIState, props: TableSectionProps) => {
+const mapStateToProps = (state: AdminUIState, props: TableSectionProps): MapStateToProps => {
   const tableSectionState = new LocalSetting<AdminUIState, boolean>(
     getTableSectionKey(props.id),
     s => s.localSettings,
@@ -132,11 +131,11 @@ const mapStateToProps = (state: AdminUIState, props: TableSectionProps) => {
 const mapDispatchToProps = (
   dispatch: Dispatch<Action>,
   props: TableSectionProps,
-) => ({
+): MapDispatchToProps => ({
   saveExpandedState: (isCollapsed: boolean) => {
     const tableSectionKey = getTableSectionKey(props.id);
     dispatch(setLocalSetting(tableSectionKey, isCollapsed));
   },
 });
 
-export default connect(mapStateToProps, mapDispatchToProps)(TableSection);
+export default connect<MapStateToProps, MapDispatchToProps, TableSectionProps, AdminUIState>(mapStateToProps, mapDispatchToProps)(TableSection);

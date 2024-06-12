@@ -359,7 +359,7 @@ export function* sendRequestBatch(requests: WithID<TSRequest>[]) {
     // Dispatch the error to each individual MetricsQuery which was
     // requesting data.
     for (const request of requests) {
-      yield put(errorMetrics(request.id, e));
+      yield put(errorMetrics(request.id, e as Error));
     }
     return;
   }

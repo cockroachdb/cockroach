@@ -191,7 +191,7 @@ const logoutBeginAction = {
 export function doLogin(
   username: string,
   password: string,
-): ThunkAction<Promise<void>, AdminUIState, void, Action> {
+): ThunkAction<Promise<void>, AdminUIState, unknown, Action> {
   return dispatch => {
     dispatch(loginBeginAction);
 
@@ -213,7 +213,7 @@ export function doLogin(
 export function doLogout(): ThunkAction<
   Promise<void>,
   AdminUIState,
-  void,
+  unknown,
   Action
 > {
   return dispatch => {

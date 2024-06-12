@@ -324,7 +324,7 @@ export function* runQuery(state: ManagedQuerySagaState) {
     yield put(queryBegin(id));
     yield call(querySaga);
   } catch (e) {
-    err = e;
+    err = e as Error;
   }
 
   // Yielding to moment lets us easily mock time in tests.

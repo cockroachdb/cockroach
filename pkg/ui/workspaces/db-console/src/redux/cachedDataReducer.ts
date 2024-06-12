@@ -645,7 +645,7 @@ export class PaginatedCachedDataReducer<
           }
         } catch (error) {
           // duplicate the same error handling as in base CachedDataReducer#refresh method.
-          if (error.message === "Unauthorized") {
+          if ((error as Error).message === "Unauthorized") {
             // TODO(couchand): This is an unpleasant dependency snuck in here...
             const { location } = createHashHistory();
             if (
@@ -657,7 +657,7 @@ export class PaginatedCachedDataReducer<
             }
           }
           setTimeout(
-            () => dispatch(this.cachedDataReducer.errorData(error, req)),
+            () => dispatch(this.cachedDataReducer.errorData(error as Error, req)),
             1000,
           );
           break;
