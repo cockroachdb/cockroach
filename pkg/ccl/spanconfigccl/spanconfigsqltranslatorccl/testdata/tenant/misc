@@ -10,8 +10,8 @@ ALTER TABLE db.t1 CONFIGURE ZONE USING gc.ttlseconds=1;
 
 translate database=db
 ----
-/Tenant/10/Table/10{6-7}                   ttl_seconds=1
-/Tenant/10/Table/10{7-8}                   range default
+/Tenant/10/Table/10{6-7}                   ttl_seconds=1 rangefeed_enabled=true
+/Tenant/10/Table/10{7-8}                   rangefeed_enabled=true
 
 # Drop the table.
 exec-sql
@@ -21,7 +21,7 @@ DROP TABLE db.t1;
 # We should no longer see the dropped table's spans.
 translate database=db
 ----
-/Tenant/10/Table/10{7-8}                   range default
+/Tenant/10/Table/10{7-8}                   rangefeed_enabled=true
 
 # Same as above, except this time the translation starts from the table's ID.
 translate id=56
@@ -41,7 +41,7 @@ mark-database-offline database=db
 
 translate database=db
 ----
-/Tenant/10/Table/10{7-8}                   ttl_seconds=10
+/Tenant/10/Table/10{7-8}                   ttl_seconds=10 rangefeed_enabled=true
 
 # Delete the bespoke zone config on db. t2 should fallback to the RANGE DEFAULT
 # zone config even though all descriptors are offline.
@@ -51,11 +51,11 @@ DELETE FROM system.zones WHERE id = 104;
 
 translate database=db
 ----
-/Tenant/10/Table/10{7-8}                   range default
+/Tenant/10/Table/10{7-8}                   rangefeed_enabled=true
 
 translate database=db table=t2
 ----
-/Tenant/10/Table/10{7-8}                   range default
+/Tenant/10/Table/10{7-8}                   rangefeed_enabled=true
 
 mark-database-public database=db
 ----
@@ -73,11 +73,11 @@ mark-table-offline database=db table=t2
 # database.
 translate database=db table=t2
 ----
-/Tenant/10/Table/10{7-8}                   ttl_seconds=11
+/Tenant/10/Table/10{7-8}                   ttl_seconds=11 rangefeed_enabled=true
 
 translate database=db
 ----
-/Tenant/10/Table/10{7-8}                   ttl_seconds=11
+/Tenant/10/Table/10{7-8}                   ttl_seconds=11 rangefeed_enabled=true
 
 # Mark the table as public again.
 mark-table-public database=db table=t2
@@ -85,7 +85,7 @@ mark-table-public database=db table=t2
 
 translate database=db table=t2
 ----
-/Tenant/10/Table/10{7-8}                   ttl_seconds=11
+/Tenant/10/Table/10{7-8}                   ttl_seconds=11 rangefeed_enabled=true
 
 subtest end
 
@@ -97,7 +97,7 @@ CREATE TYPE db.typ AS ENUM();
 
 translate database=db
 ----
-/Tenant/10/Table/10{7-8}                   ttl_seconds=11
+/Tenant/10/Table/10{7-8}                   ttl_seconds=11 rangefeed_enabled=true
 
 # Test that non-existent IDs do not generate span configurations either.
 translate id=500
