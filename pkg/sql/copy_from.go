@@ -1143,19 +1143,27 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 			// for the next batch.
 			return c.doneWithRows(ctx)
 		} else {
-			// It is currently only safe to retry if we are not in atomic copy
-			// mode & we are in an implicit transaction.
-			// NOTE: we cannot re-use the connExecutor retry scheme here as COPY
-			// consumes directly from the read buffer, and the data would no
-			// longer be available during the retry.
-			if c.implicitTxn && !c.p.SessionData().CopyFromAtomicEnabled && c.p.SessionData().CopyFromRetriesEnabled && errIsRetriable(err) {
-				log.SqlExec.Infof(ctx, "%s failed on attempt %d and is retrying, error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
-				if c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry != nil {
-					if err := c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry(); err != nil {
-						return err
+			if errIsRetriable(err) {
+				log.SqlExec.Infof(ctx, "%s failed on attempt %d and with retriable error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
+				// It is currently only safe to retry if we are not in atomic copy
+				// mode & we are in an implicit transaction.
+				//
+				// NOTE: we cannot re-use the connExecutor retry scheme here as COPY
+				// consumes directly from the read buffer, and the data would no
+				// longer be available during the retry.
+				if c.implicitTxn && !c.p.SessionData().CopyFromAtomicEnabled && c.p.SessionData().CopyFromRetriesEnabled && errIsRetriable(err) {
+					log.SqlExec.Infof(ctx, "%s is retrying", c.copyFromAST.String())
+					if c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry != nil {
+						if err := c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry(); err != nil {
+							return err
+						}
 					}
+					continue
+				} else {
+					log.SqlExec.Infof(ctx, "%s is not retrying", c.copyFromAST.String())
 				}
-				continue
+			} else {
+				log.SqlExec.Infof(ctx, "%s failed on attempt %d and with non-retriable error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
 			}
 			return err
 		}
