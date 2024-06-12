@@ -115,7 +115,8 @@ const WorkloadInsightsPage = withRouter(
     StateProps,
     DispatchProps,
     RouteComponentProps,
-    WorkloadInsightsViewProps
+    WorkloadInsightsViewProps,
+    AdminUIState
   >(
     (state: AdminUIState, props: RouteComponentProps) => ({
       transactionInsightsViewStateProps: transactionMapStateToProps(

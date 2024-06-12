@@ -183,7 +183,7 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
 };
 
 export default withRouter(
-  connect<StatementDetailsStateProps, StatementDetailsDispatchProps>(
+  connect<StatementDetailsStateProps, StatementDetailsDispatchProps, RouteComponentProps, AdminUIState>(
     mapStateToProps,
     mapDispatchToProps,
   )(StatementDetails),

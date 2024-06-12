@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 import classNames from "classnames/bind";
-import Select from "react-select";
+import Select, { Option } from "react-select";
 import React from "react";
 import isNil from "lodash/isNil";
 import includes from "lodash/includes";
@@ -66,7 +66,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
 
   dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
   titleRef: React.RefObject<HTMLDivElement> = React.createRef();
-  selectRef: React.RefObject<Select> = React.createRef();
+  selectRef: React.RefObject<Select<DropdownOption>> = React.createRef();
 
   triggerSelectClick = (e: any) => {
     this.props.onDropdownClick && this.props.onDropdownClick();
@@ -160,6 +160,7 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
         {content ? (
           content
         ) : (
+          // @ts-ignore
           <Select
             className={cx("dropdown__select")}
             arrowRenderer={arrowRenderer}
