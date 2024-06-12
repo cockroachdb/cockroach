@@ -477,6 +477,11 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 		}
 		if ok {
 			opc.log(ctx, "placeholder fast path")
+		} else if opc.p.SessionData().OptimizerUseGenericQueryPlans {
+			// Try to optimize the plan if it has placeholders anyway.
+			if _, err := opc.optimizer.Optimize(); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		// If the memo doesn't have placeholders and did not encounter any stable
@@ -506,7 +511,7 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 func (opc *optPlanningCtx) reuseMemo(
 	ctx context.Context, cachedMemo *memo.Memo,
 ) (*memo.Memo, error) {
-	if cachedMemo.IsOptimized() {
+	if cachedMemo.IsOptimized() || opc.p.SessionData().OptimizerUseGenericQueryPlans {
 		// The query could have been already fully optimized if there were no
 		// placeholders or the placeholder fast path succeeded (see
 		// buildReusableMemo).

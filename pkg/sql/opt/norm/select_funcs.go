@@ -11,10 +11,15 @@
 package norm
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -423,4 +428,93 @@ func (c *CustomFuncs) addConjuncts(
 // not matter.
 func (c *CustomFuncs) ForDuplicateRemoval(private *memo.OrdinalityPrivate) (ok bool) {
 	return private.ForDuplicateRemoval
+}
+
+func (c *CustomFuncs) PlaceholderValuesAndFilters(
+	filter memo.FiltersExpr,
+) (_ memo.RelExpr, _ memo.FiltersExpr, ok bool) {
+	hasPlaceholders := false
+	for i := range filter {
+		if filter[i].ScalarProps().HasPlaceholder {
+			hasPlaceholders = true
+			break
+		}
+	}
+	if !hasPlaceholders {
+		return nil, nil, false
+	}
+
+	// Collect all referenced placeholders.
+	// TODO: Test with multiple references to the same placeholder - don't
+	// duplicate in Values.
+	var placeholderIdxs intsets.Fast
+	var placeholders []*memo.PlaceholderExpr
+	maxPlaceholderIdx := -1
+	var collectPlaceholders func(e opt.Expr)
+	collectPlaceholders = func(e opt.Expr) {
+		if p, ok := e.(*memo.PlaceholderExpr); ok {
+			idx := int(p.Value.(*tree.Placeholder).Idx)
+			if placeholderIdxs.Contains(idx) {
+				return
+			}
+			placeholderIdxs.Add(idx)
+			placeholders = append(placeholders, p)
+			maxPlaceholderIdx = max(maxPlaceholderIdx, idx)
+			return
+		}
+		for i, n := 0, e.ChildCount(); i < n; i++ {
+			collectPlaceholders(e.Child(i))
+		}
+	}
+	for i := range filter {
+		collectPlaceholders(filter[i].Condition)
+	}
+
+	// Build the Values expression and keep a mapping from placeholder indexes
+	// to column IDs.
+	if len(placeholders) == 0 {
+		// TODO: Assertion failure.
+	}
+
+	exprs := make(memo.ScalarListExpr, 0, len(placeholders))
+	typs := make([]*types.T, 0, len(placeholders))
+	cols := make(opt.ColList, 0, len(placeholders))
+	placeholderMap := make(opt.OptionalColList, maxPlaceholderIdx+1)
+	for _, p := range placeholders {
+		exprs = append(exprs, p)
+		typs = append(typs, p.DataType())
+		idx := p.Value.(*tree.Placeholder).Idx
+		col := c.f.Metadata().AddColumn(fmt.Sprintf("$%d", idx+1), p.DataType())
+		cols = append(cols, col)
+		placeholderMap[idx] = col
+	}
+
+	tupleTyp := types.MakeTuple(typs)
+	rows := memo.ScalarListExpr{c.f.ConstructTuple(exprs, tupleTyp)}
+	values := c.f.ConstructValues(rows, &memo.ValuesPrivate{
+		Cols:    cols,
+		ID:      c.f.Metadata().NextUniqueID(),
+		Generic: true,
+	})
+
+	// Replace the placeholders in the filters with column ID variables.
+	var replace func(e opt.Expr) opt.Expr
+	replace = func(e opt.Expr) opt.Expr {
+		if p, ok := e.(*memo.PlaceholderExpr); ok {
+			idx := p.Value.(*tree.Placeholder).Idx
+			col := placeholderMap[idx]
+			if col == 0 {
+				// TODO: Assertion failure.
+			}
+			return c.f.ConstructVariable(col)
+		}
+		return c.f.Replace(e, replace)
+	}
+
+	newFilter := make(memo.FiltersExpr, len(filter))
+	for i := range newFilter {
+		newFilter[i] = c.f.ConstructFiltersItem(replace(filter[i].Condition).(opt.ScalarExpr))
+	}
+
+	return values, newFilter, true
 }

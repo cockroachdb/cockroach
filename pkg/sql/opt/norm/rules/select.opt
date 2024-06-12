@@ -448,3 +448,20 @@ $input
     )
     (RemoveFiltersItem $filter $item)
 )
+
+# TODO
+[PlaceholderJoin, Normalize]
+(Select
+    $input:*
+    $filters:* &
+        (Let
+            (
+                $values
+                $newFilters
+                $ok
+            ):(PlaceholderValuesAndFilters $filters)
+            $ok
+        )
+)
+=>
+(InnerJoin $input $values $newFilters (EmptyJoinPrivate))
