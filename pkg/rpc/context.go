@@ -907,19 +907,6 @@ func (a internalClientAdapter) Batch(
 	return a.batchHandler(ctx, ba, opts...)
 }
 
-var rangeFeedDesc = &grpc.StreamDesc{
-	StreamName:    "RangeFeed",
-	ServerStreams: true,
-}
-
-const rangefeedMethodName = "/cockroach.roachpb.Internal/RangeFeed"
-
-var rangefeedStreamInfo = &grpc.StreamServerInfo{
-	FullMethod:     rangefeedMethodName,
-	IsClientStream: false,
-	IsServerStream: true,
-}
-
 var muxRangeFeedDesc = &grpc.StreamDesc{
 	StreamName:    "MuxRangeFeed",
 	ServerStreams: true,
@@ -932,155 +919,6 @@ var muxRangefeedStreamInfo = &grpc.StreamServerInfo{
 	FullMethod:     muxRangefeedMethodName,
 	IsClientStream: true,
 	IsServerStream: true,
-}
-
-// RangeFeed implements the RestrictedInternalClient interface.
-func (a internalClientAdapter) RangeFeed(
-	ctx context.Context, args *kvpb.RangeFeedRequest, opts ...grpc.CallOption,
-) (kvpb.Internal_RangeFeedClient, error) {
-	// RangeFeed is a server-streaming RPC, so we'll use a pipe between the
-	// server-side sender and the client-side receiver. The two ends of this pipe
-	// are wrapped in a client stream (rawClientStream) and a server stream
-	// (rawServerStream).
-	//
-	// On the server side, the rawServerStream will be possibly wrapped by
-	// server-side interceptors providing their own implementation of
-	// grpc.ServerStream, and then it will be in turn wrapped by a
-	// rangeFeedServerAdapter before being passed to the RangeFeed RPC handler
-	// (i.e. Node.RangeFeed).
-	//
-	// On the client side, the rawClientStream will be returned at the bottom of the
-	// interceptor chain. The client-side interceptors might wrap it in their own
-	// ClientStream implementations, so it might not be the stream that we
-	// ultimately return to callers. Similarly, the server-side interceptors might
-	// wrap it before passing it to the RPC handler.
-	//
-	// The flow of data through the pipe, from producer to consumer:
-	//   RPC handler (i.e. Node.RangeFeed) ->
-	//    -> rangeFeedServerAdapter
-	//    -> grpc.ServerStream implementations provided by server-side interceptors
-	//    -> rawServerStream
-	//        | the pipe
-	//        v
-	//    -> rawClientStream
-	//    -> grpc.ClientStream implementations provided by client-side interceptors
-	//    -> rangeFeedClientAdapter
-	//    -> rawClientStream
-	//    -> RPC caller
-	writer, reader := makePipe(func(dst interface{}, src interface{}) {
-		*dst.(*kvpb.RangeFeedEvent) = *src.(*kvpb.RangeFeedEvent)
-	})
-	rawClientStream := &clientStream{
-		ctx:      ctx,
-		receiver: reader,
-		// RangeFeed is a server-streaming RPC, so the client does not send
-		// anything.
-		sender: pipeWriter{},
-	}
-
-	serverCtx := ctx
-	if a.separateTracers {
-		// Wipe the span from context. The server will create a root span with a
-		// different Tracer, based on remote parent information provided by the
-		// TraceInfo above. If we didn't do this, the server would attempt to
-		// create a child span with its different Tracer, which is not allowed.
-		serverCtx = tracing.ContextWithSpan(ctx, nil)
-	}
-
-	// Create a new context from the existing one with the "local request"
-	// field set. This tells the handler that this is an in-process request,
-	// bypassing ctx.Peer checks. This call also overwrites any possibly
-	// existing info in the context. This is important in situations where a
-	// shared-process tenant calls into the local KV node, and that local RPC
-	// ends up performing another RPC to the local node. The inner RPC must
-	// carry the identity of the system tenant, not the one of the client of
-	// the outer RPC.
-	serverCtx = grpcutil.NewLocalRequestContext(serverCtx, a.clientTenantID)
-
-	// Clear any leftover gRPC incoming metadata, if this call
-	// is originating from a RPC handler function called as
-	// a result of a tenant call. This is this case:
-	//
-	//    tenant -(rpc)-> tenant -(rpc)-> KV
-	//                            ^ YOU ARE HERE
-	//
-	// at this point, the left side RPC has left some incoming
-	// metadata in the context, but we need to get rid of it
-	// before we let the call go through KV.
-	serverCtx = grpcutil.ClearIncomingContext(serverCtx)
-
-	rawServerStream := &serverStream{
-		ctx: serverCtx,
-		// RangeFeed is a server-streaming RPC, so the server does not receive
-		// anything.
-		receiver: pipeReader{},
-		sender:   writer,
-	}
-
-	// Mark this request as originating locally.
-	args.AdmissionHeader.SourceLocation = kvpb.AdmissionHeader_LOCAL
-
-	// Spawn a goroutine running the server-side handler. This goroutine
-	// communicates with the client stream through rfPipe.
-	go func() {
-		// Handler adapts the ServerStream to the typed interface expected by the
-		// RPC handler (Node.RangeFeed). `stream` might be `rfPipe` which we
-		// pass to the interceptor chain below, or it might be another
-		// implementation of `ServerStream` that wraps it; in practice it will be
-		// tracing.grpcinterceptor.StreamServerInterceptor.
-		handler := func(srv interface{}, stream grpc.ServerStream) error {
-			return a.server.RangeFeed(args, rangeFeedServerAdapter{ServerStream: stream})
-		}
-		// Run the server interceptors, which will bottom out by running `handler`
-		// (defined just above), which runs Node.RangeFeed (our RPC handler).
-		// This call is blocking.
-		err := a.serverStreamInterceptors.run(a.server, rawServerStream, rangefeedStreamInfo, handler)
-		if err == nil {
-			err = io.EOF
-		}
-		rawServerStream.sendError(err)
-	}()
-
-	// Run the client-side interceptors, which produce a gprc.ClientStream.
-	// clientStream might end up being rfPipe, or it might end up being another
-	// grpc.ClientStream implementation that wraps it.
-	//
-	// NOTE: For actual RPCs, going to a remote note, there's a tracing client
-	// interceptor producing a tracing.grpcinterceptor.tracingClientStream
-	// implementation of ClientStream. That client interceptor does not run for
-	// these local requests handled by the internalClientAdapter (as opposed to
-	// the tracing server interceptor, which does run).
-	clientStream, err := a.clientStreamInterceptors.run(ctx, rangeFeedDesc, nil /* ClientConn */, rangefeedMethodName,
-		// This function runs at the bottom of the client interceptor stack,
-		// pretending to actually make an RPC call. We don't make any calls, but
-		// return the pipe on which messages from the server will come.
-		func(
-			ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption,
-		) (grpc.ClientStream, error) {
-			return rawClientStream, nil
-		},
-		opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return rangeFeedClientAdapter{clientStream}, nil
-}
-
-// rangeFeedClientAdapter adapts an untyped ClientStream to the typed
-// kvpb.Internal_RangeFeedClient used by the rangefeed RPC client.
-type rangeFeedClientAdapter struct {
-	grpc.ClientStream
-}
-
-var _ kvpb.Internal_RangeFeedClient = rangeFeedClientAdapter{}
-
-func (x rangeFeedClientAdapter) Recv() (*kvpb.RangeFeedEvent, error) {
-	m := new(kvpb.RangeFeedEvent)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
 }
 
 // MuxRangeFeed implements the RestrictedInternalClient interface.
@@ -1429,30 +1267,6 @@ func (s serverStream) sendError(err error) {
 }
 
 var _ grpc.ServerStream = serverStream{}
-
-// rangeFeedServerAdapter adapts an untyped ServerStream to the typed
-// kvpb.Internal_RangeFeedServer interface, expected by the RangeFeed RPC
-// handler.
-type rangeFeedServerAdapter struct {
-	grpc.ServerStream
-}
-
-var _ kvpb.Internal_RangeFeedServer = rangeFeedServerAdapter{}
-
-// kvpb.Internal_RangeFeedServer methods.
-func (a rangeFeedServerAdapter) Recv() (*kvpb.RangeFeedEvent, error) {
-	out := &kvpb.RangeFeedEvent{}
-	err := a.RecvMsg(out)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// Send implement the kvpb.Internal_RangeFeedServer interface.
-func (a rangeFeedServerAdapter) Send(e *kvpb.RangeFeedEvent) error {
-	return a.ServerStream.SendMsg(e)
-}
 
 // IsLocal returns true if the given InternalClient is local.
 func IsLocal(iface RestrictedInternalClient) bool {
