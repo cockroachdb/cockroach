@@ -23,6 +23,11 @@ const ReportableAppNamePrefix = "$ "
 // names are used to classify queries in different categories.
 const InternalAppNamePrefix = ReportableAppNamePrefix + "internal"
 
+// AttributedToUserInternalAppNamePrefix indicates that the application name
+// identifies an internally-executed query that should be attributed to the
+// user.
+const AttributedToUserInternalAppNamePrefix = ReportableAppNamePrefix + "attributed-internal"
+
 // DelegatedAppNamePrefix is added to a regular client application
 // name for SQL queries that are ran internally on behalf of other SQL
 // queries inside that application. This is not the same as

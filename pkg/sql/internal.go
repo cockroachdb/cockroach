@@ -220,8 +220,9 @@ func (ie *InternalExecutor) runWithEx(
 	wg *sync.WaitGroup,
 	syncCallback func([]*streamingCommandResult),
 	errCallback func(error),
+	attributeToUser bool,
 ) error {
-	ex, err := ie.initConnEx(ctx, txn, w, mode, sd, stmtBuf, syncCallback)
+	ex, err := ie.initConnEx(ctx, txn, w, mode, sd, stmtBuf, syncCallback, attributeToUser)
 	if err != nil {
 		return err
 	}
@@ -266,6 +267,7 @@ func (ie *InternalExecutor) initConnEx(
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
 	syncCallback func([]*streamingCommandResult),
+	attributeToUser bool,
 ) (*connExecutor, error) {
 	clientComm := &internalClientComm{
 		w:    w,
@@ -295,13 +297,23 @@ func (ie *InternalExecutor) initConnEx(
 				ex.extraTxnState.shouldResetSyntheticDescriptors = true
 			}
 		}
+		srvMetrics := &ie.s.InternalMetrics
+		if attributeToUser {
+			srvMetrics = &ie.s.Metrics
+		}
 		ex = ie.s.newConnExecutor(
 			ctx,
 			sdMutIterator,
 			stmtBuf,
 			clientComm,
+			// memMetrics is only about attributing memory monitoring to the
+			// right metric, so we choose to ignore the 'attributeToUser'
+			// boolean and use "internal memory metrics" unconditionally. (We
+			// will be using the internal sql executor as the parent during
+			// query execution, using different metrics here could lead to
+			// confusion.)
 			ie.memMetrics,
-			&ie.s.InternalMetrics,
+			srvMetrics,
 			applicationStats,
 			ie.s.cfg.GenerateID(),
 			false, /* fromOuterTxn */
@@ -314,6 +326,7 @@ func (ie *InternalExecutor) initConnEx(
 			stmtBuf,
 			clientComm,
 			applicationStats,
+			attributeToUser,
 		)
 		if err != nil {
 			return nil, err
@@ -345,6 +358,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	applicationStats sqlstats.ApplicationStats,
+	attributeToUser bool,
 ) (ex *connExecutor, _ error) {
 
 	// If the internal executor has injected synthetic descriptors, we will
@@ -371,13 +385,22 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		}
 	}
 
+	srvMetrics := &ie.s.InternalMetrics
+	if attributeToUser {
+		srvMetrics = &ie.s.Metrics
+	}
 	ex = ie.s.newConnExecutor(
 		ctx,
 		sdMutIterator,
 		stmtBuf,
 		clientComm,
+		// memMetrics is only about attributing memory monitoring to the right
+		// metric, so we choose to ignore the 'attributeToUser' boolean and use
+		// "internal memory metrics" unconditionally. (We will be using the
+		// internal sql executor as the parent during query execution, using
+		// different metrics here could lead to confusion.)
 		ie.memMetrics,
-		&ie.s.InternalMetrics,
+		srvMetrics,
 		applicationStats,
 		ie.s.cfg.GenerateID(),
 		ie.extraTxnState != nil, /* fromOuterTxn */
@@ -779,10 +802,11 @@ func (ie *InternalExecutor) ExecParsed(
 	ctx context.Context,
 	opName string,
 	txn *kv.Txn,
+	o sessiondata.InternalExecutorOverride,
 	parsedStmt statements.Statement[tree.Statement],
 	qargs ...interface{},
 ) (int, error) {
-	return ie.execIEStmt(ctx, opName, txn, ie.maybeNodeSessionDataOverride(opName), ieStmt{parsed: parsedStmt}, qargs...)
+	return ie.execIEStmt(ctx, opName, txn, o, ieStmt{parsed: parsedStmt}, qargs...)
 }
 
 type ieStmt struct {
@@ -1099,6 +1123,7 @@ func (ie *InternalExecutor) execInternal(
 
 	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)
+	attributeToUser := sessionDataOverride.AttributeToUser
 	if !rw.async() && (txn != nil && txn.Type() == kv.RootTxn) {
 		// If the "outer" query uses the RootTxn and the sync result channel is
 		// requested, then we must disable both DistSQL and Streamer to ensure
@@ -1124,6 +1149,13 @@ func (ie *InternalExecutor) execInternal(
 	} else if !strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
 		// If this is already an "internal app", don't put more prefix.
 		sd.ApplicationName = catconstants.DelegatedAppNamePrefix + sd.ApplicationName
+	}
+	if attributeToUser {
+		// If this query should be attributable to user, then we discard
+		// previous app name heuristics and use a separate prefix. This is
+		// needed since we hard-code filters that exclude queries with '$
+		// internal' in their app names on the UI.
+		sd.ApplicationName = catconstants.AttributedToUserInternalAppNamePrefix + "-" + opName
 	}
 	// If the caller has injected a mapping to temp schemas, install it, and
 	// leave it installed for the rest of the transaction.
@@ -1206,7 +1238,7 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	err = ie.runWithEx(ctx, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback)
+	err = ie.runWithEx(ctx, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser)
 	if err != nil {
 		return nil, err
 	}
@@ -1344,7 +1376,10 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	rw := newAsyncIEResultChannel()
 	stmtBuf := NewStmtBuf()
 
-	ex, err := ie.initConnEx(ctx, ie.extraTxnState.txn, rw, defaultIEExecutionMode, sd, stmtBuf, nil /* syncCallback */)
+	ex, err := ie.initConnEx(
+		ctx, ie.extraTxnState.txn, rw, defaultIEExecutionMode, sd, stmtBuf,
+		nil /* syncCallback */, false, /* attributeToUser */
+	)
 	if err != nil {
 		return errors.Wrap(err, "cannot create conn executor to commit txn")
 	}
