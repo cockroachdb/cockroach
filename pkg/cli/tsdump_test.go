@@ -17,7 +17,9 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -33,9 +35,9 @@ import (
 func TestDebugTimeSeriesDumpCmd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	c := NewCLITest(TestCLIParams{})
 	defer c.Cleanup()
+
 	t.Run("debug tsdump --format=openmetrics", func(t *testing.T) {
 		out, err := c.RunWithCapture("debug tsdump --format=openmetrics --cluster-name=test-cluster-1 --disable-cluster-name-verification")
 		require.NoError(t, err)
@@ -44,6 +46,31 @@ func TestDebugTimeSeriesDumpCmd(t *testing.T) {
 		require.Equal(t, results[len(results)-2], "# EOF")
 		require.Greater(t, len(results), 0)
 		require.Greater(t, len(results[:len(results)-2]), 0, "expected to have at least one metric")
+	})
+
+	t.Run("debug tsdump --format=raw with custom SQL and gRPC ports", func(t *testing.T) {
+		_, port, err := net.SplitHostPort(c.Server.SQLAddr())
+		require.NoError(t, err)
+
+		// make sure that the yamlFileName is unique for each concurrently running test
+		yamlFileName := fmt.Sprintf("/tmp/tsdump_test_%s.yaml", port)
+		out, err := c.RunWithCapture(
+			"debug tsdump --yaml=" + yamlFileName +
+				" --format=raw --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, out)
+
+		yaml, err := os.Open(yamlFileName)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, yaml.Close())
+			require.NoError(t, os.Remove(yamlFileName)) // cleanup
+		}()
+
+		yamlContents, err := io.ReadAll(yaml)
+		require.NoError(t, err)
+		require.NotEmpty(t, yamlContents)
 	})
 }
 

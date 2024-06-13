@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
@@ -87,10 +88,6 @@ will then convert it to the --format requested in the current invocation.
 		case tsDumpRaw:
 			if convertFile != "" {
 				return errors.Errorf("input file is already in raw format")
-			}
-			err := createYAML(ctx)
-			if err != nil {
-				return err
 			}
 
 			// Special case, we don't go through the text output code.
@@ -169,6 +166,23 @@ will then convert it to the --format requested in the current invocation.
 				// be writing potentially a lot of data to it.
 				w := bufio.NewWriterSize(os.Stdout, 1024*1024)
 				if err := tsutil.DumpRawTo(stream, w); err != nil {
+					return err
+				}
+
+				// get the node details so that we can get the SQL port
+				resp, err := serverpb.NewStatusClient(conn).Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
+				if err != nil {
+					return err
+				}
+
+				// override the server port with the SQL port taken from the DetailsResponse
+				// this port should be used to make the SQL connection
+				cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort, err = net.SplitHostPort(resp.SQLAddress.String())
+				if err != nil {
+					return err
+				}
+
+				if err = createYAML(ctx); err != nil {
 					return err
 				}
 				return w.Flush()
@@ -639,6 +653,7 @@ type openMetricsWriter struct {
 }
 
 // createYAML generates and writes tsdump.yaml to default /tmp or to a specified path
+// this file is used for staging the tsdump data into a local database for debugging
 func createYAML(ctx context.Context) (resErr error) {
 	file, err := os.OpenFile(debugTimeSeriesDumpOpts.yaml, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
