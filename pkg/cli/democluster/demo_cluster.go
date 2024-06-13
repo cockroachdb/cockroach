@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -56,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -100,7 +100,7 @@ type transientCluster struct {
 
 	// latencyEnabled controls whether simulated latency is currently enabled.
 	// It is only relevant when using SimulateLatency.
-	latencyEnabled syncutil.AtomicBool
+	latencyEnabled atomic.Bool
 }
 
 // maxNodeInitTime is the maximum amount of time to wait for nodes to
@@ -547,7 +547,7 @@ func (c *transientCluster) startTenantService(
 				Server: &server.TestingKnobs{
 					ContextTestingKnobs: rpc.ContextTestingKnobs{
 						InjectedLatencyOracle:  latencyMap,
-						InjectedLatencyEnabled: c.latencyEnabled.Get,
+						InjectedLatencyEnabled: c.latencyEnabled.Load,
 					},
 				},
 			},
@@ -575,7 +575,7 @@ func (c *transientCluster) startTenantService(
 					Server: &server.TestingKnobs{
 						ContextTestingKnobs: rpc.ContextTestingKnobs{
 							InjectedLatencyOracle:  latencyMap,
-							InjectedLatencyEnabled: c.latencyEnabled.Get,
+							InjectedLatencyEnabled: c.latencyEnabled.Load,
 						},
 					},
 				},
@@ -594,7 +594,7 @@ func (c *transientCluster) startTenantService(
 // clears the remote clock tracking. If the remote clocks were not cleared,
 // bad routing decisions would be made as soon as latency is turned on.
 func (c *transientCluster) SetSimulatedLatency(on bool) {
-	c.latencyEnabled.Set(on)
+	c.latencyEnabled.Store(on)
 	for _, s := range c.servers {
 		s.RPCContext().RemoteClocks.TestingResetLatencyInfos()
 	}
@@ -654,7 +654,7 @@ func (c *transientCluster) createAndAddNode(
 		// startup routine.
 		serverKnobs.ContextTestingKnobs = rpc.ContextTestingKnobs{
 			InjectedLatencyOracle:  regionlatency.MakeAddrMap(),
-			InjectedLatencyEnabled: c.latencyEnabled.Get,
+			InjectedLatencyEnabled: c.latencyEnabled.Load,
 		}
 	}
 

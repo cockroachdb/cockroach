@@ -42,7 +42,7 @@ import (
 // https://github.com/cockroachdb/cockroach/issues/36861#issuecomment-483589446
 func TemporarilyDisableFileGCForMainLogger() (cleanup func()) {
 	fileSink := debugLog.getFileSink()
-	if fileSink == nil || !fileSink.enabled.Get() {
+	if fileSink == nil || !fileSink.enabled.Load() {
 		return func() {}
 	}
 	oldLogLimit := atomic.LoadInt64(&fileSink.logFilesCombinedMaxSize)
@@ -58,7 +58,7 @@ type fileSink struct {
 	// This should only be written while mu is held, but can
 	// be read anytime. We maintain the invariant that
 	// enabled = true implies logDir != "".
-	enabled syncutil.AtomicBool
+	enabled atomic.Bool
 
 	// groupName is the config-specified file group name - do not use to
 	// generate file names! Use fileNamePrefix instead.
@@ -153,13 +153,13 @@ func newFileSink(
 		logBytesWritten:         logBytesWritten,
 	}
 	f.mu.logDir = dir
-	f.enabled.Set(dir != "")
+	f.enabled.Store(dir != "")
 	return f
 }
 
 // activeAtSeverity implements the logSink interface.
 func (l *fileSink) active() bool {
-	return l.enabled.Get()
+	return l.enabled.Load()
 }
 
 // attachHints implements the logSink interface.
@@ -181,7 +181,7 @@ func (l *fileSink) output(b []byte, opts sinkOutputOptions) error {
 		l.emergencyOutput(b)
 		return nil
 	}
-	if !l.enabled.Get() {
+	if !l.enabled.Load() {
 		// NB: we need to check filesink.enabled a second time here in
 		// case a test Scope() has disabled it asynchronously while
 		// (*loggerT).outputLogEntry() was not holding outputMu.
@@ -199,7 +199,7 @@ func (l *fileSink) output(b []byte, opts sinkOutputOptions) error {
 		return err
 	}
 
-	if opts.extraFlush || !l.bufferedWrites || logging.flushWrites.Get() {
+	if opts.extraFlush || !l.bufferedWrites || logging.flushWrites.Load() {
 		l.flushAndMaybeSyncLocked(false /*doSync*/)
 	}
 	return nil

@@ -4344,18 +4344,17 @@ func TestStrictGCEnforcement(t *testing.T) {
 
 		// Block the KVSubscriber rangefeed from progressing.
 		blockKVSubscriberCh := make(chan struct{})
-		var isBlocked syncutil.AtomicBool
-		isBlocked.Set(false)
+		var isBlocked atomic.Bool
 		mu.Lock()
 		mu.blockOnTimestampUpdate = func() {
-			isBlocked.Set(true)
+			isBlocked.Store(true)
 			<-blockKVSubscriberCh
 		}
 		mu.Unlock()
 
 		// Ensure that the KVSubscriber has been blocked.
 		testutils.SucceedsSoon(t, func() error {
-			if !isBlocked.Get() {
+			if !isBlocked.Load() {
 				return errors.New("kvsubscriber not blocked yet")
 			}
 			return nil
@@ -4389,18 +4388,17 @@ func TestStrictGCEnforcement(t *testing.T) {
 	t.Run("protected timestamps are respected", func(t *testing.T) {
 		// Block the KVSubscriber rangefeed from progressing.
 		blockKVSubscriberCh := make(chan struct{})
-		var isBlocked syncutil.AtomicBool
-		isBlocked.Set(false)
+		var isBlocked atomic.Bool
 		mu.Lock()
 		mu.blockOnTimestampUpdate = func() {
-			isBlocked.Set(true)
+			isBlocked.Store(true)
 			<-blockKVSubscriberCh
 		}
 		mu.Unlock()
 
 		// Ensure that the KVSubscriber has been blocked.
 		testutils.SucceedsSoon(t, func() error {
-			if !isBlocked.Get() {
+			if !isBlocked.Load() {
 				return errors.New("kvsubscriber not blocked yet")
 			}
 			return nil

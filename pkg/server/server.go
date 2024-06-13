@@ -2329,7 +2329,7 @@ func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 		return err
 	}
 
-	s.sqlServer.isReady.Set(true)
+	s.sqlServer.isReady.Store(true)
 
 	log.Event(ctx, "server ready")
 	return nil

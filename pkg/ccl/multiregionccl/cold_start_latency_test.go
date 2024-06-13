@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
@@ -70,7 +69,7 @@ func TestColdStartLatency(t *testing.T) {
 	}
 	pauseAfter := make(chan struct{})
 	signalAfter := make([]chan struct{}, numNodes)
-	var latencyEnabled syncutil.AtomicBool
+	var latencyEnabled atomic.Bool
 	var addrsToNodeIDs sync.Map
 
 	// Set up the host cluster.
@@ -86,7 +85,7 @@ func TestColdStartLatency(t *testing.T) {
 			SignalAfterGettingRPCAddress: signalAfter[i],
 			ContextTestingKnobs: rpc.ContextTestingKnobs{
 				InjectedLatencyOracle:  regionlatency.MakeAddrMap(),
-				InjectedLatencyEnabled: latencyEnabled.Get,
+				InjectedLatencyEnabled: latencyEnabled.Load,
 				UnaryClientInterceptor: func(
 					target string, class rpc.ConnectionClass,
 				) grpc.UnaryClientInterceptor {
@@ -135,7 +134,7 @@ func TestColdStartLatency(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 	enableLatency := func() {
-		latencyEnabled.Set(true)
+		latencyEnabled.Store(true)
 		for i := 0; i < numNodes; i++ {
 			tc.Server(i).RPCContext().RemoteClocks.TestingResetLatencyInfos()
 		}
@@ -200,7 +199,7 @@ COMMIT;`}
 				InjectedLatencyOracle: tc.Server(i).TestingKnobs().
 					Server.(*server.TestingKnobs).ContextTestingKnobs.
 					InjectedLatencyOracle,
-				InjectedLatencyEnabled: latencyEnabled.Get,
+				InjectedLatencyEnabled: latencyEnabled.Load,
 				StreamClientInterceptor: func(
 					target string, class rpc.ConnectionClass,
 				) grpc.StreamClientInterceptor {

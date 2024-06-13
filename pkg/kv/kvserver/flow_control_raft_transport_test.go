@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -145,14 +146,14 @@ func TestFlowControlRaftTransport(t *testing.T) {
 						controlM[nodeID].knobs = &kvserver.RaftTransportTestingKnobs{
 							TriggerFallbackDispatchCh: make(chan time.Time),
 							OnFallbackDispatch: func() {
-								controlM[nodeID].triggeredFallbackDispatch.Set(true)
+								controlM[nodeID].triggeredFallbackDispatch.Store(true)
 							},
 							MarkSendQueueAsIdleCh: make(chan roachpb.NodeID),
 							OnWorkerTeardown: func(nodeID roachpb.NodeID) {
 								workerTeardownCh <- nodeID
 							},
 							OnServerStreamDisconnected: func() {
-								controlM[nodeID].serverStreamDisconnected.Set(true)
+								controlM[nodeID].serverStreamDisconnected.Store(true)
 							},
 						}
 
@@ -280,12 +281,12 @@ func TestFlowControlRaftTransport(t *testing.T) {
 						toControl, found := controlM[toNodeID]
 						require.True(t, found, "uninitialized node, did you use 'add node=n%s'?", toNodeID)
 						testutils.SucceedsSoon(t, func() error {
-							if toControl.serverStreamDisconnected.Get() {
+							if toControl.serverStreamDisconnected.Load() {
 								return nil
 							}
 							return errors.Errorf("waiting for server-side stream to disconnect")
 						})
-						toControl.serverStreamDisconnected.Set(false) // reset
+						toControl.serverStreamDisconnected.Store(false) // reset
 						return ""
 
 					case "drop-disconnected-tokens":
@@ -331,12 +332,12 @@ func TestFlowControlRaftTransport(t *testing.T) {
 							return "timed out"
 						}
 						testutils.SucceedsSoon(t, func() error {
-							if control.triggeredFallbackDispatch.Get() {
+							if control.triggeredFallbackDispatch.Load() {
 								return nil
 							}
 							return errors.Errorf("waiting for fallback mechanism to activate")
 						})
-						control.triggeredFallbackDispatch.Set(false) // reset
+						control.triggeredFallbackDispatch.Store(false) // reset
 						return ""
 
 					case "pending-dispatch": // cargo-culted from kvflowdispatch.TestDispatch
@@ -405,8 +406,8 @@ type transportControl struct {
 	dispatch                  *kvflowdispatch.Dispatch
 	disconnectListener        *mockRaftTransportDisconnectListener
 	knobs                     *kvserver.RaftTransportTestingKnobs
-	serverStreamDisconnected  syncutil.AtomicBool
-	triggeredFallbackDispatch syncutil.AtomicBool
+	serverStreamDisconnected  atomic.Bool
+	triggeredFallbackDispatch atomic.Bool
 	workerTeardownCh          chan roachpb.NodeID
 	chanServer                channelServer
 }
