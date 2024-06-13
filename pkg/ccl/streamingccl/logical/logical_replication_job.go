@@ -21,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
+	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -69,54 +71,40 @@ type logicalReplicationResumer struct {
 
 var _ jobs.Resumer = (*logicalReplicationResumer)(nil)
 
+func init() {
+	repstream.CreateRemoteProduceJobForLogicalReplicationHook = createRemoteProduceJobForLogicalReplication
+}
+
+func createRemoteProduceJobForLogicalReplication(
+	ctx context.Context, srcAddr string, tableNames []string,
+) (*streampb.ReplicationProducerSpec, error) {
+	// TODO(ssd): Copy over our GetFirstActiveClient logic
+	// so that we can connect to any node that we've seen
+	// in a previous Topology.
+	streamAddr, err := url.Parse(srcAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = client.Close(ctx) }()
+
+	spec, err := client.CreateForTables(ctx, &streampb.ReplicationProducerRequest{
+		TableNames: tableNames,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return spec, err
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	jobExecCtx := execCtx.(sql.JobExecContext)
-
-	progress := r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-	payload := r.job.Details().(jobspb.LogicalReplicationDetails)
-
-	if len(progress.SourceSpans) == 0 {
-		// TODO(ssd): Move this out to the when we create the job.
-		//
-		// TODO(ssd): Copy over our GetFirstActiveClient logic
-		// so that we can connect to any node that we've seen
-		// in a previous Topology.
-		streamAddr, err := url.Parse(payload.TargetClusterConnStr)
-		if err != nil {
-			return err
-		}
-
-		client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = client.Close(ctx) }()
-
-		spec, err := client.CreateForTables(ctx, &streampb.ReplicationProducerRequest{
-			TableNames: payload.TableNames,
-		})
-		if err != nil {
-			return err
-		}
-		log.Infof(ctx, "replication producer spec: %#+v", spec)
-		if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			prog := md.Progress.GetLogicalReplication()
-			prog.StreamID = uint64(spec.StreamID)
-			prog.SourceClusterID = spec.SourceClusterID
-			prog.SourceSpans = spec.TableSpans
-			prog.ReplicationStartTime = spec.ReplicationStartTime
-			prog.TableDescriptors = spec.TableDescriptors
-			ju.UpdateProgress(md.Progress)
-			return nil
-		}); err != nil {
-			return err
-		}
-		if err := client.Close(ctx); err != nil {
-			return err
-		}
-
-	}
 	return r.handleResumeError(ctx, jobExecCtx, r.ingestWithRetries(ctx, jobExecCtx))
 }
 
@@ -154,13 +142,38 @@ func (r *logicalReplicationResumer) ingest(
 		progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 		payload  = r.job.Details().(jobspb.LogicalReplicationDetails)
 
+		streamID              = payload.StreamID
 		jobID                 = r.job.ID()
 		replicatedTimeAtStart = progress.ReplicatedTime
-		sourceSpans           = progress.SourceSpans
-		streamID              = progress.StreamID
 	)
 
-	frontier, err := span.MakeFrontierAt(replicatedTimeAtStart, sourceSpans...)
+	streamAddr, err := url.Parse(payload.TargetClusterConnStr)
+	if err != nil {
+		return err
+	}
+
+	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr, streamclient.WithStreamID(streampb.StreamID(streamID)))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close(ctx) }()
+
+	req := streampb.LogicalReplicationPlanRequest{}
+	for _, pair := range payload.ReplicationPairs {
+		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
+	}
+
+	plan, err := client.PlanLogicalReplication(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	dstToSrcDescMap := make(map[int32]descpb.TableDescriptor)
+	for _, pair := range payload.ReplicationPairs {
+		dstToSrcDescMap[pair.DstDescriptorID] = plan.DescriptorMap[pair.SrcDescriptorID]
+	}
+
+	frontier, err := span.MakeFrontierAt(replicatedTimeAtStart, plan.SourceSpans...)
 	if err != nil {
 		return err
 	}
@@ -178,30 +191,14 @@ func (r *logicalReplicationResumer) ingest(
 		return err
 	}
 
-	streamAddr, err := url.Parse(payload.TargetClusterConnStr)
-	if err != nil {
-		return err
-	}
-
-	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr, streamclient.WithStreamID(streampb.StreamID(streamID)))
-	if err != nil {
-		return err
-	}
-	defer func() { _ = client.Close(ctx) }()
-
-	topology, err := client.PlanLogicalReplication(ctx, sourceSpans)
-	if err != nil {
-		return err
-	}
-
 	specs, err := constructLogicalReplicationWriterSpecs(ctx,
 		streamingccl.StreamAddress(payload.TargetClusterConnStr),
-		topology,
+		plan.Topology,
 		destNodeLocalities,
-		progress.ReplicationStartTime,
+		payload.ReplicationStartTime,
 		progress.ReplicatedTime,
 		progress.Checkpoint,
-		progress.TableDescriptors,
+		dstToSrcDescMap,
 		jobID,
 		streampb.StreamID(streamID))
 	if err != nil {
@@ -218,7 +215,7 @@ func (r *logicalReplicationResumer) ingest(
 	// TODO(ssd): Now that we have more than one processor per
 	// node, we might actually want a tree of frontier processors
 	// spread out CPU load.
-	processorCorePlacements := make([]physicalplan.ProcessorCorePlacement, 0, len(topology.Partitions))
+	processorCorePlacements := make([]physicalplan.ProcessorCorePlacement, 0, len(plan.Topology.Partitions))
 	for nodeID, parts := range specs {
 		for _, part := range parts {
 			sp := part

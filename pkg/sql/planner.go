@@ -1014,8 +1014,18 @@ func (p *planner) StartLogicalReplicationJob(
 
 	// TODO(ssd): Name resolution needs to be thought through for
 	// the final syntax.
+	//
+	// Currently, the user passes some name and that name is
+	// resolved by both the source and the destination. The
+	// destination-side resolution is below and happens in the
+	// context of the session calling the built-in. The
+	// source-side resolution happens when creating the remote
+	// producer job and happens in the context of the session we
+	// get when connecting to the source using the user-provided
+	// URL.
 	fullyQualifiedTableNames := make([]string, 0, len(tableNames))
-	for _, t := range tableNames {
+	repPairs := make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(tableNames))
+	for i, t := range tableNames {
 		un := tree.MakeUnresolvedName(t)
 		uon, err := un.ToUnresolvedObjectName(tree.NoAnnotation)
 		if err != nil {
@@ -1033,14 +1043,28 @@ func (p *planner) StartLogicalReplicationJob(
 			tree.Name(td.GetName()),
 		)
 		fullyQualifiedTableNames = append(fullyQualifiedTableNames, tbNameWithSchema.FQString())
+		repPairs[i].DstDescriptorID = int32(td.GetID())
 	}
+
+	spec, err := repstream.CreateRemoteProduceJobForLogicalReplication(ctx, targetConnStr, tableNames)
+	if err != nil {
+		return 0, err
+	}
+	for i, name := range tableNames {
+		repPairs[i].SrcDescriptorID = int32(spec.TableDescriptors[name].ID)
+	}
+
 	jr := jobs.Record{
 		Description: fmt.Sprintf("logical replication ingestion for %s",
 			strings.Join(fullyQualifiedTableNames, ",")),
 		Username: evalCtx.SessionData().User(),
 		Details: jobspb.LogicalReplicationDetails{
+			StreamID:             uint64(spec.StreamID),
+			SourceClusterID:      spec.SourceClusterID,
+			ReplicationStartTime: spec.ReplicationStartTime,
 			TargetClusterConnStr: targetConnStr,
-			TableNames:           fullyQualifiedTableNames},
+			ReplicationPairs:     repPairs,
+			TableNames:           tableNames},
 		Progress: jobspb.LogicalReplicationProgress{},
 		JobID:    registry.MakeJobID(),
 	}

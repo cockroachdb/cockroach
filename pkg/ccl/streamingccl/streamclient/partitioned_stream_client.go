@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -276,37 +277,53 @@ func (p *partitionedStreamClient) Complete(
 	return nil
 }
 
+type LogicalReplicationPlan struct {
+	Topology      Topology
+	SourceSpans   []roachpb.Span
+	DescriptorMap map[int32]descpb.TableDescriptor
+}
+
 func (p *partitionedStreamClient) PlanLogicalReplication(
-	ctx context.Context, spans []roachpb.Span,
-) (Topology, error) {
+	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
+) (LogicalReplicationPlan, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.PlanLogicalReplication")
 	defer sp.Finish()
-
-	encodedSpans := [][]byte{}
-	for _, sourceSpan := range spans {
-		spanBytes, err := protoutil.Marshal(&sourceSpan)
-		if err != nil {
-			return Topology{}, err
-		}
-		encodedSpans = append(encodedSpans, spanBytes)
-	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	row := p.mu.srcConn.QueryRow(ctx, "SELECT crdb_internal.plan_logical_replication($1)", encodedSpans)
+	encodedReq, err := protoutil.Marshal(&req)
+	if err != nil {
+		return LogicalReplicationPlan{}, err
+	}
+
+	row := p.mu.srcConn.QueryRow(ctx, "SELECT crdb_internal.plan_logical_replication($1)", encodedReq)
 
 	streamSpecBytes := []byte{}
 	if err := row.Scan(&streamSpecBytes); err != nil {
-		return Topology{}, err
+		return LogicalReplicationPlan{}, err
 	}
 
 	streamSpec := streampb.ReplicationStreamSpec{}
 	if err := protoutil.Unmarshal(streamSpecBytes, &streamSpec); err != nil {
-		return Topology{}, err
+		return LogicalReplicationPlan{}, err
+	}
+	topology, err := p.createTopology(streamSpec)
+	if err != nil {
+		return LogicalReplicationPlan{}, err
 	}
 
-	return p.createTopology(streamSpec)
+	descMap := make(map[int32]descpb.TableDescriptor)
+	for _, desc := range streamSpec.TableDescriptors {
+		desc := desc
+		descMap[int32(desc.ID)] = desc
+	}
+
+	return LogicalReplicationPlan{
+		Topology:      topology,
+		SourceSpans:   streamSpec.TableSpans,
+		DescriptorMap: descMap,
+	}, nil
 }
 
 func (p *partitionedStreamClient) CreateForTables(
