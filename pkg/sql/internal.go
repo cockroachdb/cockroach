@@ -304,8 +304,8 @@ func (ie *InternalExecutor) initConnEx(
 			&ie.s.InternalMetrics,
 			applicationStats,
 			ie.s.cfg.GenerateID(),
-			postSetupFn,
-		)
+			false, /* fromOuterTxn */
+			postSetupFn)
 	} else {
 		ex, err = ie.newConnExecutorWithTxn(
 			ctx,
@@ -364,7 +364,6 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	postSetupFn := func(ex *connExecutor) {
 		if ie.extraTxnState != nil {
 			ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
-			ex.extraTxnState.fromOuterTxn = true
 			ex.extraTxnState.jobs = ie.extraTxnState.jobs
 			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
@@ -381,8 +380,8 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		&ie.s.InternalMetrics,
 		applicationStats,
 		ie.s.cfg.GenerateID(),
-		postSetupFn,
-	)
+		ie.extraTxnState != nil, /* fromOuterTxn */
+		postSetupFn)
 
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
