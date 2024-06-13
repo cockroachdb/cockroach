@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"hash/fnv"
 	"net/url"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/rcrowley/go-metrics"
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kversion"
 	"github.com/twmb/franz-go/pkg/sasl"
@@ -127,6 +129,7 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 			log.Infof(ctx, `kafka error in %d: %s`, k.debuggingId, err.Error())
 			if k.shouldTryResizing(err, msgs) {
 				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
+				fmt.Printf("splitting %d into %d and %d\n", len(msgs), len(a), len(b))
 				// recurse
 				return errors.Join(flushMsgs(a), flushMsgs(b))
 			}
@@ -212,13 +215,12 @@ func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []*kgo.Record) bool 
 	if !k.canTryResizing || err == nil || len(msgs) < 2 {
 		return false
 	}
-	var kError sarama.KError
-	return errors.As(err, &kError) && kError == sarama.ErrMessageSizeTooLarge
+	// TODO: i think recordlisttoolarge sounds right, but v1 uses messagesizetoolarge which sounds wrong to me...
+	return errors.Is(err, kerr.RecordListTooLarge)
 }
 
 // KafkaClientV2 is a small interface restricting the functionality in *kgo.Client
 type KafkaClientV2 interface {
-	// k.client.ProduceSync(ctx, msgs...).FirstErr(); err != nil {
 	ProduceSync(ctx context.Context, msgs ...*kgo.Record) kgo.ProduceResults
 	Close()
 }

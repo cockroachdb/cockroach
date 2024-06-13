@@ -2,9 +2,11 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -13,6 +15,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -69,8 +72,6 @@ func TestKafkaSinkClientV2_Resolved(t *testing.T) {
 	require.NoError(t, fx.sink.FlushResolvedPayload(fx.ctx, []byte(`{"resolved" 42}`), forEachTopic, retry.Options{}))
 }
 
-// TODO: test resizing
-
 func TestKafkaSinkClientV2_Basic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -94,12 +95,68 @@ func TestKafkaSinkClientV2_Basic(t *testing.T) {
 	require.NoError(t, fx.sink.Flush(fx.ctx, payload))
 }
 
+func TestKafkaSinkClientV2_Resize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	setup := func(canResize bool) (*kafkaSinkV2Fx, SinkPayload) {
+		fx := newKafkaSinkV2Fx(t, withSettings(func(settings *cluster.Settings) {
+			if canResize {
+				changefeedbase.BatchReductionRetryEnabled.Override(context.TODO(), &settings.SV, true)
+			}
+		}))
+		defer fx.close()
+
+		buf := fx.sink.MakeBatchBuffer("t")
+		for i := range 100 {
+			buf.Append([]byte("k1"), []byte(strconv.Itoa(i)), attributes{})
+		}
+		payload, err := buf.Close()
+		require.NoError(t, err)
+
+		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.RecordListTooLarge)}}
+		if canResize {
+			// it should keep splitting it in two until it hits size=1
+			gomock.InOrder(
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:50]).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:25]).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:13]).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:7]).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:4]).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:2]).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:1]).Times(1).Return(pr),
+			)
+		} else {
+			fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)).Times(1).Return(pr)
+		}
+
+		return fx, payload
+	}
+
+	t.Run("resize disabled", func(t *testing.T) {
+		fx, payload := setup(false)
+		require.Error(t, fx.sink.Flush(fx.ctx, payload))
+	})
+
+	t.Run("resize enabled", func(t *testing.T) {
+		fx, payload := setup(true)
+		require.Error(t, fx.sink.Flush(fx.ctx, payload))
+	})
+}
+
+// TODOs:
+// - test resizing
+// - adapt sink_test's topic naming tests (prefix, escaping, etc)
+// - test opts construction
+
 func TestKafkaBuffer(t *testing.T) {
 	t.Skip("TODO: test flushing under various configurations")
 }
 
 type kafkaSinkV2Fx struct {
 	t        *testing.T
+	settings *cluster.Settings
 	ctx      context.Context
 	kc       *mocks.MockKafkaClientV2
 	ac       *mocks.MockKafkaAdminClientV2
@@ -108,7 +165,14 @@ type kafkaSinkV2Fx struct {
 	sink *kafkaSinkClient
 }
 
-func newKafkaSinkV2Fx(t *testing.T, clientOpts ...kgo.Opt) *kafkaSinkV2Fx {
+type fxOpt func(*kafkaSinkV2Fx)
+
+func withSettings(cb func(*cluster.Settings)) fxOpt {
+	return func(fx *kafkaSinkV2Fx) {
+		cb(fx.settings)
+	}
+}
+func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 	kc := mocks.NewMockKafkaClientV2(ctrl)
@@ -116,20 +180,24 @@ func newKafkaSinkV2Fx(t *testing.T, clientOpts ...kgo.Opt) *kafkaSinkV2Fx {
 
 	settings := cluster.MakeTestingClusterSettings()
 
-	sink, err := newKafkaSinkClient(ctx, clientOpts, sinkBatchConfig{}, "no addrs", settings, kafkaSinkV2Knobs{
+	fx := &kafkaSinkV2Fx{
+		t:        t,
+		settings: settings,
+		ctx:      ctx,
+		kc:       kc,
+		ac:       ac,
+		mockCtrl: ctrl,
+	}
+
+	var err error
+	fx.sink, err = newKafkaSinkClient(ctx, nil, sinkBatchConfig{}, "no addrs", settings, kafkaSinkV2Knobs{
 		OverrideClient: func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2) {
 			return kc, ac
 		},
 	})
 	require.NoError(t, err)
-	return &kafkaSinkV2Fx{
-		t:        t,
-		ctx:      ctx,
-		kc:       kc,
-		ac:       ac,
-		mockCtrl: ctrl,
-		sink:     sink,
-	}
+
+	return fx
 }
 
 func (fx *kafkaSinkV2Fx) close() {
