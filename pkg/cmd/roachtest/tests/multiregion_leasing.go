@@ -144,7 +144,7 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), defaultOpts)
 
 			grp := ctxgroup.WithContext(ctx)
-			totalTimeSeconds := syncutil.AtomicFloat64(0.0)
+			var totalTimeSeconds syncutil.AtomicFloat64
 			// Start one thread per-node that will execute the cockroach sql command
 			// with a script that selects from each table. The number of tables that
 			// we have is high so the lease manager can't keep everything refreshed
@@ -184,7 +184,7 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 							"session_based_leasing=%t node=%d iteration=%d completed in %.2f",
 							sessionBasedLeasingEnabled, nodeIdx, iter, realExecTimeSeconds,
 						))
-						syncutil.AddFloat64(&totalTimeSeconds, realExecTimeSeconds)
+						totalTimeSeconds.Add(realExecTimeSeconds)
 					}
 					return nil
 				})
@@ -192,7 +192,7 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 			if err := grp.Wait(); err != nil {
 				t.Fatal(err)
 			}
-			durations[modeIdx] = time.Duration(syncutil.LoadFloat64(&totalTimeSeconds) * float64(time.Second))
+			durations[modeIdx] = time.Duration(totalTimeSeconds.Load() * float64(time.Second))
 			t.Status(fmt.Sprintf("benchmark completed for session_based_leasing=%t in %d", sessionBasedLeasingEnabled, durations[modeIdx]))
 		}()
 	}
