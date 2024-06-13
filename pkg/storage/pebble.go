@@ -920,6 +920,18 @@ func DefaultPebbleOptions() *pebble.Options {
 		l.EnsureDefaults()
 	}
 
+	// These size classes are a subset of available size classes in jemalloc[1].
+	// The size classes are used by Pebble for determining target block sizes for
+	// flushes, with the goal of reducing internal fragmentation.
+	//
+	// [1] https://jemalloc.net/jemalloc.3.html#size_classes
+	opts.AllocatorSizeClasses = []int{
+		16384,
+		20480, 24576, 28672, 32768,
+		40960, 49152, 57344, 65536,
+		81920, 98304, 114688, 131072,
+	}
+
 	return opts
 }
 
