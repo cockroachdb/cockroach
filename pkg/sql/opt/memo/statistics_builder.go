@@ -45,6 +45,9 @@ const (
 	// 'foo'.
 	similarityFilterSelectivity = 1.0 / 100.0
 
+	// TODO
+	placeholderEqualitySelectivity = 1.0 / 10000.0
+
 	// TODO(rytaft): Add other selectivities for other types of predicates.
 
 	// This is an arbitrary row count used in the absence of any real statistics.
@@ -3395,6 +3398,13 @@ func (sb *statisticsBuilder) applyFiltersItem(
 		return opt.ColSet{}, opt.ColSet{}
 	}
 
+	// TODO(mgartner): We should probably use distinctCount / rowCount as the
+	// selectivity for placeholder equality.
+	if isPlaceholderEqualityFilter(filter.Condition) {
+		unapplied.placeholderEquality++
+		return opt.ColSet{}, opt.ColSet{}
+	}
+
 	// Special case: The current conjunct is an inverted join condition which is
 	// handled by selectivityFromInvertedJoinCondition.
 	if isInvertedJoinCond(filter.Condition) {
@@ -4783,7 +4793,8 @@ func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
 	c filterCount,
 ) (selectivity props.Selectivity) {
 	s := math.Pow(unknownFilterSelectivity, float64(c.unknown)) *
-		math.Pow(similarityFilterSelectivity, float64(c.similarity))
+		math.Pow(similarityFilterSelectivity, float64(c.similarity)) *
+		math.Pow(placeholderEqualitySelectivity, float64(c.placeholderEquality))
 	return props.MakeSelectivity(s)
 }
 
@@ -4852,6 +4863,14 @@ func isSimilarityFilter(e opt.ScalarExpr) bool {
 			sim.Right.DataType().Family() == types.StringFamily
 	}
 	return false
+}
+
+// isPlaceholderEqualityFilter returns true if the given condition is an equality
+// between a column and placeholder.
+func isPlaceholderEqualityFilter(e opt.ScalarExpr) bool {
+	return e.Op() == opt.EqOp &&
+		e.Child(0).Op() == opt.VariableOp &&
+		e.Child(1).Op() == opt.PlaceholderOp
 }
 
 // isInvertedJoinCond returns true if the given condition is either an index-
@@ -5157,12 +5176,14 @@ func (sb *statisticsBuilder) factorOutVirtualCols(
 // the number of filters which are not applied to selectivities via more exact
 // means like constraints and histogram filtering.
 type filterCount struct {
-	unknown    int
-	similarity int
+	unknown             int
+	similarity          int
+	placeholderEquality int
 }
 
 // add adds the counts of other to c.
 func (c *filterCount) add(other filterCount) {
 	c.unknown += other.unknown
 	c.similarity += other.similarity
+	c.placeholderEquality += other.placeholderEquality
 }
