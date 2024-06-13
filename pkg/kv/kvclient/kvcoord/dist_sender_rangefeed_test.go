@@ -41,10 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/sasha-s/go-deadlock"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 type wrapRangeFeedClientFn func(client kvpb.Internal_RangeFeedClient) kvpb.Internal_RangeFeedClient
@@ -297,210 +295,6 @@ func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {
 	}
 }
 
-type blockRecvRangeFeedClient struct {
-	kvpb.Internal_RangeFeedClient
-	numRecvRemainingUntilBlocked int
-
-	ctxCanceled bool
-}
-
-func (b *blockRecvRangeFeedClient) Recv() (*kvpb.RangeFeedEvent, error) {
-	if !b.ctxCanceled {
-		ctx := b.Internal_RangeFeedClient.Context()
-		b.numRecvRemainingUntilBlocked--
-		if b.numRecvRemainingUntilBlocked < 0 {
-			select {
-			case <-ctx.Done():
-				b.ctxCanceled = true
-				return nil, ctx.Err()
-			case <-time.After(testutils.DefaultSucceedsSoonDuration):
-				return nil, errors.New("did not get stuck")
-			}
-		}
-	}
-	return b.Internal_RangeFeedClient.Recv()
-}
-
-var _ kvpb.Internal_RangeFeedClient = (*blockRecvRangeFeedClient)(nil)
-
-func TestRestartsStuckRangeFeeds(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	blockingClient := &blockRecvRangeFeedClient{}
-	var wrapRfClient wrapRangeFeedClientFn = func(client kvpb.Internal_RangeFeedClient) kvpb.Internal_RangeFeedClient {
-		blockingClient.Internal_RangeFeedClient = client
-		blockingClient.numRecvRemainingUntilBlocked = 1 // let first Recv through, then block
-		return blockingClient
-	}
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				KVClient: &kvcoord.ClientTestingKnobs{
-					TransportFactory: makeTransportFactory(false, nil, wrapRfClient),
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	ts := tc.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	startTime := ts.Clock().Now()
-
-	// Create a table, and split it so that we have multiple ranges, distributed across
-	// test cluster nodes.
-	sqlDB.ExecMultiple(t,
-		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-		`SET CLUSTER SETTING kv.rangefeed.range_stuck_threshold='1s'`,
-		`CREATE TABLE foo (key INT PRIMARY KEY)`,
-		`INSERT INTO foo (key) SELECT * FROM generate_series(1, 100)`,
-	)
-
-	fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-		ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
-	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
-
-	allSeen, onValue := observeNValues(100)
-	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue, false)
-	defer closeFeed()
-	channelWaitWithTimeout(t, allSeen)
-	closeFeed() // Explicitly shutdown feed to make sure metrics no longer change.
-
-	require.True(t, blockingClient.ctxCanceled)
-	require.EqualValues(t, 1, tc.Server(0).DistSenderI().(*kvcoord.DistSender).Metrics().Errors.Stuck.Count())
-}
-
-func TestRestartsStuckRangeFeedsSecondImplementation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	type testKey struct{}
-
-	ctx := context.Background()
-
-	var canceled int32 // atomic
-
-	var doneErr = errors.New("gracefully terminating test")
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					TestingRangefeedFilter: func(args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink) *kvpb.Error {
-						md, ok := metadata.FromIncomingContext(stream.Context())
-						if (!ok || len(md[t.Name()]) == 0) && stream.Context().Value(testKey{}) == nil {
-							return nil
-						}
-						if atomic.LoadInt32(&canceled) != 0 {
-							return kvpb.NewError(doneErr)
-						}
-
-						t.Logf("intercepting %s", args)
-						// Send a first response to "arm" the stuck detector in DistSender.
-						if assert.NoError(t, stream.Send(&kvpb.RangeFeedEvent{Checkpoint: &kvpb.RangeFeedCheckpoint{
-							Span:       args.Span,
-							ResolvedTS: hlc.Timestamp{Logical: 1},
-						}})) {
-							t.Log("sent first event, now blocking")
-						}
-						select {
-						case <-time.After(testutils.DefaultSucceedsSoonDuration):
-							return kvpb.NewErrorf("timed out waiting for stuck rangefeed's ctx cancellation")
-						case <-stream.Context().Done():
-							t.Log("server side rangefeed canceled (as expected)")
-							atomic.StoreInt32(&canceled, 1)
-						}
-						return nil
-					},
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	ts := tc.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	startTime := ts.Clock().Now()
-
-	for _, stmt := range []string{
-		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
-		`SET CLUSTER SETTING kv.rangefeed.range_stuck_threshold='1s'`,
-	} {
-		sqlDB.Exec(t, stmt)
-	}
-
-	span := func() roachpb.Span {
-		desc := tc.LookupRangeOrFatal(t, tc.ScratchRange(t))
-		t.Logf("r%d", desc.RangeID)
-		return desc.RSpan().AsRawSpanWithNoLocals()
-	}()
-
-	ds := ts.DistSenderI().(*kvcoord.DistSender)
-
-	// Use both gRPC metadata and a local ctx key to tag the context for the
-	// outgoing rangefeed. At time of writing, we're bypassing gRPC due to
-	// the local optimization, but it's not worth special casing on that.
-	ctx = metadata.AppendToOutgoingContext(ctx, t.Name(), "please block me")
-
-	rangeFeed := func(
-		t *testing.T,
-		ctx context.Context,
-		ds *kvcoord.DistSender,
-		sp roachpb.Span,
-		startFrom hlc.Timestamp,
-	) (_cancel func(), _wait func() error) {
-		events := make(chan kvcoord.RangeFeedMessage)
-		ctx, cancel := context.WithCancel(ctx)
-		{
-			origCancel := cancel
-			cancel = func() {
-				t.Helper()
-				t.Log("cancel invoked")
-				origCancel()
-			}
-		}
-
-		g := ctxgroup.WithContext(ctx)
-		g.GoCtx(func(ctx context.Context) error {
-			defer close(events)
-			err := ds.RangeFeed(ctx, []roachpb.Span{sp}, startFrom, events, kvcoord.WithoutMuxRangeFeed())
-			t.Logf("from RangeFeed: %v", err)
-			return err
-		})
-		g.GoCtx(func(ctx context.Context) error {
-			for {
-				select {
-				case <-ctx.Done():
-					return nil // expected
-				case ev := <-events:
-					t.Logf("from consumer: %+v", ev)
-				case <-time.After(testutils.DefaultSucceedsSoonDuration):
-					return errors.New("timed out waiting to consume events")
-				}
-			}
-		})
-
-		return cancel, g.Wait
-	}
-
-	cancel, wait := rangeFeed(t, context.WithValue(ctx, testKey{}, testKey{}), ds, span, startTime)
-	defer time.AfterFunc(testutils.DefaultSucceedsSoonDuration, cancel).Stop()
-	{
-		err := wait()
-		require.True(t, errors.Is(err, doneErr), "%+v", err)
-	}
-
-	require.EqualValues(t, 1, atomic.LoadInt32(&canceled))
-	// NB: We  really expect exactly 1 but with a 1s timeout, it's not inconceivable that
-	// on a particularly slow CI machine some unrelated rangefeed could also catch the occasional
-	// retry.
-	require.NotZero(t, ds.Metrics().Errors.Stuck.Count())
-}
-
 func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -592,7 +386,6 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 		// Upon shutdown, make sure the metrics have correct values.
 		defer func() {
 			require.EqualValues(t, 0, metrics.RangefeedRanges.Value())
-			require.EqualValues(t, 0, metrics.Errors.Stuck.Count())
 			require.EqualValues(t, 0, metrics.RangefeedLocalRanges.Value())
 
 			// We injected numRangesToRetry transient errors during catchup scan.
