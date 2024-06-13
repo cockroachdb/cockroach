@@ -3,15 +3,57 @@ package changefeedccl
 import (
 	"context"
 	"testing"
-	"time"
 
-	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
+
+type kafkaSinkV2Fx struct {
+	t        *testing.T
+	ctx      context.Context
+	kc       *mocks.MockKafkaClientV2
+	ac       *mocks.MockKafkaAdminClientV2
+	mockCtrl *gomock.Controller
+
+	sink *kafkaSinkClient
+}
+
+func newKafkaSinkV2Fx(t *testing.T, clientOpts ...kgo.Opt) *kafkaSinkV2Fx {
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	kc := mocks.NewMockKafkaClientV2(ctrl)
+	ac := mocks.NewMockKafkaAdminClientV2(ctrl)
+
+	targets := makeChangefeedTargets("t")
+	topics, err := MakeTopicNamer(targets, WithPrefix(noTopicPrefix), WithSingleName(defaultTopicName), WithSanitizeFn(SQLNameToKafkaName))
+	require.NoError(t, err)
+
+	settings := cluster.MakeTestingClusterSettings()
+
+	sink, err := newKafkaSinkClient(ctx, clientOpts, sinkBatchConfig{}, "no addrs", topics, settings, kafkaSinkV2Knobs{
+		OverrideClient: func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2) {
+			return kc, ac
+		},
+	})
+	require.NoError(t, err)
+	return &kafkaSinkV2Fx{
+		t:        t,
+		ctx:      ctx,
+		kc:       kc,
+		ac:       ac,
+		mockCtrl: ctrl,
+		sink:     sink,
+	}
+}
+
+func (fx *kafkaSinkV2Fx) close() {
+	require.NoError(fx.t, fx.sink.Close())
+}
 
 // this tests the inner sink client v2, not including the batching sink wrapper
 // copied mostly from TestKafkaSink
@@ -19,94 +61,6 @@ func TestKafkaSinkClientV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	p := newAsyncProducerMock(1)
-	sinkClient, cleanup := makeTestKafkaSinkV2(
-		t, noTopicPrefix, defaultTopicName, p, "t")
-	defer cleanup()
-
-	// No inflight
-	require.NoError(t, sinkClient.Flush(ctx, nil))
-
-	type row struct {
-		key, value string
-	}
-	mkPayload := func(rows []row) SinkPayload {
-		buf := sinkClient.MakeBatchBuffer("t")
-		for _, r := range rows {
-			buf.Append([]byte(r.key), []byte(r.value), attributes{})
-		}
-		payload, err := buf.Close()
-		require.NoError(t, err)
-		return payload
-	}
-
-	// Timeout
-	payload := mkPayload([]row{{`1`, `1`}})
-	m1 := <-p.inputCh
-	for i := 0; i < 2; i++ {
-		timeoutCtx, cancel := context.WithTimeout(ctx, time.Millisecond)
-		defer cancel()
-		require.True(t, errors.Is(context.DeadlineExceeded, sinkClient.Flush(timeoutCtx, payload)))
-	}
-	go func() { p.successesCh <- m1 }()
-	require.NoError(t, sinkClient.Flush(ctx, payload))
-
-	// // Mixed success and error.
-	// var pool testAllocPool
-	// require.NoError(t, sinkClient.EmitRow(ctx,
-	// 	topic(`t`), []byte(`2`), nil, zeroTS, zeroTS, pool.alloc()))
-	// m2 := <-p.inputCh
-	// require.NoError(t, sinkClient.EmitRow(
-	// 	ctx, topic(`t`), []byte(`3`), nil, zeroTS, zeroTS, pool.alloc()))
-
-	// m3 := <-p.inputCh
-	// require.NoError(t, sinkClient.EmitRow(
-	// 	ctx, topic(`t`), []byte(`4`), nil, zeroTS, zeroTS, pool.alloc()))
-
-	// m4 := <-p.inputCh
-	// go func() { p.successesCh <- m2 }()
-	// go func() {
-	// 	p.errorsCh <- &sarama.ProducerError{
-	// 		Msg: m3,
-	// 		Err: errors.New("m3"),
-	// 	}
-	// }()
-	// go func() { p.successesCh <- m4 }()
-	// require.Regexp(t, "m3", sinkClient.Flush(ctx))
-
-	// // Check simple success again after error
-	// require.NoError(t, sinkClient.EmitRow(
-	// 	ctx, topic(`t`), []byte(`5`), nil, zeroTS, zeroTS, pool.alloc()))
-
-	// m5 := <-p.inputCh
-	// go func() { p.successesCh <- m5 }()
-	// require.NoError(t, sinkClient.Flush(ctx))
-	// // At the end, all of the resources has been released
-	// require.EqualValues(t, 0, pool.used())
-}
-
-func makeTestKafkaSinkV2(
-	t testing.TB,
-	topicPrefix string,
-	topicNameOverride string,
-	p sarama.AsyncProducer,
-	targetNames ...string,
-) (s *kafkaSinkClient, cleanup func()) {
-	targets := makeChangefeedTargets(targetNames...)
-	topics, err := MakeTopicNamer(targets,
-		WithPrefix(topicPrefix), WithSingleName(topicNameOverride), WithSanitizeFn(SQLNameToKafkaName))
-	require.NoError(t, err)
-
-	bcfg := sinkBatchConfig{}
-	s, err = newKafkaSinkClient(context.TODO(), nil, bcfg, "no addrs", topics, nil, kafkaSinkV2Knobs{
-		OverrideClient: func(opts []kgo.Opt) (kafkaClientV2, kafkaAdminClientV2) {
-			return nil, nil
-		},
-	})
-	require.NoError(t, err)
-
-	return s, func() {
-		require.NoError(t, s.Close())
-	}
+	fx := newKafkaSinkV2Fx(t)
+	defer fx.close()
 }

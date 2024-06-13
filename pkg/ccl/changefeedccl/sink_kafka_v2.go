@@ -89,8 +89,8 @@ type kafkaSinkClient struct {
 	format      changefeedbase.FormatType
 	topics      *TopicNamer
 	batchCfg    sinkBatchConfig
-	client      kafkaClientV2
-	adminClient kafkaAdminClientV2
+	client      KafkaClientV2
+	adminClient KafkaAdminClientV2
 
 	knobs          kafkaSinkV2Knobs
 	canTryResizing bool
@@ -212,19 +212,19 @@ func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []*kgo.Record) bool 
 	return errors.As(err, &kError) && kError == sarama.ErrMessageSizeTooLarge
 }
 
-// kafkaClientV2 is a small interface restricting the functionality in *kgo.Client
-type kafkaClientV2 interface {
+// KafkaClientV2 is a small interface restricting the functionality in *kgo.Client
+type KafkaClientV2 interface {
 	// k.client.ProduceSync(ctx, msgs...).FirstErr(); err != nil {
 	ProduceSync(ctx context.Context, msgs ...*kgo.Record) kgo.ProduceResults
 	Close()
 }
 
-type kafkaAdminClientV2 interface {
+type KafkaAdminClientV2 interface {
 	ListTopics(ctx context.Context, topics ...string) (kadm.TopicDetails, error)
 }
 
 type kafkaSinkV2Knobs struct {
-	OverrideClient func(opts []kgo.Opt) (kafkaClientV2, kafkaAdminClientV2)
+	OverrideClient func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2)
 }
 
 var _ SinkClient = (*kafkaSinkClient)(nil)
@@ -286,6 +286,7 @@ func makeKafkaSinkV2(ctx context.Context,
 			Frequency: jsonDuration(1 * time.Millisecond),
 			Messages:  1000,
 		},
+		// Retry: {} ? TODO
 	})
 	if err != nil {
 		return nil, err
