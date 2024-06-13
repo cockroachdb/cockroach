@@ -121,10 +121,9 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)).Times(1).Return(pr),
 				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:50]).Times(1).Return(pr),
 				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:25]).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:13]).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:7]).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:4]).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:2]).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:12]).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:6]).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:3]).Times(1).Return(pr),
 				fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)[:1]).Times(1).Return(pr),
 			)
 		} else {
@@ -187,6 +186,10 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 		kc:       kc,
 		ac:       ac,
 		mockCtrl: ctrl,
+	}
+
+	for _, opt := range opts {
+		opt(fx)
 	}
 
 	var err error

@@ -1275,8 +1275,8 @@ func (c *SyncedCluster) RunSingleNodeStream(
 		sess.SetStderr(errW)
 
 		err := sess.Run(ctx)
-		outW.Close()
-		errW.Close()
+		_ = outW.Close()
+		_ = errW.Close()
 		if err != nil {
 			errChan <- err
 		}
