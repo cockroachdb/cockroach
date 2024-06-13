@@ -563,6 +563,9 @@ func TestStreamerVaryingResponseSizes(t *testing.T) {
 				ForceProductionValues: true,
 			},
 		},
+		// Disable tenant randomization since this test is quite heavy and could
+		// result in a timeout under shared-process tenant.
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer s.Stopper().Stop(context.Background())
 
