@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 // this tests the inner sink client v2, not including the batching sink wrapper
@@ -98,13 +99,9 @@ func makeTestKafkaSinkV2(
 	require.NoError(t, err)
 
 	bcfg := sinkBatchConfig{}
-	s, err = newKafkaSinkClient(context.TODO(), nil, bcfg, "no addrs", topics, nil, kafkaSinkKnobs{
-		OverrideAsyncProducerFromClient: func(client kafkaClient) (sarama.AsyncProducer, error) {
-			return p, nil
-		},
-		OverrideClientInit: func(config *sarama.Config) (kafkaClient, error) {
-			client := &fakeKafkaClient{config}
-			return client, nil
+	s, err = newKafkaSinkClient(context.TODO(), nil, bcfg, "no addrs", topics, nil, kafkaSinkV2Knobs{
+		OverrideClient: func(opts []kgo.Opt) (kafkaClientV2, kafkaAdminClientV2) {
+			return nil, nil
 		},
 	})
 	require.NoError(t, err)

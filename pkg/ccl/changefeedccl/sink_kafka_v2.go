@@ -5,11 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"hash/fnv"
-	"os"
-	"path"
-	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -18,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -38,7 +35,7 @@ func newKafkaSinkClient(
 	bootstrapAddrs string,
 	topics *TopicNamer,
 	settings *cluster.Settings,
-	knobs kafkaSinkKnobs,
+	knobs kafkaSinkV2Knobs,
 ) (*kafkaSinkClient, error) {
 	clientOpts = append([]kgo.Opt{
 		// TODO: hooks for metrics / metric support at all
@@ -65,7 +62,6 @@ func newKafkaSinkClient(
 		// response.
 		// kgo.RecordRetries(5),
 		// TODO: test that produce will indeed fail eventually if it keeps getting errors
-
 	}, clientOpts...)
 
 	// TODO: test hook
@@ -74,30 +70,37 @@ func newKafkaSinkClient(
 		return nil, err
 	}
 
-	return &kafkaSinkClient{
-		client:             client,
-		knobs:              knobs,
-		topics:             topics,
-		batchCfg:           batchCfg,
-		canTryResizing:     changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
-		allTopicPartitions: make(map[string][]int32),
-	}, nil
+	c := &kafkaSinkClient{
+		client:         client,
+		adminClient:    kadm.NewClient(client),
+		knobs:          knobs,
+		topics:         topics,
+		batchCfg:       batchCfg,
+		canTryResizing: changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
+	}
+	c.metadataMu.allTopicPartitions = make(map[string][]int32)
+
+	return c, nil
 }
 
 // TODO: rename, with v2 in there somewhere
 // single threaded ONLY
 type kafkaSinkClient struct {
-	format   changefeedbase.FormatType
-	topics   *TopicNamer
-	batchCfg sinkBatchConfig
-	client   *kgo.Client
+	format      changefeedbase.FormatType
+	topics      *TopicNamer
+	batchCfg    sinkBatchConfig
+	client      kafkaClientV2
+	adminClient kafkaAdminClientV2
 
-	knobs          kafkaSinkKnobs
+	knobs          kafkaSinkV2Knobs
 	canTryResizing bool
 
 	// we need to fetch and keep track of this ourselves since kgo doesnt expose metadata to us
-	allTopicPartitions  map[string][]int32
-	lastMetadataRefresh time.Time
+	metadataMu struct {
+		syncutil.Mutex
+		allTopicPartitions  map[string][]int32
+		lastMetadataRefresh time.Time
+	}
 
 	debuggingId int64
 }
@@ -112,51 +115,6 @@ func (k *kafkaSinkClient) Close() error {
 func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
 	msgs := payload.([]*kgo.Record)
 	defer log.Infof(ctx, `flushed %d messages to kafka (id=%d, err=%v)`, len(msgs), k.debuggingId, retErr)
-
-	log.Infof(ctx, `sending %d messages to kafka`, len(msgs))
-	// debugDir := path.Join(debugRoot, strconv.Itoa(int(k.debuggingId)))
-	// dfn := path.Join(debugDir, time.Now().Format(`2006-01-02T15:04:05.000000000`))
-	// fh, err := os.OpenFile(dfn, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer fh.Close()
-	// out := json.NewEncoder(fh)
-	// for _, m := range msgs {
-	// 	mm := map[string]any{
-	// 		`topic`:     m.Topic,
-	// 		`partition`: m.Partition,
-	// 		`key`:       string(m.Key.(sarama.ByteEncoder)),
-	// 		`value`:     string(m.Value.(sarama.ByteEncoder)),
-	// 		`offset`:    m.Offset,
-	// 	}
-	// 	if err := out.Encode(mm); err != nil {
-	// 		return err
-	// 	}
-	// }
-	// log.Infof(ctx, `KAFKADEBUG: %d wrote %d messages to %s`, k.debuggingId, len(msgs), fh.Name())
-
-	// defer func() {
-	// 	fh2, err := os.OpenFile(dfn+".after", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	out := json.NewEncoder(fh2)
-	// 	for _, m := range msgs {
-	// 		mm := map[string]any{
-	// 			`topic`:     m.Topic,
-	// 			`partition`: m.Partition,
-	// 			`key`:       string(m.Key.(sarama.ByteEncoder)),
-	// 			`value`:     string(m.Value.(sarama.ByteEncoder)),
-	// 			`offset`:    m.Offset,
-	// 		}
-	// 		if err := out.Encode(mm); err != nil {
-	// 			panic(err)
-	// 		}
-	// 	}
-	// 	log.Infof(ctx, `KAFKADEBUG.after: %d wrote %d messages to %s`, k.debuggingId, len(msgs), fh2.Name())
-	// 	_ = fh2.Close()
-	// }()
 
 	// TODO: make this better. possibly moving the resizing up into the batch worker would help a bit
 	var flushMsgs func(msgs []*kgo.Record) error
@@ -186,12 +144,15 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 	forEachTopic func(func(topic string) error) error,
 	retryOpts retry.Options,
 ) error {
-	if err := k.maybeUpdateTopicPartitions(ctx, forEachTopic); err != nil {
+	k.metadataMu.Lock()
+	defer k.metadataMu.Unlock()
+
+	if err := k.maybeUpdateTopicPartitionsLocked(ctx, forEachTopic); err != nil {
 		return err
 	}
-	msgs := make([]*kgo.Record, 0, len(k.allTopicPartitions))
+	msgs := make([]*kgo.Record, 0, len(k.metadataMu.allTopicPartitions))
 	err := forEachTopic(func(topic string) error {
-		for _, partition := range k.allTopicPartitions[topic] {
+		for _, partition := range k.metadataMu.allTopicPartitions[topic] {
 			msgs = append(msgs, &kgo.Record{
 				Topic:     topic,
 				Partition: partition,
@@ -209,10 +170,12 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 }
 
 // update metadata ourselves since kgo doesnt expose it to us :/
-func (k *kafkaSinkClient) maybeUpdateTopicPartitions(ctx context.Context, forEachTopic func(func(topic string) error) error) error {
-	// TODO: use a mutex if this struct becomes multithreaded
+func (k *kafkaSinkClient) maybeUpdateTopicPartitionsLocked(ctx context.Context, forEachTopic func(func(topic string) error) error) error {
+	k.metadataMu.AssertHeld()
+	log.Infof(ctx, `updating topic partitions for kafka sink`)
+
 	const metadataRefreshMinDuration = time.Minute
-	if timeutil.Now().Sub(k.lastMetadataRefresh) < metadataRefreshMinDuration {
+	if timeutil.Now().Sub(k.metadataMu.lastMetadataRefresh) < metadataRefreshMinDuration {
 		return nil
 	}
 
@@ -225,14 +188,12 @@ func (k *kafkaSinkClient) maybeUpdateTopicPartitions(ctx context.Context, forEac
 		return err
 	}
 
-	// NOTE: don't close this! it's just a wrapper around the kgo.Client and Close() will close the inner
-	adminClient := kadm.NewClient(k.client)
-	topicDetails, err := adminClient.ListTopics(ctx, topics...)
+	topicDetails, err := k.adminClient.ListTopics(ctx, topics...)
 	if err != nil {
 		return err
 	}
 	for _, td := range topicDetails.TopicsList() {
-		k.allTopicPartitions[td.Topic] = td.Partitions
+		k.metadataMu.allTopicPartitions[td.Topic] = td.Partitions
 	}
 
 	return nil
@@ -249,6 +210,21 @@ func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []*kgo.Record) bool 
 	}
 	var kError sarama.KError
 	return errors.As(err, &kError) && kError == sarama.ErrMessageSizeTooLarge
+}
+
+// kafkaClientV2 is a small interface restricting the functionality in *kgo.Client
+type kafkaClientV2 interface {
+	// k.client.ProduceSync(ctx, msgs...).FirstErr(); err != nil {
+	ProduceSync(ctx context.Context, msgs ...*kgo.Record) kgo.ProduceResults
+	Close()
+}
+
+type kafkaAdminClientV2 interface {
+	ListTopics(ctx context.Context, topics ...string) (kadm.TopicDetails, error)
+}
+
+type kafkaSinkV2Knobs struct {
+	OverrideClient func(opts []kgo.Opt) (kafkaClientV2, kafkaAdminClientV2)
 }
 
 var _ SinkClient = (*kafkaSinkClient)(nil)
@@ -294,10 +270,6 @@ func (b *kafkaBuffer) ShouldFlush() bool {
 
 var _ BatchBuffer = (*kafkaBuffer)(nil)
 
-var lastSinkId atomic.Int64
-
-const debugRoot = `/mnt/data2/kafka_sink_debug/`
-
 func makeKafkaSinkV2(ctx context.Context,
 	u sinkURL,
 	targets changefeedbase.Targets,
@@ -325,27 +297,6 @@ func makeKafkaSinkV2(ctx context.Context,
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	// TODO: redo config stuff incl auth, batchingsink stuff
-	// kafka json config options:
-	// "ClientID"
-	// "Flush"."MaxMessages"
-	// "Flush"."Messages"
-	// "Flush"."Bytes"
-	// "Flush"."Frequency"
-	// "Version"
-	// "RequiredAcks"
-	// "ONE":
-	// "NONE":
-	// "ALL":
-	// "Compression"
-
-	// webhooks', for reference
-	// Flush.Messages
-	// Flush.Bytes
-	// Flush.Frequency
-	// Retry.Max
-	// Retry.Backoff
-
 	m := mb(requiresResourceAccounting)
 	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, m.getKafkaThrottlingMetrics(settings))
 	if err != nil {
@@ -366,31 +317,36 @@ func makeKafkaSinkV2(ctx context.Context,
 	}
 
 	// TODO: might be ok to just have one client shared between workers. try it out
-	clientFactory := func(ctx context.Context) (any, error) {
-		log.Infof(ctx, `creating kafka sink client`)
-		topicNamer2, err := MakeTopicNamer(
-			targets,
-			WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(SQLNameToKafkaName))
+	// clientFactory := func(ctx context.Context) (any, error) {
+	// 	log.Infof(ctx, `creating kafka sink client`)
+	// 	topicNamer2, err := MakeTopicNamer(
+	// 		targets,
+	// 		WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(SQLNameToKafkaName))
 
-		if err != nil {
-			return nil, err
-		}
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
 
-		// TODO: how to handle knobs
-		client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, topicNamer2, settings, kafkaSinkKnobs{})
-		if err != nil {
-			return nil, err
-		}
-		client.debuggingId = lastSinkId.Add(1)
-		debugDir := path.Join(debugRoot, strconv.Itoa(int(client.debuggingId)))
-		if err := os.MkdirAll(debugDir, 0755); err != nil {
-			return nil, err
-		}
+	// 	// TODO: how to handle knobs
+	// 	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, topicNamer2, settings, kafkaSinkKnobs{})
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	client.debuggingId = lastSinkId.Add(1)
+	// 	debugDir := path.Join(debugRoot, strconv.Itoa(int(client.debuggingId)))
+	// 	if err := os.MkdirAll(debugDir, 0755); err != nil {
+	// 		return nil, err
+	// 	}
 
-		return client, nil
+	// 	return client, nil
+	// }
+
+	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, topicNamer, settings, kafkaSinkV2Knobs{})
+	if err != nil {
+		return nil, err
 	}
 
-	return makeBatchingSink(ctx, sinkTypeKafka, nil, clientFactory, time.Second, retryOpts,
+	return makeBatchingSink(ctx, sinkTypeKafka, client, nil, time.Second, retryOpts,
 		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
 }
 
@@ -528,6 +484,15 @@ func buildKgoConfig(
 		// TODO: make sure this is right. i think the intention of the setting is just to support really old versions, which is what the Max is for
 		opts = append(opts, kgo.MaxVersions(v))
 	}
+
+	// TODO: other opts like
+	// webhooks', for reference
+	// Flush.Messages
+	// Flush.Bytes
+	// Flush.Frequency
+	// Retry.Max
+	// Retry.Backoff
+
 	return opts, nil
 }
 

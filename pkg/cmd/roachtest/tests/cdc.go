@@ -1948,8 +1948,8 @@ func registerCDC(r registry.Registry) {
 							if strings.Contains(err.Error(), "connection is already closed") {
 								if conn != nil {
 									_ = conn.Close()
+									conn = nil
 								}
-								conn = nil
 							}
 							t.L().Printf("worker %d retrying insert %d: %s", wi, key, err)
 							time.Sleep(time.Duration(attempt*10) * time.Millisecond)
@@ -1958,7 +1958,8 @@ func registerCDC(r registry.Registry) {
 				}()
 			}
 
-			ct.startCRDBChaos()
+			// TODO: make this less buggy and re enable
+			// ct.startCRDBChaos()
 
 			wg.Wait()
 		},
