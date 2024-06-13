@@ -160,65 +160,7 @@ func (u updater) setInternal(
 		return err
 	}
 	u.sv.setValueOrigin(ctx, d.getSlot(), origin)
-
-	switch setting := d.(type) {
-	case *StringSetting:
-		return setting.set(ctx, u.sv, value.Value)
-
-	case *ProtobufSetting:
-		p, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		return setting.set(ctx, u.sv, p)
-
-	case *BoolSetting:
-		b, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		setting.set(ctx, u.sv, b)
-		return nil
-
-	case numericSetting:
-		i, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		return setting.set(ctx, u.sv, i)
-
-	case *FloatSetting:
-		f, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		return setting.set(ctx, u.sv, f)
-
-	case *DurationSetting:
-		d, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		return setting.set(ctx, u.sv, d)
-
-	case *DurationSettingWithExplicitUnit:
-		d, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		return setting.set(ctx, u.sv, d)
-
-	case *VersionSetting:
-		// We intentionally avoid updating the setting through this code path.
-		// The specific setting backed by VersionSetting is the cluster version
-		// setting, changes to which are propagated through direct RPCs to each
-		// node in the cluster instead of gossip. This is done using the
-		// BumpClusterVersion RPC.
-		return nil
-
-	default:
-		return errors.AssertionFailedf("unhandled type: %T", d)
-	}
+	return d.decodeAndSet(ctx, u.sv, value.Value)
 }
 
 func (u updater) SetToDefault(ctx context.Context, key InternalKey) error {
@@ -305,68 +247,5 @@ func (u updater) SetFromStorage(
 	// setInternal or .set on the setting itself): many tests use
 	// .Override earlier and we do not want to change the override.
 	// Instead, we update the default.
-	switch setting := d.(type) {
-	case *StringSetting:
-		u.sv.setDefaultOverride(setting.getSlot(), value.Value)
-		return nil
-
-	case *ProtobufSetting:
-		p, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		u.sv.setDefaultOverride(setting.getSlot(), p)
-		return nil
-
-	case *BoolSetting:
-		b, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		u.sv.setDefaultOverride(setting.getSlot(), b)
-		return nil
-
-	case numericSetting:
-		i, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		u.sv.setDefaultOverride(setting.getSlot(), i)
-		return nil
-
-	case *FloatSetting:
-		f, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		u.sv.setDefaultOverride(setting.getSlot(), f)
-		return nil
-
-	case *DurationSetting:
-		d, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		u.sv.setDefaultOverride(setting.getSlot(), d)
-		return nil
-
-	case *DurationSettingWithExplicitUnit:
-		d, err := setting.DecodeValue(value.Value)
-		if err != nil {
-			return err
-		}
-		u.sv.setDefaultOverride(setting.getSlot(), d)
-		return nil
-
-	case *VersionSetting:
-		// We intentionally avoid updating the setting through this code path.
-		// The specific setting backed by VersionSetting is the cluster version
-		// setting, changes to which are propagated through direct RPCs to each
-		// node in the cluster instead of gossip. This is done using the
-		// BumpClusterVersion RPC.
-		return nil
-
-	default:
-		return errors.AssertionFailedf("unhandled type: %T", d)
-	}
+	return d.decodeAndSetDefaultOverride(ctx, u.sv, value.Value)
 }

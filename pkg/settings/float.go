@@ -110,6 +110,25 @@ func (f *FloatSetting) set(ctx context.Context, sv *Values, v float64) error {
 	return nil
 }
 
+func (f *FloatSetting) decodeAndSet(ctx context.Context, sv *Values, encoded string) error {
+	v, err := f.DecodeValue(encoded)
+	if err != nil {
+		return err
+	}
+	return f.set(ctx, sv, v)
+}
+
+func (f *FloatSetting) decodeAndSetDefaultOverride(
+	ctx context.Context, sv *Values, encoded string,
+) error {
+	v, err := f.DecodeValue(encoded)
+	if err != nil {
+		return err
+	}
+	sv.setDefaultOverride(f.slot, v)
+	return nil
+}
+
 func (f *FloatSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
 	if val := sv.getDefaultOverride(f.slot); val != nil {
