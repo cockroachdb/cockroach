@@ -114,13 +114,9 @@ func newKafkaSinkV2Fx(t *testing.T, clientOpts ...kgo.Opt) *kafkaSinkV2Fx {
 	kc := mocks.NewMockKafkaClientV2(ctrl)
 	ac := mocks.NewMockKafkaAdminClientV2(ctrl)
 
-	targets := makeChangefeedTargets("t")
-	topics, err := MakeTopicNamer(targets, WithPrefix(noTopicPrefix), WithSingleName(defaultTopicName), WithSanitizeFn(SQLNameToKafkaName))
-	require.NoError(t, err)
-
 	settings := cluster.MakeTestingClusterSettings()
 
-	sink, err := newKafkaSinkClient(ctx, clientOpts, sinkBatchConfig{}, "no addrs", topics, settings, kafkaSinkV2Knobs{
+	sink, err := newKafkaSinkClient(ctx, clientOpts, sinkBatchConfig{}, "no addrs", settings, kafkaSinkV2Knobs{
 		OverrideClient: func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2) {
 			return kc, ac
 		},

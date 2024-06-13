@@ -35,7 +35,6 @@ func newKafkaSinkClient(
 	clientOpts []kgo.Opt,
 	batchCfg sinkBatchConfig,
 	bootstrapAddrs string,
-	topics *TopicNamer,
 	settings *cluster.Settings,
 	knobs kafkaSinkV2Knobs,
 ) (*kafkaSinkClient, error) {
@@ -83,7 +82,6 @@ func newKafkaSinkClient(
 		client:         client,
 		adminClient:    adminClient,
 		knobs:          knobs,
-		topics:         topics,
 		batchCfg:       batchCfg,
 		canTryResizing: changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
 	}
@@ -93,9 +91,7 @@ func newKafkaSinkClient(
 }
 
 // TODO: rename, with v2 in there somewhere
-// single threaded ONLY
 type kafkaSinkClient struct {
-	topics      *TopicNamer
 	batchCfg    sinkBatchConfig
 	client      KafkaClientV2
 	adminClient KafkaAdminClientV2
@@ -188,7 +184,7 @@ func (k *kafkaSinkClient) maybeUpdateTopicPartitionsLocked(ctx context.Context, 
 	}
 
 	// Build list of topics.
-	topics := make([]string, 0, len(k.topics.DisplayNames))
+	var topics []string
 	if err := forEachTopic(func(topic string) error {
 		topics = append(topics, topic)
 		return nil
@@ -325,7 +321,7 @@ func makeKafkaSinkV2(ctx context.Context,
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
-	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, topicNamer, settings, kafkaSinkV2Knobs{})
+	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, settings, kafkaSinkV2Knobs{})
 	if err != nil {
 		return nil, err
 	}
