@@ -24,6 +24,13 @@ a AND b
 ----
 false
 
+predtest vars=(a int, b int, c int)
+a = b
+=>
+a IS NOT NULL AND c > 0
+----
+false
+
 # Conjunction filters
 
 predtest vars=(a bool)
@@ -105,6 +112,14 @@ a AND b
 a AND c
 ----
 false
+
+predtest vars=(a int, b int, c int)
+c > 0 AND a = b
+=>
+a IS NOT NULL AND c > 0
+----
+true
+└── remaining filters: a = b
 
 # Range filters
 
@@ -206,6 +221,13 @@ predtest vars=(a bool, b bool)
 a OR b
 =>
 b AND a
+----
+false
+
+predtest vars=(a int, b int, c int)
+c > 0 OR a = b
+=>
+a IS NOT NULL AND c > 0
 ----
 false
 
