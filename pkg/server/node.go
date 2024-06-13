@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -398,7 +399,7 @@ type Node struct {
 
 	// Turns `Node.writeNodeStatus` into a no-op. This is a hack to enable the
 	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
-	suppressNodeStatus syncutil.AtomicBool
+	suppressNodeStatus atomic.Bool
 
 	diskStatsMap diskStatsMap
 
@@ -1289,7 +1290,7 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 // If mustExist is true the status key must already exist and must
 // not change during writing -- if false, the status is always written.
 func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, mustExist bool) error {
-	if n.suppressNodeStatus.Get() {
+	if n.suppressNodeStatus.Load() {
 		return nil
 	}
 	var err error

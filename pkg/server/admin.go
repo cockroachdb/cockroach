@@ -2116,7 +2116,7 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		return err
 	}
 
-	if !s.sqlServer.isReady.Get() {
+	if !s.sqlServer.isReady.Load() {
 		return grpcstatus.Errorf(codes.Unavailable, "node is not accepting SQL clients")
 	}
 
@@ -2159,7 +2159,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return grpcstatus.Errorf(codes.Unavailable, "node is not healthy")
 	}
 
-	if !s.sqlServer.isReady.Get() {
+	if !s.sqlServer.isReady.Load() {
 		return grpcstatus.Errorf(codes.Unavailable, "node is not accepting SQL clients")
 	}
 

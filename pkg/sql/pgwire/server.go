@@ -266,8 +266,8 @@ type Server struct {
 	// testing{Conn,Auth}LogEnabled is used in unit tests in this
 	// package to force-enable conn/auth logging without dancing around
 	// the asynchronicity of cluster settings.
-	testingConnLogEnabled syncutil.AtomicBool
-	testingAuthLogEnabled syncutil.AtomicBool
+	testingConnLogEnabled atomic.Bool
+	testingAuthLogEnabled atomic.Bool
 }
 
 // tenantSpecificMetrics is the set of metrics for a pgwire server
@@ -706,17 +706,17 @@ func (s SocketType) asConnType() (hba.ConnType, error) {
 }
 
 func (s *Server) connLogEnabled() bool {
-	return s.testingConnLogEnabled.Get() || logConnAuth.Get(&s.execCfg.Settings.SV)
+	return s.testingConnLogEnabled.Load() || logConnAuth.Get(&s.execCfg.Settings.SV)
 }
 
 // TestingEnableConnLogging is exported for use in tests.
 func (s *Server) TestingEnableConnLogging() {
-	s.testingConnLogEnabled.Set(true)
+	s.testingConnLogEnabled.Store(true)
 }
 
 // TestingEnableAuthLogging is exported for use in tests.
 func (s *Server) TestingEnableAuthLogging() {
-	s.testingAuthLogEnabled.Set(true)
+	s.testingAuthLogEnabled.Store(true)
 }
 
 // ServeConn serves a single connection, driving the handshake process and
@@ -870,7 +870,7 @@ func (s *Server) newConn(
 		rd:                    *bufio.NewReader(netConn),
 		sv:                    sv,
 		readBuf:               pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
-		alwaysLogAuthActivity: s.testingAuthLogEnabled.Get(),
+		alwaysLogAuthActivity: s.testingAuthLogEnabled.Load(),
 	}
 	c.stmtBuf.Init()
 	c.stmtBuf.PipelineCount = s.tenantMetrics.PGWirePipelineCount
