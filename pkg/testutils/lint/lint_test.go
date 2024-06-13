@@ -1622,6 +1622,7 @@ func TestLint(t *testing.T) {
 			"syscall":                                     "sysutil",
 			"errors":                                      "github.com/cockroachdb/errors",
 			"oserror":                                     "github.com/cockroachdb/errors/oserror",
+			"go.uber.org/atomic":                          "sync/atomic",
 			"github.com/pkg/errors":                       "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/assert":        "github.com/cockroachdb/errors",
 			"github.com/cockroachdb/errors/barriers":      "github.com/cockroachdb/errors",

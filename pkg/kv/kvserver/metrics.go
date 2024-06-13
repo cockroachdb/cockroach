@@ -3574,7 +3574,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.l0SublevelsTracker.swag.Record(timeutil.Now(), float64(m.Levels[0].Sublevels))
 	curMax, _ := sm.l0SublevelsTracker.swag.Query(timeutil.Now())
 	sm.l0SublevelsTracker.Unlock()
-	syncutil.StoreFloat64(&sm.l0SublevelsWindowedMax, curMax)
+	sm.l0SublevelsWindowedMax.Store(curMax)
 
 	for level, stats := range m.Levels {
 		sm.RdbBytesIngested[level].Update(int64(stats.BytesIngested))

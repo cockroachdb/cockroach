@@ -239,5 +239,5 @@ func (g *CounterFloat64) Inc(i float64) {
 // UpdateIfHigher sets the counter's value only if it's higher
 // than the currently set one. It's assumed the caller holds
 func (g *CounterFloat64) UpdateIfHigher(i float64) {
-	g.value.UpdateIfHigher(i)
+	g.value.Update(i)
 }
