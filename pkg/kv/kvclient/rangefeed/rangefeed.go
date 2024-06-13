@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/pprof"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -260,14 +261,23 @@ func (f *RangeFeed) start(
 		f.run(ctx, frontier, resumeFromFrontier)
 	}
 
-	f.spansDebugStr = func() string {
-		n := len(f.spans)
-		if n == 1 {
-			return f.spans[0].String()
-		}
-
-		return fmt.Sprintf("{%s}", frontier.String())
-	}()
+	if l := frontier.Len(); l == 1 {
+		f.spansDebugStr = frontier.PeekFrontierSpan().String()
+	} else {
+		var buf strings.Builder
+		frontier.Entries(func(sp roachpb.Span, _ hlc.Timestamp) span.OpResult {
+			if buf.Len() > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(sp.String())
+			if buf.Len() >= 400 {
+				fmt.Fprintf(&buf, "… [%d spans]", l)
+				return span.StopMatch
+			}
+			return span.ContinueMatch
+		})
+		f.spansDebugStr = buf.String()
+	}
 
 	ctx = logtags.AddTag(ctx, "rangefeed", f.name)
 	ctx, f.cancel = f.stopper.WithCancelOnQuiesce(ctx)
