@@ -157,9 +157,10 @@ func newLogicalReplicationWriterProcessor(
 			return nil, err
 		}
 	}
+
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
-		rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Codec(), flowCtx.Cfg.Settings, spec.TableDescriptors)
+		rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Cfg.Settings, spec.TableDescriptors)
 		if err != nil {
 			return nil, err
 		}
@@ -502,6 +503,12 @@ func (lrw *logicalReplicationWriterProcessor) bufferKVs(kvs []roachpb.KeyValue) 
 		return errors.New("kv event expected to have kv")
 	}
 	for _, kv := range kvs {
+		// Remove any tenant prefix from the inbound key.
+		var err error
+		kv.Key, err = keys.StripTenantPrefix(kv.Key)
+		if err != nil {
+			return errors.Wrap(err, "stripping tenant prefix")
+		}
 		lrw.buffer.addKV(kv)
 	}
 	return nil
