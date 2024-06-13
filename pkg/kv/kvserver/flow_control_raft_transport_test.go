@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -405,8 +406,8 @@ type transportControl struct {
 	dispatch                  *kvflowdispatch.Dispatch
 	disconnectListener        *mockRaftTransportDisconnectListener
 	knobs                     *kvserver.RaftTransportTestingKnobs
-	serverStreamDisconnected  syncutil.AtomicBool
-	triggeredFallbackDispatch syncutil.AtomicBool
+	serverStreamDisconnected  atomic.Bool
+	triggeredFallbackDispatch atomic.Bool
 	workerTeardownCh          chan roachpb.NodeID
 	chanServer                channelServer
 }

@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -68,7 +68,7 @@ func testBase(
 
 	// seenMessage is true after the request predicate
 	// has seen the expected message from the client.
-	var seenMessage syncutil.AtomicBool
+	var seenMessage atomic.Bool
 
 	handler := func(rw http.ResponseWriter, r *http.Request) {
 		buf := make([]byte, 5000)
@@ -89,7 +89,7 @@ func testBase(
 				// non-failing, in case there are extra log messages generated
 				t.Log(err)
 			} else {
-				seenMessage.Set(true)
+				seenMessage.Store(true)
 			}
 		}
 	}
@@ -179,7 +179,7 @@ func testBase(
 	// If the test was not requiring a timeout, it was requiring some
 	// logging message to match the predicate. If we don't see the
 	// predicate match, it is a test failure.
-	if !seenMessage.Get() {
+	if !seenMessage.Load() {
 		t.Error("expected message matching predicate, found none")
 	}
 }

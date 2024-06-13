@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -135,14 +135,14 @@ func TestRevertTenantToTimestampPTS(t *testing.T) {
 	// We are going to force a GC between installing our PTS and
 	// the processing the first RevertRange request to ensure that
 	// the request still works.
-	trapRevertRange := syncutil.AtomicBool(0)
+	var trapRevertRange atomic.Bool
 	waitForRevertRangeStart := make(chan struct{})
 	allowRevertRange := make(chan struct{})
 	testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 		for _, req := range ba.Requests {
 			if expReq := req.GetRevertRange(); expReq != nil {
-				if trapRevertRange.Get() {
-					trapRevertRange.Set(false)
+				if trapRevertRange.Load() {
+					trapRevertRange.Store(false)
 					close(waitForRevertRangeStart)
 					<-allowRevertRange
 				}

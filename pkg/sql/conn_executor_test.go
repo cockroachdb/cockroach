@@ -1661,13 +1661,13 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	var shouldBlock syncutil.AtomicBool
+	var shouldBlock atomic.Bool
 	blockingInternalTxns := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)
 	params := base.TestServerArgs{}
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		AfterExecute: func(ctx context.Context, stmt string, isInternal bool, err error) {
-			if isInternal && shouldBlock.Get() {
+			if isInternal && shouldBlock.Load() {
 				<-blockingInternalTxns
 			}
 		},

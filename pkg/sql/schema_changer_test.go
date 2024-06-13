@@ -3063,8 +3063,8 @@ func TestPrimaryKeyDropIndexNotCancelable(t *testing.T) {
 
 	ctx := context.Background()
 	var db *gosql.DB
-	var shouldAttemptCancel syncutil.AtomicBool
-	shouldAttemptCancel.Set(true)
+	var shouldAttemptCancel atomic.Bool
+	shouldAttemptCancel.Store(true)
 	hasAttemptedCancel := make(chan struct{})
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{

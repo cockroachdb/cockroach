@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
@@ -70,7 +69,7 @@ func TestColdStartLatency(t *testing.T) {
 	}
 	pauseAfter := make(chan struct{})
 	signalAfter := make([]chan struct{}, numNodes)
-	var latencyEnabled syncutil.AtomicBool
+	var latencyEnabled atomic.Bool
 	var addrsToNodeIDs sync.Map
 
 	// Set up the host cluster.
