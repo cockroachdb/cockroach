@@ -47,6 +47,11 @@ type Progress struct {
 	//
 	// In StateSnapshot, Next == PendingSnapshot + 1.
 	Next uint64
+	// Admitted maps a priority to the index up to which the follower has admitted
+	// the log writes at this priority.
+	//
+	// Invariant: Admitted[i] <= Match.
+	Admitted AdmittedMarks
 
 	// sentCommit is the highest commit index in flight to the follower.
 	//
@@ -131,6 +136,7 @@ func (pr *Progress) ResetState(state StateType) {
 	pr.PendingSnapshot = 0
 	pr.State = state
 	pr.Inflights.reset()
+	pr.Admitted = [flowPriCount]uint64{}
 }
 
 // BecomeProbe transitions into StateProbe. Next is reset to Match+1 or,
@@ -154,6 +160,9 @@ func (pr *Progress) BecomeProbe() {
 func (pr *Progress) BecomeReplicate() {
 	pr.ResetState(StateReplicate)
 	pr.Next = pr.Match + 1
+	for i := range pr.Admitted {
+		pr.Admitted[i] = pr.Match
+	}
 }
 
 // BecomeSnapshot moves the Progress to StateSnapshot with the specified pending
@@ -186,6 +195,17 @@ func (pr *Progress) CanBumpCommit(index uint64) bool {
 	// commit index eagerly only if we haven't already sent one that bumps the
 	// follower's commit all the way to Next-1.
 	return index > pr.sentCommit && pr.sentCommit < pr.Next-1
+}
+
+// AdmittedLags returns true iff the tracked admitted indices haven't converged
+// to Match.
+func (pr *Progress) AdmittedLags() bool {
+	for _, admitted := range pr.Admitted {
+		if admitted < pr.Match {
+			return true
+		}
+	}
+	return false
 }
 
 // SentCommit updates the sentCommit.
@@ -321,6 +341,10 @@ func (pr *Progress) ShouldSendMsgApp(last, commit uint64) MsgAppType {
 		// (according to the MsgAppProbesPaused flag), send one now. This is going
 		// to be an empty "probe" MsgApp.
 		case pr.Match < last && !pr.MsgAppProbesPaused:
+			return MsgAppProbe
+		// We also need to be sending periodic MsgApps if the admitted indices
+		// haven't converged to Match.
+		case !pr.MsgAppProbesPaused && pr.AdmittedLags():
 			return MsgAppProbe
 		// Send an empty MsgApp containing the latest commit index if:
 		//	- our commit index exceeds the in-flight commit index, and

@@ -124,6 +124,10 @@ message Message {
   // follower. This can be 0 if the leader hasn't yet established the follower's
   // match index, or for backward compatibility.
   optional uint64 match = 15 [(gogoproto.nullable) = false];
+
+  // admitted contains admitted log indices at different priorities. Nodes
+  // communicate these to the leader as part of MsgAppResp messages.
+  repeated uint64 admitted = 18 [(gogoproto.nullable) = false];
 }
 
 message HardState {

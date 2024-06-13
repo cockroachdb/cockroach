@@ -547,6 +547,39 @@ func (rn *RawNode) LastIndex() uint64 {
 	return rn.raft.raftLog.lastIndex()
 }
 
+func (rn *RawNode) StableIndex() uint64 {
+	// TODO(pav-kv): this call is not cheap. Track the stable index in the
+	// raftLog.unstable data structure properly.
+	//
+	// A close candidate for this is rn.raft.raftLog.unstable.offset-1, but it's
+	// not correct when snapshots come into play.
+	index, err := rn.raft.raftLog.storage.LastIndex()
+	if err != nil {
+		panic(err)
+	}
+	return index
+}
+
+func (rn *RawNode) GetAdmitted() tracker.AdmittedMarks {
+	return rn.raft.adm.Marks
+}
+
+func (rn *RawNode) SetAdmitted(marks tracker.AdmittedMarks) pb.Message {
+	if rn.raft.lead == None {
+		return pb.Message{}
+	}
+	if !rn.raft.adm.Set(marks) {
+		return pb.Message{}
+	}
+	return pb.Message{
+		From:     rn.raft.id,
+		To:       rn.raft.lead,
+		Type:     pb.MsgAppResp,
+		Index:    rn.StableIndex(),
+		Admitted: marks[:],
+	}
+}
+
 // ReportUnreachable reports the given node is not reachable for the last send.
 func (rn *RawNode) ReportUnreachable(id pb.PeerID) {
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgUnreachable, From: id})

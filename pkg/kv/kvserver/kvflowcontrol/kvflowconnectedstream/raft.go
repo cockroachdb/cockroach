@@ -17,31 +17,36 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// raftInterfaceImpl implements RaftInterface.
-type raftInterfaceImpl struct {
-	n *raft.RawNode
+type RaftNode interface {
+	RaftInterface
+	RaftAdmittedInterface
 }
 
-var _ RaftInterface = raftInterfaceImpl{}
+var _ RaftNode = raftInterfaceImpl{}
 
-// NewRaftInterface return the implementation of RaftInterface wrapped around
-// the given raft.RawNode. The node must have Config.EnableLazyAppends == true.
-func NewRaftInterface(node *raft.RawNode) RaftInterface {
-	return raftInterfaceImpl{n: node}
+// raftInterfaceImpl implements RaftInterface.
+type raftInterfaceImpl struct {
+	*raft.RawNode
+}
+
+// NewRaftNode return the implementation of RaftNode wrapped around the given
+// raft.RawNode. The node must have Config.EnableLazyAppends == true.
+func NewRaftNode(node *raft.RawNode) RaftNode {
+	return raftInterfaceImpl{RawNode: node}
 }
 
 func (r raftInterfaceImpl) FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo {
-	pr := r.n.GetProgress(raftpb.PeerID(replicaID))
+	pr := r.GetProgress(raftpb.PeerID(replicaID))
 	return FollowerStateInfo{
-		State: pr.State,
-		Match: pr.Match,
-		Next:  pr.Next,
-		// TODO: populate Admitted
+		State:    pr.State,
+		Match:    pr.Match,
+		Next:     pr.Next,
+		Admitted: pr.Admitted,
 	}
 }
 
 func (r raftInterfaceImpl) LastEntryIndex() uint64 {
-	return r.n.LastIndex()
+	return r.LastIndex()
 }
 
 func (r raftInterfaceImpl) MakeMsgApp(
@@ -50,12 +55,7 @@ func (r raftInterfaceImpl) MakeMsgApp(
 	if maxSize <= 0 {
 		return raftpb.Message{}, errors.New("maxSize <= 0")
 	}
-	return r.n.NextMsgApp(raftpb.PeerID(replicaID), start, end, uint64(maxSize))
-}
-
-func NewRaftAdmittedInterface(node *raft.RawNode) RaftAdmittedInterface {
-	// TODO:
-	return nil
+	return r.NextMsgApp(raftpb.PeerID(replicaID), start, end, uint64(maxSize))
 }
 
 type raftEventImpl raft.Ready
