@@ -161,7 +161,13 @@ func (r *logicalReplicationResumer) ingest(
 	}
 	defer func() { _ = client.Close(ctx) }()
 
-	req := streampb.LogicalReplicationPlanRequest{}
+	asOf := replicatedTimeAtStart
+	if asOf.IsEmpty() {
+		asOf = payload.ReplicationStartTime
+	}
+	req := streampb.LogicalReplicationPlanRequest{
+		PlanAsOf: asOf,
+	}
 	for _, pair := range payload.ReplicationPairs {
 		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
 	}

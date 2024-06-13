@@ -11,6 +11,7 @@ package streamclient
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"net"
 	"net/url"
 
@@ -299,7 +300,9 @@ func (p *partitionedStreamClient) PlanLogicalReplication(
 		return LogicalReplicationPlan{}, err
 	}
 
-	row := p.mu.srcConn.QueryRow(ctx, "SELECT crdb_internal.plan_logical_replication($1)", encodedReq)
+	row := p.mu.srcConn.QueryRow(ctx,
+		fmt.Sprintf("SELECT * FROM crdb_internal.plan_logical_replication($1) AS OF SYSTEM TIME %s", req.PlanAsOf.AsOfSystemTime()),
+		encodedReq)
 
 	streamSpecBytes := []byte{}
 	if err := row.Scan(&streamSpecBytes); err != nil {
