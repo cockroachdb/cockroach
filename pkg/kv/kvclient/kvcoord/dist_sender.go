@@ -333,6 +333,7 @@ var metamorphicRouteToLeaseholderFirst = metamorphic.ConstantWithTestBool(
 // followerreadsccl code to inject logic to check if follower reads are enabled.
 // By default, without CCL code, this function returns false.
 var CanSendToFollower = func(
+	_ context.Context,
 	_ *cluster.Settings,
 	_ *hlc.Clock,
 	_ roachpb.RangeClosedTimestampPolicy,
@@ -2490,7 +2491,7 @@ func (ds *DistSender) sendToReplicas(
 	// otherwise, we may send a request to a remote region unnecessarily.
 	if ba.RoutingPolicy == kvpb.RoutingPolicy_LEASEHOLDER &&
 		CanSendToFollower(
-			ds.st, ds.clock,
+			ctx, ds.st, ds.clock,
 			routing.ClosedTimestampPolicy(defaultSendClosedTimestampPolicy), ba,
 		) {
 		ba = ba.ShallowCopy()

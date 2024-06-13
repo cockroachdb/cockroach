@@ -482,7 +482,7 @@ func TestCanSendToFollower(t *testing.T) {
 				closedts.TargetDuration.Override(ctx, &st.SV, 0)
 			}
 
-			can := canSendToFollower(st, clock, c.ctPolicy, c.ba)
+			can := canSendToFollower(ctx, st, clock, c.ctPolicy, c.ba)
 			require.Equal(t, c.exp, can)
 		})
 	}
