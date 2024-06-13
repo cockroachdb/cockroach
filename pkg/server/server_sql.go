@@ -164,14 +164,11 @@ type SQLServer struct {
 	tenantConnect     kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
-	sessionRegistry        *sql.SessionRegistry
-	closedSessionCache     *sql.ClosedSessionCache
-	jobRegistry            *jobs.Registry
-	statsRefresher         *stats.Refresher
-	temporaryObjectCleaner *sql.TemporaryObjectCleaner
-	internalMemMetrics     sql.MemoryMetrics
-	// sqlMemMetrics are used to track memory usage of sql sessions.
-	sqlMemMetrics                  sql.MemoryMetrics
+	sessionRegistry                *sql.SessionRegistry
+	closedSessionCache             *sql.ClosedSessionCache
+	jobRegistry                    *jobs.Registry
+	statsRefresher                 *stats.Refresher
+	temporaryObjectCleaner         *sql.TemporaryObjectCleaner
 	stmtDiagnosticsRegistry        *stmtdiagnostics.Registry
 	sqlLivenessSessionID           sqlliveness.SessionID
 	sqlLivenessProvider            sqlliveness.Provider
@@ -1408,8 +1405,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlInstanceDialer:              cfg.sqlInstanceDialer,
 		statsRefresher:                 statsRefresher,
 		temporaryObjectCleaner:         temporaryObjectCleaner,
-		internalMemMetrics:             internalMemMetrics,
-		sqlMemMetrics:                  sqlMemMetrics,
 		stmtDiagnosticsRegistry:        stmtDiagnosticsRegistry,
 		sqlLivenessProvider:            cfg.sqlLivenessProvider,
 		sqlInstanceStorage:             cfg.sqlInstanceStorage,

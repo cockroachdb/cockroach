@@ -864,6 +864,7 @@ func (txn *wrappedInternalTxn) ExecParsed(
 	ctx context.Context,
 	opName string,
 	_ *kv.Txn,
+	o sessiondata.InternalExecutorOverride,
 	parsedStmt statements.Statement[tree.Statement],
 	params ...interface{},
 ) (int, error) {

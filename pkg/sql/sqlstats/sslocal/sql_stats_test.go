@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1800,13 +1801,18 @@ func TestSQLStatsInternalStatements(t *testing.T) {
 	ts := s.ApplicationLayer()
 	conn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
 
-	getStmtRow := func(appName string) (query string, cnt, sampledCnt int) {
+	getStmtRow := func(appName string, attributedToUser bool) (query string, cnt, sampledCnt int) {
+		prefix := catconstants.InternalAppNamePrefix
+		if attributedToUser {
+			prefix = catconstants.AttributedToUserInternalAppNamePrefix
+		}
+		appName = prefix + "-" + appName
 		row := conn.QueryRow(t, `
 SELECT
   metadata ->> 'query',
   statistics -> 'statistics' ->> 'cnt',
   statistics -> 'execution_statistics' ->> 'cnt'
-FROM crdb_internal.statement_statistics WHERE app_name = $1`, "$ internal-"+appName)
+FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 		row.Scan(&query, &cnt, &sampledCnt)
 		return
 	}
@@ -1814,34 +1820,50 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, "$ internal-"+appN
 	// Within each distinct application, we should only sample the
 	// statement if it's the first time we've seen it.
 	t.Run("internal statement without a transaction", func(t *testing.T) {
-		appName := "without-txn"
-		for i := 0; i < 10; i++ {
-			_, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(ctx, appName, nil /* txn */, "SELECT 1")
-			require.NoError(t, err)
-		}
+		testutils.RunTrueAndFalse(t, "attributed to user", func(t *testing.T, attributedToUser bool) {
+			appName := "without-txn"
+			for i := 0; i < 10; i++ {
+				_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+					ctx,
+					appName,
+					nil, /* txn */
+					sessiondata.InternalExecutorOverride{AttributeToUser: attributedToUser},
+					"SELECT 1",
+				)
+				require.NoError(t, err)
+			}
 
-		// Verify that the internal statement is captured.
-		query, cnt, sampledCnt := getStmtRow(appName)
-		require.Equal(t, "SELECT _", query)
-		require.Equal(t, 10, cnt)
-		require.Equal(t, 1, sampledCnt)
+			// Verify that the internal statement is captured.
+			query, cnt, sampledCnt := getStmtRow(appName, attributedToUser)
+			require.Equal(t, "SELECT _", query)
+			require.Equal(t, 10, cnt)
+			require.Equal(t, 1, sampledCnt)
+		})
 	})
 
 	t.Run("internal statement with a transaction", func(t *testing.T) {
-		appName := "with-txn"
-		for i := 0; i < 10; i++ {
-			err := ts.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				_, err := txn.Exec(ctx, appName, txn.KV(), "SELECT 1")
-				return err
-			})
-			require.NoError(t, err)
-		}
+		testutils.RunTrueAndFalse(t, "attributed to user", func(t *testing.T, attributedToUser bool) {
+			appName := "with-txn"
+			for i := 0; i < 10; i++ {
+				err := ts.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					_, err := txn.ExecEx(
+						ctx,
+						appName,
+						txn.KV(),
+						sessiondata.InternalExecutorOverride{AttributeToUser: attributedToUser},
+						"SELECT 1",
+					)
+					return err
+				})
+				require.NoError(t, err)
+			}
 
-		// Verify that the internal statement is captured.
-		query, cnt, sampledCnt := getStmtRow(appName)
-		require.Equal(t, "SELECT _", query)
-		require.Equal(t, 10, cnt)
-		require.Equal(t, 1, sampledCnt)
+			// Verify that the internal statement is captured.
+			query, cnt, sampledCnt := getStmtRow(appName, attributedToUser)
+			require.Equal(t, "SELECT _", query)
+			require.Equal(t, 10, cnt)
+			require.Equal(t, 1, sampledCnt)
+		})
 	})
 
 	t.Run("internal multi-statement transaction", func(t *testing.T) {
@@ -1862,7 +1884,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, "$ internal-"+appN
 		require.NoError(t, err)
 
 		// Verify that the internal statement is captured.
-		query, cnt, sampledCnt := getStmtRow(appName)
+		query, cnt, sampledCnt := getStmtRow(appName, false /* attributedToUser */)
 		require.Equal(t, "SELECT _", query)
 		require.Equal(t, 20, cnt)
 		require.Equal(t, 1, sampledCnt)
