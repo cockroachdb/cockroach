@@ -64,15 +64,22 @@ func newKafkaSinkClient(
 		// TODO: test that produce will indeed fail eventually if it keeps getting errors
 	}, clientOpts...)
 
-	// TODO: test hook
-	client, err := kgo.NewClient(clientOpts...)
-	if err != nil {
-		return nil, err
+	var client KafkaClientV2
+	var adminClient KafkaAdminClientV2
+	var err error
+	if knobs.OverrideClient != nil {
+		client, adminClient = knobs.OverrideClient(clientOpts)
+	} else {
+		client, err = kgo.NewClient(clientOpts...)
+		if err != nil {
+			return nil, err
+		}
+		adminClient = kadm.NewClient(client.(*kgo.Client))
 	}
 
 	c := &kafkaSinkClient{
 		client:         client,
-		adminClient:    kadm.NewClient(client),
+		adminClient:    adminClient,
 		knobs:          knobs,
 		topics:         topics,
 		batchCfg:       batchCfg,
