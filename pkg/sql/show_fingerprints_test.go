@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -142,14 +142,14 @@ func TestShowTenantFingerprintsProtectsTimestamp(t *testing.T) {
 
 	ctx := context.Background()
 
-	exportStartedClosed := syncutil.AtomicBool(0)
+	var exportStartedClosed atomic.Bool
 	exportsStarted := make(chan struct{})
 	exportsResume := make(chan struct{})
 	testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 		for _, req := range ba.Requests {
 			if expReq := req.GetExport(); expReq != nil {
-				if expReq.ExportFingerprint && !exportStartedClosed.Get() {
-					exportStartedClosed.Set(true)
+				if expReq.ExportFingerprint && !exportStartedClosed.Load() {
+					exportStartedClosed.Store(true)
 					close(exportsStarted)
 					<-exportsResume
 				}

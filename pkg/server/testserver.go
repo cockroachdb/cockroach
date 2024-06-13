@@ -1445,7 +1445,7 @@ func (t *testTenant) StatsForSpan(
 
 // SetReady is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) SetReady(ready bool) {
-	t.sql.isReady.Set(ready)
+	t.sql.isReady.Store(ready)
 }
 
 // SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.
@@ -2333,7 +2333,7 @@ func (ts *testServer) StatsForSpan(
 
 // SetReady is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) SetReady(ready bool) {
-	ts.sqlServer.isReady.Set(ready)
+	ts.sqlServer.isReady.Store(ready)
 }
 
 // SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.

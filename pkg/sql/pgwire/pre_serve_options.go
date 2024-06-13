@@ -293,14 +293,14 @@ var trustClientProvidedRemoteAddrOverride = envutil.EnvOrDefaultBool("COCKROACH_
 
 // TestingSetTrustClientProvidedRemoteAddr is used in tests.
 func (s *PreServeConnHandler) TestingSetTrustClientProvidedRemoteAddr(b bool) func() {
-	prev := s.trustClientProvidedRemoteAddr.Get()
-	s.trustClientProvidedRemoteAddr.Set(b)
-	return func() { s.trustClientProvidedRemoteAddr.Set(prev) }
+	prev := s.trustClientProvidedRemoteAddr.Load()
+	s.trustClientProvidedRemoteAddr.Store(b)
+	return func() { s.trustClientProvidedRemoteAddr.Store(prev) }
 }
 
 // TestingAcceptSystemIdentityOption is used in tests.
 func (s *PreServeConnHandler) TestingAcceptSystemIdentityOption(b bool) func() {
-	prev := s.acceptSystemIdentityOption.Get()
-	s.acceptSystemIdentityOption.Set(b)
-	return func() { s.acceptSystemIdentityOption.Set(prev) }
+	prev := s.acceptSystemIdentityOption.Load()
+	s.acceptSystemIdentityOption.Store(b)
+	return func() { s.acceptSystemIdentityOption.Store(prev) }
 }
