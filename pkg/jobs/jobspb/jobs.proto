@@ -212,31 +212,38 @@ message LogicalReplicationDetails {
   string target_cluster_conn_str = 1 [
     (gogoproto.customname) = "TargetClusterConnStr"
   ];
-  // TableNames is a list of fully qualified table names that
+
+  // TableNames is the original list of source table names given by the user.
+  repeated string table_names = 2;
+
+  // DescriptorIDMap is a map from the source descriptor ID
   // are being replicated by this job.
   //
-  // TODO(ssd): We need to change this into some more generic form of
-  // "target" to account for full-database replication.
-  repeated string table_names = 2;
+  // TODO(ssd): We need to decode how to account for full-database replication.
+  message ReplicationPair {
+    int32 src_descriptor_id = 1 [(gogoproto.customname) = "SrcDescriptorID"];
+    int32 dst_descriptor_id = 2 [(gogoproto.customname) = "DstDescriptorID"];
+  }
+  repeated ReplicationPair replication_pairs = 3 [(gogoproto.nullable) = false];
+
+  uint64 stream_id = 4 [(gogoproto.customname) = "StreamID"];
+
+  // ReplicationStartTime is the initial timestamp from which the replication
+  // producer job will begin streaming MVCC revisions. This timestamp is picked
+  // once when the replication producer job is created, and is never updated
+  // through the lifetime of a replication stream. This will be the timestamp as
+  // of which each partition will perform its initial rangefeed scan on the
+  // source cluster.
+  util.hlc.Timestamp replication_start_time = 5 [(gogoproto.nullable) = false];
+
+  bytes source_cluster_id = 6 [
+      (gogoproto.nullable) = false,
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+      (gogoproto.customname) = "SourceClusterID"];
 }
 
 message LogicalReplicationProgress {
-   uint64 stream_id = 1 [(gogoproto.customname) = "StreamID"];
-
-    repeated roachpb.Span source_spans = 2 [(gogoproto.nullable) = false];
-
-    // ReplicationStartTime is the initial timestamp from which the replication
-    // producer job will begin streaming MVCC revisions. This timestamp is picked
-    // once when the replication producer job is created, and is never updated
-    // through the lifetime of a replication stream. This will be the timestamp as
-    // of which each partition will perform its initial rangefeed scan on the
-    // source cluster.
-    util.hlc.Timestamp replication_start_time = 3 [(gogoproto.nullable) = false];
-
-    bytes source_cluster_id = 4 [
-        (gogoproto.nullable) = false,
-        (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
-        (gogoproto.customname) = "SourceClusterID"];
+    reserved 1, 2, 3, 4, 7;
 
     // ReplicatedTime is the ingestion frontier. This is the canonical
     // value of the frontier. The HighWater in the job progress is for
@@ -245,12 +252,6 @@ message LogicalReplicationProgress {
 
     // Checkpoint stores a set of resolved spans denoting completed ingestion progress
     StreamIngestionCheckpoint checkpoint = 6 [(gogoproto.nullable) = false];
-
-    // TableDescriptors is a map from table names to table descriptors.
-    // TODO(ssd): This should eventually be replaces with a rangefeed drive
-    // descriptor cache of some sort.
-    map<string, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 7 [(gogoproto.nullable) = false];
-
 }
 
 message StreamReplicationDetails {
