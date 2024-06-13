@@ -34,7 +34,6 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 			InitialBackoff: time.Second,
 			MaxBackoff:     30 * time.Second,
 			Multiplier:     2,
-			Closer:         s.stopper.ShouldQuiesce(),
 		}
 
 		// Check if auto upgrade is disabled for test purposes.
@@ -51,7 +50,7 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 			}
 		}
 
-		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		for r := retry.Start(ctx, retryOpts); r.Next(); {
 			clusterVersion, err := s.clusterVersion(ctx)
 			if err != nil {
 				log.Errorf(ctx, "unable to retrieve cluster version: %v", err)
@@ -95,12 +94,11 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 				InitialBackoff: 5 * time.Second,
 				MaxBackoff:     10 * time.Second,
 				Multiplier:     2,
-				Closer:         s.stopper.ShouldQuiesce(),
 			}
 
 			// Run the set cluster setting version statement in a transaction
 			// until success.
-			for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
+			for ur := retry.Start(ctx, upgradeRetryOpts); ur.Next(); {
 				if _, err := s.sqlServer.internalExecutor.ExecEx(
 					ctx, "set-version", nil, /* txn */
 					sessiondata.NodeUserSessionDataOverride,

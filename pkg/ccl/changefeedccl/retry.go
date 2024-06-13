@@ -36,7 +36,7 @@ func getRetry(ctx context.Context) Retry {
 		}
 	}
 
-	return Retry{Retry: retry.StartWithCtx(ctx, opts)}
+	return Retry{Retry: retry.Start(ctx, opts)}
 }
 
 func testingUseFastRetry() func() {

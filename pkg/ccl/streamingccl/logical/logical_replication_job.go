@@ -380,7 +380,7 @@ func (r *logicalReplicationResumer) ingestWithRetries(
 	ro := getRetryPolicy(execCtx.ExecCfg().StreamingTestingKnobs)
 	var err error
 	var lastReplicatedTime hlc.Timestamp
-	for retrier := retry.Start(ro); retrier.Next(); {
+	for retrier := retry.Start(ctx, ro); retrier.Next(); {
 		err = r.ingest(ctx, execCtx)
 		if err == nil {
 			break

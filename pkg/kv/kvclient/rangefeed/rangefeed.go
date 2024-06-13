@@ -304,7 +304,7 @@ var useMuxRangeFeed = metamorphic.ConstantWithTestBool("use-mux-rangefeed", true
 // span frontier instead of from the frontier's low water mark.
 func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithFrontier bool) {
 	defer f.running.Done()
-	r := retry.StartWithCtx(ctx, f.retryOptions)
+	r := retry.Start(ctx, f.retryOptions)
 	restartLogEvery := log.Every(10 * time.Second)
 
 	if f.withInitialScan {

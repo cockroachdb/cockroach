@@ -2215,10 +2215,11 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	// arrived and now, which is rare but entirely legal.
 	r.maybeUnquiesceLocked(false /* wakeLeader */, true /* mayCampaign */)
 
-	taskCtx := r.AnnotateCtx(context.Background())
+	taskCtx, cancel := r.store.stopper.WithCancelOnQuiesce(r.AnnotateCtx(context.Background()))
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
+		defer cancel()
 		var pushTxnRes *kvpb.PushTxnResponse
-		for retry := retry.Start(base.DefaultRetryOptions()); retry.Next(); {
+		for retry := retry.Start(ctx, base.DefaultRetryOptions()); retry.Next(); {
 			// Wait for the merge transaction to complete by attempting to push it. We
 			// don't want to accidentally abort the merge transaction, so we use the
 			// minimum transaction priority. Note that a push type of
@@ -2236,17 +2237,10 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 				PushType:  kvpb.PUSH_ABORT,
 			})
 			if err := r.store.DB().Run(ctx, b); err != nil {
-				select {
-				case <-r.store.stopper.ShouldQuiesce():
-					// The server is shutting down. The error while pushing the
-					// transaction was probably caused by the shutdown, so ignore it.
-					return
-				default:
-					log.Warningf(ctx, "error while watching for merge to complete: PushTxn: %+v", err)
-					// We can't safely unblock traffic until we can prove that the merge
-					// transaction is committed or aborted. Nothing to do but try again.
-					continue
-				}
+				log.Warningf(ctx, "error while watching for merge to complete: PushTxn: %+v", err)
+				// We can't safely unblock traffic until we can prove that the merge
+				// transaction is committed or aborted. Nothing to do but try again.
+				continue
 			}
 			pushTxnRes = b.RawResponse().Responses[0].GetInner().(*kvpb.PushTxnResponse)
 			break
@@ -2268,7 +2262,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 			// record before our PushTxn arrived. To figure out what happened, we
 			// need to look in meta2.
 			var getRes *kvpb.GetResponse
-			for retry := retry.Start(base.DefaultRetryOptions()); retry.Next(); {
+			for retry := retry.Start(ctx, base.DefaultRetryOptions()); retry.Next(); {
 				metaKey := keys.RangeMetaKey(desc.EndKey)
 				res, pErr := kv.SendWrappedWith(ctx, r.store.DB().NonTransactionalSender(), kvpb.Header{
 					// Use READ_UNCOMMITTED to avoid trying to resolve intents, since
@@ -2280,17 +2274,10 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 					RequestHeader: kvpb.RequestHeader{Key: metaKey.AsRawKey()},
 				})
 				if pErr != nil {
-					select {
-					case <-r.store.stopper.ShouldQuiesce():
-						// The server is shutting down. The error while fetching the range
-						// descriptor was probably caused by the shutdown, so ignore it.
-						return
-					default:
-						log.Warningf(ctx, "error while watching for merge to complete: Get %s: %s", metaKey, pErr)
-						// We can't safely unblock traffic until we can prove that the merge
-						// transaction is committed or aborted. Nothing to do but try again.
-						continue
-					}
+					log.Warningf(ctx, "error while watching for merge to complete: Get %s: %s", metaKey, pErr)
+					// We can't safely unblock traffic until we can prove that the merge
+					// transaction is committed or aborted. Nothing to do but try again.
+					continue
 				}
 				getRes = res.(*kvpb.GetResponse)
 				break

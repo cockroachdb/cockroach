@@ -258,7 +258,7 @@ func (s storage) acquire(
 	}()
 	// Run a retry loop to deal with AmbiguousResultErrors. All other error types
 	// are propagated up to the caller.
-	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
+	for r := retry.Start(ctx, retry.Options{}); r.Next(); {
 		err := s.db.KV().Txn(ctx, acquireInTxn)
 		switch {
 		case startup.IsRetryableReplicaError(err):
@@ -298,7 +298,8 @@ func (s storage) release(
 ) (released bool) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	retryOptions := base.DefaultRetryOptions()
-	retryOptions.Closer = stopper.ShouldQuiesce()
+	retryCtx, cancel := stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
 
 	// Compute the maximum time we will retry ambiguous replica errors before
 	// disabling the SQL liveness heartbeat. The time chosen will guarantee that
@@ -321,7 +322,7 @@ func (s storage) release(
 	}()
 	// This transaction is idempotent; the retry was put in place because of
 	// NodeUnavailableErrors.
-	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
+	for r := retry.Start(retryCtx, retryOptions); r.Next(); {
 		log.VEventf(ctx, 2, "storage releasing lease %+v", lease)
 		instanceID := s.nodeIDContainer.SQLInstanceID()
 		if instanceID == 0 {

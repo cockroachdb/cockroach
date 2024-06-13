@@ -94,7 +94,7 @@ func (r *Registry) waitForJobsToBeTerminalOrPaused(
 		maxBackoff = *r.knobs.IntervalOverrides.WaitForJobsMaxDelay
 	}
 
-	ret := retry.StartWithCtx(ctx, retry.Options{
+	ret := retry.Start(ctx, retry.Options{
 		InitialBackoff: initialBackoff,
 		MaxBackoff:     maxBackoff,
 		Multiplier:     1.5,

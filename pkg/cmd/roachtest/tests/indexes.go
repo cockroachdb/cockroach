@@ -82,7 +82,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 					// Wait for ranges to rebalance across all three regions.
 					t.L().Printf("checking replica balance")
 					retryOpts := retry.Options{MaxBackoff: 15 * time.Second}
-					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+					for r := retry.Start(ctx, retryOpts); r.Next(); {
 						WaitForUpdatedReplicationReport(ctx, t, conn)
 
 						var ok bool
@@ -103,7 +103,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 					// Wait for leases to adhere to preferences, if they aren't
 					// already.
 					t.L().Printf("checking lease preferences")
-					for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+					for r := retry.Start(ctx, retryOpts); r.Next(); {
 						var ok bool
 						if err := conn.QueryRowContext(ctx, `
 							SELECT lease_holder <= $1

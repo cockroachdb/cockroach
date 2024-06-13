@@ -138,7 +138,7 @@ func RunIdempotentWithRetryEx[T any](
 	var err error
 	retryOpts := startupRetryOpts
 	retryOpts.Closer = quiesce
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for r := retry.Start(ctx, retryOpts); r.Next(); {
 		result, err = f(ctx)
 		if err == nil {
 			break

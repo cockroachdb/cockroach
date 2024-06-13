@@ -531,7 +531,7 @@ func (rp ReplicaPlanner) findRemoveVoter(
 
 	var candidates []roachpb.ReplicaDescriptor
 	deadline := timeutil.Now().Add(timeout)
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next() && timeutil.Now().Before(deadline); {
+	for r := retry.Start(ctx, retryOpts); r.Next() && timeutil.Now().Before(deadline); {
 		lastReplAdded, lastAddedTime := repl.LastReplicaAdded()
 		if timeutil.Since(lastAddedTime) > newReplicaGracePeriod {
 			lastReplAdded = 0

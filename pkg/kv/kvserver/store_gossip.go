@@ -151,8 +151,9 @@ func (s *Store) startGossip() {
 				// making it impossible to get an epoch-based range lease), in which
 				// case we want to retry quickly.
 				retryOptions := base.DefaultRetryOptions()
-				retryOptions.Closer = s.stopper.ShouldQuiesce()
-				for r := retry.Start(retryOptions); r.Next(); {
+				retryCtx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+				defer cancel()
+				for r := retry.Start(retryCtx, retryOptions); r.Next(); {
 					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key)); repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {
