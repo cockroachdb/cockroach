@@ -112,8 +112,8 @@ func (v *VersionSetting) String(sv *Values) string {
 }
 
 // DefaultString returns the default value for the setting as a string.
-func (v *VersionSetting) DefaultString() (string, error) {
-	return v.DecodeToString(v.EncodedDefault())
+func (v *VersionSetting) DefaultString() string {
+	return encodedDefaultVersion
 }
 
 // Encoded is part of the NonMaskedSetting interface.

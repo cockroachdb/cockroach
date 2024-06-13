@@ -69,8 +69,9 @@ type Setting interface {
 	// reporting (see LookupForReportingByKey), String hides the actual value.
 	String(sv *Values) string
 
-	// DefaultString returns the default value for the setting as a string.
-	DefaultString() (string, error)
+	// DefaultString returns the default value for the setting as a string. This
+	// is the same as calling String on the setting when it was never set.
+	DefaultString() string
 
 	// Description contains a helpful text explaining what the specific cluster
 	// setting is for.
