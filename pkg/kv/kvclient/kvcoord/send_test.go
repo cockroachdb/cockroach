@@ -52,10 +52,6 @@ func (n Node) RangeLookup(
 	panic("unimplemented")
 }
 
-func (n Node) RangeFeed(_ *kvpb.RangeFeedRequest, _ kvpb.Internal_RangeFeedServer) error {
-	panic("unimplemented")
-}
-
 func (n Node) MuxRangeFeed(server kvpb.Internal_MuxRangeFeedServer) error {
 	panic("unimplemented")
 }
