@@ -93,7 +93,6 @@ func newKafkaSinkClient(
 // TODO: rename, with v2 in there somewhere
 // single threaded ONLY
 type kafkaSinkClient struct {
-	format      changefeedbase.FormatType
 	topics      *TopicNamer
 	batchCfg    sinkBatchConfig
 	client      KafkaClientV2
@@ -323,31 +322,6 @@ func makeKafkaSinkV2(ctx context.Context,
 		return nil, errors.Errorf(
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
-
-	// TODO: might be ok to just have one client shared between workers. try it out
-	// clientFactory := func(ctx context.Context) (any, error) {
-	// 	log.Infof(ctx, `creating kafka sink client`)
-	// 	topicNamer2, err := MakeTopicNamer(
-	// 		targets,
-	// 		WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(SQLNameToKafkaName))
-
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-
-	// 	// TODO: how to handle knobs
-	// 	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, topicNamer2, settings, kafkaSinkKnobs{})
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	client.debuggingId = lastSinkId.Add(1)
-	// 	debugDir := path.Join(debugRoot, strconv.Itoa(int(client.debuggingId)))
-	// 	if err := os.MkdirAll(debugDir, 0755); err != nil {
-	// 		return nil, err
-	// 	}
-
-	// 	return client, nil
-	// }
 
 	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, topicNamer, settings, kafkaSinkV2Knobs{})
 	if err != nil {
