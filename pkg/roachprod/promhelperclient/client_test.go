@@ -107,7 +107,7 @@ func TestDeleteClusterConfig(t *testing.T) {
 				Body:       io.NopCloser(strings.NewReader("failed")),
 			}, nil
 		}
-		err := c.DeleteClusterConfig(ctx, "c1", false, l)
+		err := c.DeleteClusterConfig(ctx, "c1", false, false, l)
 		require.NotNil(t, err)
 		require.Equal(t, "request failed with status 400 and error failed", err.Error())
 	})
@@ -119,7 +119,18 @@ func TestDeleteClusterConfig(t *testing.T) {
 				StatusCode: 204,
 			}, nil
 		}
-		err := c.DeleteClusterConfig(ctx, "c1", false, l)
+		err := c.DeleteClusterConfig(ctx, "c1", false, false /* insecure */, l)
+		require.Nil(t, err)
+	})
+	t.Run("DeleteClusterConfig insecure succeeds", func(t *testing.T) {
+		c.httpDelete = func(ctx context.Context, url string, h *http.Header) (
+			resp *http.Response, err error) {
+			require.Equal(t, fmt.Sprintf("%s?insecure=true", getUrl(promUrl, "c1")), url)
+			return &http.Response{
+				StatusCode: 204,
+			}, nil
+		}
+		err := c.DeleteClusterConfig(ctx, "c1", false, true /* insecure */, l)
 		require.Nil(t, err)
 	})
 }
