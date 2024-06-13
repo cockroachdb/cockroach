@@ -12,7 +12,7 @@ bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the re
 changefeed.aggregator.flush_jitter	float	0.1	jitter aggregator flushes as a fraction of min_checkpoint_frequency. This setting has no effect if min_checkpoint_frequency is set to 0.	application
 changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	application
 changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	application
-changefeed.batch_reduction_retry.enabled	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	application
+changefeed.batch_reduction_retry.enabled (alias: changefeed.batch_reduction_retry_enabled)	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	application
 changefeed.default_range_distribution_strategy	enumeration	default	configures how work is distributed among nodes for a given changefeed. for the most balanced distribution, use `balanced_simple`. changing this setting will not override locality restrictions [default = 0, balanced_simple = 1]	application
 changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	application
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	application
@@ -49,7 +49,7 @@ feature.schema_change.enabled	boolean	true	set to true to enable schema changes,
 feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true	application
 jobs.retention_time	duration	336h0m0s	the amount of time for which records for completed jobs are retained	application
 kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory	system-visible
-kv.closed_timestamp.follower_reads.enabled	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information	system-visible
+kv.closed_timestamp.follower_reads.enabled (alias: kv.closed_timestamp.follower_reads_enabled)	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information	system-visible
 kv.closed_timestamp.lead_for_global_reads_override	duration	0s	if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps	system-visible
 kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which the closed timestamp side-transport attempts to advance each range's closed timestamp; set to 0 to disable the side-transport	system-visible
 kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	system-visible
@@ -69,8 +69,8 @@ kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes u
 kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed	application
 kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, transactional locking reads are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application
-kv.transaction.write_pipelining.enabled	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
-kv.transaction.write_pipelining.max_batch_size	integer	128	if non-zero, defines that maximum size batch that will be pipelined through Raft consensus	application
+kv.transaction.write_pipelining.enabled (alias: kv.transaction.write_pipelining_enabled)	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
+kv.transaction.write_pipelining.max_batch_size (alias: kv.transaction.write_pipelining_max_batch_size)	integer	128	if non-zero, defines that maximum size batch that will be pipelined through Raft consensus	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
 security.client_cert.subject_required.enabled	boolean	false	mandates a requirement for subject role to be set for db user	system-visible
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application
@@ -80,7 +80,7 @@ server.auth_log.sql_sessions.enabled	boolean	false	if set, log verbose SQL sessi
 server.authentication_cache.enabled	boolean	true	enables a cache used during authentication to avoid lookups to system tables when retrieving per-user authentication-related information	application
 server.child_metrics.enabled	boolean	false	enables the exporting of child metrics, additional prometheus time series with extra labels	application
 server.client_cert_expiration_cache.capacity	integer	1000	the maximum number of client cert expirations stored	application
-server.clock.forward_jump_check.enabled	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic	application
+server.clock.forward_jump_check.enabled (alias: server.clock.forward_jump_check_enabled)	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic	application
 server.clock.persist_upper_bound_interval	duration	0s	the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.	application
 server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog	application
 server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are periodically purged	application
@@ -93,7 +93,7 @@ server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries
 server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	application
 server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
 server.max_open_transactions_per_gateway	integer	-1	the maximum number of open SQL transactions per gateway allowed at a given time. Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
-server.oidc_authentication.autologin.enabled	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	application
+server.oidc_authentication.autologin.enabled (alias: server.oidc_authentication.autologin)	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint	application
 server.oidc_authentication.button_text	string	Log in with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)	application
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	application
 server.oidc_authentication.client_id	string		sets OIDC client id	application
@@ -104,10 +104,10 @@ server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provide
 server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback)	application
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)	application
 server.redact_sensitive_settings.enabled	boolean	false	enables or disables the redaction of sensitive settings in the output of SHOW CLUSTER SETTINGS and SHOW ALL CLUSTER SETTINGS for users without the MODIFYCLUSTERSETTING privilege	application
-server.shutdown.connections.timeout	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
-server.shutdown.initial_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.initial_wait is to set the wait time for health probes to notice that the node is not ready.)	application
-server.shutdown.jobs.timeout	duration	10s	the maximum amount of time a server waits for all currently executing jobs to notice drain request and to perform orderly shutdown	application
-server.shutdown.transactions.timeout	duration	10s	the timeout for waiting for active transactions to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
+server.shutdown.connections.timeout (alias: server.shutdown.connection_wait)	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
+server.shutdown.initial_wait (alias: server.shutdown.drain_wait)	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.initial_wait is to set the wait time for health probes to notice that the node is not ready.)	application
+server.shutdown.jobs.timeout (alias: server.shutdown.jobs_wait)	duration	10s	the maximum amount of time a server waits for all currently executing jobs to notice drain request and to perform orderly shutdown	application
+server.shutdown.transactions.timeout (alias: server.shutdown.query_wait)	duration	10s	the timeout for waiting for active transactions to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
 server.sql_tcp_keep_alive.count	integer	3	maximum number of probes that will be sent out before a connection is dropped because it's unresponsive (Linux and Darwin only)	application
 server.sql_tcp_keep_alive.interval	duration	10s	time between keep alive probes and idle time before probes are sent out	application
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead	application
@@ -121,7 +121,7 @@ server.user_login.rehash_scram_stored_passwords_on_cost_change.enabled	boolean	t
 server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)	application
 server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	if server.user_login.password_encryption=scram-sha-256, this controls whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256	application
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged	application
-server.web_session.timeout	duration	168h0m0s	the duration that a newly created web session will be valid	application
+server.web_session.timeout (alias: server.web_session_timeout)	duration	168h0m0s	the duration that a newly created web session will be valid	application
 sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges	application
 sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	application
 sql.auth.resolve_membership_single_scan.enabled	boolean	true	determines whether to populate the role membership cache with a single scan	application
@@ -279,7 +279,7 @@ sql.metrics.max_mem_reported_stmt_fingerprints	integer	100000	the maximum number
 sql.metrics.max_mem_reported_txn_fingerprints	integer	100000	the maximum number of reported transaction fingerprints stored in memory	application
 sql.metrics.max_mem_stmt_fingerprints	integer	7500	the maximum number of statement fingerprints stored in memory	application
 sql.metrics.max_mem_txn_fingerprints	integer	7500	the maximum number of transaction fingerprints stored in memory	application
-sql.metrics.statement_details.dump_to_logs.enabled	boolean	false	dump collected statement statistics to node logs when periodically cleared	application
+sql.metrics.statement_details.dump_to_logs.enabled (alias: sql.metrics.statement_details.dump_to_logs)	boolean	false	dump collected statement statistics to node logs when periodically cleared	application
 sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics	application
 sql.metrics.statement_details.gateway_node.enabled	boolean	false	save the gateway node for each statement fingerprint. If false, the value will be stored as 0.	application
 sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID	application
@@ -325,7 +325,7 @@ sql.telemetry.transaction_sampling.max_event_frequency	integer	8	the max event f
 sql.telemetry.transaction_sampling.statement_events_per_transaction.max	integer	50	the maximum number of statement events to log for every sampled transaction. Note that statements that are logged by force do not adhere to this limit.	application
 sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects	application
 sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up	application
-sql.log.all_statements.enabled	boolean	false	set to true to enable logging of all executed statements	application
+sql.log.all_statements.enabled (alias: sql.trace.log_statement_execute)	boolean	false	set to true to enable logging of all executed statements	application
 sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold	application
 sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)	application
 sql.ttl.changefeed_replication.disabled	boolean	false	if true, deletes issued by TTL will not be replicated via changefeeds (this setting will be ignored by changefeeds that have the ignore_disable_changefeed_replication option set; such changefeeds will continue to replicate all TTL deletes)	application
@@ -343,7 +343,7 @@ storage.sstable.compression_algorithm_backup_storage	enumeration	snappy	"determi
 storage.sstable.compression_algorithm_backup_transport	enumeration	snappy	"determines the compression algorithm to use when compressing sstable data blocks for backup transport; supported values: ""snappy"", ""zstd"" [snappy = 1, zstd = 2]"	system-visible
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	system-visible
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	system-visible
-trace.debug_http_endpoint.enabled	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	application
+trace.debug_http_endpoint.enabled (alias: trace.debug.enable)	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	application
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.	application
 trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured	application
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	application
