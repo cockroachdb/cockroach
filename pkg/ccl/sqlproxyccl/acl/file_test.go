@@ -508,7 +508,7 @@ func TestParsingErrorHandling(t *testing.T) {
 
 		require.Error(t, err)
 		require.ErrorContains(t, err, "error when creating access controller from file")
-		errorCount := errorCountMetric.Snapshot().Value()
+		errorCount := errorCountMetric.Value()
 		require.Equal(t, int64(0), errorCount)
 	})
 
@@ -524,7 +524,7 @@ func TestParsingErrorHandling(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotNil(t, next)
-		require.Equal(t, int64(0), errorCountMetric.Snapshot().Value())
+		require.Equal(t, int64(0), errorCountMetric.Value())
 		allowlist := controller.(*Allowlist)
 		require.Equal(t, map[string]AllowEntry{
 			"tenant": {
@@ -544,7 +544,7 @@ func TestParsingErrorHandling(t *testing.T) {
 				// We need to return something to make the compiler happy, but t.Fatal will end execution.
 				return nil
 			default:
-				errorCount := errorCountMetric.Snapshot().Value()
+				errorCount := errorCountMetric.Value()
 				// If error count isn't one, then it hasn't happened yet.
 				if errorCount != 1 {
 					return fmt.Errorf("Expected error count to be 1 but got %d", errorCount)
@@ -560,7 +560,7 @@ func TestParsingErrorHandling(t *testing.T) {
 			select {
 			case controller := <-next:
 				// error count should go down
-				require.Equal(t, int64(0), errorCountMetric.Snapshot().Value())
+				require.Equal(t, int64(0), errorCountMetric.Value())
 				allowlist := controller.(*Allowlist)
 				require.Equal(t, map[string]AllowEntry{
 					"tenant": {
