@@ -8263,8 +8263,15 @@ func populateTxnExecutionInsights(
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 
+	acc := p.Mon().MakeBoundAccount()
+	defer acc.Close(ctx)
+
 	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
 	if err != nil {
+		return err
+	}
+
+	if err := acc.Grow(ctx, int64(response.Size())); err != nil {
 		return err
 	}
 
@@ -8456,10 +8463,18 @@ func populateStmtInsights(
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 
+	acct := p.Mon().MakeBoundAccount()
+	defer acct.Close(ctx)
+
 	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
 	if err != nil {
 		return err
 	}
+
+	if err := acct.Grow(ctx, int64(response.Size())); err != nil {
+		return err
+	}
+
 	for _, insight := range response.Insights {
 		// We don't expect the transaction to be null here, but we should provide
 		// this check to ensure we only show valid data.
