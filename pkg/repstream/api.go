@@ -13,6 +13,8 @@ package repstream
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -22,18 +24,20 @@ import (
 
 // GetReplicationStreamManagerHook is the hook to get access to the producer side replication APIs.
 // Used by builtin functions to trigger streaming replication.
-var GetReplicationStreamManagerHook func(ctx context.Context, evalCtx *eval.Context, sc resolver.SchemaResolver, txn isql.Txn, sessionID clusterunique.ID) (eval.ReplicationStreamManager, error)
+var GetReplicationStreamManagerHook func(ctx context.Context, evalCtx *eval.Context, sc resolver.SchemaResolver, txn descs.Txn, sessionID clusterunique.ID) (eval.ReplicationStreamManager, error)
 
 // GetStreamIngestManagerHook is the hook to get access to the ingestion side replication APIs.
 // Used by builtin functions to trigger streaming replication.
 var GetStreamIngestManagerHook func(ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID) (eval.StreamIngestManager, error)
+
+var CreateRemoteProduceJobForLogicalReplicationHook func(ctx context.Context, srcAddr string, tableNames []string) (*streampb.ReplicationProducerSpec, error)
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.
 func GetReplicationStreamManager(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	sc resolver.SchemaResolver,
-	txn isql.Txn,
+	txn descs.Txn,
 	sessionID clusterunique.ID,
 ) (eval.ReplicationStreamManager, error) {
 	if GetReplicationStreamManagerHook == nil {
@@ -50,4 +54,13 @@ func GetStreamIngestManager(
 		return nil, errors.New("replication streaming requires a CCL binary")
 	}
 	return GetStreamIngestManagerHook(ctx, evalCtx, txn, sessionID)
+}
+
+func CreateRemoteProduceJobForLogicalReplication(
+	ctx context.Context, srcAddr string, tableNames []string,
+) (*streampb.ReplicationProducerSpec, error) {
+	if CreateRemoteProduceJobForLogicalReplicationHook == nil {
+		return nil, errors.New("replication streaming requires a CCL binary")
+	}
+	return CreateRemoteProduceJobForLogicalReplicationHook(ctx, srcAddr, tableNames)
 }

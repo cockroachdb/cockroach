@@ -118,7 +118,7 @@ type Client interface {
 type LogicalReplicationClient interface {
 	Client
 
-	PlanLogicalReplication(ctx context.Context, spans []roachpb.Span) (Topology, error)
+	PlanLogicalReplication(ctx context.Context, req streampb.LogicalReplicationPlanRequest) (LogicalReplicationPlan, error)
 	CreateForTables(ctx context.Context, req *streampb.ReplicationProducerRequest) (*streampb.ReplicationProducerSpec, error)
 }
 

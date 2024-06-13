@@ -2582,7 +2582,7 @@ var builtinOidsArray = []string{
 	2614: `crdb_internal.scatter(key: bytes) -> void`,
 	2615: `crdb_internal.scatter(key: bytes, end_key: bytes) -> void`,
 	2616: `crdb_internal.start_logical_replication_job(conn_str: string, table_names: string[]) -> int`,
-	2617: `crdb_internal.plan_logical_replication(spans: bytes[]) -> bytes`,
+	2617: `crdb_internal.plan_logical_replication(req: bytes) -> bytes`,
 	2618: `crdb_internal.start_replication_stream_for_tables(req: bytes) -> bytes`,
 }
 
