@@ -144,9 +144,9 @@ index up to which admission has happened. That is, this is not incremental
 state, and just the latest state (which makes it easy to tolerate lossiness). It
 will be used to advance admitted at the leader.
 
-MsgApp from the leader contains the latest admitted[i] values it has, so that
-the follower doesn't bother with a MsgAppResp if the states are the same at
-the leader and the follower.
+[optimization]: MsgApp from the leader contains the latest admitted[i] values it
+has, so that the follower doesn't bother with a MsgAppResp if the states are the
+same at the leader and the follower.
 
 Raft state at all replicas:
 
@@ -589,6 +589,7 @@ type RaftInterface interface {
 	// StateSnapshot.
 	//
 	// TODO: add back maxEntries.
+	//	- [pav-kv]: Why? maxEntries == end-start, no need in an extra parameter.
 	//
 	// TODO: the transition to StateSnapshot is not guaranteed, there are some
 	// error conditions after which the flow stays in StateReplicate. We should
@@ -700,6 +701,17 @@ type RaftAdmittedInterface interface {
 	// snapshot application, this value will only advance via the caller
 	// calling SetAdmitted. When a snapshot is applied, the snapshot index
 	// becomes the value of admitted for all priorities.
+	//
+	// TODO: Get/SetAdmitted can be moved out of this interface, since all
+	// admittance happens outside raft. Alternatively, move more things to raft
+	// because all the tracking logic for indices duplicates the logic that async
+	// log appends do for deciding when things become durable.
+	//
+	// TODO: admitted indices should be paired with the Term of the leader whose
+	// log the indices pertain to. Between leadership terms, it can be truncated,
+	// and an entry at the same index can change. It is easy to make a bug if
+	// there is no explicit coupling with the leader term, because a term change
+	// can slip through in between Get/SetAdmitted calls, by virtue of any Step().
 	GetAdmitted() [NumRaftPriorities]uint64
 	// SetAdmitted sets the new value of admitted.
 	// REQUIRES:

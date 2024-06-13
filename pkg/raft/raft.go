@@ -328,6 +328,7 @@ type raft struct {
 	maxUncommittedSize entryPayloadSize
 
 	trk tracker.ProgressTracker
+	adm tracker.Admitted
 
 	state StateType
 
@@ -505,6 +506,9 @@ func (r *raft) send(m pb.Message) {
 			m.Term = r.Term
 		}
 	}
+	if m.Type == pb.MsgAppResp && !m.Reject {
+		m.Admitted = r.adm.Marks[:]
+	}
 	if m.Type == pb.MsgAppResp || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVoteResp {
 		// If async storage writes are enabled, messages added to the msgs slice
 		// are allowed to be sent out before unstable state (e.g. log entry
@@ -638,7 +642,7 @@ func (r *raft) nextMsgApp(to uint64, lo, hi uint64, maxSize entryEncodingSize) (
 	if s := pr.State; s != tracker.StateReplicate {
 		return pb.Message{}, fmt.Errorf("peer %d state %s is not StateReplicate", to, s)
 	} else if lo != pr.Next {
-		return pb.Message{}, fmt.Errorf("peer %d next is %s, expected %d", to, pr.Next, lo)
+		return pb.Message{}, fmt.Errorf("peer %d next is %d, expected %d", to, pr.Next, lo)
 	}
 
 	prevIndex := pr.Next - 1
@@ -773,6 +777,7 @@ func (r *raft) appliedSnap(snap *pb.Snapshot) {
 	index := snap.Metadata.Index
 	r.raftLog.stableSnapTo(index)
 	r.appliedTo(index, 0 /* size */)
+	r.adm.OnSnapshot(snap.Metadata.Index)
 }
 
 // maybeCommit attempts to advance the commit index. Returns true if the commit
@@ -807,6 +812,7 @@ func (r *raft) reset(term uint64) {
 			pr.Match = r.raftLog.lastIndex()
 		}
 	})
+	r.adm.OnTermBump()
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
