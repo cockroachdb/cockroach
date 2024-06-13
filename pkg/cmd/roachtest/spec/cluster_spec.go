@@ -93,6 +93,22 @@ const (
 	LocalSSDPreferOn
 )
 
+const (
+	DefaultWorkloadNodeCPUs = 4
+
+	// SmallerWorkloadNodeThreshold is the max amount of nodes in a cluster where
+	// we automatically attempt to use a smaller workload node. Unfortunately there
+	// is no simple heuristic for determining the workload node CPU as cluster size,
+	// cluster CPU count, and workload concurrency all play a factor. i.e. when running kv0:
+	//		- A 12 node 8 CPU cluster doesn't show regression w/ a 4 CPU workload node
+	// 		- A 20 node 8 CPU cluster shows regression w/ a 4 CPU workload node
+	//		- A 5 node 32 CPU cluster doesn't show regression w/ a 4 CPU workload node
+	//    - A 9 node 32 CPU cluster shows regression w/ a 4 CPU workload node
+	// Instead, we take a conservative lower bound of all three. Note that roachtests
+	// can still manually assign a custom workload node CPU size.
+	SmallerWorkloadNodeThreshold = 3
+)
+
 // ClusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
@@ -447,6 +463,24 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
+	// If WorkloadNodeCPUs is unspecified, then we attempt to assign it a smaller CPU VM.
+	// The workload node is generally not as stressed as a crdb node, and potentially giving
+	// it 8-32 CPUs like the rest of the cluster may be overkill.
+	//
+	// N.B. if you change the logic here, make sure to change it in TotalCPUs as well,
+	// which is used to determine CPU quota allocation.
+	if s.WorkloadNodeCPUs == 0 {
+		// If WorkloadNodeCPUs is not specified, then default to a VM with 4 CPUs, unless the
+		// CRDB nodes are already lower than that. In which case, keep the CPU count the same.
+		s.WorkloadNodeCPUs = min(s.CPUs, DefaultWorkloadNodeCPUs)
+
+		// In the case where the crdb cluster is not very small, we may need the higher CPU
+		// after all.
+		if (s.NodeCount - 1) > SmallerWorkloadNodeThreshold {
+			s.WorkloadNodeCPUs = s.CPUs
+		}
+	}
+
 	var workloadMachineType string
 	var err error
 	switch cloud {
@@ -505,9 +539,14 @@ func (s *ClusterSpec) Expiration() time.Time {
 func (s *ClusterSpec) TotalCPUs() int {
 	cpu := s.NodeCount * s.CPUs
 	crdbCPU := (s.NodeCount - 1) * s.CPUs
+	// If the test has a workload node, it may require different CPU than the rest of the cluster.
 	if s.WorkloadNode {
 		if s.WorkloadNodeCPUs != 0 {
 			cpu = crdbCPU + s.WorkloadNodeCPUs
+		} else if DefaultWorkloadNodeCPUs < s.CPUs && (s.NodeCount-1) <= SmallerWorkloadNodeThreshold {
+			// If the test spec does not set a CPU size for the workload node, it may be assigned a
+			// smaller CPU.
+			cpu = crdbCPU + DefaultWorkloadNodeCPUs
 		}
 	}
 	return cpu

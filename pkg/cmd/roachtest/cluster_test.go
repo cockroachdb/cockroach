@@ -728,3 +728,38 @@ func TestVerifyLibraries(t *testing.T) {
 		})
 	}
 }
+
+func TestCPUAlloc(t *testing.T) {
+	testCases := []struct {
+		nodeCount    int
+		CPU          int
+		workloadNode bool
+		workloadCPUs int
+		expected     int
+	}{
+		// No workload node.
+		{3 /* nodeCount */, 8 /* CPU */, false /* workloadNode */, 0 /* workloadCPUs */, 24 /* expected */},
+		// Make the workload node smaller.
+		{3 /* nodeCount */, 8 /* CPU */, true /* workloadNode */, 0 /* workloadCPUs */, 20 /* expected */},
+		// Explicit workloadCPU overrides attempt to create smaller workload node.
+		{3 /* nodeCount */, 8 /* CPU */, true /* workloadNode */, 8 /* workloadCPUs */, 24 /* expected */},
+		// CRDB cluster size of 4 > threshold, don't make a smaller workload node.
+		{5 /* nodeCount */, 8 /* CPU */, true /* workloadNode */, 0 /* workloadCPUs */, 40 /* expected */},
+		// CRDB cluster size of 4 > threshold, but explicit workloadCPU was passed.
+		{5 /* nodeCount */, 8 /* CPU */, true /* workloadNode */, 4 /* workloadCPUs */, 36 /* expected */},
+		// Don't change the workload node CPU if the rest of the cluster is already on a lower CPU.
+		{3 /* nodeCount */, 2 /* CPU */, true /* workloadNode */, 0 /* workloadCPUs */, 6 /* expected */},
+	}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			c := spec.MakeClusterSpec(tc.nodeCount, spec.CPU(tc.CPU))
+			if tc.workloadNode {
+				c = spec.MakeClusterSpec(tc.nodeCount, spec.CPU(tc.CPU), spec.WorkloadNode(), spec.WorkloadNodeCPU(tc.workloadCPUs))
+			}
+
+			if tc.expected != c.TotalCPUs() {
+				t.Fatalf("expected %d, but found %d", tc.expected, c.TotalCPUs())
+			}
+		})
+	}
+}
