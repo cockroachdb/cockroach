@@ -131,6 +131,8 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
 				fmt.Printf("splitting %d into %d and %d\n", len(msgs), len(a), len(b))
 				// recurse
+				// this is also a little odd because the client's batch state doesnt consist only of this payload, and it's per topic partition anyway
+				// still it should probably help.. really the answer would be for users to set maxbytes.
 				return errors.Join(flushMsgs(a), flushMsgs(b))
 			}
 
