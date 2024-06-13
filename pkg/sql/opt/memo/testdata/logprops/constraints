@@ -1217,6 +1217,28 @@ select
            ├── variable: v:3 [type=string]
            └── const: '%XY' [type=string]
 
+# Regression test for #124455. Tight constraints should be generated for LIKE
+# expressions with an escaped backslash before a wildcard character.
+opt
+SELECT * FROM kuv WHERE v LIKE e'\\\\%'
+----
+select
+ ├── columns: k:1(int!null) u:2(float) v:3(string!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1)
+ ├── scan kuv
+ │    ├── columns: k:1(int!null) u:2(float) v:3(string)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
+ └── filters
+      └── like [type=bool, outer=(3), constraints=(/3: [/e'\\' - /']'); tight)]
+           ├── variable: v:3 [type=string]
+           └── const: e'\\\\%' [type=string]
+
 opt
 SELECT * FROM kuv WHERE v SIMILAR TO 'ABC.*'
 ----
