@@ -510,7 +510,8 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		serverStreamInterceptor1Called, serverStreamInterceptor2Called = false, false
 		clientStreamInterceptor1Called, clientStreamInterceptor2Called = false, false
-		stream, err := lic.RangeFeed(ctx, &kvpb.RangeFeedRequest{})
+		stream, err := lic.MuxRangeFeed(ctx)
+		require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
 		require.NoError(t, err)
 		_, err = stream.Recv()
 		require.ErrorIs(t, err, io.EOF)
