@@ -94,6 +94,26 @@ func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) {
 	sv.setInt64(ctx, b.slot, vInt)
 }
 
+func (b *BoolSetting) decodeAndSet(ctx context.Context, sv *Values, encoded string) error {
+	v, err := strconv.ParseBool(encoded)
+	if err != nil {
+		return err
+	}
+	b.set(ctx, sv, v)
+	return nil
+}
+
+func (b *BoolSetting) decodeAndSetDefaultOverride(
+	ctx context.Context, sv *Values, encoded string,
+) error {
+	v, err := strconv.ParseBool(encoded)
+	if err != nil {
+		return err
+	}
+	sv.setDefaultOverride(b.slot, v)
+	return nil
+}
+
 func (b *BoolSetting) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
 	if val := sv.getDefaultOverride(b.slot); val != nil {

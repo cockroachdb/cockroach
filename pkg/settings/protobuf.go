@@ -121,6 +121,25 @@ func (s *ProtobufSetting) Override(ctx context.Context, sv *Values, p protoutil.
 	sv.setDefaultOverride(s.slot, p)
 }
 
+func (s *ProtobufSetting) decodeAndSet(ctx context.Context, sv *Values, encoded string) error {
+	p, err := s.DecodeValue(encoded)
+	if err != nil {
+		return err
+	}
+	return s.set(ctx, sv, p)
+}
+
+func (s *ProtobufSetting) decodeAndSetDefaultOverride(
+	ctx context.Context, sv *Values, encoded string,
+) error {
+	p, err := s.DecodeValue(encoded)
+	if err != nil {
+		return err
+	}
+	sv.setDefaultOverride(s.slot, p)
+	return nil
+}
+
 func (s *ProtobufSetting) set(ctx context.Context, sv *Values, p protoutil.Message) error {
 	if err := s.Validate(sv, p); err != nil {
 		return err

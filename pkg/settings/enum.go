@@ -12,13 +12,10 @@ package settings
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/cockroachdb/errors"
 )
 
 // EnumSetting is a StringSetting that restricts the values to be one of the `enumValues`
@@ -27,7 +24,7 @@ type EnumSetting struct {
 	enumValues map[int64]string
 }
 
-var _ numericSetting = &EnumSetting{}
+var _ internalSetting = &EnumSetting{}
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (e *EnumSetting) Typ() string {
@@ -111,13 +108,6 @@ func (e *EnumSetting) GetAvailableValues() []string {
 		vals = append(vals, e.enumValues[int64(enumIdx)])
 	}
 	return vals
-}
-
-func (e *EnumSetting) set(ctx context.Context, sv *Values, k int64) error {
-	if _, ok := e.enumValues[k]; !ok {
-		return errors.Errorf("unrecognized value %d", k)
-	}
-	return e.IntSetting.set(ctx, sv, k)
 }
 
 func enumValuesToDesc(enumValues map[int64]string) string {
