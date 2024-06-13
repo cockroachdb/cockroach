@@ -212,7 +212,6 @@ func (ds *DistSender) RangeFeedSpans(
 	for _, opt := range opts {
 		opt.set(&cfg)
 	}
-
 	ctx = ds.AnnotateCtx(ctx)
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer sp.Finish()
@@ -225,7 +224,6 @@ func (ds *DistSender) RangeFeedSpans(
 	}
 
 	rl := newCatchupScanRateLimiter(&ds.st.SV)
-
 	return muxRangeFeed(ctx, cfg, spans, ds, rr, rl, eventCh)
 }
 
