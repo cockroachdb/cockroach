@@ -7023,29 +7023,113 @@ func TestFlushJitter(t *testing.T) {
 	// min_flush_frequency period, and thus it would be hard to tell if the
 	// difference is due to jitter or not.  Just verify nextFlushWithJitter function
 	// works as expected with controlled time source.
-	const flushFrequency time.Duration = 100 * time.Millisecond
-	ts := timeutil.NewManualTime(timeutil.Now())
 
+	ts := timeutil.NewManualTime(timeutil.Now())
 	const numIters = 100
-	t.Run("disable", func(t *testing.T) {
-		const disableJitter = 0.0
-		for i := 0; i < numIters; i++ {
-			next := nextFlushWithJitter(ts, flushFrequency, disableJitter)
-			require.Equal(t, ts.Now().Add(flushFrequency), next)
-			ts.AdvanceTo(next)
-		}
-	})
-	t.Run("enable", func(t *testing.T) {
-		const jitter = 0.1
-		for i := 0; i < numIters; i++ {
-			next := nextFlushWithJitter(ts, flushFrequency, jitter)
-			// next flush should be at least flushFrequency into the future.
-			require.LessOrEqual(t, ts.Now().Add(flushFrequency), next, t)
-			// and jitter should be at most 10% more than flushFrequency (10ms)
-			require.Less(t, next.Sub(ts.Now()), flushFrequency+flushFrequency/10)
-			ts.AdvanceTo(next)
-		}
-	})
+
+	for _, tc := range []struct {
+		flushFrequency        time.Duration
+		jitter                float64
+		expectedFlushDuration time.Duration
+		expectedErr           bool
+	}{
+		// Negative jitter.
+		{
+			flushFrequency:        -1,
+			jitter:                -0.1,
+			expectedFlushDuration: 0,
+			expectedErr:           true,
+		},
+		{
+			flushFrequency:        0,
+			jitter:                -0.1,
+			expectedFlushDuration: 0,
+			expectedErr:           true,
+		},
+		{
+			flushFrequency:        10 * time.Millisecond,
+			jitter:                -0.1,
+			expectedFlushDuration: 0,
+			expectedErr:           true,
+		},
+		{
+			flushFrequency:        100 * time.Millisecond,
+			jitter:                -0.1,
+			expectedFlushDuration: 0,
+			expectedErr:           true,
+		},
+		// Disable Jitter.
+		{
+			flushFrequency:        -1,
+			jitter:                0,
+			expectedFlushDuration: 0,
+			expectedErr:           true,
+		},
+		{
+			flushFrequency:        0,
+			jitter:                0,
+			expectedFlushDuration: 0,
+			expectedErr:           false,
+		},
+		{
+			flushFrequency:        10 * time.Millisecond,
+			jitter:                0,
+			expectedFlushDuration: 10 * time.Millisecond,
+			expectedErr:           false,
+		},
+		{
+			flushFrequency:        100 * time.Millisecond,
+			jitter:                0,
+			expectedFlushDuration: 100 * time.Millisecond,
+			expectedErr:           false,
+		},
+		// Enable Jitter.
+		{
+			flushFrequency:        -1,
+			jitter:                0.1,
+			expectedFlushDuration: 0,
+			expectedErr:           true,
+		},
+		{
+			flushFrequency:        0,
+			jitter:                0.1,
+			expectedFlushDuration: 0,
+			expectedErr:           false,
+		},
+		{
+			flushFrequency:        10 * time.Millisecond,
+			jitter:                0.1,
+			expectedFlushDuration: 10 * time.Millisecond,
+			expectedErr:           false,
+		},
+		{
+			flushFrequency:        100 * time.Millisecond,
+			jitter:                0.1,
+			expectedFlushDuration: 100 * time.Millisecond,
+			expectedErr:           false,
+		},
+	} {
+		t.Run(fmt.Sprintf("flushfrequency=%sjitter=%f", tc.flushFrequency, tc.jitter), func(t *testing.T) {
+			for i := 0; i < numIters; i++ {
+				next, err := nextFlushWithJitter(ts, tc.flushFrequency, tc.jitter)
+				if tc.expectedErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+				if tc.jitter > 0 {
+					minBound := tc.expectedFlushDuration
+					maxBound := tc.expectedFlushDuration + time.Duration(float64(tc.expectedFlushDuration)*tc.jitter)
+					actualDuration := next.Sub(ts.Now())
+					require.LessOrEqual(t, minBound, actualDuration)
+					require.LessOrEqual(t, actualDuration, maxBound)
+				} else {
+					require.Equal(t, tc.expectedFlushDuration, next.Sub(ts.Now()))
+				}
+				ts.AdvanceTo(next)
+			}
+		})
+	}
 }
 
 func TestChangefeedOrderingWithErrors(t *testing.T) {
