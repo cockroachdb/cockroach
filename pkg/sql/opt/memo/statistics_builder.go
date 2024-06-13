@@ -3373,6 +3373,8 @@ func (sb *statisticsBuilder) applyFilters(
 func (sb *statisticsBuilder) applyFiltersItem(
 	filter *FiltersItem, e RelExpr, relProps *props.Relational, unapplied *filterCount,
 ) (constrainedCols, histCols opt.ColSet) {
+	s := relProps.Statistics()
+
 	// Before checking anything, try to replace any virtual computed column
 	// expressions with the corresponding virtual column.
 	if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
@@ -3400,9 +3402,12 @@ func (sb *statisticsBuilder) applyFiltersItem(
 
 	// TODO(mgartner): We should probably use distinctCount / rowCount as the
 	// selectivity for placeholder equality.
-	if isPlaceholderEqualityFilter(filter.Condition) {
-		unapplied.placeholderEquality++
-		return opt.ColSet{}, opt.ColSet{}
+	if col, ok := isPlaceholderEqualityFilter(filter.Condition); ok {
+		// unapplied.placeholderEquality++
+		cols := opt.MakeColSet(col)
+		sb.ensureColStat(cols, 1, e, s)
+		return cols, opt.ColSet{}
+		// return opt.ColSet{}, opt.ColSet{}
 	}
 
 	// Special case: The current conjunct is an inverted join condition which is
@@ -3444,7 +3449,6 @@ func (sb *statisticsBuilder) applyFiltersItem(
 	// want to make sure that we don't include columns that were only present in
 	// equality conjuncts such as var1=var2. The selectivity of these conjuncts
 	// will be accounted for in selectivityFromEquivalencies.
-	s := relProps.Statistics()
 	scalarProps := filter.ScalarProps()
 	constrainedCols.UnionWith(scalarProps.OuterCols)
 	if scalarProps.Constraints != nil {
@@ -4867,10 +4871,13 @@ func isSimilarityFilter(e opt.ScalarExpr) bool {
 
 // isPlaceholderEqualityFilter returns true if the given condition is an equality
 // between a column and placeholder.
-func isPlaceholderEqualityFilter(e opt.ScalarExpr) bool {
-	return e.Op() == opt.EqOp &&
-		e.Child(0).Op() == opt.VariableOp &&
-		e.Child(1).Op() == opt.PlaceholderOp
+func isPlaceholderEqualityFilter(e opt.ScalarExpr) (opt.ColumnID, bool) {
+	if e.Op() == opt.EqOp && e.Child(1).Op() == opt.PlaceholderOp {
+		if v, ok := e.Child(0).(*VariableExpr); ok {
+			return v.Col, true
+		}
+	}
+	return 0, false
 }
 
 // isInvertedJoinCond returns true if the given condition is either an index-

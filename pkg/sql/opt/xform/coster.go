@@ -119,7 +119,7 @@ const (
 	// PostgreSQL ratio between CPU and I/O is probably unrealistic in modern
 	// systems since much of the data can be cached in memory. Consider
 	// increasing the cpuCostFactor to account for this.
-	cpuCostFactor    = 0.01
+	cpuCostFactor    = 0.01 // PG uses 0.0025 by default...
 	seqIOCostFactor  = 1
 	randIOCostFactor = 4
 
