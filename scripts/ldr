@@ -59,8 +59,8 @@ case $1 in
     roachprod create $B \
       --clouds gce --gce-machine-type n2-standard-16 --nodes 3 --username "$USER" --lifetime 24h "$@"
     roachprod stage $A cockroach
-    roachprod stage $A cockroach
-    roachprod stage $B workload
+    roachprod stage $B cockroach
+    roachprod stage $A workload
     roachprod stage $B workload
     ;;
 
