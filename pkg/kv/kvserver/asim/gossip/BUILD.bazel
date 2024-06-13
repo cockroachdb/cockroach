@@ -14,8 +14,10 @@ go_library(
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
     ],
 )
 
