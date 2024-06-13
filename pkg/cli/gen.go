@@ -225,10 +225,17 @@ Output the list of cluster settings known to this binary.
 		}
 
 		wrapDivSlug := func(key settings.InternalKey, name settings.SettingName) string {
+			toDisplay := string(name)
 			if sqlExecCtx.TableDisplayFormat == clisqlexec.TableDisplayRawHTML {
-				return fmt.Sprintf(`<div id="setting-%s" class="anchored">%s</div>`, slugify.Slugify(string(key)), wrapCode(string(name)))
+				if string(key) != string(name) {
+					toDisplay = fmt.Sprintf("%s<br />(alias: %s)", name, key)
+				}
+				return fmt.Sprintf(`<div id="setting-%s" class="anchored">%s</div>`, slugify.Slugify(string(key)), wrapCode(toDisplay))
 			}
-			return string(name)
+			if string(key) != string(name) {
+				toDisplay = fmt.Sprintf("%s (alias: %s)", name, key)
+			}
+			return toDisplay
 		}
 
 		// Fill a Values struct with the defaults.
