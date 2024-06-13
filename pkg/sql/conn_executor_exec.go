@@ -1928,6 +1928,15 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
 		distSQLMode, planner.curPlan.main, &planner.distSQLVisitor,
 	)
+	if distSQLMode == sessiondatapb.DistSQLAlways && distSQLProhibitedErr != nil {
+		switch stmt.AST.StatementTag() {
+		/* we need to be able to reset distsql! :) */
+		case "SET", "RESET":
+		default:
+			res.SetError(distSQLProhibitedErr)
+			return nil
+		}
+	}
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {

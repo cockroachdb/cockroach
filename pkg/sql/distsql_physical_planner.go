@@ -611,7 +611,7 @@ func checkSupportForPlanNode(
 	case *lookupJoinNode:
 		if n.remoteLookupExpr != nil || n.remoteOnlyLookups {
 			// This is a locality optimized join.
-			return cannotDistribute, nil
+			return cannotDistribute, errors.New("we will never distribute this!!! I think - email me for details: yahor@cockroachlabs.com")
 		}
 		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Lookup joins that are performing row-level locking cannot
@@ -639,7 +639,7 @@ func checkSupportForPlanNode(
 	case *ordinalityNode:
 		// WITH ORDINALITY never gets distributed so that the gateway node can
 		// always number each row in order.
-		return cannotDistribute, nil
+		return cannotDistribute, planNodeNotSupportedErr
 
 	case *projectSetNode:
 		for i := range n.exprs {
@@ -669,7 +669,7 @@ func checkSupportForPlanNode(
 		switch {
 		case n.localityOptimized:
 			// This is a locality optimized scan.
-			return cannotDistribute, nil
+			return cannotDistribute, planNodeNotSupportedErr // todo: better message about emailing yahor
 		case n.isFull:
 			// This is a full scan.
 			return shouldDistribute, nil
@@ -761,10 +761,17 @@ func checkSupportForPlanNode(
 		}
 		return shouldDistribute, nil
 	case *cdcValuesNode:
-		return cannotDistribute, nil
+		return cannotDistribute, planNodeNotSupportedErr
 
 	default:
-		return cannotDistribute, planNodeNotSupportedErr
+		// also do this when verbose tracing
+		// also allowlist delayed node so that the CLI isn't so annoying?
+		/*
+			if distSQLPlanningMode == sessiondatapb.DistSQLAlways {
+			}
+		*/
+		return cannotDistribute, newQueryNotSupportedErrorf("unsupported node: %T", n)
+		//return cannotDistribute, planNodeNotSupportedErr
 	}
 }
 
@@ -797,8 +804,11 @@ func checkSupportForInvertedFilterNode(
 	filterRec := cannotDistribute
 	if n.expression.Left == nil && n.expression.Right == nil {
 		filterRec = shouldDistribute
+		err = nil
+	} else {
+		err = planNodeNotSupportedErr // todo better message
 	}
-	return rec.compose(filterRec), nil
+	return rec.compose(filterRec), err
 }
 
 //go:generate stringer -type=NodeStatus
