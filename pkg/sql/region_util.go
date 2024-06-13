@@ -915,7 +915,7 @@ func generateAndValidateZoneConfigForMultiRegionDatabase(
 		return zonepb.ZoneConfig{}, pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
 	}
 
-	if err := validateNoRepeatKeysInZone(&dbZoneConfig); err != nil {
+	if err := zonepb.ValidateNoRepeatKeysInZone(&dbZoneConfig); err != nil {
 		return zonepb.ZoneConfig{}, err
 	}
 

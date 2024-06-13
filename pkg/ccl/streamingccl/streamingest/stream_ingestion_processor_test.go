@@ -537,10 +537,10 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	randomStreamClient, ok := streamClient.(*streamclient.RandomStreamClient)
 	require.True(t, ok)
-	rps, err := randomStreamClient.Create(ctx, tenantName, streampb.ReplicationProducerRequest{})
+	rps, err := randomStreamClient.CreateForTenant(ctx, tenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 
-	topo, err := randomStreamClient.Plan(ctx, rps.StreamID)
+	topo, err := randomStreamClient.PlanPhysicalReplication(ctx, rps.StreamID)
 	require.NoError(t, err)
 	require.Equal(t, 2 /* numPartitions */, len(topo.Partitions))
 

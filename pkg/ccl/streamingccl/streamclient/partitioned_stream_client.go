@@ -62,12 +62,13 @@ func NewPartitionedStreamClient(
 }
 
 var _ Client = &partitionedStreamClient{}
+var _ LogicalReplicationClient = &partitionedStreamClient{}
 
-// Create implements Client interface.
-func (p *partitionedStreamClient) Create(
+// CreateForTenant implements Client interface.
+func (p *partitionedStreamClient) CreateForTenant(
 	ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.CreateForTenant")
 	defer sp.Finish()
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -138,8 +139,8 @@ func (p *partitionedStreamClient) postgresURL(servingAddr string) (url.URL, erro
 	return res, nil
 }
 
-// Plan implements Client interface.
-func (p *partitionedStreamClient) Plan(
+// PlanPhysicalReplication implements Client interface.
+func (p *partitionedStreamClient) PlanPhysicalReplication(
 	ctx context.Context, streamID streampb.StreamID,
 ) (Topology, error) {
 	var spec streampb.ReplicationStreamSpec
@@ -275,10 +276,10 @@ func (p *partitionedStreamClient) Complete(
 	return nil
 }
 
-func (p *partitionedStreamClient) PartitionSpans(
+func (p *partitionedStreamClient) PlanLogicalReplication(
 	ctx context.Context, spans []roachpb.Span,
 ) (Topology, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.PartitionSpans")
+	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.PlanLogicalReplication")
 	defer sp.Finish()
 
 	encodedSpans := [][]byte{}
@@ -293,7 +294,7 @@ func (p *partitionedStreamClient) PartitionSpans(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	row := p.mu.srcConn.QueryRow(ctx, "SELECT crdb_internal.partition_spans($1)", encodedSpans)
+	row := p.mu.srcConn.QueryRow(ctx, "SELECT crdb_internal.plan_logical_replication($1)", encodedSpans)
 
 	streamSpecBytes := []byte{}
 	if err := row.Scan(&streamSpecBytes); err != nil {
