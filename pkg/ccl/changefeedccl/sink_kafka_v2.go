@@ -435,11 +435,12 @@ func buildKgoConfig(
 
 	switch sinkCfg.RequiredAcks {
 	case ``, `ONE`:
-		opts = append(opts, kgo.RequiredAcks(kgo.LeaderAck()))
+		// NOTE: idempotency is on by default, but is incompatible with acks<all. TODO: should we have it on by default? i feel like yes
+		opts = append(opts, kgo.RequiredAcks(kgo.LeaderAck()), kgo.DisableIdempotentWrite())
 	case `ALL`:
 		opts = append(opts, kgo.RequiredAcks(kgo.AllISRAcks()))
 	case `NONE`:
-		opts = append(opts, kgo.RequiredAcks(kgo.NoAck()))
+		opts = append(opts, kgo.RequiredAcks(kgo.NoAck()), kgo.DisableIdempotentWrite())
 	default:
 		return nil, errors.Errorf(`unknown required acks value: %s`, sinkCfg.RequiredAcks)
 	}
