@@ -291,7 +291,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
-	var started syncutil.AtomicBool
+	var started atomic.Bool
 	var cbMu syncutil.Mutex
 	cbs := map[roachpb.NodeID]struct{}{}
 	tc := testcluster.StartTestCluster(t, 3,
@@ -305,7 +305,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 					},
 					NodeLiveness: kvserver.NodeLivenessTestingKnobs{
 						IsLiveCallback: func(l livenesspb.Liveness) {
-							if started.Get() {
+							if started.Load() {
 								cbMu.Lock()
 								defer cbMu.Unlock()
 								cbs[l.NodeID] = struct{}{}
@@ -322,7 +322,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 	pauseNodeLivenessHeartbeatLoops(tc)
 	// Only record entires after we have paused the normal heartbeat loop to make
 	// sure they come from the Heartbeat below.
-	started.Set(true)
+	started.Store(true)
 
 	// Advance clock past the liveness threshold.
 	manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).TestingGetLivenessThreshold().Nanoseconds() + 1)

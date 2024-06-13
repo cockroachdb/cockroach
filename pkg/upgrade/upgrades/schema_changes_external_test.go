@@ -15,6 +15,7 @@ import (
 	"math"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -300,10 +300,9 @@ func testMigrationWithFailures(
 			cancelCtx, cancel := context.WithCancel(ctx)
 			// To intercept the schema-change and the migration job.
 			updateEventChan := make(chan updateEvent)
-			var enableUpdateEventCh syncutil.AtomicBool
-			enableUpdateEventCh.Set(false)
+			var enableUpdateEventCh atomic.Bool
 			beforeUpdate := func(orig, updated jobs.JobMetadata) error {
-				if !enableUpdateEventCh.Get() {
+				if !enableUpdateEventCh.Load() {
 					return nil
 				}
 				ue := updateEvent{
@@ -398,7 +397,7 @@ func testMigrationWithFailures(
 			tdb.Exec(t, "DROP TABLE test.test_table")
 			tdb.Exec(t, createTableBefore)
 			expectedDescriptor.Store(desc)
-			enableUpdateEventCh.Set(true)
+			enableUpdateEventCh.Store(true)
 
 			// Run the migration, expecting failure.
 			t.Log("trying migration, expecting to fail")

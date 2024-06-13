@@ -104,7 +104,7 @@ func TestStoreCheckpointSpans(t *testing.T) {
 		desc := makeDesc(rangeID, start, end)
 		r := &Replica{RangeID: rangeID, startKey: desc.StartKey}
 		r.mu.state.Desc = &desc
-		r.isInitialized.Set(desc.IsInitialized())
+		r.isInitialized.Store(desc.IsInitialized())
 		require.NoError(t, s.addToReplicasByRangeIDLocked(r))
 		if r.IsInitialized() {
 			require.NoError(t, s.addToReplicasByKeyLocked(r, r.Desc()))
