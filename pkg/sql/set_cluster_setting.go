@@ -191,7 +191,7 @@ func (p *planner) SetClusterSetting(
 	}
 
 	if nameStatus != settings.NameActive {
-		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
+		p.BufferClientNotice(ctx, settingAlternateNameNotice(name, setting.Name()))
 		name = setting.Name()
 	}
 
