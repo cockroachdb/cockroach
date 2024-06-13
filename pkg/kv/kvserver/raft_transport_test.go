@@ -741,10 +741,12 @@ func TestRaftTransportClockPropagation(t *testing.T) {
 	}
 
 	// Advance the client's clock beyond the server's.
-	rttc.clocks[clientReplica.NodeID].manual.Increment(1000)
-	clientNow := rttc.clocks[clientReplica.NodeID].clock.Now()
 	serverNow := rttc.clocks[serverReplica.NodeID].clock.Now()
-	require.True(t, serverNow.Less(clientNow))
+	var clientNow hlc.Timestamp
+	for clientNow.LessEq(serverNow) {
+		rttc.clocks[clientReplica.NodeID].manual.Increment(1000000)
+		clientNow = rttc.clocks[clientReplica.NodeID].clock.Now()
+	}
 
 	// Send a message from the client to the server.
 	sent := rttc.Send(clientReplica, serverReplica, 1 /* rangeID */, raftpb.Message{Commit: 10})
