@@ -541,60 +541,48 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 
 	_ /* server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(t, err)
-
-	testutils.RunTrueAndFalse(t, "use_mux_rangefeed", func(t *testing.T, useMux bool) {
-		var clientInterceptors ClientInterceptorInfo
-		var s *testClientStream
-		clientInterceptors.StreamInterceptors = append(clientInterceptors.StreamInterceptors,
-			func(
-				ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
-				method string, streamer grpc.Streamer, opts ...grpc.CallOption,
-			) (grpc.ClientStream, error) {
-				clientStream, err := streamer(ctx, desc, cc, method, opts...)
-				if err != nil {
-					return nil, err
-				}
-				s = &testClientStream{inner: clientStream}
-				return s, nil
-			})
-
-		internal := &internalServer{rangeFeedEvents: []kvpb.RangeFeedEvent{{}, {}}}
-		serverCtx.SetLocalInternalServer(
-			internal,
-			serverInterceptors, clientInterceptors)
-		ic := serverCtx.GetLocalInternalClientForAddr(1)
-		lic, ok := ic.(internalClientAdapter)
-		require.True(t, ok)
-		require.Equal(t, internal, lic.server)
-
-		var receiveEvent func() error
-		if useMux {
-			stream, err := lic.MuxRangeFeed(ctx)
-			require.NoError(t, err)
-			require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
-			receiveEvent = func() error {
-				e, err := stream.Recv()
-				_ = e
-				return err
+	var clientInterceptors ClientInterceptorInfo
+	var s *testClientStream
+	clientInterceptors.StreamInterceptors = append(clientInterceptors.StreamInterceptors,
+		func(
+			ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
+			method string, streamer grpc.Streamer, opts ...grpc.CallOption,
+		) (grpc.ClientStream, error) {
+			clientStream, err := streamer(ctx, desc, cc, method, opts...)
+			if err != nil {
+				return nil, err
 			}
-		} else {
-			stream, err := lic.RangeFeed(ctx, &kvpb.RangeFeedRequest{})
-			require.NoError(t, err)
-			receiveEvent = func() error {
-				_, err := stream.Recv()
-				return err
-			}
+			s = &testClientStream{inner: clientStream}
+			return s, nil
+		})
+
+	internal := &internalServer{rangeFeedEvents: []kvpb.RangeFeedEvent{{}, {}}}
+	serverCtx.SetLocalInternalServer(
+		internal,
+		serverInterceptors, clientInterceptors)
+	ic := serverCtx.GetLocalInternalClientForAddr(1)
+	lic, ok := ic.(internalClientAdapter)
+	require.True(t, ok)
+	require.Equal(t, internal, lic.server)
+
+	var receiveEvent func() error
+	stream, err := lic.MuxRangeFeed(ctx)
+	require.NoError(t, err)
+	require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
+	receiveEvent = func() error {
+		e, err := stream.Recv()
+		_ = e
+		return err
+	}
+	// Consume the stream.
+	for {
+		err := receiveEvent()
+		if err == io.EOF {
+			break
 		}
-		// Consume the stream.
-		for {
-			err := receiveEvent()
-			if err == io.EOF {
-				break
-			}
-			require.NoError(t, err)
-		}
-		require.Equal(t, len(internal.rangeFeedEvents)+1, s.recvCount)
-	})
+		require.NoError(t, err)
+	}
+	require.Equal(t, len(internal.rangeFeedEvents)+1, s.recvCount)
 }
 
 // Test that a server stream interceptor can wrap the ServerStream when the
@@ -617,81 +605,65 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 	_ /* server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(t, err)
 
-	testutils.RunTrueAndFalse(t, "use_mux_rangefeed", func(t *testing.T, useMux bool) {
-		const int1Name = "interceptor 1"
-		serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors,
-			func(
-				srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
-			) error {
-				serverStream := &testServerStream{name: "interceptor 1", inner: ss}
-				return handler(srv, serverStream)
-			})
-		var secondInterceptorWrapped grpc.ServerStream
-		const int2Name = "interceptor 2"
-		serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors,
-			func(
-				srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
-			) error {
-				secondInterceptorWrapped = ss
-				serverStream := &testServerStream{name: int2Name, inner: ss}
-				return handler(srv, serverStream)
-			})
+	const int1Name = "interceptor 1"
+	serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors,
+		func(
+			srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+		) error {
+			serverStream := &testServerStream{name: "interceptor 1", inner: ss}
+			return handler(srv, serverStream)
+		})
+	var secondInterceptorWrapped grpc.ServerStream
+	const int2Name = "interceptor 2"
+	serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors,
+		func(
+			srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+		) error {
+			secondInterceptorWrapped = ss
+			serverStream := &testServerStream{name: int2Name, inner: ss}
+			return handler(srv, serverStream)
+		})
 
-		internal := &internalServer{rangeFeedEvents: []kvpb.RangeFeedEvent{{}, {}}}
-		serverCtx.SetLocalInternalServer(
-			internal,
-			serverInterceptors, ClientInterceptorInfo{})
-		ic := serverCtx.GetLocalInternalClientForAddr(1)
-		lic, ok := ic.(internalClientAdapter)
-		require.True(t, ok)
-		require.Equal(t, internal, lic.server)
+	internal := &internalServer{rangeFeedEvents: []kvpb.RangeFeedEvent{{}, {}}}
+	serverCtx.SetLocalInternalServer(
+		internal,
+		serverInterceptors, ClientInterceptorInfo{})
+	ic := serverCtx.GetLocalInternalClientForAddr(1)
+	lic, ok := ic.(internalClientAdapter)
+	require.True(t, ok)
+	require.Equal(t, internal, lic.server)
 
-		var receiveEvent func() error
-		if useMux {
-			stream, err := lic.MuxRangeFeed(ctx)
-			require.NoError(t, err)
-			require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
-			receiveEvent = func() error {
-				_, err := stream.Recv()
-				return err
-			}
-		} else {
-			stream, err := lic.RangeFeed(ctx, &kvpb.RangeFeedRequest{})
-			require.NoError(t, err)
-			receiveEvent = func() error {
-				_, err := stream.Recv()
-				return err
-			}
+	var receiveEvent func() error
+	stream, err := lic.MuxRangeFeed(ctx)
+	require.NoError(t, err)
+	require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
+	receiveEvent = func() error {
+		_, err := stream.Recv()
+		return err
+	}
+
+	// Consume the stream. This will synchronize with the server RPC handler
+	// goroutine, ensuring that the server-side interceptors run.
+	for {
+		err := receiveEvent()
+		if err == io.EOF {
+			break
 		}
+		require.NoError(t, err)
+	}
 
-		// Consume the stream. This will synchronize with the server RPC handler
-		// goroutine, ensuring that the server-side interceptors run.
-		for {
-			err := receiveEvent()
-			if err == io.EOF {
-				break
-			}
-			require.NoError(t, err)
-		}
+	require.IsType(t, &testServerStream{}, secondInterceptorWrapped)
 
-		require.IsType(t, &testServerStream{}, secondInterceptorWrapped)
-
-		require.Equal(t, int1Name, secondInterceptorWrapped.(*testServerStream).name)
-		var ss grpc.ServerStream
-		if useMux {
-			require.IsType(t, muxRangeFeedServerAdapter{}, internal.muxRfServerStream)
-			ss = internal.muxRfServerStream.(muxRangeFeedServerAdapter).ServerStream
-		} else {
-			require.IsType(t, rangeFeedServerAdapter{}, internal.rfServerStream)
-			ss = internal.rfServerStream.(rangeFeedServerAdapter).ServerStream
-		}
-		require.IsType(t, &testServerStream{}, ss)
-		topStream := ss.(*testServerStream)
-		require.Equal(t, int2Name, topStream.name)
-		require.IsType(t, &testServerStream{}, topStream.inner)
-		bottomStream := topStream.inner.(*testServerStream)
-		require.Equal(t, int1Name, bottomStream.name)
-	})
+	require.Equal(t, int1Name, secondInterceptorWrapped.(*testServerStream).name)
+	var ss grpc.ServerStream
+	require.IsType(t, muxRangeFeedServerAdapter{}, internal.muxRfServerStream)
+	ss = internal.muxRfServerStream.(muxRangeFeedServerAdapter).ServerStream
+	require.IsType(t, &testServerStream{}, ss)
+	topStream := ss.(*testServerStream)
+	require.Equal(t, int2Name, topStream.name)
+	require.IsType(t, &testServerStream{}, topStream.inner)
+	bottomStream := topStream.inner.(*testServerStream)
+	require.Equal(t, int1Name, bottomStream.name)
 }
 
 type testClientStream struct {

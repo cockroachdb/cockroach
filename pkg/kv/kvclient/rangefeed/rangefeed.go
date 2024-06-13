@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -306,8 +305,6 @@ func (f *RangeFeed) Close() {
 // will be reset.
 const resetThreshold = 30 * time.Second
 
-var useMuxRangeFeed = metamorphic.ConstantWithTestBool("use-mux-rangefeed", true)
-
 // run will run the RangeFeed until the context is canceled or if the client
 // indicates that an initial scan error is non-recoverable. The
 // resumeWithFrontier arg enables the client to resume the rangefeed using the
@@ -344,9 +341,6 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 	var rangefeedOpts []kvcoord.RangeFeedOption
 	if f.scanConfig.overSystemTable {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithSystemTablePriority())
-	}
-	if !useMuxRangeFeed {
-		rangefeedOpts = append(rangefeedOpts, kvcoord.WithoutMuxRangeFeed())
 	}
 	if f.withDiff {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithDiff())
