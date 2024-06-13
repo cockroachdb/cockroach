@@ -11,6 +11,8 @@
 package scbuildstmt
 
 import (
+	"reflect"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -26,187 +28,140 @@ var commentResolveParams = ResolveParams{
 }
 
 // CommentOnDatabase implements COMMENT ON DATABASE xxx IS xxx statement.
-func CommentOnDatabase(b BuildCtx, n *tree.CommentOnDatabase) {
-	dbElements := b.ResolveDatabase(n.Name, commentResolveParams)
+func CommentOnDatabase(b BuildCtx, statement *tree.CommentOnDatabase) {
+	elements := b.ResolveDatabase(statement.Name, commentResolveParams)
 
-	if n.Comment == nil {
-		dbElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			switch e.(type) {
-			case *scpb.DatabaseComment:
-				b.Drop(e)
-				b.LogEventForExistingTarget(e)
-			}
-		})
+	if statement.Comment == nil {
+		dropComment(b, elements)
 	} else {
-		dc := &scpb.DatabaseComment{
-			Comment: *n.Comment,
-		}
-		dbElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			switch t := e.(type) {
-			case *scpb.Database:
-				dc.DatabaseID = t.DatabaseID
-			}
-		})
-		b.Add(dc)
-		b.LogEventForExistingTarget(dc)
+		addComment(b, elements, &scpb.DatabaseComment{Comment: *statement.Comment})
 	}
 }
 
 // CommentOnSchema implements COMMENT ON SCHEMA xxx IS xxx statement;
-func CommentOnSchema(b BuildCtx, n *tree.CommentOnSchema) {
-	schemaElements := b.ResolveSchema(n.Name, commentResolveParams)
+func CommentOnSchema(b BuildCtx, statement *tree.CommentOnSchema) {
+	elements := b.ResolveSchema(statement.Name, commentResolveParams)
 
-	if n.Comment == nil {
-		schemaElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			switch e.(type) {
-			case *scpb.SchemaComment:
-				b.Drop(e)
-				b.LogEventForExistingTarget(e)
-			}
-		})
+	if statement.Comment == nil {
+		dropComment(b, elements)
 	} else {
-		sc := &scpb.SchemaComment{
-			Comment: *n.Comment,
-		}
-		schemaElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			switch t := e.(type) {
-			case *scpb.Schema:
-				sc.SchemaID = t.SchemaID
-			}
-		})
-		b.Add(sc)
-		b.LogEventForExistingTarget(sc)
+		addComment(b, elements, &scpb.SchemaComment{Comment: *statement.Comment})
 	}
 }
 
 // CommentOnTable implements COMMENT ON TABLE xxx IS xxx statement.
-func CommentOnTable(b BuildCtx, n *tree.CommentOnTable) {
-	tableElements := b.ResolveTable(n.Table, commentResolveParams)
-	_, _, tbl := scpb.FindTable(tableElements)
-	tbn := n.Table.ToTableName()
-	if tbl == nil {
-		b.MarkNameAsNonExistent(&tbn)
+func CommentOnTable(b BuildCtx, statement *tree.CommentOnTable) {
+	tableElements := b.ResolveTable(statement.Table, commentResolveParams)
+	_, _, table := scpb.FindTable(tableElements)
+	name := statement.Table.ToTableName()
+
+	if table == nil {
+		b.MarkNameAsNonExistent(&name)
 		return
 	}
-	tbn.ObjectNamePrefix = b.NamePrefix(tbl)
-	n.Table = tbn.ToUnresolvedObjectName()
 
-	if n.Comment == nil {
-		_, _, tableComment := scpb.FindTableComment(tableElements)
-		if tableComment != nil {
-			b.Drop(tableComment)
-			b.LogEventForExistingTarget(tableComment)
-		}
+	name.ObjectNamePrefix = b.NamePrefix(table)
+	statement.Table = name.ToUnresolvedObjectName()
+
+	if statement.Comment == nil {
+		dropComment(b, tableElements)
 	} else {
-		_, _, table := scpb.FindTable(tableElements)
-		tc := &scpb.TableComment{
-			Comment: *n.Comment,
-			TableID: table.TableID,
-		}
-		b.Add(tc)
-		b.LogEventForExistingTarget(tc)
+		addComment(b, tableElements, &scpb.TableComment{Comment: *statement.Comment})
 	}
 }
 
 // CommentOnColumn implements COMMENT ON COLUMN xxx IS xxx statement.
-func CommentOnColumn(b BuildCtx, n *tree.CommentOnColumn) {
-	if n.ColumnItem.TableName == nil {
+func CommentOnColumn(b BuildCtx, statement *tree.CommentOnColumn) {
+	if statement.ColumnItem.TableName == nil {
 		panic(pgerror.New(pgcode.Syntax, "column name must be qualified"))
 	}
-	tableElements := b.ResolveTable(n.ColumnItem.TableName, commentResolveParams)
+	tableElements := b.ResolveTable(statement.ColumnItem.TableName, commentResolveParams)
 	_, _, table := scpb.FindTable(tableElements)
-	columnElements := b.ResolveColumn(table.TableID, n.ColumnItem.ColumnName, commentResolveParams)
+	columnElements := b.ResolveColumn(table.TableID, statement.ColumnItem.ColumnName, commentResolveParams)
 
-	if n.Comment == nil {
-		columnElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			switch e.(type) {
-			case *scpb.ColumnComment:
-				b.Drop(e)
-				b.LogEventForExistingTarget(e)
-			}
-		})
+	if statement.Comment == nil {
+		dropComment(b, columnElements)
 	} else {
-		cc := &scpb.ColumnComment{
-			TableID: table.TableID,
-			Comment: *n.Comment,
-		}
-		columnElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			switch t := e.(type) {
-			case *scpb.Column:
-				cc.ColumnID = t.ColumnID
-				cc.PgAttributeNum = t.PgAttributeNum
-			}
-		})
-		b.Add(cc)
-		b.LogEventForExistingTarget(cc)
+		addComment(b, columnElements, &scpb.ColumnComment{TableID: table.TableID, Comment: *statement.Comment})
 	}
 }
 
 // CommentOnIndex implements COMMENT ON INDEX xxx iS xxx statement.
-func CommentOnIndex(b BuildCtx, n *tree.CommentOnIndex) {
-	var tableID catid.DescID
-	indexElements := b.ResolveIndexByName(&n.Index, commentResolveParams)
-	indexElements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-		switch e.(type) {
-		case *scpb.PrimaryIndex, *scpb.SecondaryIndex:
-			tableID = screl.GetDescID(e)
-		}
-	})
+func CommentOnIndex(b BuildCtx, statement *tree.CommentOnIndex) {
+	indexElements := b.ResolveIndexByName(&statement.Index, commentResolveParams)
 
-	if n.Comment == nil {
-		indexElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
-			switch e.(type) {
-			case *scpb.IndexComment:
-				b.Drop(e)
-				b.LogEventForExistingTarget(e)
-			}
-		})
+	if statement.Comment == nil {
+		dropComment(b, indexElements)
 	} else {
-		ic := &scpb.IndexComment{
-			TableID: tableID,
-			Comment: *n.Comment,
-		}
-		indexElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
-			switch e.(type) {
-			case *scpb.PrimaryIndex, *scpb.SecondaryIndex:
-				id, _ := screl.Schema.GetAttribute(screl.IndexID, e)
-				ic.IndexID = id.(catid.IndexID)
-			}
-		})
-		b.Add(ic)
-		b.LogEventForExistingTarget(ic)
+		addComment(b, indexElements, &scpb.IndexComment{Comment: *statement.Comment})
 	}
 }
 
 // CommentOnConstraint implements COMMENT ON CONSTRAINT xxx ON table_name IS xxx
 // statement.
-func CommentOnConstraint(b BuildCtx, n *tree.CommentOnConstraint) {
-	tableElements := b.ResolveTable(n.Table, commentResolveParams)
+func CommentOnConstraint(b BuildCtx, statement *tree.CommentOnConstraint) {
+	tableElements := b.ResolveTable(statement.Table, commentResolveParams)
 	_, _, table := scpb.FindTable(tableElements)
-	constraintElements := b.ResolveConstraint(table.TableID, n.Constraint, commentResolveParams)
+	elements := b.ResolveConstraint(table.TableID, statement.Constraint, commentResolveParams)
 
-	if n.Comment == nil {
-		constraintElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
-			switch e.(type) {
-			case *scpb.ConstraintComment:
-				b.Drop(e)
-				b.LogEventForExistingTarget(e)
-			}
-		})
+	if statement.Comment == nil {
+		dropComment(b, elements)
 	} else {
-		cc := &scpb.ConstraintComment{
-			Comment: *n.Comment,
-			TableID: table.TableID,
+		addComment(b, elements, &scpb.ConstraintComment{TableID: table.TableID, Comment: *statement.Comment})
+	}
+}
+
+func dropComment(b BuildCtx, elements ElementResultSet) {
+	elements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		switch e.(type) {
+		case *scpb.DatabaseComment, *scpb.SchemaComment, *scpb.IndexComment,
+			*scpb.ConstraintComment, *scpb.ColumnComment, *scpb.TableComment:
+			b.Drop(e)
+			b.LogEventForExistingTarget(e)
 		}
-		constraintElements.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
-			switch e.(type) {
-			case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint,
-				*scpb.PrimaryIndex, *scpb.SecondaryIndex:
-				id, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
-				cc.ConstraintID = id.(catid.ConstraintID)
+	})
+}
+
+func addComment(b BuildCtx, elements ElementResultSet, comment scpb.Element) {
+	elements.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		switch object := e.(type) {
+		case *scpb.Database:
+			comment.(*scpb.DatabaseComment).DatabaseID = object.DatabaseID
+		case *scpb.Schema:
+			comment.(*scpb.SchemaComment).SchemaID = object.SchemaID
+		case *scpb.PrimaryIndex, *scpb.SecondaryIndex:
+			setIndexID(comment, object)
+			setConstraintID(comment, object)
+		case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint:
+			setConstraintID(comment, object)
+		case *scpb.Table:
+			comment.(*scpb.TableComment).TableID = object.TableID
+		case *scpb.Column:
+			if reflect.TypeOf(comment) == reflect.TypeOf(&scpb.ColumnComment{}) {
+				comment.(*scpb.ColumnComment).ColumnID = object.ColumnID
 			}
-		})
-		b.Add(cc)
-		b.LogEventForExistingTarget(cc)
+		}
+	})
+
+	b.Add(comment)
+	b.LogEventForExistingTarget(comment)
+}
+
+func setIndexID(comment scpb.Element, e scpb.Element) {
+	if reflect.TypeOf(comment) == reflect.TypeOf(&scpb.IndexComment{}) {
+		id, _ := screl.Schema.GetAttribute(screl.IndexID, e)
+		comment.(*scpb.IndexComment).IndexID = id.(catid.IndexID)
+		comment.(*scpb.IndexComment).TableID = screl.GetDescID(e)
+	}
+}
+
+func setConstraintID(comment scpb.Element, e scpb.Element) {
+	if reflect.TypeOf(comment) == reflect.TypeOf(&scpb.ConstraintComment{}) {
+		switch e.(type) {
+		case *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.CheckConstraint,
+			*scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint:
+			id, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+			comment.(*scpb.ConstraintComment).ConstraintID = id.(catid.ConstraintID)
+		}
 	}
 }
