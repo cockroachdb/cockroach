@@ -270,7 +270,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				}
 
 				streamID := int64(tree.MustBeDInt(args[0]))
-				spec, err := mgr.GetReplicationStreamSpec(ctx, streampb.StreamID(streamID))
+				spec, err := mgr.GetPhysicalReplicationStreamSpec(ctx, streampb.StreamID(streamID))
 				if err != nil {
 					return nil, err
 				}
@@ -472,7 +472,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	// TODO(ssd): These functions likely aren't the final API we
 	// want.  Namely, boths should perhaps just be overloads of
 	// existing functions.
-	"crdb_internal.partition_spans": makeBuiltin(
+	"crdb_internal.plan_logical_replication": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategoryClusterReplication,
 			Undocumented:     true,
@@ -497,7 +497,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 					}
 				}
 
-				spec, err := mgr.PartitionSpans(ctx, spans)
+				spec, err := mgr.PlanLogicalReplication(ctx, spans)
 				if err != nil {
 					return nil, err
 				}

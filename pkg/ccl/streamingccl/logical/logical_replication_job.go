@@ -189,7 +189,7 @@ func (r *logicalReplicationResumer) ingest(
 	}
 	defer func() { _ = client.Close(ctx) }()
 
-	topology, err := client.PartitionSpans(ctx, sourceSpans)
+	topology, err := client.PlanLogicalReplication(ctx, sourceSpans)
 	if err != nil {
 		return err
 	}

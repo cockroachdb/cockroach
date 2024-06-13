@@ -266,7 +266,7 @@ func createReplicationJob(
 		}
 	}
 
-	replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(sourceTenant), req)
+	replicationProducerSpec, err := client.CreateForTenant(ctx, roachpb.TenantName(sourceTenant), req)
 	if err != nil {
 		return err
 	}

@@ -510,7 +510,7 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		log.Infof(ctx, "generating DistSQL plan candidate")
 		streamID := streampb.StreamID(details.StreamID)
-		topology, err := client.Plan(ctx, streamID)
+		topology, err := client.PlanPhysicalReplication(ctx, streamID)
 		if err != nil {
 			return nil, nil, err
 		}

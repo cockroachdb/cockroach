@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1312,4 +1314,63 @@ func init() {
 			len(NamedZonesList),
 		))
 	}
+}
+
+// ValidateNoRepeatKeysInZone checks that there are not duplicated values for a
+// particular constraint. For example, constraints
+// [+region=us-east1,+region=us-east2] will be rejected. Additionally, invalid
+// constraints such as [+region=us-east1, -region=us-east1] will also be
+// rejected.
+func ValidateNoRepeatKeysInZone(zone *ZoneConfig) error {
+	for _, leasePreference := range zone.LeasePreferences {
+		if err := validateNoRepeatKeysInConstraints(leasePreference.Constraints); err != nil {
+			return err
+		}
+	}
+	if err := validateNoRepeatKeysInConjunction(zone.Constraints); err != nil {
+		return err
+	}
+	return validateNoRepeatKeysInConjunction(zone.VoterConstraints)
+}
+
+func validateNoRepeatKeysInConjunction(conjunctions []ConstraintsConjunction) error {
+	for _, constraints := range conjunctions {
+		if err := validateNoRepeatKeysInConstraints(constraints.Constraints); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateNoRepeatKeysInConstraints(constraints []Constraint) error {
+	// Because we expect to have a small number of constraints, a nested
+	// loop is probably better than allocating a map.
+	for i, curr := range constraints {
+		for _, other := range constraints[i+1:] {
+			// We don't want to enter the other validation logic if both of the constraints
+			// are attributes, due to the keys being the same for attributes.
+			if curr.Key == "" && other.Key == "" {
+				if curr.Value == other.Value {
+					return pgerror.Newf(pgcode.CheckViolation,
+						"incompatible zone constraints: %q and %q", curr, other)
+				}
+			} else {
+				if curr.Type == Constraint_REQUIRED {
+					if other.Type == Constraint_REQUIRED && other.Key == curr.Key ||
+						other.Type == Constraint_PROHIBITED && other.Key == curr.Key && other.Value == curr.Value {
+						return pgerror.Newf(pgcode.CheckViolation,
+							"incompatible zone constraints: %q and %q", curr, other)
+					}
+				} else if curr.Type == Constraint_PROHIBITED {
+					// If we have a -k=v pair, verify that there are not any
+					// +k=v pairs in the constraints.
+					if other.Type == Constraint_REQUIRED && other.Key == curr.Key && other.Value == curr.Value {
+						return pgerror.Newf(pgcode.CheckViolation,
+							"incompatible zone constraints: %q and %q", curr, other)
+					}
+				}
+			}
+		}
+	}
+	return nil
 }

@@ -920,8 +920,8 @@ type ReplicationStreamManager interface {
 		opaqueSpec []byte,
 	) (ValueGenerator, error)
 
-	// GetReplicationStreamSpec gets a stream replication spec on the producer side.
-	GetReplicationStreamSpec(
+	// GetPhysicalReplicationStreamSpec gets a physical stream replication spec on the producer side.
+	GetPhysicalReplicationStreamSpec(
 		ctx context.Context,
 		streamID streampb.StreamID,
 	) (*streampb.ReplicationStreamSpec, error)
@@ -938,7 +938,7 @@ type ReplicationStreamManager interface {
 	DebugGetProducerStatuses(ctx context.Context) []*streampb.DebugProducerStatus
 	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
 
-	PartitionSpans(
+	PlanLogicalReplication(
 		ctx context.Context,
 		spans []roachpb.Span,
 	) (*streampb.ReplicationStreamSpec, error)

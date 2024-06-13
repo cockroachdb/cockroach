@@ -33,8 +33,8 @@ type MockStreamClient struct {
 
 var _ Client = &MockStreamClient{}
 
-// Create implements the Client interface.
-func (m *MockStreamClient) Create(
+// CreateForTenant implements the Client interface.
+func (m *MockStreamClient) CreateForTenant(
 	_ context.Context, _ roachpb.TenantName, _ streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
 	panic("unimplemented")
@@ -55,8 +55,10 @@ func (m *MockStreamClient) Heartbeat(
 	return m.HeartbeatStatus, m.HeartbeatErr
 }
 
-// Plan implements the Client interface.
-func (m *MockStreamClient) Plan(_ context.Context, _ streampb.StreamID) (Topology, error) {
+// PlanPhysicalReplication implements the Client interface.
+func (m *MockStreamClient) PlanPhysicalReplication(
+	_ context.Context, _ streampb.StreamID,
+) (Topology, error) {
 	panic("unimplemented mock method")
 }
 
