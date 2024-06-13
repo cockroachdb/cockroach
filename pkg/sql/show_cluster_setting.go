@@ -153,8 +153,8 @@ func checkClusterSettingValuesAreEquivalent(localRawVal, kvRawVal []byte) error 
 		localVal, kvVal)
 }
 
-func settingNameDeprecationNotice(oldName, newName settings.SettingName) pgnotice.Notice {
-	return pgnotice.Newf("the name %q is deprecated; use %q instead", oldName, newName)
+func settingAlternateNameNotice(oldName, newName settings.SettingName) pgnotice.Notice {
+	return pgnotice.Newf("%q is now an alias for %q, the preferred setting name", oldName, newName)
 }
 
 func (p *planner) ShowClusterSetting(
@@ -170,7 +170,7 @@ func (p *planner) ShowClusterSetting(
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
 	if nameStatus != settings.NameActive {
-		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
+		p.BufferClientNotice(ctx, settingAlternateNameNotice(name, setting.Name()))
 		name = setting.Name()
 	}
 
