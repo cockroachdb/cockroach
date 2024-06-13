@@ -62,7 +62,7 @@ func (p *planner) AlterTenantSetClusterSetting(
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
 	}
 	if nameStatus != settings.NameActive {
-		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
+		p.BufferClientNotice(ctx, settingAlternateNameNotice(name, setting.Name()))
 		name = setting.Name()
 	}
 	// Error out if we're trying to set a system-only variable.
@@ -183,7 +183,7 @@ func (p *planner) ShowTenantClusterSetting(
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
 	if nameStatus != settings.NameActive {
-		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
+		p.BufferClientNotice(ctx, settingAlternateNameNotice(name, setting.Name()))
 		name = setting.Name()
 	}
 
