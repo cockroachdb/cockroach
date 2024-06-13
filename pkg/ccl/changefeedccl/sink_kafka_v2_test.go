@@ -37,6 +37,7 @@ func TestKafkaSinkClientV2_Basic(t *testing.T) {
 	require.NoError(t, err)
 
 	fx.kc.EXPECT().ProduceSync(fx.ctx, payload.([]*kgo.Record)).Times(1).Return(nil)
+	fx.kc.EXPECT().Close()
 
 	require.NoError(t, fx.sink.Flush(fx.ctx, payload))
 
