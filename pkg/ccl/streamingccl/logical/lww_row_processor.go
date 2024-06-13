@@ -59,10 +59,7 @@ type queryBuffer struct {
 }
 
 func makeSQLLastWriteWinsHandler(
-	ctx context.Context,
-	codec keys.SQLCodec,
-	settings *cluster.Settings,
-	tableDescs map[string]descpb.TableDescriptor,
+	ctx context.Context, settings *cluster.Settings, tableDescs map[string]descpb.TableDescriptor,
 ) (*sqlLastWriteWinsRowProcessor, error) {
 	descs := make(map[catid.DescID]catalog.TableDescriptor)
 	qb := queryBuffer{
@@ -89,7 +86,8 @@ func makeSQLLastWriteWinsHandler(
 		})
 	}
 
-	rfCache, err := cdcevent.NewFixedRowFetcherCache(ctx, codec, settings, cdcEventTargets, descs)
+	prefixlessCodec := keys.SystemSQLCodec
+	rfCache, err := cdcevent.NewFixedRowFetcherCache(ctx, prefixlessCodec, settings, cdcEventTargets, descs)
 	if err != nil {
 		return nil, err
 	}

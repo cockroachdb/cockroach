@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -155,7 +156,7 @@ func newLogicalReplicationWriterProcessor(
 			return nil, err
 		}
 	}
-	rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Codec(), flowCtx.Cfg.Settings, spec.TableDescriptors)
+	rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Cfg.Settings, spec.TableDescriptors)
 	if err != nil {
 		return nil, err
 	}
@@ -496,6 +497,12 @@ func (lrw *logicalReplicationWriterProcessor) bufferKVs(kvs []roachpb.KeyValue) 
 		return errors.New("kv event expected to have kv")
 	}
 	for _, kv := range kvs {
+		// Remove any tenant prefix from the inbound key.
+		var err error
+		kv.Key, err = keys.StripTenantPrefix(kv.Key)
+		if err != nil {
+			return errors.Wrap(err, "stripping tenant prefix")
+		}
 		lrw.buffer.addKV(kv)
 	}
 	return nil
