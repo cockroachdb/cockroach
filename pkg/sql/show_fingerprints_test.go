@@ -142,7 +142,7 @@ func TestShowTenantFingerprintsProtectsTimestamp(t *testing.T) {
 
 	ctx := context.Background()
 
-	exportStartedClosed := syncutil.AtomicBool(0)
+	var exportStartedClosed syncutil.AtomicBool
 	exportsStarted := make(chan struct{})
 	exportsResume := make(chan struct{})
 	testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {

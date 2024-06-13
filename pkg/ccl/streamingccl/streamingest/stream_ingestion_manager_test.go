@@ -135,7 +135,7 @@ func TestRevertTenantToTimestampPTS(t *testing.T) {
 	// We are going to force a GC between installing our PTS and
 	// the processing the first RevertRange request to ensure that
 	// the request still works.
-	trapRevertRange := syncutil.AtomicBool(0)
+	var trapRevertRange syncutil.AtomicBool
 	waitForRevertRangeStart := make(chan struct{})
 	allowRevertRange := make(chan struct{})
 	testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {

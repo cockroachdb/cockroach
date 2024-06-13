@@ -32,18 +32,18 @@ func TestAtomicFloat64(t *testing.T) {
 		i      AtomicFloat64
 		after  AtomicFloat64
 	}
-	x.before = magic64
-	x.after = magic64
+	x.before.val.Store(magic64)
+	x.after.val.Store(magic64)
 	for delta := float64(1); delta+delta > delta; delta += delta {
 		e := delta
-		StoreFloat64(&x.i, e)
-		a := LoadFloat64(&x.i)
+		x.i.Store(e)
+		a := x.i.Load()
 		if a != e {
 			t.Fatalf("stored=%f got=%f", e, a)
 		}
 	}
-	if x.before != magic64 || x.after != magic64 {
-		t.Fatalf("wrong magic: %#x _ %#x != %#x _ %#x", x.before, x.after, uint64(magic64), uint64(magic64))
+	if x.before.val.Load() != magic64 || x.after.val.Load() != magic64 {
+		t.Fatalf("wrong magic: %#x _ %#x != %#x _ %#x", x.before.val.Load(), x.after.val.Load(), uint64(magic64), uint64(magic64))
 	}
 }
 
@@ -54,27 +54,27 @@ func TestAtomicStoreFloat64IfHigher(t *testing.T) {
 		i      AtomicFloat64
 		after  AtomicFloat64
 	}
-	x.before = magic64
-	x.after = magic64
+	x.before.val.Store(magic64)
+	x.after.val.Store(magic64)
 
 	// Roughly half the time we will have to store a larger value.
-	StoreFloat64(&x.i, math.MaxFloat64/math.Pow(2, 500))
+	x.i.Store(math.MaxFloat64 / math.Pow(2, 500))
 	for delta := float64(1); delta+delta > delta; delta += delta {
 		e := delta
-		cur := LoadFloat64(&x.i)
+		cur := x.i.Load()
 		shouldStore := e > cur
-		StoreFloat64IfHigher(&x.i, e)
-		afterStore := LoadFloat64(&x.i)
+		x.i.StoreIfHigher(e)
+		afterStore := x.i.Load()
 		if shouldStore && e != afterStore {
 			t.Fatalf("should store: expected=%f got=%f", e, afterStore)
 		}
 		if !shouldStore && cur != afterStore {
 			t.Fatalf("should not store: expected=%f got=%f", cur, afterStore)
 		}
-		StoreFloat64(&x.i, math.MaxFloat64/math.Pow(2, 500))
+		x.i.Store(math.MaxFloat64 / math.Pow(2, 500))
 	}
-	if x.before != magic64 || x.after != magic64 {
-		t.Fatalf("wrong magic: %#x _ %#x != %#x _ %#x", x.before, x.after, uint64(magic64), uint64(magic64))
+	if x.before.val.Load() != magic64 || x.after.val.Load() != magic64 {
+		t.Fatalf("wrong magic: %#x _ %#x != %#x _ %#x", x.before.val.Load(), x.after.val.Load(), uint64(magic64), uint64(magic64))
 	}
 }
 
@@ -85,19 +85,19 @@ func TestAtomicAddFloat64(t *testing.T) {
 		i      AtomicFloat64
 		after  AtomicFloat64
 	}
-	x.before = magic64
-	x.after = magic64
-	j := LoadFloat64(&x.i)
+	x.before.val.Store(magic64)
+	x.after.val.Store(magic64)
+	j := x.i.Load()
 	for delta := float64(1); delta+delta > delta; delta += delta {
-		AddFloat64(&x.i, delta)
+		x.i.Add(delta)
 		j += delta
-		got := LoadFloat64(&x.i)
-		if j != LoadFloat64(&x.i) {
+		got := x.i.Load()
+		if j != x.i.Load() {
 			t.Fatalf("expected=%f got=%f", j, got)
 		}
 	}
-	if x.before != magic64 || x.after != magic64 {
-		t.Fatalf("wrong magic: %#x _ %#x != %#x _ %#x", x.before, x.after, uint64(magic64), uint64(magic64))
+	if x.before.val.Load() != magic64 || x.after.val.Load() != magic64 {
+		t.Fatalf("wrong magic: %#x _ %#x != %#x _ %#x", x.before.val.Load(), x.after.val.Load(), uint64(magic64), uint64(magic64))
 	}
 }
 

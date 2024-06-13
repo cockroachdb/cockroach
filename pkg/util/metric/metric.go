@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
@@ -24,7 +25,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
-	"github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -722,22 +722,54 @@ func deepCopy(source prometheusgo.Histogram) *prometheusgo.Histogram {
 // A Counter holds a single mutable atomic value.
 type Counter struct {
 	Metadata
-	metrics.Counter
+
+	count atomic.Int64
 }
 
 // NewCounter creates a counter.
 func NewCounter(metadata Metadata) *Counter {
-	return &Counter{metadata, metrics.NewCounter()}
+	return &Counter{Metadata: metadata}
 }
 
-// Dec overrides the metric.Counter method. This method should NOT be
-// used and serves only to prevent misuse of the metric type.
-func (c *Counter) Dec(int64) {
-	// From https://prometheus.io/docs/concepts/metric_types/#counter
-	// > Counters should not be used to expose current counts of items
-	// > whose number can also go down, e.g. the number of currently
-	// > running goroutines. Use gauges for this use case.
-	panic("Counter should not be decremented, use a Gauge instead")
+// Clear resets the counter to zero.
+func (c *Counter) Clear() {
+	c.count.Store(0)
+}
+
+// Inc atomically increments the counter by the given value.
+func (c *Counter) Inc(v int64) {
+	if buildutil.CrdbTestBuild && v < 0 {
+		panic("Counters should not be decremented")
+	}
+	c.count.Add(v)
+}
+
+// Update atomically sets the current value of the counter. The value must not
+// be smaller than the existing value.
+func (c *Counter) Update(val int64) {
+	if buildutil.CrdbTestBuild && val < c.count.Load() {
+		panic("Counters should not decrease")
+	}
+	c.count.Store(val)
+}
+
+// UpdateIfHigher atomically sets the current value of the counter, unless the
+// current value is already greater.
+func (c *Counter) UpdateIfHigher(val int64) {
+	for {
+		old := c.count.Load()
+		if old > val {
+			return
+		}
+		if c.count.CompareAndSwap(old, val) {
+			return
+		}
+	}
+}
+
+// Count returns the current value of the counter.
+func (c *Counter) Count() int64 {
+	return c.count.Load()
 }
 
 // GetType returns the prometheus type enum for this metric.
@@ -745,18 +777,18 @@ func (c *Counter) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_COUNTER.Enum()
 }
 
-// Inspect calls the given closure with the empty string and itself.
+// Inspect calls the given closure with itself.
 func (c *Counter) Inspect(f func(interface{})) { f(c) }
 
 // MarshalJSON marshals to JSON.
 func (c *Counter) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Counter.Count())
+	return json.Marshal(c.Count())
 }
 
 // ToPrometheusMetric returns a filled-in prometheus metric of the right type.
 func (c *Counter) ToPrometheusMetric() *prometheusgo.Metric {
 	return &prometheusgo.Metric{
-		Counter: &prometheusgo.Counter{Value: proto.Float64(float64(c.Counter.Count()))},
+		Counter: &prometheusgo.Counter{Value: proto.Float64(float64(c.Count()))},
 	}
 }
 
@@ -782,24 +814,38 @@ func (c *CounterFloat64) GetMetadata() Metadata {
 }
 
 func (c *CounterFloat64) Clear() {
-	syncutil.StoreFloat64(&c.count, 0)
+	c.count.Store(0)
 }
 
 func (c *CounterFloat64) Count() float64 {
-	return syncutil.LoadFloat64(&c.count)
+	return c.count.Load()
 }
 
 func (c *CounterFloat64) Inc(i float64) {
-	syncutil.AddFloat64(&c.count, i)
+	if buildutil.CrdbTestBuild && i < 0 {
+		panic("Counters should not be decremented")
+	}
+	c.count.Add(i)
 }
 
+// Update atomically sets the current value of the counter. The value must not
+// be smaller than the existing value.
+func (c *CounterFloat64) Update(val float64) {
+	if buildutil.CrdbTestBuild && val < c.count.Load() {
+		panic("Counters should not decrease")
+	}
+	c.count.Store(val)
+}
+
+// UpdateIfHigher atomically sets the current value of the counter, unless the
+// current value is already greater.
 func (c *CounterFloat64) UpdateIfHigher(i float64) {
-	syncutil.StoreFloat64IfHigher(&c.count, i)
+	c.count.StoreIfHigher(i)
 }
 
 func (c *CounterFloat64) Snapshot() *CounterFloat64 {
 	newCounter := NewCounterFloat64(c.Metadata)
-	syncutil.StoreFloat64(&newCounter.count, c.Count())
+	newCounter.count.Store(c.Count())
 	return newCounter
 }
 
@@ -831,13 +877,13 @@ func NewCounterFloat64(metadata Metadata) *CounterFloat64 {
 // A Gauge atomically stores a single integer value.
 type Gauge struct {
 	Metadata
-	value *int64
+	value atomic.Int64
 	fn    func() int64
 }
 
 // NewGauge creates a Gauge.
 func NewGauge(metadata Metadata) *Gauge {
-	return &Gauge{metadata, new(int64), nil}
+	return &Gauge{Metadata: metadata}
 }
 
 // NewFunctionalGauge creates a Gauge metric whose value is determined when
@@ -845,17 +891,12 @@ func NewGauge(metadata Metadata) *Gauge {
 // Note that Update, Inc, and Dec should NOT be called on a Gauge returned
 // from NewFunctionalGauge.
 func NewFunctionalGauge(metadata Metadata, f func() int64) *Gauge {
-	return &Gauge{metadata, nil, f}
-}
-
-// Snapshot returns a read-only copy of the gauge.
-func (g *Gauge) Snapshot() metrics.Gauge {
-	return metrics.GaugeSnapshot(g.Value())
+	return &Gauge{Metadata: metadata, fn: f}
 }
 
 // Update updates the gauge's value.
 func (g *Gauge) Update(v int64) {
-	atomic.StoreInt64(g.value, v)
+	g.value.Store(v)
 }
 
 // Value returns the gauge's current value.
@@ -863,17 +904,17 @@ func (g *Gauge) Value() int64 {
 	if g.fn != nil {
 		return g.fn()
 	}
-	return atomic.LoadInt64(g.value)
+	return g.value.Load()
 }
 
 // Inc increments the gauge's value.
 func (g *Gauge) Inc(i int64) {
-	atomic.AddInt64(g.value, i)
+	g.value.Add(i)
 }
 
 // Dec decrements the gauge's value.
 func (g *Gauge) Dec(i int64) {
-	atomic.AddInt64(g.value, -i)
+	g.value.Add(-i)
 }
 
 // GetType returns the prometheus type enum for this metric.
@@ -907,43 +948,32 @@ func (g *Gauge) GetMetadata() Metadata {
 // A GaugeFloat64 atomically stores a single float64 value.
 type GaugeFloat64 struct {
 	Metadata
-	bits *uint64
+	value syncutil.AtomicFloat64
 }
 
 // NewGaugeFloat64 creates a GaugeFloat64.
 func NewGaugeFloat64(metadata Metadata) *GaugeFloat64 {
-	return &GaugeFloat64{metadata, new(uint64)}
-}
-
-// Snapshot returns a read-only copy of the gauge.
-func (g *GaugeFloat64) Snapshot() metrics.GaugeFloat64 {
-	return metrics.GaugeFloat64Snapshot(g.Value())
+	return &GaugeFloat64{Metadata: metadata}
 }
 
 // Update updates the gauge's value.
 func (g *GaugeFloat64) Update(v float64) {
-	atomic.StoreUint64(g.bits, math.Float64bits(v))
+	g.value.Store(v)
 }
 
 // Value returns the gauge's current value.
 func (g *GaugeFloat64) Value() float64 {
-	return math.Float64frombits(atomic.LoadUint64(g.bits))
+	return g.value.Load()
 }
 
 // Inc increments the gauge's value.
 func (g *GaugeFloat64) Inc(delta float64) {
-	for {
-		oldBits := atomic.LoadUint64(g.bits)
-		newBits := math.Float64bits(math.Float64frombits(oldBits) + delta)
-		if atomic.CompareAndSwapUint64(g.bits, oldBits, newBits) {
-			return
-		}
-	}
+	g.value.Add(delta)
 }
 
 // Dec decrements the gauge's value.
 func (g *GaugeFloat64) Dec(delta float64) {
-	g.Inc(-delta)
+	g.value.Add(-delta)
 }
 
 // GetType returns the prometheus type enum for this metric.
