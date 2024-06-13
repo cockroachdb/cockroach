@@ -513,7 +513,6 @@ type rangeFeedErrorCounters struct {
 	RangefeedRestartRanges *metric.Counter
 	RangefeedErrorCatchup  *metric.Counter
 	RetryErrors            []*metric.Counter
-	Stuck                  *metric.Counter
 	SendErrors             *metric.Counter
 	StoreNotFound          *metric.Counter
 	NodeNotFound           *metric.Counter
@@ -546,7 +545,6 @@ func makeRangeFeedErrorCounters() rangeFeedErrorCounters {
 		RangefeedRestartRanges: metric.NewCounter(metaDistSenderRangefeedRestartRanges),
 		RangefeedErrorCatchup:  metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
 		RetryErrors:            retryCounters,
-		Stuck:                  metric.NewCounter(retryMeta("stuck")),
 		SendErrors:             metric.NewCounter(retryMeta("send")),
 		StoreNotFound:          metric.NewCounter(retryMeta("store not found")),
 		NodeNotFound:           metric.NewCounter(retryMeta("node not found")),
