@@ -267,13 +267,6 @@ func (m *mockInternalClient) RangeLookup(
 	return nil, fmt.Errorf("unsupported RangeLookup call")
 }
 
-// RangeFeed is part of the kvpb.InternalClient interface.
-func (m *mockInternalClient) RangeFeed(
-	ctx context.Context, in *kvpb.RangeFeedRequest, opts ...grpc.CallOption,
-) (kvpb.Internal_RangeFeedClient, error) {
-	return nil, fmt.Errorf("unsupported RangeFeed call")
-}
-
 func (m *mockInternalClient) MuxRangeFeed(
 	ctx context.Context, opts ...grpc.CallOption,
 ) (kvpb.Internal_MuxRangeFeedClient, error) {

@@ -6,7 +6,6 @@ gomock(
     out = "mocks_generated.go",
     interfaces = [
         "InternalClient",
-        "Internal_RangeFeedClient",
         "Internal_MuxRangeFeedClient",
     ],
     library = "//pkg/kv/kvpb",
