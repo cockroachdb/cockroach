@@ -542,7 +542,7 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 	_ /* server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(t, err)
 
-	testutils.RunTrueAndFalse(t, "use_mux_rangefeed", func(t *testing.T, useMux bool) {
+	t.Run("client_stream_interceptors", func(t *testing.T) {
 		var clientInterceptors ClientInterceptorInfo
 		var s *testClientStream
 		clientInterceptors.StreamInterceptors = append(clientInterceptors.StreamInterceptors,
@@ -568,22 +568,13 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 		require.Equal(t, internal, lic.server)
 
 		var receiveEvent func() error
-		if useMux {
-			stream, err := lic.MuxRangeFeed(ctx)
-			require.NoError(t, err)
-			require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
-			receiveEvent = func() error {
-				e, err := stream.Recv()
-				_ = e
-				return err
-			}
-		} else {
-			stream, err := lic.RangeFeed(ctx, &kvpb.RangeFeedRequest{})
-			require.NoError(t, err)
-			receiveEvent = func() error {
-				_, err := stream.Recv()
-				return err
-			}
+		stream, err := lic.MuxRangeFeed(ctx)
+		require.NoError(t, err)
+		require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
+		receiveEvent = func() error {
+			e, err := stream.Recv()
+			_ = e
+			return err
 		}
 		// Consume the stream.
 		for {
@@ -617,7 +608,7 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 	_ /* server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(t, err)
 
-	testutils.RunTrueAndFalse(t, "use_mux_rangefeed", func(t *testing.T, useMux bool) {
+	t.Run("server_stream_interceptors", func(t *testing.T) {
 		const int1Name = "interceptor 1"
 		serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors,
 			func(
@@ -647,21 +638,12 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 		require.Equal(t, internal, lic.server)
 
 		var receiveEvent func() error
-		if useMux {
-			stream, err := lic.MuxRangeFeed(ctx)
-			require.NoError(t, err)
-			require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
-			receiveEvent = func() error {
-				_, err := stream.Recv()
-				return err
-			}
-		} else {
-			stream, err := lic.RangeFeed(ctx, &kvpb.RangeFeedRequest{})
-			require.NoError(t, err)
-			receiveEvent = func() error {
-				_, err := stream.Recv()
-				return err
-			}
+		stream, err := lic.MuxRangeFeed(ctx)
+		require.NoError(t, err)
+		require.NoError(t, stream.Send(&kvpb.RangeFeedRequest{}))
+		receiveEvent = func() error {
+			_, err := stream.Recv()
+			return err
 		}
 
 		// Consume the stream. This will synchronize with the server RPC handler
@@ -678,13 +660,8 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 
 		require.Equal(t, int1Name, secondInterceptorWrapped.(*testServerStream).name)
 		var ss grpc.ServerStream
-		if useMux {
-			require.IsType(t, muxRangeFeedServerAdapter{}, internal.muxRfServerStream)
-			ss = internal.muxRfServerStream.(muxRangeFeedServerAdapter).ServerStream
-		} else {
-			require.IsType(t, rangeFeedServerAdapter{}, internal.rfServerStream)
-			ss = internal.rfServerStream.(rangeFeedServerAdapter).ServerStream
-		}
+		require.IsType(t, muxRangeFeedServerAdapter{}, internal.muxRfServerStream)
+		ss = internal.muxRfServerStream.(muxRangeFeedServerAdapter).ServerStream
 		require.IsType(t, &testServerStream{}, ss)
 		topStream := ss.(*testServerStream)
 		require.Equal(t, int2Name, topStream.name)

@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/require"
@@ -48,7 +47,6 @@ import (
 type wrapRangeFeedClientFn func(client kvpb.Internal_RangeFeedClient) kvpb.Internal_RangeFeedClient
 type testRangefeedClient struct {
 	rpc.RestrictedInternalClient
-	muxRangeFeedEnabled bool
 	count               func()
 	wrapRangeFeedClient wrapRangeFeedClientFn
 }
@@ -58,7 +56,7 @@ func (c *testRangefeedClient) RangeFeed(
 ) (kvpb.Internal_RangeFeedClient, error) {
 	defer c.count()
 
-	if c.muxRangeFeedEnabled && ctx.Value(useMuxRangeFeedCtxKey{}) != nil {
+	if ctx.Value(useMuxRangeFeedCtxKey{}) != nil {
 		panic(errors.AssertionFailedf("unexpected call to RangeFeed"))
 	}
 
@@ -77,7 +75,7 @@ func (c *testRangefeedClient) MuxRangeFeed(
 ) (kvpb.Internal_MuxRangeFeedClient, error) {
 	defer c.count()
 
-	if !c.muxRangeFeedEnabled || ctx.Value(useMuxRangeFeedCtxKey{}) == nil {
+	if ctx.Value(useMuxRangeFeedCtxKey{}) == nil {
 		panic(errors.AssertionFailedf("unexpected call to MuxRangeFeed"))
 	}
 	return c.RestrictedInternalClient.MuxRangeFeed(ctx, opts...)
@@ -99,9 +97,7 @@ func (c *internalClientCounts) Inc(ic rpc.RestrictedInternalClient) {
 
 type countConnectionsTransport struct {
 	kvcoord.Transport
-	counts              *internalClientCounts
-	wrapRangeFeedClient wrapRangeFeedClientFn
-	rfStreamEnabled     bool
+	counts *internalClientCounts
 }
 
 var _ kvcoord.Transport = (*countConnectionsTransport)(nil)
@@ -124,8 +120,6 @@ func (c *countConnectionsTransport) NextInternalClient(
 
 	tc := &testRangefeedClient{
 		RestrictedInternalClient: client,
-		muxRangeFeedEnabled:      c.rfStreamEnabled,
-		wrapRangeFeedClient:      c.wrapRangeFeedClient,
 	}
 
 	tc.count = func() {
@@ -138,16 +132,14 @@ func (c *countConnectionsTransport) NextInternalClient(
 }
 
 func makeTransportFactory(
-	rfStreamEnabled bool, counts *internalClientCounts, wrapFn wrapRangeFeedClientFn,
+	counts *internalClientCounts,
 ) func(kvcoord.TransportFactory) kvcoord.TransportFactory {
 	return func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
 		return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) kvcoord.Transport {
 			transport := factory(options, slice)
 			countingTransport := &countConnectionsTransport{
-				Transport:           transport,
-				rfStreamEnabled:     rfStreamEnabled,
-				counts:              counts,
-				wrapRangeFeedClient: wrapFn,
+				Transport: transport,
+				counts:    counts,
 			}
 			return countingTransport
 		}
@@ -163,7 +155,6 @@ func rangeFeed(
 	sp roachpb.Span,
 	startFrom hlc.Timestamp,
 	onValue func(event kvcoord.RangeFeedMessage),
-	useMuxRangeFeed bool,
 	opts ...kvcoord.RangeFeedOption,
 ) func() {
 	ds := dsI.(*kvcoord.DistSender)
@@ -172,11 +163,7 @@ func rangeFeed(
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) (err error) {
-		if useMuxRangeFeed {
-			ctx = context.WithValue(ctx, useMuxRangeFeedCtxKey{}, struct{}{})
-		} else {
-			opts = append(opts, kvcoord.WithoutMuxRangeFeed())
-		}
+		ctx = context.WithValue(ctx, useMuxRangeFeedCtxKey{}, struct{}{})
 		return ds.RangeFeed(ctx, []roachpb.Span{sp}, startFrom, events, opts...)
 	})
 	g.GoCtx(func(ctx context.Context) error {
@@ -246,7 +233,7 @@ func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				KVClient: &kvcoord.ClientTestingKnobs{
-					TransportFactory: makeTransportFactory(true, connCounts, nil),
+					TransportFactory: makeTransportFactory(connCounts),
 				},
 			},
 		},
@@ -282,7 +269,7 @@ func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {
 	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
 	allSeen, onValue := observeNValues(1000)
-	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue, true)
+	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue)
 	defer closeFeed()
 	channelWaitWithTimeout(t, allSeen)
 	closeFeed() // Explicitly shutdown the feed to make sure counters no longer change.
@@ -333,7 +320,7 @@ func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
 	const numErrsToReturn = 100
 	var numErrors atomic.Int32
 	enoughErrors := make(chan struct{})
-	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, noValuesExpected, true,
+	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, noValuesExpected,
 		kvcoord.TestingWithOnRangefeedEvent(
 			func(_ context.Context, _ roachpb.Span, _ int64, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
 				*event = transientErrEvent
@@ -375,7 +362,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 		ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
 	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
-	testutils.RunTrueAndFalse(t, "mux", func(t *testing.T, useMux bool) {
+	t.Run("mux", func(t *testing.T) {
 		metrics := kvcoord.TestingMakeRangeFeedMetrics()
 
 		// Number of ranges for which we'll issue transient error.
@@ -432,7 +419,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 		}
 
 		ignoreValues := func(event kvcoord.RangeFeedMessage) {}
-		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, ignoreValues, useMux,
+		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, ignoreValues,
 			kvcoord.TestingWithRangeFeedMetrics(&metrics),
 			kvcoord.TestingWithOnRangefeedEvent(
 				func(ctx context.Context, s roachpb.Span, _ int64, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
@@ -441,7 +428,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 						// If we previously arranged for the range to be skipped (stuck catchup scan),
 						// then skip any value that belongs to the skipped range.
 						// This is only needed for mux rangefeed, since regular rangefeed just blocks.
-						return useMux && shouldSkip(t.Key, kindStuck), nil
+						return shouldSkip(t.Key, kindStuck), nil
 					case *kvpb.RangeFeedCheckpoint:
 						if checkpoint := t; checkpoint.Span.Contains(s) {
 							if checkpoint.ResolvedTS.IsEmpty() {
@@ -450,7 +437,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 
 							// Skip any subsequent checkpoint if we previously arranged for
 							// range to be skipped.
-							if useMux && shouldSkip(checkpoint.Span.Key, kindStuck) {
+							if shouldSkip(checkpoint.Span.Key, kindStuck) {
 								return true, nil
 							}
 
@@ -470,22 +457,13 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 							}
 
 							if numCatchupBlocked.Add(1) <= numCatchupToBlock {
-								if useMux {
-									// Mux rangefeed can't block single range, so just skip this event
-									// and arrange for other events belonging to this range to be skipped as well.
-									skipSet.Lock()
-									skipSet.stuck.Add(checkpoint.Span)
-									skipSet.Unlock()
-									log.Infof(ctx, "skipping stuck span %s", checkpoint.Span)
-									return true /* skip */, nil
-								}
-
-								// Regular rangefeed can block to prevent catchup completion until rangefeed is canceled.
-								return false, timeutil.RunWithTimeout(ctx, "wait-rf-timeout", time.Minute,
-									func(ctx context.Context) error {
-										<-ctx.Done()
-										return ctx.Err()
-									})
+								// Mux rangefeed can't block single range, so just skip this event
+								// and arrange for other events belonging to this range to be skipped as well.
+								skipSet.Lock()
+								skipSet.stuck.Add(checkpoint.Span)
+								skipSet.Unlock()
+								log.Infof(ctx, "skipping stuck span %s", checkpoint.Span)
+								return true /* skip */, nil
 							}
 						}
 					}
@@ -530,7 +508,7 @@ func TestRangefeedRangeObserver(t *testing.T) {
 	kvserver.RangefeedEnabled.Override(
 		context.Background(), &ts.ClusterSettings().SV, true)
 
-	testutils.RunTrueAndFalse(t, "mux", func(t *testing.T, useMux bool) {
+	t.Run("mux", func(t *testing.T) {
 		sqlDB.ExecMultiple(t,
 			`CREATE TABLE foo (key INT PRIMARY KEY)`,
 			`INSERT INTO foo (key) SELECT * FROM generate_series(1, 4)`,
@@ -580,7 +558,7 @@ func TestRangefeedRangeObserver(t *testing.T) {
 			})
 		}
 
-		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, ts.Clock().Now(), ignoreValues, useMux,
+		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, ts.Clock().Now(), ignoreValues,
 			kvcoord.WithRangeObserver(observer))
 		defer closeFeed()
 
@@ -676,7 +654,7 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 	ignoreValues := func(event kvcoord.RangeFeedMessage) {}
 	var numRestartStreams atomic.Int32
 
-	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, ts.Clock().Now(), ignoreValues, true,
+	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, ts.Clock().Now(), ignoreValues,
 		kvcoord.TestingWithMuxRangeFeedRequestSenderCapture(
 			// We expect a single mux sender since we have 1 node in this test.
 			func(nodeID roachpb.NodeID, capture func(request *kvpb.RangeFeedRequest) error) {
@@ -805,7 +783,7 @@ func TestMuxRangeFeedDoesNotDeadlockWithLocalStreams(t *testing.T) {
 	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
 	allSeen, onValue := observeNValues(1000)
-	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startFrom, onValue, true,
+	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startFrom, onValue,
 		kvcoord.TestingWithBeforeSendRequest(func() {
 			// Prior to sending rangefeed request, block for just a bit
 			// to make deadlock more likely.
