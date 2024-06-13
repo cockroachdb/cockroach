@@ -71,9 +71,19 @@ func BatchCanBeEvaluatedOnFollower(ctx context.Context, ba *kvpb.BatchRequest) b
 				return false
 			}
 		case r.Method() == kvpb.Export:
-		// Export requests also have clear semantics when served under the closed
-		// timestamp as well, even though they are non-transactional, as they
-		// define the start and end timestamp to export data over.
+			// Export requests also have clear semantics when served under the closed
+			// timestamp as well, even though they are non-transactional, as they
+			// define the start and end timestamp to export data over.
+			if r.(*kvpb.ExportRequest).ExportFingerprint {
+				// Fingerprint reuses a lot of the backup code by sending export requests,
+				// but unlike backup requests, doesn't have a job and multiple backup processors
+				// to spread the workload around the cluster. In a 3-node cluster, the request
+				// routing logic will determine that all replicas exist on the gateway node and
+				// with following reads allowed, will attempt to route all the export requests to
+				// the gateway node. This leads to one node doing all the work while the others sit
+				// idle. Return false to prevent follower reads for fingerprinting
+				return false
+			}
 		default:
 			return false
 		}
