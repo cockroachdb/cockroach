@@ -817,7 +817,7 @@ NULL    NULL      NULL  NULL      t     testuser
 NULL    NULL      NULL  NULL      v     testuser
 NULL    NULL      _ty   testuser  NULL  NULL
 NULL    NULL      ty    testuser  NULL  NULL
-public  admin     NULL  NULL      NULL  NULL
+public  root      NULL  NULL      NULL  NULL
 sc      testuser  NULL  NULL      NULL  NULL
 
 statement ok
@@ -838,13 +838,13 @@ ALTER DATABASE atest OWNER TO u;
 query TTTTTT rowsort
 EXECUTE showOwners('atest')
 ----
-NULL    NULL   NULL  NULL  s     testuser
-NULL    NULL   NULL  NULL  t     u
-NULL    NULL   NULL  NULL  v     testuser
-NULL    NULL   _ty   u     NULL  NULL
-NULL    NULL   ty    u     NULL  NULL
-public  admin  NULL  NULL  NULL  NULL
-sc      u      NULL  NULL  NULL  NULL
+NULL    NULL  NULL  NULL  s     testuser
+NULL    NULL  NULL  NULL  t     u
+NULL    NULL  NULL  NULL  v     testuser
+NULL    NULL  _ty   u     NULL  NULL
+NULL    NULL  ty    u     NULL  NULL
+public  root  NULL  NULL  NULL  NULL
+sc      u     NULL  NULL  NULL  NULL
 
 # Verify that events were logged.
 query ITT
@@ -878,13 +878,13 @@ REASSIGN OWNED BY testuser TO v
 query TTTTTT rowsort
 EXECUTE showOwners('atest')
 ----
-NULL    NULL   NULL  NULL  s     v
-NULL    NULL   NULL  NULL  t     v
-NULL    NULL   NULL  NULL  v     v
-NULL    NULL   _ty   v     NULL  NULL
-NULL    NULL   ty    v     NULL  NULL
-public  admin  NULL  NULL  NULL  NULL
-sc      v      NULL  NULL  NULL  NULL
+NULL    NULL  NULL  NULL  s     v
+NULL    NULL  NULL  NULL  t     v
+NULL    NULL  NULL  NULL  v     v
+NULL    NULL  _ty   v     NULL  NULL
+NULL    NULL  ty    v     NULL  NULL
+public  root  NULL  NULL  NULL  NULL
+sc      v     NULL  NULL  NULL  NULL
 
 # Verify that the ownership was transferred to v even including the view and sequence.
 query ITT
