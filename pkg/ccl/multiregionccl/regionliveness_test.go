@@ -442,8 +442,23 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	recoveryBlock <- struct{}{}
 	require.NoError(t, grp.Wait())
 	_, err = tx.Exec("INSERT INTO t2 VALUES(5)")
+	// If the txn failed, no commit is needed.
+	commitRequired := err == nil
+	const expectedTxnErr = "restart transaction: TransactionRetryWithProtoRefreshError"
+	if err != nil && !testutils.IsError(err, expectedTxnErr) {
+		require.ErrorContainsf(t,
+			err,
+			expectedTxnErr,
+			"txn should see a retry error.")
+	}
 	require.ErrorContainsf(t, grp.Wait(), "context canceled", "connection should have been dropped, node is dead.")
-	require.ErrorContainsf(t, tx.Commit(), "TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn", "connection should have been dropped, node is dead.")
+	if commitRequired {
+		require.ErrorContainsf(t,
+			tx.Commit(),
+			expectedTxnErr,
+			"TransactionRetryWithProtoRefreshError: TransactionRetryError: retry txn",
+			"txn should see a retry error")
+	}
 }
 
 // TestRegionLivenessProberForSQLInstances validates that regional avaibility issues
