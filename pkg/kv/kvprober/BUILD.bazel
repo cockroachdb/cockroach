@@ -59,11 +59,11 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//codes",
+        "@org_uber_go_atomic//:atomic",
     ],
 )

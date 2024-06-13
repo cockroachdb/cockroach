@@ -31,10 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 func TestProberDoesReadsAndWrites(t *testing.T) {
@@ -133,13 +133,13 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 	})
 
 	t.Run("all ranges are unavailable for Gets only", func(t *testing.T) {
-		var dbIsAvailable syncutil.AtomicBool
-		dbIsAvailable.Set(true)
+		var dbIsAvailable atomic.Bool
+		dbIsAvailable.Store(true)
 
 		s, _, p, cleanup := initTestServer(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(i context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-					if !dbIsAvailable.Get() {
+					if !dbIsAvailable.Load() {
 						for _, ru := range ba.Requests {
 							if ru.GetGet() != nil {
 								return kvpb.NewError(fmt.Errorf("boom"))
@@ -180,13 +180,13 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
 	})
 	t.Run("all ranges are unavailable for Puts only", func(t *testing.T) {
-		var dbIsAvailable syncutil.AtomicBool
-		dbIsAvailable.Set(true)
+		var dbIsAvailable atomic.Bool
+		dbIsAvailable.Store(true)
 
 		s, _, p, cleanup := initTestServer(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(i context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-					if !dbIsAvailable.Get() {
+					if !dbIsAvailable.Load() {
 						for _, ru := range ba.Requests {
 							if ru.GetPut() != nil {
 								return kvpb.NewError(fmt.Errorf("boom"))
@@ -201,7 +201,7 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 		defer cleanup()
 
 		// Want server to startup successfully then become unavailable.
-		dbIsAvailable.Set(false)
+		dbIsAvailable.Store(false)
 
 		kvprober.ReadEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 		kvprober.ReadInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)

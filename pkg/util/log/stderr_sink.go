@@ -12,14 +12,14 @@ package log
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"go.uber.org/atomic"
 )
 
 // Type of a stderr copy sink.
 type stderrSink struct {
 	// the --no-color flag. When set it disables escapes code on the
 	// stderr copy.
-	noColor syncutil.AtomicBool
+	noColor atomic.Bool
 }
 
 // activeAtSeverity implements the logSink interface.

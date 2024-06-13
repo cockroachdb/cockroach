@@ -84,6 +84,7 @@ go_library(
         "@com_github_cockroachdb_redact//interfaces",
         "@com_github_cockroachdb_ttycolor//:ttycolor",
         "@com_github_petermattis_goid//:goid",
+        "@org_uber_go_atomic//:atomic",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "@org_golang_x_sys//unix",
@@ -193,6 +194,7 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_sys//unix",
+        "@org_uber_go_atomic//:atomic",
     ],
 )
 

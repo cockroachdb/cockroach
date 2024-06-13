@@ -129,7 +129,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/service"
@@ -139,6 +138,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/marusama/semaphore"
 	"github.com/nightlyone/lockfile"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 )
 
@@ -193,12 +193,12 @@ type SQLServer struct {
 	// When false, the node is unhealthy or "not ready", with load balancers and
 	// connection management tools learning this status from health checks.
 	// This is set to true when the server has started accepting client conns.
-	isReady syncutil.AtomicBool
+	isReady atomic.Bool
 
 	// gracefulDrainComplete indicates when a graceful drain has
 	// completed successfully. We use this to document cases where a
 	// graceful drain did _not_ occur.
-	gracefulDrainComplete syncutil.AtomicBool
+	gracefulDrainComplete atomic.Bool
 
 	// internalDBMemMonitor is the memory monitor corresponding to the
 	// InternalDB singleton. It only gets closed when
@@ -1730,7 +1730,7 @@ func (s *SQLServer) preStart(
 			sk, _ = knobs.Server.(*TestingKnobs)
 		}
 
-		if !s.gracefulDrainComplete.Get() {
+		if !s.gracefulDrainComplete.Load() {
 			warnCtx := s.AnnotateCtx(context.Background())
 
 			if sk != nil && sk.RequireGracefulDrain {

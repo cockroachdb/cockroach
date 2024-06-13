@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -65,6 +64,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
 	"github.com/nightlyone/lockfile"
+	"go.uber.org/atomic"
 	"golang.org/x/time/rate"
 )
 
@@ -100,7 +100,7 @@ type transientCluster struct {
 
 	// latencyEnabled controls whether simulated latency is currently enabled.
 	// It is only relevant when using SimulateLatency.
-	latencyEnabled syncutil.AtomicBool
+	latencyEnabled atomic.Bool
 }
 
 // maxNodeInitTime is the maximum amount of time to wait for nodes to

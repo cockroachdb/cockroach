@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"go.uber.org/atomic"
 )
 
 // onDemandServer represents a server that can be started on demand.
@@ -91,7 +92,7 @@ type serverController struct {
 
 	// draining is set when the surrounding server starts draining, and
 	// prevents further creation of new tenant servers.
-	draining syncutil.AtomicBool
+	draining atomic.Bool
 	drainCh  chan struct{}
 
 	// disableSQLServer disables starting the SQL service.

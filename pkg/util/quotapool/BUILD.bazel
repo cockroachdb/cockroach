@@ -18,6 +18,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_tokenbucket//:tokenbucket",
+        "@org_uber_go_atomic//:atomic",
     ],
 )
 

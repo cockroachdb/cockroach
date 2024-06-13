@@ -50,7 +50,6 @@ go_library(
         "//pkg/util/netutil/addr",
         "//pkg/util/retry",
         "//pkg/util/stop",
-        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
@@ -61,6 +60,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_nightlyone_lockfile//:lockfile",
         "@org_golang_x_time//rate",
+        "@org_uber_go_atomic//:atomic",
     ],
 )
 

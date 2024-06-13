@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -140,7 +139,7 @@ func backupSuccess(t *testing.T, factory TestServerFactory, cs CumulativeTestCas
 	url := fmt.Sprintf("userfile://backups.public.userfiles_$user/data_%s_%d",
 		cs.Phase, cs.StageOrdinal)
 	var dbForBackup atomic.Pointer[gosql.DB]
-	var isBackupPostBackfill syncutil.AtomicBool
+	var isBackupPostBackfill atomic.Bool
 	pe := MakePlanExplainer()
 	knobs := &scexec.TestingKnobs{
 		// Back up the database exactly once when reaching the stage prescribed

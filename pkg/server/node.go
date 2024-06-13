@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -398,7 +399,7 @@ type Node struct {
 
 	// Turns `Node.writeNodeStatus` into a no-op. This is a hack to enable the
 	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
-	suppressNodeStatus syncutil.AtomicBool
+	suppressNodeStatus atomic.Bool
 
 	diskStatsMap diskStatsMap
 

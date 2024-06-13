@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 // TestStmtStatsBulkIngestWithRandomMetadata generates a sequence of random
@@ -730,7 +731,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 	}
 
 	g := ctxgroup.WithContext(ctx)
-	var finishedExecute syncutil.AtomicBool
+	var finishedExecute atomic.Bool
 	waitTxnFinish := make(chan struct{})
 	const latencyThreshold = time.Second * 5
 
@@ -740,13 +741,13 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 			tc.Lock()
 			defer tc.Unlock()
 			if tc.query == stmt {
-				finishedExecute.Set(true)
+				finishedExecute.Store(true)
 			}
 		},
 		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, _ sqlstats.RecordedTxnStats) {
 			tc.Lock()
 			defer tc.Unlock()
-			if !isInternal && tc.query == stmt && finishedExecute.Get() {
+			if !isInternal && tc.query == stmt && finishedExecute.Load() {
 				tc.phaseTimes = phaseTimes.Clone()
 				g.GoCtx(func(ctx context.Context) error {
 					waitTxnFinish <- struct{}{}

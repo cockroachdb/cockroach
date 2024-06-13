@@ -154,7 +154,7 @@ func signalFlusher() {
 // occurs are flushed to logs (in case the error degenerates
 // into a panic / segfault on the way out).
 func StartAlwaysFlush() {
-	logging.flushWrites.Set(true)
+	logging.flushWrites.Store(true)
 	// There may be something in the buffers already; flush it.
 	FlushFiles()
 }

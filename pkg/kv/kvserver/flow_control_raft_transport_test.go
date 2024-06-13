@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 // TestFlowControlRaftTransport tests the integration of flow tokens and the
@@ -405,8 +406,8 @@ type transportControl struct {
 	dispatch                  *kvflowdispatch.Dispatch
 	disconnectListener        *mockRaftTransportDisconnectListener
 	knobs                     *kvserver.RaftTransportTestingKnobs
-	serverStreamDisconnected  syncutil.AtomicBool
-	triggeredFallbackDispatch syncutil.AtomicBool
+	serverStreamDisconnected  atomic.Bool
+	triggeredFallbackDispatch atomic.Bool
 	workerTeardownCh          chan roachpb.NodeID
 	chanServer                channelServer
 }

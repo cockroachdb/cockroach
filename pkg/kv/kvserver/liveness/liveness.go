@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"go.uber.org/atomic"
 )
 
 const (
@@ -279,7 +280,7 @@ type NodeLiveness struct {
 
 	// Set to true once Start is called. RegisterCallback can not be called after
 	// Start is called.
-	started syncutil.AtomicBool
+	started atomic.Bool
 }
 
 // Record is a liveness record that has been read from the database, together
@@ -605,7 +606,7 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 // be possible.
 func (nl *NodeLiveness) Start(ctx context.Context) {
 	log.VEventf(ctx, 1, "starting node liveness instance")
-	if nl.started.Get() {
+	if nl.started.Load() {
 		// This is meant to prevent tests from calling start twice.
 		log.Fatal(ctx, "liveness already started")
 	}
@@ -613,7 +614,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = nl.stopper.ShouldQuiesce()
 
-	nl.started.Set(true)
+	nl.started.Store(true)
 
 	_ = nl.stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "liveness-hb", SpanOpt: stop.SterileRootSpan}, func(context.Context) {
 		ambient := nl.ambientCtx
@@ -713,7 +714,7 @@ var errNodeAlreadyLive = errors.New("node already live")
 // by the Start loop.
 // TODO(bdarnell): Should we just remove this synchronous heartbeat completely?
 func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness livenesspb.Liveness) error {
-	if buildutil.CrdbTestBuild && !nl.started.Get() {
+	if buildutil.CrdbTestBuild && !nl.started.Load() {
 		// This check was added as part of resolving #106706. We were previously
 		// accidentally relying on synchronous heartbeats to paper over problems,
 		// which only worked most of the time but could lead to hangs.
