@@ -11,7 +11,14 @@ if [ "$#" -lt 1 ]; then
 usage: $0 <command>
 
 'command' can be:
-  * create
+  * '<any valid roachprod command>'
+    runs command for each cluster with cluster name as first arg and all arguments passed through. E.g.:
+      ldr destroy
+      ldr put artifacts/cockroach
+      ldr start
+      ldr run -- whoami
+
+  * 'create'
     creates two clusters, \$USER-a and \$USER-b, defaulting to 3x16vCPU but any optional extra args
     including overriding those defaults are passed through to 'roachprod create'. It stages cockroach
     and workload from master but these can be overwritten with put if desired before starting.
@@ -29,18 +36,12 @@ usage: $0 <command>
   * 'settings <fast,reset>'
     alters some clusters settings for experimentation.
 
-  * '<any valid roachprod command>'
-    runs command for each cluster with cluster name as first arg and all arguments passed through. E.g.:
-      ldr destroy
-      ldr put artifacts/cockroach
-      ldr run -- whoami
-
   A typical test run with all defaults and staged binaries might thus look like:
     ldr create
     ldr start
     ldr workload init
     ldr jobs start
-    ldr workload run --concurrency 100
+    ldr workload run
     ...
     ldr adminurl --path /debug/pprof/ui/cpu/?node=1&seconds=5&labels=true --open
     ...
@@ -121,8 +122,8 @@ case $1 in
           --workload='custom' --insert-freq=1.0 --insert-start=${start_b} $@ $(roachprod pgurl $B) > $OUTPUT_FILE_B 2> $OUTPUT_FILE_B &" &
         ;;
       "stop")
-        roachprod run $A:1 -- "killall -9 workload"
-        roachprod run $B:1 -- "killall -9 workload"
+        roachprod run $A:1 -- "killall -9 workload || true"
+        roachprod run $B:1 -- "killall -9 workload || true"
         ;;
       *)
         echo "unknown command '$1'; useage: $0 {start|stop}"
@@ -178,9 +179,17 @@ case $1 in
   *)
     cmd="${1}"
     shift
+
+    # We're going to run the same command against A and B, but note that we have
+    # set -e above which normally would cause the first to stop the script if it
+    # exited non-zero. So we capture the result in an `||` so we keep going to
+    # the second one, then if we're still running, exit with the first's result.
+    ret=0
+    
     echo "${A}:"
-    roachprod "${cmd}" $A "$@"
+    roachprod "${cmd}" $A "$@" || ret=$?
     echo "${B}:"
     roachprod "${cmd}" $B "$@"
+    exit $ret
   ;;
 esac
