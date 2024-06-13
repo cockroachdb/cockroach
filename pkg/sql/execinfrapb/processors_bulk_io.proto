@@ -487,8 +487,9 @@ message LogicalReplicationWriterSpec {
     // StreamID is the ID of the stream (which is shared across the producer and consumer).
     optional uint64 stream_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "StreamID"];
 
-    // PartitionSpecs maps partition IDs to their specifications.
-    map<string, StreamIngestionPartitionSpec> partition_specs = 3 [(gogoproto.nullable) = false];
+    // PartitionSpec is the source partition this processor will create a
+    // subscription for.
+    optional StreamIngestionPartitionSpec partition_spec = 3 [(gogoproto.nullable) = false];
 
     // PreviousReplicatedTimestamp specifies the timestamp from which spans will
     // start ingesting data in the replication job. This timestamp is empty unless

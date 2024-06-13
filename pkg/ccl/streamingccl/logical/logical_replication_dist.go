@@ -46,7 +46,6 @@ func constructLogicalReplicationWriterSpecs(
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
 		StreamAddress:               string(streamAddress),
 		TableDescriptors:            tableDescs,
-		PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
 	}
 
 	writerSpecs := make(map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, len(destSQLInstances))
@@ -55,25 +54,23 @@ func constructLogicalReplicationWriterSpecs(
 	matcher := streamingest.MakeNodeMatcher(destSQLInstances)
 	for _, candidate := range matcher.FindSourceNodePriority(topology) {
 		destID := matcher.FindMatch(candidate.ClosestDestIDs)
+		partition := candidate.Partition
+
 		log.Infof(ctx, "logical replication src-dst pair candidate: %s (locality %s) - %d ("+
 			"locality %s)",
-			candidate.Partition.ID,
-			candidate.Partition.SrcLocality,
+			partition.ID,
+			partition.SrcLocality,
 			destID,
 			matcher.DestNodeToLocality(destID),
 		)
-		partition := candidate.Partition
-
 		spec := baseSpec
-		spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{
-			partition.ID: {
-				PartitionID:       partition.ID,
-				SubscriptionToken: string(partition.SubscriptionToken),
-				Address:           string(partition.SrcAddr),
-				Spans:             partition.Spans,
-				SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
-				DestInstanceID:    destID,
-			},
+		spec.PartitionSpec = execinfrapb.StreamIngestionPartitionSpec{
+			PartitionID:       partition.ID,
+			SubscriptionToken: string(partition.SubscriptionToken),
+			Address:           string(partition.SrcAddr),
+			Spans:             partition.Spans,
+			SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
+			DestInstanceID:    destID,
 		}
 		writerSpecs[destID] = append(writerSpecs[destID], spec)
 		spanGroup.Add(partition.Spans...)

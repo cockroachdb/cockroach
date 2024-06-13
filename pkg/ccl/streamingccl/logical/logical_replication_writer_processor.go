@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -98,12 +97,7 @@ type logicalReplicationWriterProcessor struct {
 
 	maxFlushRateTimer timeutil.Timer
 
-	// client is a streaming client which provides a stream of events from a given
-	// address.
-	forceClientForTests streamclient.Client
-	// streamPartitionClients are a collection of streamclient.Client created for
-	// consuming multiple partitions from a stream.
-	streamPartitionClients []streamclient.Client
+	streamPartitionClient streamclient.Client
 
 	// frontier keeps track of the progress for the spans tracked by this processor
 	// and is used forward resolved spans
@@ -117,15 +111,11 @@ type logicalReplicationWriterProcessor struct {
 	// related to this processor.
 	workerGroup ctxgroup.Group
 
-	// subscriptionGroup is different from workerGroup since we
-	// want to explicitly cancel the context related to it.
-	subscriptionGroup  ctxgroup.Group
+	subscription       streamclient.Subscription
 	subscriptionCancel context.CancelFunc
 
 	// stopCh stops flush loop.
 	stopCh chan struct{}
-
-	mergedSubscription *streamingest.MergedSubscription
 
 	flushInProgress atomic.Bool
 	flushCh         chan flushableBuffer
@@ -156,12 +146,7 @@ func newLogicalReplicationWriterProcessor(
 	spec execinfrapb.LogicalReplicationWriterSpec,
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
-	trackedSpans := make([]roachpb.Span, 0)
-	for _, partitionSpec := range spec.PartitionSpecs {
-		trackedSpans = append(trackedSpans, partitionSpec.Spans...)
-	}
-
-	frontier, err := span.MakeFrontierAt(spec.PreviousReplicatedTimestamp, trackedSpans...)
+	frontier, err := span.MakeFrontierAt(spec.PreviousReplicatedTimestamp, spec.PartitionSpec.Spans...)
 	if err != nil {
 		return nil, err
 	}
@@ -213,13 +198,12 @@ func newLogicalReplicationWriterProcessor(
 // assigned to this processor, parses each row, and generates inserts
 // or deletes to update local tables of the same name.
 //
-// A group of subscriptions is merged into a single event stream that
-// is read by the consumeEvents loop.
+// A subscription's event stream is read by the consumeEvents loop.
 //
 // The consumeEvents loop builds a buffer of KVs that it then sends to
 // the flushLoop. We currently allow 1 in-flight flush.
 //
-//	client.Subscribe -> mergedSubscription -> consumeEvents -> flushLoop -> Next()
+//	client.Subscribe -> consumeEvents -> flushLoop -> Next()
 //
 // All errors are reported to Next() via errCh, with the first
 // error winning.
@@ -235,72 +219,52 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 
 	db := lrw.FlowCtx.Cfg.DB
 
-	var subscriptionCtx context.Context
-	subscriptionCtx, lrw.subscriptionCancel = context.WithCancel(lrw.Ctx())
-	lrw.subscriptionGroup = ctxgroup.WithContext(subscriptionCtx)
-	lrw.workerGroup = ctxgroup.WithContext(lrw.Ctx())
+	log.Infof(ctx, "starting logical replication writer for partitions %v", lrw.spec.PartitionSpec)
 
-	log.Infof(ctx, "starting logical replication writer (partitions: %d)", len(lrw.spec.PartitionSpecs))
+	// Start the subscription for our partition.
+	partitionSpec := lrw.spec.PartitionSpec
+	token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
+	addr := partitionSpec.Address
+	redactedAddr, redactedErr := streamclient.RedactSourceURI(addr)
+	if redactedErr != nil {
+		log.Warning(lrw.Ctx(), "could not redact stream address")
+	}
+	streamClient, err := streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr), db,
+		streamclient.WithStreamID(streampb.StreamID(lrw.spec.StreamID)),
+		streamclient.WithCompression(true),
+	)
+	if err != nil {
+		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, redactedAddr))
+		return
+	}
+	lrw.streamPartitionClient = streamClient
 
-	// Initialize the event streams.
-	subscriptions := make(map[string]streamclient.Subscription)
-	lrw.streamPartitionClients = make([]streamclient.Client, 0)
-	for _, partitionSpec := range lrw.spec.PartitionSpecs {
-		id := partitionSpec.PartitionID
-		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
-		addr := partitionSpec.Address
-		redactedAddr, redactedErr := streamclient.RedactSourceURI(addr)
-		if redactedErr != nil {
-			log.Warning(lrw.Ctx(), "could not redact stream address")
+	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+		if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
+			streamingKnobs.BeforeClientSubscribe(addr, string(token), lrw.frontier)
 		}
-		var streamClient streamclient.Client
-		if lrw.forceClientForTests != nil {
-			streamClient = lrw.forceClientForTests
-			log.Infof(ctx, "using testing client")
-		} else {
-			var err error
-			streamClient, err = streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr), db,
-				streamclient.WithStreamID(streampb.StreamID(lrw.spec.StreamID)),
-				streamclient.WithCompression(true),
-			)
-			if err != nil {
-				lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, redactedAddr))
-				return
-			}
-			lrw.streamPartitionClients = append(lrw.streamPartitionClients, streamClient)
-		}
-
-		if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
-			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(addr, string(token), lrw.frontier)
-			}
-		}
-
-		sub, err := streamClient.Subscribe(ctx,
-			streampb.StreamID(lrw.spec.StreamID),
-			int32(lrw.flowCtx.NodeID.SQLInstanceID()), lrw.ProcessorID,
-			token,
-			lrw.spec.InitialScanTimestamp, lrw.frontier,
-			streamclient.WithFiltering(true),
-		)
-
-		if err != nil {
-			lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", redactedAddr))
-			return
-		}
-		subscriptions[id] = sub
-		lrw.subscriptionGroup.GoCtx(func(ctx context.Context) error {
-			if err := sub.Subscribe(ctx); err != nil {
-				lrw.sendError(errors.Wrap(err, "subscription"))
-			}
-			return nil
-		})
+	}
+	sub, err := streamClient.Subscribe(ctx,
+		streampb.StreamID(lrw.spec.StreamID),
+		int32(lrw.flowCtx.NodeID.SQLInstanceID()), lrw.ProcessorID,
+		token,
+		lrw.spec.InitialScanTimestamp, lrw.frontier,
+		streamclient.WithFiltering(true),
+	)
+	if err != nil {
+		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "subscribing to partition from %s", redactedAddr))
+		return
 	}
 
-	lrw.mergedSubscription = streamingest.MergeSubscriptions(lrw.Ctx(), subscriptions)
-	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
-		if err := lrw.mergedSubscription.Run(); err != nil {
-			lrw.sendError(errors.Wrap(err, "merge subscription"))
+	// We use a different context for the subscription here so
+	// that we can explicitly cancel it.
+	var subscriptionCtx context.Context
+	subscriptionCtx, lrw.subscriptionCancel = context.WithCancel(lrw.Ctx())
+	lrw.workerGroup = ctxgroup.WithContext(lrw.Ctx())
+	lrw.subscription = sub
+	lrw.workerGroup.GoCtx(func(_ context.Context) error {
+		if err := sub.Subscribe(subscriptionCtx); err != nil {
+			lrw.sendError(errors.Wrap(err, "subscription"))
 		}
 		return nil
 	})
@@ -382,30 +346,20 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 
 	defer lrw.frontier.Release()
 
-	// Stop the partition client and mergedSubscription. All other
-	// goroutines should exit based on channel close events.
-	for _, client := range lrw.streamPartitionClients {
-		_ = client.Close(lrw.Ctx())
-	}
-	if lrw.mergedSubscription != nil {
-		lrw.mergedSubscription.Close()
+	if lrw.streamPartitionClient != nil {
+		_ = lrw.streamPartitionClient.Close(lrw.Ctx())
 	}
 	if lrw.stopCh != nil {
 		close(lrw.stopCh)
 	}
-
-	// We shouldn't need to explicitly cancel the context for
-	// members of the worker group. The mergedSubscription close
-	// and stopCh close above should result in exit signals being
-	// sent to all relevant goroutines.
-	if err := lrw.workerGroup.Wait(); err != nil {
-		log.Errorf(lrw.Ctx(), "error on close(): %s", err)
-	}
-
 	if lrw.subscriptionCancel != nil {
 		lrw.subscriptionCancel()
 	}
-	if err := lrw.subscriptionGroup.Wait(); err != nil {
+
+	// We shouldn't need to explicitly cancel the context for members of the
+	// worker group. The client close and stopCh close above should result
+	// in exit signals being sent to all relevant goroutines.
+	if err := lrw.workerGroup.Wait(); err != nil {
 		log.Errorf(lrw.Ctx(), "error on close(): %s", err)
 	}
 	lrw.maxFlushRateTimer.Stop()
@@ -450,15 +404,15 @@ func (lrw *logicalReplicationWriterProcessor) flushLoop(_ context.Context) error
 	}
 }
 
-// consumeEvents handles processing events on the merged event queue and returns
-// once the event channel has closed.
+// consumeEvents handles processing events on the event queue and returns once
+// the event channel has closed.
 func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context) error {
 	minFlushInterval := minimumFlushInterval.Get(&lrw.flowCtx.Cfg.Settings.SV)
 	lrw.maxFlushRateTimer.Reset(minFlushInterval)
 	for {
 		before := timeutil.Now()
 		select {
-		case event, ok := <-lrw.mergedSubscription.Events():
+		case event, ok := <-lrw.subscription.Events():
 			if !ok {
 				// eventCh is closed, flush and exit.
 				if err := lrw.flush(flushOnClose); err != nil {
@@ -483,7 +437,7 @@ func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context)
 	}
 }
 
-func (lrw *logicalReplicationWriterProcessor) handleEvent(event streamingest.PartitionEvent) error {
+func (lrw *logicalReplicationWriterProcessor) handleEvent(event streamingccl.Event) error {
 	sv := &lrw.FlowCtx.Cfg.Settings.SV
 
 	if event.Type() == streamingccl.KVEvent {
@@ -547,9 +501,7 @@ func (lrw *logicalReplicationWriterProcessor) bufferKVs(kvs []roachpb.KeyValue) 
 	return nil
 }
 
-func (lrw *logicalReplicationWriterProcessor) bufferCheckpoint(
-	event streamingest.PartitionEvent,
-) error {
+func (lrw *logicalReplicationWriterProcessor) bufferCheckpoint(event streamingccl.Event) error {
 	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.ElideCheckpointEvent != nil {
 			if streamingKnobs.ElideCheckpointEvent(lrw.FlowCtx.NodeID.SQLInstanceID(), lrw.frontier.Frontier()) {
