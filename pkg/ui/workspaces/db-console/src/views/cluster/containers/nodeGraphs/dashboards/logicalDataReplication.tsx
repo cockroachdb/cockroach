@@ -28,6 +28,7 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tenantSource={tenantSource}
       tooltip={`Rate at which the logical bytes (sum of keys + values) are received by all logical replication jobs`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
       {nodeIDs.map( node => (
@@ -47,6 +48,7 @@ export default function (props: GraphDashboardProps) {
      sources={storeSources}
      tenantSource={tenantSource}
      tooltip={`Rate at which row updates are applied by all logical replication jobs`}
+     showMetricsInTooltip={true}
    >
      <Axis label="updates">
        <Metric
@@ -68,16 +70,13 @@ export default function (props: GraphDashboardProps) {
         <Metric
         name="cr.node.logical_replication.commit_latency-p50"
         title={"p50"}
-        downsampleMax
-        />
-        <Metric
-        name="cr.node.logical_replication.commit_latency-p90"
-        title={"p90"}
+        aggregateMax
         downsampleMax
         />
         <Metric
         name="cr.node.logical_replication.commit_latency-p99"
         title={"p99"}
+        aggregateMax
         downsampleMax
       />
     </Axis>
