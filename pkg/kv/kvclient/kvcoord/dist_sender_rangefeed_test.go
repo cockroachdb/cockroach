@@ -44,30 +44,9 @@ import (
 	"google.golang.org/grpc"
 )
 
-type wrapRangeFeedClientFn func(client kvpb.Internal_RangeFeedClient) kvpb.Internal_RangeFeedClient
 type testRangefeedClient struct {
 	rpc.RestrictedInternalClient
-	count               func()
-	wrapRangeFeedClient wrapRangeFeedClientFn
-}
-
-func (c *testRangefeedClient) RangeFeed(
-	ctx context.Context, args *kvpb.RangeFeedRequest, opts ...grpc.CallOption,
-) (kvpb.Internal_RangeFeedClient, error) {
-	defer c.count()
-
-	if ctx.Value(useMuxRangeFeedCtxKey{}) != nil {
-		panic(errors.AssertionFailedf("unexpected call to RangeFeed"))
-	}
-
-	rfClient, err := c.RestrictedInternalClient.RangeFeed(ctx, args, opts...)
-	if err != nil {
-		return nil, err
-	}
-	if c.wrapRangeFeedClient == nil {
-		return rfClient, nil
-	}
-	return c.wrapRangeFeedClient(rfClient), nil
+	count func()
 }
 
 func (c *testRangefeedClient) MuxRangeFeed(
