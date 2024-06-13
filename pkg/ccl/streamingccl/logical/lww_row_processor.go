@@ -59,7 +59,7 @@ type queryBuffer struct {
 }
 
 func makeSQLLastWriteWinsHandler(
-	ctx context.Context, settings *cluster.Settings, tableDescs map[string]descpb.TableDescriptor,
+	ctx context.Context, settings *cluster.Settings, tableDescs map[int32]descpb.TableDescriptor,
 ) (*sqlLastWriteWinsRowProcessor, error) {
 	descs := make(map[catid.DescID]catalog.TableDescriptor)
 	qb := queryBuffer{
@@ -170,10 +170,9 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 }
 
 func makeInsertQueries(
-	fqTableName string, td catalog.TableDescriptor,
+	dstTableDescID int32, td catalog.TableDescriptor,
 ) (map[catid.FamilyID]statements.Statement[tree.Statement], error) {
 	queries := make(map[catid.FamilyID]statements.Statement[tree.Statement], td.NumFamilies())
-
 	if err := td.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		var columnNames strings.Builder
 		var valueStrings strings.Builder
@@ -236,18 +235,18 @@ func makeInsertQueries(
 		var err error
 		originTSIdx := argIdx
 		baseQuery := `
-INSERT INTO %s (%s, crdb_internal_origin_timestamp)
+INSERT INTO [%d as t] (%s, crdb_internal_origin_timestamp)
 VALUES (%s, $%d)
 ON CONFLICT ON CONSTRAINT %s
 DO UPDATE SET
 %s,
 crdb_internal_origin_timestamp=$%[4]d
-WHERE (%[1]s.crdb_internal_mvcc_timestamp <= $%[4]d
-       AND %[1]s.crdb_internal_origin_timestamp IS NULL)
-   OR (%[1]s.crdb_internal_origin_timestamp <= $%[4]d
-       AND %[1]s.crdb_internal_origin_timestamp IS NOT NULL)`
+WHERE (t.crdb_internal_mvcc_timestamp <= $%[4]d
+       AND t.crdb_internal_origin_timestamp IS NULL)
+   OR (t.crdb_internal_origin_timestamp <= $%[4]d
+       AND t.crdb_internal_origin_timestamp IS NOT NULL)`
 		queries[family.ID], err = parser.ParseOne(fmt.Sprintf(baseQuery,
-			fqTableName,
+			dstTableDescID,
 			columnNames.String(),
 			valueStrings.String(),
 			originTSIdx,
@@ -261,7 +260,7 @@ WHERE (%[1]s.crdb_internal_mvcc_timestamp <= $%[4]d
 	return queries, nil
 }
 
-func makeDeleteQuery(fqTableName string, td catalog.TableDescriptor) string {
+func makeDeleteQuery(dstTableDescID int32, td catalog.TableDescriptor) string {
 	var whereClause strings.Builder
 	names := td.TableDesc().PrimaryIndex.KeyColumnNames
 	for i := 0; i < len(names); i++ {
@@ -273,11 +272,11 @@ func makeDeleteQuery(fqTableName string, td catalog.TableDescriptor) string {
 	}
 	originTSIdx := len(names) + 1
 	baseQuery := `
-DELETE FROM %s WHERE %s
-   AND (%[1]s.crdb_internal_mvcc_timestamp < $%[3]d
-        AND %[1]s.crdb_internal_origin_timestamp IS NULL)
-    OR (%[1]s.crdb_internal_origin_timestamp < $%[3]d
-        AND %[1]s.crdb_internal_origin_timestamp IS NOT NULL)`
+DELETE FROM [%d as t] WHERE %s
+   AND (t.crdb_internal_mvcc_timestamp < $%[3]d
+        AND t.crdb_internal_origin_timestamp IS NULL)
+    OR (t.crdb_internal_origin_timestamp < $%[3]d
+        AND t.crdb_internal_origin_timestamp IS NOT NULL)`
 
-	return fmt.Sprintf(baseQuery, fqTableName, whereClause.String(), originTSIdx)
+	return fmt.Sprintf(baseQuery, dstTableDescID, whereClause.String(), originTSIdx)
 }

@@ -511,5 +511,6 @@ message LogicalReplicationWriterSpec {
     // Checkpoint stores a set of resolved spans denoting completed progress.
     optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 7 [(gogoproto.nullable) = false];
 
-    map<string, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 8 [(gogoproto.nullable) = false];
+    // TableDescriptors is a map between the destination table IDs and the source table descriptor.
+    map<int32, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 8 [(gogoproto.nullable) = false];
 }

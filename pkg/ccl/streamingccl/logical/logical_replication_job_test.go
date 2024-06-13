@@ -20,12 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -60,63 +62,66 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 		},
 	}
 
-	serverA := testcluster.StartTestCluster(t, 1, clusterArgs)
-	defer serverA.Stopper().Stop(ctx)
+	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	defer server.Stopper().Stop(ctx)
 
-	serverB := testcluster.StartTestCluster(t, 1, clusterArgs)
-	defer serverB.Stopper().Stop(ctx)
+	_, err := server.Conns[0].Exec("CREATE DATABASE a")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE B")
+	require.NoError(t, err)
 
-	serverASQL := sqlutils.MakeSQLRunner(serverA.Server(0).ApplicationLayer().SQLConn(t))
-	serverBSQL := sqlutils.MakeSQLRunner(serverB.Server(0).ApplicationLayer().SQLConn(t))
+	dbA := sqlutils.MakeSQLRunner(server.Server(0).ApplicationLayer().SQLConn(t, serverutils.DBName("a")))
+	dbB := sqlutils.MakeSQLRunner(server.Server(0).ApplicationLayer().SQLConn(t, serverutils.DBName("b")))
 
 	for _, s := range testClusterSettings {
-		serverASQL.Exec(t, s)
-		serverBSQL.Exec(t, s)
+		dbA.Exec(t, s)
 	}
 
 	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
-	serverASQL.Exec(t, createStmt)
-	serverBSQL.Exec(t, createStmt)
-	serverASQL.Exec(t, lwwColumnAdd)
-	serverBSQL.Exec(t, lwwColumnAdd)
+	dbA.Exec(t, createStmt)
+	dbB.Exec(t, createStmt)
+	dbA.Exec(t, lwwColumnAdd)
+	dbB.Exec(t, lwwColumnAdd)
 
-	serverASQL.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
-	serverBSQL.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
 
-	serverAURL, cleanup := sqlutils.PGUrl(t, serverA.Server(0).ApplicationLayer().SQLAddr(), t.Name(), url.User(username.RootUser))
+	dbAURL, cleanup := sqlutils.PGUrl(t, server.Server(0).ApplicationLayer().SQLAddr(), t.Name(), url.User(username.RootUser))
+	dbAURL.Path = "a"
 	defer cleanup()
-	serverBURL, cleanupB := sqlutils.PGUrl(t, serverB.Server(0).ApplicationLayer().SQLAddr(), t.Name(), url.User(username.RootUser))
+	dbBURL, cleanupB := sqlutils.PGUrl(t, server.Server(0).ApplicationLayer().SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupB()
+	dbBURL.Path = "b"
 
 	var (
 		jobAID jobspb.JobID
 		jobBID jobspb.JobID
 	)
-	serverASQL.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", serverBURL.String(), `ARRAY['tab']`)).Scan(&jobAID)
-	serverBSQL.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", serverAURL.String(), `ARRAY['tab']`)).Scan(&jobBID)
+	dbA.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", dbBURL.String(), `ARRAY['tab']`)).Scan(&jobAID)
+	dbB.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", dbAURL.String(), `ARRAY['tab']`)).Scan(&jobBID)
 
-	now := serverA.Server(0).Clock().Now()
+	now := server.Server(0).Clock().Now()
 	t.Logf("waiting for replication job %d", jobAID)
-	WaitUntilReplicatedTime(t, now, serverASQL, jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 	t.Logf("waiting for replication job %d", jobBID)
-	WaitUntilReplicatedTime(t, now, serverBSQL, jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
-	serverASQL.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
-	serverBSQL.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
-	serverASQL.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
-	serverBSQL.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
+	dbA.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
+	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
 
-	now = serverA.Server(0).Clock().Now()
-	WaitUntilReplicatedTime(t, now, serverASQL, jobAID)
-	WaitUntilReplicatedTime(t, now, serverBSQL, jobBID)
+	now = server.Server(0).Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
 
 	expectedRows := [][]string{
 		{"1", "goodbye, again"},
 		{"2", "potato"},
 		{"3", "celeriac"},
 	}
-	serverBSQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
-	serverASQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
+	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRows)
+	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRows)
 }
 
 func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {

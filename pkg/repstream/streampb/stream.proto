@@ -48,11 +48,6 @@ message ReplicationProducerSpec {
     (gogoproto.customname) = "SourceTenantID"
   ];
 
-  // TableSpans is the set of spans that cover the requested tables if
-  // this is in response to a ReplicationProducerRequest that
-  // specified individual tables.
-  repeated roachpb.Span table_spans = 5 [(gogoproto.nullable) = false];
-
   // TableDescriptors are the descriptors for the tables in the
   // ReplicationProducerRequest.
   //
@@ -157,6 +152,11 @@ message SpanConfigEventStreamSpec {
 
 }
 
+message LogicalReplicationPlanRequest {
+    // TableIDs are the destination table IDs that the caller would like a plan for.
+    repeated int32 table_ids = 1 [(gogoproto.customname) = "TableIDs"];
+}
+
 message ReplicationStreamSpec {
   message Partition {
     // ID of the node this partition resides
@@ -181,6 +181,10 @@ message ReplicationStreamSpec {
   int64 span_config_stream_id = 3 [(gogoproto.customname) = "SpanConfigStreamID", (gogoproto
     .casttype) = "StreamID"];
 
+  // TableSpans is the set of spans that cover the requested tables if
+  // this is in response to a LogicalReplicationPlanRequest.
+  repeated roachpb.Span table_spans = 4 [(gogoproto.nullable) = false];
+  repeated cockroach.sql.sqlbase.TableDescriptor table_descriptors = 5 [(gogoproto.nullable) = false];
 }
 
 // StreamedSpanConfigEntry holds a span config update and its source side commit timestamp
