@@ -106,9 +106,9 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 // TestTenantStreamingJobRetryReset tests that the job level retry counter
 // resets after the replicated time progresses. To do this, the test conducts a
 // few retries before the initial scan completes, lets the initial scan
-// complete, and then maxes out the retry counter, causing the job to pause.
-// Since the job made progress when it completed the initial scan, the test
-// asserts that the total number of retries counted is larger than the max
+// complete, and then maxes out the retry counter, which may cause the job to
+// pause. Since the job made progress when it completed the initial scan, the
+// test asserts that the total number of retries counted is larger than the max
 // number of retries allowed.
 func TestTenantStreamingJobRetryReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -150,12 +150,20 @@ func TestTenantStreamingJobRetryReset(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 	mu.Lock()
+	// This may cause the job to pause if no replicated span advances after this.
+	// Either way, we still expect to see more restarts than the max retries.
 	mu.initialScanComplete = true
 	mu.Unlock()
 
-	jobutils.WaitForJobToPause(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	testutils.SucceedsSoon(t, func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		if mu.ingestionStarts > replicationtestutils.TestingMaxDistSQLRetries+1 {
+			return nil
+		}
+		return errors.Errorf("ingestion job failed %d times", mu.ingestionStarts)
 
-	require.Greater(t, mu.ingestionStarts, replicationtestutils.TestingMaxDistSQLRetries+1)
+	})
 }
 func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
