@@ -243,6 +243,7 @@
                         UnionAll |
                         IntersectAll |
                         ExceptAll |
+                        Let |
                         Limit |
                         Offset |
                         Max1Row |
@@ -250,10 +251,12 @@
                         ExplainPrivate |
                         ShowTraceForSession |
                         ShowTracePrivate |
+                        Root |
                         RowNumber |
                         RowNumberPrivate |
                         ProjectSet |
                         Sort |
+                        TopK |
                         Insert |
                         Update |
                         Upsert |

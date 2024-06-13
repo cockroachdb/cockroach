@@ -55,8 +55,8 @@ syn keyword operator SemiJoinApply AntiJoinApply
 syn keyword operator GroupBy GroupingPrivate ScalarGroupBy
 syn keyword operator DistinctOn EnsureDistinctOn UpsertDistinctOn EnsureUpsertDistinctOn
 syn keyword operator Union SetPrivate Intersect Except UnionAll IntersectAll ExceptAll
-syn keyword operator Limit Offset Max1Row Explain ExplainPrivate
-syn keyword operator ShowTraceForSession ShowTracePrivate RowNumber RowNumberPrivate ProjectSet
-syn keyword operator Sort Insert Update Upsert Delete CreateTable OpName
+syn keyword operator Let Limit Offset Max1Row Explain ExplainPrivate
+syn keyword operator ShowTraceForSession ShowTracePrivate Root RowNumber RowNumberPrivate ProjectSet
+syn keyword operator Sort TopK Insert Update Upsert Delete CreateTable OpName
 
 let b:current_syntax = "cropt"

@@ -241,8 +241,12 @@ func ingestWithRetries(
 ) error {
 	ingestionJob := resumer.job
 	ro := getRetryPolicy(execCtx.ExecCfg().StreamingTestingKnobs)
-	var err error
-	var lastReplicatedTime hlc.Timestamp
+	var (
+		err                    error
+		previousPersistedSpans jobspb.ResolvedSpanEntries
+		currentPersistedSpans  jobspb.ResolvedSpanEntries
+	)
+
 	for r := retry.Start(ro); r.Next(); {
 		err = ingest(ctx, execCtx, resumer)
 		if err == nil {
@@ -255,19 +259,14 @@ func ingestWithRetries(
 		if jobs.IsPermanentJobError(err) || ctx.Err() != nil {
 			break
 		}
-		// If we're retrying repeatedly, update the status to reflect the error we
-		// are hitting.
-		if i := r.CurrentAttempt(); i > 5 {
-			status := redact.Sprintf("retrying after error on attempt %d: %s", i, err)
-			updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError, status)
-		} else {
-			// At least log the retryable error if we're not updating the status.
-			log.Infof(ctx, "hit retryable error %s", err)
-		}
-		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
-		if lastReplicatedTime.Less(newReplicatedTime) {
+		log.Infof(ctx, "hit retryable error %s", err)
+
+		currentPersistedSpans = resumer.job.Progress().Details.(*jobspb.Progress_StreamIngest).StreamIngest.Checkpoint.ResolvedSpans
+		if !currentPersistedSpans.Equal(previousPersistedSpans) {
+			// If the previous persisted spans are different than the current, it
+			// implies that further progress has been persisted.
 			r.Reset()
-			lastReplicatedTime = newReplicatedTime
+			log.Infof(ctx, "resolved spans have advanced since last retry, resetting retry counter")
 		}
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterRetryIteration != nil {
 			knobs.AfterRetryIteration(err)
@@ -279,19 +278,6 @@ func ingestWithRetries(
 	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver,
 		"stream ingestion finished successfully")
 	return nil
-}
-
-func loadReplicatedTime(ctx context.Context, db isql.DB, ingestionJob *jobs.Job) hlc.Timestamp {
-	latestProgress, err := replicationutils.LoadIngestionProgress(ctx, db, ingestionJob.ID())
-	if err != nil {
-		log.Warningf(ctx, "error loading job progress: %s", err)
-		return hlc.Timestamp{}
-	}
-	if latestProgress == nil {
-		log.Warningf(ctx, "no job progress yet: %s", err)
-		return hlc.Timestamp{}
-	}
-	return latestProgress.ReplicatedTime
 }
 
 // The ingestion job should never fail, only pause, as progress should never be lost.
