@@ -67,10 +67,7 @@ type queryBuffer struct {
 }
 
 func makeSQLLastWriteWinsHandler(
-	ctx context.Context,
-	codec keys.SQLCodec,
-	settings *cluster.Settings,
-	tableDescs map[string]descpb.TableDescriptor,
+	ctx context.Context, settings *cluster.Settings, tableDescs map[string]descpb.TableDescriptor,
 ) (*sqlLastWriteWinsRowProcessor, error) {
 	descs := make(map[catid.DescID]catalog.TableDescriptor)
 	qb := queryBuffer{
@@ -97,7 +94,8 @@ func makeSQLLastWriteWinsHandler(
 		})
 	}
 
-	rfCache, err := cdcevent.NewFixedRowFetcherCache(ctx, codec, settings, cdcEventTargets, descs)
+	prefixlessCodec := keys.SystemSQLCodec
+	rfCache, err := cdcevent.NewFixedRowFetcherCache(ctx, prefixlessCodec, settings, cdcEventTargets, descs)
 	if err != nil {
 		return nil, err
 	}
@@ -111,9 +109,15 @@ func makeSQLLastWriteWinsHandler(
 func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, kv roachpb.KeyValue,
 ) error {
+	var err error
+	kv.Key, err = keys.StripTenantPrefix(kv.Key)
+	if err != nil {
+		return errors.Wrap(err, "stripping tenant prefix")
+	}
+
 	row, err := lww.decoder.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "decoding KeyValue")
 	}
 	if row.IsDeleted() {
 		return lww.deleteRow(ctx, txn, row)

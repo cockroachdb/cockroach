@@ -81,7 +81,7 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	tableDescs := make(map[string]descpb.TableDescriptor, 1)
 	tableDescs["defaultdb.public."+tableName] = *desc.TableDesc()
-	rp, err := makeSQLLastWriteWinsHandler(ctx, s.Codec(), s.ClusterSettings(), tableDescs)
+	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), tableDescs)
 	require.NoError(b, err)
 
 	// We'll be simulating processing the same INSERT over and over in the loop.
