@@ -241,7 +241,7 @@ func (c *eachKeySequentialConsistencyValidator) NoteRow(partition string, key st
 	}
 	var v val
 	if err := gojson.Unmarshal([]byte(value), &v); err != nil {
-		return fmt.Errorf("failed to parse value %q: %v", value, err)
+		return fmt.Errorf("failed to parse value %q: %w", value, err)
 	}
 	x := v.After.X
 	if _, ok := c.gapcheckers[key]; !ok {
