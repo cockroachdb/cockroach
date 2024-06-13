@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"hash/fnv"
+	"net/url"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	sasloauth "github.com/twmb/franz-go/pkg/sasl/oauth"
 	saslplain "github.com/twmb/franz-go/pkg/sasl/plain"
 	saslscram "github.com/twmb/franz-go/pkg/sasl/scram"
+	"golang.org/x/oauth2/clientcredentials"
 )
 
 func newKafkaSinkClient(
@@ -557,33 +559,38 @@ func (p *kgoChangefeedTopicPartitioner) Partition(r *kgo.Record, n int) int {
 func newKgoOauthTokenProvider(
 	ctx context.Context, dialConfig kafkaDialConfig,
 ) (func(ctx context.Context) (sasloauth.Auth, error), error) {
-	return nil, errors.New("TODO")
 
-	// // grant_type is by default going to be set to 'client_credentials' by the
-	// // clientcredentials library as defined by the spec, however non-compliant
-	// // auth server implementations may want a custom type
-	// var endpointParams url.Values
-	// if dialConfig.saslGrantType != `` {
-	// 	endpointParams = url.Values{"grant_type": {dialConfig.saslGrantType}}
-	// }
+	// grant_type is by default going to be set to 'client_credentials' by the
+	// clientcredentials library as defined by the spec, however non-compliant
+	// auth server implementations may want a custom type
+	var endpointParams url.Values
+	if dialConfig.saslGrantType != `` {
+		endpointParams = url.Values{"grant_type": {dialConfig.saslGrantType}}
+	}
 
-	// tokenURL, err := url.Parse(dialConfig.saslTokenURL)
-	// if err != nil {
-	// 	return nil, errors.Wrap(err, "malformed token url")
-	// }
+	tokenURL, err := url.Parse(dialConfig.saslTokenURL)
+	if err != nil {
+		return nil, errors.Wrap(err, "malformed token url")
+	}
 
-	// // the clientcredentials.Config's TokenSource method creates an
-	// // oauth2.TokenSource implementation which returns tokens for the given
-	// // endpoint, returning the same cached result until its expiration has been
-	// // reached, and then once expired re-requesting a new token from the endpoint.
-	// cfg := clientcredentials.Config{
-	// 	ClientID:       dialConfig.saslClientID,
-	// 	ClientSecret:   dialConfig.saslClientSecret,
-	// 	TokenURL:       tokenURL.String(),
-	// 	Scopes:         dialConfig.saslScopes,
-	// 	EndpointParams: endpointParams,
-	// }
-	// return &tokenProvider{
-	// 	tokenSource: cfg.TokenSource(ctx),
-	// }, nil
+	// the clientcredentials.Config's TokenSource method creates an
+	// oauth2.TokenSource implementation which returns tokens for the given
+	// endpoint, returning the same cached result until its expiration has been
+	// reached, and then once expired re-requesting a new token from the endpoint.
+	cfg := clientcredentials.Config{
+		ClientID:       dialConfig.saslClientID,
+		ClientSecret:   dialConfig.saslClientSecret,
+		TokenURL:       tokenURL.String(),
+		Scopes:         dialConfig.saslScopes,
+		EndpointParams: endpointParams,
+	}
+	ts := cfg.TokenSource(ctx)
+
+	return func(ctx context.Context) (sasloauth.Auth, error) {
+		tok, err := ts.Token()
+		if err != nil {
+			return sasloauth.Auth{}, err
+		}
+		return sasloauth.Auth{Token: tok.AccessToken}, nil
+	}, nil
 }
