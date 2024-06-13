@@ -13,6 +13,7 @@ package ui
 import (
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,7 +25,8 @@ import (
 )
 
 type Spinner struct {
-	msg          syncutil.AtomicString
+	msgTemplate  syncutil.AtomicString
+	startMsg     string
 	tickCallback func()
 	quiet, term  bool
 	out          io.Writer
@@ -36,9 +38,18 @@ type Spinner struct {
 
 type CountingSpinner struct {
 	*Spinner
-	baseMsg       syncutil.AtomicString
 	count         int32
 	expectedTotal int
+}
+
+type TaskSpinner struct {
+	*Spinner
+	tasks map[interface{}]struct {
+		msg  string
+		done bool
+	}
+	taskOrder []interface{}
+	tasksMu   syncutil.Mutex
 }
 
 type SpinnerGroup struct {
@@ -49,19 +60,26 @@ type SpinnerGroup struct {
 
 var spinnerLoop = []string{"|", "/", "-", "\\"}
 
+const spinnerTemplate = "{%}"
+
 // NewSpinner creates a new Spinner. If quiet is true, the spinner will only
 // print the message and not the spinner itself, but will still print dots every
-// second to indicate progress. If term is false the spinner will not print
-// dots to indicate progress (usually false when the output is a file).
+// second to indicate progress. If term is false the spinner will not print dots
+// to indicate progress (usually false when the output is a file). The msg
+// parameter is the initial message of the spinner and can be left empty if no
+// initial message is desired.
 func NewSpinner(msg string, out io.Writer, quiet, term bool) *Spinner {
-	atomicMsg := syncutil.AtomicString{}
-	atomicMsg.Set(msg)
+	msgTemplate := syncutil.AtomicString{}
+	if msg != "" {
+		msgTemplate.Set(msg + " " + spinnerTemplate)
+	}
 	return &Spinner{
-		msg:      atomicMsg,
-		quiet:    quiet,
-		term:     term,
-		out:      out,
-		stopChan: make(chan struct{}),
+		msgTemplate: msgTemplate,
+		startMsg:    msg,
+		quiet:       quiet,
+		term:        term,
+		out:         out,
+		stopChan:    make(chan struct{}),
 	}
 }
 
@@ -79,6 +97,15 @@ func (s *Spinner) SetTickCallback(cb func()) {
 	s.tickCallback = cb
 }
 
+func (s *Spinner) renderTemplate(spinnerIdx int, done bool) string {
+	msg := s.msgTemplate.Get()
+	spinner := ""
+	if !done {
+		spinner = spinnerLoop[spinnerIdx%len(spinnerLoop)]
+	}
+	return strings.Replace(msg, spinnerTemplate, spinner, -1)
+}
+
 // Start starts the spinner. It returns a function that can be called to stop
 // the spinner. If the spinner is already started, it does nothing.
 func (s *Spinner) Start() func() {
@@ -89,8 +116,9 @@ func (s *Spinner) Start() func() {
 	}
 	s.started = true
 
-	if s.quiet {
-		fmt.Fprintf(s.out, "%s", s.msg.Get())
+	if s.startMsg != "" && s.quiet {
+		fmt.Fprintf(s.out, "%s", s.startMsg)
+		// Print a newline since we won't be printing dots.
 		if !s.term {
 			fmt.Fprintf(s.out, "\n")
 		}
@@ -122,15 +150,13 @@ func (s *Spinner) Start() func() {
 				done = true
 			}
 			if !s.quiet {
-				fmt.Fprint(&writer, s.msg.Get())
-				if !done {
-					fmt.Fprintf(&writer, " %s", spinnerLoop[spinnerIdx%len(spinnerLoop)])
-				}
+				fmt.Fprint(&writer, s.renderTemplate(spinnerIdx, done))
 				fmt.Fprintf(&writer, "\n")
 				_ = writer.Flush(s.out)
 				spinnerIdx++
 			}
 		}
+		// This newline is only required if we have been printing dots.
 		if s.quiet && s.term {
 			fmt.Fprintf(s.out, "\n")
 		}
@@ -155,7 +181,13 @@ func (s *Spinner) Stop() {
 // the updated message will be displayed on the next tick. In quiet mode, this
 // will not have any effect and only the initial message will be displayed.
 func (s *Spinner) Status(msg string) {
-	s.msg.Set(msg)
+	msg = msg + " " + spinnerTemplate
+	s.statusTemplate(msg)
+}
+
+// statusTemplate sets the internal template message of the spinner atomically.
+func (s *Spinner) statusTemplate(msg string) {
+	s.msgTemplate.Set(msg)
 }
 
 // NewCountingSpinner creates a new CountingSpinner. It is a wrapper around
@@ -163,11 +195,8 @@ func (s *Spinner) Status(msg string) {
 // message. The expectedTotal parameter is the total number of expected items
 // that will be processed.
 func NewCountingSpinner(spinner *Spinner, expectedTotal int) *CountingSpinner {
-	baseMsg := syncutil.AtomicString{}
-	baseMsg.Set(spinner.msg.Get())
 	return &CountingSpinner{
 		Spinner:       spinner,
-		baseMsg:       baseMsg,
 		expectedTotal: expectedTotal,
 	}
 }
@@ -192,14 +221,7 @@ func (s *CountingSpinner) Start() func() {
 // count appended to it.
 func (s *CountingSpinner) updateStatus() {
 	count := atomic.LoadInt32(&s.count)
-	s.Spinner.Status(fmt.Sprintf("%s %d/%d", s.baseMsg.Get(), count, s.expectedTotal))
-}
-
-// Status changes the base message of the counting spinner. The count will be
-// appended to the new base message.
-func (s *CountingSpinner) Status(msg string) {
-	s.baseMsg.Set(msg)
-	s.updateStatus()
+	s.Spinner.Status(fmt.Sprintf("%s %d/%d", s.startMsg, count, s.expectedTotal))
 }
 
 // CountStatus sets the number of completed items atomically. This will update
@@ -251,4 +273,66 @@ func (g *SpinnerGroup) Wait() error {
 	err := g.Group.Wait()
 	updateStatus()
 	return err
+}
+
+// NewTaskSpinner creates a new TaskSpinner. It is a wrapper around Spinner that
+// keeps track of the status of multiple tasks.
+func NewTaskSpinner(spinner *Spinner) *TaskSpinner {
+	return &TaskSpinner{
+		Spinner: spinner,
+		tasks: make(map[interface{}]struct {
+			msg  string
+			done bool
+		}),
+	}
+}
+
+// NewDefaultTaskSpinner creates a new TaskSpinner with the default configuration.
+func NewDefaultTaskSpinner(l *logger.Logger, msg string) *TaskSpinner {
+	return NewTaskSpinner(NewDefaultSpinner(l, msg))
+}
+
+func (t *TaskSpinner) TaskStatus(taskKey interface{}, msg string, done bool) {
+	t.tasksMu.Lock()
+	defer t.tasksMu.Unlock()
+	if _, ok := t.tasks[taskKey]; !ok {
+		t.taskOrder = append(t.taskOrder, taskKey)
+	}
+	t.tasks[taskKey] = struct {
+		msg  string
+		done bool
+	}{
+		msg:  msg,
+		done: done,
+	}
+	t.updateStatus()
+}
+
+func (t *TaskSpinner) updateStatus() {
+	var status strings.Builder
+	if t.startMsg != "" {
+		status.WriteString(t.startMsg + "\n")
+	}
+	for idx, taskKey := range t.taskOrder {
+		if idx > 0 {
+			status.WriteString("\n")
+		}
+		status.WriteString(t.tasks[taskKey].msg)
+		if !t.tasks[taskKey].done {
+			status.WriteString(" " + spinnerTemplate)
+		}
+	}
+	t.Spinner.statusTemplate(status.String())
+}
+
+// MaybeLogTasks logs the status of all tasks if the spinner is in quiet mode
+// and not in a terminal.
+func (t *TaskSpinner) MaybeLogTasks(l *logger.Logger) {
+	t.tasksMu.Lock()
+	defer t.tasksMu.Unlock()
+	if t.quiet && !t.term {
+		for _, taskKey := range t.taskOrder {
+			l.Printf("%s\n", t.tasks[taskKey].msg)
+		}
+	}
 }
