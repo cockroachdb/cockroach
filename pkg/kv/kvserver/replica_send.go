@@ -141,9 +141,6 @@ func (r *Replica) SendWithWriteBytes(
 	startCPU := grunning.Time()
 	defer r.MeasureReqCPUNanos(startCPU)
 
-	// If the internal Raft group is quiesced, wake it and the leader.
-	r.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
-
 	isReadOnly := ba.IsReadOnly()
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
 		return nil, nil, kvpb.NewError(err)
