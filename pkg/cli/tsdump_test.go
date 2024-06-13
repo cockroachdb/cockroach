@@ -18,10 +18,12 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,9 +36,10 @@ func TestDebugTimeSeriesDumpCmd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	c := NewCLITest(TestCLIParams{})
-	defer c.Cleanup()
 	t.Run("debug tsdump --format=openmetrics", func(t *testing.T) {
+		c := NewCLITest(TestCLIParams{})
+		defer c.Cleanup()
+
 		out, err := c.RunWithCapture("debug tsdump --format=openmetrics --cluster-name=test-cluster-1 --disable-cluster-name-verification")
 		require.NoError(t, err)
 		results := strings.Split(out, "\n")[1:] // Drop first item that contains executed command string.
@@ -44,6 +47,33 @@ func TestDebugTimeSeriesDumpCmd(t *testing.T) {
 		require.Equal(t, results[len(results)-2], "# EOF")
 		require.Greater(t, len(results), 0)
 		require.Greater(t, len(results[:len(results)-2]), 0, "expected to have at least one metric")
+	})
+
+	t.Run("debug tsdump --format=raw with custom SQL and gRPC ports", func(t *testing.T) {
+		c := newCLITestWithArgs(TestCLIParams{}, func(args *base.TestServerArgs) {
+			args.SQLAddr = ":1112"
+			args.Addr = ":1111"
+		})
+		defer c.Cleanup()
+
+		yamlFileName := "/tmp/tsdump_test.yaml" // use a non-default path
+		out, err := c.RunWithCapture(
+			"debug tsdump --yaml=" + yamlFileName +
+				" --format=raw --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, out)
+
+		yaml, err := os.Open(yamlFileName)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, yaml.Close())
+			require.NoError(t, os.Remove(yamlFileName)) // cleanup
+		}()
+
+		yamlContents, err := io.ReadAll(yaml)
+		require.NoError(t, err)
+		require.NotEmpty(t, yamlContents)
 	})
 }
 
