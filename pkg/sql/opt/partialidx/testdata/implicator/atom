@@ -454,6 +454,46 @@ a IS NOT NULL
 ----
 false
 
+predtest vars=(a int, b int)
+a = b
+=>
+a IS NOT NULL
+----
+true
+└── remaining filters: a = b
+
+predtest vars=(a int, b int)
+a > b
+=>
+a IS NOT NULL
+----
+true
+└── remaining filters: a > b
+
+predtest vars=(a int, b int)
+a > b
+=>
+b IS NOT NULL
+----
+true
+└── remaining filters: a > b
+
+# TODO(mgartner): We could prove implication in this case if we constructed a
+# (/NULL - ] constraint for a.
+predtest vars=(a int, b int, c int)
+a IN (b, c)
+=>
+a IS NOT NULL
+----
+false
+
+predtest vars=(a int, b int, c int)
+a IN (b, c)
+=>
+b IS NOT NULL
+----
+false
+
 # Functions
 
 predtest vars=(a string)
