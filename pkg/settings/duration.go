@@ -50,6 +50,11 @@ func (d *DurationSetting) String(sv *Values) string {
 	return EncodeDuration(d.Get(sv))
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (d *DurationSetting) DefaultString() string {
+	return EncodeDuration(d.defaultValue)
+}
+
 // Encoded returns the encoded value of the current value of the setting.
 func (d *DurationSetting) Encoded(sv *Values) string {
 	return d.String(sv)
@@ -82,11 +87,6 @@ func (*DurationSetting) Typ() string {
 // Default returns default value for setting.
 func (d *DurationSetting) Default() time.Duration {
 	return d.defaultValue
-}
-
-// DefaultString returns the default value for the setting as a string.
-func (d *DurationSetting) DefaultString() (string, error) {
-	return d.DecodeToString(d.EncodedDefault())
 }
 
 // Defeat the linter.

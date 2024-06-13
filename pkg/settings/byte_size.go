@@ -33,6 +33,11 @@ func (b *ByteSizeSetting) String(sv *Values) string {
 	return string(humanizeutil.IBytes(b.Get(sv)))
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (b *ByteSizeSetting) DefaultString() string {
+	return string(humanizeutil.IBytes(b.defaultValue))
+}
+
 // DecodeToString decodes and renders an encoded value.
 func (b *ByteSizeSetting) DecodeToString(encoded string) (string, error) {
 	iv, err := b.DecodeValue(encoded)
@@ -40,11 +45,6 @@ func (b *ByteSizeSetting) DecodeToString(encoded string) (string, error) {
 		return "", err
 	}
 	return string(humanizeutil.IBytes(iv)), nil
-}
-
-// DefaultString returns the default value for the setting as a string.
-func (b *ByteSizeSetting) DefaultString() (string, error) {
-	return b.DecodeToString(b.EncodedDefault())
 }
 
 // RegisterByteSizeSetting defines a new setting with type bytesize and any

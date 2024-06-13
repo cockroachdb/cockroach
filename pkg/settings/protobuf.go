@@ -45,6 +45,15 @@ func (s *ProtobufSetting) String(sv *Values) string {
 	return json
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (s *ProtobufSetting) DefaultString() string {
+	json, err := s.MarshalToJSON(s.defaultValue)
+	if err != nil {
+		panic(errors.Wrapf(err, "marshaling %s: %+v", proto.MessageName(s.defaultValue), s.defaultValue))
+	}
+	return json
+}
+
 // Encoded returns the encoded value of the current value of the setting.
 func (s *ProtobufSetting) Encoded(sv *Values) string {
 	p := s.Get(sv)
@@ -86,11 +95,6 @@ func (s *ProtobufSetting) DecodeValue(encoded string) (protoutil.Message, error)
 // Default returns default value for setting.
 func (s *ProtobufSetting) Default() protoutil.Message {
 	return s.defaultValue
-}
-
-// DefaultString returns the default value for the setting as a string.
-func (s *ProtobufSetting) DefaultString() (string, error) {
-	return s.DecodeToString(s.EncodedDefault())
 }
 
 // Get retrieves the protobuf value in the setting.

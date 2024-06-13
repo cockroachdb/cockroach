@@ -38,6 +38,11 @@ func (f *FloatSetting) String(sv *Values) string {
 	return EncodeFloat(f.Get(sv))
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (f *FloatSetting) DefaultString() string {
+	return EncodeFloat(f.defaultValue)
+}
+
 // Encoded returns the encoded value of the current value of the setting.
 func (f *FloatSetting) Encoded(sv *Values) string {
 	return f.String(sv)
@@ -70,11 +75,6 @@ func (*FloatSetting) Typ() string {
 // Default returns default value for setting.
 func (f *FloatSetting) Default() float64 {
 	return f.defaultValue
-}
-
-// DefaultString returns the default value for the setting as a string.
-func (f *FloatSetting) DefaultString() (string, error) {
-	return f.DecodeToString(f.EncodedDefault())
 }
 
 // Defeat the linter.

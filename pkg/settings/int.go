@@ -37,6 +37,11 @@ func (i *IntSetting) String(sv *Values) string {
 	return EncodeInt(i.Get(sv))
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (i *IntSetting) DefaultString() string {
+	return EncodeInt(i.defaultValue)
+}
+
 // Encoded returns the encoded value of the current value of the setting.
 func (i *IntSetting) Encoded(sv *Values) string {
 	return i.String(sv)
@@ -69,11 +74,6 @@ func (*IntSetting) Typ() string {
 // Default returns default value for setting.
 func (i *IntSetting) Default() int64 {
 	return i.defaultValue
-}
-
-// DefaultString returns the default value for the setting as a string.
-func (i *IntSetting) DefaultString() (string, error) {
-	return i.DecodeToString(i.EncodedDefault())
 }
 
 // Defeat the linter.

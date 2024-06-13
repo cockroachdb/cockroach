@@ -34,6 +34,11 @@ func (b *BoolSetting) String(sv *Values) string {
 	return EncodeBool(b.Get(sv))
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (b *BoolSetting) DefaultString() string {
+	return EncodeBool(b.defaultValue)
+}
+
 // Encoded returns the encoded value of the current value of the setting.
 func (b *BoolSetting) Encoded(sv *Values) string {
 	return b.String(sv)
@@ -66,11 +71,6 @@ func (*BoolSetting) Typ() string {
 // Default returns default value for setting.
 func (b *BoolSetting) Default() bool {
 	return b.defaultValue
-}
-
-// DefaultString returns the default value for the setting as a string.
-func (b *BoolSetting) DefaultString() (string, error) {
-	return b.DecodeToString(b.EncodedDefault())
 }
 
 // Defeat the linter.

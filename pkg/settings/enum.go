@@ -44,8 +44,8 @@ func (e *EnumSetting) String(sv *Values) string {
 }
 
 // DefaultString returns the default value for the setting as a string.
-func (e *EnumSetting) DefaultString() (string, error) {
-	return e.DecodeToString(e.EncodedDefault())
+func (e *EnumSetting) DefaultString() string {
+	return e.enumValues[e.defaultValue]
 }
 
 // DecodeToString decodes and renders an encoded value.
