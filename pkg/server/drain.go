@@ -475,7 +475,7 @@ func (s *drainServer) drainClients(
 	}
 
 	// Mark the node as fully drained.
-	s.sqlServer.gracefulDrainComplete.Set(true)
+	s.sqlServer.gracefulDrainComplete.Store(true)
 	// Mark this phase in the logs to clarify the context of any subsequent
 	// errors/warnings, if any.
 	log.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")

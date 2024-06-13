@@ -291,7 +291,7 @@ func TestNodeIsLiveCallback(t *testing.T) {
 
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
-	var started syncutil.AtomicBool
+	var started atomic.Bool
 	var cbMu syncutil.Mutex
 	cbs := map[roachpb.NodeID]struct{}{}
 	tc := testcluster.StartTestCluster(t, 3,

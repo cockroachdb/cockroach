@@ -14,6 +14,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -91,7 +92,7 @@ type serverController struct {
 
 	// draining is set when the surrounding server starts draining, and
 	// prevents further creation of new tenant servers.
-	draining syncutil.AtomicBool
+	draining atomic.Bool
 	drainCh  chan struct{}
 
 	// disableSQLServer disables starting the SQL service.

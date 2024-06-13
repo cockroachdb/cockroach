@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -245,7 +246,7 @@ type StoreGossip struct {
 	cachedCapacity *cachedCapacity
 	// gossipOngoing indicates whether there is currently a triggered gossip,
 	// to avoid recursively re-triggering gossip.
-	gossipOngoing syncutil.AtomicBool
+	gossipOngoing atomic.Bool
 	// gossiper is used for adding information to gossip.
 	gossiper InfoGossiper
 	// descriptorGetter is used for getting an up to date or cached store

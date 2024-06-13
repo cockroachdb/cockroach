@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -398,7 +399,7 @@ type Node struct {
 
 	// Turns `Node.writeNodeStatus` into a no-op. This is a hack to enable the
 	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
-	suppressNodeStatus syncutil.AtomicBool
+	suppressNodeStatus atomic.Bool
 
 	diskStatsMap diskStatsMap
 

@@ -266,8 +266,8 @@ type Server struct {
 	// testing{Conn,Auth}LogEnabled is used in unit tests in this
 	// package to force-enable conn/auth logging without dancing around
 	// the asynchronicity of cluster settings.
-	testingConnLogEnabled syncutil.AtomicBool
-	testingAuthLogEnabled syncutil.AtomicBool
+	testingConnLogEnabled atomic.Bool
+	testingAuthLogEnabled atomic.Bool
 }
 
 // tenantSpecificMetrics is the set of metrics for a pgwire server

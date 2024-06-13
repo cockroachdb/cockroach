@@ -286,7 +286,7 @@ type Replica struct {
 	// incoming message but we are waiting for our initial snapshot.
 	// The field can be accessed atomically without needing to acquire the
 	// replica.mu lock. All updates to state.Desc should be duplicated here.
-	isInitialized syncutil.AtomicBool
+	isInitialized atomic.Bool
 
 	// connectionClass controls the ConnectionClass used to send raft messages.
 	connectionClass atomicConnectionClass
