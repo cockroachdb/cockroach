@@ -257,7 +257,7 @@ func (mc *MemRowContainer) Pop() interface{} { panic("unimplemented") }
 // smaller. Assumes InitTopK was called.
 func (mc *MemRowContainer) MaybeReplaceMax(ctx context.Context, row rowenc.EncDatumRow) error {
 	max := mc.At(0)
-	cmp, err := row.CompareToDatums(mc.types, &mc.datumAlloc, mc.ordering, mc.evalCtx, max)
+	cmp, err := row.CompareToDatums(ctx, mc.types, &mc.datumAlloc, mc.ordering, mc.evalCtx, max)
 	if err != nil {
 		return err
 	}

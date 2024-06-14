@@ -103,7 +103,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 				require.Nil(t, meta)
 				numActualRows++
 				require.Equal(t, len(expectedRow), len(actualRow))
-				cmp, err := expectedRow[0].Compare(typ, &da, &evalCtx, &actualRow[0])
+				cmp, err := expectedRow[0].Compare(ctx, typ, &da, &evalCtx, &actualRow[0])
 				require.NoError(t, err)
 				require.Equal(t, 0, cmp)
 			}

@@ -60,7 +60,7 @@ func CompareDatum(d, dVec, other interface{}) int {
 	// just Compare since pkg/sql/sem/eval is in the allow-list of paths that
 	// colexecerror catches panics from. Still, it seems nicer to be explicit
 	// about this.
-	res, err := d.(tree.Datum).CompareError(dVec.(*datumVec).evalCtx, convertToDatum(other))
+	res, err := d.(tree.Datum).CompareError(context.TODO(), dVec.(*datumVec).evalCtx, convertToDatum(other))
 	if err != nil {
 		colexecerror.InternalError(err)
 	}

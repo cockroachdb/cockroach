@@ -3800,7 +3800,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				result := tree.NewDArray(typ)
 				for _, e := range tree.MustBeDArray(args[0]).Array {
-					cmp, err := e.CompareError(evalCtx, args[1])
+					cmp, err := e.CompareError(ctx, evalCtx, args[1])
 					if err != nil {
 						return nil, err
 					}
@@ -3828,7 +3828,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				result := tree.NewDArray(typ)
 				for _, e := range tree.MustBeDArray(args[0]).Array {
-					cmp, err := e.CompareError(evalCtx, args[1])
+					cmp, err := e.CompareError(ctx, evalCtx, args[1])
 					if err != nil {
 						return nil, err
 					}
@@ -3860,7 +3860,7 @@ value if you rely on the HLC for accuracy.`,
 						return tree.DNull, nil
 					}
 					for i, e := range tree.MustBeDArray(args[0]).Array {
-						cmp, err := e.CompareError(evalCtx, args[1])
+						cmp, err := e.CompareError(ctx, evalCtx, args[1])
 						if err != nil {
 							return nil, err
 						}
@@ -3892,7 +3892,7 @@ value if you rely on the HLC for accuracy.`,
 
 					darray = darray[start-1:]
 					for i, e := range darray {
-						cmp, err := e.CompareError(evalCtx, args[1])
+						cmp, err := e.CompareError(ctx, evalCtx, args[1])
 						if err != nil {
 							return nil, err
 						}
@@ -3919,7 +3919,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				result := tree.NewDArray(types.Int)
 				for i, e := range tree.MustBeDArray(args[0]).Array {
-					cmp, err := e.CompareError(evalCtx, args[1])
+					cmp, err := e.CompareError(ctx, evalCtx, args[1])
 					if err != nil {
 						return nil, err
 					}

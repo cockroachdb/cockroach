@@ -95,7 +95,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 			// over all rows added so far.
 			i := rc.NewUnmarkedIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(i, rows[:mid], &evalCtx, ordering); err != nil {
+			if err := verifyRows(ctx, i, rows[:mid], &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying memory rows failed with: %s", err)
 			}
 		}()
@@ -113,7 +113,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		func() {
 			i := rc.NewUnmarkedIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(i, rows, &evalCtx, ordering); err != nil {
+			if err := verifyRows(ctx, i, rows, &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying disk rows failed with: %s", err)
 			}
 		}()
@@ -202,7 +202,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareEncRows(
-				types.OneIntCol, row, rows[counter], &evalCtx, &tree.DatumAlloc{}, ordering,
+				ctx, types.OneIntCol, row, rows[counter], &evalCtx, &tree.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -227,7 +227,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareEncRows(
-				types.OneIntCol, row, rows[counter], &evalCtx, &tree.DatumAlloc{}, ordering,
+				ctx, types.OneIntCol, row, rows[counter], &evalCtx, &tree.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -277,7 +277,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareEncRows(
-				types.OneIntCol, row, rows[counter], &evalCtx, &tree.DatumAlloc{}, ordering,
+				ctx, types.OneIntCol, row, rows[counter], &evalCtx, &tree.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -368,7 +368,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 			// over all rows added so far.
 			i := rc.NewUnmarkedIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(i, rows[:mid], &evalCtx, ordering); err != nil {
+			if err := verifyRows(ctx, i, rows[:mid], &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying memory rows failed with: %s", err)
 			}
 		}()
@@ -386,7 +386,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 		func() {
 			i := rc.NewUnmarkedIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(i, rows, &evalCtx, ordering); err != nil {
+			if err := verifyRows(ctx, i, rows, &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying disk rows failed with: %s", err)
 			}
 		}()
@@ -416,7 +416,7 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 			// over all rows added so far.
 			i := rc.NewUnmarkedIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(i, rows, &evalCtx, ordering); err != nil {
+			if err := verifyRows(ctx, i, rows, &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying memory rows failed with: %s", err)
 			}
 		}()
