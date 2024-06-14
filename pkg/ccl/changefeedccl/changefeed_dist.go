@@ -456,6 +456,9 @@ func makePlan(
 			aggregatorCheckpoint.Spans = checkpoint.Spans
 			aggregatorCheckpoint.Timestamp = checkpoint.Timestamp
 		}
+		if log.V(2) {
+			log.Infof(ctx, "aggregator checkpoint: %s", aggregatorCheckpoint)
+		}
 
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
