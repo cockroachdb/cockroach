@@ -205,31 +205,6 @@ EOF"
 
     exit 0
     ;;
-  "ua-setup")
-    # Make sure both clusters have rangefeeds enabled.
-    $0 sql drt-ua1:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
-    $0 sql drt-ua2:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
-
-    # Create external connection on each cluster to the other.
-    ua2="$(roachprod ssh drt-ua2:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
-    $0 sql drt-ua1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ua2' AS '${ua2}'"
-    ua1="$(roachprod ssh drt-ua1:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
-    $0 sql drt-ua2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ua1' AS '${ua1}'"
-
-    # Setup the main tenant, on ua1 initilly.
-    $0 sql drt-ua1:1 -- -e "CREATE VIRTUAL CLUSTER main"
-    $0 sql drt-ua1:1 -- -e "ALTER VIRTUAL CLUSTER main START SERVICE SHARED"
-    $0 sql drt-ua1:1 --cluster=main -- -e "CREATE USER roachprod WITH PASSWORD 'cockroachdb'"
-    $0 sql drt-ua1:1 --cluster=main -- -e "GRANT admin TO roachprod"
-
-    # Set the default tenant on both.
-    $0 sql drt-ua1:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
-    $0 sql drt-ua2:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
-
-    # Setup replication to ua2.
-    $0 sql drt-ua2:1 --cluster=system -- -e "CREATE VIRTUAL CLUSTER main FROM REPLICATION OF main ON 'external://drt-ua1'"
-    exit 0
-    ;;
   "ua-failover")
     if [ "$#" -lt 2 ]; then
       echo "usage: $0 failover {drt-ua1,drt-ua2}"
@@ -308,7 +283,7 @@ EOF"
         # setup dns
         $0 dns drt-chaos create
         ;;
-      "drt-ua1")
+      "ua")
         roachprod create drt-ua1 \
           --clouds="gce" \
           --gce-zones="us-east1-c" \
@@ -317,13 +292,8 @@ EOF"
           --local-ssd="true"  \
           --gce-local-ssd-count="8" \
           --username="drt" \
-          --lifetime="8760h" \
-          --gce-image "ubuntu-2204-jammy-v20240319"
-        # setup dns
-        $0 dns drt-ua1 create || $0 dns drt-ua1
-        ;;
-      "drt-ua2")
-      set -x
+          --lifetime="8760h"
+
         roachprod create drt-ua2 \
           --clouds="gce" \
           --gce-zones="us-east1-c" \
@@ -332,10 +302,49 @@ EOF"
           --local-ssd="true"  \
           --gce-local-ssd-count="8" \
           --username="drt" \
-          --lifetime="8760h" \
-          --gce-image "ubuntu-2204-jammy-v20240319"
+          --lifetime="8760h"
+
         # setup dns
-        $0 dns drt-ua2 create || $0 dns drt-ua2
+        $0 dns drt-ua1 create || $0 dns drt-ua1 || (echo "dns setup failed -- run dns manually"; true)
+        $0 dns drt-ua2 create || $0 dns drt-ua2 || (echo "dns setup failed -- run dns manually"; true)
+
+        # start cockroach
+        $0 stage drt-ua1 cockroach
+        $0 stage drt-ua2 cockroach
+        $0 start drt-ua1 --restart=false
+        $0 start drt-ua2 --restart=false
+
+        # tell the clusters about eachother.
+        ua2="$(roachprod ssh drt-ua2:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
+        ua1="$(roachprod ssh drt-ua1:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
+        $0 sql drt-ua1:1 --cluster=system -- -e "CREATE EXTERNAL CONNECTION 'drt-ua2' AS '${ua2}'"
+        $0 sql drt-ua2:1 --cluster=system -- -e "CREATE EXTERNAL CONNECTION 'drt-ua1' AS '${ua1}'"
+
+        # enable rangefeeds.
+        $0 sql drt-ua1:1 --cluster=system -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+        $0 sql drt-ua2:1 --cluster=system -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+
+        # Setup the main tenant, on ua1 initilly.
+        $0 sql drt-ua1:1 --cluster=system -- -e "CREATE VIRTUAL CLUSTER main"
+        $0 sql drt-ua1:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main START SERVICE SHARED"
+        $0 sql drt-ua1:1 --cluster=main --auth-mode=root -- -e "CREATE USER roachprod WITH PASSWORD 'cockroachdb'"
+        $0 sql drt-ua1:1 --cluster=main --auth-mode=root -- -e "GRANT admin TO roachprod"
+
+        # setup the second to follow it.
+        $0 sql drt-ua2:1 --cluster=system -- -e "CREATE VIRTUAL CLUSTER main FROM REPLICATION OF main ON 'external://drt-ua1'"
+
+        # point traffic at the main tenant.
+        $0 sql drt-ua1:1 --cluster=system -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+        $0 sql drt-ua2:1 --cluster=system -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+
+        echo
+        echo "Completed setup of ua1 and ua2, with virtual cluster main on ua1 replicating to ua2."
+        echo
+        echo "To restore the 150k warehouse fixture, run:"
+        echo "    restore database tpcc from latest in 'gs://cockroach-fixtures-us-east1/backups/tpc-c/v24.1/db/warehouses=150k/?AUTH=implicit';'"
+        echo
+        echo "Then run 'drtprod create workload-ua' after the restore completes to start the workload."
+        echo
         ;;
       "workload-ua")
         set -x
