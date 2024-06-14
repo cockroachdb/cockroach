@@ -66,15 +66,24 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 type mockOidcManager struct {
 	oauth2Config *oauth2.Config
 	claimEmail   string
+	t            *testing.T
 }
 
 func (m mockOidcManager) Verify(ctx context.Context, s string) (*oidc.IDToken, error) {
+	httpClient, exists := ctx.Value(oauth2.HTTPClient).(*http.Client)
+	if !exists || httpClient == nil {
+		m.t.Fatal("expected HTTP client in ctx")
+	}
 	return nil, nil
 }
 
 func (m mockOidcManager) Exchange(
 	ctx context.Context, s string, option ...oauth2.AuthCodeOption,
 ) (*oauth2.Token, error) {
+	httpClient, exists := ctx.Value(oauth2.HTTPClient).(*http.Client)
+	if !exists || httpClient == nil {
+		m.t.Fatal("expected HTTP client in ctx")
+	}
 	return nil, nil
 }
 
@@ -85,6 +94,11 @@ func (m mockOidcManager) AuthCodeURL(s string, option ...oauth2.AuthCodeOption) 
 func (m mockOidcManager) ExchangeVerifyGetClaims(
 	ctx context.Context, s string, s2 string,
 ) (map[string]json.RawMessage, error) {
+	httpClient, exists := ctx.Value(oauth2.HTTPClient).(*http.Client)
+	if !exists || httpClient == nil {
+		m.t.Fatal("expected HTTP client in ctx")
+	}
+
 	x := map[string]json.RawMessage{}
 	// The email is surrounded by double quotes because it's a serialized JSON string.
 	x["email"] = json.RawMessage([]byte(fmt.Sprintf(`"%s"`, m.claimEmail)))
@@ -117,7 +131,11 @@ func TestOIDCEnabled(t *testing.T) {
 			},
 			Scopes: scopes,
 		}
-		return &mockOidcManager{oauth2Config: c, claimEmail: fmt.Sprintf("%s@example.com", usernameUnderTest)}, nil
+		return &mockOidcManager{
+			oauth2Config: c,
+			claimEmail:   fmt.Sprintf("%s@example.com", usernameUnderTest),
+			t:            t,
+		}, nil
 	}
 	defer func() {
 		NewOIDCManager = realNewManager
