@@ -423,7 +423,7 @@ func TestStringToArrayAndBack(t *testing.T) {
 			}
 
 			evalContext := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			if cmp, err := result.CompareError(context.Background(), evalContext, expectedArray); err != nil {
+			if cmp, err := result.Compare(context.Background(), evalContext, expectedArray); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Errorf("expected %v, got %v", tc.expected, result)

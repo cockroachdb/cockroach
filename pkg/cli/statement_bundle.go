@@ -349,7 +349,7 @@ func getExplainCombinations(
 				}
 				if maxUpperBound == nil {
 					maxUpperBound = datum
-				} else if cmp, err := maxUpperBound.CompareError(ctx, &evalCtx, datum); err != nil {
+				} else if cmp, err := maxUpperBound.Compare(ctx, &evalCtx, datum); err != nil {
 					panic(err)
 				} else if cmp < 0 {
 					maxUpperBound = datum

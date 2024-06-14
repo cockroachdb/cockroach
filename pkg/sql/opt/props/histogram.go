@@ -481,7 +481,7 @@ func (h *Histogram) addBucket(ctx context.Context, bucket *cat.HistogramBucket, 
 			lastBucket.UpperBound = higher.UpperBound
 			return
 		}
-		cmp, err := lastBucket.UpperBound.CompareError(ctx, h.evalCtx, bucket.UpperBound)
+		cmp, err := lastBucket.UpperBound.Compare(ctx, h.evalCtx, bucket.UpperBound)
 		if err != nil {
 			panic(err)
 		} else if cmp == 0 {
@@ -638,7 +638,7 @@ func makeSpanFromBucket(
 ) (span constraint.Span) {
 	start, startBoundary := iter.lowerBound()
 	end, endBoundary := iter.upperBound()
-	cmp, err := start.CompareError(ctx, iter.h.evalCtx, end)
+	cmp, err := start.Compare(ctx, iter.h.evalCtx, end)
 	if err != nil {
 		panic(err)
 	}
@@ -699,11 +699,11 @@ func getFilteredBucket(
 	b := iter.b
 
 	// Check that the given span is contained in the bucket.
-	cmpSpanStartBucketStart, err := spanLowerBound.CompareError(keyCtx.Ctx, keyCtx.EvalCtx, bucketLowerBound)
+	cmpSpanStartBucketStart, err := spanLowerBound.Compare(keyCtx.Ctx, keyCtx.EvalCtx, bucketLowerBound)
 	if err != nil {
 		panic(err)
 	}
-	cmpSpanEndBucketEnd, err := spanUpperBound.CompareError(keyCtx.Ctx, keyCtx.EvalCtx, bucketUpperBound)
+	cmpSpanEndBucketEnd, err := spanUpperBound.Compare(keyCtx.Ctx, keyCtx.EvalCtx, bucketUpperBound)
 	if err != nil {
 		panic(err)
 	}
@@ -723,7 +723,7 @@ func getFilteredBucket(
 	)
 
 	// Determine whether this span represents an equality condition.
-	cmp, err := spanLowerBound.CompareError(keyCtx.Ctx, keyCtx.EvalCtx, spanUpperBound)
+	cmp, err := spanLowerBound.Compare(keyCtx.Ctx, keyCtx.EvalCtx, spanUpperBound)
 	if err != nil {
 		panic(err)
 	}

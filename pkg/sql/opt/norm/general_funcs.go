@@ -1528,7 +1528,7 @@ func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 // IsGreaterThan returns true if the first datum compares as greater than the
 // second.
 func (c *CustomFuncs) IsGreaterThan(first, second tree.Datum) bool {
-	cmp, err := first.CompareError(c.f.ctx, c.f.evalCtx, second)
+	cmp, err := first.Compare(c.f.ctx, c.f.evalCtx, second)
 	if err != nil {
 		panic(err)
 	}
@@ -1537,7 +1537,7 @@ func (c *CustomFuncs) IsGreaterThan(first, second tree.Datum) bool {
 
 // DatumsEqual returns true if the first datum compares as equal to the second.
 func (c *CustomFuncs) DatumsEqual(first, second tree.Datum) bool {
-	cmp, err := first.CompareError(c.f.ctx, c.f.evalCtx, second)
+	cmp, err := first.Compare(c.f.ctx, c.f.evalCtx, second)
 	if err != nil {
 		panic(err)
 	}

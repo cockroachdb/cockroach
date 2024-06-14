@@ -742,7 +742,7 @@ func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
 		return false
 	}
 	for i := range pre {
-		if cmp, err := pre[i].CompareError(c.e.ctx, c.e.evalCtx, other[i]); err != nil {
+		if cmp, err := pre[i].Compare(c.e.ctx, c.e.evalCtx, other[i]); err != nil {
 			panic(err)
 		} else if cmp != 0 {
 			return false

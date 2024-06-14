@@ -712,7 +712,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 						i, availType, test.c, res)
 				} else {
 					expectedDatum := parseFuncs[availType](t, test.c.RawString())
-					if cmp, err := res.CompareError(ctx, evalCtx, expectedDatum); err != nil {
+					if cmp, err := res.Compare(ctx, evalCtx, expectedDatum); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
 						t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+

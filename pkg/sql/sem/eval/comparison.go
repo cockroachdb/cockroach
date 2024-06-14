@@ -173,7 +173,7 @@ func cmpOpTupleFn(
 			}
 		} else {
 			var err error
-			cmp, err = leftElem.CompareError(ctx, cmpCtx, rightElem)
+			cmp, err = leftElem.Compare(ctx, cmpCtx, rightElem)
 			if err != nil {
 				return tree.DNull, err
 			}

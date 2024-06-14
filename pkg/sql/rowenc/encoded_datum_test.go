@@ -81,7 +81,7 @@ func TestEncDatum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp, err := y.Datum.CompareError(ctx, evalCtx, x.Datum); err != nil {
+	if cmp, err := y.Datum.Compare(ctx, evalCtx, x.Datum); err != nil {
 		t.Fatal(err)
 	} else if cmp != 0 {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
@@ -109,7 +109,7 @@ func TestEncDatum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp, err := y.Datum.CompareError(ctx, evalCtx, z.Datum); err != nil {
+	if cmp, err := y.Datum.Compare(ctx, evalCtx, z.Datum); err != nil {
 		t.Fatal(err)
 	} else if cmp != 0 {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
@@ -232,7 +232,7 @@ func TestEncDatumCompare(t *testing.T) {
 		for {
 			d1 = randgen.RandDatum(rng, typ, false)
 			d2 = randgen.RandDatum(rng, typ, false)
-			if cmp, err := d1.CompareError(ctx, evalCtx, d2); err != nil {
+			if cmp, err := d1.Compare(ctx, evalCtx, d2); err != nil {
 				t.Fatal(err)
 			} else if cmp < 0 {
 				break
@@ -323,7 +323,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%+v: ensuredecoded: %v (%+v)", ed[i], err, typs[i])
 			}
-			if cmp, err := decoded.Datum.CompareError(ctx, evalCtx, ed[i].Datum); err != nil {
+			if cmp, err := decoded.Datum.Compare(ctx, evalCtx, ed[i].Datum); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Errorf("decoded datum %+v doesn't equal original %+v", decoded.Datum, ed[i].Datum)
@@ -515,7 +515,7 @@ func TestEncDatumRowAlloc(t *testing.T) {
 			for i := 0; i < rows; i++ {
 				for j := 0; j < cols; j++ {
 					a, b := in[i][j].Datum, out[i][j].Datum
-					if cmp, err := a.CompareError(ctx, evalCtx, b); err != nil {
+					if cmp, err := a.Compare(ctx, evalCtx, b); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
 						t.Errorf("copied datum %s doesn't equal original %s", b, a)
@@ -566,7 +566,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 					seed, test, colTypes[i], testTyp, len(buf))
 			}
 
-			if cmp, err := decodedTuple.CompareError(ctx, evalCtx, test); err != nil {
+			if cmp, err := decodedTuple.Compare(ctx, evalCtx, test); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Fatalf("seed %d: encoded %+v, decoded %+v, expected equal, received comparison: %d", seed, test, decodedTuple, cmp)

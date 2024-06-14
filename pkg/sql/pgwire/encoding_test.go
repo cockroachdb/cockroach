@@ -292,7 +292,7 @@ func TestEncodings(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				if cmp, err := d.CompareError(ctx, &evalCtx, tc.Datum); err != nil {
+				if cmp, err := d.Compare(ctx, &evalCtx, tc.Datum); err != nil {
 					t.Fatal(err)
 				} else if cmp != 0 {
 					t.Fatalf("%v != %v", d, tc.Datum)
@@ -347,7 +347,7 @@ func TestExoticNumericEncodings(t *testing.T) {
 			}
 
 			expected := &tree.DDecimal{Decimal: *c.Value}
-			if cmp, err := d.CompareError(ctx, &evalCtx, expected); err != nil {
+			if cmp, err := d.Compare(ctx, &evalCtx, expected); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Fatalf("%v != %v", d, expected)

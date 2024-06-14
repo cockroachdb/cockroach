@@ -206,7 +206,7 @@ func TestAddUniqChecks(t *testing.T) {
 					if datum == out.DatumsFromConstraint[i][j] {
 						continue
 					}
-					if cmp, err := datum.CompareError(ctx, &evalCtx, out.DatumsFromConstraint[i][j]); err != nil {
+					if cmp, err := datum.Compare(ctx, &evalCtx, out.DatumsFromConstraint[i][j]); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
 						t.Fatalf("expected built row datum, %v, to match DatumsFromConstraint item, %v", datum, out.DatumsFromConstraint[i][j])

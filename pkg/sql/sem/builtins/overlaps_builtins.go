@@ -124,7 +124,7 @@ func evalOverlaps(
 	s2 tree.Datum,
 	e2 tree.Datum,
 ) (tree.Datum, error) {
-	compS1E1, err := s1.CompareError(ctx, evalCtx, e1)
+	compS1E1, err := s1.Compare(ctx, evalCtx, e1)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func evalOverlaps(
 		s1, e1 = e1, s1
 	}
 
-	compS2E2, err := s2.CompareError(ctx, evalCtx, e2)
+	compS2E2, err := s2.Compare(ctx, evalCtx, e2)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func evalOverlaps(
 		s2, e2 = e2, s2
 	}
 
-	compS1S2, err := s1.CompareError(ctx, evalCtx, s2)
+	compS1S2, err := s1.Compare(ctx, evalCtx, s2)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func evalOverlaps(
 
 	// Case s1 > s2.
 	case 1:
-		compS1E2, err := s1.CompareError(ctx, evalCtx, e2)
+		compS1E2, err := s1.Compare(ctx, evalCtx, e2)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +161,7 @@ func evalOverlaps(
 
 	// Case s1 < s2.
 	case -1:
-		compS2E1, err := s2.CompareError(ctx, evalCtx, e1)
+		compS2E1, err := s2.Compare(ctx, evalCtx, e1)
 		if err != nil {
 			return nil, err
 		}
