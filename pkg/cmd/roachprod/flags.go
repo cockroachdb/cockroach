@@ -102,22 +102,6 @@ var (
 	grafanaDashboardUID string
 	grafanaTimeRange    []int64
 
-	pgAuthModes = map[string]install.PGAuthMode{
-		"root":          install.AuthRootCert,
-		"user-password": install.AuthUserPassword,
-		"user-cert":     install.AuthUserCert,
-	}
-
-	defaultAuthMode = func() string {
-		for modeStr, mode := range pgAuthModes {
-			if mode == install.DefaultAuthMode {
-				return modeStr
-			}
-		}
-
-		panic(fmt.Errorf("could not find string for default auth mode"))
-	}()
-
 	sshKeyUser string
 
 	fluentBitConfig fluentbit.Config
@@ -217,7 +201,7 @@ func initFlags() {
 
 	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, loadBalancerPGUrl} {
 		cmd.Flags().StringVar(&authMode,
-			"auth-mode", defaultAuthMode, fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(pgAuthModes)))
+			"auth-mode", install.DefaultAuthMode().String(), fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(install.PGAuthModes)))
 		cmd.Flags().StringVar(&database, "database", "", "database to use")
 	}
 

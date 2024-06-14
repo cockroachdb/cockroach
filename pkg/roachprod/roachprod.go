@@ -2226,7 +2226,7 @@ func StartJaeger(
 			return err
 		}
 		_, err = c.ExecSQL(
-			ctx, l, nodes, virtualClusterName, 0, install.DefaultAuthMode, "", /* database */
+			ctx, l, nodes, virtualClusterName, 0, install.DefaultAuthMode(), "", /* database */
 			[]string{"-e", setupStmt},
 		)
 		if err != nil {

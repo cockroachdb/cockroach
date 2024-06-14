@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
 
 //go:embed scripts/start.sh
@@ -580,13 +581,46 @@ const (
 	// users authenticate.
 	AuthRootCert
 
-	// DefaultAuthMode is the auth mode used for functions that don't
-	// take an auth mode or the user doesn't specify one.
-	DefaultAuthMode = AuthUserCert
-
 	DefaultUser     = "roachprod"
 	DefaultPassword = "cockroachdb"
+
+	DefaultAuthModeEnv = "ROACHPROD_DEFAULT_AUTH_MODE"
 )
+
+// PGAuthModes is a map from auth mode string names to the actual PGAuthMode.
+// The string names are used by CLI and the DefaultAuthModeEnv var.
+var PGAuthModes = map[string]PGAuthMode{
+	"root":          AuthRootCert,
+	"user-password": AuthUserPassword,
+	"user-cert":     AuthUserCert,
+}
+
+// DefaultAuthMode is the auth mode used for functions that don't
+// take an auth mode or the user doesn't specify one.
+func DefaultAuthMode() PGAuthMode {
+	if auth, err := ResolveAuthMode(os.Getenv(DefaultAuthModeEnv)); err == nil {
+		return auth
+	}
+	return AuthUserCert
+}
+
+func ResolveAuthMode(authMode string) (PGAuthMode, error) {
+	auth, ok := PGAuthModes[authMode]
+	if !ok {
+		return -1, errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(PGAuthModes))
+	}
+	return auth, nil
+}
+
+func (auth PGAuthMode) String() string {
+	for modeStr, mode := range PGAuthModes {
+		if mode == auth {
+			return modeStr
+		}
+	}
+
+	panic(fmt.Errorf("could not find string for auth mode"))
+}
 
 // NodeURL constructs a postgres URL. If virtualClusterName is not empty, it will
 // be used as the virtual cluster name in the URL. This is used to connect to a
@@ -1388,7 +1422,7 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 ) (int, error) {
 	runSQL := func(stmt string) (string, error) {
 		results, err := startOpts.StorageCluster.ExecSQL(
-			ctx, l, startOpts.StorageCluster.Nodes[:1], "", 0, DefaultAuthMode, "", /* database */
+			ctx, l, startOpts.StorageCluster.Nodes[:1], "", 0, DefaultAuthMode(), "", /* database */
 			[]string{"--format", "csv", "-e", stmt})
 		if err != nil {
 			return "", err
