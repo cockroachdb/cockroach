@@ -403,7 +403,7 @@ func newJoinReader(
 	}
 	rightTypes := spec.FetchSpec.FetchedColumnTypes()
 
-	if err := jr.joinerBase.init(
+	evalCtx, err := jr.joinerBase.init(
 		ctx,
 		jr,
 		flowCtx,
@@ -425,22 +425,29 @@ func newJoinReader(
 				return trailingMeta
 			},
 		},
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 
 	if !spec.LookupExpr.Empty() {
+		if evalCtx == flowCtx.EvalCtx {
+			// We haven't created a copy of the eval context yet (because it is
+			// only done in init if we have a non-empty ON expression), but we
+			// actually need a copy.
+			evalCtx = flowCtx.NewEvalCtx()
+		}
 		lookupExprTypes := make([]*types.T, 0, len(leftTypes)+len(rightTypes))
 		lookupExprTypes = append(lookupExprTypes, leftTypes...)
 		lookupExprTypes = append(lookupExprTypes, rightTypes...)
 
 		semaCtx := flowCtx.NewSemaContext(jr.txn)
-		if err := jr.lookupExpr.Init(ctx, spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
+		if err := jr.lookupExpr.Init(ctx, spec.LookupExpr, lookupExprTypes, semaCtx, evalCtx); err != nil {
 			return nil, err
 		}
 		if !spec.RemoteLookupExpr.Empty() {
 			if err := jr.remoteLookupExpr.Init(
-				ctx, spec.RemoteLookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx,
+				ctx, spec.RemoteLookupExpr, lookupExprTypes, semaCtx, evalCtx,
 			); err != nil {
 				return nil, err
 			}
@@ -725,7 +732,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 	drc := rowcontainer.NewDiskBackedNumberedRowContainer(
 		false, /* deDup */
 		typs,
-		jr.EvalCtx,
+		jr.FlowCtx.EvalCtx,
 		jr.FlowCtx.Cfg.TempStorage,
 		jr.limitedMemMonitor,
 		jr.diskMonitor,

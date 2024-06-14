@@ -223,6 +223,8 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	mon *mon.BytesMonitor,
 ) error {
 	cb.initCols(desc)
+	// We'll be modifying the eval.Context in RunColumnBackfillChunk, so we need
+	// to make a copy.
 	evalCtx := flowCtx.NewEvalCtx()
 	var defaultExprs, computedExprs []tree.TypedExpr
 	// Install type metadata in the target descriptors, as well as resolve any
@@ -654,6 +656,8 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		return err
 	}
 
+	// We'll be modifying the eval.Context in BuildIndexEntriesChunk, so we need
+	// to make a copy.
 	evalCtx := flowCtx.NewEvalCtx()
 	var predicates map[descpb.IndexID]tree.TypedExpr
 	var colExprs map[descpb.ColumnID]tree.TypedExpr

@@ -123,6 +123,10 @@ func (h *ProcOutputHelper) Reset() {
 // omitted if there is no filtering expression.
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
+//
+// NB: if render expressions are present, then the eval context might be
+// **mutated**. It is the caller's responsibility to provide a copy of the eval
+// context in this case.
 func (h *ProcOutputHelper) Init(
 	ctx context.Context,
 	post *execinfrapb.PostProcessSpec,
@@ -345,9 +349,6 @@ type ProcessorBaseNoHelper struct {
 	ProcessorID int32
 
 	FlowCtx *FlowCtx
-
-	// EvalCtx is used for expression evaluation. It overrides the one in flowCtx.
-	EvalCtx *eval.Context
 
 	// Closed is set by InternalClose(). Once set, the processor's tracing span
 	// has been closed.
@@ -745,6 +746,8 @@ type ProcStateOpts struct {
 // - coreOutputTypes are the type schema of the rows output by the processor
 // core (i.e. the "internal schema" of the processor, see
 // execinfrapb.ProcessorSpec for more details).
+//
+// NB: it is assumed that the caller will not modify the eval context.
 func (pb *ProcessorBase) Init(
 	ctx context.Context,
 	self RowSource,
@@ -756,7 +759,7 @@ func (pb *ProcessorBase) Init(
 	opts ProcStateOpts,
 ) error {
 	return pb.InitWithEvalCtx(
-		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.NewEvalCtx(), processorID, memMonitor, opts,
+		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor, opts,
 	)
 }
 
@@ -775,7 +778,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	memMonitor *mon.BytesMonitor,
 	opts ProcStateOpts,
 ) error {
-	pb.ProcessorBaseNoHelper.Init(self, flowCtx, evalCtx, processorID, opts)
+	pb.ProcessorBaseNoHelper.Init(self, flowCtx, processorID, opts)
 	pb.MemMonitor = memMonitor
 
 	// Hydrate all types used in the processor.
@@ -783,18 +786,23 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	if err := resolver.HydrateTypeSlice(ctx, coreOutputTypes); err != nil {
 		return err
 	}
-	pb.SemaCtx = tree.MakeSemaContext(&resolver)
 
-	return pb.OutputHelper.Init(ctx, post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx)
+	pb.SemaCtx = tree.MakeSemaContext(&resolver)
+	if evalCtx == flowCtx.EvalCtx && len(post.RenderExprs) > 0 {
+		// If we haven't created a copy of the eval context, and we have some
+		// renders, then we'll need to create a copy ourselves since we're going
+		// to use the ExprHelper which might mutate the eval context.
+		evalCtx = flowCtx.NewEvalCtx()
+	}
+	return pb.OutputHelper.Init(ctx, post, coreOutputTypes, &pb.SemaCtx, evalCtx)
 }
 
 // Init initializes the ProcessorBaseNoHelper.
 func (pb *ProcessorBaseNoHelper) Init(
-	self RowSource, flowCtx *FlowCtx, evalCtx *eval.Context, processorID int32, opts ProcStateOpts,
+	self RowSource, flowCtx *FlowCtx, processorID int32, opts ProcStateOpts,
 ) {
 	pb.self = self
 	pb.FlowCtx = flowCtx
-	pb.EvalCtx = evalCtx
 	pb.ProcessorID = processorID
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
 	if opts.InputsToDrain != nil {
