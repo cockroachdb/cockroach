@@ -94,13 +94,13 @@ const (
 
 // LoadBasedRebalancingObjectiveMap maps the LoadBasedRebalancingObjective enum
 // value to a string.
-var LoadBasedRebalancingObjectiveMap map[int64]string = map[int64]string{
-	int64(LBRebalancingQueries): "qps",
-	int64(LBRebalancingCPU):     "cpu",
+var LoadBasedRebalancingObjectiveMap = map[LBRebalancingObjective]string{
+	LBRebalancingQueries: "qps",
+	LBRebalancingCPU:     "cpu",
 }
 
 func (lbro LBRebalancingObjective) String() string {
-	return LoadBasedRebalancingObjectiveMap[int64(lbro)]
+	return LoadBasedRebalancingObjectiveMap[lbro]
 }
 
 // LoadBasedRebalancingObjective is a cluster setting that defines the load
@@ -263,7 +263,7 @@ func ResolveLBRebalancingObjective(
 ) LBRebalancingObjective {
 	set := LoadBasedRebalancingObjective.Get(&st.SV)
 	// Queries should always be supported, return early if set.
-	if set == int64(LBRebalancingQueries) {
+	if set == LBRebalancingQueries {
 		return LBRebalancingQueries
 	}
 	// When the cpu timekeeping utility is unsupported on this aarch, the cpu

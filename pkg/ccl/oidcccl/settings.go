@@ -292,9 +292,9 @@ var OIDCGenerateClusterSSOTokenUseToken = settings.RegisterEnumSetting(
 	OIDCGenerateClusterSSOTokenUseTokenSettingName,
 	"selects which OIDC callback token to use for cluster SSO",
 	"id_token",
-	map[int64]string{
-		int64(useIdToken):     "id_token",
-		int64(useAccessToken): "access_token",
+	map[tokenToUse]string{
+		useIdToken:     "id_token",
+		useAccessToken: "access_token",
 	},
 )
 

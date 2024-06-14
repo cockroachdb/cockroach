@@ -115,12 +115,12 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 	"sql.catalog.experimental_use_session_based_leasing",
 	"enables session based leasing for internal testing.",
 	"auto",
-	map[int64]string{
-		int64(SessionBasedLeasingAuto): "auto",
-		int64(SessionBasedLeasingOff):  "off",
-		int64(SessionBasedDualWrite):   "dual_write",
-		int64(SessionBasedDrain):       "drain",
-		int64(SessionBasedOnly):        "session",
+	map[SessionBasedLeasingMode]string{
+		SessionBasedLeasingAuto: "auto",
+		SessionBasedLeasingOff:  "off",
+		SessionBasedDualWrite:   "dual_write",
+		SessionBasedDrain:       "drain",
+		SessionBasedOnly:        "session",
 	},
 )
 
