@@ -100,7 +100,7 @@ func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 }
 
 // GetApplicationStats implements sqlstats.Provider interface.
-func (s *SQLStats) GetApplicationStats(appName string, internal bool) sqlstats.ApplicationStats {
+func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if a, ok := s.mu.apps[appName]; ok {
@@ -112,7 +112,6 @@ func (s *SQLStats) GetApplicationStats(appName string, internal bool) sqlstats.A
 		s.mu.mon,
 		appName,
 		s.knobs,
-		s.insights(internal),
 		s.latencyInformation,
 	)
 	s.mu.apps[appName] = a
@@ -160,7 +159,7 @@ func (s *SQLStats) ConsumeStats(
 	}
 	apps := s.getAppNames(false)
 	for _, app := range apps {
-		container := s.GetApplicationStats(app, true).(*ssmemstorage.Container)
+		container := s.GetApplicationStats(app).(*ssmemstorage.Container)
 		if err := s.MaybeDumpStatsToLog(ctx, app, container, s.flushTarget); err != nil {
 			log.Warningf(ctx, "failed to dump stats to log, %s", err.Error())
 		}

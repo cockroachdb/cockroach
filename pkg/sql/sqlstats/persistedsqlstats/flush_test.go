@@ -783,7 +783,7 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 	sqlRun.Exec(t, "SET application_name = $1", appName)
 
 	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
-	appStats := sqlStats.GetApplicationStats(appName, false)
+	appStats := sqlStats.GetApplicationStats(appName)
 
 	sqlRun.Exec(t, `SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = true;`)
 	sqlRun.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0;`)
