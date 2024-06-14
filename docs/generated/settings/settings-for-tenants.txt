@@ -63,7 +63,6 @@ kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconcili
 kv.rangefeed.client.stream_startup_rate	integer	100	controls the rate per second the client will initiate new rangefeed stream for a single range; 0 implies unlimited	application
 kv.rangefeed.closed_timestamp_refresh_interval	duration	3s	the interval at which closed-timestamp updatesare delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval	system-visible
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled	system-visible
-kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.rangefeed.closed_timestamp_refresh_interval takes precedence)	application
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions	application
 kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	application
 kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed	application
