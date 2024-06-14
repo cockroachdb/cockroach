@@ -552,7 +552,6 @@ func internalExtendedEvalCtx(
 		statsProvider:   sqlStatsProvider,
 		jobs:            newTxnJobsCollection(),
 	}
-	ret.SetDeprecatedContext(ctx)
 	ret.copyFromExecCfg(execCfg)
 	return ret
 }

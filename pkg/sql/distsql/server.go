@@ -357,9 +357,6 @@ func (ds *ServerImpl) setupFlow(
 			IndexUsageStatsController: ds.ServerConfig.IndexUsageStatsController,
 			RangeStatsFetcher:         ds.ServerConfig.RangeStatsFetcher,
 		}
-		// Most processors will override this Context with their own context in
-		// ProcessorBase. StartInternal().
-		evalCtx.SetDeprecatedContext(ctx)
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 	}

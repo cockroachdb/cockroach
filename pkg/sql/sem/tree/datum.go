@@ -101,7 +101,7 @@ type CompareContext interface {
 	GetRelativeParseTime() time.Time
 
 	// MustGetPlaceholderValue is used to compare Datum
-	MustGetPlaceholderValue(p *Placeholder) Datum
+	MustGetPlaceholderValue(ctx context.Context, p *Placeholder) Datum
 }
 
 // Datum represents a SQL value.
@@ -5706,37 +5706,37 @@ func (d *Placeholder) AmbiguousFormat() bool {
 func (d *Placeholder) Compare(
 	ctx context.Context, cmpCtx CompareContext, other Datum,
 ) (int, error) {
-	return cmpCtx.MustGetPlaceholderValue(d).Compare(ctx, cmpCtx, other)
+	return cmpCtx.MustGetPlaceholderValue(ctx, d).Compare(ctx, cmpCtx, other)
 }
 
 // Prev implements the Datum interface.
 func (d *Placeholder) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return cmpCtx.MustGetPlaceholderValue(d).Prev(ctx, cmpCtx)
+	return cmpCtx.MustGetPlaceholderValue(ctx, d).Prev(ctx, cmpCtx)
 }
 
 // IsMin implements the Datum interface.
 func (d *Placeholder) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
-	return cmpCtx.MustGetPlaceholderValue(d).IsMin(ctx, cmpCtx)
+	return cmpCtx.MustGetPlaceholderValue(ctx, d).IsMin(ctx, cmpCtx)
 }
 
 // Next implements the Datum interface.
 func (d *Placeholder) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return cmpCtx.MustGetPlaceholderValue(d).Next(ctx, cmpCtx)
+	return cmpCtx.MustGetPlaceholderValue(ctx, d).Next(ctx, cmpCtx)
 }
 
 // IsMax implements the Datum interface.
 func (d *Placeholder) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
-	return cmpCtx.MustGetPlaceholderValue(d).IsMax(ctx, cmpCtx)
+	return cmpCtx.MustGetPlaceholderValue(ctx, d).IsMax(ctx, cmpCtx)
 }
 
 // Max implements the Datum interface.
 func (d *Placeholder) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return cmpCtx.MustGetPlaceholderValue(d).Max(ctx, cmpCtx)
+	return cmpCtx.MustGetPlaceholderValue(ctx, d).Max(ctx, cmpCtx)
 }
 
 // Min implements the Datum interface.
 func (d *Placeholder) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return cmpCtx.MustGetPlaceholderValue(d).Min(ctx, cmpCtx)
+	return cmpCtx.MustGetPlaceholderValue(ctx, d).Min(ctx, cmpCtx)
 }
 
 // Size implements the Datum interface.
