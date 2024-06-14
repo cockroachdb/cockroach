@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -122,13 +124,19 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (sp *bulkRowWriter) wrapDupError(ctx context.Context, orig error) error {
-	var typed *kvserverbase.DuplicateKeyError
-	if !errors.As(orig, &typed) {
-		return orig
+func (sp *bulkRowWriter) maybeWrapAsPGError(ctx context.Context, orig error) error {
+	if typed := new(kvserverbase.DuplicateKeyError); errors.As(orig, &typed) {
+		v := &roachpb.Value{RawBytes: typed.Value}
+		return row.NewUniquenessConstraintViolationError(ctx, sp.tableDesc, typed.Key, v)
 	}
-	v := &roachpb.Value{RawBytes: typed.Value}
-	return row.NewUniquenessConstraintViolationError(ctx, sp.tableDesc, typed.Key, v)
+	if typed := new(kvpb.KeyCollisionError); errors.As(orig, &typed) {
+		v := &roachpb.Value{RawBytes: typed.Value}
+		return row.NewUniquenessConstraintViolationError(ctx, sp.tableDesc, typed.Key, v)
+	}
+	if typed := new(kvpb.InsufficientSpaceError); errors.As(orig, &typed) {
+		return pgerror.WithCandidateCode(typed, pgcode.DiskFull)
+	}
+	return orig
 }
 
 func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) error {
@@ -159,13 +167,13 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
 				if err := adder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-					return sp.wrapDupError(ctx, err)
+					return sp.maybeWrapAsPGError(ctx, err)
 				}
 			}
 		}
 
 		if err := adder.Flush(ctx); err != nil {
-			return sp.wrapDupError(ctx, err)
+			return sp.maybeWrapAsPGError(ctx, err)
 		}
 		return nil
 	}
