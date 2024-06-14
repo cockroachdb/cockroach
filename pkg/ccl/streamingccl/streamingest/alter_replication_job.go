@@ -363,6 +363,10 @@ func alterTenantRestartReplication(
 		return err
 	}
 
+	if err := checkReplicationStartTime(ctx, p, tenInfo, resumeTS); err != nil {
+		return err
+	}
+
 	const revertFirst = true
 
 	jobID := p.ExecCfg().JobRegistry.MakeJobID()
@@ -454,6 +458,44 @@ func pickReplicationResume(
 		return reversalTS, nil
 	}
 	return resumeTS, nil
+}
+
+func checkReplicationStartTime(
+	ctx context.Context, p sql.PlanHookState, tenInfo *mtinfopb.TenantInfo, ts hlc.Timestamp,
+) error {
+	// TODO(mb): remove this once we have dummy producer jobs on dest cutover.
+	if tenInfo.PreviousSourceTenant != nil && tenInfo.PreviousSourceTenant.CutoverTimestamp.Equal(ts) {
+		return nil
+	}
+
+	pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
+
+	protected := hlc.MaxTimestamp
+	for _, id := range tenInfo.PhysicalReplicationProducerJobIDs {
+		j, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, id, p.InternalSQLTxn())
+		if err != nil {
+			return err
+		}
+		record, err := pts.GetRecord(ctx, j.Details().(jobspb.StreamReplicationDetails).ProtectedTimestampRecordID)
+		if err != nil {
+			if errors.Is(err, protectedts.ErrNotExists) {
+				continue
+			}
+			return err
+		}
+		if record.Timestamp.LessEq(ts) {
+			return nil
+		}
+		protected.Backward(record.Timestamp)
+	}
+
+	if protected == hlc.MaxTimestamp {
+		return errors.Newf("cannot resume replication into tenant %q by reverting to %s (no history is retained by %d producer jobs)",
+			tenInfo.Name, ts.GoTime(), len(tenInfo.PhysicalReplicationProducerJobIDs))
+	}
+
+	return errors.Newf("cannot resume replication into tenant %q by reverting to %s (history retained since %s)",
+		tenInfo.Name, ts.GoTime(), protected.GoTime())
 }
 
 // alterTenantJobCutover returns the cutover timestamp that was used to initiate

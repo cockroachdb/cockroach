@@ -220,14 +220,12 @@ func updateReplicationStreamProgress(
 				return nil
 			}
 
-			// TODO(casper): Error out when the protected timestamp moves backward as the ingestion
-			// processors may consume kv changes that are not protected. We are fine for now
-			// for the sake of long GC window.
-			// Now this can happen because the frontier processor moves forward the protected timestamp
-			// in the source cluster through heartbeats before it reports the new frontier to the
-			// ingestion job resumer which later updates the job high watermark. When we retry another
-			// ingestion using the previous ingestion high watermark, it can fall behind the
-			// source cluster protected timestamp.
+			// Error out when the protected timestamp moves backward as the ingestion processors
+			// may consume kv changes that are not protected. This can happen because the frontier
+			// processor moves forward the protected timestamp in the source cluster through
+			// heartbeats before it reports the new frontier to the ingestion job resumer which
+			// later updates the job high watermark. When we retry another ingestion using the
+			// previous ingestion high watermark, it can fall behind the source cluster protected timestamp.
 			if shouldUpdatePTS := ptsRecord.Timestamp.Less(consumedTime); shouldUpdatePTS {
 				if err = pts.UpdateTimestamp(ctx, ptsID, consumedTime); err != nil {
 					return err

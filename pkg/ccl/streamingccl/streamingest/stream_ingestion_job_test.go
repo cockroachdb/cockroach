@@ -204,14 +204,11 @@ func TestTenantStreamingFailback(t *testing.T) {
 	_, consumerGJobID := replicationtestutils.GetStreamJobIds(t, ctx, sqlB, roachpb.TenantName("g"))
 	var ts1 string
 	sqlA.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1)
-	t.Logf("waiting for g@%s", ts1)
-	replicationtestutils.WaitUntilReplicatedTime(t,
-		replicationtestutils.DecimalTimeToHLC(t, ts1),
-		sqlB,
-		jobspb.JobID(consumerGJobID))
 
-	t.Logf("completing replication on g@%s", ts1)
-	sqlB.Exec(t, fmt.Sprintf("ALTER VIRTUAL CLUSTER g COMPLETE REPLICATION TO SYSTEM TIME '%s'", ts1))
+	t.Log("waiting for initial scan on g")
+	replicationtestutils.WaitUntilStartTimeReached(t, sqlB, jobspb.JobID(consumerGJobID))
+	t.Log("completing replication on g to latest")
+	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g COMPLETE REPLICATION TO LATEST")
 
 	jobutils.WaitForJobToSucceed(t, sqlB, jobspb.JobID(consumerGJobID))
 	compareAtTimetamp(ts1)
