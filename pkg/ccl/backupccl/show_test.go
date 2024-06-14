@@ -372,7 +372,7 @@ GRANT UPDATE ON top_secret TO agent_bond;
 				`GRANT ALL ON DATABASE mi5 TO root WITH GRANT OPTION; `, `root`},
 			{`public`, `schema`, `GRANT ALL ON SCHEMA public TO admin WITH GRANT OPTION; ` +
 				`GRANT CREATE, USAGE ON SCHEMA public TO public; ` +
-				`GRANT ALL ON SCHEMA public TO root WITH GRANT OPTION; `, `admin`},
+				`GRANT ALL ON SCHEMA public TO root WITH GRANT OPTION; `, `root`},
 			{`locator`, `schema`, `GRANT ALL ON SCHEMA locator TO admin WITH GRANT OPTION; ` +
 				`GRANT CREATE ON SCHEMA locator TO agent_bond; ` +
 				`GRANT ALL ON SCHEMA locator TO m; ` +
@@ -409,16 +409,16 @@ ALTER TABLE locator.agent_locations OWNER TO agent_bond;
 		sqlDB.Exec(t, `BACKUP DATABASE mi5 INTO $1;`, showOwner)
 
 		want = [][]string{
-			{`agent_thomas`},
-			{`admin`},
-			{`agent_thomas`},
-			{`agent_bond`},
-			{`agent_bond`},
-			{`agent_bond`},
-			{`root`},
+			{`mi5`, `agent_thomas`},
+			{`public`, `root`},
+			{`locator`, `agent_thomas`},
+			{`continent`, `agent_bond`},
+			{`_continent`, `agent_bond`},
+			{`agent_locations`, `agent_bond`},
+			{`top_secret`, `root`},
 		}
 
-		showQuery = fmt.Sprintf(`SELECT owner FROM [SHOW BACKUP FROM LATEST IN '%s' WITH privileges]`, showOwner)
+		showQuery = fmt.Sprintf(`SELECT object_name, owner FROM [SHOW BACKUP FROM LATEST IN '%s' WITH privileges]`, showOwner)
 		sqlDBRestore.CheckQueryResults(t, showQuery, want)
 	}
 }

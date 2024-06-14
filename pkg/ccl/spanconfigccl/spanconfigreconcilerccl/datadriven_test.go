@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -84,7 +85,8 @@ import (
 // must be cleared out.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
+	skip.UnderRace(t, "descriptor ID generation is not deterministic under race")
+	skip.UnderDeadlock(t, "descriptor ID generation is not deterministic under deadlock")
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		defer log.Scope(t).Close(t)

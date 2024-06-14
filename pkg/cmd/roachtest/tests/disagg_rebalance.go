@@ -75,6 +75,21 @@ func registerDisaggRebalance(r registry.Registry) {
 				return
 			}
 
+			// Compact the ranges containing tpcc on the first three nodes. This increases
+			// the chances of a shared snapshot being sent when we start the 4th node.
+			t.Status("compacting tpcc db on nodes")
+			for i := 0; i < 3; i++ {
+				db := c.Conn(ctx, t.L(), i+1)
+				_, err := db.ExecContext(ctx, `SELECT crdb_internal.compact_engine_span(
+					$1, $2,
+					(SELECT raw_start_key FROM [SHOW RANGES FROM DATABASE tpcc WITH KEYS] LIMIT 1),
+					(SELECT raw_end_key FROM [SHOW RANGES FROM DATABASE tpcc WITH KEYS] LIMIT 1))`, i+1, i+1)
+				if err != nil {
+					t.Fatal(err)
+				}
+				db.Close()
+			}
+
 			t.Status("starting fourth node")
 			// Start the fourth node.
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(4))

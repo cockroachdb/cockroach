@@ -778,6 +778,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			walFailoverConfig,
 			storage.Attributes(spec.Attributes),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
+			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores.Specs)),
 		}
 		if len(storeKnobs.EngineKnobs) > 0 {
 			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)
