@@ -1424,7 +1424,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			}
 
 			if updateRunStatus {
-				md.Progress.RunningStatus = fmt.Sprintf("running: resolved=%s", frontier)
+				progress.RunningStatus = fmt.Sprintf("running: resolved=%s", frontier)
 			}
 
 			ju.UpdateProgress(progress)
@@ -1440,6 +1440,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 			return nil
 		}); err != nil {
 			return false, err
+		}
+		if log.V(2) {
+			log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s", frontier, checkpoint)
 		}
 	} else {
 		cf.js.coreProgress.SetHighwater(&frontier)
