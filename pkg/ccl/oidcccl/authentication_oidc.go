@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/ui"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -152,6 +153,7 @@ type oidcAuthenticationConf struct {
 	generateJWTAuthTokenUseToken tokenToUse
 	generateJWTAuthTokenSQLHost  string
 	generateJWTAuthTokenSQLPort  int64
+	httpClient                   *httputil.Client
 }
 
 // GetOIDCConf is used to extract certain parts of the OIDC
@@ -256,7 +258,10 @@ var NewOIDCManager func(context.Context, oidcAuthenticationConf, string, []strin
 	// https://github.com/coreos/go-oidc/blob/6d6be43e852de391805e5a5bc14146ba3cdd4195/oidc/verify.go#L125
 	ctx = context.WithoutCancel(ctx)
 
-	provider, err := oidc.NewProvider(ctx, conf.providerURL)
+	// Set the HTTP client in the context, as required by the `go-oidc` and `oauth2` packages.
+	octx := oidc.ClientContext(ctx, conf.httpClient.Client)
+
+	provider, err := oidc.NewProvider(octx, conf.providerURL)
 	if err != nil {
 		return nil, err
 	}
@@ -313,6 +318,7 @@ func reloadConfigLocked(
 		generateJWTAuthTokenUseToken: tokenToUse(OIDCGenerateClusterSSOTokenUseToken.Get(&st.SV)),
 		generateJWTAuthTokenSQLHost:  OIDCGenerateClusterSSOTokenSQLHost.Get(&st.SV),
 		generateJWTAuthTokenSQLPort:  OIDCGenerateClusterSSOTokenSQLPort.Get(&st.SV),
+		httpClient:                   httputil.NewClientWithTimeout(httputil.StandardHTTPTimeout),
 	}
 
 	if !oidcAuthServer.conf.enabled && conf.enabled {
@@ -469,7 +475,10 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		claims, err := oidcAuthentication.manager.ExchangeVerifyGetClaims(ctx, r.URL.Query().Get(codeKey), idTokenKey)
+		// Set the HTTP client in the context, as required by the `go-oidc` and `oauth2` packages.
+		octx := oidc.ClientContext(ctx, oidcAuthentication.conf.httpClient.Client)
+
+		claims, err := oidcAuthentication.manager.ExchangeVerifyGetClaims(octx, r.URL.Query().Get(codeKey), idTokenKey)
 		if err != nil {
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
@@ -563,7 +572,10 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		credentials, err := oidcAuthentication.manager.Exchange(ctx, r.URL.Query().Get(codeKey))
+		// Set the HTTP client in the context, as required by the `go-oidc` and `oauth2` packages.
+		octx := oidc.ClientContext(ctx, oidcAuthentication.conf.httpClient.Client)
+
+		credentials, err := oidcAuthentication.manager.Exchange(octx, r.URL.Query().Get(codeKey))
 		if err != nil {
 			log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
 			log.Errorf(ctx, "%v", r.URL.Query().Get(codeKey))
@@ -582,7 +594,7 @@ var ConfigureOIDC = func(
 			rawToken = rawIDToken
 		}
 
-		token, err := oidcAuthentication.manager.Verify(ctx, rawToken)
+		token, err := oidcAuthentication.manager.Verify(octx, rawToken)
 		if err != nil {
 			log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
