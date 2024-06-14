@@ -175,7 +175,7 @@ func (e *expander) maybeExpandPgURL(
 	}
 	switch strings.ToLower(m[1]) {
 	case ":lb":
-		url, err := c.loadBalancerURL(ctx, l, virtualClusterName, sqlInstance, DefaultAuthMode)
+		url, err := c.loadBalancerURL(ctx, l, virtualClusterName, sqlInstance, DefaultAuthMode())
 		return url, url != "", err
 	default:
 		if e.pgURLs[virtualClusterName] == nil {
