@@ -278,10 +278,3 @@ func (s *PersistedSQLStats) jitterInterval(interval time.Duration) time.Duration
 	jitteredInterval := time.Duration(frac * float64(interval.Nanoseconds()))
 	return jitteredInterval
 }
-
-// GetApplicationStats implements sqlstats.Provider interface.
-func (s *PersistedSQLStats) GetApplicationStats(
-	appName string, internal bool,
-) sqlstats.ApplicationStats {
-	return s.SQLStats.GetApplicationStats(appName, internal)
-}
