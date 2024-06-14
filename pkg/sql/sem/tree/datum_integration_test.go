@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strings"
 	"testing"
 	"time"
 
@@ -1164,104 +1163,6 @@ func TestDTimeTZNext(t *testing.T) {
 		} else {
 			assert.True(t, timeTZ.ToTime().Equal(prevTimeTZ.ToTime()))
 		}
-	}
-}
-
-func TestIsDistinctFrom(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	testData := []struct {
-		a        string // comma separated list of strings, `NULL` is converted to a NULL
-		b        string // same as a
-		expected bool
-	}{
-		{"a", "a", false},
-		{"a", "b", true},
-		{"b", "b", false},
-		{"a,a", "a,a", false},
-		{"a,a", "a,b", true},
-		{"a,a", "b,a", true},
-		{"a,a,a", "a,a,a", false},
-		{"a,a,a", "a,a,b", true},
-		{"a,a,a", "a,b,a", true},
-		{"a,a,a", "a,b,b", true},
-		{"a,a,a", "b,a,a", true},
-		{"a,a,a", "b,a,b", true},
-		{"a,a,a", "b,b,a", true},
-		{"a,a,a", "b,b,b", true},
-		{"NULL", "NULL", false},
-		{"a", "NULL", true},
-		{"a,a", "a,NULL", true},
-		{"a,a", "NULL,a", true},
-		{"a,a", "NULL,NULL", true},
-		{"a,NULL", "a,a", true},
-		{"a,NULL", "a,NULL", false},
-		{"a,NULL", "NULL,a", true},
-		{"a,NULL", "NULL,NULL", true},
-		{"NULL,a", "a,a", true},
-		{"NULL,a", "a,NULL", true},
-		{"NULL,a", "NULL,a", false},
-		{"NULL,a", "NULL,NULL", true},
-		{"NULL,NULL", "a,a", true},
-		{"NULL,NULL", "a,NULL", true},
-		{"NULL,NULL", "NULL,a", true},
-		{"NULL,NULL", "NULL,NULL", false},
-		{"a,a,a", "a,a,NULL", true},
-		{"a,a,a", "a,NULL,a", true},
-		{"a,a,a", "a,NULL,NULL", true},
-		{"a,a,a", "NULL,a,a", true},
-		{"a,a,a", "NULL,a,NULL", true},
-		{"a,a,a", "NULL,NULL,a", true},
-		{"a,a,a", "NULL,NULL,NULL", true},
-		{"a,NULL,a", "a,a,a", true},
-		{"a,NULL,a", "a,a,NULL", true},
-		{"a,NULL,a", "a,NULL,a", false},
-		{"a,NULL,a", "a,NULL,NULL", true},
-		{"a,NULL,a", "NULL,a,a", true},
-		{"a,NULL,a", "NULL,a,NULL", true},
-		{"a,NULL,a", "NULL,NULL,a", true},
-		{"a,NULL,a", "NULL,NULL,NULL", true},
-		{"NULL,a,NULL", "a,a,a", true},
-		{"NULL,a,NULL", "a,a,NULL", true},
-		{"NULL,a,NULL", "a,NULL,a", true},
-		{"NULL,a,NULL", "a,NULL,NULL", true},
-		{"NULL,a,NULL", "NULL,a,a", true},
-		{"NULL,a,NULL", "NULL,a,NULL", false},
-		{"NULL,a,NULL", "NULL,NULL,a", true},
-		{"NULL,a,NULL", "NULL,NULL,NULL", true},
-		{"NULL,NULL,NULL", "a,a,a", true},
-		{"NULL,NULL,NULL", "a,a,NULL", true},
-		{"NULL,NULL,NULL", "a,NULL,a", true},
-		{"NULL,NULL,NULL", "a,NULL,NULL", true},
-		{"NULL,NULL,NULL", "NULL,a,a", true},
-		{"NULL,NULL,NULL", "NULL,a,NULL", true},
-		{"NULL,NULL,NULL", "NULL,NULL,a", true},
-		{"NULL,NULL,NULL", "NULL,NULL,NULL", false},
-	}
-	convert := func(s string) tree.Datums {
-		splits := strings.Split(s, ",")
-		result := make(tree.Datums, len(splits))
-		for i, value := range splits {
-			if value == "NULL" {
-				result[i] = tree.DNull
-				continue
-			}
-			result[i] = tree.NewDString(value)
-		}
-		return result
-	}
-	for _, td := range testData {
-		t.Run(fmt.Sprintf("%s to %s", td.a, td.b), func(t *testing.T) {
-			datumsA := convert(td.a)
-			datumsB := convert(td.b)
-			if e, a := td.expected, datumsA.IsDistinctFrom(&eval.Context{}, datumsB); e != a {
-				if e {
-					t.Errorf("expected %s to be distinct from %s, but got %t", datumsA, datumsB, e)
-				} else {
-					t.Errorf("expected %s to not be distinct from %s, but got %t", datumsA, datumsB, e)
-				}
-			}
-		})
 	}
 }
 
