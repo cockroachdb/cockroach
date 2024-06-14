@@ -107,17 +107,6 @@ type optionFunc func(*rangeFeedConfig)
 
 func (o optionFunc) set(c *rangeFeedConfig) { o(c) }
 
-// WithoutMuxRangeFeed configures range feed to use legacy RangeFeed RPC.
-//
-// TODO(erikgrinaker): this should be removed when support for the legacy
-// RangeFeed protocol is no longer needed in mixed-version clusters, and we
-// don't need test coverage for it.
-func WithoutMuxRangeFeed() RangeFeedOption {
-	return optionFunc(func(c *rangeFeedConfig) {
-		c.disableMuxRangeFeed = true
-	})
-}
-
 // WithSystemTablePriority is used for system-internal rangefeeds, it uses a
 // higher admission priority during catch up scans.
 func WithSystemTablePriority() RangeFeedOption {
