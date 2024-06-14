@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"slices"
 	"sync"
 	"time"
@@ -23,13 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -75,14 +70,6 @@ var catchupStartupRate = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 	settings.WithPublic,
 )
-
-var rangefeedRangeStuckThreshold = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"kv.rangefeed.range_stuck_threshold",
-	"restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.rangefeed.closed_timestamp_refresh_interval takes precedence)",
-	time.Minute,
-	settings.NonNegativeDuration,
-	settings.WithPublic)
 
 // ForEachRangeFn is used to execute `fn` over each range in a rangefeed.
 type ForEachRangeFn func(fn ActiveRangeFeedIterFn) error
@@ -752,16 +739,6 @@ func handleRangefeedError(
 		// retry.
 		metrics.Errors.NodeNotFound.Inc(1)
 		return rangefeedErrorInfo{}, nil
-	case errors.Is(err, errRestartStuckRange):
-		// Stuck ranges indicate a bug somewhere in the system.  We are being
-		// defensive and attempt to restart this rangefeed. Usually, any
-		// stuck-ness is cleared out if we just attempt to re-resolve range
-		// descriptor and retry.
-		//
-		// The error contains the replica which we were waiting for.
-		log.Warningf(ctx, "restarting stuck rangefeed: %s", err)
-		metrics.Errors.Stuck.Inc(1)
-		return rangefeedErrorInfo{evict: true}, nil
 	case IsSendError(err):
 		metrics.Errors.SendErrors.Inc(1)
 		return rangefeedErrorInfo{evict: true}, nil
@@ -880,27 +857,6 @@ func makeRangeFeedRequest(
 	}
 }
 
-func defaultStuckRangeThreshold(st *cluster.Settings) func() time.Duration {
-	return func() time.Duration {
-		// Before the introduction of kv.rangefeed.range_stuck_threshold = 1m,
-		// clusters may already have kv.closed_timestamp.side_transport_interval or
-		// kv.rangefeed.closed_timestamp_refresh_interval set to >1m. This would
-		// cause rangefeeds to continually restart. We therefore conservatively use
-		// the highest value, with a 1.2 safety factor.
-		threshold := rangefeedRangeStuckThreshold.Get(&st.SV)
-		if threshold > 0 {
-			interval := kvserverbase.RangeFeedRefreshInterval.Get(&st.SV)
-			if i := closedts.SideTransportCloseInterval.Get(&st.SV); i > interval {
-				interval = i
-			}
-			if t := time.Duration(math.Round(1.2 * float64(interval))); t > threshold {
-				threshold = t
-			}
-		}
-		return threshold
-	}
-}
-
 // singleRangeFeed gathers and rearranges the replicas, and makes a RangeFeed
 // RPC call. Results will be sent on the provided channel. Returns the timestamp
 // of the maximum rangefeed checkpoint seen, which can be used to re-establish
@@ -933,9 +889,6 @@ func (ds *DistSender) singleRangeFeed(
 	}
 	defer transport.Release()
 
-	stuckWatcher := newStuckRangeFeedCanceler(cancelFeed, defaultStuckRangeThreshold(ds.st))
-	defer stuckWatcher.stop()
-
 	var streamCleanup func()
 	maybeCleanupStream := func() {
 		if streamCleanup != nil {
@@ -946,7 +899,6 @@ func (ds *DistSender) singleRangeFeed(
 	defer maybeCleanupStream()
 
 	for {
-		stuckWatcher.stop() // if timer is running from previous iteration, stop it now
 		if transport.IsExhausted() {
 			return args.Timestamp, newSendError(errors.New("sending to all replicas failed"))
 		}
@@ -980,17 +932,10 @@ func (ds *DistSender) singleRangeFeed(
 			continue
 		}
 
-		var event *kvpb.RangeFeedEvent
 		for {
-			if err := stuckWatcher.do(func() (err error) {
-				event, err = stream.Recv()
-				return err
-			}); err != nil {
+			event, err := stream.Recv()
+			if err != nil {
 				log.VErrEventf(ctx, 2, "RPC error: %s", err)
-				if stuckWatcher.stuck() {
-					afterCatchUpScan := active.catchupRes == nil
-					return args.Timestamp, handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold(), metrics)
-				}
 				return args.Timestamp, err
 			}
 
@@ -1024,13 +969,6 @@ func (ds *DistSender) singleRangeFeed(
 				if active.catchupRes != nil {
 					metrics.Errors.RangefeedErrorCatchup.Inc(1)
 				}
-				if stuckWatcher.stuck() {
-					// When the stuck watcher fired, and the rangefeed call is local,
-					// the remote might notice the cancellation first and return from
-					// Recv with an error that we need to special-case here.
-					afterCatchUpScan := active.catchupRes == nil
-					return args.Timestamp, handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold(), metrics)
-				}
 				return args.Timestamp, t.Error.GoError()
 			}
 			active.onRangeEvent(args.Replica.NodeID, desc.RangeID, event)
@@ -1043,23 +981,6 @@ func (ds *DistSender) singleRangeFeed(
 		}
 	}
 }
-
-func handleStuckEvent(
-	args *kvpb.RangeFeedRequest,
-	afterCatchupScan bool,
-	threshold time.Duration,
-	m *DistSenderRangeFeedMetrics,
-) error {
-	if afterCatchupScan {
-		telemetry.Count("rangefeed.stuck.after-catchup-scan")
-	} else {
-		telemetry.Count("rangefeed.stuck.during-catchup-scan")
-	}
-	return errors.Wrapf(errRestartStuckRange, "waiting for r%d %s [threshold %s]", args.RangeID, args.Replica, threshold)
-}
-
-// sentinel error returned when cancelling rangefeed when it is stuck.
-var errRestartStuckRange = errors.New("rangefeed restarting due to inactivity")
 
 // TestingWithOnRangefeedEvent returns a test only option to modify rangefeed event.
 func TestingWithOnRangefeedEvent(

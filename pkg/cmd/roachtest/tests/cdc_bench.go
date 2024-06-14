@@ -163,10 +163,6 @@ func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSe
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.rangefeed.enabled"] = "true"
 
-	// Disable the stuck watcher, since it can cause continual catchup scans when
-	// ranges aren't able to keep up.
-	settings.ClusterSettings["kv.rangefeed.range_stuck_threshold"] = "0"
-
 	// Checkpoint frequently.  Some of the larger benchmarks might overload the
 	// cluster.  Producing frequent span-level checkpoints helps with recovery.
 	settings.ClusterSettings["changefeed.frontier_checkpoint_frequency"] = "60s"
