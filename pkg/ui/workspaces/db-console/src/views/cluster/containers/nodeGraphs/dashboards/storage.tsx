@@ -231,6 +231,50 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="L0 SSTable Count"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={`The number of L0 SSTables in use for each store ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="sstables">
+        {nodeIDs.flatMap(nid => (
+          storeIDsForNode(storeIDsByNodeID, nid).map(sid => (
+            <Metric
+              key={`${nid}-${sid}`}
+              name="cr.store.storage.l0-num-files"
+              title={`${getNodeNameById(nid)},s${sid}`}
+              sources={[sid]}
+            />
+          ))
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="L0 SSTable Size"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={`The size of all L0 SSTables in use for each store ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="Size" units={AxisUnits.Bytes}>
+        {nodeIDs.flatMap(nid => (
+          storeIDsForNode(storeIDsByNodeID, nid).map(sid => (
+            <Metric
+              key={`${nid}-${sid}`}
+              name="cr.store.storage.l0-level-size"
+              title={`${getNodeNameById(nid)},s${sid}`}
+              sources={[sid]}
+            />
+          ))
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="File Descriptors"
       sources={nodeSources}
       isKvGraph={true}
