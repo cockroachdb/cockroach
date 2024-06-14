@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
@@ -76,10 +77,19 @@ func TestComposeCompare(t *testing.T) {
 		// start up docker-compose, but the files themselves will be
 		// Bazel-built symlinks. We want to copy these files to a
 		// different temporary location.
-		composeBinsDir := t.TempDir()
-		compareDir = composeBinsDir
-		cockroachBin = filepath.Join(composeBinsDir, "cockroach")
-		libGeosDir = filepath.Join(composeBinsDir, "lib")
+		compareDir, err = os.MkdirTemp(datapathutils.DebuggableTempDir(), "TestComposeCompare")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if t.Failed() {
+				return
+			}
+			// Temporarily commented for debugging.
+			// _ = os.RemoveAll(compareDir)
+		})
+		cockroachBin = filepath.Join(compareDir, "cockroach")
+		libGeosDir = filepath.Join(compareDir, "lib")
 		if err = os.MkdirAll(libGeosDir, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -93,7 +103,7 @@ func TestComposeCompare(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if err = copyBin(*flagCompare, filepath.Join(composeBinsDir, "compare.test")); err != nil {
+		if err = copyBin(*flagCompare, filepath.Join(compareDir, "compare.test")); err != nil {
 			t.Fatal(err)
 		}
 		if *flagArtifacts == "" {
@@ -137,6 +147,7 @@ func TestComposeCompare(t *testing.T) {
 		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
 		"COCKROACH_RUN_COMPOSE_COMPARE=true",
 	}
+	t.Logf("running: %s", cmd)
 	out, err := cmd.CombinedOutput()
 	t.Log(string(out))
 	if err != nil {
