@@ -179,7 +179,7 @@ func checkEncDatumCmp(
 
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	if val, err := dec1.Compare(typ, a, evalCtx, &dec2); err != nil {
+	if val, err := dec1.Compare(context.Background(), typ, a, evalCtx, &dec2); err != nil {
 		t.Fatal(err)
 	} else if val != expectedCmp {
 		t.Errorf("comparing %s (%s), %s (%s) resulted in %d, expected %d",
@@ -233,7 +233,7 @@ func TestEncDatumCompare(t *testing.T) {
 		v1 := rowenc.DatumToEncDatum(typ, d1)
 		v2 := rowenc.DatumToEncDatum(typ, d2)
 
-		if val, err := v1.Compare(typ, a, evalCtx, &v2); err != nil {
+		if val, err := v1.Compare(context.Background(), typ, a, evalCtx, &v2); err != nil {
 			t.Fatal(err)
 		} else if val != -1 {
 			t.Errorf("compare(1, 2) = %d", val)
@@ -456,7 +456,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 		for i := range typs {
 			typs[i] = types.Int
 		}
-		cmp, err := c.row1.Compare(typs, a, c.ord, evalCtx, c.row2)
+		cmp, err := c.row1.Compare(context.Background(), typs, a, c.ord, evalCtx, c.row2)
 		if err != nil {
 			t.Error(err)
 		} else if cmp != c.cmp {

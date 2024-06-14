@@ -195,7 +195,7 @@ func TestRouters(t *testing.T) {
 							for _, row2 := range r2 {
 								equal := true
 								for _, c := range tc.spec.HashColumns {
-									cmp, err := row[c].Compare(types[c], alloc, evalCtx, &row2[c])
+									cmp, err := row[c].Compare(ctx, types[c], alloc, evalCtx, &row2[c])
 									if err != nil {
 										t.Fatal(err)
 									}
@@ -230,7 +230,7 @@ func TestRouters(t *testing.T) {
 
 						equal := true
 						for j, c := range row {
-							cmp, err := c.Compare(types[j], alloc, evalCtx, &row2[j])
+							cmp, err := c.Compare(ctx, types[j], alloc, evalCtx, &row2[j])
 							if err != nil {
 								t.Fatal(err)
 							}
@@ -922,7 +922,7 @@ func TestRouterDiskSpill(t *testing.T) {
 			}
 			// Verify correct order (should be the order in which we added rows).
 			for j, c := range row {
-				if cmp, err := c.Compare(types.Int, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
+				if cmp, err := c.Compare(ctx, types.Int, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
 					t.Fatal(err)
 				} else if cmp != 0 {
 					t.Fatalf(

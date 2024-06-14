@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -359,7 +360,9 @@ func ConcatArrays(typ *types.T, left Datum, right Datum) (Datum, error) {
 }
 
 // ArrayContains return true if the haystack contains all needles.
-func ArrayContains(cmpCtx CompareContext, haystack *DArray, needles *DArray) (*DBool, error) {
+func ArrayContains(
+	ctx context.Context, cmpCtx CompareContext, haystack *DArray, needles *DArray,
+) (*DBool, error) {
 	if !haystack.ParamTyp.Equivalent(needles.ParamTyp) {
 		return DBoolFalse, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
 	}
@@ -370,7 +373,7 @@ func ArrayContains(cmpCtx CompareContext, haystack *DArray, needles *DArray) (*D
 		}
 		var found bool
 		for _, hay := range haystack.Array {
-			if cmp, err := needle.CompareError(cmpCtx, hay); err != nil {
+			if cmp, err := needle.CompareError(ctx, cmpCtx, hay); err != nil {
 				return DBoolFalse, err
 			} else if cmp == 0 {
 				found = true
@@ -386,7 +389,9 @@ func ArrayContains(cmpCtx CompareContext, haystack *DArray, needles *DArray) (*D
 
 // ArrayOverlaps return true if there is even one element
 // common between the left and right arrays.
-func ArrayOverlaps(cmpCtx CompareContext, array, other *DArray) (*DBool, error) {
+func ArrayOverlaps(
+	ctx context.Context, cmpCtx CompareContext, array, other *DArray,
+) (*DBool, error) {
 	if !array.ParamTyp.Equivalent(other.ParamTyp) {
 		return nil, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
 	}
@@ -396,7 +401,7 @@ func ArrayOverlaps(cmpCtx CompareContext, array, other *DArray) (*DBool, error) 
 			continue
 		}
 		for _, hay := range other.Array {
-			if cmp, err := needle.CompareError(cmpCtx, hay); err != nil {
+			if cmp, err := needle.CompareError(ctx, cmpCtx, hay); err != nil {
 				return DBoolFalse, err
 			} else if cmp == 0 {
 				return DBoolTrue, nil

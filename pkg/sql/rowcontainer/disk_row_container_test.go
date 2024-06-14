@@ -42,6 +42,7 @@ import (
 // is invalid. Note that the comparison is only performed on the ordering
 // columns.
 func compareEncRows(
+	ctx context.Context,
 	lTypes []*types.T,
 	l, r rowenc.EncDatumRow,
 	e *eval.Context,
@@ -50,7 +51,7 @@ func compareEncRows(
 ) (int, error) {
 	for _, orderInfo := range ordering {
 		col := orderInfo.ColIdx
-		cmp, err := l[col].Compare(lTypes[col], d, e, &r[col])
+		cmp, err := l[col].Compare(ctx, lTypes[col], d, e, &r[col])
 		if err != nil {
 			return 0, err
 		}
@@ -69,6 +70,7 @@ func compareEncRows(
 // returned is invalid. Note that the comparison is only performed on the
 // ordering columns.
 func compareRowToEncRow(
+	ctx context.Context,
 	lTypes []*types.T,
 	l tree.Datums,
 	r rowenc.EncDatumRow,
@@ -81,7 +83,7 @@ func compareRowToEncRow(
 		if err := r[col].EnsureDecoded(lTypes[col], d); err != nil {
 			return 0, err
 		}
-		cmp, err := l[col].CompareError(e, r[col].Datum)
+		cmp, err := l[col].CompareError(ctx, e, r[col].Datum)
 		if err != nil {
 			return 0, err
 		}
@@ -210,7 +212,7 @@ func TestDiskRowContainer(t *testing.T) {
 
 					// Check equality of the row we wrote and the row we read.
 					for i := range row {
-						if cmp, err := readEncRow[i].Compare(typs[i], d.datumAlloc, &evalCtx, &row[i]); err != nil {
+						if cmp, err := readEncRow[i].Compare(ctx, typs[i], d.datumAlloc, &evalCtx, &row[i]); err != nil {
 							t.Fatal(err)
 						} else if cmp != 0 {
 							t.Fatalf("encoded %s but decoded %s", row.String(typs), readEncRow.String(typs))
@@ -223,7 +225,7 @@ func TestDiskRowContainer(t *testing.T) {
 						t.Fatal(err)
 					}
 					for i := range row {
-						if cmp, err := readRow[i].CompareError(&evalCtx, row[i].Datum); err != nil {
+						if cmp, err := readRow[i].CompareError(ctx, &evalCtx, row[i].Datum); err != nil {
 							t.Fatal(err)
 						} else if cmp != 0 {
 							t.Fatalf("read %s but expected %s", readRow.String(), row.String(typs))
@@ -287,7 +289,7 @@ func TestDiskRowContainer(t *testing.T) {
 					// Check sorted order.
 					sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
 					if cmp, err := compareEncRows(
-						types, sortedRows.scratchEncRow, row, &evalCtx, d.datumAlloc, ordering,
+						ctx, types, sortedRows.scratchEncRow, row, &evalCtx, d.datumAlloc, ordering,
 					); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
@@ -409,13 +411,13 @@ func makeUniqueRows(
 	// It is possible there was some duplication, so remove duplicates.
 	var alloc tree.DatumAlloc
 	sort.Slice(rows, func(i, j int) bool {
-		cmp, err := rows[i].Compare(types, &alloc, ordering, evalCtx, rows[j])
+		cmp, err := rows[i].Compare(context.Background(), types, &alloc, ordering, evalCtx, rows[j])
 		require.NoError(t, err)
 		return cmp < 0
 	})
 	deDupedRows := rows[:1]
 	for i := 1; i < len(rows); i++ {
-		cmp, err := rows[i].Compare(types, &alloc, ordering, evalCtx, deDupedRows[len(deDupedRows)-1])
+		cmp, err := rows[i].Compare(context.Background(), types, &alloc, ordering, evalCtx, deDupedRows[len(deDupedRows)-1])
 		require.NoError(t, err)
 		if cmp != 0 {
 			deDupedRows = append(deDupedRows, rows[i])
@@ -494,7 +496,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	// checkEqual checks that the given row is equal to otherRow.
 	checkEqual := func(row rowenc.EncDatumRow, otherRow rowenc.EncDatumRow) error {
 		for j, c := range row {
-			if cmp, err := c.Compare(types.Int, alloc, &evalCtx, &otherRow[j]); err != nil {
+			if cmp, err := c.Compare(ctx, types.Int, alloc, &evalCtx, &otherRow[j]); err != nil {
 				return err
 			} else if cmp != 0 {
 				return fmt.Errorf(

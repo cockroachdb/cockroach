@@ -12,6 +12,7 @@ package tree
 
 import (
 	"bytes"
+	"context"
 	"math/rand"
 	"testing"
 
@@ -144,7 +145,7 @@ type noopUnwrapCompareContext struct {
 	CompareContext
 }
 
-func (noopUnwrapCompareContext) UnwrapDatum(d Datum) Datum { return d }
+func (noopUnwrapCompareContext) UnwrapDatum(ctx context.Context, d Datum) Datum { return d }
 
 const randomArrayIterations = 1000
 const randomArrayMaxLength = 10

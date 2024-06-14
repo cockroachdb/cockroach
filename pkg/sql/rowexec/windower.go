@@ -782,7 +782,7 @@ func (n *partitionPeerGrouper) InSameGroup(i, j int) (bool, error) {
 			n.err = err
 			return false, n.err
 		}
-		if c, err := da.CompareError(n.evalCtx, db); err != nil {
+		if c, err := da.CompareError(n.ctx, n.evalCtx, db); err != nil {
 			n.err = err
 			return false, n.err
 		} else if c != 0 {

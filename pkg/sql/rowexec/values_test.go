@@ -82,7 +82,7 @@ func TestValuesProcessor(t *testing.T) {
 						t.Fatalf("row %d incorrect length %d, expected %d", i, len(res[i]), numCols)
 					}
 					for j, val := range res[i] {
-						cmp, err := val.Compare(colTypes[j], &a, evalCtx, &inRows[i][j])
+						cmp, err := val.Compare(context.Background(), colTypes[j], &a, evalCtx, &inRows[i][j])
 						if err != nil {
 							t.Fatal(err)
 						}

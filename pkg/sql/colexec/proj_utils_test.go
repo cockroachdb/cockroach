@@ -89,7 +89,7 @@ func assertProjOpAgainstRowByRow(
 		actualRow, meta := materializer.Next()
 		require.Nil(t, meta)
 		require.Equal(t, 1, len(actualRow))
-		cmp, err := expectedDatum.Compare(outputType, &da, evalCtx, &actualRow[0])
+		cmp, err := expectedDatum.Compare(ctx, outputType, &da, evalCtx, &actualRow[0])
 		require.NoError(t, err)
 		require.Equal(t, 0, cmp)
 	}

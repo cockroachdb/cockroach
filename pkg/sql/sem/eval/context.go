@@ -425,14 +425,14 @@ func (ec *Context) SetDeprecatedContext(ctx context.Context) context.Context {
 }
 
 // UnwrapDatum encapsulates UnwrapDatum for use in the tree.CompareContext.
-func (ec *Context) UnwrapDatum(d tree.Datum) tree.Datum {
+func (ec *Context) UnwrapDatum(ctx context.Context, d tree.Datum) tree.Datum {
 	if ec == nil {
 		// When ec is nil, then eval.UnwrapDatum is equivalent to
 		// tree.UnwrapDOidWrapper. We have this special handling in order to not
 		// hit a nil pointer exception when accessing deprecatedContext field.
 		return tree.UnwrapDOidWrapper(d)
 	}
-	return UnwrapDatum(ec.deprecatedContext, ec, d)
+	return UnwrapDatum(ctx, ec, d)
 }
 
 // MustGetPlaceholderValue is part of the tree.CompareContext interface.

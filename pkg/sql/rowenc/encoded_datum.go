@@ -395,16 +395,21 @@ func (ed *EncDatum) Fingerprint(
 //	0  if the receiver is equal to rhs,
 //	+1 if the receiver is greater than rhs.
 func (ed *EncDatum) Compare(
-	typ *types.T, a *tree.DatumAlloc, evalCtx *eval.Context, rhs *EncDatum,
+	ctx context.Context, typ *types.T, a *tree.DatumAlloc, evalCtx *eval.Context, rhs *EncDatum,
 ) (int, error) {
-	return ed.CompareEx(typ, a, evalCtx, rhs, typ)
+	return ed.CompareEx(ctx, typ, a, evalCtx, rhs, typ)
 }
 
 // CompareEx is the same as Compare but allows specifying the type of RHS
 // EncDatum in case it's different from ed (e.g. we might be comparing Oid
 // family types with different Oids).
 func (ed *EncDatum) CompareEx(
-	typ *types.T, a *tree.DatumAlloc, evalCtx *eval.Context, rhs *EncDatum, rhsTyp *types.T,
+	ctx context.Context,
+	typ *types.T,
+	a *tree.DatumAlloc,
+	evalCtx *eval.Context,
+	rhs *EncDatum,
+	rhsTyp *types.T,
 ) (int, error) {
 	// TODO(radu): if we have both the Datum and a key encoding available, which
 	// one would be faster to use?
@@ -422,7 +427,7 @@ func (ed *EncDatum) CompareEx(
 	if err := rhs.EnsureDecoded(rhsTyp, a); err != nil {
 		return 0, err
 	}
-	return ed.Datum.CompareError(evalCtx, rhs.Datum)
+	return ed.Datum.CompareError(ctx, evalCtx, rhs.Datum)
 }
 
 // GetInt decodes an EncDatum that is known to be of integer type and returns
@@ -556,18 +561,20 @@ func EncDatumRowToDatums(
 // {{0, asc}, {1, asc}} (i.e. ordered by first column and then by second
 // column).
 func (r EncDatumRow) Compare(
+	ctx context.Context,
 	types []*types.T,
 	a *tree.DatumAlloc,
 	ordering colinfo.ColumnOrdering,
 	evalCtx *eval.Context,
 	rhs EncDatumRow,
 ) (int, error) {
-	return r.CompareEx(types, a, ordering, evalCtx, rhs, types)
+	return r.CompareEx(ctx, types, a, ordering, evalCtx, rhs, types)
 }
 
 // CompareEx is the same as Compare but allows specifying a different type
 // schema for RHS row.
 func (r EncDatumRow) CompareEx(
+	ctx context.Context,
 	types []*types.T,
 	a *tree.DatumAlloc,
 	ordering colinfo.ColumnOrdering,
@@ -582,7 +589,7 @@ func (r EncDatumRow) CompareEx(
 		))
 	}
 	for _, c := range ordering {
-		cmp, err := r[c.ColIdx].CompareEx(types[c.ColIdx], a, evalCtx, &rhs[c.ColIdx], rhsTypes[c.ColIdx])
+		cmp, err := r[c.ColIdx].CompareEx(ctx, types[c.ColIdx], a, evalCtx, &rhs[c.ColIdx], rhsTypes[c.ColIdx])
 		if err != nil {
 			return 0, err
 		}
@@ -598,6 +605,7 @@ func (r EncDatumRow) CompareEx(
 
 // CompareToDatums is a version of Compare which compares against decoded Datums.
 func (r EncDatumRow) CompareToDatums(
+	ctx context.Context,
 	types []*types.T,
 	a *tree.DatumAlloc,
 	ordering colinfo.ColumnOrdering,
@@ -608,7 +616,7 @@ func (r EncDatumRow) CompareToDatums(
 		if err := r[c.ColIdx].EnsureDecoded(types[c.ColIdx], a); err != nil {
 			return 0, err
 		}
-		cmp, err := r[c.ColIdx].Datum.CompareError(evalCtx, rhs[c.ColIdx])
+		cmp, err := r[c.ColIdx].Datum.CompareError(ctx, evalCtx, rhs[c.ColIdx])
 		if err != nil {
 			return 0, err
 		}

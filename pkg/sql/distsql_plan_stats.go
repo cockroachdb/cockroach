@@ -317,7 +317,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 			"column %s does not have a prior statistic",
 			column.GetName())
 	}
-	lowerBound, upperBound, err := bounds.GetUsingExtremesBounds(planCtx.EvalContext(), histogram)
+	lowerBound, upperBound, err := bounds.GetUsingExtremesBounds(ctx, planCtx.EvalContext(), histogram)
 	if err != nil {
 		return nil, err
 	}

@@ -11,6 +11,7 @@
 package tree_test
 
 import (
+	"context"
 	"math"
 	"testing"
 
@@ -32,6 +33,7 @@ func TestDatumPrevNext(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	rng, _ := randutil.NewTestRand()
+	ctx := context.Background()
 	var evalCtx eval.Context
 	const numRuns = 1000
 	for i := 0; i < numRuns; i++ {
@@ -50,14 +52,14 @@ func TestDatumPrevNext(t *testing.T) {
 		}
 		if !d.IsMin(&evalCtx) {
 			if prev, ok := tree.DatumPrev(d, &evalCtx, &evalCtx.CollationEnv); ok {
-				cmp, err := d.CompareError(&evalCtx, prev)
+				cmp, err := d.CompareError(ctx, &evalCtx, prev)
 				require.NoError(t, err)
 				require.True(t, cmp > 0, "d=%s, prev=%s, type=%s", d.String(), prev.String(), d.ResolvedType().SQLString())
 			}
 		}
 		if !d.IsMax(&evalCtx) {
 			if next, ok := tree.DatumNext(d, &evalCtx, &evalCtx.CollationEnv); ok {
-				cmp, err := d.CompareError(&evalCtx, next)
+				cmp, err := d.CompareError(ctx, &evalCtx, next)
 				require.NoError(t, err)
 				require.True(t, cmp < 0, "d=%s, next=%s, type=%s", d.String(), next.String(), d.ResolvedType().SQLString())
 			}

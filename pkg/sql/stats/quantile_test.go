@@ -11,6 +11,7 @@
 package stats
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/bits"
@@ -51,7 +52,7 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 						t.Errorf("seed: %v unexpected makeQuantile error: %v", seed, err)
 						return
 					}
-					hist2, err := qfun.toHistogram(colType, rowCount)
+					hist2, err := qfun.toHistogram(context.Background(), colType, rowCount)
 					if err != nil {
 						t.Errorf("seed: %v unexpected quantile.toHistogram error: %v", seed, err)
 						return
@@ -563,7 +564,7 @@ func TestQuantileToHistogram(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			hist, err := tc.qfun.toHistogram(types.Float, tc.rows)
+			hist, err := tc.qfun.toHistogram(context.Background(), types.Float, tc.rows)
 			if err != nil {
 				if !tc.err {
 					t.Errorf("test case %d unexpected quantile.toHistogram err: %v", i, err)
@@ -840,6 +841,7 @@ func TestQuantileValueRoundTrip(t *testing.T) {
 			err: true,
 		},
 	}
+	ctx := context.Background()
 	var compareCtx *eval.Context
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
@@ -864,7 +866,7 @@ func TestQuantileValueRoundTrip(t *testing.T) {
 				t.Errorf("test case %d (%v) unexpected fromQuantileValue err: %v", i, tc.typ.Name(), err)
 				return
 			}
-			cmp, err := res.CompareError(compareCtx, tc.dat)
+			cmp, err := res.CompareError(ctx, compareCtx, tc.dat)
 			if err != nil {
 				t.Errorf("test case %d (%v) unexpected CompareError err: %v", i, tc.typ.Name(), err)
 				return
@@ -1117,6 +1119,7 @@ func TestQuantileValueRoundTripOverflow(t *testing.T) {
 			res: quantileMaxTimestampSec,
 		},
 	}
+	ctx := context.Background()
 	var compareCtx *eval.Context
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
@@ -1131,7 +1134,7 @@ func TestQuantileValueRoundTripOverflow(t *testing.T) {
 				t.Errorf("test case %d (%v) expected fromQuantileValue err", i, tc.typ.Name())
 				return
 			}
-			cmp, err := d.CompareError(compareCtx, tc.dat)
+			cmp, err := d.CompareError(ctx, compareCtx, tc.dat)
 			if err != nil {
 				t.Errorf("test case %d (%v) unexpected CompareError err: %v", i, tc.typ.Name(), err)
 				return

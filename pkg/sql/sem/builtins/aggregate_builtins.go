@@ -3637,7 +3637,7 @@ func (a *maxAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datu
 		a.max = datum
 		return nil
 	}
-	c, err := a.max.CompareError(a.evalCtx, datum)
+	c, err := a.max.CompareError(ctx, a.evalCtx, datum)
 	if err != nil {
 		return err
 	}
@@ -3710,7 +3710,7 @@ func (a *minAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datu
 		a.min = datum
 		return nil
 	}
-	c, err := a.min.CompareError(a.evalCtx, datum)
+	c, err := a.min.CompareError(ctx, a.evalCtx, datum)
 	if err != nil {
 		return err
 	}
