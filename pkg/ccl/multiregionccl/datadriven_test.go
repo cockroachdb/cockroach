@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -168,6 +169,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 						Locality: localityCfg,
 						Settings: st,
 						Knobs: base.TestingKnobs{
+							JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 							SQLExecutor: &sql.ExecutorTestingKnobs{
 								WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 									mu.Lock()
@@ -383,12 +385,20 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 
 							// We want to only initiate a lease transfer if our target replica
 							// is a voter. Otherwise, TransferRangeLease will silently fail.
-							newLeaseholderType := actualPlacement.getReplicaType(expectedLeaseIdx)
+							newLeaseholderType, found := actualPlacement.getReplicaType(expectedLeaseIdx)
+							if !found {
+								return errors.CombineErrors(
+									leaseErr,
+									errors.Newf(
+										"expected node %d to have a replica; it doesn't have one yet",
+										expectedLeaseIdx),
+								)
+							}
 							if newLeaseholderType != replicaTypeVoter {
 								return errors.CombineErrors(
 									leaseErr,
 									errors.Newf(
-										"expected node %s to be a voter but was %s",
+										"expected node %d to be a voter but was %s",
 										expectedLeaseIdx,
 										newLeaseholderType.String()))
 							}
@@ -438,7 +448,7 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 					}
 
 					return nil
-				}, 2*time.Minute); err != nil {
+				}, 5*time.Minute); err != nil {
 					return err.Error()
 				}
 
@@ -745,8 +755,9 @@ func (r *replicaPlacement) getLeaseholder() int {
 	return r.leaseholder
 }
 
-func (r *replicaPlacement) getReplicaType(nodeIdx int) replicaType {
-	return r.nodeToReplicaType[nodeIdx]
+func (r *replicaPlacement) getReplicaType(nodeIdx int) (_ replicaType, found bool) {
+	rType, found := r.nodeToReplicaType[nodeIdx]
+	return rType, found
 }
 
 func getRangeKeyForInput(
