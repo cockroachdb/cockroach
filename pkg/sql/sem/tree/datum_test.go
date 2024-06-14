@@ -160,7 +160,9 @@ type testTimestampCompareContext struct {
 	loc *time.Location
 }
 
-func (fcc *testTimestampCompareContext) MustGetPlaceholderValue(p *Placeholder) Datum {
+func (fcc *testTimestampCompareContext) MustGetPlaceholderValue(
+	ctx context.Context, p *Placeholder,
+) Datum {
 	panic("not implemented")
 }
 

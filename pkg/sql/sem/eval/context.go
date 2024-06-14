@@ -150,12 +150,6 @@ type Context struct {
 	// need to restore once we finish evaluating it.
 	iVarContainerStack []tree.IndexedVarContainer
 
-	// deprecatedContext holds the context in which the expression is evaluated.
-	//
-	// Deprecated: this field should not be used because an effort to remove it
-	// from Context is under way.
-	deprecatedContext context.Context
-
 	Planner Planner
 
 	StreamManagerFactory StreamManagerFactory
@@ -413,35 +407,18 @@ type RangeProber interface {
 	) error
 }
 
-// SetDeprecatedContext updates the context.Context of this Context. Previously
-// stored context is returned.
-//
-// Deprecated: this method should not be used because an effort to remove the
-// context.Context from Context is under way.
-func (ec *Context) SetDeprecatedContext(ctx context.Context) context.Context {
-	oldCtx := ec.deprecatedContext
-	ec.deprecatedContext = ctx
-	return oldCtx
-}
-
 // UnwrapDatum encapsulates UnwrapDatum for use in the tree.CompareContext.
 func (ec *Context) UnwrapDatum(ctx context.Context, d tree.Datum) tree.Datum {
-	if ec == nil {
-		// When ec is nil, then eval.UnwrapDatum is equivalent to
-		// tree.UnwrapDOidWrapper. We have this special handling in order to not
-		// hit a nil pointer exception when accessing deprecatedContext field.
-		return tree.UnwrapDOidWrapper(d)
-	}
 	return UnwrapDatum(ctx, ec, d)
 }
 
 // MustGetPlaceholderValue is part of the tree.CompareContext interface.
-func (ec *Context) MustGetPlaceholderValue(p *tree.Placeholder) tree.Datum {
+func (ec *Context) MustGetPlaceholderValue(ctx context.Context, p *tree.Placeholder) tree.Datum {
 	e, ok := ec.Placeholders.Value(p.Idx)
 	if !ok {
 		panic(errors.AssertionFailedf("fail"))
 	}
-	out, err := Expr(ec.deprecatedContext, ec, e)
+	out, err := Expr(ctx, ec, e)
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "fail"))
 	}
@@ -472,7 +449,6 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	ctx.TestingMon = monitor
 	ctx.Planner = &fakePlannerWithMonitor{monitor: monitor}
 	ctx.StreamManagerFactory = &fakeStreamManagerFactory{}
-	ctx.deprecatedContext = context.TODO()
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
