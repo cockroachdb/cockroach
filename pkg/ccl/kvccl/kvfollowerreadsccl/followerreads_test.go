@@ -538,9 +538,9 @@ func TestOracle(t *testing.T) {
 		{NodeID: 3, Address: util.MakeUnresolvedAddr("tcp", "3"), Locality: region("c")},
 	}
 	replicas := []roachpb.ReplicaDescriptor{
-		{NodeID: 1, StoreID: 1},
-		{NodeID: 2, StoreID: 2},
-		{NodeID: 3, StoreID: 3},
+		{NodeID: 1, StoreID: 1, ReplicaID: 1},
+		{NodeID: 2, StoreID: 2, ReplicaID: 2},
+		{NodeID: 3, StoreID: 3, ReplicaID: 3},
 	}
 	desc := &roachpb.RangeDescriptor{
 		InternalReplicas: replicas,
