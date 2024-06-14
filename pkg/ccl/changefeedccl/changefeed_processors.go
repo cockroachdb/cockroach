@@ -1699,6 +1699,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 		}); err != nil {
 			return false, err
 		}
+		if log.V(2) {
+			log.Infof(cf.Ctx(), "persisted frontier checkpoint: %s", checkpoint)
+		}
 	}
 
 	cf.localState.SetHighwater(frontier)
