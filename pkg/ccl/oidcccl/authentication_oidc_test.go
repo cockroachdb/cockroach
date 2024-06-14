@@ -17,7 +17,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/coreos/go-oidc"
@@ -505,4 +508,66 @@ func TestOIDCManagerInitialisationUnderNetworkAvailability(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOIDCProviderInitialization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Initiate a test server to handle `./well-known/openid-configuration`.
+	testServer := httptest.NewUnstartedServer(nil)
+	testServerURL := "http://" + testServer.Listener.Addr().String()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(
+		"GET /.well-known/openid-configuration",
+		func(w http.ResponseWriter, r *http.Request) {
+			// Serve the response locally from testdata.
+			dataBytes, err := os.ReadFile("testdata/issuer_well_known_openid_configuration")
+			require.NoError(t, err)
+
+			// We need to match the 'issuer' key in the response to the test server URL.
+			// Hence, we read the test response and overwrite the 'issuer'.
+			type providerJSON struct {
+				Issuer      string   `json:"issuer"`
+				AuthURL     string   `json:"authorization_endpoint"`
+				TokenURL    string   `json:"token_endpoint"`
+				JWKSURL     string   `json:"jwks_uri"`
+				UserInfoURL string   `json:"userinfo_endpoint"`
+				Algorithms  []string `json:"id_token_signing_alg_values_supported"`
+			}
+
+			var p providerJSON
+			err = json.Unmarshal(dataBytes, &p)
+			require.NoError(t, err)
+
+			p.Issuer = testServerURL
+
+			updatedBytes, err := json.Marshal(p)
+			require.NoError(t, err)
+
+			_, err = w.Write(updatedBytes)
+			require.NoError(t, err)
+		},
+	)
+
+	testServer.Config = &http.Server{
+		Handler: mux,
+	}
+	testServer.Start()
+	defer testServer.Close()
+
+	// Initialize the OIDC manager.
+	oidcConf := oidcAuthenticationConf{
+		providerURL: testServerURL,
+	}
+	iOIDCMgr, err := NewOIDCManager(context.Background(), oidcConf, "redirectURL", []string{})
+	require.NoError(t, err)
+	require.NotNil(t, iOIDCMgr)
+
+	oidcMgr, _ := iOIDCMgr.(*oidcManager)
+	require.NotNil(t, oidcMgr.verifier)
+	require.NotNil(t, oidcMgr.oauth2Config)
+	require.NotNil(t, oidcMgr.httpClient)
+	require.Equal(t, httputil.StandardHTTPTimeout, oidcMgr.httpClient.Timeout)
 }
