@@ -261,7 +261,7 @@ func (r *datumRows) Len() int {
 }
 
 func (r *datumRows) Less(i, j int) bool {
-	cmp, err := r.rows[i].CompareError(context.Background(), r.ctx, r.rows[j])
+	cmp, err := r.rows[i].Compare(context.Background(), r.ctx, r.rows[j])
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -310,7 +310,7 @@ func makeSortedPartition(testCfg *testConfig) (tree.Datums, *colexecutils.Spilli
 		insertBatch.ColVec(orderColIdx).Nulls().UnsetNulls()
 		peersVal := i == 0
 		if i > 0 {
-			cmp, err := val.CompareError(ctx, testCfg.evalCtx, last)
+			cmp, err := val.Compare(ctx, testCfg.evalCtx, last)
 			if err != nil {
 				colexecerror.InternalError(err)
 			}
@@ -492,7 +492,7 @@ func (c *peerGroupChecker) InSameGroup(i, j int) (bool, error) {
 		// All rows are in the same peer group.
 		return true, nil
 	}
-	cmp, err := c.partition[i].CompareError(context.Background(), &c.evalCtx, c.partition[j])
+	cmp, err := c.partition[i].Compare(context.Background(), &c.evalCtx, c.partition[j])
 	return cmp == 0, err
 }
 

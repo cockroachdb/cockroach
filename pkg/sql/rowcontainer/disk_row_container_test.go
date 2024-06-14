@@ -83,7 +83,7 @@ func compareRowToEncRow(
 		if err := r[col].EnsureDecoded(lTypes[col], d); err != nil {
 			return 0, err
 		}
-		cmp, err := l[col].CompareError(ctx, e, r[col].Datum)
+		cmp, err := l[col].Compare(ctx, e, r[col].Datum)
 		if err != nil {
 			return 0, err
 		}
@@ -225,7 +225,7 @@ func TestDiskRowContainer(t *testing.T) {
 						t.Fatal(err)
 					}
 					for i := range row {
-						if cmp, err := readRow[i].CompareError(ctx, &evalCtx, row[i].Datum); err != nil {
+						if cmp, err := readRow[i].Compare(ctx, &evalCtx, row[i].Datum); err != nil {
 							t.Fatal(err)
 						} else if cmp != 0 {
 							t.Fatalf("read %s but expected %s", readRow.String(), row.String(typs))

@@ -94,7 +94,7 @@ func testStartPreceding(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, off
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if cmp, err := value.CompareError(context.Background(), evalCtx, valueAt); err != nil {
+				if cmp, err := value.Compare(context.Background(), evalCtx, valueAt); err != nil {
 					t.Fatal(err)
 				} else if cmp <= 0 {
 					if idx != frameStartIdx {
@@ -153,7 +153,7 @@ func testStartFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, off
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if cmp, err := value.CompareError(context.Background(), evalCtx, valueAt); err != nil {
+				if cmp, err := value.Compare(context.Background(), evalCtx, valueAt); err != nil {
 					t.Fatal(err)
 				} else if cmp <= 0 {
 					if idx != frameStartIdx {
@@ -203,7 +203,7 @@ func testEndPreceding(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offse
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if cmp, err := value.CompareError(context.Background(), evalCtx, valueAt); err != nil {
+				if cmp, err := value.Compare(context.Background(), evalCtx, valueAt); err != nil {
 					t.Fatal(err)
 				} else if cmp >= 0 {
 					if idx+1 != frameEndIdx {
@@ -253,7 +253,7 @@ func testEndFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offse
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if cmp, err := value.CompareError(context.Background(), evalCtx, valueAt); err != nil {
+				if cmp, err := value.Compare(context.Background(), evalCtx, valueAt); err != nil {
 					t.Fatal(err)
 				} else if cmp >= 0 {
 					if idx+1 != frameEndIdx {

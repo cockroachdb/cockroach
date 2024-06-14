@@ -86,7 +86,7 @@ func TestIndexedVars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp, err := d.CompareError(ctx, evalCtx, tree.NewDInt(3+5*6)); err != nil {
+	if cmp, err := d.Compare(ctx, evalCtx, tree.NewDInt(3+5*6)); err != nil {
 		t.Fatal(err)
 	} else if cmp != 0 {
 		t.Errorf("invalid result %s (expected %d)", d, 3+5*6)

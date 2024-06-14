@@ -611,7 +611,7 @@ var mathBuiltins = map[string]builtinDefinition{
 				}
 
 				for i, v := range thresholds.Array {
-					if cmp, err := operand.CompareError(ctx, evalCtx, v); err != nil {
+					if cmp, err := operand.Compare(ctx, evalCtx, v); err != nil {
 						return tree.NewDInt(0), err
 					} else if cmp < 0 {
 						return tree.NewDInt(tree.DInt(i)), nil

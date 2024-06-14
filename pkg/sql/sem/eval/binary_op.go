@@ -158,7 +158,7 @@ func (e *evaluator) EvalCompareScalarOp(
 			return tree.DNull, nil
 		}
 	}
-	cmp, err := left.CompareError(ctx, e.ctx(), right)
+	cmp, err := left.Compare(ctx, e.ctx(), right)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (e *evaluator) EvalCompareTupleOp(
 			}
 		} else {
 			var err error
-			cmp, err = leftElem.CompareError(ctx, e.ctx(), rightElem)
+			cmp, err = leftElem.Compare(ctx, e.ctx(), rightElem)
 			if err != nil {
 				return tree.DNull, err
 			}
@@ -517,7 +517,7 @@ func (e *evaluator) EvalInTupleOp(
 		for _, val := range vtuple.D {
 			if val == tree.DNull {
 				sawNull = true
-			} else if cmp, err := val.CompareError(ctx, e.ctx(), arg); err != nil {
+			} else if cmp, err := val.Compare(ctx, e.ctx(), arg); err != nil {
 				return tree.DNull, err
 			} else if cmp == 0 {
 				return tree.DBoolTrue, nil

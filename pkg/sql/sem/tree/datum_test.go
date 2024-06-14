@@ -195,7 +195,7 @@ func BenchmarkDatumCompare(b *testing.B) {
 	} {
 		b.Run(tc.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_, _ = tc.d.CompareError(ctx, compareCtx, tc.other)
+				_, _ = tc.d.Compare(ctx, compareCtx, tc.other)
 			}
 		})
 	}

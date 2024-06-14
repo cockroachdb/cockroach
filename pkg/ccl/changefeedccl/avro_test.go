@@ -412,7 +412,7 @@ func TestAvroSchema(t *testing.T) {
 				require.NoError(t, err)
 				roundtripped, err := roundtrippedSchema.rowFromTextual(serialized)
 				require.NoError(t, err)
-				cmp, err := encDatums[1].Datum.CompareError(ctx, evalCtx, roundtripped[1].Datum)
+				cmp, err := encDatums[1].Datum.Compare(ctx, evalCtx, roundtripped[1].Datum)
 				require.NoError(t, err)
 				require.Equal(t, 0, cmp, `%s != %s`, encDatums[1].Datum, roundtripped[1].Datum)
 
@@ -420,7 +420,7 @@ func TestAvroSchema(t *testing.T) {
 				require.NoError(t, err)
 				roundtripped, err = roundtrippedSchema.RowFromBinary(serialized)
 				require.NoError(t, err)
-				cmp, err = encDatums[1].Datum.CompareError(ctx, evalCtx, roundtripped[1].Datum)
+				cmp, err = encDatums[1].Datum.Compare(ctx, evalCtx, roundtripped[1].Datum)
 				require.NoError(t, err)
 				require.Equal(t, 0, cmp, `%s != %s`, encDatums[1].Datum, roundtripped[1].Datum)
 			}

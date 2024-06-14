@@ -49,7 +49,7 @@ func TestEncodeDecode(t *testing.T) {
 		if err != nil {
 			return "error: " + err.Error()
 		}
-		if cmp, err := newD.CompareError(context.Background(), ctx, d); err != nil {
+		if cmp, err := newD.Compare(context.Background(), ctx, d); err != nil {
 			return "error: " + err.Error()
 		} else if cmp != 0 {
 			return "unequal"
@@ -86,7 +86,7 @@ func TestEncodeDecode(t *testing.T) {
 			return "error: " + err.Error()
 		}
 
-		expectedCmp, err := d1.CompareError(context.Background(), ctx, d2)
+		expectedCmp, err := d1.Compare(context.Background(), ctx, d2)
 		if err != nil {
 			return "error: " + err.Error()
 		}

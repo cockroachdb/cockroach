@@ -236,7 +236,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	gotString := tree.MustBeDString(got)
 	gotArray, _, err := tree.ParseDArrayFromString(evalCtx, string(gotString), types.Int)
 	require.NoError(t, err)
-	if cmp, err := gotArray.CompareError(ctx, evalCtx, d); err != nil {
+	if cmp, err := gotArray.Compare(ctx, evalCtx, d); err != nil {
 		t.Fatal(err)
 	} else if cmp != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
@@ -324,7 +324,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 					if _, ok := got.(*tree.DBytes); !ok {
 						t.Fatalf("parse does not return DBytes, got %T", got)
 					}
-					if cmp, err := got.CompareError(ctx, evalCtx, d); err != nil {
+					if cmp, err := got.Compare(ctx, evalCtx, d); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
 						t.Fatalf("expected %s, got %s", d, got)
@@ -776,7 +776,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 		b.StopTimer()
 		if err != nil {
 			b.Fatal(err)
-		} else if cmp, err := got.CompareError(ctx, evalCtx, expected); err != nil {
+		} else if cmp, err := got.Compare(ctx, evalCtx, expected); err != nil {
 			b.Fatal(err)
 		} else if cmp != 0 {
 			b.Fatalf("expected %s, got %s", expected, got)

@@ -427,7 +427,7 @@ func (ed *EncDatum) CompareEx(
 	if err := rhs.EnsureDecoded(rhsTyp, a); err != nil {
 		return 0, err
 	}
-	return ed.Datum.CompareError(ctx, evalCtx, rhs.Datum)
+	return ed.Datum.Compare(ctx, evalCtx, rhs.Datum)
 }
 
 // GetInt decodes an EncDatum that is known to be of integer type and returns
@@ -616,7 +616,7 @@ func (r EncDatumRow) CompareToDatums(
 		if err := r[c.ColIdx].EnsureDecoded(types[c.ColIdx], a); err != nil {
 			return 0, err
 		}
-		cmp, err := r[c.ColIdx].Datum.CompareError(ctx, evalCtx, rhs[c.ColIdx])
+		cmp, err := r[c.ColIdx].Datum.Compare(ctx, evalCtx, rhs[c.ColIdx])
 		if err != nil {
 			return 0, err
 		}

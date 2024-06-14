@@ -309,7 +309,7 @@ func (q quantile) toHistogram(
 		if err != nil {
 			return histogram{}, err
 		}
-		cmp, err := upperBound.CompareError(ctx, compareCtx, currentUpperBound)
+		cmp, err := upperBound.Compare(ctx, compareCtx, currentUpperBound)
 		if err != nil {
 			return histogram{}, err
 		}

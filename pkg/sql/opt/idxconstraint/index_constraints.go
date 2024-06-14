@@ -960,7 +960,7 @@ func (c *indexConstraintCtx) getMaxSimplifyPrefix(idxConstraint *constraint.Cons
 		j := 0
 		// Find the longest prefix of equal values.
 		for ; j < sp.StartKey().Length() && j < sp.EndKey().Length(); j++ {
-			if cmp, err := sp.StartKey().Value(j).CompareError(c.ctx, c.evalCtx, sp.EndKey().Value(j)); err != nil {
+			if cmp, err := sp.StartKey().Value(j).Compare(c.ctx, c.evalCtx, sp.EndKey().Value(j)); err != nil {
 				panic(err)
 			} else if cmp != 0 {
 				break

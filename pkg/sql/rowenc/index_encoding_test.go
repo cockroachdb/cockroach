@@ -321,7 +321,7 @@ func TestIndexKey(t *testing.T) {
 
 			for j, value := range values {
 				testValue := testValues[colMap.GetDefault(index.GetKeyColumnID(j))]
-				if cmp, err := value.CompareError(ctx, evalCtx, testValue); err != nil {
+				if cmp, err := value.Compare(ctx, evalCtx, testValue); err != nil {
 					t.Fatal(err)
 				} else if cmp != 0 {
 					t.Fatalf("%d: value %d got %q but expected %q", i, j, value, testValue)
@@ -994,7 +994,7 @@ func containsNonNullUniqueElement(
 				lastVal = val
 				continue
 			}
-			if cmp, err := lastVal.CompareError(ctx, evalCtx, val); err != nil {
+			if cmp, err := lastVal.Compare(ctx, evalCtx, val); err != nil {
 				return false, err
 			} else if cmp != 0 {
 				return false, nil

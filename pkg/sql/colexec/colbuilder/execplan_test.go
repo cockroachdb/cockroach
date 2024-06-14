@@ -158,7 +158,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		}
 		require.Equal(t, 1, len(row))
 		expected := tree.DInt(rowIdx)
-		cmp, err := row[0].Datum.CompareError(ctx, &evalCtx, &expected)
+		cmp, err := row[0].Datum.Compare(ctx, &evalCtx, &expected)
 		require.NoError(t, err)
 		require.True(t, cmp == 0)
 		rowIdx++

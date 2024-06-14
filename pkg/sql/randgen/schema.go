@@ -689,7 +689,7 @@ func isDuplicateExpr(ctx context.Context, e tree.Exprs, list []tree.ListPartitio
 			n := 0
 			// Check each expression in the tuple.
 			for ; n < len(tp.Exprs); n++ {
-				cmp, err := tp.Exprs[n].(tree.Datum).CompareError(ctx, &eval.Context{}, e[n].(tree.Datum))
+				cmp, err := tp.Exprs[n].(tree.Datum).Compare(ctx, &eval.Context{}, e[n].(tree.Datum))
 				if err != nil {
 					return false, err
 				}

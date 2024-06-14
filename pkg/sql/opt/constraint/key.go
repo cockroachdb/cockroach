@@ -322,7 +322,7 @@ func (c *KeyContext) Compare(colIdx int, a, b tree.Datum) int {
 	if a == b {
 		return 0
 	}
-	cmp, err := a.CompareError(c.Ctx, c.EvalCtx, b)
+	cmp, err := a.Compare(c.Ctx, c.EvalCtx, b)
 	if err != nil {
 		panic(err)
 	}

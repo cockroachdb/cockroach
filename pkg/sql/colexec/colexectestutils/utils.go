@@ -99,7 +99,7 @@ func (t Tuple) less(
 		// Check whether we have datum-backed values.
 		if d1, ok := t[i].(tree.Datum); ok {
 			d2 := other[i].(tree.Datum)
-			cmp, err := d1.CompareError(ctx, evalCtx, d2)
+			cmp, err := d1.Compare(ctx, evalCtx, d2)
 			if err != nil {
 				colexecerror.InternalError(err)
 			}
@@ -204,7 +204,7 @@ func (t Tuple) less(
 					// tuples.sort for more details.
 					d1 := stringToDatum(lString, d.ResolvedType(), evalCtx)
 					d2 := stringToDatum(rString, d.ResolvedType(), evalCtx)
-					cmp, err := d1.CompareError(ctx, evalCtx, d2)
+					cmp, err := d1.Compare(ctx, evalCtx, d2)
 					if err != nil {
 						colexecerror.InternalError(err)
 					}
@@ -1474,7 +1474,7 @@ func tupleEquals(ctx context.Context, expected Tuple, actual Tuple, evalCtx *eva
 				default:
 					return false
 				}
-				if cmp, err := d1.CompareError(ctx, evalCtx, d2); err != nil {
+				if cmp, err := d1.Compare(ctx, evalCtx, d2); err != nil {
 					colexecerror.InternalError(err)
 				} else if cmp == 0 {
 					continue

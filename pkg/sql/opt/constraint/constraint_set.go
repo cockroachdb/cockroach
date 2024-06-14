@@ -346,7 +346,7 @@ func (s *Set) HasSingleColumnNonNullConstValues(
 		if startVal == tree.DNull {
 			return false
 		}
-		if cmp, err := startVal.CompareError(ctx, evalCtx, end.Value(0)); err != nil {
+		if cmp, err := startVal.Compare(ctx, evalCtx, end.Value(0)); err != nil {
 			panic(err)
 		} else if cmp != 0 {
 			return false

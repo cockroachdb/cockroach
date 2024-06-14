@@ -698,5 +698,5 @@ func compareForWindow(ctx context.Context, evalCtx *Context, left, right tree.Da
 			return 0, err
 		}
 	}
-	return left.CompareError(ctx, evalCtx, right)
+	return left.Compare(ctx, evalCtx, right)
 }

@@ -85,7 +85,7 @@ func (sp *Span) HasSingleKey(ctx context.Context, evalCtx *eval.Context) bool {
 		return false
 	}
 	for i, n := 0, l; i < n; i++ {
-		if cmp, err := sp.start.Value(i).CompareError(ctx, evalCtx, sp.end.Value(i)); err != nil {
+		if cmp, err := sp.start.Value(i).Compare(ctx, evalCtx, sp.end.Value(i)); err != nil {
 			panic(err)
 		} else if cmp != 0 {
 			return false
@@ -105,7 +105,7 @@ func (sp *Span) Prefix(ctx context.Context, evalCtx *eval.Context) int {
 		if start.Length() <= prefix || end.Length() <= prefix {
 			return prefix
 		}
-		if cmp, err := start.Value(prefix).CompareError(ctx, evalCtx, end.Value(prefix)); err != nil {
+		if cmp, err := start.Value(prefix).Compare(ctx, evalCtx, end.Value(prefix)); err != nil {
 			panic(err)
 		} else if cmp != 0 {
 			return prefix

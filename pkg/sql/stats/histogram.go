@@ -215,7 +215,7 @@ func ConstructExtremesHistogram(
 	var lowerSamples tree.Datums
 	var upperSamples tree.Datums
 	for _, val := range values {
-		c, err := val.CompareError(ctx, compareCtx, lowerBound)
+		c, err := val.Compare(ctx, compareCtx, lowerBound)
 		if err != nil {
 			return HistogramData{}, nil, err
 		}
@@ -273,7 +273,7 @@ func equiDepthHistogramWithoutAdjustment(
 	}
 
 	sort.Slice(samples, func(i, j int) bool {
-		cmp, err := samples[i].CompareError(ctx, compareCtx, samples[j])
+		cmp, err := samples[i].Compare(ctx, compareCtx, samples[j])
 		if err != nil {
 			panic(err)
 		}
@@ -298,7 +298,7 @@ func equiDepthHistogramWithoutAdjustment(
 		// numLess is the number of samples less than upper (in this bucket).
 		numLess := 0
 		for ; numLess < numSamplesInBucket-1; numLess++ {
-			if c, err := samples[i+numLess].CompareError(ctx, compareCtx, upper); err != nil {
+			if c, err := samples[i+numLess].Compare(ctx, compareCtx, upper); err != nil {
 				return histogram{}, err
 			} else if c == 0 {
 				break
@@ -308,7 +308,7 @@ func equiDepthHistogramWithoutAdjustment(
 		}
 		// Advance the boundary of the bucket to cover all samples equal to upper.
 		for ; i+numSamplesInBucket < numSamples; numSamplesInBucket++ {
-			if c, err := samples[i+numSamplesInBucket].CompareError(ctx, compareCtx, upper); err != nil {
+			if c, err := samples[i+numSamplesInBucket].Compare(ctx, compareCtx, upper); err != nil {
 				return histogram{}, err
 			} else if c != 0 {
 				break

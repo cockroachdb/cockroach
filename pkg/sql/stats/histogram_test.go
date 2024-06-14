@@ -1068,7 +1068,7 @@ func TestUpperBoundsRoundTrip(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(st)
 	for i, expected := range upperBounds {
 		decoded := stat.Histogram[i].UpperBound
-		if cmp, err := expected.CompareError(context.Background(), &evalCtx, decoded); err != nil {
+		if cmp, err := expected.Compare(context.Background(), &evalCtx, decoded); err != nil {
 			t.Fatal(err)
 		} else if cmp != 0 {
 			t.Errorf("type %s: expected %s, decoded %s", typ.SQLString(), expected, decoded)
