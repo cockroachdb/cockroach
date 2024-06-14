@@ -14,12 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
-const (
-	streamingFlushHistMaxLatency   = 1 * time.Minute
-	streamingAdmitLatencyMaxValue  = 3 * time.Minute
-	streamingCommitLatencyMaxValue = 10 * time.Minute
-)
-
 var (
 	metaReplicationEventsIngested = metric.Metadata{
 		Name:        "logical_replication.events_ingested",
@@ -169,62 +163,54 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		JobProgressUpdates:   metric.NewCounter(metaJobProgressUpdates),
 		ReplanCount:          metric.NewCounter(metaDistSQLReplanCount),
 		FlushHistNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationFlushHistNanos,
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
-			MaxVal:       streamingFlushHistMaxLatency.Nanoseconds(),
-			SigFigs:      1,
 		}),
 		CommitLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationCommitLatency,
 			Duration:     histogramWindow,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
-			MaxVal:       streamingCommitLatencyMaxValue.Nanoseconds(),
-			SigFigs:      1,
+			BucketConfig: metric.LongRunning60mLatencyBuckets,
 		}),
 		AdmitLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationAdmitLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
-			MaxVal:       streamingAdmitLatencyMaxValue.Nanoseconds(),
-			SigFigs:      1,
 		}),
 		FlushRowCountHist: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationFlushRowCountHist,
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
-			MaxVal:       streamingAdmitLatencyMaxValue.Nanoseconds(),
-			SigFigs:      1,
 		}),
 		FlushBytesHist: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationFlushBytesHist,
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
-			MaxVal:       streamingAdmitLatencyMaxValue.Nanoseconds(),
-			SigFigs:      1,
 		}),
 		FlushWaitHistNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationFlushWaitHistNanos,
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
-			MaxVal:       streamingAdmitLatencyMaxValue.Nanoseconds(),
-			SigFigs:      1,
 		}),
 		FlushOnSize: metric.NewCounter(metaReplicationFlushOnSize),
 		FlushOnTime: metric.NewCounter(metaReplicationFlushOnTime),
 		BatchBytesHist: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationBatchBytes,
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
-			MaxVal:       streamingAdmitLatencyMaxValue.Nanoseconds(),
-			SigFigs:      1,
 		}),
 		BatchHistNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationBatchHistNanos,
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
-			MaxVal:       streamingAdmitLatencyMaxValue.Nanoseconds(),
-			SigFigs:      1,
 		}),
 		RunningCount:          metric.NewGauge(metaStreamsRunning),
 		ReplicatedTimeSeconds: metric.NewGauge(metaReplicatedTimeSeconds),

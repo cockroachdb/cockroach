@@ -342,7 +342,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	replicatedTime := rh.frontier.Frontier()
 
 	rh.lastPartitionUpdate = timeutil.Now()
-	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
+	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime.GoTime())
 	if err := rh.job.NoTxn().Update(ctx,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
@@ -359,7 +359,7 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 					HighWater: &replicatedTime,
 				}
 			}
-			progress.RunningStatus = fmt.Sprintf("logical replication running: %s", replicatedTime)
+			progress.RunningStatus = fmt.Sprintf("logical replication running: %s", replicatedTime.GoTime())
 			ju.UpdateProgress(progress)
 			if md.RunStats != nil && md.RunStats.NumRuns > 1 {
 				ju.UpdateRunStats(1, md.RunStats.LastRun)
