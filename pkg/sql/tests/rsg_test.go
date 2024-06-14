@@ -833,7 +833,9 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if serialized1 != serialized2 {
 			panic(errors.Errorf("serialized didn't match:\nexpr: %s\nfirst: %s\nsecond: %s", generated, serialized1, serialized2))
 		}
-		if datum1.Compare(&ec, datum2) != 0 {
+		if cmp, err := datum1.CompareError(ctx, &ec, datum2); err != nil {
+			panic(err)
+		} else if cmp != 0 {
 			panic(errors.Errorf("%s [%[1]T] != %s [%[2]T] (original expr: %s)", serialized1, serialized2, serializedGen))
 		}
 		return nil

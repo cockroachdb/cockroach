@@ -1901,7 +1901,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 			// we've already accounted for. That's ok because below we will
 			// reconcile the incremental accounting with the final result's
 			// memory footprint.
-			result.Normalize(&evalCtx.Context)
+			result.Normalize(ctx, &evalCtx.Context)
 		}
 		subqueryPlans[planIdx].result = &result
 	case rowexec.SubqueryExecModeOneRow:

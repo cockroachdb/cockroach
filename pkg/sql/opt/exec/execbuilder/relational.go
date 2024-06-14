@@ -566,7 +566,7 @@ func (b *Builder) indexConstraintMaxResults(
 		return 0, false
 	}
 
-	return c.CalculateMaxResults(b.evalCtx, indexCols, relProps.NotNullCols)
+	return c.CalculateMaxResults(b.ctx, b.evalCtx, indexCols, relProps.NotNullCols)
 }
 
 // scanParams populates ScanParams and the output column mapping.
@@ -885,7 +885,7 @@ func (b *Builder) buildPlaceholderScan(
 	}
 	var columns constraint.Columns
 	columns.Init(spanColumns)
-	keyCtx := constraint.MakeKeyContext(&columns, b.evalCtx)
+	keyCtx := constraint.MakeKeyContext(b.ctx, &columns, b.evalCtx)
 
 	values := make([]tree.Datum, len(scan.Span))
 	for i, expr := range scan.Span {
@@ -911,7 +911,7 @@ func (b *Builder) buildPlaceholderScan(
 	c.Init(&keyCtx, &spans)
 
 	private := scan.ScanPrivate
-	private.SetConstraint(b.evalCtx, &c)
+	private.SetConstraint(b.ctx, b.evalCtx, &c)
 
 	var params exec.ScanParams
 	params, outputCols, err = b.scanParams(tab, &private, scan.Relational(), scan.RequiredPhysical())

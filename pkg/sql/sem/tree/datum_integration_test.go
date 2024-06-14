@@ -334,10 +334,13 @@ func TestDFloatCompare(t *testing.T) {
 			} else if i > j {
 				expected = 1
 			}
+			ctx := context.Background()
 			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			defer evalCtx.Stop(context.Background())
-			got := x.Compare(evalCtx, y)
-			if got != expected {
+			defer evalCtx.Stop(ctx)
+			got, err := x.CompareError(ctx, evalCtx, y)
+			if err != nil {
+				t.Fatal(err)
+			} else if got != expected {
 				t.Errorf("comparing DFloats %s and %s: expected %d, got %d", x, y, expected, got)
 			}
 		}
@@ -420,9 +423,12 @@ func TestParseDIntervalWithTypeMetadata(t *testing.T) {
 			t.Errorf("unexpected error while parsing expected value INTERVAL %s: %s", td.expected, err)
 			continue
 		}
+		ctx := context.Background()
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-		defer evalCtx.Stop(context.Background())
-		if expected.Compare(evalCtx, actual) != 0 {
+		defer evalCtx.Stop(ctx)
+		if cmp, err := expected.CompareError(ctx, evalCtx, actual); err != nil {
+			t.Fatal(err)
+		} else if cmp != 0 {
 			t.Errorf("INTERVAL %s %#v: got %s, expected %s", td.str, td.dtype, actual, expected)
 		}
 	}
@@ -479,7 +485,9 @@ func TestParseDDate(t *testing.T) {
 		}
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
-		if expected.Compare(evalCtx, actual) != 0 {
+		if cmp, err := expected.CompareError(context.Background(), evalCtx, actual); err != nil {
+			t.Fatal(err)
+		} else if cmp != 0 {
 			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
 		}
 		if td.expectedDepOnCtx != depOnCtx {
@@ -876,7 +884,10 @@ func TestMakeDJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if j1.Compare(eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), j2) != -1 {
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	if cmp, err := j1.CompareError(context.Background(), evalCtx, j2); err != nil {
+		t.Fatal(err)
+	} else if cmp != -1 {
 		t.Fatal("expected JSON 1 < 2")
 	}
 }
@@ -981,7 +992,9 @@ func TestDTimeTZ(t *testing.T) {
 				assert.False(t, ok)
 			}
 			for _, largerThan := range append(largerThan, tc.largerThan...) {
-				assert.Equal(t, 1, tc.t.Compare(ctx, largerThan), "%s > %s", tc.t.String(), largerThan.String())
+				cmp, err := tc.t.CompareError(context.Background(), ctx, largerThan)
+				assert.NoError(t, err)
+				assert.Equal(t, 1, cmp, "%s > %s", tc.t.String(), largerThan.String())
 			}
 
 			var smallerThan []tree.Datum
@@ -993,11 +1006,15 @@ func TestDTimeTZ(t *testing.T) {
 				assert.False(t, ok)
 			}
 			for _, smallerThan := range append(smallerThan, tc.smallerThan...) {
-				assert.Equal(t, -1, tc.t.Compare(ctx, smallerThan), "%s < %s", tc.t.String(), smallerThan.String())
+				cmp, err := tc.t.CompareError(context.Background(), ctx, smallerThan)
+				assert.NoError(t, err)
+				assert.Equal(t, -1, cmp, "%s < %s", tc.t.String(), smallerThan.String())
 			}
 
 			for _, equalTo := range tc.equalTo {
-				assert.Equal(t, 0, tc.t.Compare(ctx, equalTo), "%s = %s", tc.t.String(), equalTo.String())
+				cmp, err := tc.t.CompareError(context.Background(), ctx, equalTo)
+				assert.NoError(t, err)
+				assert.Equal(t, 0, cmp, "%s = %s", tc.t.String(), equalTo.String())
 			}
 
 			assert.Equal(t, tc.isMax, tc.t.IsMax(ctx))

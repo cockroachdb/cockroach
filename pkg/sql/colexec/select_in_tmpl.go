@@ -22,6 +22,8 @@
 package colexec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -82,6 +84,7 @@ const (
 )
 
 func GetInProjectionOperator(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	allocator *colmem.Allocator,
 	t *types.T,
@@ -105,7 +108,7 @@ func GetInProjectionOperator(
 				outputIdx:      resultIdx,
 				negate:         negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(evalCtx, t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(ctx, evalCtx, t, datumTuple)
 			return obj, nil
 			// {{end}}
 		}
@@ -115,6 +118,7 @@ func GetInProjectionOperator(
 }
 
 func GetInOperator(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	t *types.T,
 	input colexecop.Operator,
@@ -133,7 +137,7 @@ func GetInOperator(
 				colIdx:         colIdx,
 				negate:         negate,
 			}
-			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(evalCtx, t, datumTuple)
+			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(ctx, evalCtx, t, datumTuple)
 			return obj, nil
 			// {{end}}
 		}
@@ -168,10 +172,10 @@ type projectInOp_TYPE struct {
 var _ colexecop.Operator = &projectInOp_TYPE{}
 
 func fillDatumRow_TYPE(
-	evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
+	ctx context.Context, evalCtx *eval.Context, t *types.T, datumTuple *tree.DTuple,
 ) ([]_GOTYPE_UPCAST_INT, bool) {
 	// Sort the contents of the tuple, if they are not already sorted.
-	datumTuple.Normalize(evalCtx)
+	datumTuple.Normalize(ctx, evalCtx)
 
 	// {{if or (eq .VecMethod "Int16") (eq .VecMethod "Int32")}}
 	// Ensure that we always upcast all integer types.

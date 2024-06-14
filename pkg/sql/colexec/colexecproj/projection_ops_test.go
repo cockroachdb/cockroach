@@ -167,7 +167,8 @@ func TestRandomComparisons(t *testing.T) {
 		}
 		for _, cmpOpSymbol := range supportedCmpOps {
 			for i := range lDatums {
-				cmp := lDatums[i].Compare(&evalCtx, rDatums[i])
+				cmp, err := lDatums[i].CompareError(ctx, &evalCtx, rDatums[i])
+				require.NoError(t, err)
 				var b bool
 				switch cmpOpSymbol {
 				case treecmp.EQ:

@@ -35,6 +35,7 @@ func TestEncDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &tree.DatumAlloc{}
+	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	v := rowenc.EncDatum{}
@@ -80,7 +81,9 @@ func TestEncDatum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp := y.Datum.Compare(evalCtx, x.Datum); cmp != 0 {
+	if cmp, err := y.Datum.CompareError(ctx, evalCtx, x.Datum); err != nil {
+		t.Fatal(err)
+	} else if cmp != 0 {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
 	}
 
@@ -106,7 +109,9 @@ func TestEncDatum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmp := y.Datum.Compare(evalCtx, z.Datum); cmp != 0 {
+	if cmp, err := y.Datum.CompareError(ctx, evalCtx, z.Datum); err != nil {
+		t.Fatal(err)
+	} else if cmp != 0 {
 		t.Errorf("Datums should be equal, cmp = %d", cmp)
 	}
 	y.UnsetDatum()
@@ -208,8 +213,9 @@ func TestEncDatumCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &tree.DatumAlloc{}
+	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	defer evalCtx.Stop(context.Background())
+	defer evalCtx.Stop(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	for _, typ := range types.OidToType {
@@ -226,7 +232,9 @@ func TestEncDatumCompare(t *testing.T) {
 		for {
 			d1 = randgen.RandDatum(rng, typ, false)
 			d2 = randgen.RandDatum(rng, typ, false)
-			if cmp := d1.Compare(evalCtx, d2); cmp < 0 {
+			if cmp, err := d1.CompareError(ctx, evalCtx, d2); err != nil {
+				t.Fatal(err)
+			} else if cmp < 0 {
 				break
 			}
 		}
@@ -268,8 +276,9 @@ func TestEncDatumFromBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var alloc tree.DatumAlloc
+	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	defer evalCtx.Stop(context.Background())
+	defer evalCtx.Stop(ctx)
 	rng, _ := randutil.NewTestRand()
 	for test := 0; test < 20; test++ {
 		var err error
@@ -314,7 +323,9 @@ func TestEncDatumFromBuffer(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%+v: ensuredecoded: %v (%+v)", ed[i], err, typs[i])
 			}
-			if decoded.Datum.Compare(evalCtx, ed[i].Datum) != 0 {
+			if cmp, err := decoded.Datum.CompareError(ctx, evalCtx, ed[i].Datum); err != nil {
+				t.Fatal(err)
+			} else if cmp != 0 {
 				t.Errorf("decoded datum %+v doesn't equal original %+v", decoded.Datum, ed[i].Datum)
 			}
 		}
@@ -471,8 +482,9 @@ func TestEncDatumRowCompare(t *testing.T) {
 func TestEncDatumRowAlloc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	defer evalCtx.Stop(context.Background())
+	defer evalCtx.Stop(ctx)
 	rng, _ := randutil.NewTestRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {
 		for _, rows := range []int{1, 2, 3, 5, 10, 20} {
@@ -502,7 +514,10 @@ func TestEncDatumRowAlloc(t *testing.T) {
 			}
 			for i := 0; i < rows; i++ {
 				for j := 0; j < cols; j++ {
-					if a, b := in[i][j].Datum, out[i][j].Datum; a.Compare(evalCtx, b) != 0 {
+					a, b := in[i][j].Datum, out[i][j].Datum
+					if cmp, err := a.CompareError(ctx, evalCtx, b); err != nil {
+						t.Fatal(err)
+					} else if cmp != 0 {
 						t.Errorf("copied datum %s doesn't equal original %s", b, a)
 					}
 				}
@@ -515,6 +530,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 	rng, seed := randutil.NewTestRand()
 	tests := make([]tree.Datum, 1000)
 	colTypes := make([]*types.T, 1000)
+	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for i := range tests {
@@ -550,7 +566,9 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 					seed, test, colTypes[i], testTyp, len(buf))
 			}
 
-			if cmp := decodedTuple.Compare(evalCtx, test); cmp != 0 {
+			if cmp, err := decodedTuple.CompareError(ctx, evalCtx, test); err != nil {
+				t.Fatal(err)
+			} else if cmp != 0 {
 				t.Fatalf("seed %d: encoded %+v, decoded %+v, expected equal, received comparison: %d", seed, test, decodedTuple, cmp)
 			}
 		default:

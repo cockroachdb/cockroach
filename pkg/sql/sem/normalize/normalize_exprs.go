@@ -248,7 +248,7 @@ func normalizeComparisonExpr(v *Visitor, expr *tree.ComparisonExpr) tree.TypedEx
 		tuple, ok := expr.Right.(*tree.DTuple)
 		if ok {
 			tupleCopy := *tuple
-			tupleCopy.Normalize(v.evalCtx)
+			tupleCopy.Normalize(v.ctx, v.evalCtx)
 
 			// If the tuple only contains NULL values, Normalize will have reduced
 			// it to a single NULL value.

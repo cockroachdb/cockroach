@@ -135,7 +135,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 			hjOutputTuples = append(hjOutputTuples, colexectestutils.GetTupleFromBatch(b, i))
 		}
 	}
-	err := colexectestutils.AssertTuplesSetsEqual(hjOutputTuples, mjOutputTuples, evalCtx)
+	err := colexectestutils.AssertTuplesSetsEqual(ctx, hjOutputTuples, mjOutputTuples, evalCtx)
 	// Note that the error message can be extremely verbose (it
 	// might contain all output tuples), so we manually check that
 	// comparing err to nil returns true (if we were to use

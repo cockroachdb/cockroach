@@ -507,7 +507,7 @@ func (e *evaluator) EvalInTupleOp(
 		//
 		// We can use binary search to make a determination in this case. This
 		// is the common case when tuples don't contain NULLs.
-		_, result := vtuple.SearchSorted(e.ctx(), arg)
+		_, result := vtuple.SearchSorted(ctx, e.ctx(), arg)
 		return tree.MakeDBool(tree.DBool(result)), nil
 	}
 

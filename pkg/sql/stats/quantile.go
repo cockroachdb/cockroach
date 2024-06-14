@@ -289,7 +289,7 @@ func (q quantile) toHistogram(
 
 		// Calculate DistinctRange for this bucket now that NumRange is finalized.
 		distinctRange := estimatedDistinctValuesInRange(
-			compareCtx, currentBucket.NumRange, currentLowerBound, currentUpperBound,
+			ctx, compareCtx, currentBucket.NumRange, currentLowerBound, currentUpperBound,
 		)
 		if !isValidCount(distinctRange) {
 			return errors.AssertionFailedf("invalid histogram DistinctRange: %v", distinctRange)

@@ -162,7 +162,7 @@ func (c *CustomFuncs) handleSingleRowInsert(
 			return nil, false
 		}
 		// ... and that the span has a single key.
-		if !span.HasSingleKey(c.e.evalCtx) {
+		if !span.HasSingleKey(c.e.ctx, c.e.evalCtx) {
 			return nil, false
 		}
 		keySpecification := make(memo.ScalarListExpr, span.StartKey().Length())

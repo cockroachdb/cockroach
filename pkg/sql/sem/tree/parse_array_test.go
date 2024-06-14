@@ -134,7 +134,9 @@ lo}`, types.String, Datums{NewDString(`hel`), NewDString(`lo`)}},
 			if err != nil {
 				t.Fatalf("ARRAY %s: got error %s, expected %s", td.str, err.Error(), expected)
 			}
-			if actual.Compare(noopUnwrapCompareContext{}, expected) != 0 {
+			if cmp, err := actual.CompareError(context.Background(), noopUnwrapCompareContext{}, expected); err != nil {
+				t.Fatal(err)
+			} else if cmp != 0 {
 				t.Fatalf("ARRAY %s: got %s, expected %s", td.str, actual, expected)
 			}
 		})

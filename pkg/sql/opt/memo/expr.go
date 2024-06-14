@@ -921,12 +921,14 @@ func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
 // SetConstraint sets the constraint in the ScanPrivate and caches the exact
 // prefix. This function should always be used instead of modifying the
 // constraint directly.
-func (s *ScanPrivate) SetConstraint(evalCtx *eval.Context, c *constraint.Constraint) {
+func (s *ScanPrivate) SetConstraint(
+	ctx context.Context, evalCtx *eval.Context, c *constraint.Constraint,
+) {
 	s.Constraint = c
 	if c == nil {
 		s.ExactPrefix = 0
 	} else {
-		s.ExactPrefix = c.ExactPrefix(evalCtx)
+		s.ExactPrefix = c.ExactPrefix(ctx, evalCtx)
 	}
 }
 

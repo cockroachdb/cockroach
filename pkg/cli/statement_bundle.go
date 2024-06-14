@@ -347,7 +347,11 @@ func getExplainCombinations(
 				if err != nil {
 					panic("failed parsing datum string as " + datum.String() + " " + err.Error())
 				}
-				if maxUpperBound == nil || maxUpperBound.Compare(&evalCtx, datum) < 0 {
+				if maxUpperBound == nil {
+					maxUpperBound = datum
+				} else if cmp, err := maxUpperBound.CompareError(ctx, &evalCtx, datum); err != nil {
+					panic(err)
+				} else if cmp < 0 {
 					maxUpperBound = datum
 				}
 				// If we have any datums within the bucket (i.e. not equal to

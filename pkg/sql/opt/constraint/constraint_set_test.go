@@ -11,6 +11,7 @@
 package constraint
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -21,6 +22,7 @@ import (
 )
 
 func TestConstraintSetIntersect(t *testing.T) {
+	ctx := context.Background()
 	kc1 := testKeyContext(1)
 	kc2 := testKeyContext(2)
 	kc12 := testKeyContext(1, 2)
@@ -47,9 +49,9 @@ func TestConstraintSetIntersect(t *testing.T) {
 	test(le40, "/1: [ - /40]")
 
 	// @1 > 20 AND @1 <= 40
-	range2040 := gt20.Intersect(evalCtx, le40)
+	range2040 := gt20.Intersect(ctx, evalCtx, le40)
 	test(range2040, "/1: (/20 - /40]")
-	range2040 = le40.Intersect(evalCtx, gt20)
+	range2040 = le40.Intersect(ctx, evalCtx, gt20)
 	test(range2040, "/1: (/20 - /40]")
 
 	// Include constraint on multiple columns.
@@ -58,25 +60,25 @@ func TestConstraintSetIntersect(t *testing.T) {
 	test(gt1015, "/1/2: [/10/15 - ]")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40
-	multi2 := le40.Intersect(evalCtx, gt1015)
+	multi2 := le40.Intersect(ctx, evalCtx, gt1015)
 	test(multi2, ""+
 		"/1: [ - /40]; "+
 		"/1/2: [/10/15 - ]")
 
-	multi2 = gt1015.Intersect(evalCtx, le40)
+	multi2 = gt1015.Intersect(ctx, evalCtx, le40)
 	test(multi2, ""+
 		"/1: [ - /40]; "+
 		"/1/2: [/10/15 - ]")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40 AND @2 < 80
 	lt80 := SingleSpanConstraint(kc2, &data.spLt80)
-	multi3 := lt80.Intersect(evalCtx, multi2)
+	multi3 := lt80.Intersect(ctx, evalCtx, multi2)
 	test(multi3, ""+
 		"/1: [ - /40]; "+
 		"/1/2: [/10/15 - ]; "+
 		"/2: [ - /80)")
 
-	multi3 = multi2.Intersect(evalCtx, lt80)
+	multi3 = multi2.Intersect(ctx, evalCtx, lt80)
 	test(multi3, ""+
 		"/1: [ - /40]; "+
 		"/1/2: [/10/15 - ]; "+
@@ -84,52 +86,53 @@ func TestConstraintSetIntersect(t *testing.T) {
 
 	// Mismatched number of constraints in each set.
 	eq10 := SingleSpanConstraint(kc1, &data.spEq10)
-	mismatched := eq10.Intersect(evalCtx, multi3)
+	mismatched := eq10.Intersect(ctx, evalCtx, multi3)
 	test(mismatched, ""+
 		"/1: [/10 - /10]; "+
 		"/1/2: [/10/15 - ]; "+
 		"/2: [ - /80)")
 
-	mismatched = multi3.Intersect(evalCtx, eq10)
+	mismatched = multi3.Intersect(ctx, evalCtx, eq10)
 	test(mismatched, ""+
 		"/1: [/10 - /10]; "+
 		"/1/2: [/10/15 - ]; "+
 		"/2: [ - /80)")
 
 	// Multiple intersecting constraints on different columns.
-	diffCols := eq10.Intersect(evalCtx, SingleSpanConstraint(kc2, &data.spGt20))
-	res := diffCols.Intersect(evalCtx, multi3)
+	diffCols := eq10.Intersect(ctx, evalCtx, SingleSpanConstraint(kc2, &data.spGt20))
+	res := diffCols.Intersect(ctx, evalCtx, multi3)
 	test(res, ""+
 		"/1: [/10 - /10]; "+
 		"/1/2: [/10/15 - ]; "+
 		"/2: (/20 - /80)")
 
-	res = multi3.Intersect(evalCtx, diffCols)
+	res = multi3.Intersect(ctx, evalCtx, diffCols)
 	test(res, ""+
 		"/1: [/10 - /10]; "+
 		"/1/2: [/10/15 - ]; "+
 		"/2: (/20 - /80)")
 
 	// Intersection results in Contradiction.
-	res = eq10.Intersect(evalCtx, gt20)
+	res = eq10.Intersect(ctx, evalCtx, gt20)
 	test(res, "contradiction")
-	res = gt20.Intersect(evalCtx, eq10)
+	res = gt20.Intersect(ctx, evalCtx, eq10)
 	test(res, "contradiction")
 
 	// Intersect with Unconstrained (identity op).
-	res = range2040.Intersect(evalCtx, Unconstrained)
+	res = range2040.Intersect(ctx, evalCtx, Unconstrained)
 	test(res, "/1: (/20 - /40]")
-	res = Unconstrained.Intersect(evalCtx, range2040)
+	res = Unconstrained.Intersect(ctx, evalCtx, range2040)
 	test(res, "/1: (/20 - /40]")
 
 	// Intersect with Contradiction (always contradiction).
-	res = eq10.Intersect(evalCtx, Contradiction)
+	res = eq10.Intersect(ctx, evalCtx, Contradiction)
 	test(res, "contradiction")
-	res = Contradiction.Intersect(evalCtx, eq10)
+	res = Contradiction.Intersect(ctx, evalCtx, eq10)
 	test(res, "contradiction")
 }
 
 func TestConstraintSetUnion(t *testing.T) {
+	ctx := context.Background()
 	kc1 := testKeyContext(1)
 	kc2 := testKeyContext(2)
 	kc12 := testKeyContext(1, 2)
@@ -153,46 +156,46 @@ func TestConstraintSetUnion(t *testing.T) {
 	test(eq10, "/1: [/10 - /10]")
 
 	// @1 > 20 OR @1 = 10
-	gt20eq10 := gt20.Union(evalCtx, eq10)
+	gt20eq10 := gt20.Union(ctx, evalCtx, eq10)
 	test(gt20eq10, "/1: [/10 - /10] (/20 - ]")
-	gt20eq10 = eq10.Union(evalCtx, gt20)
+	gt20eq10 = eq10.Union(ctx, evalCtx, gt20)
 	test(gt20eq10, "/1: [/10 - /10] (/20 - ]")
 
 	// Combine constraints that result in full span and unconstrained result.
 	// @1 > 20 OR @1 = 10 OR @1 <= 40
 	le40 := SingleSpanConstraint(kc1, &data.spLe40)
-	res := gt20eq10.Union(evalCtx, le40)
+	res := gt20eq10.Union(ctx, evalCtx, le40)
 	test(res, "unconstrained")
-	res = le40.Union(evalCtx, gt20eq10)
+	res = le40.Union(ctx, evalCtx, gt20eq10)
 	test(res, "unconstrained")
 
 	// Include constraint on multiple columns and union with itself.
 	// (@1, @2) >= (10, 15)
 	gt1015 := SingleSpanConstraint(kc12, &data.spGe1015)
-	res = gt1015.Union(evalCtx, gt1015)
+	res = gt1015.Union(ctx, evalCtx, gt1015)
 	test(res, "/1/2: [/10/15 - ]")
 
 	// Union incompatible constraints (both are discarded).
 	// (@1, @2) >= (10, 15) OR @2 < 80
 	lt80 := SingleSpanConstraint(kc2, &data.spLt80)
-	res = gt1015.Union(evalCtx, lt80)
+	res = gt1015.Union(ctx, evalCtx, lt80)
 	test(res, "unconstrained")
-	res = lt80.Union(evalCtx, gt1015)
+	res = lt80.Union(ctx, evalCtx, gt1015)
 	test(res, "unconstrained")
 
 	// Union two sets with multiple and differing numbers of constraints.
 	// ((@1, @2) >= (10, 15) AND @2 < 80 AND @1 > 20) OR (@1 = 10 AND @2 = 80)
-	multi3 := gt1015.Intersect(evalCtx, lt80)
-	multi3 = multi3.Intersect(evalCtx, gt20)
+	multi3 := gt1015.Intersect(ctx, evalCtx, lt80)
+	multi3 = multi3.Intersect(ctx, evalCtx, gt20)
 
 	eq80 := SingleSpanConstraint(kc2, &data.spEq80)
-	multi2 := eq10.Intersect(evalCtx, eq80)
+	multi2 := eq10.Intersect(ctx, evalCtx, eq80)
 
-	res = multi3.Union(evalCtx, multi2)
+	res = multi3.Union(ctx, evalCtx, multi2)
 	test(res, ""+
 		"/1: [/10 - /10] (/20 - ]; "+
 		"/2: [ - /80]")
-	res = multi2.Union(evalCtx, multi3)
+	res = multi2.Union(ctx, evalCtx, multi3)
 	test(res, ""+
 		"/1: [/10 - /10] (/20 - ]; "+
 		"/2: [ - /80]")
@@ -200,28 +203,28 @@ func TestConstraintSetUnion(t *testing.T) {
 	// Do same as previous, but in different order so that discarded constraint
 	// is at end of list rather than beginning.
 	// (@1 > 20 AND @2 < 80 AND (@1, @2) >= (10, 15)) OR (@1 = 10 AND @2 = 80)
-	multi3 = gt20.Intersect(evalCtx, lt80)
-	multi3 = multi3.Intersect(evalCtx, gt1015)
+	multi3 = gt20.Intersect(ctx, evalCtx, lt80)
+	multi3 = multi3.Intersect(ctx, evalCtx, gt1015)
 
-	res = multi3.Union(evalCtx, multi2)
+	res = multi3.Union(ctx, evalCtx, multi2)
 	test(res, ""+
 		"/1: [/10 - /10] (/20 - ]; "+
 		"/2: [ - /80]")
-	res = multi2.Union(evalCtx, multi3)
+	res = multi2.Union(ctx, evalCtx, multi3)
 	test(res, ""+
 		"/1: [/10 - /10] (/20 - ]; "+
 		"/2: [ - /80]")
 
 	// Union with Unconstrained (always unconstrained).
-	res = gt20.Union(evalCtx, Unconstrained)
+	res = gt20.Union(ctx, evalCtx, Unconstrained)
 	test(res, "unconstrained")
-	res = Unconstrained.Union(evalCtx, gt20)
+	res = Unconstrained.Union(ctx, evalCtx, gt20)
 	test(res, "unconstrained")
 
 	// Union with Contradiction (identity op).
-	res = eq10.Union(evalCtx, Contradiction)
+	res = eq10.Union(ctx, evalCtx, Contradiction)
 	test(res, "/1: [/10 - /10]")
-	res = Contradiction.Union(evalCtx, eq10)
+	res = Contradiction.Union(ctx, evalCtx, eq10)
 	test(res, "/1: [/10 - /10]")
 }
 
@@ -258,13 +261,13 @@ func TestExtractCols(t *testing.T) {
 		},
 	}
 
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.NewTestingEvalContext(st)
+	ctx := context.Background()
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, tc := range cases {
 		cs := Unconstrained
 		for _, constraint := range tc.constraints {
 			constraint := ParseConstraint(evalCtx, constraint)
-			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
+			cs = cs.Intersect(ctx, evalCtx, SingleConstraint(&constraint))
 		}
 		cols := cs.ExtractCols()
 		if !tc.expected.Equals(cols) {
@@ -322,15 +325,15 @@ func TestExtractConstColsForSet(t *testing.T) {
 		},
 	}
 
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.NewTestingEvalContext(st)
+	ctx := context.Background()
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, tc := range cases {
 		cs := Unconstrained
 		for _, constraint := range tc.constraints {
 			constraint := ParseConstraint(evalCtx, constraint)
-			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
+			cs = cs.Intersect(ctx, evalCtx, SingleConstraint(&constraint))
 		}
-		cols := cs.ExtractConstCols(evalCtx)
+		cols := cs.ExtractConstCols(ctx, evalCtx)
 		var expCols opt.ColSet
 		for col := range tc.expected {
 			expCols.Add(col)
@@ -341,7 +344,7 @@ func TestExtractConstColsForSet(t *testing.T) {
 		// Ensure that no value is returned for the columns that are not constant.
 		cs.ExtractCols().ForEach(func(col opt.ColumnID) {
 			if !cols.Contains(col) {
-				val := cs.ExtractValueForConstCol(evalCtx, col)
+				val := cs.ExtractValueForConstCol(ctx, evalCtx, col)
 				if val != nil {
 					t.Errorf("%s: const value should not have been found for column %d", cs, col)
 				}
@@ -349,7 +352,7 @@ func TestExtractConstColsForSet(t *testing.T) {
 		})
 		// Ensure that the expected value is returned for the columns that are constant.
 		cols.ForEach(func(col opt.ColumnID) {
-			val := cs.ExtractValueForConstCol(evalCtx, col)
+			val := cs.ExtractValueForConstCol(ctx, evalCtx, col)
 			if val == nil {
 				t.Errorf("%s: no const value for column %d", cs, col)
 				return
@@ -383,15 +386,15 @@ func TestHasSingleColumnNonNullConstValues(t *testing.T) {
 		{[]string{`/1: [/10 - /10]`, `/1/2: [/10/8 - /10/8]`}, 1, false},
 		{[]string{`/1: [/10 - /10]`, `/1/2: [/10/8 - /10/8]`}, 2, false},
 	}
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.NewTestingEvalContext(st)
+	ctx := context.Background()
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, tc := range cases {
 		cs := Unconstrained
 		for _, constraint := range tc.constraints {
 			constraint := ParseConstraint(evalCtx, constraint)
-			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
+			cs = cs.Intersect(ctx, evalCtx, SingleConstraint(&constraint))
 		}
-		res := cs.HasSingleColumnNonNullConstValues(evalCtx, tc.col)
+		res := cs.HasSingleColumnNonNullConstValues(ctx, evalCtx, tc.col)
 		if res != tc.expected {
 			t.Errorf("%s: expected %t got %t", cs, tc.expected, res)
 		}
@@ -430,15 +433,15 @@ func TestExtractSingleColumnNonNullConstValues(t *testing.T) {
 			0, nil,
 		},
 	}
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.NewTestingEvalContext(st)
+	ctx := context.Background()
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, tc := range cases {
 		cs := Unconstrained
 		for _, constraint := range tc.constraints {
 			constraint := ParseConstraint(evalCtx, constraint)
-			cs = cs.Intersect(evalCtx, SingleConstraint(&constraint))
+			cs = cs.Intersect(ctx, evalCtx, SingleConstraint(&constraint))
 		}
-		vals, _ := cs.ExtractSingleColumnNonNullConstValues(evalCtx, tc.col)
+		vals, _ := cs.ExtractSingleColumnNonNullConstValues(ctx, evalCtx, tc.col)
 		var intVals []int
 		for _, val := range vals {
 			intVals = append(intVals, int(*val.(*tree.DInt)))

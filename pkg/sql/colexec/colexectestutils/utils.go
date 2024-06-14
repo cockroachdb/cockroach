@@ -83,7 +83,9 @@ func (t Tuple) String() string {
 	return sb.String()
 }
 
-func (t Tuple) less(other Tuple, evalCtx *eval.Context, tupleFromOtherSet Tuple) bool {
+func (t Tuple) less(
+	ctx context.Context, other Tuple, evalCtx *eval.Context, tupleFromOtherSet Tuple,
+) bool {
 	for i := range t {
 		// If either side is nil, we short circuit the comparison. For nil, we
 		// define: nil < {any_none_nil}
@@ -97,7 +99,10 @@ func (t Tuple) less(other Tuple, evalCtx *eval.Context, tupleFromOtherSet Tuple)
 		// Check whether we have datum-backed values.
 		if d1, ok := t[i].(tree.Datum); ok {
 			d2 := other[i].(tree.Datum)
-			cmp := d1.Compare(evalCtx, d2)
+			cmp, err := d1.CompareError(ctx, evalCtx, d2)
+			if err != nil {
+				colexecerror.InternalError(err)
+			}
 			if cmp == 0 {
 				continue
 			}
@@ -199,7 +204,10 @@ func (t Tuple) less(other Tuple, evalCtx *eval.Context, tupleFromOtherSet Tuple)
 					// tuples.sort for more details.
 					d1 := stringToDatum(lString, d.ResolvedType(), evalCtx)
 					d2 := stringToDatum(rString, d.ResolvedType(), evalCtx)
-					cmp := d1.Compare(evalCtx, d2)
+					cmp, err := d1.CompareError(ctx, evalCtx, d2)
+					if err != nil {
+						colexecerror.InternalError(err)
+					}
 					if cmp == 0 {
 						continue
 					}
@@ -256,7 +264,7 @@ func (t Tuples) String() string {
 // tree.Datum in the latter but strings in the former. In order to use the same
 // ordering when sorting the strings, we need to peek into the actual tuple to
 // determine whether we want to convert the string to datum before comparison.
-func (t Tuples) sort(evalCtx *eval.Context, tupleFromOtherSet Tuple) Tuples {
+func (t Tuples) sort(ctx context.Context, evalCtx *eval.Context, tupleFromOtherSet Tuple) Tuples {
 	b := make(Tuples, len(t))
 	for i := range b {
 		b[i] = make(Tuple, len(t[i]))
@@ -265,7 +273,7 @@ func (t Tuples) sort(evalCtx *eval.Context, tupleFromOtherSet Tuple) Tuples {
 	sort.SliceStable(b, func(i, j int) bool {
 		lhs := b[i]
 		rhs := b[j]
-		return lhs.less(rhs, evalCtx, tupleFromOtherSet)
+		return lhs.less(ctx, rhs, evalCtx, tupleFromOtherSet)
 	})
 	return b
 }
@@ -414,7 +422,7 @@ func RunTestsWithOrderedCols(
 				originalTuples = append(originalTuples, GetTupleFromBatch(originalBatch, i))
 				tuplesWithNulls = append(tuplesWithNulls, GetTupleFromBatch(batchWithNulls, i))
 			}
-			if err := AssertTuplesSetsEqual(originalTuples, tuplesWithNulls, evalCtx); err != nil {
+			if err := AssertTuplesSetsEqual(ctx, originalTuples, tuplesWithNulls, evalCtx); err != nil {
 				// err is non-nil which means that the batches are different.
 				foundDifference = true
 				break
@@ -1312,7 +1320,7 @@ func (r *OpTestOutput) Verify() error {
 		}
 		actual = append(actual, tup)
 	}
-	return assertTuplesOrderedEqual(r.expected, actual, r.evalCtx)
+	return assertTuplesOrderedEqual(context.Background(), r.expected, actual, r.evalCtx)
 }
 
 // VerifyAnyOrder ensures that the input to this OpTestOutput produced the same
@@ -1334,7 +1342,7 @@ func (r *OpTestOutput) VerifyAnyOrder() error {
 		}
 		actual = append(actual, tup)
 	}
-	return AssertTuplesSetsEqual(r.expected, actual, r.evalCtx)
+	return AssertTuplesSetsEqual(context.Background(), r.expected, actual, r.evalCtx)
 }
 
 // VerifyPartialOrder ensures that the input to this OpTestOutput produced the
@@ -1388,7 +1396,7 @@ func (r *OpTestOutput) VerifyPartialOrder() error {
 		}
 		expected = r.expected[start : start+count]
 		start = start + count
-		if err := AssertTuplesSetsEqual(expected, actual, r.evalCtx); err != nil {
+		if err := AssertTuplesSetsEqual(context.Background(), expected, actual, r.evalCtx); err != nil {
 			return err
 		}
 		actual = nil
@@ -1399,7 +1407,7 @@ func (r *OpTestOutput) VerifyPartialOrder() error {
 // tupleEquals checks that two tuples are equal, using a slow,
 // reflection-based method to do the comparison. Reflection is used so that
 // values can be compared in a type-agnostic way.
-func tupleEquals(expected Tuple, actual Tuple, evalCtx *eval.Context) bool {
+func tupleEquals(ctx context.Context, expected Tuple, actual Tuple, evalCtx *eval.Context) bool {
 	if len(expected) != len(actual) {
 		return false
 	}
@@ -1466,7 +1474,9 @@ func tupleEquals(expected Tuple, actual Tuple, evalCtx *eval.Context) bool {
 				default:
 					return false
 				}
-				if d1.Compare(evalCtx, d2) == 0 {
+				if cmp, err := d1.CompareError(ctx, evalCtx, d2); err != nil {
+					colexecerror.InternalError(err)
+				} else if cmp == 0 {
 					continue
 				}
 				return false
@@ -1508,7 +1518,9 @@ func makeError(expected Tuples, actual Tuples) error {
 }
 
 // AssertTuplesSetsEqual asserts that two sets of tuples are equal.
-func AssertTuplesSetsEqual(expected Tuples, actual Tuples, evalCtx *eval.Context) error {
+func AssertTuplesSetsEqual(
+	ctx context.Context, expected Tuples, actual Tuples, evalCtx *eval.Context,
+) error {
 	if len(expected) != len(actual) {
 		return makeError(expected, actual)
 	}
@@ -1516,22 +1528,24 @@ func AssertTuplesSetsEqual(expected Tuples, actual Tuples, evalCtx *eval.Context
 	if len(expected) > 0 {
 		tupleFromOtherSet = expected[0]
 	}
-	actual = actual.sort(evalCtx, tupleFromOtherSet)
+	actual = actual.sort(ctx, evalCtx, tupleFromOtherSet)
 	if len(actual) > 0 {
 		tupleFromOtherSet = actual[0]
 	}
-	expected = expected.sort(evalCtx, tupleFromOtherSet)
-	return assertTuplesOrderedEqual(expected, actual, evalCtx)
+	expected = expected.sort(ctx, evalCtx, tupleFromOtherSet)
+	return assertTuplesOrderedEqual(ctx, expected, actual, evalCtx)
 }
 
 // assertTuplesOrderedEqual asserts that two permutations of tuples are equal
 // in order.
-func assertTuplesOrderedEqual(expected Tuples, actual Tuples, evalCtx *eval.Context) error {
+func assertTuplesOrderedEqual(
+	ctx context.Context, expected Tuples, actual Tuples, evalCtx *eval.Context,
+) error {
 	if len(expected) != len(actual) {
 		return errors.Errorf("expected %+v, actual %+v", expected, actual)
 	}
 	for i := range expected {
-		if !tupleEquals(expected[i], actual[i], evalCtx) {
+		if !tupleEquals(ctx, expected[i], actual[i], evalCtx) {
 			return makeError(expected, actual)
 		}
 	}

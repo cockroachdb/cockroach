@@ -96,7 +96,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	rel.NotNullCols = makeTableNotNullCols(md, scan.Table).Copy()
 	// Union not-NULL columns with not-NULL columns in the constraint.
 	if scan.Constraint != nil {
-		rel.NotNullCols.UnionWith(scan.Constraint.ExtractNotNullCols(b.evalCtx))
+		rel.NotNullCols.UnionWith(scan.Constraint.ExtractNotNullCols(b.sb.ctx, b.evalCtx))
 	}
 	// Union not-NULL columns with not-NULL columns in the partial index
 	// predicate.
@@ -138,7 +138,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 			rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, scan.Table))
 		}
 		if scan.Constraint != nil {
-			rel.FuncDeps.AddConstants(scan.Constraint.ExtractConstCols(b.evalCtx))
+			rel.FuncDeps.AddConstants(scan.Constraint.ExtractConstCols(b.sb.ctx, b.evalCtx))
 		}
 		if tabMeta := md.TableMeta(scan.Table); tabMeta.Constraints != nil {
 			b.addFiltersToFuncDep(*tabMeta.Constraints.(*FiltersExpr), &rel.FuncDeps)
@@ -1612,7 +1612,7 @@ func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *p
 
 	// Constraints
 	// -----------
-	cb := constraintsBuilder{md: b.mem.Metadata(), evalCtx: b.evalCtx}
+	cb := constraintsBuilder{md: b.mem.Metadata(), ctx: b.sb.ctx, evalCtx: b.evalCtx}
 	scalar.Constraints, scalar.TightConstraints = cb.buildConstraints(item.Condition)
 	if scalar.Constraints.IsUnconstrained() {
 		scalar.Constraints, scalar.TightConstraints = nil, false
@@ -1622,7 +1622,7 @@ func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *p
 	// -----------------------
 	var constCols opt.ColSet
 	if scalar.Constraints != nil {
-		constCols = scalar.Constraints.ExtractConstCols(b.evalCtx)
+		constCols = scalar.Constraints.ExtractConstCols(b.sb.ctx, b.evalCtx)
 	}
 
 	if eq, ok := item.Condition.(*EqExpr); ok {
@@ -2045,12 +2045,14 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 // NullColsRejectedByFilter returns a set of columns that are "null rejected"
 // by the filters. An input row with a NULL value on any of these columns will
 // not pass the filter.
-func NullColsRejectedByFilter(evalCtx *eval.Context, filters FiltersExpr) opt.ColSet {
+func NullColsRejectedByFilter(
+	ctx context.Context, evalCtx *eval.Context, filters FiltersExpr,
+) opt.ColSet {
 	var notNullCols opt.ColSet
 	for i := range filters {
 		filterProps := filters[i].ScalarProps()
 		if filterProps.Constraints != nil {
-			notNullCols.UnionWith(filterProps.Constraints.ExtractNotNullCols(evalCtx))
+			notNullCols.UnionWith(filterProps.Constraints.ExtractNotNullCols(ctx, evalCtx))
 		}
 	}
 	return notNullCols
@@ -2059,7 +2061,7 @@ func NullColsRejectedByFilter(evalCtx *eval.Context, filters FiltersExpr) opt.Co
 // rejectNullCols returns the set of all columns that are inferred to be not-
 // null, based on the filter conditions.
 func (b *logicalPropsBuilder) rejectNullCols(filters FiltersExpr) opt.ColSet {
-	return NullColsRejectedByFilter(b.evalCtx, filters)
+	return NullColsRejectedByFilter(b.sb.ctx, b.evalCtx, filters)
 }
 
 // addFiltersToFuncDep returns the union of all functional dependencies from
@@ -2099,10 +2101,10 @@ func (b *logicalPropsBuilder) addFiltersToFuncDep(filters FiltersExpr, fdset *pr
 		intersection := constraint.Unconstrained
 		for i := range filters {
 			if c := filters[i].ScalarProps().Constraints; c != nil {
-				intersection = intersection.Intersect(b.evalCtx, c)
+				intersection = intersection.Intersect(b.sb.ctx, b.evalCtx, c)
 			}
 		}
-		constCols := intersection.ExtractConstCols(b.evalCtx)
+		constCols := intersection.ExtractConstCols(b.sb.ctx, b.evalCtx)
 		fdset.AddConstants(constCols)
 	}
 }
@@ -2139,7 +2141,7 @@ func (b *logicalPropsBuilder) updateCardinalityFromConstraint(
 		return
 	}
 
-	count, ok := c.CalculateMaxResults(b.evalCtx, cols, rel.NotNullCols)
+	count, ok := c.CalculateMaxResults(b.sb.ctx, b.evalCtx, cols, rel.NotNullCols)
 	if ok && count < math.MaxUint32 {
 		rel.Cardinality = rel.Cardinality.Limit(uint32(count))
 	}

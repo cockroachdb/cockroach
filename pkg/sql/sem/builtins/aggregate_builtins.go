@@ -752,14 +752,15 @@ func makeAggOverloadWithReturnType(
 			switch w := aggWindowFunc.(type) {
 			case *minAggregate:
 				min := &slidingWindowFunc{}
-				min.sw = makeSlidingWindow(evalCtx, func(evalCtx *eval.Context, a, b tree.Datum) int {
-					return -a.Compare(evalCtx, b)
+				min.sw = makeSlidingWindow(evalCtx, func(ctx context.Context, evalCtx *eval.Context, a, b tree.Datum) (int, error) {
+					cmp, err := a.CompareError(ctx, evalCtx, b)
+					return -cmp, err
 				})
 				return min
 			case *maxAggregate:
 				max := &slidingWindowFunc{}
-				max.sw = makeSlidingWindow(evalCtx, func(evalCtx *eval.Context, a, b tree.Datum) int {
-					return a.Compare(evalCtx, b)
+				max.sw = makeSlidingWindow(evalCtx, func(ctx context.Context, evalCtx *eval.Context, a, b tree.Datum) (int, error) {
+					return a.CompareError(ctx, evalCtx, b)
 				})
 				return max
 			case *intSumAggregate:

@@ -11,6 +11,7 @@
 package xform
 
 import (
+	"context"
 	"math"
 	"math/bits"
 
@@ -273,6 +274,7 @@ type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, o
 // Citations: [8]
 type JoinOrderBuilder struct {
 	f       *norm.Factory
+	ctx     context.Context
 	evalCtx *eval.Context
 
 	// vertexes is the set of base relations that form the vertexes of the join
@@ -337,11 +339,12 @@ type JoinOrderBuilder struct {
 // Init initializes a new JoinOrderBuilder with the given factory. The join
 // graph is reset, so a JoinOrderBuilder can be reused. Callback functions are
 // not reset.
-func (jb *JoinOrderBuilder) Init(f *norm.Factory, evalCtx *eval.Context) {
+func (jb *JoinOrderBuilder) Init(ctx context.Context, f *norm.Factory, evalCtx *eval.Context) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*jb = JoinOrderBuilder{
 		f:               f,
+		ctx:             ctx,
 		evalCtx:         evalCtx,
 		plans:           make(map[vertexSet]memo.RelExpr),
 		applicableEdges: make(map[vertexSet]edgeSet),
@@ -1236,7 +1239,7 @@ func (e *edge) calcNullRejectedRels(jb *JoinOrderBuilder) {
 	var nullRejectedCols opt.ColSet
 	for i := range e.filters {
 		if constraints := e.filters[i].ScalarProps().Constraints; constraints != nil {
-			nullRejectedCols.UnionWith(constraints.ExtractNotNullCols(jb.evalCtx))
+			nullRejectedCols.UnionWith(constraints.ExtractNotNullCols(jb.ctx, jb.evalCtx))
 		}
 	}
 	e.nullRejectedRels = jb.getRelations(nullRejectedCols)

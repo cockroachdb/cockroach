@@ -132,10 +132,13 @@ func TestSampleReservoir(t *testing.T) {
 }
 
 func TestTruncateDatum(t *testing.T) {
+	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	runTest := func(d, expected tree.Datum) {
 		actual := truncateDatum(&evalCtx, d, 10 /* maxBytes */)
-		if actual.Compare(&evalCtx, expected) != 0 {
+		if cmp, err := actual.CompareError(ctx, &evalCtx, expected); err != nil {
+			t.Fatal(err)
+		} else if cmp != 0 {
 			t.Fatalf("expected %s but found %s", expected.String(), actual.String())
 		}
 	}

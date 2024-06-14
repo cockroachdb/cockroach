@@ -371,7 +371,7 @@ func (d *DiskRowContainer) Reorder(ctx context.Context, ordering colinfo.ColumnO
 }
 
 // InitTopK limits iterators to read the first k rows.
-func (d *DiskRowContainer) InitTopK() {
+func (d *DiskRowContainer) InitTopK(context.Context) {
 	d.topK = d.Len()
 }
 

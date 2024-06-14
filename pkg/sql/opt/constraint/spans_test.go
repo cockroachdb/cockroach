@@ -13,6 +13,7 @@
 package constraint
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -53,6 +54,7 @@ func TestSpans(t *testing.T) {
 }
 
 func TestSpansSortAndMerge(t *testing.T) {
+	ctx := context.Background()
 	keyCtx := testKeyContext(1)
 	evalCtx := keyCtx.EvalCtx
 
@@ -97,7 +99,7 @@ func TestSpansSortAndMerge(t *testing.T) {
 		for i := 1; i < spans.Count(); i++ {
 			var d Constraint
 			d.InitSingleSpan(keyCtx, spans.Get(i))
-			c.UnionWith(evalCtx, &d)
+			c.UnionWith(ctx, evalCtx, &d)
 		}
 		expected := c.Spans.String()
 
