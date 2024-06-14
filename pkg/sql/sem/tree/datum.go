@@ -131,11 +131,11 @@ type Datum interface {
 	// uses .Compare/encoding order and is guaranteed to be large enough by this
 	// weaker contract. The original filter expression is left in place to catch
 	// false positives.
-	Prev(cmpCtx CompareContext) (Datum, bool)
+	Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool)
 
 	// IsMin returns true if the datum is equal to the minimum value the datum
 	// type can hold.
-	IsMin(cmpCtx CompareContext) bool
+	IsMin(ctx context.Context, cmpCtx CompareContext) bool
 
 	// Next returns the next datum and true, if one exists, or nil and false
 	// otherwise. The next datum satisfies the following definition: if the
@@ -151,19 +151,19 @@ type Datum interface {
 	// uses .Compare/encoding order and is guaranteed to be large enough by this
 	// weaker contract. The original filter expression is left in place to catch
 	// false positives.
-	Next(cmpCtx CompareContext) (Datum, bool)
+	Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool)
 
 	// IsMax returns true if the datum is equal to the maximum value the datum
 	// type can hold.
-	IsMax(cmpCtx CompareContext) bool
+	IsMax(ctx context.Context, cmpCtx CompareContext) bool
 
 	// Max returns the upper value and true, if one exists, otherwise
 	// nil and false. Used By Prev().
-	Max(cmpCtx CompareContext) (Datum, bool)
+	Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool)
 
 	// Min returns the lower value, if one exists, otherwise nil and
 	// false. Used by Next().
-	Min(cmpCtx CompareContext) (Datum, bool)
+	Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool)
 
 	// Size returns a lower bound on the total size of the receiver in bytes,
 	// including memory that is pointed at (even if shared between Datum
@@ -435,32 +435,32 @@ func CompareBools(d, v bool) int {
 }
 
 // Prev implements the Datum interface.
-func (*DBool) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (*DBool) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DBoolFalse, true
 }
 
 // Next implements the Datum interface.
-func (*DBool) Next(cmpCtx CompareContext) (Datum, bool) {
+func (*DBool) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DBoolTrue, true
 }
 
 // IsMax implements the Datum interface.
-func (d *DBool) IsMax(cmpCtx CompareContext) bool {
+func (d *DBool) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return bool(*d)
 }
 
 // IsMin implements the Datum interface.
-func (d *DBool) IsMin(cmpCtx CompareContext) bool {
+func (d *DBool) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return !bool(*d)
 }
 
 // Min implements the Datum interface.
-func (d *DBool) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBool) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DBoolFalse, true
 }
 
 // Max implements the Datum interface.
-func (d *DBool) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBool) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DBoolTrue, true
 }
 
@@ -588,35 +588,35 @@ func (d *DBitArray) Compare(ctx context.Context, cmpCtx CompareContext, other Da
 }
 
 // Prev implements the Datum interface.
-func (d *DBitArray) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBitArray) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DBitArray) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBitArray) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	a := bitarray.Next(d.BitArray)
 	return &DBitArray{BitArray: a}, true
 }
 
 // IsMax implements the Datum interface.
-func (d *DBitArray) IsMax(cmpCtx CompareContext) bool {
+func (d *DBitArray) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DBitArray) IsMin(cmpCtx CompareContext) bool {
+func (d *DBitArray) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.BitArray.IsEmpty()
 }
 
 var bitArrayZero = NewDBitArray(0)
 
 // Min implements the Datum interface.
-func (d *DBitArray) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBitArray) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return bitArrayZero, true
 }
 
 // Max implements the Datum interface.
-func (d *DBitArray) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBitArray) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -732,22 +732,22 @@ func (d *DInt) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) 
 }
 
 // Prev implements the Datum interface.
-func (d *DInt) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DInt) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return NewDInt(*d - 1), true
 }
 
 // Next implements the Datum interface.
-func (d *DInt) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DInt) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return NewDInt(*d + 1), true
 }
 
 // IsMax implements the Datum interface.
-func (d *DInt) IsMax(cmpCtx CompareContext) bool {
+func (d *DInt) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return *d == math.MaxInt64
 }
 
 // IsMin implements the Datum interface.
-func (d *DInt) IsMin(cmpCtx CompareContext) bool {
+func (d *DInt) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return *d == math.MinInt64
 }
 
@@ -755,12 +755,12 @@ var dMaxInt = NewDInt(math.MaxInt64)
 var dMinInt = NewDInt(math.MinInt64)
 
 // Max implements the Datum interface.
-func (d *DInt) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DInt) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dMaxInt, true
 }
 
 // Min implements the Datum interface.
-func (d *DInt) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DInt) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dMinInt, true
 }
 
@@ -877,7 +877,7 @@ func (d *DFloat) Compare(ctx context.Context, cmpCtx CompareContext, other Datum
 }
 
 // Prev implements the Datum interface.
-func (d *DFloat) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DFloat) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	f := float64(*d)
 	if math.IsNaN(f) {
 		return nil, false
@@ -889,7 +889,7 @@ func (d *DFloat) Prev(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Next implements the Datum interface.
-func (d *DFloat) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DFloat) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	f := float64(*d)
 	if math.IsNaN(f) {
 		return DNegInfFloat, true
@@ -912,22 +912,22 @@ var (
 )
 
 // IsMax implements the Datum interface.
-func (d *DFloat) IsMax(cmpCtx CompareContext) bool {
+func (d *DFloat) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return *d == *DPosInfFloat
 }
 
 // IsMin implements the Datum interface.
-func (d *DFloat) IsMin(cmpCtx CompareContext) bool {
+func (d *DFloat) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return math.IsNaN(float64(*d))
 }
 
 // Max implements the Datum interface.
-func (d *DFloat) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DFloat) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DPosInfFloat, true
 }
 
 // Min implements the Datum interface.
-func (d *DFloat) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DFloat) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DNaNFloat, true
 }
 
@@ -1086,12 +1086,12 @@ func CompareDecimals(d *apd.Decimal, v *apd.Decimal) int {
 }
 
 // Prev implements the Datum interface.
-func (d *DDecimal) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DDecimal) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DDecimal) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DDecimal) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -1107,22 +1107,22 @@ var (
 )
 
 // IsMax implements the Datum interface.
-func (d *DDecimal) IsMax(cmpCtx CompareContext) bool {
+func (d *DDecimal) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Form == apd.Infinite && !d.Negative
 }
 
 // IsMin implements the Datum interface.
-func (d *DDecimal) IsMin(cmpCtx CompareContext) bool {
+func (d *DDecimal) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Form == apd.NaN
 }
 
 // Max implements the Datum interface.
-func (d *DDecimal) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DDecimal) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dPosInfDecimal, true
 }
 
 // Min implements the Datum interface.
-func (d *DDecimal) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DDecimal) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dNaNDecimal, true
 }
 
@@ -1244,34 +1244,34 @@ func (d *DString) Compare(ctx context.Context, cmpCtx CompareContext, other Datu
 }
 
 // Prev implements the Datum interface.
-func (d *DString) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DString) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DString) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DString) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return NewDString(string(encoding.BytesNext([]byte(*d)))), true
 }
 
 // IsMax implements the Datum interface.
-func (*DString) IsMax(cmpCtx CompareContext) bool {
+func (*DString) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DString) IsMin(cmpCtx CompareContext) bool {
+func (d *DString) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return len(*d) == 0
 }
 
 var dEmptyString = NewDString("")
 
 // Min implements the Datum interface.
-func (d *DString) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DString) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dEmptyString, true
 }
 
 // Max implements the Datum interface.
-func (d *DString) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DString) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -1408,32 +1408,32 @@ func (d *DCollatedString) Compare(
 }
 
 // Prev implements the Datum interface.
-func (d *DCollatedString) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DCollatedString) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DCollatedString) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DCollatedString) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMax implements the Datum interface.
-func (*DCollatedString) IsMax(cmpCtx CompareContext) bool {
+func (*DCollatedString) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DCollatedString) IsMin(cmpCtx CompareContext) bool {
+func (d *DCollatedString) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Contents == ""
 }
 
 // Min implements the Datum interface.
-func (d *DCollatedString) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DCollatedString) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DCollatedString{"", d.Locale, nil}, true
 }
 
 // Max implements the Datum interface.
-func (d *DCollatedString) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DCollatedString) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -1520,34 +1520,34 @@ func (d *DBytes) Compare(ctx context.Context, cmpCtx CompareContext, other Datum
 }
 
 // Prev implements the Datum interface.
-func (d *DBytes) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBytes) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DBytes) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBytes) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return NewDBytes(DBytes(encoding.BytesNext([]byte(*d)))), true
 }
 
 // IsMax implements the Datum interface.
-func (*DBytes) IsMax(cmpCtx CompareContext) bool {
+func (*DBytes) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DBytes) IsMin(cmpCtx CompareContext) bool {
+func (d *DBytes) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return len(*d) == 0
 }
 
 var dEmptyBytes = NewDBytes(DBytes(""))
 
 // Min implements the Datum interface.
-func (d *DBytes) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBytes) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dEmptyBytes, true
 }
 
 // Max implements the Datum interface.
-func (d *DBytes) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBytes) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -1647,32 +1647,32 @@ func (d *DEncodedKey) Compare(
 }
 
 // Prev implements the Datum interface.
-func (d *DEncodedKey) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DEncodedKey) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DEncodedKey) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DEncodedKey) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMax implements the Datum interface.
-func (*DEncodedKey) IsMax(cmpCtx CompareContext) bool {
+func (*DEncodedKey) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DEncodedKey) IsMin(cmpCtx CompareContext) bool {
+func (d *DEncodedKey) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // Min implements the Datum interface.
-func (d *DEncodedKey) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DEncodedKey) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Max implements the Datum interface.
-func (d *DEncodedKey) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DEncodedKey) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -1753,26 +1753,26 @@ func (d *DUuid) equal(other *DUuid) bool {
 }
 
 // Prev implements the Datum interface.
-func (d *DUuid) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DUuid) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	i := d.ToUint128()
 	u := uuid.FromUint128(i.Sub(1))
 	return NewDUuid(DUuid{u}), true
 }
 
 // Next implements the Datum interface.
-func (d *DUuid) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DUuid) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	i := d.ToUint128()
 	u := uuid.FromUint128(i.Add(1))
 	return NewDUuid(DUuid{u}), true
 }
 
 // IsMax implements the Datum interface.
-func (d *DUuid) IsMax(cmpCtx CompareContext) bool {
+func (d *DUuid) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.equal(DMaxUUID)
 }
 
 // IsMin implements the Datum interface.
-func (d *DUuid) IsMin(cmpCtx CompareContext) bool {
+func (d *DUuid) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.equal(DMinUUID)
 }
 
@@ -1784,12 +1784,12 @@ var DMaxUUID = NewDUuid(DUuid{uuid.UUID{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}})
 
 // Min implements the Datum interface.
-func (*DUuid) Min(cmpCtx CompareContext) (Datum, bool) {
+func (*DUuid) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DMinUUID, true
 }
 
 // Max implements the Datum interface.
-func (*DUuid) Max(cmpCtx CompareContext) (Datum, bool) {
+func (*DUuid) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DMaxUUID, true
 }
 
@@ -1878,7 +1878,7 @@ func (d DIPAddr) equal(other *DIPAddr) bool {
 }
 
 // Prev implements the Datum interface.
-func (d *DIPAddr) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DIPAddr) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	// We will do one of the following to get the Prev IPAddr:
 	//	- Decrement IP address if we won't underflow the IP.
 	//	- Decrement mask and set the IP to max in family if we will underflow.
@@ -1899,7 +1899,7 @@ func (d *DIPAddr) Prev(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Next implements the Datum interface.
-func (d *DIPAddr) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DIPAddr) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	// We will do one of a few things to get the Next IP address:
 	//	- Increment IP address if we won't overflow the IP.
 	//	- Increment mask and set the IP to min in family if we will overflow.
@@ -1920,12 +1920,12 @@ func (d *DIPAddr) Next(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // IsMax implements the Datum interface.
-func (d *DIPAddr) IsMax(cmpCtx CompareContext) bool {
+func (d *DIPAddr) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.equal(DMaxIPAddr)
 }
 
 // IsMin implements the Datum interface.
-func (d *DIPAddr) IsMin(cmpCtx CompareContext) bool {
+func (d *DIPAddr) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.equal(DMinIPAddr)
 }
 
@@ -1949,12 +1949,12 @@ var DMinIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Add
 var DMaxIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: 128}})
 
 // Min implements the Datum interface.
-func (*DIPAddr) Min(cmpCtx CompareContext) (Datum, bool) {
+func (*DIPAddr) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DMinIPAddr, true
 }
 
 // Max implements the Datum interface.
-func (*DIPAddr) Max(cmpCtx CompareContext) (Datum, bool) {
+func (*DIPAddr) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DMaxIPAddr, true
 }
 
@@ -2180,7 +2180,7 @@ var (
 )
 
 // Prev implements the Datum interface.
-func (d *DDate) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DDate) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	switch d.Date {
 	case pgdate.PosInfDate:
 		return dHighDate, true
@@ -2197,7 +2197,7 @@ func (d *DDate) Prev(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Next implements the Datum interface.
-func (d *DDate) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DDate) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	switch d.Date {
 	case pgdate.NegInfDate:
 		return dLowDate, true
@@ -2214,22 +2214,22 @@ func (d *DDate) Next(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // IsMax implements the Datum interface.
-func (d *DDate) IsMax(cmpCtx CompareContext) bool {
+func (d *DDate) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.PGEpochDays() == pgdate.PosInfDate.PGEpochDays()
 }
 
 // IsMin implements the Datum interface.
-func (d *DDate) IsMin(cmpCtx CompareContext) bool {
+func (d *DDate) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.PGEpochDays() == pgdate.NegInfDate.PGEpochDays()
 }
 
 // Max implements the Datum interface.
-func (d *DDate) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DDate) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dMaxDate, true
 }
 
 // Min implements the Datum interface.
-func (d *DDate) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DDate) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dMinDate, true
 }
 
@@ -2322,8 +2322,8 @@ func (d *DTime) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 }
 
 // Prev implements the Datum interface.
-func (d *DTime) Prev(cmpCtx CompareContext) (Datum, bool) {
-	if d.IsMin(cmpCtx) {
+func (d *DTime) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.IsMin(ctx, cmpCtx) {
 		return nil, false
 	}
 	prev := *d - 1
@@ -2336,8 +2336,8 @@ func (d *DTime) Round(precision time.Duration) *DTime {
 }
 
 // Next implements the Datum interface.
-func (d *DTime) Next(cmpCtx CompareContext) (Datum, bool) {
-	if d.IsMax(cmpCtx) {
+func (d *DTime) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.IsMax(ctx, cmpCtx) {
 		return nil, false
 	}
 	next := *d + 1
@@ -2348,22 +2348,22 @@ var dTimeMin = MakeDTime(timeofday.Min)
 var dTimeMax = MakeDTime(timeofday.Max)
 
 // IsMax implements the Datum interface.
-func (d *DTime) IsMax(cmpCtx CompareContext) bool {
+func (d *DTime) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return *d == *dTimeMax
 }
 
 // IsMin implements the Datum interface.
-func (d *DTime) IsMin(cmpCtx CompareContext) bool {
+func (d *DTime) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return *d == *dTimeMin
 }
 
 // Max implements the Datum interface.
-func (d *DTime) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTime) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dTimeMax, true
 }
 
 // Min implements the Datum interface.
-func (d *DTime) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTime) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dTimeMin, true
 }
 
@@ -2466,8 +2466,8 @@ func (d *DTimeTZ) Compare(ctx context.Context, cmpCtx CompareContext, other Datu
 }
 
 // Prev implements the Datum interface.
-func (d *DTimeTZ) Prev(cmpCtx CompareContext) (Datum, bool) {
-	if d.IsMin(cmpCtx) {
+func (d *DTimeTZ) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.IsMin(ctx, cmpCtx) {
 		return nil, false
 	}
 	// In the common case, the absolute time doesn't change, we simply decrement
@@ -2495,8 +2495,8 @@ func (d *DTimeTZ) Prev(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Next implements the Datum interface.
-func (d *DTimeTZ) Next(cmpCtx CompareContext) (Datum, bool) {
-	if d.IsMax(cmpCtx) {
+func (d *DTimeTZ) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.IsMax(ctx, cmpCtx) {
 		return nil, false
 	}
 	// In the common case, the absolute time doesn't change, we simply increment
@@ -2524,17 +2524,17 @@ func (d *DTimeTZ) Next(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // IsMax implements the Datum interface.
-func (d *DTimeTZ) IsMax(cmpCtx CompareContext) bool {
+func (d *DTimeTZ) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.TimeOfDay == DMaxTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MaxTimeTZOffsetSecs
 }
 
 // IsMin implements the Datum interface.
-func (d *DTimeTZ) IsMin(cmpCtx CompareContext) bool {
+func (d *DTimeTZ) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.TimeOfDay == DMinTimeTZ.TimeOfDay && d.OffsetSecs == timetz.MinTimeTZOffsetSecs
 }
 
 // Max implements the Datum interface.
-func (d *DTimeTZ) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTimeTZ) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DMaxTimeTZ, true
 }
 
@@ -2544,7 +2544,7 @@ func (d *DTimeTZ) Round(precision time.Duration) *DTimeTZ {
 }
 
 // Min implements the Datum interface.
-func (d *DTimeTZ) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTimeTZ) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DMinTimeTZ, true
 }
 
@@ -2705,12 +2705,12 @@ const (
 	positiveInfinity
 )
 
-func checkInfiniteDate(cmpCtx CompareContext, d Datum) infiniteDateComparison {
+func checkInfiniteDate(ctx context.Context, cmpCtx CompareContext, d Datum) infiniteDateComparison {
 	if _, isDate := d.(*DDate); isDate {
-		if d.IsMax(cmpCtx) {
+		if d.IsMax(ctx, cmpCtx) {
 			return positiveInfinity
 		}
-		if d.IsMin(cmpCtx) {
+		if d.IsMin(ctx, cmpCtx) {
 			return negativeInfinity
 		}
 	}
@@ -2725,8 +2725,8 @@ func checkInfiniteDate(cmpCtx CompareContext, d Datum) infiniteDateComparison {
 // DTimeTZ. For all other datum types it will panic; also, comparing two DDates
 // is not supported.
 func compareTimestamps(ctx context.Context, cmpCtx CompareContext, l Datum, r Datum) (int, error) {
-	leftInf := checkInfiniteDate(cmpCtx, l)
-	rightInf := checkInfiniteDate(cmpCtx, r)
+	leftInf := checkInfiniteDate(ctx, cmpCtx, l)
+	rightInf := checkInfiniteDate(ctx, cmpCtx, r)
 	if leftInf != finite || rightInf != finite {
 		// At least one of the datums is an infinite date.
 		if leftInf != finite && rightInf != finite {
@@ -2796,38 +2796,38 @@ func (d *DTimestamp) Compare(ctx context.Context, cmpCtx CompareContext, other D
 }
 
 // Prev implements the Datum interface.
-func (d *DTimestamp) Prev(cmpCtx CompareContext) (Datum, bool) {
-	if d.IsMin(cmpCtx) {
+func (d *DTimestamp) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.IsMin(ctx, cmpCtx) {
 		return nil, false
 	}
 	return &DTimestamp{Time: d.Add(-time.Microsecond)}, true
 }
 
 // Next implements the Datum interface.
-func (d *DTimestamp) Next(cmpCtx CompareContext) (Datum, bool) {
-	if d.IsMax(cmpCtx) {
+func (d *DTimestamp) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.IsMax(ctx, cmpCtx) {
 		return nil, false
 	}
 	return &DTimestamp{Time: d.Add(time.Microsecond)}, true
 }
 
 // IsMax implements the Datum interface.
-func (d *DTimestamp) IsMax(cmpCtx CompareContext) bool {
+func (d *DTimestamp) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Equal(MaxSupportedTime)
 }
 
 // IsMin implements the Datum interface.
-func (d *DTimestamp) IsMin(cmpCtx CompareContext) bool {
+func (d *DTimestamp) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Equal(MinSupportedTime)
 }
 
 // Min implements the Datum interface.
-func (d *DTimestamp) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTimestamp) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DTimestamp{Time: MinSupportedTime}, true
 }
 
 // Max implements the Datum interface.
-func (d *DTimestamp) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTimestamp) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DTimestamp{Time: MaxSupportedTime}, true
 }
 
@@ -2988,38 +2988,38 @@ func (d *DTimestampTZ) Compare(
 }
 
 // Prev implements the Datum interface.
-func (d *DTimestampTZ) Prev(cmpCtx CompareContext) (Datum, bool) {
-	if d.IsMin(cmpCtx) {
+func (d *DTimestampTZ) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.IsMin(ctx, cmpCtx) {
 		return nil, false
 	}
 	return &DTimestampTZ{Time: d.Add(-time.Microsecond)}, true
 }
 
 // Next implements the Datum interface.
-func (d *DTimestampTZ) Next(cmpCtx CompareContext) (Datum, bool) {
-	if d.IsMax(cmpCtx) {
+func (d *DTimestampTZ) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.IsMax(ctx, cmpCtx) {
 		return nil, false
 	}
 	return &DTimestampTZ{Time: d.Add(time.Microsecond)}, true
 }
 
 // IsMax implements the Datum interface.
-func (d *DTimestampTZ) IsMax(cmpCtx CompareContext) bool {
+func (d *DTimestampTZ) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Equal(MaxSupportedTime)
 }
 
 // IsMin implements the Datum interface.
-func (d *DTimestampTZ) IsMin(cmpCtx CompareContext) bool {
+func (d *DTimestampTZ) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Equal(MinSupportedTime)
 }
 
 // Min implements the Datum interface.
-func (d *DTimestampTZ) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTimestampTZ) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DTimestampTZ{Time: MinSupportedTime}, true
 }
 
 // Max implements the Datum interface.
-func (d *DTimestampTZ) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTimestampTZ) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DTimestampTZ{Time: MaxSupportedTime}, true
 }
 
@@ -3197,22 +3197,22 @@ func (d *DInterval) Compare(ctx context.Context, cmpCtx CompareContext, other Da
 }
 
 // Prev implements the Datum interface.
-func (d *DInterval) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DInterval) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DInterval) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DInterval) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMax implements the Datum interface.
-func (d *DInterval) IsMax(cmpCtx CompareContext) bool {
+func (d *DInterval) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Duration == dMaxInterval.Duration
 }
 
 // IsMin implements the Datum interface.
-func (d *DInterval) IsMin(cmpCtx CompareContext) bool {
+func (d *DInterval) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Duration == dMinInterval.Duration
 }
 
@@ -3223,12 +3223,12 @@ var (
 )
 
 // Max implements the Datum interface.
-func (d *DInterval) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DInterval) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dMaxInterval, true
 }
 
 // Min implements the Datum interface.
-func (d *DInterval) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DInterval) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return dMinInterval, true
 }
 
@@ -3326,32 +3326,32 @@ func (d *DGeography) Compare(ctx context.Context, cmpCtx CompareContext, other D
 }
 
 // Prev implements the Datum interface.
-func (d *DGeography) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DGeography) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DGeography) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DGeography) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMax implements the Datum interface.
-func (d *DGeography) IsMax(cmpCtx CompareContext) bool {
+func (d *DGeography) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DGeography) IsMin(cmpCtx CompareContext) bool {
+func (d *DGeography) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // Max implements the Datum interface.
-func (d *DGeography) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DGeography) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Min implements the Datum interface.
-func (d *DGeography) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DGeography) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -3451,32 +3451,32 @@ func (d *DGeometry) Compare(ctx context.Context, cmpCtx CompareContext, other Da
 }
 
 // Prev implements the Datum interface.
-func (d *DGeometry) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DGeometry) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DGeometry) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DGeometry) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMax implements the Datum interface.
-func (d *DGeometry) IsMax(cmpCtx CompareContext) bool {
+func (d *DGeometry) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DGeometry) IsMin(cmpCtx CompareContext) bool {
+func (d *DGeometry) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // Max implements the Datum interface.
-func (d *DGeometry) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DGeometry) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Min implements the Datum interface.
-func (d *DGeometry) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DGeometry) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -3576,38 +3576,38 @@ func (d *DPGLSN) Compare(ctx context.Context, cmpCtx CompareContext, other Datum
 }
 
 // Prev implements the Datum interface.
-func (d *DPGLSN) Prev(cmpCtx CompareContext) (Datum, bool) {
-	if d.IsMin(cmpCtx) {
+func (d *DPGLSN) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.IsMin(ctx, cmpCtx) {
 		return nil, false
 	}
 	return NewDPGLSN(d.LSN.Sub(1)), true
 }
 
 // Next implements the Datum interface.
-func (d *DPGLSN) Next(cmpCtx CompareContext) (Datum, bool) {
-	if d.IsMax(cmpCtx) {
+func (d *DPGLSN) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.IsMax(ctx, cmpCtx) {
 		return nil, false
 	}
 	return NewDPGLSN(d.LSN.Add(1)), true
 }
 
 // IsMax implements the Datum interface.
-func (d *DPGLSN) IsMax(cmpCtx CompareContext) bool {
+func (d *DPGLSN) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.LSN == math.MaxUint64
 }
 
 // IsMin implements the Datum interface.
-func (d *DPGLSN) IsMin(cmpCtx CompareContext) bool {
+func (d *DPGLSN) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.LSN == 0
 }
 
 // Max implements the Datum interface.
-func (d *DPGLSN) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DPGLSN) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return NewDPGLSN(math.MaxUint64), false
 }
 
 // Min implements the Datum interface.
-func (d *DPGLSN) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DPGLSN) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return NewDPGLSN(0), false
 }
 
@@ -3695,32 +3695,32 @@ func (d *DBox2D) Compare(ctx context.Context, cmpCtx CompareContext, other Datum
 }
 
 // Prev implements the Datum interface.
-func (d *DBox2D) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBox2D) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DBox2D) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBox2D) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMax implements the Datum interface.
-func (d *DBox2D) IsMax(cmpCtx CompareContext) bool {
+func (d *DBox2D) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DBox2D) IsMin(cmpCtx CompareContext) bool {
+func (d *DBox2D) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // Max implements the Datum interface.
-func (d *DBox2D) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBox2D) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Min implements the Datum interface.
-func (d *DBox2D) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DBox2D) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -3966,32 +3966,32 @@ func (d *DJSON) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 }
 
 // Prev implements the Datum interface.
-func (d *DJSON) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DJSON) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DJSON) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DJSON) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMax implements the Datum interface.
-func (d *DJSON) IsMax(cmpCtx CompareContext) bool {
+func (d *DJSON) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DJSON) IsMin(cmpCtx CompareContext) bool {
+func (d *DJSON) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.JSON == json.NullJSONValue
 }
 
 // Max implements the Datum interface.
-func (d *DJSON) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DJSON) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Min implements the Datum interface.
-func (d *DJSON) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DJSON) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DJSON{json.NullJSONValue}, true
 }
 
@@ -4067,32 +4067,32 @@ func (d *DTSQuery) Compare(ctx context.Context, cmpCtx CompareContext, other Dat
 }
 
 // Prev implements the Datum interface.
-func (d *DTSQuery) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTSQuery) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DTSQuery) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTSQuery) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMin implements the Datum interface.
-func (d *DTSQuery) IsMin(cmpCtx CompareContext) bool {
+func (d *DTSQuery) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return len(d.String()) == 0
 }
 
 // IsMax implements the Datum interface.
-func (d *DTSQuery) IsMax(cmpCtx CompareContext) bool {
+func (d *DTSQuery) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // Max implements the Datum interface.
-func (d *DTSQuery) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTSQuery) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Min implements the Datum interface.
-func (d *DTSQuery) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTSQuery) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DTSQuery{}, false
 }
 
@@ -4189,32 +4189,32 @@ func (d *DTSVector) Compare(ctx context.Context, cmpCtx CompareContext, other Da
 }
 
 // Prev implements the Datum interface.
-func (d *DTSVector) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTSVector) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DTSVector) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTSVector) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMin implements the Datum interface.
-func (d *DTSVector) IsMin(cmpCtx CompareContext) bool {
+func (d *DTSVector) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return len(d.String()) == 0
 }
 
 // IsMax implements the Datum interface.
-func (d *DTSVector) IsMax(cmpCtx CompareContext) bool {
+func (d *DTSVector) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // Max implements the Datum interface.
-func (d *DTSVector) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTSVector) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Min implements the Datum interface.
-func (d *DTSVector) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTSVector) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DTSVector{}, false
 }
 
@@ -4373,7 +4373,7 @@ func (d *DTuple) Compare(ctx context.Context, cmpCtx CompareContext, other Datum
 }
 
 // Prev implements the Datum interface.
-func (d *DTuple) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTuple) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	// Note: (a:decimal, b:int, c:int) has a prev value; that's (a, b,
 	// c-1). With an exception if c is MinInt64, in which case the prev
 	// value is (a, b-1, max(_ *EvalContext)). However, (a:int, b:decimal) does not
@@ -4386,15 +4386,15 @@ func (d *DTuple) Prev(cmpCtx CompareContext) (Datum, bool) {
 	res := NewDTupleWithLen(d.typ, len(d.D))
 	copy(res.D, d.D)
 	for i := len(res.D) - 1; i >= 0; i-- {
-		if !res.D[i].IsMin(cmpCtx) {
-			prevVal, ok := res.D[i].Prev(cmpCtx)
+		if !res.D[i].IsMin(ctx, cmpCtx) {
+			prevVal, ok := res.D[i].Prev(ctx, cmpCtx)
 			if !ok {
 				return nil, false
 			}
 			res.D[i] = prevVal
 			break
 		}
-		maxVal, ok := res.D[i].Max(cmpCtx)
+		maxVal, ok := res.D[i].Max(ctx, cmpCtx)
 		if !ok {
 			return nil, false
 		}
@@ -4404,7 +4404,7 @@ func (d *DTuple) Prev(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Next implements the Datum interface.
-func (d *DTuple) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTuple) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	// Note: (a:decimal, b:int, c:int) has a next value; that's (a, b,
 	// c+1). With an exception if c is MaxInt64, in which case the next
 	// value is (a, b+1, min(_ *EvalContext)). However, (a:int, b:decimal) does not
@@ -4417,8 +4417,8 @@ func (d *DTuple) Next(cmpCtx CompareContext) (Datum, bool) {
 	res := NewDTupleWithLen(d.typ, len(d.D))
 	copy(res.D, d.D)
 	for i := len(res.D) - 1; i >= 0; i-- {
-		if !res.D[i].IsMax(cmpCtx) {
-			nextVal, ok := res.D[i].Next(cmpCtx)
+		if !res.D[i].IsMax(ctx, cmpCtx) {
+			nextVal, ok := res.D[i].Next(ctx, cmpCtx)
 			if !ok {
 				return nil, false
 			}
@@ -4432,10 +4432,10 @@ func (d *DTuple) Next(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Max implements the Datum interface.
-func (d *DTuple) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTuple) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	res := NewDTupleWithLen(d.typ, len(d.D))
 	for i, v := range d.D {
-		m, ok := v.Max(cmpCtx)
+		m, ok := v.Max(ctx, cmpCtx)
 		if !ok {
 			return nil, false
 		}
@@ -4445,10 +4445,10 @@ func (d *DTuple) Max(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Min implements the Datum interface.
-func (d *DTuple) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DTuple) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	res := NewDTupleWithLen(d.typ, len(d.D))
 	for i, v := range d.D {
-		m, ok := v.Min(cmpCtx)
+		m, ok := v.Min(ctx, cmpCtx)
 		if !ok {
 			return nil, false
 		}
@@ -4458,9 +4458,9 @@ func (d *DTuple) Min(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // IsMax implements the Datum interface.
-func (d *DTuple) IsMax(cmpCtx CompareContext) bool {
+func (d *DTuple) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	for _, v := range d.D {
-		if !v.IsMax(cmpCtx) {
+		if !v.IsMax(ctx, cmpCtx) {
 			return false
 		}
 	}
@@ -4468,9 +4468,9 @@ func (d *DTuple) IsMax(cmpCtx CompareContext) bool {
 }
 
 // IsMin implements the Datum interface.
-func (d *DTuple) IsMin(cmpCtx CompareContext) bool {
+func (d *DTuple) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	for _, v := range d.D {
-		if !v.IsMin(cmpCtx) {
+		if !v.IsMin(ctx, cmpCtx) {
 			return false
 		}
 	}
@@ -4684,32 +4684,32 @@ func (d dNull) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) 
 }
 
 // Prev implements the Datum interface.
-func (d dNull) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d dNull) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d dNull) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d dNull) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMax implements the Datum interface.
-func (dNull) IsMax(cmpCtx CompareContext) bool {
+func (dNull) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return true
 }
 
 // IsMin implements the Datum interface.
-func (dNull) IsMin(cmpCtx CompareContext) bool {
+func (dNull) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return true
 }
 
 // Max implements the Datum interface.
-func (dNull) Max(cmpCtx CompareContext) (Datum, bool) {
+func (dNull) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DNull, true
 }
 
 // Min implements the Datum interface.
-func (dNull) Min(cmpCtx CompareContext) (Datum, bool) {
+func (dNull) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return DNull, true
 }
 
@@ -4858,12 +4858,12 @@ func (d *DArray) Compare(ctx context.Context, cmpCtx CompareContext, other Datum
 }
 
 // Prev implements the Datum interface.
-func (d *DArray) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DArray) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DArray) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DArray) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	a := DArray{ParamTyp: d.ParamTyp, Array: make(Datums, d.Len()+1)}
 	copy(a.Array, d.Array)
 	a.Array[len(a.Array)-1] = DNull
@@ -4871,22 +4871,22 @@ func (d *DArray) Next(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Max implements the Datum interface.
-func (d *DArray) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DArray) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Min implements the Datum interface.
-func (d *DArray) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DArray) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DArray{ParamTyp: d.ParamTyp}, true
 }
 
 // IsMax implements the Datum interface.
-func (d *DArray) IsMax(cmpCtx CompareContext) bool {
+func (d *DArray) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DArray) IsMin(cmpCtx CompareContext) bool {
+func (d *DArray) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Len() == 0
 }
 
@@ -5022,32 +5022,32 @@ func (d *DVoid) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 }
 
 // Prev implements the Datum interface.
-func (d *DVoid) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DVoid) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Next implements the Datum interface.
-func (d *DVoid) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DVoid) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // IsMax implements the Datum interface.
-func (d *DVoid) IsMax(cmpCtx CompareContext) bool {
+func (d *DVoid) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // IsMin implements the Datum interface.
-func (d *DVoid) IsMin(cmpCtx CompareContext) bool {
+func (d *DVoid) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return false
 }
 
 // Max implements the Datum interface.
-func (d *DVoid) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DVoid) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
 // Min implements the Datum interface.
-func (d *DVoid) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DVoid) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -5246,7 +5246,7 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 }
 
 // Prev implements the Datum interface.
-func (d *DEnum) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DEnum) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	idx, err := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
 	if err != nil {
 		panic(err)
@@ -5263,7 +5263,7 @@ func (d *DEnum) Prev(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Next implements the Datum interface.
-func (d *DEnum) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DEnum) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	idx, err := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
 	if err != nil {
 		panic(err)
@@ -5280,7 +5280,7 @@ func (d *DEnum) Next(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Max implements the Datum interface.
-func (d *DEnum) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DEnum) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	enumData := d.EnumTyp.TypeMeta.EnumData
 	if len(enumData.PhysicalRepresentations) == 0 {
 		return nil, false
@@ -5294,7 +5294,7 @@ func (d *DEnum) Max(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // Min implements the Datum interface.
-func (d *DEnum) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DEnum) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	enumData := d.EnumTyp.TypeMeta.EnumData
 	if len(enumData.PhysicalRepresentations) == 0 {
 		return nil, false
@@ -5307,7 +5307,7 @@ func (d *DEnum) Min(cmpCtx CompareContext) (Datum, bool) {
 }
 
 // IsMax implements the Datum interface.
-func (d *DEnum) IsMax(cmpCtx CompareContext) bool {
+func (d *DEnum) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	physReps := d.EnumTyp.TypeMeta.EnumData.PhysicalRepresentations
 	idx, err := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
 	if err != nil {
@@ -5317,7 +5317,7 @@ func (d *DEnum) IsMax(cmpCtx CompareContext) bool {
 }
 
 // IsMin implements the Datum interface.
-func (d *DEnum) IsMin(cmpCtx CompareContext) bool {
+func (d *DEnum) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	idx, err := d.EnumTyp.EnumGetIdxOfPhysical(d.PhysicalRep)
 	if err != nil {
 		panic(err)
@@ -5527,23 +5527,23 @@ func (d *DOid) Format(ctx *FmtCtx) {
 }
 
 // IsMax implements the Datum interface.
-func (d *DOid) IsMax(cmpCtx CompareContext) bool {
+func (d *DOid) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Oid == math.MaxUint32
 }
 
 // IsMin implements the Datum interface.
-func (d *DOid) IsMin(cmpCtx CompareContext) bool {
+func (d *DOid) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 	return d.Oid == 0
 }
 
 // Next implements the Datum interface.
-func (d *DOid) Next(cmpCtx CompareContext) (Datum, bool) {
+func (d *DOid) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	next := d.Oid + 1
 	return &DOid{next, d.semanticType, ""}, true
 }
 
 // Prev implements the Datum interface.
-func (d *DOid) Prev(cmpCtx CompareContext) (Datum, bool) {
+func (d *DOid) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	prev := d.Oid - 1
 	return &DOid{prev, d.semanticType, ""}, true
 }
@@ -5557,12 +5557,12 @@ func (d *DOid) ResolvedType() *types.T {
 func (d *DOid) Size() uintptr { return unsafe.Sizeof(*d) }
 
 // Max implements the Datum interface.
-func (d *DOid) Max(cmpCtx CompareContext) (Datum, bool) {
+func (d *DOid) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DOid{math.MaxUint32, d.semanticType, ""}, true
 }
 
 // Min implements the Datum interface.
-func (d *DOid) Min(cmpCtx CompareContext) (Datum, bool) {
+func (d *DOid) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 	return &DOid{0, d.semanticType, ""}, true
 }
 
@@ -5644,36 +5644,36 @@ func (d *DOidWrapper) Compare(
 }
 
 // Prev implements the Datum interface.
-func (d *DOidWrapper) Prev(cmpCtx CompareContext) (Datum, bool) {
-	prev, ok := d.Wrapped.Prev(cmpCtx)
+func (d *DOidWrapper) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	prev, ok := d.Wrapped.Prev(ctx, cmpCtx)
 	return wrapWithOid(prev, d.Oid), ok
 }
 
 // Next implements the Datum interface.
-func (d *DOidWrapper) Next(cmpCtx CompareContext) (Datum, bool) {
-	next, ok := d.Wrapped.Next(cmpCtx)
+func (d *DOidWrapper) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	next, ok := d.Wrapped.Next(ctx, cmpCtx)
 	return wrapWithOid(next, d.Oid), ok
 }
 
 // IsMax implements the Datum interface.
-func (d *DOidWrapper) IsMax(cmpCtx CompareContext) bool {
-	return d.Wrapped.IsMax(cmpCtx)
+func (d *DOidWrapper) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	return d.Wrapped.IsMax(ctx, cmpCtx)
 }
 
 // IsMin implements the Datum interface.
-func (d *DOidWrapper) IsMin(cmpCtx CompareContext) bool {
-	return d.Wrapped.IsMin(cmpCtx)
+func (d *DOidWrapper) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	return d.Wrapped.IsMin(ctx, cmpCtx)
 }
 
 // Max implements the Datum interface.
-func (d *DOidWrapper) Max(cmpCtx CompareContext) (Datum, bool) {
-	max, ok := d.Wrapped.Max(cmpCtx)
+func (d *DOidWrapper) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	max, ok := d.Wrapped.Max(ctx, cmpCtx)
 	return wrapWithOid(max, d.Oid), ok
 }
 
 // Min implements the Datum interface.
-func (d *DOidWrapper) Min(cmpCtx CompareContext) (Datum, bool) {
-	min, ok := d.Wrapped.Min(cmpCtx)
+func (d *DOidWrapper) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	min, ok := d.Wrapped.Min(ctx, cmpCtx)
 	return wrapWithOid(min, d.Oid), ok
 }
 
@@ -5710,33 +5710,33 @@ func (d *Placeholder) Compare(
 }
 
 // Prev implements the Datum interface.
-func (d *Placeholder) Prev(cmpCtx CompareContext) (Datum, bool) {
-	return cmpCtx.MustGetPlaceholderValue(d).Prev(cmpCtx)
+func (d *Placeholder) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return cmpCtx.MustGetPlaceholderValue(d).Prev(ctx, cmpCtx)
 }
 
 // IsMin implements the Datum interface.
-func (d *Placeholder) IsMin(cmpCtx CompareContext) bool {
-	return cmpCtx.MustGetPlaceholderValue(d).IsMin(cmpCtx)
+func (d *Placeholder) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	return cmpCtx.MustGetPlaceholderValue(d).IsMin(ctx, cmpCtx)
 }
 
 // Next implements the Datum interface.
-func (d *Placeholder) Next(cmpCtx CompareContext) (Datum, bool) {
-	return cmpCtx.MustGetPlaceholderValue(d).Next(cmpCtx)
+func (d *Placeholder) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return cmpCtx.MustGetPlaceholderValue(d).Next(ctx, cmpCtx)
 }
 
 // IsMax implements the Datum interface.
-func (d *Placeholder) IsMax(cmpCtx CompareContext) bool {
-	return cmpCtx.MustGetPlaceholderValue(d).IsMax(cmpCtx)
+func (d *Placeholder) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	return cmpCtx.MustGetPlaceholderValue(d).IsMax(ctx, cmpCtx)
 }
 
 // Max implements the Datum interface.
-func (d *Placeholder) Max(cmpCtx CompareContext) (Datum, bool) {
-	return cmpCtx.MustGetPlaceholderValue(d).Max(cmpCtx)
+func (d *Placeholder) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return cmpCtx.MustGetPlaceholderValue(d).Max(ctx, cmpCtx)
 }
 
 // Min implements the Datum interface.
-func (d *Placeholder) Min(cmpCtx CompareContext) (Datum, bool) {
-	return cmpCtx.MustGetPlaceholderValue(d).Min(cmpCtx)
+func (d *Placeholder) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return cmpCtx.MustGetPlaceholderValue(d).Min(ctx, cmpCtx)
 }
 
 // Size implements the Datum interface.
@@ -6322,7 +6322,7 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 // The return value is undefined if Datum.IsMin returns true or if the value is
 // NaN or an infinity (for floats and decimals).
 func DatumPrev(
-	datum Datum, cmpCtx CompareContext, collationEnv *CollationEnvironment,
+	ctx context.Context, datum Datum, cmpCtx CompareContext, collationEnv *CollationEnvironment,
 ) (Datum, bool) {
 	datum = UnwrapDOidWrapper(datum)
 	prevString := func(s string) (string, bool) {
@@ -6371,7 +6371,7 @@ func DatumPrev(
 		// TODO(yuzefovich): consider adding support for other datums that don't
 		// have Datum.Prev implementation (DCollatedString, DBitArray,
 		// DGeography, DGeometry, DBox2D, DJSON, DArray).
-		return datum.Prev(cmpCtx)
+		return datum.Prev(ctx, cmpCtx)
 	}
 }
 
@@ -6383,7 +6383,7 @@ func DatumPrev(
 // The return value is undefined if Datum.IsMax returns true or if the value is
 // NaN or an infinity (for floats and decimals).
 func DatumNext(
-	datum Datum, cmpCtx CompareContext, collationEnv *CollationEnvironment,
+	ctx context.Context, datum Datum, cmpCtx CompareContext, collationEnv *CollationEnvironment,
 ) (Datum, bool) {
 	datum = UnwrapDOidWrapper(datum)
 	switch d := datum.(type) {
@@ -6406,6 +6406,6 @@ func DatumNext(
 		// TODO(yuzefovich): consider adding support for other datums that don't
 		// have Datum.Next implementation (DCollatedString, DGeography,
 		// DGeometry, DBox2D, DJSON).
-		return datum.Next(cmpCtx)
+		return datum.Next(ctx, cmpCtx)
 	}
 }
