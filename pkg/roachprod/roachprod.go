@@ -1643,6 +1643,20 @@ func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes in
 	return SetupSSH(ctx, l, clusterName)
 }
 
+func Shrink(ctx context.Context, l *logger.Logger, clusterName string, numNodes int) error {
+	c, err := getClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	err = cloud.ShrinkCluster(l, &c.Cluster, numNodes)
+	if err != nil {
+		return err
+	}
+	_, err = Sync(l, vm.ListOptions{})
+	return err
+}
+
 // GC garbage-collects expired clusters, unused SSH key pairs in AWS, and unused
 // DNS records.
 func GC(l *logger.Logger, dryrun bool) error {

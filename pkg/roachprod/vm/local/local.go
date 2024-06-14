@@ -270,6 +270,10 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 	return errors.New("unimplemented")
 }
 
+func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName string) error {
+	return errors.New("unimplemented")
+}
+
 // Delete is part of the vm.Provider interface.
 func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	panic("DeleteCluster should be used")
