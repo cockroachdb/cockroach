@@ -3,18 +3,20 @@ services:
     # We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
     # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
     image: us-east1-docker.pkg.dev/crl-docker-sync/docker-mirror/docker.io/library/ubuntu:xenial-20170214
-    command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach1
+    command: /cockroach/cockroach start-single-node --insecure --log-dir=/cockroach/logs --spatial-libs=/cockroach/lib --listen-addr cockroach1
     volumes:
       - "${COCKROACH_PATH}:/cockroach/cockroach"
       - "${LIBGEOS_DIR_PATH}:/cockroach/lib"
+      - "${COMPARE_DIR_PATH}/logs1:/cockroach/logs"
   cockroach2:
     # We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
     # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
     image: us-east1-docker.pkg.dev/crl-docker-sync/docker-mirror/docker.io/library/ubuntu:xenial-20170214
-    command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach2
+    command: /cockroach/cockroach start-single-node --insecure --log-dir=/cockroach/logs --spatial-libs=/cockroach/lib --listen-addr cockroach2
     volumes:
       - "${COCKROACH_PATH}:/cockroach/cockroach"
       - "${LIBGEOS_DIR_PATH}:/cockroach/lib"
+      - "${COMPARE_DIR_PATH}/logs2:/cockroach/logs"
   test:
     # We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
     # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
