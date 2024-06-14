@@ -98,6 +98,7 @@ server.oidc_authentication.button_text	string	Log in with your OIDC provider	tex
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)	application
 server.oidc_authentication.client_id	string		sets OIDC client id	application
 server.oidc_authentication.client_secret	string		sets OIDC client secret	application
+server.oidc_authentication.client_timeout	duration	30s	sets the client timeout for external calls made during OIDC authentication (e.g. authorization code flow, etc.)	application
 server.oidc_authentication.enabled	boolean	false	enables or disabled OIDC login for the DB Console	application
 server.oidc_authentication.principal_regex	string	(.+)	regular expression to apply to extracted principal (see claim_json_key setting) to translate to SQL user (golang regex format, must include 1 grouping to extract)	application
 server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)	application
