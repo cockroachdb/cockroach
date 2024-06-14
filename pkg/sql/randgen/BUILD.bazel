@@ -54,6 +54,7 @@ go_library(
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
+        "@com_github_twpayne_go_geom//:go-geom",
     ],
 )
 
