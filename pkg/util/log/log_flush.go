@@ -93,7 +93,8 @@ const syncInterval = 30
 // maxSyncDuration is set to a conservative value since this is a new mechanism.
 // In practice, even a fraction of that would indicate a problem. This metric's
 // default should ideally match its sister metric in the storage engine, set by
-// COCKROACH_ENGINE_MAX_SYNC_DURATION.
+// COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT and the storage.max_sync_duration
+// cluster setting.
 var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_LOG_MAX_SYNC_DURATION", 20*time.Second)
 
 // syncWarnDuration is the threshold after which a slow disk warning is written
