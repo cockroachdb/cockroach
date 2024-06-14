@@ -244,7 +244,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={`${nid}-${sid}`}
               name="cr.store.storage.l0-num-files"
-              title={`store ${sid} ${getNodeNameById(nid)}`}
+              title={`${getNodeNameById(nid)},s${sid}`}
               sources={[sid]}
             />
           ))
@@ -266,7 +266,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={`${nid}-${sid}`}
               name="cr.store.storage.l0-level-size"
-              title={`store ${sid} ${getNodeNameById(nid)}`}
+              title={`${getNodeNameById(nid)},s${sid}`}
               sources={[sid]}
             />
           ))
