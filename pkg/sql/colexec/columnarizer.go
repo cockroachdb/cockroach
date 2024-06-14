@@ -155,10 +155,6 @@ func newColumnarizer(
 	c.ProcessorBaseNoHelper.Init(
 		nil, /* self */
 		flowCtx,
-		// The columnarizer will update the eval context when closed, so we give
-		// it a copy of the eval context to preserve the "global" eval context
-		// from being mutated.
-		flowCtx.NewEvalCtx(),
 		processorID,
 		execinfra.ProcStateOpts{
 			// We append input to inputs to drain below in order to reuse the same

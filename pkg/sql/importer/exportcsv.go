@@ -145,7 +145,7 @@ func newCSVWriterProcessor(
 		input:       input,
 	}
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	if err := c.out.Init(ctx, post, colinfo.ExportColumnTypes, &semaCtx, flowCtx.NewEvalCtx()); err != nil {
+	if err := c.out.Init(ctx, post, colinfo.ExportColumnTypes, &semaCtx, flowCtx.EvalCtx, flowCtx); err != nil {
 		return nil, err
 	}
 	return c, nil

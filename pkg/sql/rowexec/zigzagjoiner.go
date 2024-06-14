@@ -305,7 +305,7 @@ func newZigzagJoiner(
 
 	leftColumnTypes := spec.Sides[0].FetchSpec.FetchedColumnTypes()
 	rightColumnTypes := spec.Sides[1].FetchSpec.FetchedColumnTypes()
-	err := z.joinerBase.init(
+	_, err := z.joinerBase.init(
 		ctx,
 		z, /* self */
 		flowCtx,

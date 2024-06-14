@@ -179,6 +179,8 @@ var _ IndexedRowContainer = &MemRowContainer{}
 
 // Init initializes the MemRowContainer. The MemRowContainer uses the planner's
 // monitor to track memory usage.
+//
+// Note that eval context will **not** be mutated.
 func (mc *MemRowContainer) Init(
 	ordering colinfo.ColumnOrdering, types []*types.T, evalCtx *eval.Context,
 ) {
@@ -187,6 +189,8 @@ func (mc *MemRowContainer) Init(
 
 // InitWithMon initializes the MemRowContainer with an explicit monitor. Only
 // use this if the default MemRowContainer.Init() function is insufficient.
+//
+// Note that eval context will **not** be mutated.
 func (mc *MemRowContainer) InitWithMon(
 	ordering colinfo.ColumnOrdering, types []*types.T, evalCtx *eval.Context, mon *mon.BytesMonitor,
 ) {
@@ -431,7 +435,7 @@ var _ DeDupingRowContainer = &DiskBackedRowContainer{}
 //   - ordering is the output ordering; the order in which rows should be sorted.
 //   - types is the schema of rows that will be added to this container.
 //   - evalCtx defines the context in which to evaluate comparisons, only used
-//     when storing rows in memory.
+//     when storing rows in memory. It will **not** be mutated.
 //   - engine is the store used for rows when spilling to disk.
 //   - memoryMonitor is used to monitor the DiskBackedRowContainer's memory usage.
 //     If this monitor denies an allocation, the DiskBackedRowContainer will

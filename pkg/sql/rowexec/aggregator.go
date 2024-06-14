@@ -52,6 +52,8 @@ func (af aggregateFuncs) close(ctx context.Context) {
 type aggregatorBase struct {
 	execinfra.ProcessorBase
 
+	evalCtx *eval.Context
+
 	// runningState represents the state of the aggregator. This is in addition to
 	// ProcessorBase.State - the runningState is only relevant when
 	// ProcessorBase.State == StateRunning.
@@ -113,6 +115,8 @@ func (ag *aggregatorBase) init(
 	ag.bucketsAcc = memMonitor.MakeBoundAccount()
 	ag.arena = stringarena.Make(&ag.bucketsAcc)
 	ag.aggFuncsAcc = memMonitor.MakeBoundAccount()
+	ag.evalCtx = flowCtx.NewEvalCtx()
+	ag.evalCtx.SingleDatumAggMemAccount = &ag.aggFuncsAcc
 
 	// Loop over the select expressions and extract any aggregate functions --
 	// non-aggregation functions are replaced with parser.NewIdentAggregate,
@@ -135,7 +139,7 @@ func (ag *aggregatorBase) init(
 			}
 		}
 		constructor, arguments, outputType, err := execagg.GetAggregateConstructor(
-			ctx, flowCtx.EvalCtx, semaCtx, &aggInfo, ag.inputTypes,
+			ctx, ag.evalCtx, semaCtx, &aggInfo, ag.inputTypes,
 		)
 		if err != nil {
 			return err
@@ -147,8 +151,8 @@ func (ag *aggregatorBase) init(
 		ag.outputTypes[i] = outputType
 	}
 
-	return ag.ProcessorBase.Init(
-		ctx, self, post, ag.outputTypes, flowCtx, processorID, memMonitor,
+	return ag.ProcessorBase.InitWithEvalCtx(
+		ctx, self, post, ag.outputTypes, flowCtx, ag.evalCtx, processorID, memMonitor,
 		execinfra.ProcStateOpts{
 			InputsToDrain:        []execinfra.RowSource{ag.input},
 			TrailingMetaCallback: trailingMetaCallback,
@@ -283,8 +287,7 @@ func newHashAggregator(
 		buckets:                 make(map[string]aggregateFuncs),
 		bucketsLenGrowThreshold: hashAggregatorBucketsInitialLen,
 	}
-
-	if err := ag.init(
+	return ag, ag.init(
 		ctx,
 		ag,
 		flowCtx,
@@ -296,15 +299,7 @@ func newHashAggregator(
 			ag.close()
 			return nil
 		},
-	); err != nil {
-		return nil, err
-	}
-
-	// A new tree.EvalCtx was created during initializing aggregatorBase above
-	// and will be used only by this aggregator, so it is ok to update EvalCtx
-	// directly.
-	ag.EvalCtx.SingleDatumAggMemAccount = &ag.aggFuncsAcc
-	return ag, nil
+	)
 }
 
 func newOrderedAggregator(
@@ -316,8 +311,7 @@ func newOrderedAggregator(
 	post *execinfrapb.PostProcessSpec,
 ) (*orderedAggregator, error) {
 	ag := &orderedAggregator{}
-
-	if err := ag.init(
+	return ag, ag.init(
 		ctx,
 		ag,
 		flowCtx,
@@ -329,15 +323,7 @@ func newOrderedAggregator(
 			ag.close()
 			return nil
 		},
-	); err != nil {
-		return nil, err
-	}
-
-	// A new tree.EvalCtx was created during initializing aggregatorBase above
-	// and will be used only by this aggregator, so it is ok to update EvalCtx
-	// directly.
-	ag.EvalCtx.SingleDatumAggMemAccount = &ag.aggFuncsAcc
-	return ag, nil
+	)
 }
 
 // Start is part of the RowSource interface.
@@ -405,7 +391,7 @@ func (ag *orderedAggregator) close() {
 // columns, and false otherwise.
 func (ag *aggregatorBase) matchLastOrdGroupCols(row rowenc.EncDatumRow) (bool, error) {
 	for _, colIdx := range ag.orderedGroupCols {
-		res, err := ag.lastOrdGroupCols[colIdx].Compare(ag.Ctx(), ag.inputTypes[colIdx], &ag.datumAlloc, ag.EvalCtx, &row[colIdx])
+		res, err := ag.lastOrdGroupCols[colIdx].Compare(ag.Ctx(), ag.inputTypes[colIdx], &ag.datumAlloc, ag.evalCtx, &row[colIdx])
 		if res != 0 || err != nil {
 			return false, err
 		}
@@ -965,7 +951,7 @@ func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {
 	}
 	bucket := make(aggregateFuncs, len(ag.funcs))
 	for i, f := range ag.funcs {
-		agg := f.create(ag.EvalCtx, f.arguments)
+		agg := f.create(ag.evalCtx, f.arguments)
 		if err := ag.bucketsAcc.Grow(ag.Ctx(), agg.Size()); err != nil {
 			return nil, err
 		}
