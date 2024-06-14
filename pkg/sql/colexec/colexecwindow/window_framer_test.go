@@ -261,7 +261,10 @@ func (r *datumRows) Len() int {
 }
 
 func (r *datumRows) Less(i, j int) bool {
-	cmp := r.rows[i].Compare(r.ctx, r.rows[j])
+	cmp, err := r.rows[i].CompareError(context.Background(), r.ctx, r.rows[j])
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
 	if r.asc {
 		return cmp < 0
 	}
@@ -273,6 +276,7 @@ func (r *datumRows) Swap(i, j int) {
 }
 
 func makeSortedPartition(testCfg *testConfig) (tree.Datums, *colexecutils.SpillingBuffer) {
+	ctx := context.Background()
 	datums := &datumRows{
 		rows: make(tree.Datums, testCfg.count),
 		asc:  testCfg.asc,
@@ -304,10 +308,15 @@ func makeSortedPartition(testCfg *testConfig) (tree.Datums, *colexecutils.Spilli
 	var last tree.Datum
 	for i, val := range datums.rows {
 		insertBatch.ColVec(orderColIdx).Nulls().UnsetNulls()
-		insertBatch.ColVec(peersColIdx).Bool()[0] = false
-		if i == 0 || val.Compare(testCfg.evalCtx, last) != 0 {
-			insertBatch.ColVec(peersColIdx).Bool()[0] = true
+		peersVal := i == 0
+		if i > 0 {
+			cmp, err := val.CompareError(ctx, testCfg.evalCtx, last)
+			if err != nil {
+				colexecerror.InternalError(err)
+			}
+			peersVal = cmp != 0
 		}
+		insertBatch.ColVec(peersColIdx).Bool()[0] = peersVal
 		last = val
 		vec := insertBatch.ColVec(orderColIdx)
 		if val == tree.DNull {
@@ -333,8 +342,7 @@ func makeSortedPartition(testCfg *testConfig) (tree.Datums, *colexecutils.Spilli
 			}
 		}
 		insertBatch.SetLength(1)
-		partition.AppendTuples(
-			context.Background(), insertBatch, 0 /* startIdx */, insertBatch.Length())
+		partition.AppendTuples(ctx, insertBatch, 0 /* startIdx */, insertBatch.Length())
 	}
 	return datums.rows, partition
 }
@@ -484,7 +492,8 @@ func (c *peerGroupChecker) InSameGroup(i, j int) (bool, error) {
 		// All rows are in the same peer group.
 		return true, nil
 	}
-	return c.partition[i].Compare(&c.evalCtx, c.partition[j]) == 0, nil
+	cmp, err := c.partition[i].CompareError(context.Background(), &c.evalCtx, c.partition[j])
+	return cmp == 0, err
 }
 
 func modeToExecinfrapb(mode treewindow.WindowFrameMode) execinfrapb.WindowerSpec_Frame_Mode {

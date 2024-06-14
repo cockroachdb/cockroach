@@ -11,6 +11,7 @@
 package constraint
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -90,7 +91,7 @@ func (c *Constraint) IsUnconstrained() bool {
 // columns of both constraints must be the same. Constrained columns in the
 // merged constraint can have values that are part of either of the input
 // constraints.
-func (c *Constraint) UnionWith(evalCtx *eval.Context, other *Constraint) {
+func (c *Constraint) UnionWith(ctx context.Context, evalCtx *eval.Context, other *Constraint) {
 	if !c.Columns.Equals(&other.Columns) {
 		panic(errors.AssertionFailedf("column mismatch"))
 	}
@@ -105,7 +106,7 @@ func (c *Constraint) UnionWith(evalCtx *eval.Context, other *Constraint) {
 	leftIndex := 0
 	right := &other.Spans
 	rightIndex := 0
-	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	keyCtx := MakeKeyContext(ctx, &c.Columns, evalCtx)
 	var result Spans
 	result.Alloc(left.Count() + right.Count())
 
@@ -178,7 +179,7 @@ func (c *Constraint) UnionWith(evalCtx *eval.Context, other *Constraint) {
 // spans, then the intersection is empty, and tryIntersectWith returns false.
 // If a constraint set has even one empty constraint, then the entire set
 // should be marked as empty and all constraints removed.
-func (c *Constraint) IntersectWith(evalCtx *eval.Context, other *Constraint) {
+func (c *Constraint) IntersectWith(ctx context.Context, evalCtx *eval.Context, other *Constraint) {
 	if !c.Columns.Equals(&other.Columns) {
 		panic(errors.AssertionFailedf("column mismatch"))
 	}
@@ -193,7 +194,7 @@ func (c *Constraint) IntersectWith(evalCtx *eval.Context, other *Constraint) {
 	leftIndex := 0
 	right := &other.Spans
 	rightIndex := 0
-	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	keyCtx := MakeKeyContext(ctx, &c.Columns, evalCtx)
 	var result Spans
 	result.Alloc(left.Count())
 
@@ -241,7 +242,7 @@ func (c Constraint) String() string {
 
 // Contains returns true if the constraint contains every span in the given
 // constraint.
-func (c *Constraint) Contains(evalCtx *eval.Context, other *Constraint) bool {
+func (c *Constraint) Contains(ctx context.Context, evalCtx *eval.Context, other *Constraint) bool {
 	// The columns of the constraint must have a common prefix with the columns
 	// from other constraint.
 	prefixLength := c.Columns.PrefixLength(&other.Columns)
@@ -271,7 +272,7 @@ func (c *Constraint) Contains(evalCtx *eval.Context, other *Constraint) bool {
 	leftIndex := 0
 	right := &other.Spans
 	rightIndex := 0
-	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	keyCtx := MakeKeyContext(ctx, &c.Columns, evalCtx)
 
 	for leftIndex < left.Count() && rightIndex < right.Count() {
 		// If the current left span starts after the current right span, then
@@ -327,8 +328,8 @@ func (c *Constraint) maxSpanKeyLength() int {
 
 // ContainsSpan returns true if the constraint contains the given span (or a
 // span that contains it).
-func (c *Constraint) ContainsSpan(evalCtx *eval.Context, sp *Span) bool {
-	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+func (c *Constraint) ContainsSpan(ctx context.Context, evalCtx *eval.Context, sp *Span) bool {
+	keyCtx := MakeKeyContext(ctx, &c.Columns, evalCtx)
 	if cSpan, ok := c.findIntersectingSpan(&keyCtx, sp); ok {
 		// The spans must overlap. Check if sp is fully contained.
 		return sp.CompareStarts(&keyCtx, cSpan) >= 0 &&
@@ -338,8 +339,8 @@ func (c *Constraint) ContainsSpan(evalCtx *eval.Context, sp *Span) bool {
 }
 
 // IntersectsSpan returns true if the constraint overlaps the given span.
-func (c *Constraint) IntersectsSpan(evalCtx *eval.Context, sp *Span) bool {
-	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+func (c *Constraint) IntersectsSpan(ctx context.Context, evalCtx *eval.Context, sp *Span) bool {
+	keyCtx := MakeKeyContext(ctx, &c.Columns, evalCtx)
 	_, ok := c.findIntersectingSpan(&keyCtx, sp)
 	return ok
 }
@@ -368,7 +369,9 @@ func (c *Constraint) findIntersectingSpan(keyCtx *KeyContext, sp *Span) (_ *Span
 //	c:      /a/b: [/1 - /2] [/4 - /4]
 //	other:  /b: [/5 - /5]
 //	result: /a/b: [/1/5 - /2/5] [/4/5 - /4/5]
-func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint, checkCancellation func()) {
+func (c *Constraint) Combine(
+	ctx context.Context, evalCtx *eval.Context, other *Constraint, checkCancellation func(),
+) {
 	if !other.Columns.IsStrictSuffixOf(&c.Columns) {
 		// Note: we don't want to let the c and other pointers escape by passing
 		// them directly to Sprintf.
@@ -388,7 +391,7 @@ func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint, checkCanc
 	// We only initialize result if we determine that we need to modify the list
 	// of spans.
 	var resultInitialized bool
-	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
+	keyCtx := KeyContext{Columns: c.Columns, Ctx: ctx, EvalCtx: evalCtx}
 
 	numIterations := 0
 	cancelCheck := func() {
@@ -515,8 +518,10 @@ func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint, checkCanc
 // local partitions will not be consolidated with spans that overlap any remote
 // row ranges. A local row range is one whose leaseholder region preference is
 // the same region as the gateway region.
-func (c *Constraint) ConsolidateSpans(evalCtx *eval.Context, ps partition.PrefixSorter) {
-	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
+func (c *Constraint) ConsolidateSpans(
+	ctx context.Context, evalCtx *eval.Context, ps partition.PrefixSorter,
+) {
+	keyCtx := KeyContext{Columns: c.Columns, Ctx: ctx, EvalCtx: evalCtx}
 	var result Spans
 
 	if c.Spans.Count() < 1 {
@@ -588,7 +593,7 @@ func (c *Constraint) ConsolidateSpans(evalCtx *eval.Context, ps partition.Prefix
 //	/a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8]  ->  ExactPrefix = 1
 //	/a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3]  ->  ExactPrefix = 1
 //	/a/b/c: [/1/2/3 - /1/2/3] [/3 - /4]          ->  ExactPrefix = 0
-func (c *Constraint) ExactPrefix(evalCtx *eval.Context) int {
+func (c *Constraint) ExactPrefix(ctx context.Context, evalCtx *eval.Context) int {
 	if c.IsContradiction() {
 		return 0
 	}
@@ -602,12 +607,16 @@ func (c *Constraint) ExactPrefix(evalCtx *eval.Context) int {
 				return col
 			}
 			startVal := sp.start.Value(col)
-			if startVal.Compare(evalCtx, sp.end.Value(col)) != 0 {
+			if cmp, err := startVal.CompareError(ctx, evalCtx, sp.end.Value(col)); err != nil {
+				panic(err)
+			} else if cmp != 0 {
 				return col
 			}
 			if i == 0 {
 				val = startVal
-			} else if startVal.Compare(evalCtx, val) != 0 {
+			} else if cmp, err := startVal.CompareError(ctx, evalCtx, val); err != nil {
+				panic(err)
+			} else if cmp != 0 {
 				return col
 			}
 		}
@@ -650,7 +659,7 @@ func (c *Constraint) ConstrainedColumns(evalCtx *eval.Context) int {
 //
 //	/a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8] -> ExactPrefix = 1, Prefix = 1
 //	/a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3] -> ExactPrefix = 1, Prefix = 3
-func (c *Constraint) Prefix(evalCtx *eval.Context) int {
+func (c *Constraint) Prefix(ctx context.Context, evalCtx *eval.Context) int {
 	if c.IsContradiction() {
 		return 0
 	}
@@ -661,8 +670,12 @@ func (c *Constraint) Prefix(evalCtx *eval.Context) int {
 			sp := c.Spans.Get(i)
 			start := sp.StartKey()
 			end := sp.EndKey()
-			if start.Length() <= prefix || end.Length() <= prefix ||
-				start.Value(prefix).Compare(evalCtx, end.Value(prefix)) != 0 {
+			if start.Length() <= prefix || end.Length() <= prefix {
+				return prefix
+			}
+			if cmp, err := start.Value(prefix).CompareError(ctx, evalCtx, end.Value(prefix)); err != nil {
+				panic(err)
+			} else if cmp != 0 {
 				return prefix
 			}
 		}
@@ -688,9 +701,9 @@ func (c *Constraint) Prefix(evalCtx *eval.Context) int {
 //
 // This function returns all columns which have the same value for all spans,
 // and are within the constraint prefix (see Constraint.Prefix() for details).
-func (c *Constraint) ExtractConstCols(evalCtx *eval.Context) opt.ColSet {
+func (c *Constraint) ExtractConstCols(ctx context.Context, evalCtx *eval.Context) opt.ColSet {
 	var res opt.ColSet
-	prefix := c.Prefix(evalCtx)
+	prefix := c.Prefix(ctx, evalCtx)
 	for col := 0; col < prefix; col++ {
 		// Check if all spans have the same value for this column.
 		var val tree.Datum
@@ -702,7 +715,9 @@ func (c *Constraint) ExtractConstCols(evalCtx *eval.Context) opt.ColSet {
 			startVal := sp.start.Value(col)
 			if i == 0 {
 				val = startVal
-			} else if startVal.Compare(evalCtx, val) != 0 {
+			} else if cmp, err := startVal.CompareError(ctx, evalCtx, val); err != nil {
+				panic(err)
+			} else if cmp != 0 {
 				allMatch = false
 				break
 			}
@@ -717,7 +732,7 @@ func (c *Constraint) ExtractConstCols(evalCtx *eval.Context) opt.ColSet {
 
 // ExtractNotNullCols returns a set of columns that cannot be NULL when the
 // constraint holds.
-func (c *Constraint) ExtractNotNullCols(evalCtx *eval.Context) opt.ColSet {
+func (c *Constraint) ExtractNotNullCols(ctx context.Context, evalCtx *eval.Context) opt.ColSet {
 	if c.IsUnconstrained() || c.IsContradiction() {
 		return opt.ColSet{}
 	}
@@ -735,7 +750,7 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *eval.Context) opt.ColSet {
 	//   [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]
 	// has prefix 2. Only these columns and the first following column can be
 	// known to be not-null.
-	prefix := c.Prefix(evalCtx)
+	prefix := c.Prefix(ctx, evalCtx)
 	for i := 0; i < prefix; i++ {
 		// hasNull identifies cases like [/1/NULL/1 - /1/NULL/2].
 		hasNull := false
@@ -788,12 +803,12 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *eval.Context) opt.ColSet {
 // planner and optimizer need this logic, due to the heuristic planner planning
 // mutations. Once the optimizer plans mutations, this method can go away.
 func (c *Constraint) CalculateMaxResults(
-	evalCtx *eval.Context, indexCols opt.ColSet, notNullCols opt.ColSet,
+	ctx context.Context, evalCtx *eval.Context, indexCols opt.ColSet, notNullCols opt.ColSet,
 ) (_ uint64, ok bool) {
 	// Ensure that if we have nullable columns, we are only reading non-null
 	// values, given that a unique index allows an arbitrary number of duplicate
 	// entries if they have NULLs.
-	if !indexCols.SubsetOf(notNullCols.Union(c.ExtractNotNullCols(evalCtx))) {
+	if !indexCols.SubsetOf(notNullCols.Union(c.ExtractNotNullCols(ctx, evalCtx))) {
 		return 0, false
 	}
 
@@ -801,13 +816,13 @@ func (c *Constraint) CalculateMaxResults(
 
 	// Check if the longest prefix of columns for which all the spans have the
 	// same start and end values covers all columns.
-	prefix := c.Prefix(evalCtx)
+	prefix := c.Prefix(ctx, evalCtx)
 	var distinctVals uint64
 	if prefix < numCols-1 {
 		return 0, false
 	}
 	if prefix == numCols-1 {
-		keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+		keyCtx := MakeKeyContext(ctx, &c.Columns, evalCtx)
 		// If the prefix does not include the last column, calculate the number of
 		// distinct values possible in the span.
 		for i := 0; i < c.Spans.Count(); i++ {
@@ -828,7 +843,7 @@ func (c *Constraint) CalculateMaxResults(
 // and returns all included values. If a null value is included, hasNullValue
 // is returned as true.
 func (c *Constraint) CollectFirstColumnValues(
-	evalCtx *eval.Context,
+	ctx context.Context, evalCtx *eval.Context,
 ) (_ tree.Datums, hasNullValue bool, ok bool) {
 	if c.IsContradiction() || c.IsUnconstrained() {
 		return nil, false, false
@@ -836,7 +851,7 @@ func (c *Constraint) CollectFirstColumnValues(
 	numSpans := c.Spans.Count()
 	values := make(tree.Datums, 0, numSpans)
 
-	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	keyCtx := MakeKeyContext(ctx, &c.Columns, evalCtx)
 	hasNullValue = false
 	var prevValue tree.Datum
 	addValueIfNotDup := func(value tree.Datum) {

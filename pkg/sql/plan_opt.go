@@ -800,7 +800,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 		savedMemo.RootProps(),
 		f.CopyWithoutAssigningPlaceholders,
 	)
-	opc.optimizer.Memo().Metadata().UpdateTableMeta(f.EvalContext(), hypTables)
+	opc.optimizer.Memo().Metadata().UpdateTableMeta(ctx, f.EvalContext(), hypTables)
 	if _, err = opc.optimizer.Optimize(); err != nil {
 		return nil, err
 	}
@@ -815,7 +815,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	// update the saved memo's metadata with the original table information.
 	// Prepare to re-optimize and create an executable plan.
 	opc.optimizer.Init(ctx, f.EvalContext(), opc.catalog)
-	savedMemo.Metadata().UpdateTableMeta(f.EvalContext(), optTables)
+	savedMemo.Metadata().UpdateTableMeta(ctx, f.EvalContext(), optTables)
 	f.CopyAndReplace(
 		savedMemo.RootExpr().(memo.RelExpr),
 		savedMemo.RootProps(),

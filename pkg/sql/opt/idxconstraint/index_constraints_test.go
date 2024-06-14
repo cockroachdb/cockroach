@@ -62,6 +62,7 @@ func TestIndexConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, tu.TestDataPath(t), func(t *testing.T, path string) {
+		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
@@ -71,7 +72,7 @@ func TestIndexConstraints(t *testing.T) {
 			var err error
 
 			var f norm.Factory
-			f.Init(context.Background(), &evalCtx, nil /* catalog */)
+			f.Init(ctx, &evalCtx, nil /* catalog */)
 			md := f.Metadata()
 
 			evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = true
@@ -134,7 +135,7 @@ func TestIndexConstraints(t *testing.T) {
 
 				var ic idxconstraint.Instance
 				ic.Init(
-					filters, optionalFilters, indexCols, sv.NotNullCols(), computedCols,
+					ctx, filters, optionalFilters, indexCols, sv.NotNullCols(), computedCols,
 					colsInComputedColsExpressions,
 					true /* consolidate */, &evalCtx, &f, partition.PrefixSorter{},
 					func() {}, /* checkCancellation */
@@ -229,13 +230,14 @@ func BenchmarkIndexConstraints(b *testing.B) {
 		testCases = append(testCases, tc)
 	}
 
+	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			var f norm.Factory
-			f.Init(context.Background(), &evalCtx, nil /* catalog */)
+			f.Init(ctx, &evalCtx, nil /* catalog */)
 			md := f.Metadata()
 			var sv testutils.ScalarVars
 			err := sv.Init(md, strings.Split(tc.vars, ", "))
@@ -253,7 +255,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				var ic idxconstraint.Instance
 				ic.Init(
-					filters, nil /* optionalFilters */, indexCols, sv.NotNullCols(),
+					ctx, filters, nil /* optionalFilters */, indexCols, sv.NotNullCols(),
 					nil /* computedCols */, opt.ColSet{}, /* colsInComputedColsExpressions */
 					true, /* consolidate */
 					&evalCtx, &f, partition.PrefixSorter{},

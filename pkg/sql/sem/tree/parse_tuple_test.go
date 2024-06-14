@@ -12,6 +12,7 @@ package tree_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -213,7 +214,9 @@ func TestParseTuple(t *testing.T) {
 			if err != nil {
 				t.Fatalf("tuple %s: got error %s, expected %s", td.str, err.Error(), td.expected)
 			}
-			if actual.Compare(evalContext, td.expected) != 0 {
+			if cmp, err := actual.CompareError(context.Background(), evalContext, td.expected); err != nil {
+				t.Fatal(err)
+			} else if cmp != 0 {
 				t.Fatalf("tuple %s: got %s, expected %s", td.str, actual, td.expected)
 			}
 		})
@@ -306,7 +309,9 @@ func TestParseTupleRandomDatums(t *testing.T) {
 				tupContents,
 			)
 		}
-		if tup.Compare(evalCtx, parsed) != 0 {
+		if cmp, err := tup.CompareError(context.Background(), evalCtx, parsed); err != nil {
+			t.Fatal(err)
+		} else if cmp != 0 {
 			t.Fatalf(`iteration %d: tuple "%s", got %#v, expected %#v`, i, tupString, parsed, tup)
 		}
 	}

@@ -94,7 +94,9 @@ func testStartPreceding(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, off
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if value.Compare(evalCtx, valueAt) <= 0 {
+				if cmp, err := value.CompareError(context.Background(), evalCtx, valueAt); err != nil {
+					t.Fatal(err)
+				} else if cmp <= 0 {
 					if idx != frameStartIdx {
 						t.Errorf("FrameStartIdx returned wrong result on Preceding: expected %+v, found %+v", idx, frameStartIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
@@ -151,7 +153,9 @@ func testStartFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, off
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if value.Compare(evalCtx, valueAt) <= 0 {
+				if cmp, err := value.CompareError(context.Background(), evalCtx, valueAt); err != nil {
+					t.Fatal(err)
+				} else if cmp <= 0 {
 					if idx != frameStartIdx {
 						t.Errorf("FrameStartIdx returned wrong result on Following: expected %+v, found %+v", idx, frameStartIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
@@ -199,7 +203,9 @@ func testEndPreceding(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offse
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if value.Compare(evalCtx, valueAt) >= 0 {
+				if cmp, err := value.CompareError(context.Background(), evalCtx, valueAt); err != nil {
+					t.Fatal(err)
+				} else if cmp >= 0 {
 					if idx+1 != frameEndIdx {
 						t.Errorf("FrameEndIdx returned wrong result on Preceding: expected %+v, found %+v", idx+1, frameEndIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)
@@ -247,7 +253,9 @@ func testEndFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offse
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if value.Compare(evalCtx, valueAt) >= 0 {
+				if cmp, err := value.CompareError(context.Background(), evalCtx, valueAt); err != nil {
+					t.Fatal(err)
+				} else if cmp >= 0 {
 					if idx+1 != frameEndIdx {
 						t.Errorf("FrameEndIdx returned wrong result on Following: expected %+v, found %+v", idx+1, frameEndIdx)
 						t.Errorf("Search for %+v when wfr.RowIdx=%+v", value, wfr.RowIdx)

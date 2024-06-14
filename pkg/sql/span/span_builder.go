@@ -11,6 +11,7 @@
 package span
 
 import (
+	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -370,7 +371,7 @@ var _ InvertedSpans = inverted.SpanExpressionProtoSpans{}
 // scratch can be an optional roachpb.Spans slice that will be reused to
 // populate the result.
 func (s *Builder) SpansFromInvertedSpans(
-	invertedSpans InvertedSpans, c *constraint.Constraint, scratch roachpb.Spans,
+	ctx context.Context, invertedSpans InvertedSpans, c *constraint.Constraint, scratch roachpb.Spans,
 ) (roachpb.Spans, error) {
 	if invertedSpans == nil {
 		return nil, errors.AssertionFailedf("invertedSpans cannot be nil")
@@ -386,7 +387,7 @@ func (s *Builder) SpansFromInvertedSpans(
 			span := c.Spans.Get(i)
 
 			// The spans must have the same start and end key.
-			if !span.HasSingleKey(s.evalCtx) {
+			if !span.HasSingleKey(ctx, s.evalCtx) {
 				return nil, errors.AssertionFailedf("constraint span %s does not have a single key", span)
 			}
 

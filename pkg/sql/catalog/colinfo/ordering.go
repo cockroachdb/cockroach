@@ -12,6 +12,7 @@ package colinfo
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -78,7 +79,9 @@ func CompareDatums(ordering ColumnOrdering, evalCtx *eval.Context, lhs, rhs tree
 		// not sure this always holds as `CASE` expressions can return different
 		// types for a column for different rows. Investigate how other RDBMs
 		// handle this.
-		if cmp := lhs[c.ColIdx].Compare(evalCtx, rhs[c.ColIdx]); cmp != 0 {
+		if cmp, err := lhs[c.ColIdx].CompareError(context.TODO(), evalCtx, rhs[c.ColIdx]); err != nil {
+			panic(err)
+		} else if cmp != 0 {
 			if c.Direction == encoding.Descending {
 				cmp = -cmp
 			}

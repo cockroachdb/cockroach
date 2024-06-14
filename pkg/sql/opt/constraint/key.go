@@ -12,6 +12,7 @@ package constraint
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -304,12 +305,13 @@ func (k Key) String() string {
 // KeyContext contains the necessary metadata for comparing Keys.
 type KeyContext struct {
 	Columns Columns
+	Ctx     context.Context
 	EvalCtx *eval.Context
 }
 
 // MakeKeyContext initializes a KeyContext.
-func MakeKeyContext(cols *Columns, evalCtx *eval.Context) KeyContext {
-	return KeyContext{Columns: *cols, EvalCtx: evalCtx}
+func MakeKeyContext(ctx context.Context, cols *Columns, evalCtx *eval.Context) KeyContext {
+	return KeyContext{Columns: *cols, Ctx: ctx, EvalCtx: evalCtx}
 }
 
 // Compare two values for a given column.
@@ -320,7 +322,10 @@ func (c *KeyContext) Compare(colIdx int, a, b tree.Datum) int {
 	if a == b {
 		return 0
 	}
-	cmp := a.Compare(c.EvalCtx, b)
+	cmp, err := a.CompareError(c.Ctx, c.EvalCtx, b)
+	if err != nil {
+		panic(err)
+	}
 	if c.Columns.Get(colIdx).Descending() {
 		cmp = -cmp
 	}

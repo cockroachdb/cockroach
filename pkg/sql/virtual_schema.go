@@ -297,7 +297,7 @@ func (t virtualSchemaTable) isUnimplemented() bool {
 // not using a partial index, and therefore do not need to fallback on an
 // undefined populate function.
 func (t virtualSchemaTable) preferIndexOverGenerator(
-	p *planner, index catalog.Index, idxConstraint *constraint.Constraint,
+	ctx context.Context, p *planner, index catalog.Index, idxConstraint *constraint.Constraint,
 ) bool {
 	if idxConstraint == nil || idxConstraint.IsUnconstrained() {
 		return false
@@ -314,7 +314,7 @@ func (t virtualSchemaTable) preferIndexOverGenerator(
 
 	for i := 0; i < idxConstraint.Spans.Count(); i++ {
 		constraintSpan := idxConstraint.Spans.Get(i)
-		if !constraintSpan.HasSingleKey(p.EvalContext()) {
+		if !constraintSpan.HasSingleKey(ctx, p.EvalContext()) {
 			return false
 		}
 	}
@@ -634,7 +634,7 @@ func (e *virtualDefEntry) getPlanInfo(
 				return nil, newInvalidVirtualSchemaError()
 			}
 
-			if def.generator != nil && !def.preferIndexOverGenerator(p, index, idxConstraint) {
+			if def.generator != nil && !def.preferIndexOverGenerator(ctx, p, index, idxConstraint) {
 				next, cleanup, err := def.generator(ctx, p, dbDesc, stopper)
 				if err != nil {
 					return nil, err
@@ -759,7 +759,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 				// will tell us whether or not to let the current row pass the filter.
 				key := constraint.MakeCompositeKey(indexKeyDatums...)
 				span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
-				if !idxConstraint.ContainsSpan(p.EvalContext(), &span) {
+				if !idxConstraint.ContainsSpan(ctx, p.EvalContext(), &span) {
 					return nil
 				}
 				if err := e.validateRow(datums, columns); err != nil {
@@ -790,7 +790,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 				return errors.AssertionFailedf(
 					"programming error: can't push down composite constraints into vtables")
 			}
-			if !span.HasSingleKey(p.EvalContext()) {
+			if !span.HasSingleKey(ctx, p.EvalContext()) {
 				// No hope - we can't deal with range scans on virtual indexes.
 				break
 			}

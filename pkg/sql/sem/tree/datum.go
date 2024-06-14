@@ -199,7 +199,7 @@ func (d *Datums) Format(ctx *FmtCtx) {
 // Compare does a lexicographical comparison and returns -1 if the receiver
 // is less than other, 0 if receiver is equal to other and +1 if receiver is
 // greater than other.
-func (d Datums) Compare(evalCtx CompareContext, other Datums) int {
+func (d Datums) Compare(ctx context.Context, evalCtx CompareContext, other Datums) int {
 	if len(d) == 0 {
 		panic(errors.AssertionFailedf("empty Datums being compared to other"))
 	}
@@ -209,7 +209,10 @@ func (d Datums) Compare(evalCtx CompareContext, other Datums) int {
 			return 1
 		}
 
-		compareDatum := d[i].Compare(evalCtx, other[i])
+		compareDatum, err := d[i].CompareError(ctx, evalCtx, other[i])
+		if err != nil {
+			panic(err)
+		}
 		if compareDatum != 0 {
 			return compareDatum
 		}
@@ -4825,7 +4828,9 @@ func (d *DTuple) AssertSorted() {
 // The target Datum cannot be NULL or a DTuple that contains NULLs (we cannot
 // binary search in this case; for example `(1, NULL) IN ((1, 2), ..)` needs to
 // be
-func (d *DTuple) SearchSorted(cmpCtx CompareContext, target Datum) (int, bool) {
+func (d *DTuple) SearchSorted(
+	ctx context.Context, cmpCtx CompareContext, target Datum,
+) (int, bool) {
 	d.AssertSorted()
 	if target == DNull {
 		panic(errors.AssertionFailedf("NULL target (d: %s)", d))
@@ -4834,22 +4839,38 @@ func (d *DTuple) SearchSorted(cmpCtx CompareContext, target Datum) (int, bool) {
 		panic(errors.AssertionFailedf("target containing NULLs: %#v (d: %s)", target, d))
 	}
 	i := sort.Search(len(d.D), func(i int) bool {
-		return d.D[i].Compare(cmpCtx, target) >= 0
+		cmp, err := d.D[i].CompareError(ctx, cmpCtx, target)
+		if err != nil {
+			panic(err)
+		}
+		return cmp >= 0
 	})
-	found := i < len(d.D) && d.D[i].Compare(cmpCtx, target) == 0
+	var found bool
+	if i < len(d.D) {
+		cmp, err := d.D[i].CompareError(ctx, cmpCtx, target)
+		if err != nil {
+			panic(err)
+		}
+		found = cmp == 0
+	}
 	return i, found
 }
 
 // Normalize sorts and uniques the datum tuple.
 func (d *DTuple) Normalize(cmpCtx CompareContext) {
-	d.sort(cmpCtx)
-	d.makeUnique(cmpCtx)
+	ctx := context.TODO()
+	d.sort(ctx, cmpCtx)
+	d.makeUnique(ctx, cmpCtx)
 }
 
-func (d *DTuple) sort(cmpCtx CompareContext) {
+func (d *DTuple) sort(ctx context.Context, cmpCtx CompareContext) {
 	if !d.sorted {
 		sortFn := func(a, b Datum) int {
-			return a.Compare(cmpCtx, b)
+			cmp, err := a.CompareError(ctx, cmpCtx, b)
+			if err != nil {
+				panic(err)
+			}
+			return cmp
 		}
 
 		// It is possible for the tuple to be sorted even though the sorted flag
@@ -4862,10 +4883,16 @@ func (d *DTuple) sort(cmpCtx CompareContext) {
 	}
 }
 
-func (d *DTuple) makeUnique(cmpCtx CompareContext) {
-	n := 0
-	for i := 0; i < len(d.D); i++ {
-		if n == 0 || d.D[n-1].Compare(cmpCtx, d.D[i]) < 0 {
+func (d *DTuple) makeUnique(ctx context.Context, cmpCtx CompareContext) {
+	if len(d.D) == 0 {
+		return
+	}
+	n := 1 // always keep the first element
+	for i := 1; i < len(d.D); i++ {
+		cmp, err := d.D[n-1].CompareError(ctx, cmpCtx, d.D[i])
+		if err != nil {
+			panic(err)
+		} else if cmp < 0 {
 			d.D[n] = d.D[i]
 			n++
 		}
@@ -6293,12 +6320,16 @@ var baseDatumTypeSizes = map[types.Family]struct {
 // If neither of these conditions hold, MaxDistinctCount returns ok=false.
 // Additionally, it must be the case that first <= last, otherwise
 // MaxDistinctCount returns ok=false.
-func MaxDistinctCount(evalCtx CompareContext, first, last Datum) (_ int64, ok bool) {
+func MaxDistinctCount(
+	ctx context.Context, evalCtx CompareContext, first, last Datum,
+) (_ int64, ok bool) {
 	if !first.ResolvedType().Equivalent(last.ResolvedType()) {
 		// The datums must be of the same type.
 		return 0, false
 	}
-	if first.Compare(evalCtx, last) == 0 {
+	if cmp, err := first.CompareError(ctx, evalCtx, last); err != nil {
+		panic(err)
+	} else if cmp == 0 {
 		// If the datums are equal, the distinct count is 1.
 		return 1, true
 	}
