@@ -1700,6 +1700,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 			return false, err
 		}
 	}
+	if log.V(2) {
+		log.Infof(cf.Ctx(), "wrote checkpoint to job progress: %s", checkpoint)
+	}
 
 	cf.localState.SetHighwater(frontier)
 	cf.localState.SetCheckpoint(checkpoint.Spans, checkpoint.Timestamp)
