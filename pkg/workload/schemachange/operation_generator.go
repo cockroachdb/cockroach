@@ -1197,7 +1197,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	}
 
 	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(
-		og.params.rng, "table", tableIdx, databaseHasMultiRegion,
+		ctx, og.params.rng, "table", tableIdx, databaseHasMultiRegion,
 		true /* allowPartiallyVisibleIndex */, og.newUniqueSeqNumSuffix,
 	)
 	stmt.Table = *tableName

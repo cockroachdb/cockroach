@@ -555,7 +555,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 
 		// First check that evaluating `indexedValue @> value` matches the expected
 		// result.
-		res, err := tree.ArrayContains(&evalCtx, indexedValue.(*tree.DArray), value.(*tree.DArray))
+		res, err := tree.ArrayContains(context.Background(), &evalCtx, indexedValue.(*tree.DArray), value.(*tree.DArray))
 		require.NoError(t, err)
 		if bool(*res) != c.expected {
 			t.Fatalf(
@@ -577,7 +577,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		left := randgen.RandArray(rng, typ, 0 /* nullChance */)
 		right := randgen.RandArray(rng, typ, 0 /* nullChance */)
 
-		res, err := tree.ArrayContains(&evalCtx, left.(*tree.DArray), right.(*tree.DArray))
+		res, err := tree.ArrayContains(context.Background(), &evalCtx, left.(*tree.DArray), right.(*tree.DArray))
 		require.NoError(t, err)
 
 		// The spans should not have duplicate values if there is at least one
@@ -692,7 +692,7 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 
 		// Since the spans are never tight, apply an additional filter to determine
 		// if the result is contained.
-		actual, err := tree.ArrayContains(&evalCtx, value.(*tree.DArray), indexedValue.(*tree.DArray))
+		actual, err := tree.ArrayContains(context.Background(), &evalCtx, value.(*tree.DArray), indexedValue.(*tree.DArray))
 		require.NoError(t, err)
 		if bool(*actual) != expected {
 			if expected {
@@ -720,7 +720,7 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 
 		// We cannot check for false positives with these tests (due to the fact that
 		// the spans are not tight), so we will only test for false negatives.
-		isContained, err := tree.ArrayContains(&evalCtx, right.(*tree.DArray), left.(*tree.DArray))
+		isContained, err := tree.ArrayContains(context.Background(), &evalCtx, right.(*tree.DArray), left.(*tree.DArray))
 		require.NoError(t, err)
 		if !*isContained {
 			continue
@@ -959,7 +959,7 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 		left := randgen.RandArray(rng, typ, 9 /* nullChance */)
 		right := randgen.RandArray(rng, typ, 9 /* nullChance */)
 
-		overlaps, err := tree.ArrayOverlaps(&evalCtx, right.(*tree.DArray), left.(*tree.DArray))
+		overlaps, err := tree.ArrayOverlaps(context.Background(), &evalCtx, right.(*tree.DArray), left.(*tree.DArray))
 		require.NoError(t, err)
 
 		rightArr, _ := right.(*tree.DArray)
