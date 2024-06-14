@@ -296,7 +296,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		RangeLeaseDuration:       p.repl.store.cfg.RangeLeaseDuration,
 	}
 	nl := p.repl.store.cfg.NodeLiveness
-	in := leases.Input{
+	in := leases.BuildInput{
 		LocalStoreID:          p.repl.StoreID(),
 		Now:                   status.Now,
 		MinLeaseProposedTS:    p.repl.mu.minLeaseProposedTS,

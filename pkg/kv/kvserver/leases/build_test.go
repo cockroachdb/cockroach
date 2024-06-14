@@ -37,17 +37,17 @@ var (
 func TestInputValidation(t *testing.T) {
 	testCases := []struct {
 		name   string
-		input  Input
+		input  BuildInput
 		expErr string
 	}{
 		{
 			name:   "empty",
-			input:  Input{},
+			input:  BuildInput{},
 			expErr: "no lease target provided",
 		},
 		{
 			name: "remote transfer",
-			input: Input{
+			input: BuildInput{
 				LocalStoreID:    repl1.StoreID,
 				Now:             cts20,
 				PrevLease:       roachpb.Lease{Replica: repl2, Expiration: &ts30},
@@ -57,7 +57,7 @@ func TestInputValidation(t *testing.T) {
 		},
 		{
 			name: "epoch without liveness",
-			input: Input{
+			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
 				Now:              cts20,
 				PrevLease:        roachpb.Lease{Replica: repl2, Epoch: 3},
@@ -68,7 +68,7 @@ func TestInputValidation(t *testing.T) {
 		},
 		{
 			name: "expiration with liveness",
-			input: Input{
+			input: BuildInput{
 				LocalStoreID:          repl1.StoreID,
 				Now:                   cts20,
 				PrevLease:             roachpb.Lease{Replica: repl2, Expiration: &ts30},
@@ -80,7 +80,7 @@ func TestInputValidation(t *testing.T) {
 		},
 		{
 			name: "previous lease expired incorrect, computed false",
-			input: Input{
+			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
 				Now:              cts20,
 				PrevLease:        roachpb.Lease{Replica: repl2, Expiration: &ts30},
@@ -91,7 +91,7 @@ func TestInputValidation(t *testing.T) {
 		},
 		{
 			name: "previous lease expired incorrect, computed true",
-			input: Input{
+			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
 				Now:              cts20,
 				PrevLease:        roachpb.Lease{Replica: repl2, Expiration: &ts10},
@@ -102,7 +102,7 @@ func TestInputValidation(t *testing.T) {
 		},
 		{
 			name: "acquisition before expiration",
-			input: Input{
+			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
 				Now:              cts20,
 				PrevLease:        roachpb.Lease{Replica: repl2, Expiration: &ts30},
@@ -113,7 +113,7 @@ func TestInputValidation(t *testing.T) {
 		},
 		{
 			name: "valid acquisition",
-			input: Input{
+			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
 				Now:              cts20,
 				PrevLease:        roachpb.Lease{Replica: repl2, Expiration: &ts10},
@@ -124,7 +124,7 @@ func TestInputValidation(t *testing.T) {
 		},
 		{
 			name: "valid extension",
-			input: Input{
+			input: BuildInput{
 				LocalStoreID:    repl1.StoreID,
 				Now:             cts20,
 				PrevLease:       roachpb.Lease{Replica: repl1, Expiration: &ts30},
@@ -134,7 +134,7 @@ func TestInputValidation(t *testing.T) {
 		},
 		{
 			name: "valid transfer",
-			input: Input{
+			input: BuildInput{
 				LocalStoreID:    repl1.StoreID,
 				Now:             cts20,
 				PrevLease:       roachpb.Lease{Replica: repl1, Expiration: &ts30},
@@ -206,7 +206,7 @@ func TestBuild(t *testing.T) {
 		name      string
 		st        Settings
 		nl        NodeLiveness
-		input     Input
+		input     BuildInput
 		expOutput Output
 		expErr    string
 	}
@@ -235,7 +235,7 @@ func TestBuild(t *testing.T) {
 	}
 
 	t.Run("acquisition", func(t *testing.T) {
-		defaultInput := Input{
+		defaultInput := BuildInput{
 			LocalStoreID: repl1.StoreID,
 			Now:          cts20,
 			PrevLease: roachpb.Lease{
@@ -247,7 +247,7 @@ func TestBuild(t *testing.T) {
 			PrevLeaseExpired:      true,
 			NextLeaseHolder:       repl1,
 		}
-		expirationInput := func() Input {
+		expirationInput := func() BuildInput {
 			i := defaultInput
 			i.PrevLease.Expiration = &ts10
 			i.PrevLease.Epoch = 0
@@ -272,7 +272,7 @@ func TestBuild(t *testing.T) {
 			},
 			{
 				name: "basic, previous expired, prior epoch",
-				input: func() Input {
+				input: func() BuildInput {
 					i := defaultInput
 					i.PrevLeaseExpired = true
 					return i
@@ -291,7 +291,7 @@ func TestBuild(t *testing.T) {
 			},
 			{
 				name: "basic, previous expired, same epoch",
-				input: func() Input {
+				input: func() BuildInput {
 					i := defaultInput
 					i.Now = cts30
 					i.PrevLease.Epoch = 3
@@ -371,7 +371,7 @@ func TestBuild(t *testing.T) {
 	})
 
 	t.Run("extension", func(t *testing.T) {
-		defaultInput := Input{
+		defaultInput := BuildInput{
 			LocalStoreID: repl1.StoreID,
 			Now:          cts20,
 			PrevLease: roachpb.Lease{
@@ -383,7 +383,7 @@ func TestBuild(t *testing.T) {
 			PrevLeaseNodeLiveness: defaultNodeLivenessRecord(repl1.NodeID).Liveness,
 			NextLeaseHolder:       repl1,
 		}
-		expirationInput := func() Input {
+		expirationInput := func() BuildInput {
 			i := defaultInput
 			i.PrevLease.Expiration = &ts30
 			i.PrevLease.Epoch = 0
@@ -408,7 +408,7 @@ func TestBuild(t *testing.T) {
 			},
 			{
 				name: "basic, previous expired",
-				input: func() Input {
+				input: func() BuildInput {
 					i := defaultInput
 					i.Now = cts30
 					i.PrevLeaseExpired = true
@@ -464,7 +464,7 @@ func TestBuild(t *testing.T) {
 			},
 			{
 				name: "promote expiration to epoch, needs liveness heartbeat",
-				input: func() Input {
+				input: func() BuildInput {
 					i := expirationInput
 					i.PrevLease.Expiration = &ts40
 					return i
@@ -504,7 +504,7 @@ func TestBuild(t *testing.T) {
 			{
 				name: "extend expiration, avoid shortening",
 				st:   useExpirationSettings(),
-				input: func() Input {
+				input: func() BuildInput {
 					i := expirationInput
 					i.PrevLease.Expiration = &ts50
 					return i
@@ -523,7 +523,7 @@ func TestBuild(t *testing.T) {
 			},
 			{
 				name: "min proposed timestamp",
-				input: func() Input {
+				input: func() BuildInput {
 					i := defaultInput
 					i.MinLeaseProposedTS = hlc.ClockTimestamp{WallTime: 15}
 					return i
@@ -549,7 +549,7 @@ func TestBuild(t *testing.T) {
 	})
 
 	t.Run("transfer", func(t *testing.T) {
-		defaultInput := Input{
+		defaultInput := BuildInput{
 			LocalStoreID: repl1.StoreID,
 			Now:          cts20,
 			PrevLease: roachpb.Lease{
@@ -561,7 +561,7 @@ func TestBuild(t *testing.T) {
 			PrevLeaseNodeLiveness: defaultNodeLivenessRecord(repl1.NodeID).Liveness,
 			NextLeaseHolder:       repl2,
 		}
-		expirationInput := func() Input {
+		expirationInput := func() BuildInput {
 			i := defaultInput
 			i.PrevLease.Expiration = &ts30
 			i.PrevLease.Epoch = 0
