@@ -234,8 +234,10 @@ func newInvertedJoiner(
 		}
 	}
 
-	if err := ij.ProcessorBase.Init(
-		ctx, ij, post, outputColTypes, flowCtx, processorID, nil, /* memMonitor */
+	// Always make a copy of the eval context since it might be mutated later.
+	evalCtx := flowCtx.NewEvalCtx()
+	if err := ij.ProcessorBase.InitWithEvalCtx(
+		ctx, ij, post, outputColTypes, flowCtx, evalCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ij.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
@@ -263,7 +265,7 @@ func newInvertedJoiner(
 	// execbuilder.Builder.buildInvertedJoin.
 	onExprColTypes[len(ij.inputTypes)+ij.invertedFetchedColOrdinal] = spec.InvertedColumnOriginalType
 
-	if err := ij.onExprHelper.Init(ctx, spec.OnExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
+	if err := ij.onExprHelper.Init(ctx, spec.OnExpr, onExprColTypes, semaCtx, evalCtx); err != nil {
 		return nil, err
 	}
 	combinedRowLen := len(onExprColTypes)
@@ -274,11 +276,11 @@ func newInvertedJoiner(
 
 	if ij.datumsToInvertedExpr == nil {
 		var invertedExprHelper execinfrapb.ExprHelper
-		if err := invertedExprHelper.Init(ctx, spec.InvertedExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
+		if err := invertedExprHelper.Init(ctx, spec.InvertedExpr, onExprColTypes, semaCtx, evalCtx); err != nil {
 			return nil, err
 		}
 		ij.datumsToInvertedExpr, err = invertedidx.NewDatumsToInvertedExpr(
-			ctx, ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr(), ij.fetchSpec.GeoConfig,
+			ctx, evalCtx, onExprColTypes, invertedExprHelper.Expr(), ij.fetchSpec.GeoConfig,
 		)
 		if err != nil {
 			return nil, err
@@ -324,7 +326,7 @@ func newInvertedJoiner(
 	ij.indexRows = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */
 		rightColTypes,
-		ij.EvalCtx,
+		ij.FlowCtx.EvalCtx,
 		ij.FlowCtx.Cfg.TempStorage,
 		ij.MemMonitor,
 		ij.diskMonitor,

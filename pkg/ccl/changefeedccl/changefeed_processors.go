@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -929,9 +930,10 @@ const (
 type changeFrontier struct {
 	execinfra.ProcessorBase
 
-	spec   execinfrapb.ChangeFrontierSpec
-	memAcc mon.BoundAccount
-	a      tree.DatumAlloc
+	evalCtx *eval.Context
+	spec    execinfrapb.ChangeFrontierSpec
+	memAcc  mon.BoundAccount
+	a       tree.DatumAlloc
 
 	// input returns rows from one or more changeAggregator processors
 	input execinfra.RowSource
@@ -1135,6 +1137,9 @@ func newChangeFrontierProcessor(
 	}
 
 	cf := &changeFrontier{
+		// We might modify the ChangefeedState field in the eval.Context, so we
+		// need to make a copy.
+		evalCtx:       flowCtx.NewEvalCtx(),
 		spec:          spec,
 		memAcc:        memMonitor.MakeBoundAccount(),
 		input:         input,
@@ -1146,12 +1151,13 @@ func newChangeFrontierProcessor(
 		cf.knobs = *cfKnobs
 	}
 
-	if err := cf.Init(
+	if err := cf.InitWithEvalCtx(
 		ctx,
 		cf,
 		post,
 		input.OutputTypes(),
 		flowCtx,
+		cf.evalCtx,
 		processorID,
 		memMonitor,
 		execinfra.ProcStateOpts{
@@ -1248,12 +1254,12 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
-	if cf.EvalCtx.ChangefeedState == nil {
+	if cf.evalCtx.ChangefeedState == nil {
 		cf.MoveToDraining(errors.AssertionFailedf("expected initialized local state"))
 		return
 	}
 
-	cf.localState = cf.EvalCtx.ChangefeedState.(*cachedState)
+	cf.localState = cf.evalCtx.ChangefeedState.(*cachedState)
 	cf.js = newJobState(nil, cf.FlowCtx.Cfg.Settings, cf.metrics, timeutil.DefaultTimeSource{})
 
 	if cf.spec.JobID != 0 {

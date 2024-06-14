@@ -73,7 +73,7 @@ func newMergeJoiner(
 		m.ExecStatsForTrace = m.execStatsForTrace
 	}
 
-	if err := m.joinerBase.init(
+	if _, err := m.joinerBase.init(
 		ctx, m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, false /* outputContinuationColumn */, post,
 		execinfra.ProcStateOpts{
