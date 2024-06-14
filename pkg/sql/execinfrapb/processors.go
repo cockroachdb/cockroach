@@ -269,7 +269,7 @@ func isNegative(ctx context.Context, evalCtx *eval.Context, offset tree.Datum) (
 	case *tree.DFloat:
 		return *o < 0, nil
 	case *tree.DInterval:
-		cmp, err := o.CompareError(ctx, evalCtx, &tree.DInterval{Duration: duration.Duration{}})
+		cmp, err := o.Compare(ctx, evalCtx, &tree.DInterval{Duration: duration.Duration{}})
 		return cmp < 0, err
 	default:
 		panic("unexpected offset type")

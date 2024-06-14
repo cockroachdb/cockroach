@@ -214,7 +214,7 @@ func TestParseTuple(t *testing.T) {
 			if err != nil {
 				t.Fatalf("tuple %s: got error %s, expected %s", td.str, err.Error(), td.expected)
 			}
-			if cmp, err := actual.CompareError(context.Background(), evalContext, td.expected); err != nil {
+			if cmp, err := actual.Compare(context.Background(), evalContext, td.expected); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Fatalf("tuple %s: got %s, expected %s", td.str, actual, td.expected)
@@ -309,7 +309,7 @@ func TestParseTupleRandomDatums(t *testing.T) {
 				tupContents,
 			)
 		}
-		if cmp, err := tup.CompareError(context.Background(), evalCtx, parsed); err != nil {
+		if cmp, err := tup.Compare(context.Background(), evalCtx, parsed); err != nil {
 			t.Fatal(err)
 		} else if cmp != 0 {
 			t.Fatalf(`iteration %d: tuple "%s", got %#v, expected %#v`, i, tupString, parsed, tup)

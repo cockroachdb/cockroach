@@ -168,7 +168,7 @@ func mergeExtremesStatistic(
 	i := 0
 	// Merge partial stats to prior full statistics.
 	for i < len(partialHistogram) {
-		if val, err := partialHistogram[i].UpperBound.CompareError(ctx, cmpCtx, fullHistogram[0].UpperBound); err == nil {
+		if val, err := partialHistogram[i].UpperBound.Compare(ctx, cmpCtx, fullHistogram[0].UpperBound); err == nil {
 			if val == 0 {
 				return nil, errors.New("the lowerbound of the full statistic histogram overlaps with the partial statistic histogram")
 			}
@@ -186,7 +186,7 @@ func mergeExtremesStatistic(
 	// Iterate through the rest of the full histogram and append it.
 	for _, fullHistBucket := range fullHistogram {
 		if i < len(partialHistogram) {
-			if val, err := partialHistogram[i].UpperBound.CompareError(ctx, cmpCtx, fullHistBucket.UpperBound); err == nil {
+			if val, err := partialHistogram[i].UpperBound.Compare(ctx, cmpCtx, fullHistBucket.UpperBound); err == nil {
 				if val <= 0 {
 					return nil, errors.New("the upperbound of the full statistic histogram overlaps with the partial statistic histogram")
 				}

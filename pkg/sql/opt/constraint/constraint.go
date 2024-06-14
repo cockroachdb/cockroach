@@ -607,14 +607,14 @@ func (c *Constraint) ExactPrefix(ctx context.Context, evalCtx *eval.Context) int
 				return col
 			}
 			startVal := sp.start.Value(col)
-			if cmp, err := startVal.CompareError(ctx, evalCtx, sp.end.Value(col)); err != nil {
+			if cmp, err := startVal.Compare(ctx, evalCtx, sp.end.Value(col)); err != nil {
 				panic(err)
 			} else if cmp != 0 {
 				return col
 			}
 			if i == 0 {
 				val = startVal
-			} else if cmp, err := startVal.CompareError(ctx, evalCtx, val); err != nil {
+			} else if cmp, err := startVal.Compare(ctx, evalCtx, val); err != nil {
 				panic(err)
 			} else if cmp != 0 {
 				return col
@@ -673,7 +673,7 @@ func (c *Constraint) Prefix(ctx context.Context, evalCtx *eval.Context) int {
 			if start.Length() <= prefix || end.Length() <= prefix {
 				return prefix
 			}
-			if cmp, err := start.Value(prefix).CompareError(ctx, evalCtx, end.Value(prefix)); err != nil {
+			if cmp, err := start.Value(prefix).Compare(ctx, evalCtx, end.Value(prefix)); err != nil {
 				panic(err)
 			} else if cmp != 0 {
 				return prefix
@@ -715,7 +715,7 @@ func (c *Constraint) ExtractConstCols(ctx context.Context, evalCtx *eval.Context
 			startVal := sp.start.Value(col)
 			if i == 0 {
 				val = startVal
-			} else if cmp, err := startVal.CompareError(ctx, evalCtx, val); err != nil {
+			} else if cmp, err := startVal.Compare(ctx, evalCtx, val); err != nil {
 				panic(err)
 			} else if cmp != 0 {
 				allMatch = false

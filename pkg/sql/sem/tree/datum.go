@@ -113,10 +113,9 @@ type Datum interface {
 	// fmtFlags.disambiguateDatumTypes.
 	AmbiguousFormat() bool
 
-	// CompareError returns -1 if the receiver is less than other, 0 if receiver
-	// is equal to other and +1 if receiver is greater than other.
-	// TODO(yuzefovich): rename this to Compare.
-	CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error)
+	// Compare returns -1 if the receiver is less than other, 0 if receiver is
+	// equal to other and +1 if receiver is greater than 'other'.
+	Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error)
 
 	// Prev returns the previous datum and true, if one exists, or nil and false.
 	// The previous datum satisfies the following definition: if the receiver is
@@ -205,7 +204,7 @@ func (d Datums) Compare(ctx context.Context, evalCtx CompareContext, other Datum
 			return 1
 		}
 
-		compareDatum, err := d[i].CompareError(ctx, evalCtx, other[i])
+		compareDatum, err := d[i].Compare(ctx, evalCtx, other[i])
 		if err != nil {
 			panic(err)
 		}
@@ -410,8 +409,8 @@ func (*DBool) ResolvedType() *types.T {
 	return types.Bool
 }
 
-// CompareError implements the Datum interface.
-func (d *DBool) CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+// Compare implements the Datum interface.
+func (d *DBool) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -574,10 +573,8 @@ func (*DBitArray) ResolvedType() *types.T {
 	return types.VarBit
 }
 
-// CompareError implements the Datum interface.
-func (d *DBitArray) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DBitArray) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -695,8 +692,8 @@ func (*DInt) ResolvedType() *types.T {
 	return types.Int
 }
 
-// CompareError implements the Datum interface.
-func (d *DInt) CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+// Compare implements the Datum interface.
+func (d *DInt) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -707,7 +704,7 @@ func (d *DInt) CompareError(ctx context.Context, cmpCtx CompareContext, other Da
 	case *DInt:
 		v = *t
 	case *DFloat, *DDecimal:
-		res, err := t.CompareError(ctx, cmpCtx, d)
+		res, err := t.Compare(ctx, cmpCtx, d)
 		if err != nil {
 			return 0, err
 		}
@@ -839,10 +836,8 @@ func (*DFloat) ResolvedType() *types.T {
 	return types.Float
 }
 
-// CompareError implements the Datum interface.
-func (d *DFloat) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DFloat) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -854,7 +849,7 @@ func (d *DFloat) CompareError(
 	case *DInt:
 		v = DFloat(MustBeDInt(t))
 	case *DDecimal:
-		res, err := t.CompareError(ctx, cmpCtx, d)
+		res, err := t.Compare(ctx, cmpCtx, d)
 		if err != nil {
 			return 0, err
 		}
@@ -1053,10 +1048,8 @@ func (*DDecimal) ResolvedType() *types.T {
 	return types.Decimal
 }
 
-// CompareError implements the Datum interface.
-func (d *DDecimal) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DDecimal) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -1231,10 +1224,8 @@ func (*DString) ResolvedType() *types.T {
 	return types.String
 }
 
-// CompareError implements the Datum interface.
-func (d *DString) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DString) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -1400,8 +1391,8 @@ func (d *DCollatedString) ResolvedType() *types.T {
 	return types.MakeCollatedString(types.String, d.Locale)
 }
 
-// CompareError implements the Datum interface.
-func (d *DCollatedString) CompareError(
+// Compare implements the Datum interface.
+func (d *DCollatedString) Compare(
 	ctx context.Context, cmpCtx CompareContext, other Datum,
 ) (int, error) {
 	if other == DNull {
@@ -1497,10 +1488,8 @@ func (*DBytes) ResolvedType() *types.T {
 	return types.Bytes
 }
 
-// CompareError implements the Datum interface.
-func (d *DBytes) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DBytes) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -1624,8 +1613,8 @@ func (*DEncodedKey) ResolvedType() *types.T {
 	return types.EncodedKey
 }
 
-// CompareError implements the Datum interface.
-func (d *DEncodedKey) CompareError(
+// Compare implements the Datum interface.
+func (d *DEncodedKey) Compare(
 	ctx context.Context, cmpCtx CompareContext, other Datum,
 ) (int, error) {
 	if other == DNull {
@@ -1745,8 +1734,8 @@ func (*DUuid) ResolvedType() *types.T {
 	return types.Uuid
 }
 
-// CompareError implements the Datum interface.
-func (d *DUuid) CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+// Compare implements the Datum interface.
+func (d *DUuid) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -1869,10 +1858,8 @@ func (*DIPAddr) ResolvedType() *types.T {
 	return types.INet
 }
 
-// CompareError implements the Datum interface.
-func (d *DIPAddr) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DIPAddr) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -2164,8 +2151,8 @@ func (*DDate) ResolvedType() *types.T {
 	return types.Date
 }
 
-// CompareError implements the Datum interface.
-func (d *DDate) CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+// Compare implements the Datum interface.
+func (d *DDate) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -2325,8 +2312,8 @@ func (*DTime) ResolvedType() *types.T {
 	return types.Time
 }
 
-// CompareError implements the Datum interface.
-func (d *DTime) CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+// Compare implements the Datum interface.
+func (d *DTime) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -2469,10 +2456,8 @@ func (*DTimeTZ) ResolvedType() *types.T {
 	return types.TimeTZ
 }
 
-// CompareError implements the Datum interface.
-func (d *DTimeTZ) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DTimeTZ) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -2801,10 +2786,8 @@ func compareTimestamps(ctx context.Context, cmpCtx CompareContext, l Datum, r Da
 	return 0, nil
 }
 
-// CompareError implements the Datum interface.
-func (d *DTimestamp) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DTimestamp) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -2993,8 +2976,8 @@ func (*DTimestampTZ) ResolvedType() *types.T {
 	return types.TimestampTZ
 }
 
-// CompareError implements the Datum interface.
-func (d *DTimestampTZ) CompareError(
+// Compare implements the Datum interface.
+func (d *DTimestampTZ) Compare(
 	ctx context.Context, cmpCtx CompareContext, other Datum,
 ) (int, error) {
 	if other == DNull {
@@ -3199,10 +3182,8 @@ func (*DInterval) ResolvedType() *types.T {
 	return types.Interval
 }
 
-// CompareError implements the Datum interface.
-func (d *DInterval) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DInterval) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -3330,10 +3311,8 @@ func (*DGeography) ResolvedType() *types.T {
 	return types.Geography
 }
 
-// CompareError implements the Datum interface.
-func (d *DGeography) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DGeography) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -3457,10 +3436,8 @@ func (*DGeometry) ResolvedType() *types.T {
 	return types.Geometry
 }
 
-// CompareError implements the Datum interface.
-func (d *DGeometry) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DGeometry) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -3585,10 +3562,8 @@ func (*DPGLSN) ResolvedType() *types.T {
 	return types.PGLSN
 }
 
-// CompareError implements the Datum interface.
-func (d *DPGLSN) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DPGLSN) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -3705,10 +3680,8 @@ func (*DBox2D) ResolvedType() *types.T {
 	return types.Box2D
 }
 
-// CompareError implements the Datum interface.
-func (d *DBox2D) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DBox2D) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -3975,8 +3948,8 @@ func (*DJSON) ResolvedType() *types.T {
 	return types.Jsonb
 }
 
-// CompareError implements the Datum interface.
-func (d *DJSON) CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+// Compare implements the Datum interface.
+func (d *DJSON) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -4074,10 +4047,8 @@ func (d *DTSQuery) ResolvedType() *types.T {
 // AmbiguousFormat implements the Datum interface.
 func (d *DTSQuery) AmbiguousFormat() bool { return true }
 
-// CompareError implements the Datum interface.
-func (d *DTSQuery) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DTSQuery) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -4198,10 +4169,8 @@ func (d *DTSVector) ResolvedType() *types.T {
 // AmbiguousFormat implements the Datum interface.
 func (d *DTSVector) AmbiguousFormat() bool { return true }
 
-// CompareError implements the Datum interface.
-func (d *DTSVector) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DTSVector) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -4371,10 +4340,8 @@ func (d *DTuple) ResolvedType() *types.T {
 	return d.typ
 }
 
-// CompareError implements the Datum interface.
-func (d *DTuple) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DTuple) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -4388,7 +4355,7 @@ func (d *DTuple) CompareError(
 		n = len(v.D)
 	}
 	for i := 0; i < n; i++ {
-		c, err := d.D[i].CompareError(ctx, cmpCtx, v.D[i])
+		c, err := d.D[i].Compare(ctx, cmpCtx, v.D[i])
 		if err != nil {
 			return 0, errors.WithDetailf(err, "type mismatch at record column %d", redact.SafeInt(i+1))
 		}
@@ -4610,7 +4577,7 @@ func (d *DTuple) SearchSorted(
 		panic(errors.AssertionFailedf("target containing NULLs: %#v (d: %s)", target, d))
 	}
 	i := sort.Search(len(d.D), func(i int) bool {
-		cmp, err := d.D[i].CompareError(ctx, cmpCtx, target)
+		cmp, err := d.D[i].Compare(ctx, cmpCtx, target)
 		if err != nil {
 			panic(err)
 		}
@@ -4618,7 +4585,7 @@ func (d *DTuple) SearchSorted(
 	})
 	var found bool
 	if i < len(d.D) {
-		cmp, err := d.D[i].CompareError(ctx, cmpCtx, target)
+		cmp, err := d.D[i].Compare(ctx, cmpCtx, target)
 		if err != nil {
 			panic(err)
 		}
@@ -4637,7 +4604,7 @@ func (d *DTuple) Normalize(cmpCtx CompareContext) {
 func (d *DTuple) sort(ctx context.Context, cmpCtx CompareContext) {
 	if !d.sorted {
 		sortFn := func(a, b Datum) int {
-			cmp, err := a.CompareError(ctx, cmpCtx, b)
+			cmp, err := a.Compare(ctx, cmpCtx, b)
 			if err != nil {
 				panic(err)
 			}
@@ -4660,7 +4627,7 @@ func (d *DTuple) makeUnique(ctx context.Context, cmpCtx CompareContext) {
 	}
 	n := 1 // always keep the first element
 	for i := 1; i < len(d.D); i++ {
-		cmp, err := d.D[n-1].CompareError(ctx, cmpCtx, d.D[i])
+		cmp, err := d.D[n-1].Compare(ctx, cmpCtx, d.D[i])
 		if err != nil {
 			panic(err)
 		} else if cmp < 0 {
@@ -4708,8 +4675,8 @@ func (dNull) ResolvedType() *types.T {
 	return types.Unknown
 }
 
-// CompareError implements the Datum interface.
-func (d dNull) CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+// Compare implements the Datum interface.
+func (d dNull) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		return 0, nil
 	}
@@ -4858,10 +4825,8 @@ func (d *DArray) FirstIndex() int {
 	return 1
 }
 
-// CompareError implements the Datum interface.
-func (d *DArray) CompareError(
-	ctx context.Context, cmpCtx CompareContext, other Datum,
-) (int, error) {
+// Compare implements the Datum interface.
+func (d *DArray) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -4875,7 +4840,7 @@ func (d *DArray) CompareError(
 		n = v.Len()
 	}
 	for i := 0; i < n; i++ {
-		c, err := d.Array[i].CompareError(ctx, cmpCtx, v.Array[i])
+		c, err := d.Array[i].Compare(ctx, cmpCtx, v.Array[i])
 		if err != nil {
 			return 0, err
 		}
@@ -5042,8 +5007,8 @@ func (*DVoid) ResolvedType() *types.T {
 	return types.Void
 }
 
-// CompareError implements the Datum interface.
-func (d *DVoid) CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+// Compare implements the Datum interface.
+func (d *DVoid) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -5252,8 +5217,8 @@ func (d *DEnum) ResolvedType() *types.T {
 	return d.EnumTyp
 }
 
-// CompareError implements the Datum interface.
-func (d *DEnum) CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+// Compare implements the Datum interface.
+func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		return 1, nil
 	}
@@ -5507,8 +5472,8 @@ func (d *DOid) AsRegProc(name string) *DOid {
 // AmbiguousFormat implements the Datum interface.
 func (*DOid) AmbiguousFormat() bool { return true }
 
-// CompareError implements the Datum interface.
-func (d *DOid) CompareError(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+// Compare implements the Datum interface.
+func (d *DOid) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
 		// NULL is less than any non-NULL value.
 		return 1, nil
@@ -5664,8 +5629,8 @@ func (d *DOidWrapper) ResolvedType() *types.T {
 	return types.OidToType[d.Oid]
 }
 
-// CompareError implements the Datum interface.
-func (d *DOidWrapper) CompareError(
+// Compare implements the Datum interface.
+func (d *DOidWrapper) Compare(
 	ctx context.Context, cmpCtx CompareContext, other Datum,
 ) (int, error) {
 	if other == DNull {
@@ -5673,9 +5638,9 @@ func (d *DOidWrapper) CompareError(
 		return 1, nil
 	}
 	if v, ok := other.(*DOidWrapper); ok {
-		return d.Wrapped.CompareError(ctx, cmpCtx, v.Wrapped)
+		return d.Wrapped.Compare(ctx, cmpCtx, v.Wrapped)
 	}
-	return d.Wrapped.CompareError(ctx, cmpCtx, other)
+	return d.Wrapped.Compare(ctx, cmpCtx, other)
 }
 
 // Prev implements the Datum interface.
@@ -5737,11 +5702,11 @@ func (d *Placeholder) AmbiguousFormat() bool {
 	return true
 }
 
-// CompareError implements the Datum interface.
-func (d *Placeholder) CompareError(
+// Compare implements the Datum interface.
+func (d *Placeholder) Compare(
 	ctx context.Context, cmpCtx CompareContext, other Datum,
 ) (int, error) {
-	return cmpCtx.MustGetPlaceholderValue(d).CompareError(ctx, cmpCtx, other)
+	return cmpCtx.MustGetPlaceholderValue(d).Compare(ctx, cmpCtx, other)
 }
 
 // Prev implements the Datum interface.
@@ -6035,7 +6000,7 @@ func MaxDistinctCount(
 		// The datums must be of the same type.
 		return 0, false
 	}
-	if cmp, err := first.CompareError(ctx, evalCtx, last); err != nil {
+	if cmp, err := first.Compare(ctx, evalCtx, last); err != nil {
 		panic(err)
 	} else if cmp == 0 {
 		// If the datums are equal, the distinct count is 1.

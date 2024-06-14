@@ -34,13 +34,13 @@ func TestDatumVec(t *testing.T) {
 	var expected coldata.Datum
 	expected = tree.NewDJSON(json.FromString("str1"))
 	dv1.AppendVal(expected)
-	cmp, err := dv1.Get(0).(tree.Datum).CompareError(ctx, evalCtx, expected.(tree.Datum))
+	cmp, err := dv1.Get(0).(tree.Datum).Compare(ctx, evalCtx, expected.(tree.Datum))
 	require.NoError(t, err)
 	require.True(t, cmp == 0)
 
 	expected = tree.NewDJSON(json.FromString("str2"))
 	dv1.AppendVal(expected)
-	cmp, err = dv1.Get(1).(tree.Datum).CompareError(ctx, evalCtx, expected.(tree.Datum))
+	cmp, err = dv1.Get(1).(tree.Datum).Compare(ctx, evalCtx, expected.(tree.Datum))
 	require.NoError(t, err)
 	require.True(t, cmp == 0)
 	require.Equal(t, 2, dv1.Len())
@@ -71,7 +71,7 @@ func TestDatumVec(t *testing.T) {
 		dv1.AppendSlice(dv2, i, 0 /* srcStartIdx */, dv2.Len())
 		require.Equal(t, i+1, dv1.Len())
 		for j := 0; j <= i; j++ {
-			cmp, err = dv1.Get(j).(tree.Datum).CompareError(ctx, evalCtx, tree.NewDJSON(json.FromString("dv2 str")))
+			cmp, err = dv1.Get(j).(tree.Datum).Compare(ctx, evalCtx, tree.NewDJSON(json.FromString("dv2 str")))
 			require.NoError(t, err)
 			require.True(t, cmp == 0)
 		}
@@ -85,10 +85,10 @@ func TestDatumVec(t *testing.T) {
 
 	dv1.AppendSlice(dv2, 1 /* destIdx */, 1 /* srcStartIdx */, 3 /* srcEndIdx */)
 	require.Equal(t, 3 /* expected */, dv1.Len())
-	cmp, err = dv1.Get(0).(tree.Datum).CompareError(ctx, evalCtx, tree.NewDJSON(json.FromString("dv2 str")))
+	cmp, err = dv1.Get(0).(tree.Datum).Compare(ctx, evalCtx, tree.NewDJSON(json.FromString("dv2 str")))
 	require.NoError(t, err)
 	require.True(t, cmp == 0)
-	cmp, err = dv1.Get(1).(tree.Datum).CompareError(ctx, evalCtx, tree.NewDJSON(json.FromString("dv2 str2")))
+	cmp, err = dv1.Get(1).(tree.Datum).Compare(ctx, evalCtx, tree.NewDJSON(json.FromString("dv2 str2")))
 	require.NoError(t, err)
 	require.True(t, cmp == 0)
 	require.True(t, dv1.Get(2).(tree.Datum) == tree.DNull)
@@ -100,11 +100,11 @@ func TestDatumVec(t *testing.T) {
 
 	dv1.CopySlice(dv2, 0 /* destIdx */, 0 /* srcStartIdx */, 3 /* srcEndIdx */)
 	require.Equal(t, 3 /* expected */, dv1.Len())
-	cmp, err = dv1.Get(0).(tree.Datum).CompareError(ctx, evalCtx, tree.NewDJSON(json.FromString("string0")))
+	cmp, err = dv1.Get(0).(tree.Datum).Compare(ctx, evalCtx, tree.NewDJSON(json.FromString("string0")))
 	require.NoError(t, err)
 	require.True(t, cmp == 0)
 	require.True(t, dv1.Get(1).(tree.Datum) == tree.DNull)
-	cmp, err = dv1.Get(2).(tree.Datum).CompareError(ctx, evalCtx, tree.NewDJSON(json.FromString("string2")))
+	cmp, err = dv1.Get(2).(tree.Datum).Compare(ctx, evalCtx, tree.NewDJSON(json.FromString("string2")))
 	require.NoError(t, err)
 	require.True(t, cmp == 0)
 }

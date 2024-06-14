@@ -595,7 +595,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 						if err != nil {
 							t.Fatalf("unexpected error: %v", err)
 						}
-						if cmp, err := datum.CompareError(ctx, &evalCtx, writtenRow[col].Datum); err != nil {
+						if cmp, err := datum.Compare(ctx, &evalCtx, writtenRow[col].Datum); err != nil {
 							t.Fatal(err)
 						} else if cmp != 0 {
 							t.Fatalf("read row is not equal to written one")
@@ -665,7 +665,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 						if err != nil {
 							t.Fatalf("unexpected error: %v", err)
 						}
-						if cmp, err := readDatum.CompareError(ctx, &evalCtx, expectedDatum.Datum); err != nil {
+						if cmp, err := readDatum.Compare(ctx, &evalCtx, expectedDatum.Datum); err != nil {
 							t.Fatal(err)
 						} else if cmp != 0 {
 							t.Fatalf("read row is not equal to expected one")
@@ -694,7 +694,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 						if err != nil {
 							t.Fatalf("unexpected error: %v", err)
 						}
-						if cmp, err := readDatum.CompareError(ctx, &evalCtx, expectedDatum.Datum); err != nil {
+						if cmp, err := readDatum.Compare(ctx, &evalCtx, expectedDatum.Datum); err != nil {
 							t.Fatal(err)
 						} else if cmp != 0 {
 							t.Fatalf("read row is not equal to expected one")
@@ -764,7 +764,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 					if err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
-					if cmp, err := readOrderingDatum.CompareError(ctx, &evalCtx, expectedRow.Row[ordering[0].ColIdx].Datum); err != nil {
+					if cmp, err := readOrderingDatum.Compare(ctx, &evalCtx, expectedRow.Row[ordering[0].ColIdx].Datum); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
 						// We're skipping comparison if both rows are equal on the ordering
@@ -778,7 +778,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 							if err != nil {
 								t.Fatalf("unexpected error: %v", err)
 							}
-							if cmp, err := readDatum.CompareError(ctx, &evalCtx, expectedDatum.Datum); err != nil {
+							if cmp, err := readDatum.Compare(ctx, &evalCtx, expectedDatum.Datum); err != nil {
 								t.Fatal(err)
 							} else if cmp != 0 {
 								t.Fatalf("read row is not equal to expected one")
@@ -935,7 +935,7 @@ func compareIndexedRows(
 		if err != nil {
 			return 0, err
 		}
-		if c, err := da.CompareError(context.Background(), evalCtx, db); err != nil {
+		if c, err := da.Compare(context.Background(), evalCtx, db); err != nil {
 			return 0, err
 		} else if c != 0 {
 			if o.Direction != encoding.Ascending {

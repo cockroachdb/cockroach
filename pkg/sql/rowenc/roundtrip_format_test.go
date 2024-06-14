@@ -102,7 +102,7 @@ func TestRandParseDatumStringAs(t *testing.T) {
 				if err != nil {
 					t.Fatal(ds, err)
 				}
-				if cmp, err := parsed.CompareError(ctx, evalCtx, datum); err != nil {
+				if cmp, err := parsed.Compare(ctx, evalCtx, datum); err != nil {
 					t.Fatal(err)
 				} else if cmp != 0 {
 					t.Fatal(ds, "expected", datum, "found", parsed)
@@ -308,7 +308,7 @@ func TestParseDatumStringAs(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if cmp, err := parsed.CompareError(ctx, evalCtx, d); err != nil {
+					if cmp, err := parsed.Compare(ctx, evalCtx, d); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
 						t.Fatal("expected", d, "found", parsed)

@@ -373,7 +373,7 @@ func ArrayContains(
 		}
 		var found bool
 		for _, hay := range haystack.Array {
-			if cmp, err := needle.CompareError(ctx, cmpCtx, hay); err != nil {
+			if cmp, err := needle.Compare(ctx, cmpCtx, hay); err != nil {
 				return DBoolFalse, err
 			} else if cmp == 0 {
 				found = true
@@ -401,7 +401,7 @@ func ArrayOverlaps(
 			continue
 		}
 		for _, hay := range other.Array {
-			if cmp, err := needle.CompareError(ctx, cmpCtx, hay); err != nil {
+			if cmp, err := needle.Compare(ctx, cmpCtx, hay); err != nil {
 				return DBoolFalse, err
 			} else if cmp == 0 {
 				return DBoolTrue, nil

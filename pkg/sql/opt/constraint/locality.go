@@ -34,7 +34,7 @@ func compare(prefixInfo partition.Prefix, span *Span, ps partition.PrefixSorter)
 
 	// Look for an exact match on the shared prefix.
 	for k, datum := range prefix {
-		compareResult, err := datum.CompareError(ps.Ctx, ps.EvalCtx, span.StartKey().Value(k))
+		compareResult, err := datum.Compare(ps.Ctx, ps.EvalCtx, span.StartKey().Value(k))
 		if err != nil {
 			panic(err)
 		}
@@ -82,7 +82,7 @@ func searchPrefixes(span *Span, ps partition.PrefixSorter, prefixSearchUpperBoun
 		}
 
 		for k, datum := range prefix {
-			compareResult, err := datum.CompareError(ps.Ctx, ps.EvalCtx, span.StartKey().Value(k))
+			compareResult, err := datum.Compare(ps.Ctx, ps.EvalCtx, span.StartKey().Value(k))
 			if err != nil {
 				panic(err)
 			}

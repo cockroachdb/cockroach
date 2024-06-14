@@ -3810,7 +3810,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 			startVal := sp.StartKey().Value(col)
 			endVal := sp.EndKey().Value(col)
 			if i != 0 && val != nil {
-				compare, err := startVal.CompareError(sb.ctx, sb.evalCtx, val)
+				compare, err := startVal.Compare(sb.ctx, sb.evalCtx, val)
 				if err != nil {
 					panic(err)
 				}

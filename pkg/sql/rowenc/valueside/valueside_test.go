@@ -54,7 +54,7 @@ func TestEncodeDecode(t *testing.T) {
 			if err != nil {
 				return "error: " + err.Error()
 			}
-			if cmp, err := newD.CompareError(context.Background(), ctx, d); err != nil {
+			if cmp, err := newD.Compare(context.Background(), ctx, d); err != nil {
 				return "error: " + err.Error()
 			} else if cmp != 0 {
 				return "unequal"
@@ -95,7 +95,7 @@ func TestDecode(t *testing.T) {
 				return
 			}
 			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			if cmp, err := tc.in.CompareError(context.Background(), evalCtx, d); err != nil {
+			if cmp, err := tc.in.Compare(context.Background(), evalCtx, d); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Fatalf("decoded datum %[1]v (%[1]T) does not match encoded datum %[2]v (%[2]T)", d, tc.in)
@@ -306,7 +306,7 @@ func TestLegacyRoundtrip(t *testing.T) {
 				if err != nil {
 					return "error unmarshaling: " + err.Error()
 				}
-				if cmp, err := datum.CompareError(context.Background(), ctx, outDatum); err != nil {
+				if cmp, err := datum.Compare(context.Background(), ctx, outDatum); err != nil {
 					return "error: " + err.Error()
 				} else if cmp != 0 {
 					return fmt.Sprintf("datum didn't roundtrip.\ninput: %v\noutput: %v", datum, outDatum)

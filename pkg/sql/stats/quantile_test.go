@@ -867,9 +867,9 @@ func TestQuantileValueRoundTrip(t *testing.T) {
 				t.Errorf("test case %d (%v) unexpected fromQuantileValue err: %v", i, tc.typ.Name(), err)
 				return
 			}
-			cmp, err := res.CompareError(ctx, compareCtx, tc.dat)
+			cmp, err := res.Compare(ctx, compareCtx, tc.dat)
 			if err != nil {
-				t.Errorf("test case %d (%v) unexpected CompareError err: %v", i, tc.typ.Name(), err)
+				t.Errorf("test case %d (%v) unexpected Compare err: %v", i, tc.typ.Name(), err)
 				return
 			}
 			if cmp != 0 {
@@ -1135,9 +1135,9 @@ func TestQuantileValueRoundTripOverflow(t *testing.T) {
 				t.Errorf("test case %d (%v) expected fromQuantileValue err", i, tc.typ.Name())
 				return
 			}
-			cmp, err := d.CompareError(ctx, compareCtx, tc.dat)
+			cmp, err := d.Compare(ctx, compareCtx, tc.dat)
 			if err != nil {
-				t.Errorf("test case %d (%v) unexpected CompareError err: %v", i, tc.typ.Name(), err)
+				t.Errorf("test case %d (%v) unexpected Compare err: %v", i, tc.typ.Name(), err)
 				return
 			}
 			if cmp != 0 {

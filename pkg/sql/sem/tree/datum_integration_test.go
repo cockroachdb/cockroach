@@ -337,7 +337,7 @@ func TestDFloatCompare(t *testing.T) {
 			ctx := context.Background()
 			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(ctx)
-			got, err := x.CompareError(ctx, evalCtx, y)
+			got, err := x.Compare(ctx, evalCtx, y)
 			if err != nil {
 				t.Fatal(err)
 			} else if got != expected {
@@ -426,7 +426,7 @@ func TestParseDIntervalWithTypeMetadata(t *testing.T) {
 		ctx := context.Background()
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(ctx)
-		if cmp, err := expected.CompareError(ctx, evalCtx, actual); err != nil {
+		if cmp, err := expected.Compare(ctx, evalCtx, actual); err != nil {
 			t.Fatal(err)
 		} else if cmp != 0 {
 			t.Errorf("INTERVAL %s %#v: got %s, expected %s", td.str, td.dtype, actual, expected)
@@ -485,7 +485,7 @@ func TestParseDDate(t *testing.T) {
 		}
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
-		if cmp, err := expected.CompareError(context.Background(), evalCtx, actual); err != nil {
+		if cmp, err := expected.Compare(context.Background(), evalCtx, actual); err != nil {
 			t.Fatal(err)
 		} else if cmp != 0 {
 			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
@@ -885,7 +885,7 @@ func TestMakeDJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	if cmp, err := j1.CompareError(context.Background(), evalCtx, j2); err != nil {
+	if cmp, err := j1.Compare(context.Background(), evalCtx, j2); err != nil {
 		t.Fatal(err)
 	} else if cmp != -1 {
 		t.Fatal("expected JSON 1 < 2")
@@ -992,7 +992,7 @@ func TestDTimeTZ(t *testing.T) {
 				assert.False(t, ok)
 			}
 			for _, largerThan := range append(largerThan, tc.largerThan...) {
-				cmp, err := tc.t.CompareError(context.Background(), ctx, largerThan)
+				cmp, err := tc.t.Compare(context.Background(), ctx, largerThan)
 				assert.NoError(t, err)
 				assert.Equal(t, 1, cmp, "%s > %s", tc.t.String(), largerThan.String())
 			}
@@ -1006,13 +1006,13 @@ func TestDTimeTZ(t *testing.T) {
 				assert.False(t, ok)
 			}
 			for _, smallerThan := range append(smallerThan, tc.smallerThan...) {
-				cmp, err := tc.t.CompareError(context.Background(), ctx, smallerThan)
+				cmp, err := tc.t.Compare(context.Background(), ctx, smallerThan)
 				assert.NoError(t, err)
 				assert.Equal(t, -1, cmp, "%s < %s", tc.t.String(), smallerThan.String())
 			}
 
 			for _, equalTo := range tc.equalTo {
-				cmp, err := tc.t.CompareError(context.Background(), ctx, equalTo)
+				cmp, err := tc.t.Compare(context.Background(), ctx, equalTo)
 				assert.NoError(t, err)
 				assert.Equal(t, 0, cmp, "%s = %s", tc.t.String(), equalTo.String())
 			}

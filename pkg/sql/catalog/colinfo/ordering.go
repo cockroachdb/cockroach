@@ -79,7 +79,7 @@ func CompareDatums(ordering ColumnOrdering, evalCtx *eval.Context, lhs, rhs tree
 		// not sure this always holds as `CASE` expressions can return different
 		// types for a column for different rows. Investigate how other RDBMs
 		// handle this.
-		if cmp, err := lhs[c.ColIdx].CompareError(context.TODO(), evalCtx, rhs[c.ColIdx]); err != nil {
+		if cmp, err := lhs[c.ColIdx].Compare(context.TODO(), evalCtx, rhs[c.ColIdx]); err != nil {
 			panic(err)
 		} else if cmp != 0 {
 			if c.Direction == encoding.Descending {
