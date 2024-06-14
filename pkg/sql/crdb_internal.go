@@ -2434,10 +2434,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public
 			desc := setting.Description()
-			defaultVal, err := setting.DefaultString()
-			if err != nil {
-				return err
-			}
+			defaultVal := setting.DefaultString()
 			origin := setting.ValueOrigin(ctx, &p.ExecCfg().Settings.SV).String()
 			if err := addRow(
 				tree.NewDString(string(setting.Name())),
