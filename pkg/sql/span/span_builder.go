@@ -83,6 +83,7 @@ func (s *Builder) SpanFromEncDatums(
 // generated. Since the exec code knows nothing about index column sorting
 // direction we assume ascending if they are descending we deal with that here.
 func (s *Builder) SpanFromEncDatumsWithRange(
+	ctx context.Context,
 	values rowenc.EncDatumRow,
 	prefixLen int,
 	startBound, endBound *rowenc.EncDatum,
@@ -104,8 +105,8 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 			return roachpb.Span{}, true, true, nil
 		}
 		if !startInclusive {
-			if (isDesc && startBound.Datum.IsMin(s.evalCtx)) ||
-				(!isDesc && startBound.Datum.IsMax(s.evalCtx)) {
+			if (isDesc && startBound.Datum.IsMin(ctx, s.evalCtx)) ||
+				(!isDesc && startBound.Datum.IsMax(ctx, s.evalCtx)) {
 				// There are no values that satisfy the start bound.
 				return roachpb.Span{}, false, true, nil
 			}
@@ -135,7 +136,7 @@ func (s *Builder) SpanFromEncDatumsWithRange(
 			// filtered cases where this is not possible. If the index column is ASC,
 			// we can directly increment the key below instead of the datum.
 			var ok bool
-			startDatum, ok = startDatum.Prev(s.evalCtx)
+			startDatum, ok = startDatum.Prev(ctx, s.evalCtx)
 			if !ok {
 				return roachpb.Span{}, false, false, errors.AssertionFailedf(
 					"couldn't get a Prev value for %s", startBound.Datum,

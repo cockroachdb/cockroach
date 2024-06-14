@@ -612,10 +612,10 @@ func (b *ConstraintBuilder) findJoinConstantRangeFilter(
 					// "advance" the end boundary to the previous value in order to make
 					// it inclusive. This operation cannot be directly performed on the
 					// encoded key, so the Datum.Prev method is necessary here.
-					if val.IsMin(b.evalCtx) {
+					if val.IsMin(b.ctx, b.evalCtx) {
 						continue
 					}
-					if _, ok := val.Prev(b.evalCtx); !ok {
+					if _, ok := val.Prev(b.ctx, b.evalCtx); !ok {
 						continue
 					}
 				}

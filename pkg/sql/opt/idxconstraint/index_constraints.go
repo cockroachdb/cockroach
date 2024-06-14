@@ -267,14 +267,14 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 		}
 		key := constraint.MakeKey(datum)
 		descending := c.columns[offset].Descending()
-		if !(startKey.IsEmpty() && c.isNullable(offset)) && datum.IsMin(c.evalCtx) {
+		if !(startKey.IsEmpty() && c.isNullable(offset)) && datum.IsMin(c.ctx, c.evalCtx) {
 			// Omit the (/NULL - key) span by setting a contradiction, so that the
 			// UnionWith call below will result in just the second span.
 			c.contradiction(offset, out)
 		} else {
 			c.singleSpan(offset, startKey, startBoundary, key, excludeBoundary, descending, out)
 		}
-		if !datum.IsMax(c.evalCtx) {
+		if !datum.IsMax(c.ctx, c.evalCtx) {
 			var other constraint.Constraint
 			c.singleSpan(offset, key, excludeBoundary, emptyKey, includeBoundary, descending, &other)
 			out.UnionWith(c.ctx, c.evalCtx, &other)

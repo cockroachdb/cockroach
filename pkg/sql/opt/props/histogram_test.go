@@ -406,7 +406,7 @@ func TestFilterBucket(t *testing.T) {
 	// getPrevUpperBound is used to find the upper bound of the first bucket so
 	// that the lower bound of the second bucket will equal upperBound.Next().
 	getPrevUpperBound := func(lowerBound tree.Datum) tree.Datum {
-		res, ok := lowerBound.Prev(&evalCtx)
+		res, ok := lowerBound.Prev(ctx, &evalCtx)
 		if !ok {
 			res = lowerBound
 		}
