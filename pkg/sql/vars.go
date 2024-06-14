@@ -3377,6 +3377,29 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	`plan_cache_mode`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			mode, ok := sessiondatapb.PlanCacheModeFromString(s)
+			if !ok {
+				return newVarValueError(
+					`plan_cache_mode`,
+					s,
+					sessiondatapb.PlanCacheModeForceCustom.String(),
+					sessiondatapb.PlanCacheModeForceGeneric.String(),
+					sessiondatapb.PlanCacheModeAuto.String(),
+				)
+			}
+			m.SetPlanCacheMode(mode)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().PlanCacheMode.String(), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondatapb.PlanCacheModeForceCustom.String()
+		},
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
