@@ -12,6 +12,7 @@ package keyside_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -48,7 +49,9 @@ func TestEncodeDecode(t *testing.T) {
 		if err != nil {
 			return "error: " + err.Error()
 		}
-		if newD.Compare(ctx, d) != 0 {
+		if cmp, err := newD.CompareError(context.Background(), ctx, d); err != nil {
+			return "error: " + err.Error()
+		} else if cmp != 0 {
 			return "unequal"
 		}
 		return ""
@@ -83,7 +86,10 @@ func TestEncodeDecode(t *testing.T) {
 			return "error: " + err.Error()
 		}
 
-		expectedCmp := d1.Compare(ctx, d2)
+		expectedCmp, err := d1.CompareError(context.Background(), ctx, d2)
+		if err != nil {
+			return "error: " + err.Error()
+		}
 		cmp := bytes.Compare(b1, b2)
 
 		if expectedCmp == 0 {

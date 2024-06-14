@@ -47,7 +47,7 @@ func (c *CustomFuncs) Init(e *explorer) {
 		e: e,
 	}
 	c.CustomFuncs.Init(e.f)
-	c.im.Init(e.f, e.mem.Metadata(), e.evalCtx)
+	c.im.Init(e.ctx, e.f, e.mem.Metadata(), e.evalCtx)
 }
 
 // IsCanonicalScan returns true if the given ScanPrivate is an original
@@ -200,7 +200,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 
 	// Generate index constraints.
 	ic.Init(
-		requiredFilters, optionalFilters,
+		c.e.ctx, requiredFilters, optionalFilters,
 		columns, notNullCols, tabMeta.ComputedCols,
 		tabMeta.ColsInComputedColsExpressions,
 		true /* consolidate */, c.e.evalCtx, c.e.f, ps,
@@ -290,7 +290,7 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 			}
 		}
 	}
-	keyCtx := constraint.MakeKeyContext(&cons.Columns, c.e.evalCtx)
+	keyCtx := constraint.MakeKeyContext(c.e.ctx, &cons.Columns, c.e.evalCtx)
 	spans := cons.Spans
 
 	// Get the total number of keys that can be extracted from the spans. Also
@@ -482,7 +482,7 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 	// construct an unlimited Scan and add it to the UnionAll tree.
 	newScanPrivate := c.DuplicateScanPrivate(sp)
 	// Map from cons Columns to new columns.
-	newScanPrivate.SetConstraint(c.e.evalCtx, &constraint.Constraint{
+	newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, &constraint.Constraint{
 		Columns: cons.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   noLimitSpans,
 	})
@@ -540,7 +540,7 @@ func (c *CustomFuncs) numAllowedValues(
 			if constraint.IsContradiction() || constraint.IsUnconstrained() {
 				continue
 			}
-			if distinctVals, ok := constraint.CalculateMaxResults(c.e.evalCtx, cols, cols); ok {
+			if distinctVals, ok := constraint.CalculateMaxResults(c.e.ctx, c.e.evalCtx, cols, cols); ok {
 				if distinctVals > math.MaxInt32 {
 					return math.MaxInt32, true
 				}
@@ -654,7 +654,7 @@ func (c *CustomFuncs) makeNewScanPrivate(
 		Columns: columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   newSpans,
 	}
-	newScanPrivate.SetConstraint(c.e.evalCtx, newConstraint)
+	newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, newConstraint)
 
 	return newScanPrivate
 }

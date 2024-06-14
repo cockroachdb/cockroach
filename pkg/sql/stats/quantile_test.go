@@ -34,6 +34,7 @@ import (
 // tests that each can be converted to a quantile function and back without
 // changing.
 func TestRandomQuantileRoundTrip(t *testing.T) {
+	ctx := context.Background()
 	colTypes := []*types.T{
 		// Types not in types.Scalar.
 		types.Int4,
@@ -46,13 +47,13 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 		if canMakeQuantile(HistVersion, colType) {
 			for i := 0; i < 5; i++ {
 				t.Run(fmt.Sprintf("%v/%v", colType.Name(), i), func(t *testing.T) {
-					hist, rowCount := randHist(colType, rng)
+					hist, rowCount := randHist(ctx, colType, rng)
 					qfun, err := makeQuantile(hist, rowCount)
 					if err != nil {
 						t.Errorf("seed: %v unexpected makeQuantile error: %v", seed, err)
 						return
 					}
-					hist2, err := qfun.toHistogram(context.Background(), colType, rowCount)
+					hist2, err := qfun.toHistogram(ctx, colType, rowCount)
 					if err != nil {
 						t.Errorf("seed: %v unexpected quantile.toHistogram error: %v", seed, err)
 						return
@@ -69,7 +70,7 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 // randHist makes a random histogram of the specified type, with [1, 200]
 // buckets. Not all types are supported. Every bucket will have NumEq > 0 but
 // could have NumRange == 0.
-func randHist(colType *types.T, rng *rand.Rand) (histogram, float64) {
+func randHist(ctx context.Context, colType *types.T, rng *rand.Rand) (histogram, float64) {
 	numBuckets := rng.Intn(200) + 1
 	buckets := make([]cat.HistogramBucket, numBuckets)
 	bounds := randBounds(colType, rng, numBuckets)
@@ -99,7 +100,7 @@ func randHist(colType *types.T, rng *rand.Rand) (histogram, float64) {
 	for i := 1; i < len(buckets); i++ {
 		lowerBound := getNextLowerBound(compareCtx, buckets[i-1].UpperBound)
 		buckets[i].DistinctRange = estimatedDistinctValuesInRange(
-			compareCtx, buckets[i].NumRange, lowerBound, buckets[i].UpperBound,
+			ctx, compareCtx, buckets[i].NumRange, lowerBound, buckets[i].UpperBound,
 		)
 	}
 	return histogram{buckets: buckets}, rowCount

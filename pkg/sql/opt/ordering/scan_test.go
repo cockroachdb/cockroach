@@ -35,9 +35,10 @@ func TestScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(st)
 	var f norm.Factory
-	f.Init(context.Background(), evalCtx, tc)
+	f.Init(ctx, evalCtx, tc)
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)
@@ -50,7 +51,7 @@ func TestScan(t *testing.T) {
 	var columns constraint.Columns
 	columns.Init([]opt.OrderingColumn{-3, +4, +1, +2})
 	var c constraint.Constraint
-	keyCtx := constraint.MakeKeyContext(&columns, evalCtx)
+	keyCtx := constraint.MakeKeyContext(ctx, &columns, evalCtx)
 	var span constraint.Span
 	span.Init(
 		constraint.MakeCompositeKey(tree.NewDInt(1), tree.NewDInt(10)),
@@ -174,7 +175,7 @@ func TestScan(t *testing.T) {
 			for tcIdx, tc := range g.cases {
 				t.Run(fmt.Sprintf("case%d", tcIdx+1), func(t *testing.T) {
 					req := props.ParseOrderingChoice(tc.req)
-					g.p.SetConstraint(evalCtx, g.c)
+					g.p.SetConstraint(ctx, evalCtx, g.c)
 					ok, rev := ScanPrivateCanProvide(md, &g.p, &req)
 					res := "no"
 					if ok {

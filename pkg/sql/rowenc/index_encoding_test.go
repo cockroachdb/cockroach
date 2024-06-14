@@ -266,8 +266,9 @@ func TestIndexKey(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		ctx := context.Background()
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-		defer evalCtx.Stop(context.Background())
+		defer evalCtx.Stop(ctx)
 		tableDesc, colMap := makeTableDescForTest(test, true /* isSecondaryIndexForward */)
 		// Add the default family to each test, since secondary indexes support column families.
 		var (
@@ -298,7 +299,7 @@ func TestIndexKey(t *testing.T) {
 		primaryIndexKV := kv.KeyValue{Key: primaryKey, Value: &primaryValue}
 
 		secondaryIndexEntry, err := EncodeSecondaryIndex(
-			context.Background(), codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0],
+			ctx, codec, tableDesc, tableDesc.PublicNonPrimaryIndexes()[0],
 			colMap, testValues, true, /* includeEmpty */
 		)
 		if len(secondaryIndexEntry) != 1 {
@@ -320,7 +321,9 @@ func TestIndexKey(t *testing.T) {
 
 			for j, value := range values {
 				testValue := testValues[colMap.GetDefault(index.GetKeyColumnID(j))]
-				if value.Compare(evalCtx, testValue) != 0 {
+				if cmp, err := value.CompareError(ctx, evalCtx, testValue); err != nil {
+					t.Fatal(err)
+				} else if cmp != 0 {
 					t.Fatalf("%d: value %d got %q but expected %q", i, j, value, testValue)
 				}
 			}
@@ -889,6 +892,7 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 		{`{2, NULL}`, `{1, NULL}`, true, false, true},
 	}
 
+	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parseArray := func(s string) tree.Datum {
 		if s == "NULL" {
@@ -959,7 +963,7 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 		left := randgen.RandArray(rng, typ, 9 /* nullChance */)
 		right := randgen.RandArray(rng, typ, 9 /* nullChance */)
 
-		overlaps, err := tree.ArrayOverlaps(context.Background(), &evalCtx, right.(*tree.DArray), left.(*tree.DArray))
+		overlaps, err := tree.ArrayOverlaps(ctx, &evalCtx, right.(*tree.DArray), left.(*tree.DArray))
 		require.NoError(t, err)
 
 		rightArr, _ := right.(*tree.DArray)
@@ -970,7 +974,8 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 		// the form:
 		// Array A && Array containing one or more entries of same non-null
 		// element e.g. A && [1, 1].
-		unique := containsNonNullUniqueElement(&evalCtx, rightArr)
+		unique, err := containsNonNullUniqueElement(ctx, &evalCtx, rightArr)
+		require.NoError(t, err)
 
 		// Now check that we get the same result with the inverted index spans.
 		runTest(left, right, bool(*overlaps), ok, unique)
@@ -979,17 +984,24 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 
 // Determines if the input array contains only one or more entries of the
 // same non-null element. NULL entries are not considered.
-func containsNonNullUniqueElement(evalCtx *eval.Context, valArr *tree.DArray) bool {
+func containsNonNullUniqueElement(
+	ctx context.Context, evalCtx *eval.Context, valArr *tree.DArray,
+) (bool, error) {
 	var lastVal tree.Datum = tree.DNull
 	for _, val := range valArr.Array {
 		if val != tree.DNull {
-			if lastVal != tree.DNull && lastVal.Compare(evalCtx, val) != 0 {
-				return false
+			if lastVal == tree.DNull {
+				lastVal = val
+				continue
 			}
-			lastVal = val
+			if cmp, err := lastVal.CompareError(ctx, evalCtx, val); err != nil {
+				return false, err
+			} else if cmp != 0 {
+				return false, nil
+			}
 		}
 	}
-	return lastVal != tree.DNull
+	return lastVal != tree.DNull, nil
 }
 
 type trigramSearchType int

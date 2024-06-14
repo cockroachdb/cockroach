@@ -11,6 +11,7 @@
 package valueside_test
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -53,7 +54,9 @@ func TestEncodeDecode(t *testing.T) {
 			if err != nil {
 				return "error: " + err.Error()
 			}
-			if newD.Compare(ctx, d) != 0 {
+			if cmp, err := newD.CompareError(context.Background(), ctx, d); err != nil {
+				return "error: " + err.Error()
+			} else if cmp != 0 {
 				return "unequal"
 			}
 			return ""
@@ -91,7 +94,10 @@ func TestDecode(t *testing.T) {
 			} else if err != nil {
 				return
 			}
-			if tc.in.Compare(eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), d) != 0 {
+			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			if cmp, err := tc.in.CompareError(context.Background(), evalCtx, d); err != nil {
+				t.Fatal(err)
+			} else if cmp != 0 {
 				t.Fatalf("decoded datum %[1]v (%[1]T) does not match encoded datum %[2]v (%[2]T)", d, tc.in)
 			}
 		})
@@ -300,7 +306,9 @@ func TestLegacyRoundtrip(t *testing.T) {
 				if err != nil {
 					return "error unmarshaling: " + err.Error()
 				}
-				if datum.Compare(ctx, outDatum) != 0 {
+				if cmp, err := datum.CompareError(context.Background(), ctx, outDatum); err != nil {
+					return "error: " + err.Error()
+				} else if cmp != 0 {
 					return fmt.Sprintf("datum didn't roundtrip.\ninput: %v\noutput: %v", datum, outDatum)
 				}
 				return ""

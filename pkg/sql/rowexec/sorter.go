@@ -359,7 +359,7 @@ func (s *sortTopKProcessor) Start(ctx context.Context) {
 		} else {
 			if !heapCreated {
 				// Arrange the k values into a max-heap.
-				s.rows.InitTopK()
+				s.rows.InitTopK(ctx)
 				heapCreated = true
 			}
 			// Replace the max value if the new row is smaller, maintaining the

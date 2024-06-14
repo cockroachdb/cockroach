@@ -893,7 +893,9 @@ func (md *Metadata) QualifiedAlias(
 
 // UpdateTableMeta allows the caller to replace the cat.Table struct that a
 // TableMeta instance stores.
-func (md *Metadata) UpdateTableMeta(evalCtx *eval.Context, tables map[cat.StableID]cat.Table) {
+func (md *Metadata) UpdateTableMeta(
+	ctx context.Context, evalCtx *eval.Context, tables map[cat.StableID]cat.Table,
+) {
 	for i := range md.tables {
 		oldTable := md.tables[i].Table
 		if newTable, ok := tables[oldTable.ID()]; ok {
@@ -909,7 +911,7 @@ func (md *Metadata) UpdateTableMeta(evalCtx *eval.Context, tables map[cat.Stable
 				md.SetTableAnnotation(md.tables[i].MetaID, NotNullAnnID, nil)
 			}
 			md.tables[i].Table = newTable
-			md.tables[i].CacheIndexPartitionLocalities(evalCtx)
+			md.tables[i].CacheIndexPartitionLocalities(ctx, evalCtx)
 		}
 	}
 }
