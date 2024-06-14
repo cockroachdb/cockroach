@@ -1,16 +1,18 @@
 services:
   cockroach1:
     image: ubuntu:xenial-20170214
-    command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach1
+    command: /cockroach/cockroach start-single-node --insecure --log-dir=/cockroach/logs --spatial-libs=/cockroach/lib --listen-addr cockroach1
     volumes:
       - "${COCKROACH_PATH}:/cockroach/cockroach"
       - "${LIBGEOS_DIR_PATH}:/cockroach/lib"
+      - "${COMPARE_DIR_PATH}/logs1:/cockroach/logs"
   cockroach2:
     image: ubuntu:xenial-20170214
-    command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach2
+    command: /cockroach/cockroach start-single-node --insecure --log-dir=/cockroach/logs --spatial-libs=/cockroach/lib --listen-addr cockroach2
     volumes:
       - "${COCKROACH_PATH}:/cockroach/cockroach"
       - "${LIBGEOS_DIR_PATH}:/cockroach/lib"
+      - "${COMPARE_DIR_PATH}/logs2:/cockroach/logs"
   test:
     image: ubuntu:xenial-20170214
     environment:

@@ -21,6 +21,7 @@ go_test(
     tags = ["integration"],
     deps = [
         "//pkg/build/bazel",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/envutil",
     ],
 )
