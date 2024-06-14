@@ -90,6 +90,8 @@ type fileSink struct {
 	// include at the start of a log file.
 	getStartLines func(time.Time) []*buffer
 
+	fatalOnLogStall func() bool
+
 	filePermissions fs.FileMode
 
 	logBytesWritten *atomic.Uint64
@@ -259,14 +261,19 @@ func (l *fileSink) flushAndMaybeSyncLocked(doSync bool) {
 		// recursive back-and-forth between the copy of FATAL events to
 		// OPS and disk slowness detection here. (See the implementation
 		// of logfDepth for details.)
+		sev := severity.FATAL
+		// We default to assuming a fatal on log stall.
+		if l.fatalOnLogStall != nil && !l.fatalOnLogStall() {
+			sev = severity.ERROR
+		} else {
+			// The write stall may prevent the process from exiting. If the process
+			// won't exit, we can at least terminate all our RPC connections first.
+			//
+			// See pkg/cli.runStart for where this function is hooked up.
+			MakeProcessUnavailable()
+		}
 
-		// The write stall may prevent the process from exiting. If the process
-		// won't exit, we can at least terminate all our RPC connections first.
-		//
-		// See pkg/cli.runStart for where this function is hooked up.
-		MakeProcessUnavailable()
-
-		Ops.Shoutf(context.Background(), severity.FATAL,
+		Ops.Shoutf(context.Background(), sev,
 			"disk stall detected: unable to sync log files within %s", maxSyncDuration,
 		)
 	})

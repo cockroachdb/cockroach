@@ -191,6 +191,9 @@ type cliContext struct {
 	// that no log directory was specified and there were multiple
 	// on-disk stores.
 	ambiguousLogDir bool
+	// fatalOnLogStall returns true if the logger should fatal in the case
+	// of a disk stall.
+	fatalOnLogStall func() bool
 
 	// For `cockroach version --build-tag`.
 	showVersionUsingOnlyBuildTag bool

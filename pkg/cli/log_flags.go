@@ -191,7 +191,10 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 
 	logBytesWritten := serverCfg.DiskWriteStatsCollector.CreateStat(fs.CRDBLogWriteCategory)
 	// Configuration ready and directories exist; apply it.
-	logShutdownFn, err := log.ApplyConfig(h.Config, log.FileSinkMetrics{LogBytesWritten: logBytesWritten})
+	fatalOnLogStall := func() bool {
+		return fs.MaxSyncDurationFatalOnExceeded.Get(&serverCfg.Settings.SV)
+	}
+	logShutdownFn, err := log.ApplyConfig(h.Config, log.FileSinkMetrics{LogBytesWritten: logBytesWritten}, fatalOnLogStall)
 	if err != nil {
 		return err
 	}
