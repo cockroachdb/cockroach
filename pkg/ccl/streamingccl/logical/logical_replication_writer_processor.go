@@ -183,7 +183,7 @@ func newLogicalReplicationWriterProcessor(
 		spec:           spec,
 		bh:             bh,
 		frontier:       frontier,
-		buffer:         &ingestionBuffer{},
+		buffer:         getBuffer(),
 		stopCh:         make(chan struct{}),
 		flushCh:        make(chan flushableBuffer),
 		checkpointCh:   make(chan *jobspb.ResolvedSpans),
@@ -751,6 +751,12 @@ type ingestionBuffer struct {
 	minTimestamp hlc.Timestamp
 }
 
+func NewIngestionBuffer() *ingestionBuffer {
+	return &ingestionBuffer{
+		minTimestamp: hlc.MaxTimestamp,
+	}
+}
+
 func (b *ingestionBuffer) addKV(kv roachpb.KeyValue) {
 	b.curKVBatchSize += kv.Size()
 	b.curKVBatch = append(b.curKVBatch, kv)
@@ -783,7 +789,7 @@ func (b *ingestionBuffer) shouldFlushOnKVSize(
 }
 
 var bufferPool = sync.Pool{
-	New: func() interface{} { return &ingestionBuffer{} },
+	New: func() interface{} { return NewIngestionBuffer() },
 }
 
 func getBuffer() *ingestionBuffer {
