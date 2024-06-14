@@ -103,7 +103,7 @@ func runDiskStalledWALFailover(
 	m := c.NewMonitor(ctx, c.Range(1, 3))
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload run kv --read-percent 0 `+
-			`--duration 60m --concurrency 4096 --max-rate 4096 --tolerate-errors `+
+			`--duration 60m --concurrency 4096 --ramp=1m --max-rate 4096 --tolerate-errors `+
 			` --min-block-bytes=2048 --max-block-bytes=2048 --timeout 1s `+
 			`{pgurl:1-3}`)
 		return nil
@@ -160,7 +160,7 @@ func runDiskStalledWALFailover(
 	}
 
 	data := mustGetMetrics(ctx, c, t, adminURL,
-		workloadStartAt.Add(time.Minute),
+		workloadStartAt.Add(5*time.Minute),
 		timeutil.Now().Add(-time.Minute),
 		[]tsQuery{
 			{name: "cr.node.sql.exec.latency-p99.99", queryType: total, sources: []string{"2"}},
