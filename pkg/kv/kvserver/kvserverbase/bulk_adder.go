@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // BulkAdderOptions is used to configure the behavior of a BulkAdder.
@@ -111,7 +112,17 @@ type DuplicateKeyError struct {
 }
 
 func (d *DuplicateKeyError) Error() string {
-	return fmt.Sprintf("duplicate key: %s", d.Key)
+	return fmt.Sprint(d)
+}
+
+// Format implements fmt.Formatter.
+func (d *DuplicateKeyError) Format(s fmt.State, verb rune) {
+	errors.FormatError(d, s, verb)
+}
+
+func (d *DuplicateKeyError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("duplicate key: %s", d.Key)
+	return nil
 }
 
 // NewDuplicateKeyError constructs a DuplicateKeyError, copying its input.
