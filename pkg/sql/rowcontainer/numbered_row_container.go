@@ -54,7 +54,7 @@ type DiskBackedNumberedRowContainer struct {
 // Arguments:
 //   - deDup is true if it should de-duplicate.
 //   - types is the schema of rows that will be added to this container.
-//   - evalCtx defines the context.
+//   - evalCtx defines the context. It will **not** be mutated.
 //   - engine is the underlying store that rows are stored on when the container
 //     spills to disk.
 //   - memoryMonitor is used to monitor this container's memory usage.

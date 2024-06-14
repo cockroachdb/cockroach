@@ -182,7 +182,7 @@ func (eh *MultiExprHelper) Reset() {
 	eh.exprs = eh.exprs[:0]
 }
 
-// exprHelper is a base implementation of an expressoin helper used by both
+// exprHelper is a base implementation of an expression helper used by both
 // ExprHelper and MultiExprHelper.
 type exprHelper struct {
 	evalCtx    *eval.Context

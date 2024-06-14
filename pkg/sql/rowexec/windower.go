@@ -61,6 +61,8 @@ const memRequiredByWindower = 100 * 1024
 type windower struct {
 	execinfra.ProcessorBase
 
+	evalCtx *eval.Context
+
 	// runningState represents the state of the windower. This is in addition to
 	// ProcessorBase.State - the runningState is only relevant when
 	// ProcessorBase.State == StateRunning.
@@ -107,9 +109,9 @@ func newWindower(
 	post *execinfrapb.PostProcessSpec,
 ) (*windower, error) {
 	w := &windower{
-		input: input,
+		evalCtx: flowCtx.NewEvalCtx(),
+		input:   input,
 	}
-	evalCtx := flowCtx.NewEvalCtx()
 	w.inputTypes = input.OutputTypes()
 
 	// Limit the memory use by creating a child monitor with a hard limit.
@@ -122,7 +124,7 @@ func newWindower(
 	// them to reuse the same shared memory account with the windower. Notably,
 	// we need to update the eval context before constructing the window
 	// builtins.
-	evalCtx.SingleDatumAggMemAccount = &w.acc
+	w.evalCtx.SingleDatumAggMemAccount = &w.acc
 
 	w.partitionBy = spec.PartitionBy
 	windowFns := spec.WindowFns
@@ -144,7 +146,7 @@ func newWindower(
 		}
 		w.outputTypes[windowFn.OutputColIdx] = outputType
 
-		w.builtins = append(w.builtins, windowConstructor(evalCtx))
+		w.builtins = append(w.builtins, windowConstructor(w.evalCtx))
 		wf := &windowFunc{
 			ordering:     windowFn.Ordering,
 			argsIdxs:     windowFn.ArgsIdxs,
@@ -163,7 +165,7 @@ func newWindower(
 		post,
 		w.outputTypes,
 		flowCtx,
-		evalCtx,
+		w.evalCtx,
 		processorID,
 		limitedMon,
 		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{w.input},
@@ -177,7 +179,7 @@ func newWindower(
 
 	w.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "windower-disk")
 	w.allRowsPartitioned = rowcontainer.NewHashDiskBackedRowContainer(
-		evalCtx, w.MemMonitor, w.diskMonitor, flowCtx.Cfg.TempStorage,
+		w.evalCtx, w.MemMonitor, w.diskMonitor, flowCtx.Cfg.TempStorage,
 	)
 	if err := w.allRowsPartitioned.Init(
 		ctx,
@@ -243,7 +245,7 @@ func (w *windower) close() {
 			w.partition.Close(w.Ctx())
 		}
 		for _, builtin := range w.builtins {
-			builtin.Close(w.Ctx(), w.EvalCtx)
+			builtin.Close(w.Ctx(), w.evalCtx)
 		}
 		w.acc.Close(w.Ctx())
 		w.MemMonitor.Stop(w.Ctx())
@@ -304,7 +306,7 @@ func (w *windower) emitRow() (windowerState, rowenc.EncDatumRow, *execinfrapb.Pr
 				return windowerStateUnknown, nil, w.DrainHelper()
 			}
 
-			if err := w.computeWindowFunctions(w.Ctx(), w.EvalCtx); err != nil {
+			if err := w.computeWindowFunctions(w.Ctx(), w.evalCtx); err != nil {
 				w.MoveToDraining(err)
 				return windowerStateUnknown, nil, w.DrainHelper()
 			}
@@ -615,7 +617,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *eval.Con
 	w.partition = rowcontainer.NewDiskBackedIndexedRowContainer(
 		ordering,
 		w.inputTypes,
-		w.EvalCtx,
+		w.FlowCtx.EvalCtx,
 		w.FlowCtx.Cfg.TempStorage,
 		w.MemMonitor,
 		w.diskMonitor,

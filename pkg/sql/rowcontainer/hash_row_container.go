@@ -838,6 +838,8 @@ type HashDiskBackedRowContainer struct {
 var _ HashRowContainer = &HashDiskBackedRowContainer{}
 
 // NewHashDiskBackedRowContainer makes a HashDiskBackedRowContainer.
+//
+// Note that eval context will **not** be mutated.
 func NewHashDiskBackedRowContainer(
 	evalCtx *eval.Context,
 	memoryMonitor *mon.BytesMonitor,

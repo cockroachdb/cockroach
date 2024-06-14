@@ -73,7 +73,7 @@ func (s *sorterBase) init(
 	rc.Init(
 		ordering,
 		input.OutputTypes(),
-		s.EvalCtx,
+		s.FlowCtx.EvalCtx,
 		flowCtx.Cfg.TempStorage,
 		memMonitor,
 		s.diskMonitor,
