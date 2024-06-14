@@ -13,6 +13,7 @@ package upgrades_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -58,18 +59,16 @@ func TestLeasingClusterVersionStarvation(t *testing.T) {
 		},
 	}
 
-	// Disable lease renewals intentionally, so that we validate
-	// no deadlock risk exists with the settings table.
 	st := clustersettings.MakeTestingClusterSettingsWithVersions(
 		clusterversion.Latest.Version(),
 		clusterversion.MinSupported.Version(),
 		false)
-
 	clusterArgs.ServerArgs.Settings = st
-
+	// Encourage continuous lease renewals intentionally, so that we validate
+	// no deadlock risk exists with the settings table. By setting a higher number
+	// the expiration will be less than the renewal interval.g
+	lease.LeaseRenewalDuration.Override(ctx, &st.SV, time.Hour)
 	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
-	lease.LeaseDuration.Override(ctx, &st.SV, 0)
-	lease.LeaseRenewalDuration.Override(ctx, &st.SV, 0)
 
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
