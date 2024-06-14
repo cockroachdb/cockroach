@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -79,8 +78,6 @@ type IndexBackfillMerger struct {
 	spec        execinfrapb.IndexBackfillMergerSpec
 
 	desc catalog.TableDescriptor
-
-	out execinfra.ProcOutputHelper
 
 	flowCtx *execinfra.FlowCtx
 
@@ -157,12 +154,6 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 		outputMu.Lock()
 		defer outputMu.Unlock()
 		output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
-	}
-
-	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	if err := ibm.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, ibm.flowCtx.NewEvalCtx()); err != nil {
-		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
-		return
 	}
 
 	numWorkers := int(indexBackfillMergeNumWorkers.Get(&ibm.evalCtx.Settings.SV))
@@ -527,7 +518,8 @@ func NewIndexBackfillMerger(
 		spec:        spec,
 		desc:        tabledesc.NewUnsafeImmutable(&spec.Table),
 		flowCtx:     flowCtx,
-		evalCtx:     flowCtx.NewEvalCtx(),
+		// We won't modify the eval context, so we can use the shared one.
+		evalCtx: flowCtx.EvalCtx,
 	}
 }
 

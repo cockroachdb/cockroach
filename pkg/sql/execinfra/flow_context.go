@@ -107,16 +107,11 @@ type FlowCtx struct {
 	TenantCPUMonitor multitenantcpu.CPUUsageHelper
 }
 
-// NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
-// Processors should use this method any time they need to store a pointer to
-// the EvalContext, since processors may mutate the EvalContext. Specifically,
-// every processor that runs ProcOutputHelper.Init must pass in a modifiable
-// EvalContext, since it stores that EvalContext in its exprHelpers and mutates
-// them at runtime to ensure expressions are evaluated with the correct indexed
-// var context.
-// TODO(yuzefovich): once we remove eval.Context.deprecatedContext, re-evaluate
-// this since many processors don't modify the eval context except for that
-// field.
+// NewEvalCtx returns a modifiable copy of the FlowCtx's eval.Context.
+// Processors should use this method whenever they explicitly modify the
+// eval.Context or use rendering capabilities of ProcOutputHelper (in the latter
+// case the EexprHelper mutates the context to ensure expressions are evaluated
+// with the correct indexed var context).
 func (flowCtx *FlowCtx) NewEvalCtx() *eval.Context {
 	evalCopy := flowCtx.EvalCtx.Copy()
 	return evalCopy

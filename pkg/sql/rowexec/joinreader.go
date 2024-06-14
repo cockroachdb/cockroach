@@ -430,6 +430,12 @@ func newJoinReader(
 	}
 
 	if !spec.LookupExpr.Empty() {
+		if jr.EvalCtx == flowCtx.EvalCtx {
+			// We haven't created a copy of the eval context yet (because it is
+			// only done in init if we have non-empty ON expression), but we
+			// actually need a copy. Updating here is ok.
+			jr.EvalCtx = flowCtx.NewEvalCtx()
+		}
 		lookupExprTypes := make([]*types.T, 0, len(leftTypes)+len(rightTypes))
 		lookupExprTypes = append(lookupExprTypes, leftTypes...)
 		lookupExprTypes = append(lookupExprTypes, rightTypes...)

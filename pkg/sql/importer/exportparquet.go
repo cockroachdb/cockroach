@@ -68,7 +68,11 @@ func newParquetWriterProcessor(
 		input:       input,
 	}
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	if err := c.out.Init(ctx, post, colinfo.ExportColumnTypes, &semaCtx, flowCtx.NewEvalCtx()); err != nil {
+	evalCtx := flowCtx.EvalCtx
+	if len(post.RenderExprs) > 0 {
+		evalCtx = flowCtx.NewEvalCtx()
+	}
+	if err := c.out.Init(ctx, post, colinfo.ExportColumnTypes, &semaCtx, evalCtx); err != nil {
 		return nil, err
 	}
 	return c, nil

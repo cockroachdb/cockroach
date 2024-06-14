@@ -89,12 +89,14 @@ func newProjectSetProcessor(
 		gens:      make([]eval.ValueGenerator, len(spec.Exprs)),
 		done:      make([]bool, len(spec.Exprs)),
 	}
-	if err := ps.Init(
+	if err := ps.InitWithEvalCtx(
 		ctx,
 		ps,
 		post,
 		outputTypes,
 		flowCtx,
+		// We'll be mutating the eval context, so we always need a copy.
+		flowCtx.NewEvalCtx(),
 		processorID,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{

@@ -45,12 +45,15 @@ func newFiltererProcessor(
 ) (*filtererProcessor, error) {
 	f := &filtererProcessor{input: input}
 	types := input.OutputTypes()
-	if err := f.Init(
+	if err := f.InitWithEvalCtx(
 		ctx,
 		f,
 		post,
 		types,
 		flowCtx,
+		// Make a copy of the eval context since we're going to pass it to the
+		// ExprHelper later (which might modify it).
+		flowCtx.NewEvalCtx(),
 		processorID,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{f.input}},

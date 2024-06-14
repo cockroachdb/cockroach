@@ -1150,12 +1150,15 @@ func newChangeFrontierProcessor(
 		cf.knobs = *cfKnobs
 	}
 
-	if err := cf.Init(
+	if err := cf.InitWithEvalCtx(
 		ctx,
 		cf,
 		post,
 		input.OutputTypes(),
 		flowCtx,
+		// We might modify the ChangefeedState field in the eval.Context, so we
+		// need to make a copy.
+		flowCtx.NewEvalCtx(),
 		processorID,
 		memMonitor,
 		execinfra.ProcStateOpts{

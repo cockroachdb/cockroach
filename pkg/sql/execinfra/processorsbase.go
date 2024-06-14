@@ -123,6 +123,10 @@ func (h *ProcOutputHelper) Reset() {
 // omitted if there is no filtering expression.
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
+//
+// NB: if render expressions are present, then the eval context might be
+// **mutated**. It is the caller's responsibility to provide a copy of the eval
+// context in this case.
 func (h *ProcOutputHelper) Init(
 	ctx context.Context,
 	post *execinfrapb.PostProcessSpec,
@@ -347,6 +351,7 @@ type ProcessorBaseNoHelper struct {
 	FlowCtx *FlowCtx
 
 	// EvalCtx is used for expression evaluation. It overrides the one in flowCtx.
+	// TODO: consider removing this field altogether.
 	EvalCtx *eval.Context
 
 	// Closed is set by InternalClose(). Once set, the processor's tracing span
@@ -745,6 +750,8 @@ type ProcStateOpts struct {
 // - coreOutputTypes are the type schema of the rows output by the processor
 // core (i.e. the "internal schema" of the processor, see
 // execinfrapb.ProcessorSpec for more details).
+//
+// NB: it is assumed that the caller will not modify the eval context.
 func (pb *ProcessorBase) Init(
 	ctx context.Context,
 	self RowSource,
@@ -755,8 +762,14 @@ func (pb *ProcessorBase) Init(
 	memMonitor *mon.BytesMonitor,
 	opts ProcStateOpts,
 ) error {
+	evalCtx := flowCtx.EvalCtx
+	if len(post.RenderExprs) > 0 {
+		// Only create a copy of the eval context if we have some renders, in
+		// which case we're going to use the ExprHelper which might mutate it.
+		evalCtx = flowCtx.NewEvalCtx()
+	}
 	return pb.InitWithEvalCtx(
-		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.NewEvalCtx(), processorID, memMonitor, opts,
+		ctx, self, post, coreOutputTypes, flowCtx, evalCtx, processorID, memMonitor, opts,
 	)
 }
 

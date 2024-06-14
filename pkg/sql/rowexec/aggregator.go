@@ -147,8 +147,10 @@ func (ag *aggregatorBase) init(
 		ag.outputTypes[i] = outputType
 	}
 
-	return ag.ProcessorBase.Init(
-		ctx, self, post, ag.outputTypes, flowCtx, processorID, memMonitor,
+	// We always create a copy of the eval context because we'll mutate it later
+	// (SingleDatumAggMemAccount field will be updated).
+	return ag.ProcessorBase.InitWithEvalCtx(
+		ctx, self, post, ag.outputTypes, flowCtx, flowCtx.NewEvalCtx(), processorID, memMonitor,
 		execinfra.ProcStateOpts{
 			InputsToDrain:        []execinfra.RowSource{ag.input},
 			TrailingMetaCallback: trailingMetaCallback,

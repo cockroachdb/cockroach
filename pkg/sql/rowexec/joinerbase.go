@@ -82,13 +82,18 @@ func (jb *joinerBase) init(
 		outputTypes = append(outputTypes, types.Bool)
 	}
 
-	if err := jb.ProcessorBase.Init(
-		ctx, self, post, outputTypes, flowCtx, processorID, nil /* memMonitor */, opts,
+	evalCtx := flowCtx.EvalCtx
+	if !onExpr.Empty() {
+		// Only make a copy if we need to evaluate ON expression.
+		evalCtx = flowCtx.NewEvalCtx()
+	}
+	if err := jb.ProcessorBase.InitWithEvalCtx(
+		ctx, self, post, outputTypes, flowCtx, evalCtx, processorID, nil /* memMonitor */, opts,
 	); err != nil {
 		return err
 	}
 	semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
-	return jb.onCond.Init(ctx, onExpr, onCondTypes, semaCtx, jb.EvalCtx)
+	return jb.onCond.Init(ctx, onExpr, onCondTypes, semaCtx, evalCtx)
 }
 
 // joinSide is the utility type to distinguish between two sides of the join.
