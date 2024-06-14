@@ -72,7 +72,7 @@ func init() {
 	// using TestLogScope.
 	cfg := getTestConfig(nil /* output to files disabled */, true /* mostly inline */)
 
-	if _, err := ApplyConfig(cfg, FileSinkMetrics{}); err != nil {
+	if _, err := ApplyConfig(cfg, FileSinkMetrics{}, nil /* fatalOnLogStall */); err != nil {
 		panic(err)
 	}
 
@@ -97,7 +97,7 @@ func IsActive() (active bool, firstUse string) {
 //
 // The returned logShutdownFn can be used to gracefully shut down logging facilities.
 func ApplyConfig(
-	config logconfig.Config, metrics FileSinkMetrics,
+	config logconfig.Config, metrics FileSinkMetrics, fatalOnLogStall func() bool,
 ) (logShutdownFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
@@ -319,6 +319,7 @@ func ApplyConfig(
 		if err != nil {
 			return nil, err
 		}
+		fileSink.fatalOnLogStall = fatalOnLogStall
 		attachBufferWrapper(fileSinkInfo, fc.CommonSinkConfig.Buffering, closer)
 		attachSinkInfo(fileSinkInfo, &fc.Channels)
 
