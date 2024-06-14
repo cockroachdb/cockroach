@@ -50,15 +50,15 @@ func TestDatumPrevNext(t *testing.T) {
 				continue
 			}
 		}
-		if !d.IsMin(&evalCtx) {
-			if prev, ok := tree.DatumPrev(d, &evalCtx, &evalCtx.CollationEnv); ok {
+		if !d.IsMin(ctx, &evalCtx) {
+			if prev, ok := tree.DatumPrev(ctx, d, &evalCtx, &evalCtx.CollationEnv); ok {
 				cmp, err := d.Compare(ctx, &evalCtx, prev)
 				require.NoError(t, err)
 				require.True(t, cmp > 0, "d=%s, prev=%s, type=%s", d.String(), prev.String(), d.ResolvedType().SQLString())
 			}
 		}
-		if !d.IsMax(&evalCtx) {
-			if next, ok := tree.DatumNext(d, &evalCtx, &evalCtx.CollationEnv); ok {
+		if !d.IsMax(ctx, &evalCtx) {
+			if next, ok := tree.DatumNext(ctx, d, &evalCtx, &evalCtx.CollationEnv); ok {
 				cmp, err := d.Compare(ctx, &evalCtx, next)
 				require.NoError(t, err)
 				require.True(t, cmp < 0, "d=%s, next=%s, type=%s", d.String(), next.String(), d.ResolvedType().SQLString())

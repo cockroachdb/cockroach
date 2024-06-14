@@ -181,10 +181,10 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 		}
 		key := constraint.MakeKey(datum)
 		c := contradiction
-		if startKey.IsEmpty() || !datum.IsMin(cb.evalCtx) {
+		if startKey.IsEmpty() || !datum.IsMin(cb.ctx, cb.evalCtx) {
 			c = cb.singleSpan(col, startKey, startBoundary, key, excludeBoundary)
 		}
-		if !datum.IsMax(cb.evalCtx) {
+		if !datum.IsMax(cb.ctx, cb.evalCtx) {
 			other := cb.singleSpan(col, key, excludeBoundary, emptyKey, includeBoundary)
 			c = c.Union(cb.ctx, cb.evalCtx, other)
 		}

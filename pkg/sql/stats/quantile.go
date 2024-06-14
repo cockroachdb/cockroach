@@ -329,7 +329,7 @@ func (q quantile) toHistogram(
 			if !isValidCount(numRange) {
 				return histogram{}, errors.AssertionFailedf("invalid histogram NumRange: %v", numRange)
 			}
-			currentLowerBound = getNextLowerBound(compareCtx, currentUpperBound)
+			currentLowerBound = getNextLowerBound(ctx, compareCtx, currentUpperBound)
 			currentUpperBound = upperBound
 			currentBucket = cat.HistogramBucket{
 				NumEq:         0,

@@ -331,7 +331,7 @@ func equiDepthHistogramWithoutAdjustment(
 			UpperBound:    upper,
 		})
 
-		lowerBound = getNextLowerBound(compareCtx, upper)
+		lowerBound = getNextLowerBound(ctx, compareCtx, upper)
 	}
 
 	return h, nil
@@ -585,7 +585,7 @@ func (h *histogram) removeZeroBuckets() {
 // value exists. The boolean indicates whether it exists and the bucket needs to
 // be created.
 func getMinVal(
-	upperBound tree.Datum, t *types.T, compareCtx tree.CompareContext,
+	ctx context.Context, upperBound tree.Datum, t *types.T, compareCtx tree.CompareContext,
 ) (tree.Datum, bool) {
 	if t.Family() == types.IntFamily {
 		// INT2 and INT4 require special handling.
@@ -610,17 +610,17 @@ func getMinVal(
 			return tree.NewDInt(tree.DInt(math.MinInt32)), true
 		}
 	}
-	if upperBound.IsMin(compareCtx) {
+	if upperBound.IsMin(ctx, compareCtx) {
 		return nil, false
 	}
-	return upperBound.Min(compareCtx)
+	return upperBound.Min(ctx, compareCtx)
 }
 
 // getMaxVal returns the maximum value for the maximum "outer" bucket if the
 // value exists. The boolean indicates whether it exists and the bucket needs to
 // be created.
 func getMaxVal(
-	upperBound tree.Datum, t *types.T, compareCtx tree.CompareContext,
+	ctx context.Context, upperBound tree.Datum, t *types.T, compareCtx tree.CompareContext,
 ) (tree.Datum, bool) {
 	if t.Family() == types.IntFamily {
 		// INT2 and INT4 require special handling.
@@ -645,10 +645,10 @@ func getMaxVal(
 			return tree.NewDInt(tree.DInt(math.MaxInt32)), true
 		}
 	}
-	if upperBound.IsMax(compareCtx) {
+	if upperBound.IsMax(ctx, compareCtx) {
 		return nil, false
 	}
-	return upperBound.Max(compareCtx)
+	return upperBound.Max(ctx, compareCtx)
 }
 
 // addOuterBuckets adds buckets above and below the existing buckets in the
@@ -665,7 +665,7 @@ func (h *histogram) addOuterBuckets(
 	var maxDistinctCountExtraBuckets float64
 	var addedMin, addedMax bool
 	var newBuckets int
-	if minVal, ok := getMinVal(h.buckets[0].UpperBound, colType, compareCtx); ok {
+	if minVal, ok := getMinVal(ctx, h.buckets[0].UpperBound, colType, compareCtx); ok {
 		lowerBound := minVal
 		upperBound := h.buckets[0].UpperBound
 		maxDistRange, _ := maxDistinctRange(ctx, compareCtx, lowerBound, upperBound)
@@ -674,7 +674,7 @@ func (h *histogram) addOuterBuckets(
 		addedMin = true
 		newBuckets++
 	}
-	if maxVal, ok := getMaxVal(h.buckets[len(h.buckets)-1].UpperBound, colType, compareCtx); ok {
+	if maxVal, ok := getMaxVal(ctx, h.buckets[len(h.buckets)-1].UpperBound, colType, compareCtx); ok {
 		lowerBound := h.buckets[len(h.buckets)-1].UpperBound
 		upperBound := maxVal
 		maxDistRange, _ := maxDistinctRange(ctx, compareCtx, lowerBound, upperBound)
@@ -808,7 +808,7 @@ func estimatedDistinctValuesInRange(
 	if numRange == 0 {
 		return 0
 	}
-	rangeUpperBound, ok := upperBound.Prev(compareCtx)
+	rangeUpperBound, ok := upperBound.Prev(ctx, compareCtx)
 	if !ok {
 		rangeUpperBound = upperBound
 	}
@@ -818,8 +818,10 @@ func estimatedDistinctValuesInRange(
 	return numRange
 }
 
-func getNextLowerBound(compareCtx tree.CompareContext, currentUpperBound tree.Datum) tree.Datum {
-	nextLowerBound, ok := currentUpperBound.Next(compareCtx)
+func getNextLowerBound(
+	ctx context.Context, compareCtx tree.CompareContext, currentUpperBound tree.Datum,
+) tree.Datum {
+	nextLowerBound, ok := currentUpperBound.Next(ctx, compareCtx)
 	if !ok {
 		nextLowerBound = currentUpperBound
 	}

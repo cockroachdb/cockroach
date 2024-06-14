@@ -336,28 +336,28 @@ func (c *KeyContext) Compare(colIdx int, a, b tree.Datum) int {
 // integers). See Datum.Next/Prev.
 func (c *KeyContext) Next(colIdx int, val tree.Datum) (_ tree.Datum, ok bool) {
 	if c.Columns.Get(colIdx).Ascending() {
-		if val.IsMax(c.EvalCtx) {
+		if val.IsMax(c.Ctx, c.EvalCtx) {
 			return nil, false
 		}
-		return val.Next(c.EvalCtx)
+		return val.Next(c.Ctx, c.EvalCtx)
 	}
-	if val.IsMin(c.EvalCtx) {
+	if val.IsMin(c.Ctx, c.EvalCtx) {
 		return nil, false
 	}
-	return val.Prev(c.EvalCtx)
+	return val.Prev(c.Ctx, c.EvalCtx)
 }
 
 // Prev returns the previous value on a given column (for discrete types like
 // integers). See Datum.Next/Prev.
 func (c *KeyContext) Prev(colIdx int, val tree.Datum) (_ tree.Datum, ok bool) {
 	if c.Columns.Get(colIdx).Ascending() {
-		if val.IsMin(c.EvalCtx) {
+		if val.IsMin(c.Ctx, c.EvalCtx) {
 			return nil, false
 		}
-		return val.Prev(c.EvalCtx)
+		return val.Prev(c.Ctx, c.EvalCtx)
 	}
-	if val.IsMax(c.EvalCtx) {
+	if val.IsMax(c.Ctx, c.EvalCtx) {
 		return nil, false
 	}
-	return val.Next(c.EvalCtx)
+	return val.Next(c.Ctx, c.EvalCtx)
 }

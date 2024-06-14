@@ -98,7 +98,7 @@ func randHist(ctx context.Context, colType *types.T, rng *rand.Rand) (histogram,
 	// Set DistinctRange in all buckets.
 	var compareCtx *eval.Context
 	for i := 1; i < len(buckets); i++ {
-		lowerBound := getNextLowerBound(compareCtx, buckets[i-1].UpperBound)
+		lowerBound := getNextLowerBound(ctx, compareCtx, buckets[i-1].UpperBound)
 		buckets[i].DistinctRange = estimatedDistinctValuesInRange(
 			ctx, compareCtx, buckets[i].NumRange, lowerBound, buckets[i].UpperBound,
 		)

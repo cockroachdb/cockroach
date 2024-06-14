@@ -369,7 +369,7 @@ func getExplainCombinations(
 					addPrevious = true
 				}
 				if addPrevious {
-					if prev, ok := tree.DatumPrev(datum, &evalCtx, &evalCtx.CollationEnv); ok {
+					if prev, ok := tree.DatumPrev(ctx, datum, &evalCtx, &evalCtx.CollationEnv); ok {
 						bucketMap[key] = append(bucketMap[key], tree.AsStringWithFlags(prev, fmtCtx))
 						addedNonExistent = addedNonExistent || numRange == 0
 					}
@@ -381,7 +381,7 @@ func getExplainCombinations(
 			}
 			// Create a value that's outside of histogram range by incrementing the
 			// max value that we've seen.
-			if outside, ok := tree.DatumNext(maxUpperBound, &evalCtx, &evalCtx.CollationEnv); ok {
+			if outside, ok := tree.DatumNext(ctx, maxUpperBound, &evalCtx, &evalCtx.CollationEnv); ok {
 				colSamples = append(colSamples, tree.AsStringWithFlags(outside, fmtCtx))
 			}
 			sort.Strings(colSamples)
