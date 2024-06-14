@@ -115,6 +115,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 				Replica:    replicas[1],
 				ProposedTS: now,
 				Start:      now,
+				Sequence:   prevLease.Sequence + 1,
 			}
 			if epoch {
 				nextLease.Epoch = 1

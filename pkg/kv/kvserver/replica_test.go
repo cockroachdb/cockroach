@@ -535,9 +535,12 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba := &kvpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	st := r.CurrentLeaseStatus(ctx)
+	lease := *l
+	prevLease := st.Lease
+	lease.Sequence = prevLease.Sequence + 1
 	leaseReq := &kvpb.RequestLeaseRequest{
-		Lease:     *l,
-		PrevLease: st.Lease,
+		Lease:     lease,
+		PrevLease: prevLease,
 	}
 	ba.Add(leaseReq)
 	_, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
@@ -1135,7 +1138,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 	if err := sendLeaseRequest(tc.repl, &roachpb.Lease{
 		ProposedTS: now,
 		Start:      now,
-		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
+		Expiration: now.ToTimestamp().Add(cfg.RangeLeaseDuration.Nanoseconds(), 0).Clone(),
 		Replica: roachpb.ReplicaDescriptor{
 			ReplicaID: 1,
 			NodeID:    1,
@@ -1223,7 +1226,6 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 		start       hlc.Timestamp
 		expiration  hlc.Timestamp
 		expLowWater int64 // 0 for not expecting anything
-		expErr      string
 	}{
 		// Grant the lease fresh.
 		{storeID: tc.store.StoreID(),
@@ -1234,12 +1236,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 		// Renew the lease but shorten expiration. This is silently ignored.
 		{storeID: tc.store.StoreID(),
 			start: now.Add(16, 0), expiration: now.Add(25, 0)},
-		// Another Store attempts to get the lease, but overlaps. If the
-		// previous lease expiration had worked, this would have too.
-		{storeID: secondReplica.StoreID,
-			start: now.Add(29, 0), expiration: now.Add(50, 0),
-			expErr: "overlaps previous"},
-		// The other store tries again, this time without the overlap.
+		// Another Store grabs the lease.
 		{storeID: secondReplica.StoreID,
 			start: now.Add(31, 0), expiration: now.Add(50, 0),
 			// The cache now moves to this other store, and we can't query that.
@@ -1247,9 +1244,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 		// Lease is regranted to this store. The low-water mark is updated to the
 		// beginning of the lease.
 		{storeID: tc.store.StoreID(),
-			start: now.Add(60, 0), expiration: now.Add(70, 0),
-			// We expect 50, not 60, because the new lease is wound back to the end
-			// of the previous lease.
+			start: now.Add(50, 0), expiration: now.Add(70, 0),
 			expLowWater: now.Add(50, 0).WallTime},
 	}
 
@@ -1272,7 +1267,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 				NodeID:    roachpb.NodeID(test.storeID),
 				StoreID:   test.storeID,
 			},
-		}); !testutils.IsError(err, test.expErr) {
+		}); err != nil {
 			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
@@ -1306,6 +1301,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 
 	tc.manualClock.MustAdvanceTo(leaseExpiry(tc.repl))
 	now := tc.Clock().NowAsClockTimestamp()
+	st := tc.repl.CurrentLeaseStatus(ctx)
 	lease := &roachpb.Lease{
 		Start:      now,
 		Expiration: now.ToTimestamp().Add(10, 0).Clone(),
@@ -1314,8 +1310,8 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 			NodeID:    2,
 			StoreID:   2,
 		},
+		Sequence: st.Lease.Sequence + 1,
 	}
-	st := tc.repl.CurrentLeaseStatus(ctx)
 	ba := &kvpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&kvpb.RequestLeaseRequest{Lease: *lease, PrevLease: st.Lease})
@@ -7875,7 +7871,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 		ba.Requests = nil
 
 		lease := prevLease
-		lease.Sequence = 0
+		lease.Sequence++
 		lease.ProposedTS = tc.Clock().Now().UnsafeToClockTimestamp()
 
 		ba.Add(&kvpb.RequestLeaseRequest{

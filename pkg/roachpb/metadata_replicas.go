@@ -560,6 +560,14 @@ func CheckCanReceiveLease(
 	if !ok {
 		return ErrReplicaNotFound
 	}
+	if repDesc.StoreID != wouldbeLeaseholder.StoreID {
+		return errors.AssertionFailedf("store ID mismatch: %d != %d",
+			repDesc.StoreID, wouldbeLeaseholder.StoreID)
+	}
+	if repDesc.NodeID != wouldbeLeaseholder.NodeID {
+		return errors.AssertionFailedf("node ID mismatch: %d != %d",
+			repDesc.NodeID, wouldbeLeaseholder.NodeID)
+	}
 	if !(repDesc.IsVoterNewConfig() ||
 		(repDesc.IsVoterOldConfig() && replDescs.containsVoterIncoming() && wasLastLeaseholder)) {
 		// We allow a demoting / incoming voter to receive the lease if there's an incoming voter.
