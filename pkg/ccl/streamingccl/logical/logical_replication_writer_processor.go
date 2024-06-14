@@ -10,6 +10,7 @@ package logical
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -91,7 +92,7 @@ type logicalReplicationWriterProcessor struct {
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.LogicalReplicationWriterSpec
 
-	bh BatchHandler
+	bh []BatchHandler
 
 	buffer *ingestionBuffer
 
@@ -155,18 +156,22 @@ func newLogicalReplicationWriterProcessor(
 			return nil, err
 		}
 	}
-	rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Codec(), flowCtx.Cfg.Settings, spec.TableDescriptors)
-	if err != nil {
-		return nil, err
+	bhPool := make([]BatchHandler, maxWriterWorkers)
+	for i := range bhPool {
+		rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Codec(), flowCtx.Cfg.Settings, spec.TableDescriptors)
+		if err != nil {
+			return nil, err
+		}
+		bhPool[i] = &txnBatch{
+			db: flowCtx.Cfg.DB,
+			rp: rp,
+		}
 	}
-	bh := &txnBatch{
-		db: flowCtx.Cfg.DB,
-		rp: rp,
-	}
+
 	lrw := &logicalReplicationWriterProcessor{
 		flowCtx:        flowCtx,
 		spec:           spec,
-		bh:             bh,
+		bh:             bhPool,
 		frontier:       frontier,
 		buffer:         &ingestionBuffer{},
 		stopCh:         make(chan struct{}),
@@ -592,6 +597,8 @@ func (lrw *logicalReplicationWriterProcessor) flush(reason flushReason) error {
 	}
 }
 
+const maxWriterWorkers = 32
+
 // flushBuffer flushes the given flusableBufferand returns the underlying streamIngestionBuffer to the pool.
 func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	b flushableBuffer,
@@ -604,39 +611,72 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return b.checkpoint, nil
 	}
 
+	kvs := b.buffer.curKVBatch
+
+	batchSize := int(flushBatchSize.Get(&lrw.EvalCtx.Settings.SV))
+
 	// Ensure the batcher is always reset, even on early error returns.
 	preFlushTime := timeutil.Now()
-	lrw.debug.RecordFlushStart(preFlushTime, int64(len(b.buffer.curKVBatch)))
+	lrw.debug.RecordFlushStart(preFlushTime, int64(len(kvs)))
 
 	// TODO: The batching here in production would need to be much
 	// smarter. Namely, we don't want to include updates to the
 	// same key in the same batch. Also, it's possible batching
 	// will make things much worse in practice.
-	flushByteSize := 0
-	batchStart := 0
-	batchSize := int(flushBatchSize.Get(&lrw.EvalCtx.Settings.SV))
-	batchEnd := min(batchStart+batchSize, len(b.buffer.curKVBatch))
-	for batchStart < len(b.buffer.curKVBatch) && batchEnd != 0 {
-		preBatchTime := timeutil.Now()
-		batchStats, err := lrw.bh.HandleBatch(ctx, b.buffer.curKVBatch[batchStart:batchEnd])
-		if err != nil {
-			// TODO(ssd): Handle errors. We should perhaps split the batch and retry a portion of the batch.
-			// If that fails, send the failed application to the dead-letter-queue.
-			return nil, err
+
+	sort.Stable(roachpb.KeyValueByKey(kvs))
+	var flushByteSize atomic.Int64
+
+	chunkStart, chunkSize := 0, max((len(kvs)/len(lrw.bh))+1, batchSize)
+
+	g := ctxgroup.WithContext(ctx)
+	for worker := range lrw.bh {
+		if chunkStart >= len(kvs) {
+			break
 		}
+		bh := lrw.bh[worker]
+		batchStart := chunkStart
 
-		flushByteSize += batchStats.byteSize
-		batchStart = batchEnd
+		// The chunk should end after the first new key after chunk size.
+		chunkEnd := min(chunkStart+chunkSize, len(kvs))
+		for chunkEnd < len(kvs) && kvs[chunkEnd-1].Key.Equal(kvs[chunkEnd].Key) {
+			chunkEnd++
+		}
+		// Set the start for the next chunk to where this one ended.
+		chunkStart = chunkEnd
 
-		batchEnd = min(batchStart+batchSize, len(b.buffer.curKVBatch))
-		batchTime := timeutil.Since(preBatchTime)
-		lrw.debug.RecordBatchApplied(batchTime, int64(batchEnd-batchStart))
-		lrw.metrics.BatchBytesHist.RecordValue(int64(batchStats.byteSize))
-		lrw.metrics.BatchHistNanos.RecordValue(batchTime.Nanoseconds())
+		g.GoCtx(func(ctx context.Context) error {
+			for batchStart < chunkEnd {
+				batchEnd := min(batchStart+batchSize, chunkEnd)
+				preBatchTime := timeutil.Now()
+				batchStats, err := bh.HandleBatch(ctx, b.buffer.curKVBatch[batchStart:batchEnd])
+				if err != nil {
+					// TODO(ssd): Handle errors. We should perhaps split the batch and retry a portion of the batch.
+					// If that fails, send the failed application to the dead-letter-queue.
+					return err
+				}
+				batchStart = batchEnd
+				batchTime := timeutil.Since(preBatchTime)
+
+				lrw.debug.RecordBatchApplied(batchTime, int64(batchEnd-batchStart))
+				lrw.metrics.BatchBytesHist.RecordValue(int64(batchStats.byteSize))
+				lrw.metrics.BatchHistNanos.RecordValue(batchTime.Nanoseconds())
+				flushByteSize.Add(int64(batchStats.byteSize))
+			}
+			return nil
+		})
+	}
+
+	if chunkStart != len(kvs) {
+		panic(errors.AssertionFailedf("%d %d %d", len(lrw.bh)-1, chunkSize, len(kvs)))
+	}
+
+	if err := g.Wait(); err != nil {
+		return b.checkpoint, err
 	}
 
 	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
-	keyCount, byteCount := int64(len(b.buffer.curKVBatch)), int64(flushByteSize)
+	keyCount, byteCount := int64(len(b.buffer.curKVBatch)), flushByteSize.Load()
 	lrw.debug.RecordFlushComplete(flushTime, keyCount, byteCount)
 
 	lrw.metrics.Flushes.Inc(1)
