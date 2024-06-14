@@ -17,6 +17,7 @@ go_test(
     visibility = ["//pkg/compose:__subpackages__"],
     deps = [
         "//pkg/cmd/cmpconn",
+        "//pkg/geo/geos",
         "//pkg/internal/sqlsmith",
         "//pkg/sql/randgen",
         "//pkg/testutils",
