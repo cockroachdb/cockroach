@@ -10,7 +10,7 @@ package logical
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -624,7 +625,20 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	// same key in the same batch. Also, it's possible batching
 	// will make things much worse in practice.
 
-	sort.Stable(roachpb.KeyValueByKey(kvs))
+	k := func(kv roachpb.KeyValue) roachpb.Key {
+		if p, err := keys.EnsureSafeSplitKey(kv.Key); err == nil {
+			return p
+		}
+		return kv.Key
+	}
+
+	slices.SortFunc(kvs, func(a, b roachpb.KeyValue) int {
+		if c := k(a).Compare(k(b)); c != 0 {
+			return c
+		}
+		return a.Value.Timestamp.Compare(b.Value.Timestamp)
+	})
+
 	var flushByteSize atomic.Int64
 
 	chunkStart, chunkSize := 0, max((len(kvs)/len(lrw.bh))+1, batchSize)
@@ -639,7 +653,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 		// The chunk should end after the first new key after chunk size.
 		chunkEnd := min(chunkStart+chunkSize, len(kvs))
-		for chunkEnd < len(kvs) && kvs[chunkEnd-1].Key.Equal(kvs[chunkEnd].Key) {
+		for chunkEnd < len(kvs) && k(kvs[chunkEnd-1]).Equal(k(kvs[chunkEnd])) {
 			chunkEnd++
 		}
 		// Set the start for the next chunk to where this one ended.
