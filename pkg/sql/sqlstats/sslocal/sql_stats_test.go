@@ -460,7 +460,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		insightsProvider.LatencyInformation(),
 	)
 
-	appStats := sqlStats.GetApplicationStats("" /* appName */, false /* internal */)
+	appStats := sqlStats.GetApplicationStats("" /* appName */)
 	statsCollector := sslocal.NewStatsCollector(
 		st,
 		appStats,
@@ -588,7 +588,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			nil,
 			insightsProvider.LatencyInformation(),
 		)
-		appStats := sqlStats.GetApplicationStats("" /* appName */, false /* internal */)
+		appStats := sqlStats.GetApplicationStats("" /* appName */)
 		statsCollector := sslocal.NewStatsCollector(
 			st,
 			appStats,

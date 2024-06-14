@@ -121,7 +121,6 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		s.mu.mon,
 		appName,
 		s.knobs,
-		s.insights(false /* internal */),
 		s.latencyInformation,
 	)
 	s.mu.apps[appName] = a
