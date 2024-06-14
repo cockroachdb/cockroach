@@ -114,25 +114,25 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 		payload, err := buf.Close()
 		require.NoError(t, err)
 
-		payloadAnys := make([]any, 0, len(payload.([]*kgo.Record)))
+		payloadMatchers := make([]any, 0, len(payload.([]*kgo.Record)))
 		for _, r := range payload.([]*kgo.Record) {
-			payloadAnys = append(payloadAnys, r)
+			payloadMatchers = append(payloadMatchers, r)
 		}
 
 		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.RecordListTooLarge)}}
 		if canResize {
 			// it should keep splitting it in two until it hits size=1
 			gomock.InOrder(
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:50]...).Times(1).Return(pr), // TODO: why no worky
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:25]...).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:12]...).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:6]...).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:3]...).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:1]...).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers...).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:50]...).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:25]...).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:12]...).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:6]...).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:3]...).Times(1).Return(pr),
+				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:1]...).Times(1).Return(pr),
 			)
 		} else {
-			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys...).Times(1).Return(pr)
+			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers...).Times(1).Return(pr)
 		}
 
 		return fx, payload
@@ -150,7 +150,6 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 }
 
 // TODOs:
-// - test resizing
 // - adapt sink_test's topic naming tests (prefix, escaping, etc)
 // - test opts construction
 

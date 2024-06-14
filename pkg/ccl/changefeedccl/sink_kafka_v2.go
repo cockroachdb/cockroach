@@ -125,7 +125,8 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 	// TODO: make this better. possibly moving the resizing up into the batch worker would help a bit
 	var flushMsgs func(msgs []*kgo.Record) error
 	flushMsgs = func(msgs []*kgo.Record) error {
-		handleErr := func(err error) error {
+		log.Infof(ctx, `inner flushing %d messages to kafka (id=%d)`, len(msgs), k.debuggingId)
+		if err := k.client.ProduceSync(ctx, msgs...).FirstErr(); err != nil {
 			log.Infof(ctx, `kafka error in %d: %s`, k.debuggingId, err.Error())
 			if k.shouldTryResizing(err, msgs) {
 				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
@@ -133,13 +134,16 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 				// recurse
 				// this is also a little odd because the client's batch state doesnt consist only of this payload, and it's per topic partition anyway
 				// still it should probably help.. really the answer would be for users to set maxbytes.
-				return errors.Join(flushMsgs(a), flushMsgs(b))
+				if err := flushMsgs(a); err != nil {
+					return err
+				}
+				if err := flushMsgs(b); err != nil {
+					return err
+				}
+				return nil
+			} else {
+				return err
 			}
-
-			return err
-		}
-		if err := k.client.ProduceSync(ctx, msgs...).FirstErr(); err != nil {
-			return handleErr(err)
 		}
 		return nil
 	}
