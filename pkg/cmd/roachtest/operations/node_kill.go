@@ -33,14 +33,22 @@ func (cl *cleanupNodeKill) Cleanup(ctx context.Context, o operation.Operation, c
 	db, err := c.ConnE(ctx, o.L(), cl.nodes[0])
 	if err != nil {
 		err = c.RunE(ctx, option.WithNodes(cl.nodes), "./cockroach.sh")
-		o.Status(fmt.Sprintf("restarted node with error %s", err))
+		if err != nil {
+			o.Status(fmt.Sprintf("restarted node with error %s", err))
+		} else {
+			o.Status("restarted node with no error")
+		}
 		return
 	}
 	defer db.Close()
 	_, err = db.Query("SELECT 1")
 	if err != nil {
 		err = c.RunE(ctx, option.WithNodes(cl.nodes), "./cockroach.sh")
-		o.Status(fmt.Sprintf("restarted node with error %s", err))
+		if err != nil {
+			o.Status(fmt.Sprintf("restarted node with error %s", err))
+		} else {
+			o.Status("restarted node with no error")
+		}
 	}
 }
 
