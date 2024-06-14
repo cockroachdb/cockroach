@@ -31,7 +31,7 @@ fake_client_secret
 query TT rowsort
 SELECT variable, value
 FROM [show all cluster settings]
-WHERE variable ILIKE 'server.oidc_authentication.client_%'
+WHERE variable ILIKE 'server.oidc_authentication.client\_%'
 ----
 server.oidc_authentication.client_id      fake_client_id
 server.oidc_authentication.client_secret  fake_client_secret
@@ -59,7 +59,7 @@ SHOW CLUSTER SETTING server.oidc_authentication.client_secret
 query TT rowsort
 SELECT variable, value
 FROM [show all cluster settings]
-WHERE variable ILIKE 'server.oidc_authentication.client_%'
+WHERE variable ILIKE 'server.oidc_authentication.client\_%'
 ----
 server.oidc_authentication.client_id      <redacted>
 server.oidc_authentication.client_secret  <redacted>
@@ -86,7 +86,7 @@ fake_client_secret
 query TT rowsort
 SELECT variable, value
 FROM [show all cluster settings]
-WHERE variable ILIKE 'server.oidc_authentication.client_%'
+WHERE variable ILIKE 'server.oidc_authentication.client\_%'
 ----
 server.oidc_authentication.client_id      fake_client_id
 server.oidc_authentication.client_secret  fake_client_secret
@@ -114,7 +114,7 @@ SET ROLE testuser
 query error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SELECT variable, value, origin
 FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
-WHERE variable ILIKE 'server.oidc_authentication.client_%'
+WHERE variable ILIKE 'server.oidc_authentication.client\_%'
 
 query error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SHOW CLUSTER SETTING server.oidc_authentication.client_id FOR TENANT [10]
@@ -136,7 +136,7 @@ SET ROLE testuser
 query TTT rowsort
 SELECT variable, value, origin
 FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
-WHERE variable ILIKE 'server.oidc_authentication.client_%'
+WHERE variable ILIKE 'server.oidc_authentication.client\_%'
 ----
 server.oidc_authentication.client_id      fake_tenant_client_id      per-tenant-override
 server.oidc_authentication.client_secret  fake_tenant_client_secret  per-tenant-override
