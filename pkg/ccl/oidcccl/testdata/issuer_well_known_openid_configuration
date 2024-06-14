@@ -1,0 +1,10 @@
+{
+ "issuer": "https://accounts.idp1.com",
+ "authorization_endpoint": "https://accounts.idp1.com/o/oauth2/v2/auth",
+ "token_endpoint": "https://oauth2.idp1apis.com/token",
+ "jwks_uri": "https://www.idp1apis.com/oauth2/v3/certs",
+ "userinfo_endpoint": "https://openidconnect.idp1apis.com/v1/userinfo",
+ "id_token_signing_alg_values_supported": [
+  "RS256"
+ ]
+}
