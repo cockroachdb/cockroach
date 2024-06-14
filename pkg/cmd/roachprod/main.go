@@ -537,7 +537,7 @@ var loadBalancerPGUrl = &cobra.Command{
 %[1]s`, strings.TrimSpace(AuthModeHelp)),
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		auth, err := resolveAuthMode()
+		auth, err := install.ResolveAuthMode(authMode)
 		if err != nil {
 			return err
 		}
@@ -1139,9 +1139,9 @@ var sqlCmd = &cobra.Command{
 	Long:  "Run `cockroach sql` on a remote cluster.\n",
 	Args:  cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		auth, ok := pgAuthModes[authMode]
+		auth, ok := install.PGAuthModes[authMode]
 		if !ok {
-			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
+			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(install.PGAuthModes))
 		}
 
 		return roachprod.SQL(context.Background(), config.Logger, args[0], isSecure, virtualClusterName, sqlInstance, auth, args[1:])
@@ -1157,7 +1157,7 @@ var pgurlCmd = &cobra.Command{
 `, strings.TrimSpace(AuthModeHelp)),
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		auth, err := resolveAuthMode()
+		auth, err := install.ResolveAuthMode(authMode)
 		if err != nil {
 			return err
 		}
@@ -1185,14 +1185,6 @@ Defaults to root if not passed. Available auth-modes are:
 	user-password: authenticates with the default roachprod user and password
 
 	user-cert: authenticates with the default roachprod user and certificates`
-
-func resolveAuthMode() (install.PGAuthMode, error) {
-	auth, ok := pgAuthModes[authMode]
-	if !ok {
-		return -1, errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
-	}
-	return auth, nil
-}
 
 var pprofCmd = &cobra.Command{
 	Use:     "pprof <cluster>",
