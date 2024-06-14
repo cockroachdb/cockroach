@@ -69,7 +69,7 @@ case $1 in
     # wrapper.
     shift
     cluster=$1
-    roachprod adminurl $cluster --ips |
+    roachprod adminurl $cluster --ips --insecure=false |
       awk '{printf "%04d\t%s\n", NR, $0}' | # prepend the padded node IDs.
       sed -e 's,https://\(.*\):26258/,\1,g' | # remove the HTTPS part.
       while read node ip; do
