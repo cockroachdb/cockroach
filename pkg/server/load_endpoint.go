@@ -50,6 +50,17 @@ type loadEndpoint struct {
 	mainMetricSource metricMarshaler
 }
 
+// customLoadEndpointMetricsSet returns the set of all custom metric names that
+// the load endpoint should export.
+func customLoadEndpointMetricsSet() map[string]struct{} {
+	return map[string]struct{}{
+		jobs.MetaRunningNonIdleJobs.Name: {},
+		pgwire.MetaConns.Name:            {},
+		pgwire.MetaNewConns.Name:         {},
+		sql.MetaQueryExecuted.Name:       {},
+	}
+}
+
 func newLoadEndpoint(
 	rsr *status.RuntimeStatSampler, mainMetricSource metricMarshaler,
 ) (*loadEndpoint, error) {
@@ -66,11 +77,7 @@ func newLoadEndpoint(
 		mainMetricSource:   mainMetricSource,
 	}
 	// Exporter for the selected metrics that also show in /_status/vars.
-	result.exporterVars = metric.MakePrometheusExporterForSelectedMetrics(map[string]struct{}{
-		sql.MetaQueryExecuted.Name:       {},
-		pgwire.MetaConns.Name:            {},
-		jobs.MetaRunningNonIdleJobs.Name: {},
-	})
+	result.exporterVars = metric.MakePrometheusExporterForSelectedMetrics(customLoadEndpointMetricsSet())
 
 	result.cpuUserNanos = metric.NewGauge(rsr.CPUUserNS.GetMetadata())
 	result.cpuSysNanos = metric.NewGauge(rsr.CPUSysNS.GetMetadata())

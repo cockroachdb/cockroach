@@ -12,13 +12,20 @@ package server
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -27,11 +34,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testMetricSource struct{}
+func newTestMetricSource(clock hlc.WallClock) metricMarshaler {
+	st := cluster.MakeTestingClusterSettings()
+	metricSource := status.NewMetricsRecorder(
+		roachpb.SystemTenantID,
+		roachpb.NewTenantNameContainer(catconstants.SystemTenantName),
+		nil, /* nodeLiveness */
+		nil, /* remoteClocks */
+		clock,
+		st,
+	)
+	nodeDesc := roachpb.NodeDescriptor{
+		NodeID: roachpb.NodeID(7),
+	}
+	reg1 := metric.NewRegistry()
+	appReg := metric.NewRegistry()
+	logReg := metric.NewRegistry()
+	sysReg := metric.NewRegistry()
+	metricSource.AddNode(reg1, appReg, logReg, sysReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
-func (t testMetricSource) MarshalJSON() ([]byte, error)                                  { return nil, nil }
-func (t testMetricSource) PrintAsText(writer io.Writer, contentType expfmt.Format) error { return nil }
-func (t testMetricSource) ScrapeIntoPrometheus(pm *metric.PrometheusExporter)            {}
+	m := struct {
+		// Metrics that we need.
+		Conns              *metric.Gauge
+		NewConns           *metric.Counter
+		QueryExecuted      *metric.Counter
+		RunningNonIdleJobs *metric.Gauge
+		// Metrics that we don't need.
+		BytesInCount *metric.Counter
+	}{
+		// Metrics that we need.
+		Conns:              metric.NewGauge(pgwire.MetaConns),
+		NewConns:           metric.NewCounter(pgwire.MetaNewConns),
+		QueryExecuted:      metric.NewCounter(sql.MetaQueryExecuted),
+		RunningNonIdleJobs: metric.NewGauge(jobs.MetaRunningNonIdleJobs),
+		// Metrics that we don't need.
+		BytesInCount: metric.NewCounter(pgwire.MetaBytesIn),
+	}
+	regTenant := metric.NewRegistry()
+	regTenant.AddMetricStruct(&m)
+	metricSource.AddTenantRegistry(roachpb.SystemTenantID, regTenant)
+	return metricSource
+}
 
 func extractPrometheusMetrics(
 	t *testing.T, w *httptest.ResponseRecorder,
@@ -57,6 +100,21 @@ func extractPrometheusMetrics(
 	require.Len(t, uptime.GetMetric(), 1)
 	require.Equal(t, io_prometheus_client.MetricType_GAUGE, uptime.GetType())
 	uptimeNanos = uptime.Metric[0].GetGauge().GetValue() * 1.e9
+
+	munge := func(s string) string {
+		return strings.ReplaceAll(s, ".", "_")
+	}
+
+	// Validate that all custom metrics are exported.
+	customMetrics := customLoadEndpointMetricsSet()
+	for name := range customMetrics {
+		_, found := metrics[munge(name)]
+		require.True(t, found)
+	}
+
+	// Non custom metrics should not be exported.
+	_, found = metrics[munge(pgwire.MetaBytesIn.Name)]
+	require.False(t, found)
 	return
 }
 
@@ -76,7 +134,7 @@ func Test_loadEndpoint(t *testing.T) {
 
 	clock := timeutil.NewTestTimeSource()
 	rss := status.NewRuntimeStatSampler(ctx, clock)
-	metricSource := testMetricSource{}
+	metricSource := newTestMetricSource(clock)
 	le, err := newLoadEndpoint(rss, metricSource)
 	require.NoError(t, err)
 	req := httptest.NewRequest(http.MethodGet, "/_status/load", nil)
