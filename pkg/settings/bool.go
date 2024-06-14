@@ -34,6 +34,11 @@ func (b *BoolSetting) String(sv *Values) string {
 	return EncodeBool(b.Get(sv))
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (b *BoolSetting) DefaultString() string {
+	return EncodeBool(b.defaultValue)
+}
+
 // Encoded returns the encoded value of the current value of the setting.
 func (b *BoolSetting) Encoded(sv *Values) string {
 	return b.String(sv)
@@ -68,11 +73,6 @@ func (b *BoolSetting) Default() bool {
 	return b.defaultValue
 }
 
-// DefaultString returns the default value for the setting as a string.
-func (b *BoolSetting) DefaultString() (string, error) {
-	return b.DecodeToString(b.EncodedDefault())
-}
-
 // Defeat the linter.
 var _ = (*BoolSetting).Default
 
@@ -92,6 +92,26 @@ func (b *BoolSetting) set(ctx context.Context, sv *Values, v bool) {
 		vInt = 1
 	}
 	sv.setInt64(ctx, b.slot, vInt)
+}
+
+func (b *BoolSetting) decodeAndSet(ctx context.Context, sv *Values, encoded string) error {
+	v, err := strconv.ParseBool(encoded)
+	if err != nil {
+		return err
+	}
+	b.set(ctx, sv, v)
+	return nil
+}
+
+func (b *BoolSetting) decodeAndSetDefaultOverride(
+	ctx context.Context, sv *Values, encoded string,
+) error {
+	v, err := strconv.ParseBool(encoded)
+	if err != nil {
+		return err
+	}
+	sv.setDefaultOverride(b.slot, v)
+	return nil
 }
 
 func (b *BoolSetting) setToDefault(ctx context.Context, sv *Values) {
