@@ -1,48 +1,20 @@
-// Copyright 2023 The Cockroach Authors.
-//
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
-
-package kvserver
+package leases
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestReplicaLeaseStatus tests that Replica.leaseStatus returns a valid lease
-// status, both for expiration- and epoch-based leases.
-func TestReplicaLeaseStatus(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
+func TestStatus(t *testing.T) {
 	const maxOffset = 100 * time.Nanosecond
-	clock := hlc.NewClock(hlc.NewHybridManualClock(), maxOffset, maxOffset)
-
 	r1 := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	ts := []hlc.ClockTimestamp{
 		{WallTime: 500, Logical: 0},  // before lease start
@@ -123,34 +95,33 @@ func TestReplicaLeaseStatus(t *testing.T) {
 			wantErr: "node liveness info for n1 is stale"},
 	} {
 		t.Run("", func(t *testing.T) {
-			cache :=
-				liveness.NewCache(
-					gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry()),
-					clock,
-					cluster.MakeTestingClusterSettings(),
-					nil,
-				)
-			l := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
-				Clock: clock,
-				Cache: cache,
-			})
-			r := Replica{store: &Store{
-				Ident: &roachpb.StoreIdent{StoreID: 1, NodeID: 1},
-				cfg:   StoreConfig{Clock: clock, NodeLiveness: l},
-			}}
-			var empty livenesspb.Liveness
-			if maybeLiveness := tc.liveness; maybeLiveness != empty {
-				l.TestingMaybeUpdate(ctx, liveness.Record{Liveness: maybeLiveness})
+			nl := &mockNodeLiveness{
+				record:  liveness.Record{Liveness: tc.liveness},
+				missing: tc.liveness == livenesspb.Liveness{},
+			}
+			in := StatusInput{
+				LocalStoreID:       r1.StoreID,
+				MaxOffset:          maxOffset,
+				Now:                tc.now,
+				MinProposedTs:      tc.minProposedTS,
+				MinValidObservedTs: hlc.ClockTimestamp{},
+				RequestTs:          tc.reqTS,
+				Lease:              tc.lease,
 			}
 
-			got := r.leaseStatus(ctx, tc.lease, tc.now, tc.minProposedTS, hlc.ClockTimestamp{}, tc.reqTS)
+			got := Status(context.Background(), nl, in)
 			if tc.wantErr != "" {
 				require.Contains(t, got.ErrInfo, tc.wantErr)
 				got.ErrInfo = ""
 			}
-			assert.Equal(t, kvserverpb.LeaseStatus{
-				Lease: tc.lease, Now: tc.now, RequestTime: tc.reqTS, State: tc.want, Liveness: tc.liveness,
-			}, got)
+			exp := kvserverpb.LeaseStatus{
+				Lease:       tc.lease,
+				Now:         tc.now,
+				RequestTime: tc.reqTS,
+				State:       tc.want,
+				Liveness:    tc.liveness,
+			}
+			require.Equal(t, exp, got)
 		})
 	}
 }
