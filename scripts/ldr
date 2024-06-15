@@ -142,7 +142,6 @@ case $1 in
     "fast")
     for s in \
         "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'" \
-        "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'" \
         "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'" \
         "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'" \
         "SET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency='100ms'" \
@@ -156,7 +155,6 @@ case $1 in
       ;;
     "reset")
       for s in \
-        "RESET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval" \
         "RESET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval" \
         "RESET CLUSTER SETTING kv.closed_timestamp.target_duration" \
         "RESET CLUSTER SETTING kv.closed_timestamp.side_transport_interval" \
