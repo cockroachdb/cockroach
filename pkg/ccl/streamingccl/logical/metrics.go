@@ -140,13 +140,10 @@ type Metrics struct {
 	FlushBytesHist        metric.IHistogram
 	FlushHistNanos        metric.IHistogram
 	FlushWaitHistNanos    metric.IHistogram
-	FlushOnSize           *metric.Counter
-	FlushOnTime           *metric.Counter
 	BatchBytesHist        metric.IHistogram
 	BatchHistNanos        metric.IHistogram
 	CommitLatency         metric.IHistogram
 	AdmitLatency          metric.IHistogram
-	RunningCount          *metric.Gauge
 	ReplicatedTimeSeconds *metric.Gauge
 }
 
@@ -198,8 +195,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
-		FlushOnSize: metric.NewCounter(metaReplicationFlushOnSize),
-		FlushOnTime: metric.NewCounter(metaReplicationFlushOnTime),
 		BatchBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationBatchBytes,
@@ -212,7 +207,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
-		RunningCount:          metric.NewGauge(metaStreamsRunning),
 		ReplicatedTimeSeconds: metric.NewGauge(metaReplicatedTimeSeconds),
 	}
 }
