@@ -11,7 +11,6 @@ package logical
 import (
 	"context"
 	"slices"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -45,27 +43,6 @@ import (
 var logicalReplicationWriterResultType = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpans
 }
-
-var minimumFlushInterval = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.ApplicationLevel,
-	"logical_replication.consumer.minimum_flush_interval",
-	"the minimum timestamp between flushes; flushes may still occur if internal buffers fill up",
-	5*time.Second,
-)
-
-var targetKVBufferLen = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"logical_replication.consumer.kv_buffer_target_length",
-	"the maximum length of the KV buffer allowed before a flush",
-	32,
-)
-
-var maxKVBufferSize = settings.RegisterByteSizeSetting(
-	settings.ApplicationLevel,
-	"logical_replication.consumer.kv_buffer_size",
-	"the maximum size of the KV buffer allowed before a flush",
-	128<<20, // 128 MiB
-)
 
 var flushBatchSize = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
@@ -82,11 +59,8 @@ var quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	5*time.Second,
 )
 
-// logicalReplicationWriterProcessor started life as a copy/pasta fork of the
-// streamIngestionProcessor.
-//
-// We _may_ want to refactor this to just _be_ the stream ingestion processor
-// with some different dependencies injected.
+// logicalReplicationWriterProcessor consumes a cross-cluster replication stream
+// by decoding kvs in it to logical changes and applying them by executing DMLs.
 type logicalReplicationWriterProcessor struct {
 	execinfra.ProcessorBase
 
@@ -95,19 +69,11 @@ type logicalReplicationWriterProcessor struct {
 
 	bh []BatchHandler
 
-	buffer *ingestionBuffer
-
-	maxFlushRateTimer timeutil.Timer
-
 	streamPartitionClient streamclient.Client
 
 	// frontier keeps track of the progress for the spans tracked by this processor
 	// and is used forward resolved spans
 	frontier span.Frontier
-	// lastFlushTime keeps track of the last time that we flushed due to a
-	// checkpoint timestamp event.
-	lastFlushTime     time.Time
-	lastFlushFrontier hlc.Timestamp
 
 	// workerGroup is a context group holding all goroutines
 	// related to this processor.
@@ -119,12 +85,9 @@ type logicalReplicationWriterProcessor struct {
 	// stopCh stops flush loop.
 	stopCh chan struct{}
 
-	flushInProgress atomic.Bool
-	flushCh         chan flushableBuffer
-
 	errCh chan error
 
-	checkpointCh chan *jobspb.ResolvedSpans
+	checkpointCh chan []jobspb.ResolvedSpan
 
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
@@ -174,10 +137,8 @@ func newLogicalReplicationWriterProcessor(
 		spec:           spec,
 		bh:             bhPool,
 		frontier:       frontier,
-		buffer:         getBuffer(),
 		stopCh:         make(chan struct{}),
-		flushCh:        make(chan flushableBuffer),
-		checkpointCh:   make(chan *jobspb.ResolvedSpans),
+		checkpointCh:   make(chan []jobspb.ResolvedSpan),
 		errCh:          make(chan error, 1),
 		logBufferEvery: log.Every(30 * time.Second),
 		debug: streampb.DebugLogicalConsumerStatus{
@@ -276,16 +237,9 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 		return nil
 	})
 	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
-		defer close(lrw.flushCh)
+		defer close(lrw.checkpointCh)
 		if err := lrw.consumeEvents(ctx); err != nil {
 			lrw.sendError(errors.Wrap(err, "consume events"))
-		}
-		return nil
-	})
-	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
-		defer close(lrw.checkpointCh)
-		if err := lrw.flushLoop(ctx); err != nil {
-			lrw.sendError(errors.Wrap(err, "flush loop"))
 		}
 		return nil
 	})
@@ -301,8 +255,9 @@ func (lrw *logicalReplicationWriterProcessor) Next() (
 	}
 
 	select {
-	case progressUpdate, ok := <-lrw.checkpointCh:
+	case resolved, ok := <-lrw.checkpointCh:
 		if ok {
+			progressUpdate := &jobspb.ResolvedSpans{ResolvedSpans: resolved}
 			progressBytes, err := protoutil.Marshal(progressUpdate)
 			if err != nil {
 				lrw.MoveToDrainingAndLogError(err)
@@ -369,7 +324,6 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 	if err := lrw.workerGroup.Wait(); err != nil {
 		log.Errorf(lrw.Ctx(), "error on close(): %s", err)
 	}
-	lrw.maxFlushRateTimer.Stop()
 
 	lrw.InternalClose()
 }
@@ -385,68 +339,23 @@ func (lrw *logicalReplicationWriterProcessor) sendError(err error) {
 	}
 }
 
-func (lrw *logicalReplicationWriterProcessor) flushLoop(_ context.Context) error {
-	for {
-		bufferToFlush, ok := <-lrw.flushCh
-		if !ok {
-			// eventConsumer is done.
-			return nil
-		}
-		lrw.flushInProgress.Store(true)
-		resolvedSpan, err := lrw.flushBuffer(bufferToFlush)
-		if err != nil {
-			return err
-		}
-
-		// NB: The flushLoop needs to select on stopCh here
-		// because the reader of checkpointCh is the caller of
-		// Next(). But there might never be another Next()
-		// call.
-		select {
-		case lrw.checkpointCh <- resolvedSpan:
-		case <-lrw.stopCh:
-			return nil
-		}
-		lrw.flushInProgress.Store(false)
-	}
-}
-
 // consumeEvents handles processing events on the event queue and returns once
 // the event channel has closed.
 func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context) error {
-	minFlushInterval := minimumFlushInterval.Get(&lrw.flowCtx.Cfg.Settings.SV)
-	lrw.maxFlushRateTimer.Reset(minFlushInterval)
-	for {
-		before := timeutil.Now()
-		select {
-		case event, ok := <-lrw.subscription.Events():
-			if !ok {
-				// eventCh is closed, flush and exit.
-				if err := lrw.flush(flushOnClose); err != nil {
-					return err
-				}
-				return nil
-			}
-			lrw.debug.RecordRecv(timeutil.Since(before))
-			if err := lrw.handleEvent(event); err != nil {
-				return err
-			}
-		case <-lrw.maxFlushRateTimer.C:
-			lrw.maxFlushRateTimer.Read = true
-			minFlushInterval = minimumFlushInterval.Get(&lrw.flowCtx.Cfg.Settings.SV)
-			if timeutil.Since(lrw.lastFlushTime) >= minFlushInterval {
-				if err := lrw.maybeFlush(flushOnTime); err != nil {
-					return err
-				}
-			}
-			lrw.maxFlushRateTimer.Reset(minFlushInterval)
+	before := timeutil.Now()
+	for event := range lrw.subscription.Events() {
+		lrw.debug.RecordRecv(timeutil.Since(before))
+		before = timeutil.Now()
+		if err := lrw.handleEvent(ctx, event); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
-func (lrw *logicalReplicationWriterProcessor) handleEvent(event streamingccl.Event) error {
-	sv := &lrw.FlowCtx.Cfg.Settings.SV
-
+func (lrw *logicalReplicationWriterProcessor) handleEvent(
+	ctx context.Context, event streamingccl.Event,
+) error {
 	switch event.Type() {
 	case streamingccl.KVEvent:
 		ts := event.GetKVs()[0].Value.Timestamp.GoTime()
@@ -468,15 +377,22 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(event streamingccl.Eve
 
 	switch event.Type() {
 	case streamingccl.KVEvent:
-		if err := lrw.bufferKVs(event.GetKVs()); err != nil {
+		// TODO(dt): change producer to always make the stream event rather than the
+		// raw roachpb.KeyValue, so we can skip this copy.
+		kvs := event.GetKVs()
+		withDiffs := make([]streampb.StreamEvent_KVWithDiff, len(kvs))
+		for i := range kvs {
+			withDiffs[i].KeyValue = kvs[i]
+		}
+		if err := lrw.flushBuffer(ctx, withDiffs); err != nil {
 			return err
 		}
 	case streamingccl.KVWithDiffEvent:
-		if err := lrw.bufferKVsWithDiff(event.GetKVWithDiff()); err != nil {
+		if err := lrw.flushBuffer(ctx, event.GetKVWithDiff()); err != nil {
 			return err
 		}
 	case streamingccl.CheckpointEvent:
-		if err := lrw.bufferCheckpoint(event); err != nil {
+		if err := lrw.checkpoint(ctx, event); err != nil {
 			return err
 		}
 	case streamingccl.SSTableEvent, streamingccl.DeleteRangeEvent:
@@ -490,47 +406,12 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(event streamingccl.Eve
 	default:
 		return errors.Newf("unknown streaming event type %v", event.Type())
 	}
-
-	if lrw.logBufferEvery.ShouldLog() {
-		log.Infof(lrw.Ctx(), "current KV batch size %d (%d items)", lrw.buffer.curKVBatchSize, len(lrw.buffer.curKVBatch))
-	}
-
-	shouldFlush, mustFlush := lrw.buffer.shouldFlushOnKVSize(lrw.Ctx(), sv)
-	if mustFlush {
-		if err := lrw.flush(flushOnSize); err != nil {
-			return err
-		}
-	} else if shouldFlush {
-		if err := lrw.maybeFlush(flushOnSize); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
-func (lrw *logicalReplicationWriterProcessor) bufferKVs(kvs []roachpb.KeyValue) error {
-	if kvs == nil {
-		return errors.New("kv event expected to have kv")
-	}
-	for _, kv := range kvs {
-		lrw.buffer.addKV(kv)
-	}
-	return nil
-}
-
-func (lrw *logicalReplicationWriterProcessor) bufferKVsWithDiff(
-	kvs []streampb.StreamEvent_KVWithDiff,
+func (lrw *logicalReplicationWriterProcessor) checkpoint(
+	ctx context.Context, event streamingccl.Event,
 ) error {
-	// TODO(ssd): Once we are actually doing something with them,
-	// we'll want to buffer the previous values. For now we are
-	// just dropping them.
-	for _, kv := range kvs {
-		lrw.buffer.addKV(kv.KeyValue)
-	}
-	return nil
-}
-
-func (lrw *logicalReplicationWriterProcessor) bufferCheckpoint(event streamingccl.Event) error {
 	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.ElideCheckpointEvent != nil {
 			if streamingKnobs.ElideCheckpointEvent(lrw.FlowCtx.NodeID.SQLInstanceID(), lrw.frontier.Frontier()) {
@@ -561,81 +442,27 @@ func (lrw *logicalReplicationWriterProcessor) bufferCheckpoint(event streamingcc
 		}
 	}
 
+	select {
+	case lrw.checkpointCh <- resolvedSpans:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	lrw.metrics.CheckpointEvents.Inc(1)
 	return nil
-}
-
-func (lrw *logicalReplicationWriterProcessor) maybeFlush(reason flushReason) error {
-	// TODO (ssd): This is racy but I didn't want to think about it hard yet.
-	if lrw.flushInProgress.Load() {
-		return nil
-	}
-	if len(lrw.buffer.curKVBatch) == 0 && lrw.frontier.Frontier().LessEq(lrw.lastFlushFrontier) {
-		return nil
-	}
-	return lrw.flush(reason)
-}
-
-type flushReason int
-
-const (
-	flushOnSize flushReason = iota
-	flushOnTime
-	flushOnClose
-)
-
-func (lrw *logicalReplicationWriterProcessor) flush(reason flushReason) error {
-	switch reason {
-	case flushOnSize:
-		lrw.metrics.FlushOnSize.Inc(1)
-	case flushOnTime:
-		lrw.metrics.FlushOnTime.Inc(1)
-	}
-
-	bufferToFlush := lrw.buffer
-	lrw.buffer = getBuffer()
-
-	checkpoint := &jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0, lrw.frontier.Len())}
-	lrw.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
-		if !ts.IsEmpty() {
-			checkpoint.ResolvedSpans = append(checkpoint.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
-		}
-		return span.ContinueMatch
-	})
-	thisFlushFrontier := lrw.frontier.Frontier()
-
-	flushRequestStartTime := timeutil.Now()
-	select {
-	case lrw.flushCh <- flushableBuffer{
-		buffer:     bufferToFlush,
-		checkpoint: checkpoint,
-	}:
-		lrw.lastFlushFrontier = thisFlushFrontier
-		lrw.lastFlushTime = timeutil.Now()
-		lrw.metrics.FlushWaitHistNanos.RecordValue(timeutil.Since(flushRequestStartTime).Nanoseconds())
-		return nil
-	case <-lrw.stopCh:
-		// We return on stopCh here because our flush process
-		// may have been stopped or exited on error.
-		return nil
-	}
 }
 
 const maxWriterWorkers = 32
 
 // flushBuffer flushes the given flusableBufferand returns the underlying streamIngestionBuffer to the pool.
 func (lrw *logicalReplicationWriterProcessor) flushBuffer(
-	b flushableBuffer,
-) (*jobspb.ResolvedSpans, error) {
-	ctx, sp := tracing.ChildSpan(lrw.Ctx(), "logical-replication-writer-flush")
+	ctx context.Context, kvs []streampb.StreamEvent_KVWithDiff,
+) error {
+	ctx, sp := tracing.ChildSpan(ctx, "logical-replication-writer-flush")
 	defer sp.Finish()
 
-	if len(b.buffer.curKVBatch) == 0 {
-		releaseBuffer(b.buffer)
-		return b.checkpoint, nil
+	if len(kvs) < 1 {
+		return nil
 	}
-
-	kvs := b.buffer.curKVBatch
 
 	batchSize := int(flushBatchSize.Get(&lrw.EvalCtx.Settings.SV))
 
@@ -648,18 +475,20 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	// same key in the same batch. Also, it's possible batching
 	// will make things much worse in practice.
 
-	k := func(kv roachpb.KeyValue) roachpb.Key {
-		if p, err := keys.EnsureSafeSplitKey(kv.Key); err == nil {
+	k := func(kv streampb.StreamEvent_KVWithDiff) roachpb.Key {
+		if p, err := keys.EnsureSafeSplitKey(kv.KeyValue.Key); err == nil {
 			return p
 		}
-		return kv.Key
+		return kv.KeyValue.Key
 	}
 
-	slices.SortFunc(kvs, func(a, b roachpb.KeyValue) int {
+	firstKeyTS := kvs[0].KeyValue.Value.Timestamp.GoTime()
+
+	slices.SortFunc(kvs, func(a, b streampb.StreamEvent_KVWithDiff) int {
 		if c := k(a).Compare(k(b)); c != 0 {
 			return c
 		}
-		return a.Value.Timestamp.Compare(b.Value.Timestamp)
+		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
 
 	var flushByteSize atomic.Int64
@@ -686,7 +515,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 			for batchStart < chunkEnd {
 				batchEnd := min(batchStart+batchSize, chunkEnd)
 				preBatchTime := timeutil.Now()
-				batchStats, err := bh.HandleBatch(ctx, b.buffer.curKVBatch[batchStart:batchEnd])
+				batchStats, err := bh.HandleBatch(ctx, kvs[batchStart:batchEnd])
 				if err != nil {
 					// TODO(ssd): Handle errors. We should perhaps split the batch and retry a portion of the batch.
 					// If that fails, send the failed application to the dead-letter-queue.
@@ -709,11 +538,11 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	}
 
 	if err := g.Wait(); err != nil {
-		return b.checkpoint, err
+		return err
 	}
 
 	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
-	keyCount, byteCount := int64(len(b.buffer.curKVBatch)), flushByteSize.Load()
+	keyCount, byteCount := int64(len(kvs)), flushByteSize.Load()
 	lrw.debug.RecordFlushComplete(flushTime, keyCount, byteCount)
 
 	lrw.metrics.Flushes.Inc(1)
@@ -721,12 +550,11 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	lrw.metrics.FlushRowCountHist.RecordValue(keyCount)
 	lrw.metrics.FlushBytesHist.RecordValue(byteCount)
 	lrw.metrics.IngestedLogicalBytes.Inc(byteCount)
-	lrw.metrics.CommitLatency.RecordValue(timeutil.Since(b.buffer.minTimestamp.GoTime()).Nanoseconds())
-	lrw.metrics.IngestedEvents.Inc(int64(len(b.buffer.curKVBatch)))
 
-	releaseBuffer(b.buffer)
+	lrw.metrics.CommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
+	lrw.metrics.IngestedEvents.Inc(int64(len(kvs)))
 
-	return b.checkpoint, nil
+	return nil
 }
 
 type batchStats struct {
@@ -734,7 +562,7 @@ type batchStats struct {
 }
 
 type BatchHandler interface {
-	HandleBatch(context.Context, []roachpb.KeyValue) (batchStats, error)
+	HandleBatch(context.Context, []streampb.StreamEvent_KVWithDiff) (batchStats, error)
 }
 
 // RowProcessor knows how to process a single row from an event stream.
@@ -747,7 +575,9 @@ type txnBatch struct {
 	rp RowProcessor
 }
 
-func (t *txnBatch) HandleBatch(ctx context.Context, batch []roachpb.KeyValue) (batchStats, error) {
+func (t *txnBatch) HandleBatch(
+	ctx context.Context, batch []streampb.StreamEvent_KVWithDiff,
+) (batchStats, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "txnBatch.HandleBatch")
 	defer sp.Finish()
 
@@ -763,7 +593,7 @@ func (t *txnBatch) HandleBatch(ctx context.Context, batch []roachpb.KeyValue) (b
 		txn.KV().SetOmitInRangefeeds()
 		for _, kv := range batch {
 			stats.byteSize += kv.Size()
-			if err := t.rp.ProcessRow(ctx, txn, kv); err != nil {
+			if err := t.rp.ProcessRow(ctx, txn, kv.KeyValue); err != nil {
 				return err
 			}
 
@@ -771,74 +601,6 @@ func (t *txnBatch) HandleBatch(ctx context.Context, batch []roachpb.KeyValue) (b
 		return nil
 	})
 	return stats, err
-}
-
-type flushableBuffer struct {
-	buffer     *ingestionBuffer
-	checkpoint *jobspb.ResolvedSpans
-}
-
-// streamIngestionBuffer is a local buffer for KVs.
-//
-// TODO(ssd): We want to sort curKVBatch on MVCC timestamp.
-
-// TOOD(ssd): We may want to sort curKVBatch based on schema topology.
-type ingestionBuffer struct {
-	curKVBatch     []roachpb.KeyValue
-	curKVBatchSize int
-
-	// Minimum timestamp in the current batch. Used for metrics purpose.
-	minTimestamp hlc.Timestamp
-}
-
-func NewIngestionBuffer() *ingestionBuffer {
-	return &ingestionBuffer{
-		minTimestamp: hlc.MaxTimestamp,
-	}
-}
-
-func (b *ingestionBuffer) addKV(kv roachpb.KeyValue) {
-	b.curKVBatchSize += kv.Size()
-	b.curKVBatch = append(b.curKVBatch, kv)
-	if kv.Value.Timestamp.Less(b.minTimestamp) {
-		b.minTimestamp = kv.Value.Timestamp
-	}
-}
-
-func (b *ingestionBuffer) reset() {
-	b.minTimestamp = hlc.MaxTimestamp
-	b.curKVBatchSize = 0
-	b.curKVBatch = b.curKVBatch[:0]
-}
-
-// shouldFlushOnKVSize returns two bools indicating whether the buffer
-// should be flushed if possible or wether it must be flushed based on
-// the overal size limit.
-func (b *ingestionBuffer) shouldFlushOnKVSize(
-	ctx context.Context, sv *settings.Values,
-) (shouldFlush bool, mustFlush bool) {
-	kvBufMax := int(maxKVBufferSize.Get(sv))
-	kvBufLenTarget := int(targetKVBufferLen.Get(sv))
-	if kvBufMax > 0 && b.curKVBatchSize >= kvBufMax {
-		log.VInfof(ctx, 2, "flushing because current KV batch based on size %d >= %d", b.curKVBatchSize, kvBufMax)
-		return true, true
-	} else if len(b.curKVBatch) >= kvBufLenTarget {
-		return true, false
-	}
-	return false, false
-}
-
-var bufferPool = sync.Pool{
-	New: func() interface{} { return NewIngestionBuffer() },
-}
-
-func getBuffer() *ingestionBuffer {
-	return bufferPool.Get().(*ingestionBuffer)
-}
-
-func releaseBuffer(b *ingestionBuffer) {
-	b.reset()
-	bufferPool.Put(b)
 }
 
 func init() {
