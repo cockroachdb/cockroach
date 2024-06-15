@@ -19,8 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -45,6 +48,17 @@ const abortTxnAsyncTimeout = time.Minute
 // lacking a transaction record) by another pushing transaction that encounters
 // its intents, as this will result in the transaction being aborted.
 const heartbeatTxnBufferPeriod = 200 * time.Millisecond
+
+// RandomizedTxnAnchorKeyEnabled dictates whether a transactions anchor key is
+// chosen at random from all keys being locked in its first locking batch;
+// otherwise, it's set to the first ever key that's locked by the transaction.
+var RandomizedTxnAnchorKeyEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.randomized_anchor_key.enabled",
+	"dictates whether a transactions anchor key is randomized or not",
+	true,
+	settings.WithPublic,
+)
 
 // txnHeartbeater is a txnInterceptor in charge of a transaction's heartbeat
 // loop. Transaction coordinators heartbeat their transaction record
@@ -82,6 +96,8 @@ type txnHeartbeater struct {
 	clock        *hlc.Clock
 	metrics      *TxnMetrics
 	loopInterval time.Duration
+	st           *cluster.Settings
+	knobs        *ClientTestingKnobs
 
 	// wrapped is the next sender in the interceptor stack.
 	wrapped lockedSender
@@ -170,12 +186,19 @@ func (h *txnHeartbeater) init(
 	gatekeeper lockedSender,
 	mu sync.Locker,
 	txn *roachpb.Transaction,
+	settings *cluster.Settings,
+	testingKnobs *ClientTestingKnobs,
 ) {
+	if testingKnobs == nil {
+		testingKnobs = &ClientTestingKnobs{}
+	}
 	h.AmbientContext = ac
 	h.stopper = stopper
 	h.clock = clock
 	h.metrics = metrics
 	h.loopInterval = loopInterval
+	h.st = settings
+	h.knobs = testingKnobs
 	h.gatekeeper = gatekeeper
 	h.mu.Locker = mu
 	h.mu.txn = txn
@@ -186,16 +209,16 @@ func (h *txnHeartbeater) SendLocked(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
 	etArg, hasET := ba.GetArg(kvpb.EndTxn)
-	firstLockingIndex, pErr := firstLockingIndex(ba)
+	randLockingIdx, pErr := h.randLockingIndex(ba)
 	if pErr != nil {
 		return nil, pErr
 	}
-	if firstLockingIndex != -1 {
-		// Set txn key based on the key of the first transactional write if not
-		// already set. If it is already set, make sure we keep the anchor key
-		// the same.
+	if randLockingIdx != -1 {
+		// If the anchor key for the transaction's txn record is unset, we set it
+		// here to a random key that it's locking in the supplied batch. If it's
+		// already set, however, make sure we keep the anchor key the same.
 		if len(h.mu.txn.Key) == 0 {
-			anchor := ba.Requests[firstLockingIndex].GetInner().Header().Key
+			anchor := ba.Requests[randLockingIdx].GetInner().Header().Key
 			h.mu.txn.Key = anchor
 			// Put the anchor also in the ba's copy of the txn, since this batch
 			// was prepared before we had an anchor.
@@ -598,21 +621,39 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	}
 }
 
-// firstLockingIndex returns the index of the first request that acquires locks
+// randLockingIndex returns the index of the first request that acquires locks
 // in the BatchRequest. Returns -1 if the batch has no intention to acquire
 // locks. It also verifies that if an EndTxnRequest is included, then it is the
 // last request in the batch.
-func firstLockingIndex(ba *kvpb.BatchRequest) (int, *kvpb.Error) {
+func (h *txnHeartbeater) randLockingIndex(ba *kvpb.BatchRequest) (int, *kvpb.Error) {
+	// We don't know the number of locking requests in the supplied batch request,
+	// if any. We'll use reservoir sampling to get a uniform distribution for our
+	// random pick. To do so, we need to keep track of the number of locking
+	// requests we've seen so far and the index of our pick.
+	numLocking := 0
+	idx := -1
+	disableRandomization := h.knobs.DisableTxnAnchorKeyRandomization ||
+		!RandomizedTxnAnchorKeyEnabled.Get(&h.st.SV)
 	for i, ru := range ba.Requests {
 		args := ru.GetInner()
-		if i < len(ba.Requests)-1 /* if not last*/ {
+		if i < len(ba.Requests)-1 /* if not last */ {
 			if _, ok := args.(*kvpb.EndTxnRequest); ok {
 				return -1, kvpb.NewErrorf("%s sent as non-terminal call", args.Method())
 			}
 		}
 		if kvpb.IsLocking(args) {
-			return i, nil
+			if disableRandomization {
+				return i, nil // return the index of the first locking request if randomization is disabled
+			}
+			numLocking++
+			if numLocking == 1 { // fastpath; no need to generate a random number
+				idx = i
+			} else if randutil.FastUint32()%uint32(numLocking) == 0 {
+				// Reservoir sampling picks a locking request with prob =
+				// 1/numLockingRequestsSeenSoFar.
+				idx = i
+			}
 		}
 	}
-	return -1, nil
+	return idx, nil
 }

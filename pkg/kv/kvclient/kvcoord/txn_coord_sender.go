@@ -251,6 +251,8 @@ func newRootTxnCoordSender(
 		&tcs.interceptorAlloc.txnLockGatekeeper,
 		&tcs.mu.Mutex,
 		&tcs.mu.txn,
+		tcf.st,
+		&tcs.testingKnobs,
 	)
 	tcs.interceptorAlloc.txnCommitter = txnCommitter{
 		st:      tcf.st,

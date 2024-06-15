@@ -2038,6 +2038,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					}
 					return true
 				},
+				// Disable randomization of the transaction's anchor key so that we can
+				// predictably make assertions that rely on the transaction record being
+				// on a specific range.
+				DisableTxnAnchorKeyRandomization: true,
 			}}})
 
 	disableCondensingRefreshSpans := func() bool { return false }

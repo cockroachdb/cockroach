@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -905,7 +906,16 @@ func TestTxnContentionEventsTable(t *testing.T) {
 	// Start the server. (One node is sufficient; the outliers system
 	// is currently in-memory only.)
 	ctx := context.Background()
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			KVClient: &kvcoord.ClientTestingKnobs{
+				// This test shouldn't care where a transaction's record is anchored,
+				// but it does because of:
+				// https://github.com/cockroachdb/cockroach/pull/125744
+				DisableTxnAnchorKeyRandomization: true,
+			},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	testTxnContentionEventsTableHelper(t, ctx, conn, sqlDB)
@@ -972,6 +982,14 @@ func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestTenantAlwaysEnabled,
+		Knobs: base.TestingKnobs{
+			KVClient: &kvcoord.ClientTestingKnobs{
+				// This test shouldn't care where a transaction's record is anchored,
+				// but it does because of:
+				// https://github.com/cockroachdb/cockroach/pull/125744
+				DisableTxnAnchorKeyRandomization: true,
+			},
+		},
 	})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
