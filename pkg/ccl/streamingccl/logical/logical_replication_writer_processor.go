@@ -53,13 +53,6 @@ var flushBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-var quantize = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.ApplicationLevel,
-	"logical_replication.consumer.timestamp_granularity",
-	"the granularity at which replicated times are quantized to make tracking more efficient",
-	5*time.Second,
-)
-
 // logicalReplicationWriterProcessor started life as a copy/pasta fork of the
 // streamIngestionProcessor.
 //
@@ -413,17 +406,7 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(event streamingccl.Even
 		return errors.New("checkpoint event expected to have resolved spans")
 	}
 
-	d := quantize.Get(&lrw.EvalCtx.Settings.SV)
 	for _, resolvedSpan := range resolvedSpans {
-		// If quantizing is enabled, round the timestamp down to an even multiple of
-		// the quantization amount, to maximize the number of spans that share the
-		// same resolved timestamp -- even if they were individually resolved to
-		// _slightly_ different/newer timestamps -- to allow them to merge into
-		// fewer and larger spans in the frontier.
-		if d > 0 && resolvedSpan.Timestamp.After(lrw.spec.InitialScanTimestamp) {
-			resolvedSpan.Timestamp.Logical = 0
-			resolvedSpan.Timestamp.WallTime -= resolvedSpan.Timestamp.WallTime % int64(d)
-		}
 		_, err := lrw.frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
 		if err != nil {
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
