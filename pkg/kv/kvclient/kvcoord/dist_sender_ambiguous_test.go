@@ -362,6 +362,9 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					KVClient: &kvcoord.ClientTestingKnobs{
 						TransportFactory: getInterceptingTransportFactory(1),
+						// This test makes tight assumptions about which key a transaction's
+						// record is anchored on.
+						DisableTxnAnchorKeyRandomization: true,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{

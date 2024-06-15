@@ -11229,7 +11229,16 @@ func TestReplicaAsyncIntentResolutionOn1PC(t *testing.T) {
 
 		ctx := context.Background()
 		s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-			Knobs: base.TestingKnobs{Store: &storeKnobs}})
+			Knobs: base.TestingKnobs{
+				Store: &storeKnobs,
+				KVClient: &kvcoord.ClientTestingKnobs{
+					// Disable randomization of the transaction's anchor key so that we
+					// can predictably make assertions that rely on the transaction record
+					// being on a specific range.
+					DisableTxnAnchorKeyRandomization: true,
+				},
+			},
+		})
 		defer s.Stopper().Stop(ctx)
 
 		store, err := s.GetStores().(*Stores).GetStore(1)
@@ -14804,6 +14813,11 @@ func TestLockAcquisitions1PCInteractions(t *testing.T) {
 		Clock:      s.Clock(),
 		Stopper:    s.Stopper(),
 		Metrics:    metrics,
+		TestingKnobs: kvcoord.ClientTestingKnobs{
+			// This test makes assumptions about which range the transaction record
+			// should be on.
+			DisableTxnAnchorKeyRandomization: true,
+		},
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(tcsFactoryCfg, distSender)
 	testDB := kv.NewDBWithContext(s.AmbientCtx(), tcsFactory, s.Clock(), kvDB.Context())
