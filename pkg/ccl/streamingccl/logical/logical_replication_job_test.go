@@ -40,8 +40,6 @@ var (
 		"SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'",
 
 		"SET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency = '100ms'",
-		"SET CLUSTER SETTING logical_replication.consumer.minimum_flush_interval = '10ms'",
-		"SET CLUSTER SETTING logical_replication.consumer.timestamp_granularity = '100ms'",
 	}
 	lwwColumnAdd = "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
 )
