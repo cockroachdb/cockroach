@@ -104,17 +104,20 @@ type extendedEvalContext struct {
 	TxnModesSetter txnModesSetter
 
 	// jobs refers to jobs in extraTxnState.
+	// TODO: this seems mutable.
 	jobs *txnJobsCollection
 
 	statsProvider *persistedsqlstats.PersistedSQLStats
 
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
+	// TODO: this seems mutable.
 	SchemaChangerState *SchemaChangerState
 
 	statementPreparer statementPreparer
 
 	// validateDbZoneConfig should the DB zone config on commit.
+	// TODO: this is definitely mutable.
 	validateDbZoneConfig *bool
 }
 

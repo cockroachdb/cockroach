@@ -3952,7 +3952,8 @@ func (dsp *DistSQLPlanner) wrapPlan(
 	}
 
 	// Copy the evalCtx.
-	evalCtx := *planCtx.ExtendedEvalCtx
+	// TODO: do we need this copy?
+	evalCtx := planCtx.ExtendedEvalCtx
 	// We permit the planNodeToRowSource to trigger the wrapped planNode's fast
 	// path if its the very first node in the flow, and if the statement type we're
 	// expecting is in fact RowsAffected. RowsAffected statements return a single
@@ -3961,7 +3962,7 @@ func (dsp *DistSQLPlanner) wrapPlan(
 	wrapper := newPlanNodeToRowSource(
 		n,
 		runParams{
-			extendedEvalCtx: &evalCtx,
+			extendedEvalCtx: evalCtx,
 			p:               planCtx.planner,
 		},
 		useFastPath,
