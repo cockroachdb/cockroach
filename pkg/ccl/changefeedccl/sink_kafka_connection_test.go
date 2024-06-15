@@ -216,6 +216,21 @@ func TestChangefeedExternalConnections(t *testing.T) {
 			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported",
 			expectedError: "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN",
 		},
+		{
+			name:          "sasl_aws_iam_session_name must be provided when AWS IAM authentication is enabled",
+			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=OAUTHBEARER&sasl_aws_iam_role_enabled=true&sasl_aws_region=us-west-1&sasl_aws_iam_role_arn=foo",
+			expectedError: "sasl_aws_iam_session_name must be provided when SASL and AWS IAM role authentication are enabled using mechanism OAUTHBEARER",
+		},
+		{
+			name:          "sasl_aws_iam_role_arn must be provided when AWS IAM authentication is enabled",
+			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=OAUTHBEARER&sasl_aws_iam_role_enabled=true&sasl_aws_region=us-west-1&sasl_aws_iam_session_name=foo",
+			expectedError: "sasl_aws_iam_role_arn must be provided when SASL and AWS IAM role authentication are enabled using mechanism OAUTHBEARER",
+		},
+		{
+			name:          "sasl_aws_region must be provided when AWS IAM authentication is enabled",
+			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=OAUTHBEARER&sasl_aws_iam_role_enabled=true&sasl_aws_iam_session_name=foo&sasl_aws_iam_session_name=foo",
+			expectedError: "sasl_aws_region must be provided when SASL and AWS IAM role authentication are enabled using mechanism OAUTHBEARER",
+		},
 		// confluent-cloud scheme tests
 		{
 			name:          "requires parameter api_key",
@@ -308,6 +323,7 @@ func TestChangefeedExternalConnections(t *testing.T) {
 		// kafka scheme external connections
 		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION nope AS 'kafka://nope'`)
 		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION "nope-with-params" AS 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true&topic_name=foo'`)
+		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION "nope-with-aws-iam-auth" AS 'kafka://nope/?sasl_enabled=true&sasl_mechanism=OAUTHBEARER&sasl_aws_iam_role_enabled=true&sasl_aws_region=us-west-1&sasl_aws_iam_role_arn=foo&sasl_aws_iam_session_name=bar'`)
 		// confluent-cloud external connections
 		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION confluent1 AS 'confluent-cloud://nope?api_key=fee&api_secret=bar'`)
 		sqlDB.Exec(t, `CREATE EXTERNAL CONNECTION confluent2 AS 'confluent-cloud://nope?api_key=fee&api_secret=bar&`+
