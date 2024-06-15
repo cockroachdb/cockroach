@@ -26,10 +26,11 @@ message TxnMeta {
   bytes id = 1 [(gogoproto.customname) = "ID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
       (gogoproto.nullable) = false];
-  // key is the key which anchors the transaction. This is typically
-  // the first key read or written during the transaction and
-  // determines which range in the cluster will hold the transaction
-  // record.
+  // key is the key which anchors the transaction. This is any key (that is locked)
+  // in the first batch executed by the transaction. Typically, this is chosen
+  // at random, but this behavior can be changed by toggling the
+  // RandomizedTxnAnchorKeyEnabled cluster setting. The range to which this key
+  // belongs to will hold the transaction's record.
   bytes key = 3; // TODO(tschottdorf): [(gogoproto.casttype) = "Key"];
   // iso_level is the isolation level of the transaction.
   cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 2;
