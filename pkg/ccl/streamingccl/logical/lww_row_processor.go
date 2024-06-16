@@ -163,6 +163,7 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 	}); err != nil {
 		return err
 	}
+	datums = append(datums, eval.TimestampToDecimalDatum(row.MvccTimestamp))
 	deleteQuery := lww.queryBuffer.deleteQueries[row.TableID]
 	if _, err := txn.ExecParsed(ctx, "replicated-delete", txn.KV(), deleteQuery, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", deleteQuery.SQL, err.Error())
@@ -276,10 +277,10 @@ func makeDeleteQuery(fqTableName string, td catalog.TableDescriptor) string {
 	originTSIdx := len(names) + 1
 	baseQuery := `
 DELETE FROM %s WHERE %s
-   AND (%[1]s.crdb_internal_mvcc_timestamp < $%[3]d
+   AND ((%[1]s.crdb_internal_mvcc_timestamp < $%[3]d
         AND %[1]s.crdb_internal_origin_timestamp IS NULL)
     OR (%[1]s.crdb_internal_origin_timestamp < $%[3]d
-        AND %[1]s.crdb_internal_origin_timestamp IS NOT NULL)`
+        AND %[1]s.crdb_internal_origin_timestamp IS NOT NULL))`
 
 	return fmt.Sprintf(baseQuery, fqTableName, whereClause.String(), originTSIdx)
 }
