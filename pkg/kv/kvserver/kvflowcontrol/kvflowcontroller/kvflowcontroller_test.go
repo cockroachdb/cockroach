@@ -304,7 +304,7 @@ func TestBucketSignalingBug(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	regularTokensPerStream.Override(ctx, &st.SV, 10)
 	elasticTokensPerStream.Override(ctx, &st.SV, 5)
-	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
+	kvflowcontrol.Mode.Override(ctx, &st.SV, kvflowcontrol.ApplyToAll)
 	controller := New(
 		metric.NewRegistry(),
 		st,
@@ -413,7 +413,7 @@ func TestInspectController(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	elasticTokensPerStream.Override(ctx, &st.SV, 8<<20 /* 8 MiB */)
 	regularTokensPerStream.Override(ctx, &st.SV, 16<<20 /* 16 MiB */)
-	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
+	kvflowcontrol.Mode.Override(ctx, &st.SV, kvflowcontrol.ApplyToAll)
 	controller := New(metric.NewRegistry(), st, hlc.NewClockForTesting(nil))
 
 	// No streams connected -- inspect state should be empty.
@@ -474,7 +474,7 @@ func TestControllerLogging(t *testing.T) {
 	const numTokens = 1 << 20 /* 1 MiB */
 	elasticTokensPerStream.Override(ctx, &st.SV, numTokens)
 	regularTokensPerStream.Override(ctx, &st.SV, numTokens)
-	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
+	kvflowcontrol.Mode.Override(ctx, &st.SV, kvflowcontrol.ApplyToAll)
 	controller := New(metric.NewRegistry(), st, hlc.NewClockForTesting(nil))
 
 	numBlocked := 0

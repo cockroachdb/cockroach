@@ -145,7 +145,7 @@ var WithValueBlocksDisabled SSTWriterOption = func(opts *sstable.WriterOptions) 
 // WithCompressionFromClusterSetting sets the compression algorithm for an
 // SSTable based on the value of the given cluster setting.
 func WithCompressionFromClusterSetting(
-	ctx context.Context, cs *cluster.Settings, setting *settings.EnumSetting,
+	ctx context.Context, cs *cluster.Settings, setting *settings.EnumSetting[compressionAlgorithm],
 ) SSTWriterOption {
 	return func(opts *sstable.WriterOptions) {
 		opts.Compression = getCompressionAlgorithm(ctx, cs, setting)

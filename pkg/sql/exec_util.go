@@ -510,11 +510,11 @@ var experimentalUseNewSchemaChanger = settings.RegisterEnumSetting(
 	"default value for use_declarative_schema_changer session setting;"+
 		"disables new schema changer by default",
 	"on",
-	map[int64]string{
-		int64(sessiondatapb.UseNewSchemaChangerOff):          "off",
-		int64(sessiondatapb.UseNewSchemaChangerOn):           "on",
-		int64(sessiondatapb.UseNewSchemaChangerUnsafe):       "unsafe",
-		int64(sessiondatapb.UseNewSchemaChangerUnsafeAlways): "unsafe_always",
+	map[sessiondatapb.NewSchemaChangerMode]string{
+		sessiondatapb.UseNewSchemaChangerOff:          "off",
+		sessiondatapb.UseNewSchemaChangerOn:           "on",
+		sessiondatapb.UseNewSchemaChangerUnsafe:       "unsafe",
+		sessiondatapb.UseNewSchemaChangerUnsafeAlways: "unsafe_always",
 	},
 	settings.WithPublic)
 
@@ -567,9 +567,9 @@ var experimentalDistSQLPlanningClusterMode = settings.RegisterEnumSetting(
 	ExperimentalDistSQLPlanningClusterSettingName,
 	"default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning",
 	"off",
-	map[int64]string{
-		int64(sessiondatapb.ExperimentalDistSQLPlanningOff): "off",
-		int64(sessiondatapb.ExperimentalDistSQLPlanningOn):  "on",
+	map[sessiondatapb.ExperimentalDistSQLPlanningMode]string{
+		sessiondatapb.ExperimentalDistSQLPlanningOff: "off",
+		sessiondatapb.ExperimentalDistSQLPlanningOn:  "on",
 	},
 	settings.WithPublic)
 
@@ -584,13 +584,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	VectorizeClusterSettingName,
 	"default vectorize mode",
 	"on",
-	func() map[int64]string {
-		m := make(map[int64]string, len(sessiondatapb.VectorizeExecMode_name))
-		for k := range sessiondatapb.VectorizeExecMode_name {
-			m[int64(k)] = sessiondatapb.VectorizeExecMode(k).String()
-		}
-		return m
-	}(),
+	sessiondatapb.VectorizeExecMode_name,
 	settings.WithPublic)
 
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
@@ -599,11 +593,11 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"sql.defaults.distsql",
 	"default distributed SQL execution mode",
 	"auto",
-	map[int64]string{
-		int64(sessiondatapb.DistSQLOff):    "off",
-		int64(sessiondatapb.DistSQLAuto):   "auto",
-		int64(sessiondatapb.DistSQLOn):     "on",
-		int64(sessiondatapb.DistSQLAlways): "always",
+	map[sessiondatapb.DistSQLExecMode]string{
+		sessiondatapb.DistSQLOff:    "off",
+		sessiondatapb.DistSQLAuto:   "auto",
+		sessiondatapb.DistSQLOn:     "on",
+		sessiondatapb.DistSQLAlways: "always",
 	},
 	settings.WithPublic)
 
@@ -614,13 +608,13 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 	"sql.defaults.serial_normalization",
 	"default handling of SERIAL in table definitions",
 	"rowid",
-	map[int64]string{
-		int64(sessiondatapb.SerialUsesRowID):                  "rowid",
-		int64(sessiondatapb.SerialUsesUnorderedRowID):         "unordered_rowid",
-		int64(sessiondatapb.SerialUsesVirtualSequences):       "virtual_sequence",
-		int64(sessiondatapb.SerialUsesSQLSequences):           "sql_sequence",
-		int64(sessiondatapb.SerialUsesCachedSQLSequences):     "sql_sequence_cached",
-		int64(sessiondatapb.SerialUsesCachedNodeSQLSequences): "sql_sequence_cached_node",
+	map[sessiondatapb.SerialNormalizationMode]string{
+		sessiondatapb.SerialUsesRowID:                  "rowid",
+		sessiondatapb.SerialUsesUnorderedRowID:         "unordered_rowid",
+		sessiondatapb.SerialUsesVirtualSequences:       "virtual_sequence",
+		sessiondatapb.SerialUsesSQLSequences:           "sql_sequence",
+		sessiondatapb.SerialUsesCachedSQLSequences:     "sql_sequence_cached",
+		sessiondatapb.SerialUsesCachedNodeSQLSequences: "sql_sequence_cached_node",
 	},
 	settings.WithPublic)
 
@@ -636,14 +630,8 @@ var intervalStyle = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.intervalstyle",
 	"default value for IntervalStyle session setting",
-	strings.ToLower(duration.IntervalStyle_POSTGRES.String()),
-	func() map[int64]string {
-		ret := make(map[int64]string, len(duration.IntervalStyle_name))
-		for k, v := range duration.IntervalStyle_name {
-			ret[int64(k)] = strings.ToLower(v)
-		}
-		return ret
-	}(),
+	duration.IntervalStyle_POSTGRES.String(),
+	duration.IntervalStyle_name,
 	settings.WithPublic)
 
 // dateStyleEnumMap is not inlined in the RegisterEnumSetting call below because
