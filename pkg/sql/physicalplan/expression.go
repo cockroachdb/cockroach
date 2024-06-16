@@ -209,6 +209,10 @@ var _ tree.Visitor = &ivarRemapper{}
 
 func (v *ivarRemapper) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	if ivar, ok := expr.(*tree.IndexedVar); ok {
+		if ivar.Idx == v.indexVarMap[ivar.Idx] {
+			// Avoid the identical remapping since it's redundant.
+			return false, expr
+		}
 		newIvar := v.allocIndexedVar()
 		*newIvar = *ivar
 		newIvar.Idx = v.indexVarMap[ivar.Idx]
