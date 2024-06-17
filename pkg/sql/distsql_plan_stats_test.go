@@ -11,9 +11,11 @@
 package sql
 
 import (
+	"context"
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -21,6 +23,7 @@ import (
 func TestComputeNumberSamples(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	testData := []struct {
 		numRows            int
@@ -43,7 +46,9 @@ func TestComputeNumberSamples(t *testing.T) {
 			t.Fatalf("expected %d samples, got %d", expectedNumSamples, computedNumSamples)
 		}
 	}
+
+	st := cluster.MakeTestingClusterSettings()
 	for _, td := range testData {
-		checkComputeNumberSamples(int(computeNumberSamples(uint64(td.numRows))), td.expectedNumSamples)
+		checkComputeNumberSamples(int(computeNumberSamples(ctx, uint64(td.numRows), st)), td.expectedNumSamples)
 	}
 }
