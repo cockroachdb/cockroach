@@ -69,33 +69,30 @@ func TestSimplifyFilters(t *testing.T) {
 	}
 }
 
-// Test CopyAndReplace on an already optimized join. Before CopyAndReplace is
-// called, the join has a placeholder that causes the optimizer to use a merge
-// join. After CopyAndReplace substitutes a constant for the placeholder, the
-// optimizer switches to a lookup join. A similar pattern is used by the
-// ApplyJoin execution operator which replaces variables with constants in an
-// already optimized tree. The CopyAndReplace code must take care to copy over
-// the normalized tree rather than the optimized tree by using the FirstExpr
-// method.
+// Test CopyAndReplace on an already optimized memo. Before CopyAndReplace is
+// called, the query has a placeholder that causes the optimizer to use a
+// parameterized lookup-join. After CopyAndReplace substitutes a constant for
+// the placeholder, the optimizer switches to a constrained scan. A similar
+// pattern is used by the ApplyJoin execution operator which replaces variables
+// with constants in an already optimized tree. The CopyAndReplace code must
+// take care to copy over the normalized tree rather than the optimized tree by
+// using the FirstExpr method.
 func TestCopyAndReplace(t *testing.T) {
 	cat := testcat.New()
 	if _, err := cat.ExecuteDDL("CREATE TABLE ab (a INT PRIMARY KEY, b INT)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cat.ExecuteDDL("CREATE TABLE cde (c INT PRIMARY KEY, d INT, e INT, INDEX(d))"); err != nil {
-		t.Fatal(err)
-	}
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	evalCtx.SessionData().OptimizerMergeJoinsEnabled = true
 
 	var o xform.Optimizer
-	testutils.BuildQuery(t, &o, cat, &evalCtx, "SELECT * FROM cde INNER JOIN ab ON a=c AND d=$1")
+	testutils.BuildQuery(t, &o, cat, &evalCtx, "SELECT * FROM ab WHERE a = $1")
 
 	if e, err := o.Optimize(); err != nil {
 		t.Fatal(err)
-	} else if e.Op() != opt.MergeJoinOp {
-		t.Errorf("expected optimizer to choose merge-join, not %v", e.Op())
+	} else if e.Op() != opt.ProjectOp || e.Child(0).Op() != opt.LookupJoinOp {
+		t.Errorf("expected optimizer to choose a (project (lookup-join)), not (%v (%v))",
+			e.Op(), e.Child(0).Op())
 	}
 
 	m := o.Factory().DetachMemo()
@@ -112,8 +109,10 @@ func TestCopyAndReplace(t *testing.T) {
 
 	if e, err := o.Optimize(); err != nil {
 		t.Fatal(err)
-	} else if e.Op() != opt.LookupJoinOp {
-		t.Errorf("expected optimizer to choose lookup-join, not %v", e.Op())
+	} else if e.Op() != opt.ScanOp {
+		t.Errorf("expected optimizer to choose a constrained scan, not %v", e.Op())
+	} else if e.(*memo.ScanExpr).Constraint == nil {
+		t.Errorf("expected optimizer to choose a constrained scan")
 	}
 }
 
