@@ -99,7 +99,7 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	setup := func(canResize bool) (*kafkaSinkV2Fx, SinkPayload) {
+	setup := func(t *testing.T, canResize bool) (*kafkaSinkV2Fx, SinkPayload, []any) {
 		fx := newKafkaSinkV2Fx(t, withSettings(func(settings *cluster.Settings) {
 			if canResize {
 				changefeedbase.BatchReductionRetryEnabled.Override(context.TODO(), &settings.SV, true)
@@ -114,38 +114,58 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 		payload, err := buf.Close()
 		require.NoError(t, err)
 
-		payloadMatchers := make([]any, 0, len(payload.([]*kgo.Record)))
+		payloadAnys := make([]any, 0, len(payload.([]*kgo.Record)))
 		for _, r := range payload.([]*kgo.Record) {
-			payloadMatchers = append(payloadMatchers, r)
+			payloadAnys = append(payloadAnys, r)
 		}
 
-		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.RecordListTooLarge)}}
-		if canResize {
-			// it should keep splitting it in two until it hits size=1
-			gomock.InOrder(
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers...).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:50]...).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:25]...).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:12]...).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:6]...).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:3]...).Times(1).Return(pr),
-				fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers[:1]...).Times(1).Return(pr),
-			)
-		} else {
-			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadMatchers...).Times(1).Return(pr)
-		}
-
-		return fx, payload
+		return fx, payload, payloadAnys
 	}
 
 	t.Run("resize disabled", func(t *testing.T) {
-		fx, payload := setup(false)
+		fx, payload, payloadAnys := setup(t, false)
+		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.RecordListTooLarge)}}
+		fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys...).Times(1).Return(pr)
 		require.Error(t, fx.sink.Flush(fx.ctx, payload))
 	})
 
-	t.Run("resize enabled", func(t *testing.T) {
-		fx, payload := setup(true)
+	t.Run("resize enabled and it keeps failing", func(t *testing.T) {
+		fx, payload, payloadAnys := setup(t, true)
+
+		pr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.RecordListTooLarge)}}
+		// it should keep splitting it in two until it hits size=1
+		gomock.InOrder(
+			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys...).Times(1).Return(pr),
+			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:50]...).Times(1).Return(pr),
+			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:25]...).Times(1).Return(pr),
+			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:12]...).Times(1).Return(pr),
+			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:6]...).Times(1).Return(pr),
+			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:3]...).Times(1).Return(pr),
+			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:1]...).Times(1).Return(pr),
+		)
 		require.Error(t, fx.sink.Flush(fx.ctx, payload))
+	})
+
+	t.Run("resize enabled and it gets everything", func(t *testing.T) {
+		fx, payload, payloadAnys := setup(t, true)
+
+		prErr := kgo.ProduceResults{kgo.ProduceResult{Err: fmt.Errorf("..: %w", kerr.RecordListTooLarge)}}
+		prOk := kgo.ProduceResults{}
+		// fails twice and succeeds at size 25
+		gotRecordValues := make(map[string]struct{})
+		fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys...).Times(1).Return(prErr)
+		fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:50]...).MinTimes(1).Return(prErr)
+		fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[50:]...).MinTimes(1).Return(prErr)
+
+		fx.kc.EXPECT().ProduceSync(fx.ctx, gomock.Any()).Times(4).DoAndReturn(func(ctx context.Context, records ...*kgo.Record) kgo.ProduceResults {
+			require.Len(t, records, 25)
+			for _, r := range records {
+				gotRecordValues[string(r.Value)] = struct{}{}
+			}
+			return prOk
+		})
+		require.NoError(t, fx.sink.Flush(fx.ctx, payload))
+		require.Len(t, gotRecordValues, 100)
 	})
 }
 
