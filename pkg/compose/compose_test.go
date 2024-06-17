@@ -23,6 +23,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"testing"
 	"time"
@@ -89,6 +90,12 @@ func TestComposeCompare(t *testing.T) {
 			}
 			_ = os.RemoveAll(compareDir)
 		})
+		if err = os.MkdirAll(filepath.Join(compareDir, "store1"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err = os.MkdirAll(filepath.Join(compareDir, "store2"), 0755); err != nil {
+			t.Fatal(err)
+		}
 		cockroachBin = filepath.Join(compareDir, "cockroach")
 		libGeosDir = filepath.Join(compareDir, "lib")
 		if err = os.MkdirAll(libGeosDir, 0755); err != nil {
@@ -137,7 +144,13 @@ func TestComposeCompare(t *testing.T) {
 		"--force-recreate",
 		"--exit-code-from", "test",
 	)
+	userInfo, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
 	cmd.Env = []string{
+		fmt.Sprintf("UID=%s", userInfo.Uid),
+		fmt.Sprintf("GID=%s", userInfo.Gid),
 		fmt.Sprintf("EACH=%s", *flagEach),
 		fmt.Sprintf("TESTS=%s", *flagTests),
 		fmt.Sprintf("COCKROACH_PATH=%s", cockroachBin),
