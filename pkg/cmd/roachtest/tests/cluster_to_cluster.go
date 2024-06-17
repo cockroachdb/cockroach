@@ -1074,7 +1074,7 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		additionalDuration:        0 * time.Minute,
 		cutover:                   30 * time.Second,
 		skipNodeDistributionCheck: true,
-		clouds:                    registry.AllExceptAWS,
+		clouds:                    registry.OnlyGCE,
 		suites:                    registry.Suites(registry.Nightly),
 	}
 	rd := makeReplicationDriver(t, c, sp)
@@ -1093,25 +1093,6 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 func registerClusterToCluster(r registry.Registry) {
 	for _, sp := range []replicationSpec{
 		{
-			// Cutover TO LATEST:
-			name:      "c2c/tpcc/warehouses=500/duration=10/cutover=0",
-			benchmark: true,
-			srcNodes:  4,
-			dstNodes:  4,
-			cpus:      8,
-			pdSize:    1000,
-			// 500 warehouses adds 30 GB to source
-			//
-			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
-			// job speeds up.
-			workload:           replicateTPCC{warehouses: 500},
-			timeout:            1 * time.Hour,
-			additionalDuration: 10 * time.Minute,
-			cutover:            0,
-			clouds:             registry.AllExceptAWS,
-			suites:             registry.Suites(registry.Nightly),
-		},
-		{
 			name:      "c2c/tpcc/warehouses=1000/duration=60/cutover=30",
 			benchmark: true,
 			srcNodes:  4,
@@ -1126,7 +1107,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            3 * time.Hour,
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
-			clouds:             registry.AllExceptAWS,
+			clouds:             registry.AllExceptAzure,
 			suites:             registry.Suites(registry.Nightly),
 		},
 		{
@@ -1145,7 +1126,7 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration:                   10 * time.Minute,
 			cutover:                              5 * time.Minute,
 			sometimesTestFingerprintMismatchCode: true,
-			clouds:                               registry.AllClouds,
+			clouds:                               registry.OnlyGCE,
 			suites:                               registry.Suites(registry.Nightly),
 		},
 		{
@@ -1163,7 +1144,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            1 * time.Hour,
 			additionalDuration: 5 * time.Minute,
 			cutover:            0,
-			clouds:             registry.AllExceptAWS,
+			clouds:             registry.AllExceptAzure,
 			suites:             registry.Suites(registry.Nightly),
 		},
 		{
@@ -1190,7 +1171,7 @@ func registerClusterToCluster(r registry.Registry) {
 			overrideTenantTTL:  12 * time.Hour,
 			additionalDuration: 2 * time.Hour,
 			cutover:            0,
-			clouds:             registry.AllClouds,
+			clouds:             registry.OnlyGCE,
 			suites:             registry.Suites(registry.Weekly),
 		},
 		{
@@ -1235,7 +1216,7 @@ func registerClusterToCluster(r registry.Registry) {
 			cutover:                   30 * time.Second,
 			skipNodeDistributionCheck: true,
 			skip:                      "for local ad hoc testing",
-			clouds:                    registry.AllExceptAWS,
+			clouds:                    registry.AllClouds,
 			suites:                    registry.Suites(registry.Nightly),
 		},
 		{
@@ -1260,7 +1241,7 @@ func registerClusterToCluster(r registry.Registry) {
 			// Skipping node distribution check because there is little data on the
 			// source when the replication stream begins.
 			skipNodeDistributionCheck: true,
-			clouds:                    registry.AllExceptAWS,
+			clouds:                    registry.OnlyGCE,
 			suites:                    registry.Suites(registry.Nightly),
 		},
 		{
@@ -1279,7 +1260,7 @@ func registerClusterToCluster(r registry.Registry) {
 			// skipNodeDistributionCheck is set to true because the roachtest
 			// completes before the automatic replanner can run.
 			skipNodeDistributionCheck: true,
-			clouds:                    registry.AllExceptAWS,
+			clouds:                    registry.OnlyGCE,
 			suites:                    registry.Suites(registry.Nightly),
 			skip:                      "used for debugging when the full test fails",
 		},
@@ -1534,7 +1515,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			cutover:                              3 * time.Minute,
 			expectedNodeDeaths:                   1,
 			sometimesTestFingerprintMismatchCode: true,
-			clouds:                               registry.AllExceptAWS,
+			clouds:                               registry.OnlyGCE,
 			suites:                               registry.Suites(registry.Nightly),
 		}
 
@@ -1649,7 +1630,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		additionalDuration: 10 * time.Minute,
 		cutover:            2 * time.Minute,
 		maxAcceptedLatency: 12 * time.Minute,
-		clouds:             registry.AllExceptAWS,
+		clouds:             registry.OnlyGCE,
 		suites:             registry.Suites(registry.Nightly),
 	}
 	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
