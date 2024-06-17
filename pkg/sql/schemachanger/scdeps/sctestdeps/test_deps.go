@@ -1083,6 +1083,9 @@ func (s *TestState) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) (err 
 	return err
 }
 
+func (s *TestState) GetExplain() string           { return "" }
+func (s *TestState) SetExplain(_ string, _ error) {}
+
 // ValidateForwardIndexes implements the validator interface.
 func (s *TestState) ValidateForwardIndexes(
 	_ context.Context,

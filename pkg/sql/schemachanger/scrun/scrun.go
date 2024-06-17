@@ -130,6 +130,7 @@ func RunSchemaChangesInJob(
 		}
 		return err
 	}
+	deps.SetExplain(p.ExplainCompact())
 	for i := range p.Stages {
 		// Execute each stage in its own transaction.
 		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td scexec.Dependencies, el EventLogger) error {
