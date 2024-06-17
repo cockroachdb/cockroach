@@ -358,7 +358,7 @@ func (t *testingRaft) admit(storeID roachpb.StoreID, to uint64, pri admissionpb.
 }
 
 // setReplicas updates the replica set tracked by testingRaft. New replicas are
-// assigned match equal to the last entry index.
+// assigned match and admitted equal to the last entry index.
 func (t *testingRaft) setReplicas(replicaSet ReplicaSet) {
 	if t.replicas == nil {
 		t.replicas = make(map[roachpb.ReplicaID]testingReplica)
@@ -368,6 +368,9 @@ func (t *testingRaft) setReplicas(replicaSet ReplicaSet) {
 		repl := testingReplica{
 			info: FollowerStateInfo{State: tracker.StateReplicate, Next: t.lastEntryIndex + 1, Match: t.lastEntryIndex},
 			desc: rdesc,
+		}
+		for admitIdx := RaftPriority(0); admitIdx < NumRaftPriorities; admitIdx++ {
+			repl.info.Admitted[admitIdx] = t.lastEntryIndex
 		}
 		if _, ok := t.replicas[rdesc.ReplicaID]; ok {
 			repl.info = t.replicas[rdesc.ReplicaID].info

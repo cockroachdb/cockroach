@@ -956,6 +956,7 @@ func (rc *RangeControllerImpl) updateReplicaSetAndMap(newSet ReplicaSet) {
 		}
 		rc.replicaMap[r] = NewReplicaState(rc, desc)
 	}
+	rc.replicaSet = newSet
 }
 
 // replicaSet, replicaMap, leaseholder are up-to-date.
@@ -1519,10 +1520,10 @@ type replicaSendStream struct {
 }
 
 func (rss *replicaSendStream) String() string {
-	return fmt.Sprintf("[%v,%v) conn=%v closed=%v handle_id=%d size=%v pri=%v force=%v",
+	return fmt.Sprintf("[%v,%v) conn=%v closed=%v handle_id=%d size=%v pri=%v force=%v tracker=%v",
 		rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex, rss.connectedState, rss.closed,
 		rss.sendQueue.watcherHandleID, rss.queueSize(), rss.queuePriority(),
-		rss.sendQueue.forceFlushScheduled)
+		rss.sendQueue.forceFlushScheduled, rss.tracker.String())
 }
 
 // Initial state provided to constructor of replicaSendStream.
@@ -2080,11 +2081,13 @@ func (rss *replicaSendStream) returnTokensForPri(pri RaftPriority, uptoIndex uin
 	rss.tracker.Untrack(pri, uptoIndex,
 		func(index uint64, originalPri RaftPriority, tokens kvflowcontrol.Tokens) {
 			wc := workClassFromRaftPriority(pri)
+			originalWC := workClassFromRaftPriority(originalPri)
 			if index >= rss.nextRaftIndexInitial {
-				originalWC := workClassFromRaftPriority(originalPri)
 				rss.eval.tokensDeducted[originalWC] -= tokens
 				rss.parent.evalTokenCounter.Return(context.TODO(), originalWC, tokens)
 			}
+			log.VInfof(context.TODO(), 1, "returnTokensForPri(%v): wc=%v original_wc=%v index=%v tokens=%v",
+				rss.parent.desc.ReplicaID, wc, originalWC, index, tokens)
 			rss.parent.sendTokenCounter.Return(context.TODO(), wc, tokens)
 		})
 }
