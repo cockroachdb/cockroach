@@ -96,6 +96,7 @@ SELECT node_id
 				}
 
 				if len(expLiveNodes) == 0 {
+					t.L().Printf("%d: found %d live nodes\n", i, len(liveNodes))
 					expLiveNodes = liveNodes
 					continue
 				}
@@ -119,9 +120,10 @@ SELECT node_id
 		}
 
 		waitForGossip := func(deadNode int) {
-			t.Status("waiting for gossip to exclude dead node")
+			t.Status("waiting for gossip to exclude dead node %d", deadNode)
 			start := timeutil.Now()
 			for {
+				t.L().Printf("checking if gossip excludes dead node %d\n", deadNode)
 				if gossipOK(start, deadNode) {
 					return
 				}
