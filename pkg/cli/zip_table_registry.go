@@ -149,37 +149,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"crdb_internal.hide_sql_constants(stmt) as stmt",
 		},
 	},
-	"crdb_internal.cluster_execution_insights": {
-		// `last_retry_reason` column contains error text that may contain
-		// sensitive data.
-		nonSensitiveCols: NonSensitiveColumns{
-			"session_id",
-			"txn_id",
-			"txn_fingerprint_id",
-			"stmt_id",
-			"stmt_fingerprint_id",
-			"query",
-			"status",
-			"start_time",
-			"end_time",
-			"full_scan",
-			"user_name",
-			"app_name",
-			"database_name",
-			"plan_gist",
-			"rows_read",
-			"rows_written",
-			"priority",
-			"retries",
-			"exec_node_ids",
-			"kv_node_ids",
-			"contention",
-			"index_recommendations",
-			"retries",
-			"error_code",
-			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
-		},
-	},
 	"crdb_internal.cluster_locks": {
 		// `lock_key` column contains the txn lock key, which may contain
 		// sensitive row-level data.
@@ -278,31 +247,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"isolation_level",
 			"priority",
 			"quality_of_service",
-		},
-	},
-	"crdb_internal.cluster_txn_execution_insights": {
-		// `last_retry_reason` column contains error text that may contain
-		// sensitive data.
-		nonSensitiveCols: NonSensitiveColumns{
-			"txn_id",
-			"txn_fingerprint_id",
-			"query",
-			"implicit_txn",
-			"session_id",
-			"start_time",
-			"end_time",
-			"user_name",
-			"app_name",
-			"rows_read",
-			"rows_written",
-			"priority",
-			"retries",
-			"contention",
-			"problems",
-			"causes",
-			"stmt_execution_ids",
-			"last_error_code",
-			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
 	},
 	`"".crdb_internal.create_function_statements`: {
