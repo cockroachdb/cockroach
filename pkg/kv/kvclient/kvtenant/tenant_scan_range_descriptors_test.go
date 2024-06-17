@@ -30,13 +30,9 @@ func setup(
 	t *testing.T, ctx context.Context,
 ) (*testcluster.TestCluster, serverutils.ApplicationLayerInterface, rangedesc.IteratorFactory) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					DisableMergeQueue: true,
-				},
-			},
 		},
 	})
 
