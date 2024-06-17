@@ -35,57 +35,99 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func scanReplicas(t *testing.T, input string) ReplicaSet {
-	replicaSet := ReplicaSet{}
+func scanReplicaDescriptor(t *testing.T, line string) roachpb.ReplicaDescriptor {
+	var storeID, replicaID int
+	var replicaType roachpb.ReplicaType
+	var desc roachpb.ReplicaDescriptor
+	var err error
+
+	parts := strings.Fields(line)
+	parts[0] = strings.TrimSpace(parts[0])
+
+	require.True(t, strings.HasPrefix(parts[0], "store_id="))
+	parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "store_id=")
+	storeID, err = strconv.Atoi(parts[0])
+	require.NoError(t, err)
+
+	parts[1] = strings.TrimSpace(parts[1])
+	require.True(t, strings.HasPrefix(parts[1], "replica_id="))
+	parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "replica_id=")
+	replicaID, err = strconv.Atoi(parts[1])
+	require.NoError(t, err)
+
+	parts[2] = strings.TrimSpace(parts[2])
+	require.True(t, strings.HasPrefix(parts[2], "type="))
+	parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "type=")
+	switch parts[2] {
+	case "VOTER_FULL":
+		replicaType = roachpb.VOTER_FULL
+	case "VOTER_INCOMING":
+		replicaType = roachpb.VOTER_INCOMING
+	case "VOTER_DEMOTING_LEARNER":
+		replicaType = roachpb.VOTER_DEMOTING_LEARNER
+	case "LEARNER":
+		replicaType = roachpb.LEARNER
+	case "NON_VOTER":
+		replicaType = roachpb.NON_VOTER
+	case "VOTER_DEMOTING_NON_VOTER":
+		replicaType = roachpb.VOTER_DEMOTING_NON_VOTER
+	default:
+		panic("unknown replica type")
+	}
+
+	desc = roachpb.ReplicaDescriptor{
+		NodeID:    roachpb.NodeID(storeID),
+		StoreID:   roachpb.StoreID(storeID),
+		ReplicaID: roachpb.ReplicaID(replicaID),
+		Type:      replicaType,
+	}
+
+	return desc
+}
+
+func scanRanges(t *testing.T, input string) []testingRange {
+	replicas := []testingRange{}
+
 	for _, line := range strings.Split(input, "\n") {
-
-		var storeID, replicaID int
-		var replicaType roachpb.ReplicaType
-		var desc roachpb.ReplicaDescriptor
-		var err error
-
 		parts := strings.Fields(line)
 		parts[0] = strings.TrimSpace(parts[0])
-		require.True(t, strings.HasPrefix(parts[0], "store_id="))
-		parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "store_id=")
-		storeID, err = strconv.Atoi(parts[0])
-		require.NoError(t, err)
+		if strings.HasPrefix(parts[0], "range_id=") {
+			// Create a new range, any replicas which follow until the next range_id
+			// line will be added to this replica set.
+			var rangeID, tenantID, localReplicaID int
+			var err error
 
-		parts[1] = strings.TrimSpace(parts[1])
-		require.True(t, strings.HasPrefix(parts[1], "replica_id="))
-		parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "replica_id=")
-		replicaID, err = strconv.Atoi(parts[1])
-		require.NoError(t, err)
+			require.True(t, strings.HasPrefix(parts[0], "range_id="))
+			parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "range_id=")
+			rangeID, err = strconv.Atoi(parts[0])
+			require.NoError(t, err)
 
-		parts[2] = strings.TrimSpace(parts[2])
-		require.True(t, strings.HasPrefix(parts[2], "type="))
-		parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "type=")
-		switch parts[2] {
-		case "VOTER_FULL":
-			replicaType = roachpb.VOTER_FULL
-		case "VOTER_INCOMING":
-			replicaType = roachpb.VOTER_INCOMING
-		case "VOTER_DEMOTING_LEARNER":
-			replicaType = roachpb.VOTER_DEMOTING_LEARNER
-		case "LEARNER":
-			replicaType = roachpb.LEARNER
-		case "NON_VOTER":
-			replicaType = roachpb.NON_VOTER
-		case "VOTER_DEMOTING_NON_VOTER":
-			replicaType = roachpb.VOTER_DEMOTING_NON_VOTER
-		default:
-			panic("unknown replica type")
+			parts[1] = strings.TrimSpace(parts[1])
+			require.True(t, strings.HasPrefix(parts[1], "tenant_id="))
+			parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "tenant_id=")
+			tenantID, err = strconv.Atoi(parts[1])
+			require.NoError(t, err)
+
+			parts[2] = strings.TrimSpace(parts[2])
+			require.True(t, strings.HasPrefix(parts[2], "local_replica_id="))
+			parts[2] = strings.TrimPrefix(strings.TrimSpace(parts[2]), "local_replica_id=")
+			localReplicaID, err = strconv.Atoi(parts[2])
+			require.NoError(t, err)
+
+			replicas = append(replicas, testingRange{
+				rangeID:        roachpb.RangeID(rangeID),
+				tenantID:       roachpb.MustMakeTenantID(uint64(tenantID)),
+				localReplicaID: roachpb.ReplicaID(localReplicaID),
+				replicaSet:     map[roachpb.ReplicaID]roachpb.ReplicaDescriptor{},
+			})
+		} else {
+			// Otherwise, add the replica to the last replica set created.
+			desc := scanReplicaDescriptor(t, line)
+			replicas[len(replicas)-1].replicaSet[desc.ReplicaID] = desc
 		}
-
-		desc = roachpb.ReplicaDescriptor{
-			NodeID:    roachpb.NodeID(storeID),
-			StoreID:   roachpb.StoreID(storeID),
-			ReplicaID: roachpb.ReplicaID(replicaID),
-			Type:      replicaType,
-		}
-		replicaSet[roachpb.ReplicaID(replicaID)] = desc
 	}
-	return replicaSet
+
+	return replicas
 }
 
 func scanPriority(t *testing.T, input string) admissionpb.WorkPriority {
@@ -106,12 +148,16 @@ func scanPriority(t *testing.T, input string) admissionpb.WorkPriority {
 // TestRangeController is a datadriven test that exercises the RangeController.
 // The commands available are:
 //
-//   - init range_id=<range_id> tenant_id=<tenant_id> local_replica_id=<local_replica_id>
+//   - init
+//     range_id=<range_id> tenant_id=<tenant_id> local_replica_id=<local_replica_id>
 //     store_id=<store_id> replica_id=<replica_id> type=<type>
+//     ...
 //     ...
 //
 //   - set_replicas
+//     range_id=<range_id> tenant_id=<tenant_id> local_replica_id=<local_replica_id>
 //     store_id=<store_id> replica_id=<replica_id> type=<type>
+//     ...
 //     ...
 //
 //   - send
@@ -119,25 +165,28 @@ func scanPriority(t *testing.T, input string) admissionpb.WorkPriority {
 //     ...
 //
 //   - admit
+//     range_id=<range_id>
 //     store_id=<store_id> to=<to> pri=<pri>
 //     ...
+//     ...
+//
+//   - set_leader range_id=<range_id> replica_id=<replica_id>
 //
 // TODO(kvoli):
-//   - add multi-tenant throughout commands, this is currently mostly ignored.
-//   - add multi-range support, this test currently assumes only a single range
-//     controller.
-//   - add stringer functions to print the tracker state.
-//   - print the appropriate state after each command, rather than all the
-//     state.
 //   - test replica set changes
+//   - full voter transition [VOTER_FULL -> VOTER_DEMOTING_LEARNER -> LEARNER]
+//   - force flushes
+//   - test state transition from <- probe <-> replicate <-> snapshot ->.
+//     These could be set via set_replicas, which would be updated to take a
+//     connection state, in addition to the replica type? A downside of this is
+//     that it would call into set replicas.
 //   - test leaseholder changes
-//   - test state transition from <- probe <-> replicate <-> snapshot ->
+//   - test multi-tenant
 func TestRangeController(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		raftImpl := testingRaft{}
 		mtime := timeutil.NewManualTime(time.Time{})
 		clock := hlc.NewClockForTesting(mtime)
 		settings := cluster.MakeTestingClusterSettings()
@@ -145,43 +194,44 @@ func TestRangeController(t *testing.T) {
 		defer stopper.Stop(context.Background())
 
 		var (
-			controller        RangeController
+			raftImpls         map[roachpb.RangeID]*testingRaft
+			controllers       map[roachpb.RangeID]RangeController
 			tokenCounter      StoreStreamsTokenCounter
 			sendTokensWatcher StoreStreamSendTokensWatcher
-			raftInterface     RaftInterface
-			messageSender     MessageSender
-			scheduler         Scheduler
 		)
 
 		stateString := func() string {
 			var buf strings.Builder
-			replicaIDs := make([]roachpb.ReplicaID, 0, len(raftImpl.replicas))
-			for replicaID := range raftImpl.replicas {
-				replicaIDs = append(replicaIDs, replicaID)
-			}
-
-			sort.Slice(replicaIDs, func(i, j int) bool {
-				return replicaIDs[i] < replicaIDs[j]
-			})
-
-			// Grab out the controllerImpl from the controller interface in order to
-			// inspect the send queue state.
-			controllerImpl := controller.(*RangeControllerImpl)
-			for _, replicaID := range replicaIDs {
-				replica := raftImpl.replicas[replicaID]
-				controllerRepl := controllerImpl.replicaMap[replicaID]
-				fmt.Fprintf(&buf, "%v: %v eval=(%v) send=(%v)",
-					replica.desc, replica.info, controllerRepl.evalTokenCounter, controllerRepl.sendTokenCounter)
-				// Only include the send queue state if non-empty.
-				if controllerRepl.replicaSendStream.queueSize() > 0 {
-					fmt.Fprintf(&buf, " queue=[%v,%v) size=%v pri=%v",
-						controllerRepl.replicaSendStream.sendQueue.indexToSend,
-						controllerRepl.replicaSendStream.sendQueue.nextRaftIndex,
-						controllerRepl.replicaSendStream.queueSize(),
-						controllerRepl.replicaSendStream.queuePriority(),
-					)
+			for rangeID, raftImpl := range raftImpls {
+				fmt.Fprintf(&buf, "range_id=%d\n", rangeID)
+				replicaIDs := make([]roachpb.ReplicaID, 0, len(raftImpl.replicas))
+				for replicaID := range raftImpl.replicas {
+					replicaIDs = append(replicaIDs, replicaID)
 				}
-				buf.WriteString("\n")
+
+				sort.Slice(replicaIDs, func(i, j int) bool {
+					return replicaIDs[i] < replicaIDs[j]
+				})
+
+				// Grab out the controllerImpl from the controller interface in order to
+				// inspect the send queue state.
+				controllerImpl := controllers[rangeID].(*RangeControllerImpl)
+				for _, replicaID := range replicaIDs {
+					replica := raftImpl.replicas[replicaID]
+					controllerRepl := controllerImpl.replicaMap[replicaID]
+					fmt.Fprintf(&buf, "\t%v: %v eval=(%v) send=(%v)",
+						replica.desc, replica.info, controllerRepl.evalTokenCounter, controllerRepl.sendTokenCounter)
+					// Only include the send queue state if non-empty.
+					if controllerRepl.replicaSendStream.queueSize() > 0 {
+						fmt.Fprintf(&buf, " queue=[%v,%v) size=%v pri=%v",
+							controllerRepl.replicaSendStream.sendQueue.indexToSend,
+							controllerRepl.replicaSendStream.sendQueue.nextRaftIndex,
+							controllerRepl.replicaSendStream.queueSize(),
+							controllerRepl.replicaSendStream.queuePriority(),
+						)
+					}
+					buf.WriteString("\n")
+				}
 			}
 			return buf.String()
 		}
@@ -189,73 +239,79 @@ func TestRangeController(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				var (
-					rangeID        int = 1
-					tenantID       int = 1
-					localReplicaID int = 1
-				)
-
-				d.MaybeScanArgs(t, "range_id=%d tenant_id=%d local_replica_id=%d", &rangeID, &tenantID, &localReplicaID)
-
-				raftInterface = &raftImpl
-				messageSender = &raftImpl
-				scheduler = &raftImpl
+				raftImpls = make(map[roachpb.RangeID]*testingRaft)
+				controllers = make(map[roachpb.RangeID]RangeController)
 				sendTokensWatcher = NewStoreStreamSendTokensWatcher(stopper)
 				tokenCounter = NewStoreStreamsTokenCounter(settings, clock)
-				replicaSet := scanReplicas(t, d.Input)
 
-				options := RangeControllerOptions{
-					RangeID:           roachpb.RangeID(rangeID),
-					TenantID:          roachpb.MustMakeTenantID(uint64(tenantID)),
-					LocalReplicaID:    roachpb.ReplicaID(localReplicaID),
-					SSTokenCounter:    tokenCounter,
-					SendTokensWatcher: sendTokensWatcher,
-					RaftInterface:     raftInterface,
-					MessageSender:     messageSender,
-					Scheduler:         scheduler,
+				for _, r := range scanRanges(t, d.Input) {
+					raftImpls[r.rangeID] = &testingRaft{}
+					controllers[r.rangeID] = nil
+
+					options := RangeControllerOptions{
+						RangeID:           r.rangeID,
+						TenantID:          r.tenantID,
+						LocalReplicaID:    r.localReplicaID,
+						SSTokenCounter:    tokenCounter,
+						SendTokensWatcher: sendTokensWatcher,
+						RaftInterface:     raftImpls[r.rangeID],
+						MessageSender:     raftImpls[r.rangeID],
+						Scheduler:         raftImpls[r.rangeID],
+					}
+
+					raftImpls[r.rangeID].localReplicaID = roachpb.ReplicaID(r.localReplicaID)
+					raftImpls[r.rangeID].setReplicas(r.replicaSet)
+
+					init := RangeControllerInitState{
+						ReplicaSet:  r.replicaSet,
+						Leaseholder: r.localReplicaID,
+					}
+					controllers[r.rangeID] = NewRangeControllerImpl(options, init)
+					raftImpls[r.rangeID].controller = controllers[r.rangeID]
 				}
-
-				raftImpl.localReplicaID = roachpb.ReplicaID(localReplicaID)
-				raftImpl.setReplicas(replicaSet)
-
-				init := RangeControllerInitState{
-					ReplicaSet:  replicaSet,
-					Leaseholder: roachpb.ReplicaID(localReplicaID),
-				}
-				controller = NewRangeControllerImpl(options, init)
-				raftImpl.controller = controller
 			case "set_replicas":
-				replicaSet := scanReplicas(t, d.Input)
-				raftImpl.setReplicas(replicaSet)
-				controller.SetReplicas(replicaSet)
+				for _, r := range scanRanges(t, d.Input) {
+					raftImpls[r.rangeID].setReplicas(r.replicaSet)
+					controllers[r.rangeID].SetReplicas(r.replicaSet)
+				}
 			case "set_leader":
-				var leader int
-				log.Infof(context.Background(), "set_leader: %s", d.CmdArgs)
-				d.ScanArgs(t, "replica_id", &leader)
-				controller.SetLeaseholder(roachpb.ReplicaID(leader))
+				var rangeID, leader int
+				d.ScanArgs(t, "range_id=%d replica_id=%d", &rangeID, &leader)
+				controllers[roachpb.RangeID(rangeID)].SetLeaseholder(roachpb.ReplicaID(leader))
 			case "admit":
+				var lastRangeID roachpb.RangeID
 				for _, line := range strings.Split(d.Input, "\n") {
 					var (
+						rangeID int
 						storeID int
 						to      int
+						err     error
 					)
-
 					parts := strings.Fields(line)
 					parts[0] = strings.TrimSpace(parts[0])
-					require.True(t, strings.HasPrefix(parts[0], "store_id="))
-					parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "store_id=")
-					storeID, err := strconv.Atoi(parts[0])
-					require.NoError(t, err)
 
-					parts[1] = strings.TrimSpace(parts[1])
-					require.True(t, strings.HasPrefix(parts[1], "to="))
-					parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "to=")
-					to, err = strconv.Atoi(parts[1])
-					require.NoError(t, err)
+					if strings.HasPrefix(parts[0], "range_id=") {
+						parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "range_id=")
+						rangeID, err = strconv.Atoi(parts[0])
+						require.NoError(t, err)
+						lastRangeID = roachpb.RangeID(rangeID)
+					} else {
+						parts[0] = strings.TrimSpace(parts[0])
+						require.True(t, strings.HasPrefix(parts[0], "store_id="))
+						parts[0] = strings.TrimPrefix(strings.TrimSpace(parts[0]), "store_id=")
+						storeID, err = strconv.Atoi(parts[0])
+						require.NoError(t, err)
 
-					workPriority := scanPriority(t, parts[2])
+						parts[1] = strings.TrimSpace(parts[1])
+						require.True(t, strings.HasPrefix(parts[1], "to="))
+						parts[1] = strings.TrimPrefix(strings.TrimSpace(parts[1]), "to=")
+						to, err = strconv.Atoi(parts[1])
+						require.NoError(t, err)
 
-					raftImpl.admit(roachpb.StoreID(storeID), uint64(to), workPriority)
+						workPriority := scanPriority(t, parts[2])
+
+						raftImpls[lastRangeID].admit(roachpb.StoreID(storeID), uint64(to), workPriority)
+					}
 				}
 			case "send":
 				for _, line := range strings.Split(d.Input, "\n") {
@@ -280,7 +336,7 @@ func TestRangeController(t *testing.T) {
 					require.NoError(t, err)
 
 					log.Infof(context.Background(), "rangeID: %d, prio: %v, size: %v", rangeID, workPriority, size)
-					raftImpl.prop(AdmissionPriorityToRaftPriority(workPriority), uint64(size))
+					raftImpls[roachpb.RangeID(rangeID)].prop(AdmissionPriorityToRaftPriority(workPriority), uint64(size))
 				}
 			}
 			return stateString()
@@ -309,6 +365,13 @@ type testingRaft struct {
 type testingReplica struct {
 	desc roachpb.ReplicaDescriptor
 	info FollowerStateInfo
+}
+
+type testingRange struct {
+	rangeID        roachpb.RangeID
+	tenantID       roachpb.TenantID
+	localReplicaID roachpb.ReplicaID
+	replicaSet     map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
 }
 
 func (t *testingRaft) prop(pri RaftPriority, size uint64) {

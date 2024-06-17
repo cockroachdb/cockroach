@@ -1,14 +1,16 @@
 # This test demonstrates a simple single range interaction with the range
 # controller. The replica set does not change. The only interaction is entry
 # sending and admitting on receiving stores.
-init local_replica_id=1
-store_id=1 replica_id=1 type=VOTER_FULL
-store_id=2 replica_id=2 type=VOTER_FULL
-store_id=3 replica_id=3 type=VOTER_FULL
+init
+range_id=1 tenant_id=1 local_replica_id=1
+  store_id=1 replica_id=1 type=VOTER_FULL
+  store_id=2 replica_id=2 type=VOTER_FULL
+  store_id=3 replica_id=3 type=VOTER_FULL
 ----
-(n1,s1):1: match=0 next=1 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
-(n2,s2):2: match=0 next=1 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
-(n3,s3):3: match=0 next=1 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+range_id=1
+	(n1,s1):1: match=0 next=1 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+	(n2,s2):2: match=0 next=1 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+	(n3,s3):3: match=0 next=1 admitted=[] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
 
 # Send two entries to the range. The first entry is a regular work class and
 # the other an elastic work class. Neither of these should wait for tokens
@@ -17,37 +19,43 @@ send
 range_id=1 pri=NormalPri size=1MiB
 range_id=1 pri=LowPri size=1MiB
 ----
-(n1,s1):1: match=2 next=3 admitted=[] eval=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
-(n2,s2):2: match=2 next=3 admitted=[] eval=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
-(n3,s3):3: match=2 next=3 admitted=[] eval=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+range_id=1
+	(n1,s1):1: match=2 next=3 admitted=[] eval=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+	(n2,s2):2: match=2 next=3 admitted=[] eval=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+	(n3,s3):3: match=2 next=3 admitted=[] eval=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
 
 # Admit the regular entries on stores 1 and 2, store 3 is not admitted here and
 # should have less than full tokens.
 admit
-store_id=1 to=2 pri=NormalPri
-store_id=2 to=2 pri=NormalPri
+range_id=1
+  store_id=1 to=2 pri=NormalPri
+  store_id=2 to=2 pri=NormalPri
 ----
-(n1,s1):1: match=2 next=3 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+16 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
-(n2,s2):2: match=2 next=3 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+16 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
-(n3,s3):3: match=2 next=3 admitted=[] eval=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+range_id=1
+	(n1,s1):1: match=2 next=3 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+16 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+	(n2,s2):2: match=2 next=3 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+16 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+	(n3,s3):3: match=2 next=3 admitted=[] eval=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
 
 # Admit all remaining tokens on s2,s1.
 admit
-store_id=1 to=2 pri=LowPri
-store_id=2 to=2 pri=LowPri
+range_id=1
+  store_id=1 to=2 pri=LowPri
+  store_id=2 to=2 pri=LowPri
 ----
-(n1,s1):1: match=2 next=3 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
-(n2,s2):2: match=2 next=3 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
-(n3,s3):3: match=2 next=3 admitted=[] eval=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+range_id=1
+	(n1,s1):1: match=2 next=3 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+	(n2,s2):2: match=2 next=3 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+	(n3,s3):3: match=2 next=3 admitted=[] eval=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
 
 # Send another regular entry, this entry will consume all of the remaining
 # tokens available for regular work and put s3 in a deficit.
 send
 range_id=1 pri=NormalPri size=16MiB
 ----
-(n1,s1):1: match=3 next=4 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB)
-(n2,s2):2: match=3 next=4 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB)
-(n3,s3):3: match=3 next=4 admitted=[] eval=(reg=-1.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB)
+range_id=1
+	(n1,s1):1: match=3 next=4 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB)
+	(n2,s2):2: match=3 next=4 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB)
+	(n3,s3):3: match=3 next=4 admitted=[] eval=(reg=-1.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB)
 
 # Send another regular entry, this entry will encounter no available tokens and
 # should queue on s2 and s3: the match does not increase for s2 or s3. 
@@ -59,26 +67,30 @@ range_id=1 pri=NormalPri size=16MiB
 send
 range_id=1 pri=NormalPri size=1MiB
 ----
-(n1,s1):1: match=4 next=5 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB)
-(n2,s2):2: match=3 next=4 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) queue=[4,5) size=+1021 KiB pri=NormalPri
-(n3,s3):3: match=3 next=4 admitted=[] eval=(reg=-2.0 MiB/+16 MiB ela=-11 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) queue=[4,5) size=+1021 KiB pri=NormalPri
+range_id=1
+	(n1,s1):1: match=4 next=5 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB)
+	(n2,s2):2: match=3 next=4 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) queue=[4,5) size=+1021 KiB pri=NormalPri
+	(n3,s3):3: match=3 next=4 admitted=[] eval=(reg=-2.0 MiB/+16 MiB ela=-11 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) queue=[4,5) size=+1021 KiB pri=NormalPri
 
 admit
-store_id=1 to=3 pri=NormalPri
-store_id=2 to=3 pri=NormalPri
+range_id=1
+  store_id=1 to=3 pri=NormalPri
+  store_id=2 to=3 pri=NormalPri
 ----
-(n1,s1):1: match=4 next=5 admitted=[LowPri=2,NormalPri=3,AboveNormalPri=3,HighPri=3] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
-(n2,s2):2: match=4 next=5 admitted=[LowPri=2,NormalPri=3,AboveNormalPri=3,HighPri=3] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
-(n3,s3):3: match=3 next=4 admitted=[] eval=(reg=-2.0 MiB/+16 MiB ela=-11 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) queue=[4,5) size=+1021 KiB pri=NormalPri
+range_id=1
+	(n1,s1):1: match=4 next=5 admitted=[LowPri=2,NormalPri=3,AboveNormalPri=3,HighPri=3] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+	(n2,s2):2: match=4 next=5 admitted=[LowPri=2,NormalPri=3,AboveNormalPri=3,HighPri=3] eval=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB) send=(reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB)
+	(n3,s3):3: match=3 next=4 admitted=[] eval=(reg=-2.0 MiB/+16 MiB ela=-11 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) queue=[4,5) size=+1021 KiB pri=NormalPri
 
 # Send another entry at a high priority, the send queue to s3 should have its
 # priority updated to reflect it.
 send
 range_id=1 pri=HighPri size=1MiB
 ----
-(n1,s1):1: match=5 next=6 admitted=[LowPri=2,NormalPri=3,AboveNormalPri=3,HighPri=3] eval=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
-(n2,s2):2: match=5 next=6 admitted=[LowPri=2,NormalPri=3,AboveNormalPri=3,HighPri=3] eval=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
-(n3,s3):3: match=3 next=4 admitted=[] eval=(reg=-3.0 MiB/+16 MiB ela=-12 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) queue=[4,6) size=+2.0 MiB pri=HighPri
+range_id=1
+	(n1,s1):1: match=5 next=6 admitted=[LowPri=2,NormalPri=3,AboveNormalPri=3,HighPri=3] eval=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+	(n2,s2):2: match=5 next=6 admitted=[LowPri=2,NormalPri=3,AboveNormalPri=3,HighPri=3] eval=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+	(n3,s3):3: match=3 next=4 admitted=[] eval=(reg=-3.0 MiB/+16 MiB ela=-12 MiB/+8.0 MiB) send=(reg=-1.0 MiB/+16 MiB ela=-10 MiB/+8.0 MiB) queue=[4,6) size=+2.0 MiB pri=HighPri
 
 # Finish off by admitting all the entries, the tokens should be identical to
 # the start and no send queue should exist for any store.
@@ -87,10 +99,12 @@ range_id=1 pri=HighPri size=1MiB
 # testing bug where tokens are returned before the corresponding entries are
 # sent when calling admit here (s3).
 admit
-store_id=3 to=5 pri=LowPri
-store_id=2 to=5 pri=LowPri
-store_id=1 to=5 pri=LowPri
+range_id=1
+  store_id=3 to=5 pri=LowPri
+  store_id=2 to=5 pri=LowPri
+  store_id=1 to=5 pri=LowPri
 ----
-(n1,s1):1: match=5 next=6 admitted=[LowPri=5,NormalPri=5,AboveNormalPri=5,HighPri=5] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
-(n2,s2):2: match=5 next=6 admitted=[LowPri=5,NormalPri=5,AboveNormalPri=5,HighPri=5] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
-(n3,s3):3: match=5 next=6 admitted=[LowPri=5,NormalPri=5,AboveNormalPri=5,HighPri=5] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+range_id=1
+	(n1,s1):1: match=5 next=6 admitted=[LowPri=5,NormalPri=5,AboveNormalPri=5,HighPri=5] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+	(n2,s2):2: match=5 next=6 admitted=[LowPri=5,NormalPri=5,AboveNormalPri=5,HighPri=5] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+	(n3,s3):3: match=5 next=6 admitted=[LowPri=5,NormalPri=5,AboveNormalPri=5,HighPri=5] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
