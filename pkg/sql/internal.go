@@ -272,6 +272,7 @@ func (ie *InternalExecutor) initConnEx(
 		mode: mode,
 		sync: syncCallback,
 	}
+	clientComm.results = clientComm.resultsScratch[:0]
 	clientComm.rowsAffectedState.rewind = func() {
 		var zero int
 		_ = w.addResult(ctx, ieIteratorResult{rowsAffected: &zero})
@@ -1431,6 +1432,8 @@ type internalClientComm struct {
 	// at any point in time (i.e. any command is created, evaluated, and then
 	// closed / discarded, and only after that a new command can be processed).
 	results []*streamingCommandResult
+	// resultsScratch is the underlying storage for results.
+	resultsScratch [4]*streamingCommandResult
 
 	// The results of the query execution will be written into w.
 	w ieResultWriter

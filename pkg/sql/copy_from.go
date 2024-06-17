@@ -474,9 +474,9 @@ func (c *copyMachine) initVectorizedCopy(ctx context.Context, typs []*types.T) e
 	c.vectorized = true
 	factory := coldataext.NewExtendedColumnFactory(c.p.EvalContext())
 	alloc := colmem.NewLimitedAllocator(ctx, &c.rowsMemAcc, nil /*optional unlimited memory account*/, factory)
-	alloc.SetMaxBatchSize(c.copyBatchRowSize)
 	// TODO(cucaroach): Avoid allocating selection vector.
-	c.accHelper.Init(alloc, c.maxRowMem, typs, false /*alwaysReallocate*/)
+	c.accHelper.Init(alloc, c.maxRowMem, typs, false /* alwaysReallocate */)
+	c.accHelper.SetMaxBatchSize(c.copyBatchRowSize)
 	// Start with small number of rows, compromise between going too big and
 	// overallocating memory and avoiding some doubling growth batches.
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -60,9 +61,12 @@ type OpWithMetaInfo struct {
 // NewColOperatorArgs is a helper struct that encompasses all of the input
 // arguments to NewColOperator call.
 type NewColOperatorArgs struct {
-	Spec                 *execinfrapb.ProcessorSpec
-	Inputs               []OpWithMetaInfo
-	StreamingMemAccount  *mon.BoundAccount
+	Spec   *execinfrapb.ProcessorSpec
+	Inputs []OpWithMetaInfo
+	// StreamingMemAccount, if nil, is allocated lazily in NewColOperator.
+	StreamingMemAccount *mon.BoundAccount
+	// StreamingAllocator will be allocated lazily in NewColOperator.
+	StreamingAllocator   *colmem.Allocator
 	ProcessorConstructor execinfra.ProcessorConstructor
 	LocalProcessors      []execinfra.LocalProcessor
 	// any is actually a coldata.Batch, see physicalplan.PhysicalInfrastructure comments.
