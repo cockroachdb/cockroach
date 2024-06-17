@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"hash/fnv"
 	"net/url"
 	"strings"
@@ -117,7 +116,7 @@ func (k *kafkaSinkClient) Close() error {
 	return nil
 }
 
-// Flush implements SinkClient. Does not retry -- retries will be handled by ParallelIO.
+// Flush implements SinkClient. Does not retry -- retries will be handled either by kafka or ParallelIO.
 func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
 	msgs := payload.([]*kgo.Record)
 	defer log.Infof(ctx, `flushed %d messages to kafka (id=%d, err=%v)`, len(msgs), k.debuggingId, retErr)
@@ -125,12 +124,9 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 	// TODO: make this better. possibly moving the resizing up into the batch worker would help a bit
 	var flushMsgs func(msgs []*kgo.Record) error
 	flushMsgs = func(msgs []*kgo.Record) error {
-		log.Infof(ctx, `inner flushing %d messages to kafka (id=%d)`, len(msgs), k.debuggingId)
 		if err := k.client.ProduceSync(ctx, msgs...).FirstErr(); err != nil {
-			log.Infof(ctx, `kafka error in %d: %s`, k.debuggingId, err.Error())
 			if k.shouldTryResizing(err, msgs) {
 				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
-				fmt.Printf("splitting %d into %d and %d\n", len(msgs), len(a), len(b))
 				// recurse
 				// this is also a little odd because the client's batch state doesnt consist only of this payload, and it's per topic partition anyway
 				// still it should probably help.. really the answer would be for users to set maxbytes.
@@ -231,6 +227,9 @@ type KafkaClientV2 interface {
 	Close()
 }
 
+// KafkaAdminClientV2 is a small interface restricting the functionality in
+// *kadm.Client. It's used to list topics so we can iterate over all partitions
+// to flush resolved messages.
 type KafkaAdminClientV2 interface {
 	ListTopics(ctx context.Context, topics ...string) (kadm.TopicDetails, error)
 }
@@ -240,7 +239,7 @@ type kafkaSinkV2Knobs struct {
 }
 
 var _ SinkClient = (*kafkaSinkClient)(nil)
-var _ SinkPayload = ([]*kgo.Record)(nil) // this doesnt actually assert anything fyi
+var _ SinkPayload = ([]*kgo.Record)(nil) // NOTE: This doesn't actually assert anything, but it's good documentation.
 
 type keyPlusPayload struct {
 	key     []byte
@@ -269,7 +268,7 @@ func (b *kafkaBuffer) Close() (SinkPayload, error) {
 			Topic: b.topic,
 			Key:   m.key,
 			Value: m.payload,
-			// can use Context field for tracking/metrics if desired
+			// TODO: use Context field for additional tracking/metrics, if desired
 		})
 	}
 	return msgs, nil
