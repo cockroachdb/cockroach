@@ -428,6 +428,9 @@ func makePlan(
 			Spans:     checkpoint.Spans,
 			Timestamp: checkpoint.Timestamp,
 		}
+		if log.V(2) {
+			log.Infof(ctx, "aggregator checkpoint: %s", aggregatorCheckpoint)
+		}
 
 		var checkpointSpanGroup roachpb.SpanGroup
 		checkpointSpanGroup.Add(checkpoint.Spans...)
