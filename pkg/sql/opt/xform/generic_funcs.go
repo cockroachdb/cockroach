@@ -110,3 +110,12 @@ func (c *CustomFuncs) GeneratePlaceholderValuesAndJoinFilters(
 
 	return values, newFilters, true
 }
+
+// GenericJoinPrivate returns JoinPrivate that disabled join reordering and
+// merge join exploration.
+func (c *CustomFuncs) GenericJoinPrivate() *memo.JoinPrivate {
+	return &memo.JoinPrivate{
+		Flags:            memo.DisallowMergeJoin,
+		SkipReorderJoins: true,
+	}
+}
