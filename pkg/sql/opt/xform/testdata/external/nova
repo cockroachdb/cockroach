@@ -228,6 +228,7 @@ project
       │    │    │    │    │    │    │    │         ├── fd: ()-->(1-12,14,15,37), (37)==(7), (7)==(37)
       │    │    │    │    │    │    │    │         ├── inner-join (lookup flavors@flavors_flavorid_key)
       │    │    │    │    │    │    │    │         │    ├── columns: flavors.id:1!null flavorid:7!null "$2":37!null
+      │    │    │    │    │    │    │    │         │    ├── flags: disallow merge join
       │    │    │    │    │    │    │    │         │    ├── key columns: [37] = [7]
       │    │    │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
@@ -1031,6 +1032,7 @@ project
       │    │    │    │    │    │    │    │         ├── fd: ()-->(1-16,42,43), (42)==(13), (2)==(43), (43)==(2), (13)==(42)
       │    │    │    │    │    │    │    │         ├── inner-join (lookup instance_types@instance_types_name_deleted_key)
       │    │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null name:2!null instance_types.deleted:13!null "$1":42!null "$4":43!null
+      │    │    │    │    │    │    │    │         │    ├── flags: disallow merge join
       │    │    │    │    │    │    │    │         │    ├── key columns: [43 42] = [2 13]
       │    │    │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
@@ -1209,6 +1211,7 @@ project
       │    │    │    │    │    │    │    ├── fd: ()-->(1-16)
       │    │    │    │    │    │    │    └── inner-join (lookup instance_types)
       │    │    │    │    │    │    │         ├── columns: instance_types.id:1!null name:2 memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7 swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 instance_types.deleted:13!null instance_types.deleted_at:14 instance_types.created_at:15 instance_types.updated_at:16 "$4":42!null "$1":43!null
+      │    │    │    │    │    │    │         ├── flags: disallow merge join
       │    │    │    │    │    │    │         ├── key columns: [42] = [1]
       │    │    │    │    │    │    │         ├── lookup columns are key
       │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
@@ -1238,6 +1241,7 @@ project
       │    │    │    │    │    │    │    │    ├── fd: ()-->(20-22)
       │    │    │    │    │    │    │    │    └── inner-join (lookup instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key)
       │    │    │    │    │    │    │    │         ├── columns: instance_type_projects.instance_type_id:20!null project_id:21!null instance_type_projects.deleted:22!null "$2":44!null "$3":45!null "$4":46!null
+      │    │    │    │    │    │    │    │         ├── flags: disallow merge join
       │    │    │    │    │    │    │    │         ├── key columns: [46 45 44] = [20 21 22]
       │    │    │    │    │    │    │    │         ├── lookup columns are key
       │    │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
@@ -1417,6 +1421,7 @@ project
       │    │    │    │    │    │    │    │         ├── fd: ()-->(1-12,14,15,37), (37)==(2), (2)==(37)
       │    │    │    │    │    │    │    │         ├── inner-join (lookup flavors@flavors_name_key)
       │    │    │    │    │    │    │    │         │    ├── columns: flavors.id:1!null name:2!null "$2":37!null
+      │    │    │    │    │    │    │    │         │    ├── flags: disallow merge join
       │    │    │    │    │    │    │    │         │    ├── key columns: [37] = [2]
       │    │    │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
@@ -1593,6 +1598,7 @@ project
       │    │    │    │    │    │    │    │         ├── fd: ()-->(1-12,14,15,37), (37)==(7), (7)==(37)
       │    │    │    │    │    │    │    │         ├── inner-join (lookup flavors@flavors_flavorid_key)
       │    │    │    │    │    │    │    │         │    ├── columns: flavors.id:1!null flavorid:7!null "$2":37!null
+      │    │    │    │    │    │    │    │         │    ├── flags: disallow merge join
       │    │    │    │    │    │    │    │         │    ├── key columns: [37] = [7]
       │    │    │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
@@ -2160,6 +2166,7 @@ project
       │    │    │    │    │    │    │    │         ├── fd: ()-->(1-16,42,43), (42)==(13), (7)==(43), (43)==(7), (13)==(42)
       │    │    │    │    │    │    │    │         ├── inner-join (lookup instance_types@instance_types_flavorid_deleted_key)
       │    │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null flavorid:7!null instance_types.deleted:13!null "$1":42!null "$4":43!null
+      │    │    │    │    │    │    │    │         │    ├── flags: disallow merge join
       │    │    │    │    │    │    │    │         │    ├── key columns: [43 42] = [7 13]
       │    │    │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
@@ -3149,6 +3156,7 @@ project
       │    │    │    │    │    │    │    │         ├── fd: ()-->(1-16,42,43), (42)==(13), (7)==(43), (43)==(7), (13)==(42)
       │    │    │    │    │    │    │    │         ├── inner-join (lookup instance_types@instance_types_flavorid_deleted_key)
       │    │    │    │    │    │    │    │         │    ├── columns: instance_types.id:1!null flavorid:7!null instance_types.deleted:13!null "$1":42!null "$4":43!null
+      │    │    │    │    │    │    │    │         │    ├── flags: disallow merge join
       │    │    │    │    │    │    │    │         │    ├── key columns: [43 42] = [7 13]
       │    │    │    │    │    │    │    │         │    ├── lookup columns are key
       │    │    │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
@@ -3318,6 +3326,7 @@ project
       │    │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15)
       │    │    │    │    │    │    │    └── inner-join (lookup flavors)
       │    │    │    │    │    │    │         ├── columns: flavors.id:1!null name:2!null memory_mb:3!null vcpus:4!null root_gb:5 ephemeral_gb:6 flavorid:7!null swap:8!null rxtx_factor:9 vcpu_weight:10 disabled:11 is_public:12 flavors.created_at:14 flavors.updated_at:15 "$2":37!null
+      │    │    │    │    │    │    │         ├── flags: disallow merge join
       │    │    │    │    │    │    │         ├── key columns: [37] = [1]
       │    │    │    │    │    │    │         ├── lookup columns are key
       │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
@@ -3346,6 +3355,7 @@ project
       │    │    │    │    │    │    │    │    ├── fd: ()-->(19,20)
       │    │    │    │    │    │    │    │    └── inner-join (lookup flavor_projects@flavor_projects_flavor_id_project_id_key)
       │    │    │    │    │    │    │    │         ├── columns: flavor_projects.flavor_id:19!null project_id:20!null "$1":38!null "$2":39!null
+      │    │    │    │    │    │    │    │         ├── flags: disallow merge join
       │    │    │    │    │    │    │    │         ├── key columns: [39 38] = [19 20]
       │    │    │    │    │    │    │    │         ├── lookup columns are key
       │    │    │    │    │    │    │    │         ├── cardinality: [0 - 1]
