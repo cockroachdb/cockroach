@@ -127,16 +127,23 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 	demoCtx.UseEmptyDatabase = true
 	demoCtx.Multitenant = false
 	return runDemoInternal(cmd, nil /* gen */, func(ctx context.Context, conn clisqlclient.Conn) error {
-		// Disable autostats collection, which will override the injected stats.
-		if err := conn.Exec(ctx,
-			`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`); err != nil {
-			return errors.Wrap(err, "disabling stats collection")
+		// SET CLUSTER SETTING statements cannot be executed in multi-statement
+		// implicit transaction, so we need to separate them out into their own
+		// implicit transactions.
+		initStmts := strings.Split(string(bundle.env), "SET CLUSTER SETTING")
+		for i := 1; i < len(initStmts); i++ {
+			initStmts[i] = "SET CLUSTER SETTING " + initStmts[i]
 		}
-		var initStmts = [][]byte{bundle.env, bundle.schema}
-		initStmts = append(initStmts, bundle.stats...)
-		for _, a := range initStmts {
-			if err := conn.Exec(ctx, string(a)); err != nil {
-				return errors.Wrapf(err, "failed to run: %s", a)
+		// Disable auto stats collection (which would override the injected
+		// stats).
+		initStmts = append(initStmts, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
+		initStmts = append(initStmts, string(bundle.schema))
+		for _, stats := range bundle.stats {
+			initStmts = append(initStmts, string(stats))
+		}
+		for _, s := range initStmts {
+			if err := conn.Exec(ctx, s); err != nil {
+				return errors.Wrapf(err, "failed to run: %s", s)
 			}
 		}
 
