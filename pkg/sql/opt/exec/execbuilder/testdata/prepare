@@ -135,7 +135,7 @@ quality of service: regular
   KV bytes read: 8 B
   KV gRPC calls: 1
   estimated max memory allocated: 0 B
-  estimated row count: 0
+  estimated row count: 1
   table: ab@ab_pkey
   spans: [/1 - /1]
 
@@ -164,6 +164,6 @@ quality of service: regular
   KV bytes read: 0 B
   KV gRPC calls: 0
   estimated max memory allocated: 0 B
-  estimated row count: 0
+  estimated row count: 1
   table: ab@ab_pkey
   spans: [/2 - /2]
