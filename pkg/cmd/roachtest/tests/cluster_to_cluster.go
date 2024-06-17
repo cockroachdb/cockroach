@@ -1093,25 +1093,6 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 func registerClusterToCluster(r registry.Registry) {
 	for _, sp := range []replicationSpec{
 		{
-			// Cutover TO LATEST:
-			name:      "c2c/tpcc/warehouses=500/duration=10/cutover=0",
-			benchmark: true,
-			srcNodes:  4,
-			dstNodes:  4,
-			cpus:      8,
-			pdSize:    1000,
-			// 500 warehouses adds 30 GB to source
-			//
-			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
-			// job speeds up.
-			workload:           replicateTPCC{warehouses: 500},
-			timeout:            1 * time.Hour,
-			additionalDuration: 10 * time.Minute,
-			cutover:            0,
-			clouds:             registry.OnlyGCE,
-			suites:             registry.Suites(registry.Nightly),
-		},
-		{
 			name:      "c2c/tpcc/warehouses=1000/duration=60/cutover=30",
 			benchmark: true,
 			srcNodes:  4,
