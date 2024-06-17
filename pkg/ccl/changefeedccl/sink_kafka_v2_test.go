@@ -171,7 +171,7 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 
 // TODOs:
 // - adapt sink_test's topic naming tests (prefix, escaping, etc)
-// - test opts construction
+// - test opts construction. using client.OptValues() (neat trick!)
 
 func TestKafkaBuffer(t *testing.T) {
 	t.Skip("TODO: test flushing under various configurations")
