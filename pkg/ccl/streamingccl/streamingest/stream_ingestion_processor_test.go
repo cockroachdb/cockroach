@@ -138,11 +138,11 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	t.Run("finite stream client", func(t *testing.T) {
 		events := func() []streamingccl.Event {
 			return []streamingccl.Event{
-				streamingccl.MakeKVEvent(sampleKV()),
-				streamingccl.MakeKVEvent(sampleKV()),
+				streamingccl.MakeKVEventFromKVs(sampleKV()),
+				streamingccl.MakeKVEventFromKVs(sampleKV()),
 				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 2)),
-				streamingccl.MakeKVEvent(sampleKV()),
-				streamingccl.MakeKVEvent(sampleKV()),
+				streamingccl.MakeKVEventFromKVs(sampleKV()),
+				streamingccl.MakeKVEventFromKVs(sampleKV()),
 				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 4)),
 				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p2Span, 5)),
 			}
@@ -222,7 +222,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			return []streamingccl.Event{
 				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 2)),
 				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 4)),
-				streamingccl.MakeKVEvent(sampleKV()),
+				streamingccl.MakeKVEventFromKVs(sampleKV()),
 			}
 		}
 		mockClient := &streamclient.MockStreamClient{
@@ -318,9 +318,9 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	t.Run("resume from checkpoint", func(t *testing.T) {
 		events := func() []streamingccl.Event {
 			return []streamingccl.Event{
-				streamingccl.MakeKVEvent(sampleKV()),
+				streamingccl.MakeKVEventFromKVs(sampleKV()),
 				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p2Span, 2)),
-				streamingccl.MakeKVEvent(sampleKV()),
+				streamingccl.MakeKVEventFromKVs(sampleKV()),
 				streamingccl.MakeCheckpointEvent(sampleCheckpoint(p1Span, 6)),
 			}
 		}
@@ -753,20 +753,22 @@ func resolvedSpansMinTS(resolvedSpans []jobspb.ResolvedSpan) hlc.Timestamp {
 }
 
 func noteKeyVal(
-	validator *streamClientValidator, keyVals []roachpb.KeyValue, spec streamclient.SubscriptionToken,
+	validator *streamClientValidator,
+	keyVals []streampb.StreamEvent_KV,
+	spec streamclient.SubscriptionToken,
 ) {
 	for _, keyVal := range keyVals {
 		if validator.rekeyer != nil {
-			rekey, _, err := validator.rekeyer.RewriteTenant(keyVal.Key)
+			rekey, _, err := validator.rekeyer.RewriteTenant(keyVal.KeyValue.Key)
 			if err != nil {
 				panic(err.Error())
 			}
-			keyVal.Key = rekey
-			keyVal.Value.ClearChecksum()
-			keyVal.Value.InitChecksum(keyVal.Key)
+			keyVal.KeyValue.Key = rekey
+			keyVal.KeyValue.Value.ClearChecksum()
+			keyVal.KeyValue.Value.InitChecksum(keyVal.KeyValue.Key)
 		}
-		err := validator.noteRow(string(spec), string(keyVal.Key), string(keyVal.Value.RawBytes),
-			keyVal.Value.Timestamp)
+		err := validator.noteRow(string(spec), string(keyVal.KeyValue.Key), string(keyVal.KeyValue.Value.RawBytes),
+			keyVal.KeyValue.Value.Timestamp)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -787,13 +789,14 @@ func validateFnWithValidator(
 		case streamingccl.SSTableEvent:
 			kvs := storageutils.ScanSST(t, event.GetSSTable().Data)
 			for _, keyVal := range kvs.MVCCKeyValues() {
-				noteKeyVal(validator, []roachpb.KeyValue{{
-					Key: keyVal.Key.Key,
-					Value: roachpb.Value{
-						RawBytes:  keyVal.Value,
-						Timestamp: keyVal.Key.Timestamp,
-					},
-				}}, spec)
+				noteKeyVal(validator, []streampb.StreamEvent_KV{{
+					KeyValue: roachpb.KeyValue{
+						Key: keyVal.Key.Key,
+						Value: roachpb.Value{
+							RawBytes:  keyVal.Value,
+							Timestamp: keyVal.Key.Timestamp,
+						},
+					}}}, spec)
 			}
 		case streamingccl.KVEvent:
 			noteKeyVal(validator, event.GetKVs(), spec)

@@ -115,9 +115,9 @@ func (d *partitionStreamDecoder) pop() streamingccl.Event {
 	}
 
 	if d.e.Batch != nil {
-		event := streamingccl.MakeKVEvent([]roachpb.KeyValue{d.e.Batch.KeyValues[0]})
-		d.e.Batch.KeyValues = d.e.Batch.KeyValues[1:]
-		if len(d.e.Batch.KeyValues) == 0 {
+		event := streamingccl.MakeKVEvent(d.e.Batch.KVs[0:1])
+		d.e.Batch.KVs = d.e.Batch.KVs[1:]
+		if len(d.e.Batch.KVs) == 0 {
 			d.e.Batch = nil
 		}
 		return event
@@ -449,7 +449,7 @@ CREATE TABLE t3(
 		for {
 			require.True(t, source.mu.rows.Next())
 			source.mu.codec.decode()
-			if codec.e.Batch != nil && len(codec.e.Batch.KeyValues) > 0 {
+			if codec.e.Batch != nil && len(codec.e.Batch.KVs) > 0 {
 				break
 			}
 		}
@@ -523,9 +523,9 @@ USE d;
 				if len(codec.e.Batch.Ssts) > 0 {
 					require.Equal(t, 1, len(codec.e.Batch.Ssts))
 					require.Regexp(t, "/Tenant/10/Table/.*42.*", codec.e.Batch.Ssts[0].Span.String())
-				} else if len(codec.e.Batch.KeyValues) > 0 {
-					require.LessOrEqual(t, 1, len(codec.e.Batch.KeyValues))
-					require.Regexp(t, "/Tenant/10/Table/.*42.*", codec.e.Batch.KeyValues[0].Key.String())
+				} else if len(codec.e.Batch.KVs) > 0 {
+					require.LessOrEqual(t, 1, len(codec.e.Batch.KVs))
+					require.Regexp(t, "/Tenant/10/Table/.*42.*", codec.e.Batch.KVs[0].KeyValue.Key.String())
 				}
 				break
 			}
@@ -699,9 +699,9 @@ USE d;
 		return rKeySpans
 	}
 
-	consumeUntilTimestamp := func(ts hlc.Timestamp) ([]roachpb.KeyValue, []roachpb.Span) {
+	consumeUntilTimestamp := func(ts hlc.Timestamp) ([]streampb.StreamEvent_KV, []roachpb.Span) {
 		t.Logf("consuming until %s", ts)
-		receivedKVs := make([]roachpb.KeyValue, 0)
+		receivedKVs := make([]streampb.StreamEvent_KV, 0)
 		receivedDelRangeSpans := make([]roachpb.Span, 0)
 		f, err := span.MakeFrontier(spans...)
 		require.NoError(t, err)
@@ -719,7 +719,7 @@ USE d;
 					t.Logf("%s current frontier %s", timeutil.Now(), f.Frontier())
 				}
 			} else if codec.e.Batch != nil {
-				receivedKVs = append(receivedKVs, codec.e.Batch.KeyValues...)
+				receivedKVs = append(receivedKVs, codec.e.Batch.KVs...)
 				for _, dr := range codec.e.Batch.DelRanges {
 					receivedDelRangeSpans = append(receivedDelRangeSpans, dr.Span)
 				}
@@ -770,8 +770,8 @@ USE d;
 	require.NoError(t, err)
 
 	receivedKVs, receivedDelRangeSpans := consumeUntilTimestamp(batchHLCTime)
-	require.Equal(t, t2Span.Key, receivedKVs[0].Key)
-	require.True(t, batchHLCTime.LessEq(receivedKVs[0].Value.Timestamp))
+	require.Equal(t, t2Span.Key, receivedKVs[0].KeyValue.Key)
+	require.True(t, batchHLCTime.LessEq(receivedKVs[0].KeyValue.Value.Timestamp))
 	require.Equal(t, expectedDelRanges, normalizeRangeKeys(receivedDelRangeSpans))
 }
 

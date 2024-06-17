@@ -105,7 +105,7 @@ func (sc testStreamClient) Subscribe(
 	}
 
 	events := make(chan streamingccl.Event, 2)
-	events <- streamingccl.MakeKVEvent([]roachpb.KeyValue{sampleKV})
+	events <- streamingccl.MakeKVEventFromKVs([]roachpb.KeyValue{sampleKV})
 	events <- streamingccl.MakeCheckpointEvent([]jobspb.ResolvedSpan{sampleResolvedSpan})
 	close(events)
 
@@ -308,7 +308,7 @@ func ExampleClient() {
 				case streamingccl.KVEvent:
 					kvs := event.GetKVs()
 					for _, kv := range kvs {
-						fmt.Printf("kv: %s->%s@%d\n", kv.Key.String(), string(kv.Value.RawBytes), kv.Value.Timestamp.WallTime)
+						fmt.Printf("kv: %s->%s@%d\n", kv.KeyValue.Key.String(), string(kv.KeyValue.Value.RawBytes), kv.KeyValue.Value.Timestamp.WallTime)
 					}
 				case streamingccl.SSTableEvent:
 					sst := event.GetSSTable()
