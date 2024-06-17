@@ -520,6 +520,9 @@ message LocalOnlySessionData {
   // OptimizerPushOffsetIntoIndexJoin, when true, indicates that the optimizer
   // should push offset expressions into index joins.
   bool optimizer_push_offset_into_index_join = 132;
+  // PlanCacheMode indicates the method that the optimizer should use to choose
+  // between a custom and generic query plan.
+  PlanCacheMode plan_cache_mode = 133;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
@@ -534,6 +537,23 @@ enum ReplicationMode {
   REPLICATION_MODE_DISABLED = 0;
   REPLICATION_MODE_ENABLED = 1;
   REPLICATION_MODE_DATABASE = 2;
+}
+
+// PlanCacheMode controls the optimizer's decision to use a custom or generic
+// query plan.
+enum PlanCacheMode {
+  option (gogoproto.goproto_enum_prefix) = false;
+  option (gogoproto.goproto_enum_stringer) = false;
+
+  // PlanCacheModeForceCustom forces the optimizer to use a custom query plan.
+  force_custom_plan = 0 [(gogoproto.enumvalue_customname) = "PlanCacheModeForceCustom"];
+
+  // PlanCacheModeForceCustom forces the optimizer to use a generic query plan.
+  force_generic_plan = 1 [(gogoproto.enumvalue_customname) = "PlanCacheModeForceGeneric"];
+
+  // PlanCacheModeAuto allows the optimizer to automatically choose between a
+  // custom and generic query plan.
+  auto = 2 [(gogoproto.enumvalue_customname) = "PlanCacheModeAuto"];
 }
 
 // SequenceCacheEntry is an entry in a SequenceCache.

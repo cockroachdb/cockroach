@@ -80,6 +80,25 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 	return m, true
 }
 
+func (m PlanCacheMode) String() string {
+	name, ok := PlanCacheMode_name[int32(m)]
+	if !ok {
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+	return name
+}
+
+// PlanCacheModeFromString converts a string into a PlanCacheMode. False is
+// returned if the conversion was unsuccessful.
+func PlanCacheModeFromString(val string) (PlanCacheMode, bool) {
+	lowerVal := strings.ToLower(val)
+	m, ok := PlanCacheMode_value[lowerVal]
+	if !ok {
+		return 0, false
+	}
+	return PlanCacheMode(m), true
+}
+
 // User retrieves the current user.
 func (s *SessionData) User() username.SQLUsername {
 	return s.UserProto.Decode()
