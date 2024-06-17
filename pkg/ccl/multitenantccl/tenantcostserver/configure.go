@@ -11,6 +11,7 @@ package tenantcostserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -33,7 +34,13 @@ func (s *instance) ReconfigureTokenBucket(
 	if err := s.checkTenantID(ctx, txn, tenantID); err != nil {
 		return err
 	}
-	h := makeSysTableHelper(ctx, tenantID)
+
+	// Check whether the consumption rates migration has run. If not, then do not
+	// attempt to write the new rates columns.
+	// TODO(andyk): Remove this after 24.3.
+	ratesAvailable := s.settings.Version.IsActive(ctx, clusterversion.V24_2_TenantRates)
+
+	h := makeSysTableHelper(ctx, tenantID, ratesAvailable)
 	state, err := h.readTenantState(txn)
 	if err != nil {
 		return err
@@ -41,7 +48,7 @@ func (s *instance) ReconfigureTokenBucket(
 	now := s.timeSource.Now()
 	state.update(now)
 	state.Bucket.Reconfigure(ctx, tenantID, availableTokens, refillRate, maxBurstTokens)
-	if err := h.updateTenantState(txn, state); err != nil {
+	if err := h.updateTenantAndInstanceState(txn, &state, nil); err != nil {
 		return err
 	}
 	return nil

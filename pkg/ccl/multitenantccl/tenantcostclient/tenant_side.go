@@ -115,10 +115,6 @@ const extendedReportingPeriodFactor = 4
 // estimated usage. This is intended to support usage spikes without blocking.
 const bufferTokens = 5000
 
-// defaultWriteBatchRate specifies the write batch rate that will be used to
-// estimate KV CPU when an actual measurement of the rate is not available.
-const defaultWriteBatchRate = 1000
-
 // tokensPerCPUSecond is the factor used to convert from estimated KV CPU
 // seconds to tokens in the distributed token bucket. This factor was chosen to
 // convert from seconds to milliseconds, as that measurement has a similar
@@ -241,8 +237,14 @@ type tenantSideCostController struct {
 	// avgSQLCPUPerSec is an exponentially-weighted moving average of the SQL CPU
 	// usage per second; used to estimate the CPU usage of a query. It is only
 	// written in the main loop, but can be read by multiple goroutines so is an
-	// atomic.
+	// atomic. It is a Uint64-encoded float64 value.
 	avgSQLCPUPerSec atomic.Uint64
+
+	// writeQPS is the recent global rate of write batches per second for this
+	// tenant, measured across all SQL pods. It is only written in the main loop,
+	// but can be read by multiple goroutines so is an atomic. It is a
+	// Uint64-encoded float64 value.
+	writeQPS atomic.Uint64
 
 	// lowTokensNotifyChan is used when the number of available tokens is running
 	// low and we need to send an early token bucket request.
@@ -645,6 +647,9 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		cfg.MaxTokens = bufferTokens + granted
 	}
 
+	// Store global write QPS for the tenant.
+	c.writeQPS.Store(math.Float64bits(resp.ConsumptionRates.WriteBatchRate))
+
 	c.limiter.Reconfigure(now, cfg)
 	c.run.lastRate = cfg.NewRate
 
@@ -791,7 +796,8 @@ func (c *tenantSideCostController) OnResponseWait(
 	} else {
 		// Estimate CPU usage for the operation.
 		cpuModel := c.cpuModel.Load()
-		estimatedCPU := cpuModel.RequestCost(req, defaultWriteBatchRate/nodeCount)
+		writeQPS := math.Float64frombits(c.writeQPS.Load())
+		estimatedCPU := cpuModel.RequestCost(req, writeQPS/nodeCount)
 		estimatedCPU += cpuModel.ResponseCost(resp)
 		tokens = float64(estimatedCPU) * tokensPerCPUSecond
 
