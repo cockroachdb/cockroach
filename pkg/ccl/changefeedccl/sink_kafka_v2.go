@@ -354,16 +354,12 @@ func buildKgoConfig(
 	u sinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 ) ([]kgo.Opt, error) {
-	// TODO: what's the equivalent of the frequency option? is there even one? like maybe not
 	var opts []kgo.Opt
 
 	dialConfig, err := buildDialConfig(u)
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO: metrics
-	// config.MetricRegistry = newMetricsRegistryInterceptor(kafkaThrottlingMetrics)
 
 	if dialConfig.tlsEnabled {
 		tlsCfg := &tls.Config{InsecureSkipVerify: dialConfig.tlsSkipVerify}
@@ -483,14 +479,6 @@ func buildKgoConfig(
 		// TODO: make sure this is right. i think the intention of the setting is just to support really old versions, which is what the Max is for
 		opts = append(opts, kgo.MaxVersions(v))
 	}
-
-	// TODO: other opts like
-	// webhooks', for reference
-	// Flush.Messages
-	// Flush.Bytes
-	// Flush.Frequency
-	// Retry.Max
-	// Retry.Backoff
 
 	return opts, nil
 }
