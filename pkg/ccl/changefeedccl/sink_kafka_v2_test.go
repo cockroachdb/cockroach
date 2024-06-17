@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"reflect"
+	"runtime"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
@@ -16,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/kversion"
 )
 
 // TODO: why no worky
@@ -253,6 +259,84 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 	})
 }
 
+func TestKafkaSinkClientV2_Opts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type check struct {
+		opt      string
+		expected any
+	}
+
+	t.Run("default", func(t *testing.T) {
+		fx := newKafkaSinkV2Fx(t, withJSONConfig("{}"), withRealClient())
+		defer fx.close()
+
+		opts := []check{
+			{"ClientID", "CockroachDB"},
+			{"Compression", kgo.NoCompression()},
+			{"RequiredAcks", kgo.NoAck()},
+			{"Version", nil}, // Unset.
+			{"DialTLSConfig", nil},
+			{"SASL", nil},
+		}
+
+		client := fx.bs.client.(*kafkaSinkClient).client.(*kgo.Client)
+		for _, o := range opts {
+			vals := client.OptValues(o.opt) // This lets us distinguis between zero and unset.
+			var val any
+			if vals != nil {
+				val = vals[0]
+			}
+			assert.Equal(t, o.expected, val, "opt %q has value %v (expected %v)", o.opt, val, o.expected)
+		}
+		assert.Equal(t, 1000, fx.bs.client.(*kafkaSinkClient).batchCfg.Messages)
+		assert.Equal(t, 0, fx.bs.client.(*kafkaSinkClient).batchCfg.Bytes)
+		assert.Equal(t, 1*time.Millisecond, fx.bs.client.(*kafkaSinkClient).batchCfg.Frequency)
+
+	})
+
+	t.Run("custom", func(t *testing.T) {
+		j := `
+	{
+		"ClientID": "test",
+		"Compression": "gzip",
+		"RequiredAcks": "ALL",
+		"Version": "3.6.2",
+		"Flush": {
+			"Messages": 100,
+			"Bytes": 1000,
+			"Frequency": "1s",
+			"MaxMessages": 1000
+		}
+	}
+	`
+		fx := newKafkaSinkV2Fx(t, withJSONConfig(j), withRealClient())
+		defer fx.close()
+
+		opts := []check{
+			{"ClientID", "test"},
+			{"Compression", kgo.GzipCompression()},
+			{"RequiredAcks", kgo.AllISRAcks()},
+			{"Version", kgo.MaxVersions(kversion.V3_6_0())},
+		}
+
+		client := fx.bs.client.(*kafkaSinkClient).client.(*kgo.Client)
+		for _, o := range opts {
+			vals := client.OptValues(o.opt)
+			var val any
+			if vals != nil {
+				val = vals[0]
+			}
+			assert.Equal(t, o.expected, val, "opt %q has value %v (expected %v)", o.opt, val, o.expected)
+		}
+
+		assert.Equal(t, 100, fx.bs.client.(*kafkaSinkClient).batchCfg.Messages) // Takes the minimum of the two, for backwards compatibility.
+		assert.Equal(t, 1000, fx.bs.client.(*kafkaSinkClient).batchCfg.Bytes)
+		assert.Equal(t, 1*time.Second, fx.bs.client.(*kafkaSinkClient).batchCfg.Frequency)
+	})
+}
+
 func TestKafkaBuffer(t *testing.T) {
 	t.Skip("TODO: test flushing under various configurations")
 }
@@ -265,9 +349,13 @@ type kafkaSinkV2Fx struct {
 	ac       *mocks.MockKafkaAdminClientV2
 	mockCtrl *gomock.Controller
 
-	targetNames   []string
-	topicOverride string
-	topicPrefix   string
+	// set with fxOpts to modify the created sinks
+	targetNames    []string
+	topicOverride  string
+	topicPrefix    string
+	sinkJSONConfig changefeedbase.SinkSpecificJSONConfig
+	batchConfig    sinkBatchConfig
+	realClient     bool
 
 	sink *kafkaSinkClient
 	bs   *batchingSink
@@ -299,6 +387,24 @@ func withTopicPrefix(prefix string) fxOpt {
 	}
 }
 
+func withJSONConfig(cfg string) fxOpt {
+	return func(fx *kafkaSinkV2Fx) {
+		fx.sinkJSONConfig = changefeedbase.SinkSpecificJSONConfig(cfg)
+	}
+}
+
+func withBatchConfig(cfg sinkBatchConfig) fxOpt {
+	return func(fx *kafkaSinkV2Fx) {
+		fx.batchConfig = cfg
+	}
+}
+
+func withRealClient() fxOpt {
+	return func(fx *kafkaSinkV2Fx) {
+		fx.realClient = true
+	}
+}
+
 func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -327,8 +433,12 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 		},
 	}
 
+	if fx.realClient {
+		knobs = kafkaSinkV2Knobs{}
+	}
+
 	var err error
-	fx.sink, err = newKafkaSinkClient(ctx, nil, sinkBatchConfig{}, "no addrs", settings, knobs, nilMetricsRecorderBuilder)
+	fx.sink, err = newKafkaSinkClient(ctx, nil, fx.batchConfig, "no addrs", settings, knobs, nilMetricsRecorderBuilder)
 	require.NoError(t, err)
 
 	targets := makeChangefeedTargets(fx.targetNames...)
@@ -345,7 +455,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 	u.RawQuery = q.Encode()
 
-	bs, err := makeKafkaSinkV2(ctx, sinkURL{URL: u}, targets, "{}", 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
+	bs, err := makeKafkaSinkV2(ctx, sinkURL{URL: u}, targets, fx.sinkJSONConfig, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
 	require.NoError(t, err)
 	fx.bs = bs.(*batchingSink)
 
@@ -369,3 +479,16 @@ func (f fnMatcher) String() string {
 }
 
 var _ gomock.Matcher = fnMatcher(nil)
+
+func namefn(fn any) string {
+	v := reflect.ValueOf(fn)
+	if v.Type().Kind() != reflect.Func {
+		return ""
+	}
+	name := runtime.FuncForPC(v.Pointer()).Name()
+	dot := strings.LastIndexByte(name, '.')
+	if dot >= 0 {
+		return name[dot+1:]
+	}
+	return name
+}

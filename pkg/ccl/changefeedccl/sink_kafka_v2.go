@@ -31,6 +31,9 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
+// newKafkaSinkClient creates a new kafka sink client. It is a thin wrapper
+// around the kgo client for use by the batching sink. It's not meant to be
+// invoked on its own, but rather through makeKafkaSinkV2.
 func newKafkaSinkClient(
 	ctx context.Context,
 	clientOpts []kgo.Opt,
@@ -42,9 +45,7 @@ func newKafkaSinkClient(
 ) (*kafkaSinkClient, error) {
 
 	baseOpts := []kgo.Opt{
-		// TODO: hooks for metrics / metric support at all
 		kgo.SeedBrokers(bootstrapAddrs),
-		kgo.ClientID(`cockroach`),
 		kgo.WithLogger(kgoLogAdapter{ctx: ctx}),
 		kgo.RecordPartitioner(newKgoChangefeedPartitioner()),
 		kgo.ProducerBatchMaxBytes(2 << 27), // nearly parity - this is the max the library allows
@@ -433,6 +434,7 @@ func buildKgoConfig(
 	}
 
 	// Apply some statement level overrides. The flush related ones (Messages, MaxMessages, Bytes) are not applied here, but on the sinkBatchConfig instead.
+	// TODO: Remove the dependence on sarama eventually.
 	sinkCfg, err := getSaramaConfig(jsonStr)
 	if err != nil {
 		return nil, errors.Wrapf(err,
