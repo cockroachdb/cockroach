@@ -155,7 +155,7 @@ type muxStreamOrError struct {
 // ││└──│── Maybe release catchup scan quota
 // ││   │
 // ││   ├─► OR Handle error
-// ││   └─► restartActiveRangeFeeds
+// ││   └─► restartActiveRangeFeed
 // ││       Determine if the error is fatal, if so terminate
 // ││       Transient error can be retried, using retry/transport state
 // │└────── stored in this structure (for example: try next replica)
@@ -228,8 +228,14 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 		parentRangeFeedMetadata: parentRangefeedMetadata,
 	}
 
+	doRelease := true
+	defer func() {
+		if doRelease {
+			stream.release()
+		}
+	}()
+
 	if err := stream.start(ctx, m); err != nil {
-		stream.release()
 		return err
 	}
 
@@ -241,6 +247,7 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 		}
 	}
 
+	doRelease = false
 	return nil
 }
 
@@ -430,7 +437,20 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		if log.V(1) {
 			log.Infof(ctx, "mux to node %d restarted %d streams", ms.nodeID, len(toRestart))
 		}
-		return m.restartActiveRangeFeeds(ctx, recvErr, toRestart)
+
+		var returnErr error
+		for _, active := range toRestart {
+			if returnErr != nil {
+				if err := m.restartActiveRangeFeed(ctx, active, recvErr); err != nil {
+					returnErr = err
+					active.release()
+				}
+			} else {
+				active.release()
+			}
+		}
+
+		return returnErr
 	}
 
 	return nil
@@ -509,18 +529,6 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 		case m.eventCh <- msg:
 		}
 	}
-}
-
-// restartActiveRangeFeeds restarts one or more rangefeeds.
-func (m *rangefeedMuxer) restartActiveRangeFeeds(
-	ctx context.Context, reason error, toRestart []*activeMuxRangeFeed,
-) error {
-	for _, active := range toRestart {
-		if err := m.restartActiveRangeFeed(ctx, active, reason); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // restartActiveRangeFeed restarts rangefeed after it encountered "reason" error.
