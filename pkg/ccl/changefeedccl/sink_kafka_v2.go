@@ -64,6 +64,11 @@ func newKafkaSinkClient(
 		// response.
 		// kgo.RecordRetries(5),
 		// TODO: test that produce will indeed fail eventually if it keeps getting errors
+
+		// This detects unavoidable data loss due to kafka cluster issues, and we may as well log about it.
+		kgo.ProducerOnDataLossDetected(func(topic string, part int32) {
+			log.Errorf(ctx, `kafka producer detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
+		}),
 	}, clientOpts...)
 
 	var client KafkaClientV2
