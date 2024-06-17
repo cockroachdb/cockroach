@@ -85,6 +85,8 @@ go_library(
         "//pkg/sql/storageparam/indexstorageparam",
         "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",

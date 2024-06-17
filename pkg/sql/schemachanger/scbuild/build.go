@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/redact"
 )
@@ -124,11 +125,16 @@ func Build(
 	return ret, eventLogCallBack, nil
 }
 
+type loggedTarget struct {
+	target    scpb.Target
+	maybeInfo logpb.EventPayload
+}
+
 // makeState populates the declarative schema changer state returned by Build
 // with the targets and the statuses present in the builderState.
 func makeState(
 	version clusterversion.ClusterVersion, bs *builderState,
-) (s scpb.CurrentState, loggedTargets []scpb.Target) {
+) (s scpb.CurrentState, loggedTargets []loggedTarget) {
 	s = scpb.CurrentState{
 		TargetState: scpb.TargetState{
 			Targets:      make([]scpb.Target, 0, len(bs.output)),
@@ -137,7 +143,7 @@ func makeState(
 		Initial: make([]scpb.Status, 0, len(bs.output)),
 		Current: make([]scpb.Status, 0, len(bs.output)),
 	}
-	loggedTargets = make([]scpb.Target, 0, len(bs.output))
+	loggedTargets = make([]loggedTarget, 0, len(bs.output))
 	isElementAllowedInVersion := func(e scpb.Element) bool {
 		if !screl.VersionSupportsElementUse(e, version) {
 			// Exclude targets which are not yet usable in the currently active
@@ -180,7 +186,8 @@ func makeState(
 		s.Initial = append(s.Initial, e.initial)
 		s.Current = append(s.Current, e.current)
 		if e.withLogEvent {
-			loggedTargets = append(loggedTargets, t)
+			lt := loggedTarget{target: t, maybeInfo: e.maybePayload}
+			loggedTargets = append(loggedTargets, lt)
 		}
 	}
 	return s, loggedTargets
@@ -209,6 +216,9 @@ type elementState struct {
 	// withLogEvent is true iff an event should be written to the event log
 	// based on this element.
 	withLogEvent bool
+	// maybePayload exists if extra details need to be passed down to our
+	// payload builder in order to log our event.
+	maybePayload logpb.EventPayload
 }
 
 // byteSize returns an estimated memory usage of `es` in bytes.
