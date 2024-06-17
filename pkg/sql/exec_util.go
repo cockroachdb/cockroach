@@ -3825,6 +3825,10 @@ func (m *sessionDataMutator) SetOptimizerPushOffsetIntoIndexJoin(val bool) {
 	m.data.OptimizerPushOffsetIntoIndexJoin = val
 }
 
+func (m *sessionDataMutator) SetPlanCacheMode(val sessiondatapb.PlanCacheMode) {
+	m.data.PlanCacheMode = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
