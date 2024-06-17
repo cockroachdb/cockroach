@@ -48,7 +48,7 @@ func KeyMatches(key roachpb.Key) FeedEventPredicate {
 			return false
 		}
 		for _, kv := range msg.GetKVs() {
-			if bytes.Equal(key, kv.Key) {
+			if bytes.Equal(key, kv.KeyValue.Key) {
 				return true
 			}
 		}
@@ -120,7 +120,7 @@ func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roac
 	rf.consumeUntil(ctx, KeyMatches(key), func(err error) bool {
 		return false
 	})
-	return rf.msg.GetKVs()[0]
+	return rf.msg.GetKVs()[0].KeyValue
 }
 
 // ObserveAnySpanConfigRecord consumes the feed until any span config record is observed.
