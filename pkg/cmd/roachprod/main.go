@@ -542,6 +542,7 @@ var loadBalancerPGUrl = &cobra.Command{
 			return err
 		}
 		url, err := roachprod.LoadBalancerPgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
+			Database:           database,
 			External:           external,
 			Secure:             isSecure,
 			VirtualClusterName: virtualClusterName,
@@ -629,8 +630,8 @@ var updateTargetsCmd = &cobra.Command{
 	Short: "update prometheus target configurations for a cluster",
 	Long: `Update prometheus target configurations of each node of a cluster.
 
-The "start" command updates the prometheus target configuration every time. But, in case of any  
-failure, this command can be used to update the configurations. 
+The "start" command updates the prometheus target configuration every time. But, in case of any
+failure, this command can be used to update the configurations.
 
 The default prometheus url is https://grafana.testeng.crdb.io/. This can be overwritten by using the
 environment variable COCKROACH_PROM_HOST_URL
@@ -1144,7 +1145,7 @@ var sqlCmd = &cobra.Command{
 			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
 		}
 
-		return roachprod.SQL(context.Background(), config.Logger, args[0], isSecure, virtualClusterName, sqlInstance, auth, args[1:])
+		return roachprod.SQL(context.Background(), config.Logger, args[0], isSecure, virtualClusterName, sqlInstance, auth, database, args[1:])
 	}),
 }
 
@@ -1162,6 +1163,7 @@ var pgurlCmd = &cobra.Command{
 			return err
 		}
 		urls, err := roachprod.PgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
+			Database:           database,
 			External:           external,
 			Secure:             isSecure,
 			VirtualClusterName: virtualClusterName,
