@@ -2065,6 +2065,11 @@ func (rpcCtx *Context) makeDialCtx(
 	return rpcCtx.wrapCtx(rpcCtx.MasterCtx, target, remoteNodeID, class)
 }
 
+const RemoteAddress = "raddr"
+const RemoteNode = "rnode"
+const Class = "class"
+const Rpc = "rpc"
+
 func (rpcCtx *Context) wrapCtx(
 	ctx context.Context, target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) context.Context {
@@ -2072,10 +2077,10 @@ func (rpcCtx *Context) wrapCtx(
 	if remoteNodeID == 0 {
 		rnodeID = redact.SafeString("?")
 	}
-	ctx = logtags.AddTag(ctx, "rnode", rnodeID)
-	ctx = logtags.AddTag(ctx, "raddr", target)
-	ctx = logtags.AddTag(ctx, "class", class)
-	ctx = logtags.AddTag(ctx, "rpc", nil)
+	ctx = logtags.AddTag(ctx, RemoteNode, rnodeID)
+	ctx = logtags.AddTag(ctx, RemoteAddress, target)
+	ctx = logtags.AddTag(ctx, Class, class)
+	ctx = logtags.AddTag(ctx, Rpc, nil)
 	return ctx
 }
 

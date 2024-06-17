@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -24,12 +25,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
+
+var redactedAddress = fmt.Sprintf("%s=%s", rpc.RemoteAddress, redact.RedactedMarker())
 
 // makePerNodeZipRequests defines the zipRequests (API requests) that are to be
 // performed once per node.
@@ -344,6 +349,9 @@ func (zc *debugZipContext) collectPerNodeData(
 				}
 				return err
 			})
+		if zipCtx.redact {
+			stacksDataWithLabels = redactStackTrace(stacksDataWithLabels)
+		}
 		if err := zc.z.createRawOrError(s, prefix+"/stacks_with_labels.txt", stacksDataWithLabels, requestErr); err != nil {
 			return err
 		}
@@ -520,6 +528,12 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 	}
 	return nil
+}
+
+func redactStackTrace(stacksDataWithLabels []byte) []byte {
+	re := regexp.MustCompile("raddr=[[:alnum:].:-]+")
+	data := re.ReplaceAll(stacksDataWithLabels, []byte(redactedAddress))
+	return data
 }
 
 func guessNodeURL(workingURL string, hostport string) clisqlclient.Conn {
