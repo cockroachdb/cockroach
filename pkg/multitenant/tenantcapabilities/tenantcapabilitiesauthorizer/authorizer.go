@@ -37,10 +37,10 @@ var authorizerMode = settings.RegisterEnumSetting(
 	"server.secondary_tenants.authorization.mode",
 	"configures how requests are authorized for secondary tenants",
 	"on",
-	map[int64]string{
-		int64(authorizerModeOn):       "on",
-		int64(authorizerModeAllowAll): "allow-all",
-		int64(authorizerModeV222):     "v222",
+	map[authorizerModeType]string{
+		authorizerModeOn:       "on",
+		authorizerModeAllowAll: "allow-all",
+		authorizerModeV222:     "v222",
 	},
 	settings.WithName("server.virtual_cluster_authorization.mode"),
 )
@@ -420,7 +420,7 @@ func (a *Authorizer) getMode(
 	ctx context.Context, tid roachpb.TenantID,
 ) (entry tenantcapabilities.Entry, selectedMode authorizerModeType) {
 	// We prioritize what the cluster setting tells us.
-	selectedMode = authorizerModeType(authorizerMode.Get(&a.settings.SV))
+	selectedMode = authorizerMode.Get(&a.settings.SV)
 
 	// If the mode is "on", we need to check the capabilities. Are they
 	// available?

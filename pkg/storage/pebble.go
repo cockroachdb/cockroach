@@ -159,10 +159,10 @@ var readaheadModeInformed = settings.RegisterEnumSetting(
 		"sys-readahead performs explicit prefetching via the readahead syscall; "+
 		"fadv-sequential lets the OS perform prefetching via fadvise(FADV_SEQUENTIAL)",
 	"fadv-sequential",
-	map[int64]string{
-		int64(objstorageprovider.NoReadahead):       "off",
-		int64(objstorageprovider.SysReadahead):      "sys-readahead",
-		int64(objstorageprovider.FadviseSequential): "fadv-sequential",
+	map[objstorageprovider.ReadaheadMode]string{
+		objstorageprovider.NoReadahead:       "off",
+		objstorageprovider.SysReadahead:      "sys-readahead",
+		objstorageprovider.FadviseSequential: "fadv-sequential",
 	},
 )
 
@@ -178,10 +178,10 @@ var readaheadModeSpeculative = settings.RegisterEnumSetting(
 		"fadv-sequential starts with explicit prefetching via the readahead syscall then automatically "+
 		"switches to OS-driven prefetching via fadvise(FADV_SEQUENTIAL)",
 	"fadv-sequential",
-	map[int64]string{
-		int64(objstorageprovider.NoReadahead):       "off",
-		int64(objstorageprovider.SysReadahead):      "sys-readahead",
-		int64(objstorageprovider.FadviseSequential): "fadv-sequential",
+	map[objstorageprovider.ReadaheadMode]string{
+		objstorageprovider.NoReadahead:       "off",
+		objstorageprovider.SysReadahead:      "sys-readahead",
+		objstorageprovider.FadviseSequential: "fadv-sequential",
 	},
 )
 
@@ -210,7 +210,7 @@ func (c compressionAlgorithm) String() string {
 // cluster setting with the given name, description and default value.
 func RegisterCompressionAlgorithmClusterSetting(
 	name settings.InternalKey, desc string, defaultValue compressionAlgorithm,
-) *settings.EnumSetting {
+) *settings.EnumSetting[compressionAlgorithm] {
 	return settings.RegisterEnumSetting(
 		// NB: We can't use settings.SystemOnly today because we may need to read the
 		// value from within a tenant building an sstable for AddSSTable.
@@ -219,9 +219,9 @@ func RegisterCompressionAlgorithmClusterSetting(
 		// will need to override it because they depend on a deterministic sstable
 		// size.
 		defaultValue.String(),
-		map[int64]string{
-			int64(compressionAlgorithmSnappy): compressionAlgorithmSnappy.String(),
-			int64(compressionAlgorithmZstd):   compressionAlgorithmZstd.String(),
+		map[compressionAlgorithm]string{
+			compressionAlgorithmSnappy: compressionAlgorithmSnappy.String(),
+			compressionAlgorithmZstd:   compressionAlgorithmZstd.String(),
 		},
 		settings.WithPublic,
 	)
@@ -265,12 +265,14 @@ var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSet
 )
 
 func getCompressionAlgorithm(
-	ctx context.Context, settings *cluster.Settings, setting *settings.EnumSetting,
+	ctx context.Context,
+	settings *cluster.Settings,
+	setting *settings.EnumSetting[compressionAlgorithm],
 ) pebble.Compression {
 	switch setting.Get(&settings.SV) {
-	case int64(compressionAlgorithmSnappy):
+	case compressionAlgorithmSnappy:
 		return pebble.SnappyCompression
-	case int64(compressionAlgorithmZstd):
+	case compressionAlgorithmZstd:
 		// Pre-24.1 Pebble's implementation of zstd had bugs that could cause
 		// in-memory corruption. We require that the cluster version is 24.1 which
 		// implies that all nodes are running 24.1 code and will never run code
@@ -1236,8 +1238,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 
 	cfg.opts.Local.ReadaheadConfigFn = func() pebble.ReadaheadConfig {
 		return pebble.ReadaheadConfig{
-			Informed:    objstorageprovider.ReadaheadMode(readaheadModeInformed.Get(&cfg.settings.SV)),
-			Speculative: objstorageprovider.ReadaheadMode(readaheadModeSpeculative.Get(&cfg.settings.SV)),
+			Informed:    readaheadModeInformed.Get(&cfg.settings.SV),
+			Speculative: readaheadModeSpeculative.Get(&cfg.settings.SV),
 		}
 	}
 
