@@ -54,6 +54,9 @@ var tpccMultiDBMeta = workload.Meta{
 		g.flags.Meta["txn-preamble-file"] = workload.FlagMeta{RuntimeOnly: true}
 		// Support accessing multiple databases via the client driver.
 		g.flags.StringVar(&g.dbListFile, "db-list-file", "", "a file containing a list of databases.")
+		// Because this workload can create a large number of objects, the import
+		// concurrent may need to be limited.
+		g.flags.Int(workload.ImportDataLoaderConcurrencyFlag, 32, workload.ImportDataLoaderConcurrencyFlagDescription)
 		return &g
 	},
 }

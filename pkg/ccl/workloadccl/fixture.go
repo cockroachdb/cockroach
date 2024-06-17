@@ -15,6 +15,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"path/filepath"
 	"strconv"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -404,10 +406,22 @@ func ImportFixture(
 		}
 	}
 
+	// Default to unbounded unless a flag exists for it.
+	concurrencyLimit := math.MaxInt
+	importLimit, err := gen.(workload.Flagser).Flags().GetInt("import-concurrency-limit")
+	if err == nil {
+		concurrencyLimit = importLimit
+	}
+	concurrentImportLimit := limit.MakeConcurrentRequestLimiter("workload_import", concurrencyLimit)
 	for _, t := range tables {
 		table := t
 		paths := csvServerPaths(pathPrefix, gen, table, numNodes*filesPerNode)
 		g.GoCtx(func(ctx context.Context) error {
+			res, err := concurrentImportLimit.Begin(ctx)
+			if err != nil {
+				return err
+			}
+			defer res.Release()
 			tableBytes, err := importFixtureTable(
 				ctx, sqlDB, dbName, table, paths, `` /* output */, injectStats)
 			atomic.AddInt64(&bytesAtomic, tableBytes)
