@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"testing"
 	"time"
@@ -136,7 +137,13 @@ func TestComposeCompare(t *testing.T) {
 		"--force-recreate",
 		"--exit-code-from", "test",
 	)
+	userInfo, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
 	cmd.Env = []string{
+		fmt.Sprintf("UID=%s", userInfo.Uid),
+		fmt.Sprintf("GID=%s", userInfo.Gid),
 		fmt.Sprintf("EACH=%s", *flagEach),
 		fmt.Sprintf("TESTS=%s", *flagTests),
 		fmt.Sprintf("COCKROACH_PATH=%s", cockroachBin),
