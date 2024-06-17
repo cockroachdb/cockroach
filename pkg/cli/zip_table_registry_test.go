@@ -217,6 +217,7 @@ func TestNonSensitiveColumns(t *testing.T) {
 			// in a system tenant. These would fail if pointed to a
 			// secondary tenant.
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Insecure:          true,
 		},
 	})
 	defer cluster.Stopper().Stop(context.Background())
