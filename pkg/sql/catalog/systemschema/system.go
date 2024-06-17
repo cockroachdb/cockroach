@@ -796,6 +796,14 @@ CREATE TABLE system.tenant_usage (
   -- Cumulative usage statistics, encoded as roachpb.TenantConsumption.
   total_consumption BYTES,
 
+  -- Computed rates of consumption for metrics used in tenant modeling, encoded
+  -- as roachpb.TenantConsumptionRates.
+  current_rates BYTES,
+
+  -- In-progress computed rates of consumption for metrics used in tenant
+  -- modeling, encoded as roachpb.TenantConsumptionRates.
+  next_rates BYTES,
+
   -- -------------------------------------------------------------
   --  The following fields are used for per-instance state, when
   --  instance_id != 0.
@@ -816,11 +824,11 @@ CREATE TABLE system.tenant_usage (
   FAMILY "primary" (
     tenant_id, instance_id, next_instance_id, last_update,
     ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
-    total_consumption,
+    total_consumption, current_rates, next_rates,
     instance_lease, instance_seq, instance_shares
   ),
 
-	CONSTRAINT "primary" PRIMARY KEY (tenant_id, instance_id)
+  CONSTRAINT "primary" PRIMARY KEY (tenant_id, instance_id)
 ) WITH (exclude_data_from_backup = true)`
 
 	SQLInstancesTableSchema = `
@@ -1212,7 +1220,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_2_StmtDiagRedacted.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_2_TenantRates.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -3773,6 +3781,8 @@ var (
 				{Name: "instance_lease", ID: 10, Type: types.Bytes, Nullable: true},
 				{Name: "instance_seq", ID: 11, Type: types.Int, Nullable: true},
 				{Name: "instance_shares", ID: 12, Type: types.Float, Nullable: true},
+				{Name: "current_rates", ID: 13, Type: types.Bytes, Nullable: true},
+				{Name: "next_rates", ID: 14, Type: types.Bytes, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -3783,8 +3793,9 @@ var (
 						"ru_burst_limit", "ru_refill_rate", "ru_current", "current_share_sum",
 						"total_consumption",
 						"instance_lease", "instance_seq", "instance_shares",
+						"current_rates", "next_rates",
 					},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
 					DefaultColumnID: 0,
 				},
 			},

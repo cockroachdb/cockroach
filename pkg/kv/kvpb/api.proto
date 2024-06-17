@@ -3495,11 +3495,21 @@ message TenantConsumption {
   // Note: if any fields are changed, the Sub and Add methods must be updated.
 }
 
+// TenantConsumptionRates specifies rates of consumption for tenant metrics that
+// are used in the cost model.
+message TenantConsumptionRates {
+  double write_batch_rate = 1;
+}
+
 // TokenBucketRequest is used by tenants to obtain Request Units and report
 // consumption.
 message TokenBucketRequest {
   // Consumption that occurred since this node's last request.
   TenantConsumption consumption_since_last_request = 1 [(gogoproto.nullable) = false];
+
+  // ConsumptionPeriod is the period over which the consumption was measured.
+  google.protobuf.Duration consumption_period = 9 [(gogoproto.nullable) = false,
+                                                   (gogoproto.stdduration) = true];
 
   uint64 tenant_id = 2 [(gogoproto.customname) = "TenantID"];
 
@@ -3572,6 +3582,11 @@ message TokenBucketResponse {
   // it runs out of tokens and a problem prevents TokenBucket requests from
   // completing.
   double fallback_rate = 4;
+
+  // ConsumptionRates contains the rate of consumption of tenant metrics that
+  // are used by the cost model. These rates are calculated across all SQL pods
+  // for the tenant.
+  TenantConsumptionRates consumption_rates = 5 [(gogoproto.nullable) = false];
 }
 
 // JoinNodeRequest is used to specify to the server node what the client's

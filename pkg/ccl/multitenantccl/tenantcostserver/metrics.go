@@ -9,6 +9,9 @@
 package tenantcostserver
 
 import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -201,4 +204,76 @@ func (m *Metrics) getTenantMetrics(tenantID roachpb.TenantID) tenantMetrics {
 		m.mu.tenantMetrics[tenantID] = tm
 	}
 	return tm
+}
+
+const metricsInterval = 10 * time.Second
+
+// metricRates calculates rate of consumption for tenant metrics that are used
+// by the cost model. Rates need to be calculated across all SQL pods for a
+// given tenant. Because consumption can be reported at different intervals by
+// different SQL pods, rates are determined on even 10-second boundaries and
+// added together across pods. For example, if at 12:00:03, pod #1 reports 900
+// write batches over the last 9 seconds, then the 12:00:00 rate is increased by
+// 100. If pod #2 reports the last 9 seconds of consumption at 12:00:13, then it
+// would instead be added to the 12:00:10 rate.
+type metricRates struct {
+	// next contains calculations for consumption rates at the most recent
+	// 10-second boundary. Some of the SQL pods may not have yet reported their
+	// rates, so this should be considered "in-progress".
+	next kvpb.TenantConsumptionRates
+
+	// current contains calculations for consumption rates at the previous
+	// 10-second boundary. Most or all of the SQL pods should already have
+	// reported their rates, so this is usually the final rate. However, it's
+	// possible that a SQL pod is reporting on a delayed schedule due to low
+	// consumption, so this rate can still change (though generally not by much).
+	current kvpb.TenantConsumptionRates
+}
+
+// Current returns the set of consumption rates that's expected to include the
+// rates reported by all SQL pods.
+func (mw *metricRates) Current() *kvpb.TenantConsumptionRates { return &mw.current }
+
+// Update calculates updated consumption rates given a new consumption report
+// at "now" time. The "prev" argument gives the time of the last call to Update.
+func (mw *metricRates) Update(
+	now, last time.Time, consumption *kvpb.TenantConsumption, consumptionPeriod time.Duration,
+) {
+	// In all but strange edge cases, time should tick upwards. If that's not
+	// the case, then just ignore the reported consumption.
+	if now.Before(last) {
+		return
+	}
+
+	// Calculate the start of the next and current periods, always on even
+	// 10-second boundaries.
+	aligned := (time.Duration(now.Second()) * time.Second) % metricsInterval
+	nextStart := now.Add(-aligned).Truncate(time.Second)
+	currentStart := nextStart.Add(-metricsInterval)
+
+	// Check if the last Update call happened in a different metrics interval.
+	if last.Before(nextStart) {
+		if last.Before(currentStart) {
+			// The last call happened at least 2 intervals ago.
+			mw.current = kvpb.TenantConsumptionRates{}
+		} else {
+			// The last call happened 1 interval ago, so the in-progress rates
+			// should be shifted to become current rates.
+			mw.current = mw.next
+		}
+		mw.next = kvpb.TenantConsumptionRates{}
+	}
+
+	// Calculate rates per second.
+	writeBatchRate := float64(consumption.WriteBatches) * float64(time.Second) / float64(consumptionPeriod)
+
+	// Add rates to the next and current reports, based on the length of the
+	// consumption period.
+	start := now.Add(-consumptionPeriod)
+	if start.Before(nextStart) {
+		mw.next.WriteBatchRate += writeBatchRate
+	}
+	if start.Before(currentStart) {
+		mw.current.WriteBatchRate += writeBatchRate
+	}
 }

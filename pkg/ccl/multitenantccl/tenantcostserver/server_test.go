@@ -20,10 +20,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -37,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errbase"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
 
@@ -160,11 +164,13 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			ExternalIOEgressBytes  uint64  `yaml:"external_io_egress_bytes"`
 			CrossRegionNetworkRU   float64 `yaml:"cross_region_network_ru"`
 		}
-		Tokens float64 `yaml:"tokens"`
-		Period string  `yaml:"period"`
+		ConsumptionPeriod string  `yaml:"consumption_period"`
+		Tokens            float64 `yaml:"tokens"`
+		RequestPeriod     string  `yaml:"request_period"`
 	}
 	args.SeqNum = -1
-	args.Period = "10s"
+	args.ConsumptionPeriod = "10s"
+	args.RequestPeriod = "10s"
 	args.InstanceLease = "foo"
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &args); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
@@ -174,9 +180,13 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		ts.autoSeqNum++
 		args.SeqNum = ts.autoSeqNum
 	}
-	period, err := time.ParseDuration(args.Period)
+	consumptionPeriod, err := time.ParseDuration(args.ConsumptionPeriod)
 	if err != nil {
-		d.Fatalf(t, "failed to parse duration: %v", args.Period)
+		d.Fatalf(t, "failed to parse duration: %v", args.ConsumptionPeriod)
+	}
+	requestPeriod, err := time.ParseDuration(args.RequestPeriod)
+	if err != nil {
+		d.Fatalf(t, "failed to parse duration: %v", args.RequestPeriod)
 	}
 	req := kvpb.TokenBucketRequest{
 		TenantID:           tenantID,
@@ -199,8 +209,9 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 			ExternalIOEgressBytes:  args.Consumption.ExternalIOEgressBytes,
 			CrossRegionNetworkRU:   args.Consumption.CrossRegionNetworkRU,
 		},
+		ConsumptionPeriod:   consumptionPeriod,
 		RequestedTokens:     args.Tokens,
-		TargetRequestPeriod: period,
+		TargetRequestPeriod: requestPeriod,
 	}
 	res := ts.tenantUsage.TokenBucketRequest(
 		context.Background(), roachpb.MustMakeTenantID(tenantID), &req,
@@ -395,4 +406,85 @@ func TestInstanceCleanup(t *testing.T) {
 			)
 		}
 	}
+}
+
+// TestPreMigration ensures that the token bucket works before the TenantRates
+// migration has run and added columns to the system.tenant_usage table.
+// TODO(andyk): Remove this after 24.3.
+func TestPreMigration(t *testing.T) {
+	ctx := context.Background()
+
+	// Set up a server that we use only for the system tables.
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+				BinaryVersionOverride:          (clusterversion.V24_2_TenantRates - 1).Version(),
+			},
+		},
+	})
+	s := srv.ApplicationLayer()
+	r := sqlutils.MakeSQLRunner(db)
+
+	clock := timeutil.NewManualTime(t0)
+	tenantUsage := tenantcostserver.NewInstance(
+		s.ClusterSettings(),
+		kvDB,
+		s.InternalDB().(isql.DB),
+		clock,
+	)
+	metricsReg := metric.NewRegistry()
+	metricsReg.AddMetricStruct(tenantUsage.Metrics())
+
+	r.Exec(t, fmt.Sprintf("SELECT crdb_internal.create_tenant(10)"))
+
+	req := kvpb.TokenBucketRequest{
+		TenantID:           10,
+		InstanceID:         1,
+		InstanceLease:      []byte("foo"),
+		NextLiveInstanceID: 1,
+		SeqNum:             1,
+		ConsumptionSinceLastRequest: kvpb.TenantConsumption{
+			RU:                     10,
+			KVRU:                   20,
+			ReadBatches:            30,
+			ReadRequests:           40,
+			ReadBytes:              50,
+			WriteBatches:           60,
+			WriteRequests:          70,
+			WriteBytes:             80,
+			SQLPodsCPUSeconds:      90,
+			PGWireEgressBytes:      100,
+			ExternalIOIngressBytes: 110,
+			ExternalIOEgressBytes:  120,
+			CrossRegionNetworkRU:   130,
+		},
+		ConsumptionPeriod:   10 * time.Second,
+		RequestedTokens:     1000,
+		TargetRequestPeriod: 10 * time.Second,
+	}
+
+	// Send the request twice with a delay so that consumption rates would have
+	// been calculated, if the migration had happened. Verify that the returned
+	// rate is zero, since we're simulation the case where the migration has not
+	// yet happened.
+	resp := tenantUsage.TokenBucketRequest(
+		context.Background(), roachpb.MustMakeTenantID(10), &req,
+	)
+	if resp.Error.Error != nil {
+		require.NoError(t, errbase.DecodeError(ctx, resp.Error))
+	}
+
+	clock.Advance(10 * time.Second)
+
+	req.SeqNum = 2
+	resp = tenantUsage.TokenBucketRequest(
+		context.Background(), roachpb.MustMakeTenantID(10), &req,
+	)
+	if resp.Error.Error != nil {
+		require.NoError(t, errbase.DecodeError(ctx, resp.Error))
+	}
+
+	require.Equal(t, float64(0), resp.ConsumptionRates.WriteBatchRate)
 }

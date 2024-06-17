@@ -132,6 +132,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add new columns to the system.tenant_usage table to store tenant consumption rates",
+		clusterversion.V24_2_TenantRates.Version(),
+		upgrade.NoPrecondition,
+		tenantRatesMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

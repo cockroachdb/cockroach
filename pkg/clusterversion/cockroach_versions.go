@@ -251,6 +251,10 @@ const (
 	// system.statement_diagnostics_requests table.
 	V24_2_StmtDiagRedacted
 
+	// V24_2_TenantRates is the migration to add the `current_rates` and
+	// `next_rates` consumption rate columns to the system.tenant_usage table.
+	V24_2_TenantRates
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -311,6 +315,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_2Start: {Major: 24, Minor: 1, Internal: 2},
 
 	V24_2_StmtDiagRedacted: {Major: 24, Minor: 1, Internal: 4},
+
+	V24_2_TenantRates: {Major: 24, Minor: 1, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
