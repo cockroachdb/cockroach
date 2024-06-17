@@ -221,7 +221,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 		OverrideClient: func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2) {
 			return kc, ac
 		},
-	})
+	}, nil)
 	require.NoError(t, err)
 
 	return fx

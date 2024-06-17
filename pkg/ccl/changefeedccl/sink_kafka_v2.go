@@ -38,12 +38,12 @@ func newKafkaSinkClient(
 	bootstrapAddrs string,
 	settings *cluster.Settings,
 	knobs kafkaSinkV2Knobs,
+	mb metricsRecorderBuilder,
 ) (*kafkaSinkClient, error) {
 	clientOpts = append([]kgo.Opt{
 		// TODO: hooks for metrics / metric support at all
 		kgo.SeedBrokers(bootstrapAddrs),
 		kgo.ClientID(`cockroach`),
-		// kgo.DefaultProduceTopic(topic), // TODO: maybe, depending on if we end up sharing producers
 		kgo.WithLogger(kgoLogAdapter{ctx: ctx}),
 		kgo.RecordPartitioner(newKgoChangefeedPartitioner()),
 		kgo.ProducerBatchMaxBytes(2 << 27), // nearly parity - this is the max the library allows
@@ -69,6 +69,7 @@ func newKafkaSinkClient(
 		kgo.ProducerOnDataLossDetected(func(topic string, part int32) {
 			log.Errorf(ctx, `kafka producer detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
 		}),
+		kgo.WithHooks(&kgoMetricsAdapter{throttling: mb(requiresResourceAccounting).getKafkaThrottlingMetrics(settings)}),
 	}, clientOpts...)
 
 	var client KafkaClientV2
@@ -314,8 +315,7 @@ func makeKafkaSinkV2(ctx context.Context,
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	m := mb(requiresResourceAccounting)
-	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, m.getKafkaThrottlingMetrics(settings))
+	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +333,7 @@ func makeKafkaSinkV2(ctx context.Context,
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
-	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, settings, kafkaSinkV2Knobs{})
+	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, settings, kafkaSinkV2Knobs{}, mb)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +346,6 @@ func buildKgoConfig(
 	ctx context.Context,
 	u sinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
-	kafkaThrottlingMetrics metrics.Histogram,
 ) ([]kgo.Opt, error) {
 	// TODO: what's the equivalent of the frequency option? is there even one? like maybe not
 	var opts []kgo.Opt
@@ -603,3 +602,13 @@ func newKgoOauthTokenProvider(
 		return sasloauth.Auth{Token: tok.AccessToken}, nil
 	}, nil
 }
+
+type kgoMetricsAdapter struct {
+	throttling metrics.Histogram
+}
+
+func (k *kgoMetricsAdapter) OnBrokerThrottle(meta kgo.BrokerMetadata, throttleInterval time.Duration, throttledAfterResponse bool) {
+	k.throttling.Update(int64(throttleInterval.Nanoseconds()))
+}
+
+var _ kgo.HookBrokerThrottle = (*kgoMetricsAdapter)(nil)
