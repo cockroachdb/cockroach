@@ -92,7 +92,7 @@ type txCounter struct {
 
 type txCounters map[string]txCounter
 
-func setupTPCCMetrics(reg prometheus.Registerer) txCounters {
+func setupTPCCMetrics(workloadName string, reg prometheus.Registerer) txCounters {
 	m := txCounters{}
 	f := promauto.With(reg)
 	for _, tx := range allTxs {
@@ -100,7 +100,7 @@ func setupTPCCMetrics(reg prometheus.Registerer) txCounters {
 			success: f.NewCounter(
 				prometheus.CounterOpts{
 					Namespace: histogram.PrometheusNamespace,
-					Subsystem: tpccMeta.Name,
+					Subsystem: workloadName,
 					Name:      fmt.Sprintf("%s_success_total", tx.name),
 					Help:      fmt.Sprintf("The total number of successful %s transactions.", tx.name),
 				},
@@ -108,7 +108,7 @@ func setupTPCCMetrics(reg prometheus.Registerer) txCounters {
 			error: f.NewCounter(
 				prometheus.CounterOpts{
 					Namespace: histogram.PrometheusNamespace,
-					Subsystem: tpccMeta.Name,
+					Subsystem: workloadName,
 					Name:      fmt.Sprintf("%s_error_total", tx.name),
 					Help:      fmt.Sprintf("The total number of error %s transactions.", tx.name),
 				}),

@@ -40,8 +40,9 @@ import (
 var RandomSeed = workload.NewUint64RandomSeed()
 
 type tpcc struct {
-	flags     workload.Flags
-	connFlags *workload.ConnFlags
+	flags        workload.Flags
+	connFlags    *workload.ConnFlags
+	workloadName string
 
 	warehouses       int
 	activeWarehouses int
@@ -217,7 +218,9 @@ var tpccMeta = workload.Meta{
 	Version:    `2.2.0`,
 	RandomSeed: RandomSeed,
 	New: func() workload.Generator {
-		g := &tpcc{}
+		g := &tpcc{
+			workloadName: "tpcc",
+		}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`mix`:                      {RuntimeOnly: true},
@@ -813,7 +816,7 @@ func (w *tpcc) Ops(
 	// Registry.
 	if w.reg == nil {
 		w.reg = reg
-		w.txCounters = setupTPCCMetrics(reg.Registerer())
+		w.txCounters = setupTPCCMetrics(w.workloadName, reg.Registerer())
 	}
 
 	// We can't use a single MultiConnPool because we want to implement partition
