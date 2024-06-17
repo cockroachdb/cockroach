@@ -148,6 +148,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
 		rangefeed.WithOnValues(s.onValues),
 		rangefeed.WithFiltering(s.spec.WithFiltering),
+		rangefeed.WithDiff(s.spec.WithDiff),
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
 	}
 	if emitMetadata.Get(&s.execCfg.Settings.SV) {
@@ -286,7 +287,14 @@ func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
 		s.addMu.Lock()
 		defer s.addMu.Unlock()
 	}
-	s.seb.addKV(roachpb.KeyValue{Key: value.Key, Value: value.Value})
+	if s.spec.WithDiff {
+		s.seb.addKVWithDiff(
+			roachpb.KeyValue{Key: value.Key, Value: value.Value},
+			value.PrevValue,
+		)
+	} else {
+		s.seb.addKV(roachpb.KeyValue{Key: value.Key, Value: value.Value})
+	}
 	s.setErr(s.maybeFlushBatch(ctx))
 }
 
