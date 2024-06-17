@@ -256,6 +256,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 		token,
 		lrw.spec.InitialScanTimestamp, lrw.frontier,
 		streamclient.WithFiltering(true),
+		streamclient.WithDiff(true),
 	)
 	if err != nil {
 		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "subscribing to partition from %s", redactedAddr))
@@ -446,9 +447,15 @@ func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context)
 func (lrw *logicalReplicationWriterProcessor) handleEvent(event streamingccl.Event) error {
 	sv := &lrw.FlowCtx.Cfg.Settings.SV
 
-	if event.Type() == streamingccl.KVEvent {
+	switch event.Type() {
+	case streamingccl.KVEvent:
+		ts := event.GetKVs()[0].Value.Timestamp.GoTime()
 		lrw.metrics.AdmitLatency.RecordValue(
-			timeutil.Since(event.GetKVs()[0].Value.Timestamp.GoTime()).Nanoseconds())
+			timeutil.Since(ts).Nanoseconds())
+	case streamingccl.KVWithDiffEvent:
+		ts := event.GetKVWithDiff()[0].KeyValue.Value.Timestamp.GoTime()
+		lrw.metrics.AdmitLatency.RecordValue(
+			timeutil.Since(ts).Nanoseconds())
 	}
 
 	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
@@ -462,6 +469,10 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(event streamingccl.Eve
 	switch event.Type() {
 	case streamingccl.KVEvent:
 		if err := lrw.bufferKVs(event.GetKVs()); err != nil {
+			return err
+		}
+	case streamingccl.KVWithDiffEvent:
+		if err := lrw.bufferKVsWithDiff(event.GetKVWithDiff()); err != nil {
 			return err
 		}
 	case streamingccl.CheckpointEvent:
@@ -503,6 +514,18 @@ func (lrw *logicalReplicationWriterProcessor) bufferKVs(kvs []roachpb.KeyValue) 
 	}
 	for _, kv := range kvs {
 		lrw.buffer.addKV(kv)
+	}
+	return nil
+}
+
+func (lrw *logicalReplicationWriterProcessor) bufferKVsWithDiff(
+	kvs []streampb.StreamEvent_KVWithDiff,
+) error {
+	// TODO(ssd): Once we are actually doing something with them,
+	// we'll want to buffer the previous values. For now we are
+	// just dropping them.
+	for _, kv := range kvs {
+		lrw.buffer.addKV(kv.KeyValue)
 	}
 	return nil
 }

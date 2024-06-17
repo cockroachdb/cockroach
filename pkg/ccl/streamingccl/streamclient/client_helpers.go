@@ -105,6 +105,9 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 		case len(streamEvent.Batch.KeyValues) > 0:
 			event = streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues)
 			streamEvent.Batch.KeyValues = nil
+		case len(streamEvent.Batch.KeyValuesWithDiff) > 0:
+			event = streamingccl.MakeKVWithDiffEvent(streamEvent.Batch.KeyValuesWithDiff)
+			streamEvent.Batch.KeyValuesWithDiff = nil
 		case len(streamEvent.Batch.DelRanges) > 0:
 			event = streamingccl.MakeDeleteRangeEvent(streamEvent.Batch.DelRanges[0])
 			streamEvent.Batch.DelRanges = streamEvent.Batch.DelRanges[1:]
