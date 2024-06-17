@@ -20,6 +20,7 @@ go_library(
         "scmutationexec.go",
         "sequence.go",
         "stats.go",
+        "table.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec",
     visibility = ["//visibility:public"],
