@@ -3,15 +3,18 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kadm"
@@ -19,15 +22,17 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+// TODO: why no worky
 func TestKafkaSinkClientV2_Resolved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	fx := newKafkaSinkV2Fx(t)
+	topics := []string{"t1", "t2", "t3"}
+
+	fx := newKafkaSinkV2Fx(t, withTargets(topics))
 	defer fx.close()
 
 	forEachTopic := func(cb func(topic string) error) error {
-		topics := []string{"t1", "t2", "t3"}
 		for _, topic := range topics {
 			if err := cb(topic); err != nil {
 				return err
@@ -173,6 +178,68 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 // - adapt sink_test's topic naming tests (prefix, escaping, etc)
 // - test opts construction. using client.OptValues() (neat trick!)
 
+func TestKafkaSinkClientV2_Escaping(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	fx := newKafkaSinkV2Fx(t, withTargets([]string{"☃"}))
+	defer fx.close()
+
+	produced := make(chan struct{})
+	fx.kc.EXPECT().ProduceSync(gomock.Any(), fnMatcher(func(arg any) bool {
+		defer close(produced)
+		rec := arg.(*kgo.Record)
+		return rec.Topic == `_u2603_` && string(rec.Key) == `k☃` && string(rec.Value) == `v☃`
+	})).Times(1).Return(nil)
+
+	require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
+	// require.NoError(t, fx.bs.Flush(fx.ctx))
+
+	testutils.SucceedsSoon(t, func() error {
+		select {
+		case <-produced:
+			return nil
+		default:
+			return fmt.Errorf("not yet")
+		}
+	})
+}
+
+func TestKafkaSinkClientV2_TopicNameProvided(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// ctx := context.Background()
+	// const topicOverride = "general"
+	// p := newAsyncProducerMock(1)
+	// sink, cleanup := makeTestKafkaSink(
+	// 	t, noTopicPrefix, topicOverride, p, "particular0", "particular1")
+	// defer cleanup()
+
+	// //all messages go to the general topic
+	// require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
+	// m := <-p.inputCh
+	// require.Equal(t, topicOverride, m.Topic)
+}
+
+func TestKafkaSinkClientV2_TopicNameWithPrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// ctx := context.Background()
+	// p := newAsyncProducerMock(1)
+	// const topicPrefix = "prefix-"
+	// const topicOverride = "☃"
+	// sink, clenaup := makeTestKafkaSink(
+	// 	t, topicPrefix, topicOverride, p, "particular0", "particular1")
+	// defer clenaup()
+
+	// //the prefix is applied and the name is escaped
+	// require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
+	// m := <-p.inputCh
+	// require.Equal(t, `prefix-_u2603_`, m.Topic)
+}
+
 func TestKafkaBuffer(t *testing.T) {
 	t.Skip("TODO: test flushing under various configurations")
 }
@@ -185,7 +252,10 @@ type kafkaSinkV2Fx struct {
 	ac       *mocks.MockKafkaAdminClientV2
 	mockCtrl *gomock.Controller
 
+	targetNames []string
+
 	sink *kafkaSinkClient
+	bs   *batchingSink
 }
 
 type fxOpt func(*kafkaSinkV2Fx)
@@ -195,6 +265,13 @@ func withSettings(cb func(*cluster.Settings)) fxOpt {
 		cb(fx.settings)
 	}
 }
+
+func withTargets(ts []string) fxOpt {
+	return func(fx *kafkaSinkV2Fx) {
+		fx.targetNames = ts
+	}
+}
+
 func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -204,32 +281,44 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	settings := cluster.MakeTestingClusterSettings()
 
 	fx := &kafkaSinkV2Fx{
-		t:        t,
-		settings: settings,
-		ctx:      ctx,
-		kc:       kc,
-		ac:       ac,
-		mockCtrl: ctrl,
+		t:           t,
+		settings:    settings,
+		ctx:         ctx,
+		kc:          kc,
+		ac:          ac,
+		mockCtrl:    ctrl,
+		targetNames: []string{"t"},
 	}
 
 	for _, opt := range opts {
 		opt(fx)
 	}
 
-	var err error
-	fx.sink, err = newKafkaSinkClient(ctx, nil, sinkBatchConfig{}, "no addrs", settings, kafkaSinkV2Knobs{
+	knobs := kafkaSinkV2Knobs{
 		OverrideClient: func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2) {
 			return kc, ac
 		},
-	}, nil)
+	}
+
+	var err error
+	fx.sink, err = newKafkaSinkClient(ctx, nil, sinkBatchConfig{}, "no addrs", settings, knobs, nilMetricsRecorderBuilder)
 	require.NoError(t, err)
+
+	targets := makeChangefeedTargets(fx.targetNames...)
+
+	u, err := url.Parse("kafka://localhost:9092")
+	require.NoError(t, err)
+	bs, err := makeKafkaSinkV2(ctx, sinkURL{URL: u}, targets, "{}", 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
+	require.NoError(t, err)
+	fx.bs = bs.(*batchingSink)
 
 	return fx
 }
 
 func (fx *kafkaSinkV2Fx) close() {
-	fx.kc.EXPECT().Close()
+	fx.kc.EXPECT().Close().AnyTimes()
 	require.NoError(fx.t, fx.sink.Close())
+	require.NoError(fx.t, fx.bs.Close())
 }
 
 type fnMatcher func(arg any) bool

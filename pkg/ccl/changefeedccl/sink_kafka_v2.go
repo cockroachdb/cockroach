@@ -40,7 +40,8 @@ func newKafkaSinkClient(
 	knobs kafkaSinkV2Knobs,
 	mb metricsRecorderBuilder,
 ) (*kafkaSinkClient, error) {
-	clientOpts = append([]kgo.Opt{
+
+	baseOpts := []kgo.Opt{
 		// TODO: hooks for metrics / metric support at all
 		kgo.SeedBrokers(bootstrapAddrs),
 		kgo.ClientID(`cockroach`),
@@ -69,8 +70,13 @@ func newKafkaSinkClient(
 		kgo.ProducerOnDataLossDetected(func(topic string, part int32) {
 			log.Errorf(ctx, `kafka producer detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
 		}),
-		kgo.WithHooks(&kgoMetricsAdapter{throttling: mb(requiresResourceAccounting).getKafkaThrottlingMetrics(settings)}),
-	}, clientOpts...)
+	}
+
+	if m := mb(requiresResourceAccounting); m != nil { // `m` can be nil in tests.
+		baseOpts = append(baseOpts, kgo.WithHooks(&kgoMetricsAdapter{throttling: m.getKafkaThrottlingMetrics(settings)}))
+	}
+
+	clientOpts = append(baseOpts, clientOpts...)
 
 	var client KafkaClientV2
 	var adminClient KafkaAdminClientV2
@@ -296,6 +302,7 @@ func makeKafkaSinkV2(ctx context.Context,
 	timeSource timeutil.TimeSource,
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
+	knobs kafkaSinkV2Knobs,
 ) (Sink, error) {
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
 		// Defaults from the old kafka sink (nearly -- we require Frequency to be nonzero if anything else is, but the old sink did not. Set it low.)
@@ -333,7 +340,7 @@ func makeKafkaSinkV2(ctx context.Context,
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
-	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, settings, kafkaSinkV2Knobs{}, mb)
+	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb)
 	if err != nil {
 		return nil, err
 	}
@@ -608,7 +615,7 @@ type kgoMetricsAdapter struct {
 }
 
 func (k *kgoMetricsAdapter) OnBrokerThrottle(meta kgo.BrokerMetadata, throttleInterval time.Duration, throttledAfterResponse bool) {
-	k.throttling.Update(int64(throttleInterval.Nanoseconds()))
+	k.throttling.Update(int64(throttleInterval))
 }
 
 var _ kgo.HookBrokerThrottle = (*kgoMetricsAdapter)(nil)
