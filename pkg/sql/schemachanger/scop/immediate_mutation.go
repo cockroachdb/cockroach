@@ -892,3 +892,10 @@ type AddDatabaseZoneConfig struct {
 	DatabaseID descpb.ID
 	ZoneConfig *zonepb.ZoneConfig
 }
+
+// AddTableZoneConfig adds a zone config to a table.
+type AddTableZoneConfig struct {
+	immediateMutationOp
+	TableID    descpb.ID
+	ZoneConfig *zonepb.ZoneConfig
+}
