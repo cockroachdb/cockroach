@@ -999,6 +999,7 @@ project
            │    ├── fd: ()-->(9,12)
            │    └── inner-join (lookup phone [as=phones1_])
            │         ├── columns: phones1_.id:9!null person_id:12 "$1":17!null
+           │         ├── flags: disallow merge join
            │         ├── key columns: [17] = [9]
            │         ├── lookup columns are key
            │         ├── cardinality: [0 - 1]
@@ -1063,6 +1064,7 @@ project
            │    ├── fd: ()-->(9,12)
            │    └── inner-join (lookup phone [as=phones1_])
            │         ├── columns: phones1_.id:9!null person_id:12 "$1":17!null
+           │         ├── flags: disallow merge join
            │         ├── key columns: [17] = [9]
            │         ├── lookup columns are key
            │         ├── cardinality: [0 - 1]
