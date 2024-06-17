@@ -12,7 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"strings"
+	"regexp"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -315,9 +315,10 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 						if !detectLeaseWait.Load() {
 							return
 						}
-						const leaseQuery = "SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME"
+						const leaseQueryRegex = "SELECT .* FROM system.public.lease AS OF SYSTEM TIME"
+						re := regexp.MustCompile(leaseQueryRegex)
 						// Fail intentionally, when we go to probe the first region.
-						if strings.Contains(stmt, leaseQuery) {
+						if re.MatchString(stmt) {
 							if targetCount.Add(1) != 1 {
 								return
 							}
