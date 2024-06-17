@@ -3133,6 +3133,7 @@ system         public        tenant_tasks                     owner_id          
 system         public        tenant_tasks                     payload_id                                                                                                5
 system         public        tenant_tasks                     task_id                                                                                                   3
 system         public        tenant_tasks                     tenant_id                                                                                                 1
+system         public        tenant_usage                     current_rates                                                                                             13
 system         public        tenant_usage                     current_share_sum                                                                                         8
 system         public        tenant_usage                     instance_id                                                                                               2
 system         public        tenant_usage                     instance_lease                                                                                            10
@@ -3140,6 +3141,7 @@ system         public        tenant_usage                     instance_seq      
 system         public        tenant_usage                     instance_shares                                                                                           12
 system         public        tenant_usage                     last_update                                                                                               4
 system         public        tenant_usage                     next_instance_id                                                                                          3
+system         public        tenant_usage                     next_rates                                                                                                14
 system         public        tenant_usage                     ru_burst_limit                                                                                            5
 system         public        tenant_usage                     ru_current                                                                                                7
 system         public        tenant_usage                     ru_refill_rate                                                                                            6
