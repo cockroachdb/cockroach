@@ -444,9 +444,9 @@ func (c *SyncedCluster) Stop(
 		}
 		return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
 	} else {
-		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, DefaultAuthMode, []string{
-			"-e", fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName),
-		})
+		cmd := fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName)
+		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, DefaultAuthMode, "", /* database */
+			[]string{"-e", cmd})
 		if err != nil || res[0].Err != nil {
 			if len(res) > 0 {
 				return errors.CombineErrors(err, res[0].Err)
@@ -2652,7 +2652,7 @@ func (c *SyncedCluster) pgurls(
 		if err != nil {
 			return nil, err
 		}
-		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, AuthUserCert)
+		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, AuthUserCert, "" /* database */)
 	}
 	return m, nil
 }
@@ -2700,7 +2700,7 @@ func (c *SyncedCluster) loadBalancerURL(
 	if err != nil {
 		return "", err
 	}
-	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, serviceMode, auth)
+	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, serviceMode, auth, "" /* database */)
 	return loadBalancerURL, nil
 }
 

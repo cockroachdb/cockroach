@@ -37,6 +37,7 @@ var (
 	numNodes              int
 	numRacks              int
 	username              string
+	database              string
 	dryrun                bool
 	destroyAllMine        bool
 	destroyAllLocal       bool
@@ -217,6 +218,7 @@ func initFlags() {
 	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, loadBalancerPGUrl} {
 		cmd.Flags().StringVar(&authMode,
 			"auth-mode", defaultAuthMode, fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(pgAuthModes)))
+		cmd.Flags().StringVar(&database, "database", "", "database to use")
 	}
 
 	pprofCmd.Flags().DurationVar(&pprofOpts.Duration,
