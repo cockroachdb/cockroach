@@ -21,6 +21,7 @@ import clone from "lodash/clone";
 import groupBy from "lodash/groupBy";
 import map from "lodash/map";
 import flatMap from "lodash/flatMap";
+import { util } from "@cockroachlabs/cluster-ui";
 
 import { queryTimeSeries } from "src/util/api";
 import { PayloadAction } from "src/interfaces/action";
@@ -359,7 +360,7 @@ export function* sendRequestBatch(requests: WithID<TSRequest>[]) {
     // Dispatch the error to each individual MetricsQuery which was
     // requesting data.
     for (const request of requests) {
-      yield put(errorMetrics(request.id, e));
+      yield put(errorMetrics(request.id, util.maybeError(e)));
     }
     return;
   }

@@ -182,7 +182,7 @@ describe("getTxnQueryString", () => {
       stmtIDs: [3, 5, 7, 9],
       queries: ["a", "b", "c", "d"],
     },
-  ].map(tc => {
+  ].map((tc): [Txn, Stmt[], string] => {
     const txnID = Long.fromInt(tc.txnID);
 
     const txn = mockTxnStats({
@@ -286,7 +286,7 @@ describe("getStatementsForTransaction", () => {
       stmtIDs: [4, 5, 6],
       useArrayProp: true,
     },
-  ].map(tc => {
+  ].map((tc): [Txn, string[], Stmt[]] => {
     const txnID = Long.fromInt(tc.txnID);
 
     const txn = mockTxnStats({

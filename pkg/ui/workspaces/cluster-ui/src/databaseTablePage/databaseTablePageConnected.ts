@@ -143,7 +143,12 @@ export const mapDispatchToProps = (
 });
 
 export const ConnectedDatabaseTablePage = withRouter(
-  connect<DatabaseTablePageData, DatabaseTablePageActions, RouteComponentProps>(
+  connect<
+    DatabaseTablePageData,
+    DatabaseTablePageActions,
+    RouteComponentProps,
+    AppState
+  >(
     mapStateToProps,
     mapDispatchToProps,
   )(DatabaseTablePage),

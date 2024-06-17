@@ -12,6 +12,7 @@ import { all, call, put, takeLatest } from "redux-saga/effects";
 import { PayloadAction } from "@reduxjs/toolkit";
 
 import { SchemaInsightReqParams, getSchemaInsights } from "../../api";
+import { maybeError } from "../../util";
 
 import { actions } from "./schemaInsights.reducer";
 
@@ -28,7 +29,7 @@ export function* requestSchemaInsightsSaga(
     const result = yield call(getSchemaInsights, action.payload);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(maybeError(e)));
   }
 }
 

@@ -19,6 +19,8 @@ import {
 } from "src/api/statementsApi";
 import { generateStmtDetailsToID } from "src/util/appStats";
 
+import { maybeError } from "../../util";
+
 import { actions as sqlDetailsStatsActions } from "./statementDetails.reducer";
 
 export function* refreshSQLDetailsStatsSaga(
@@ -47,7 +49,7 @@ export function* requestSQLDetailsStatsSaga(
     yield put(sqlDetailsStatsActions.received(resultWithKey));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: maybeError(e),
       key,
     };
     yield put(sqlDetailsStatsActions.failed(err));

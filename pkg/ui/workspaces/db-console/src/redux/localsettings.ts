@@ -24,6 +24,7 @@ import { Action } from "redux";
 import { call, takeEvery } from "redux-saga/effects";
 import clone from "lodash/clone";
 import isNil from "lodash/isNil";
+import { util } from "@cockroachlabs/cluster-ui";
 
 import { PayloadAction } from "src/interfaces/action";
 
@@ -55,7 +56,7 @@ function saveToSessionStorage(data: LocalSettingData) {
     sessionStorage.setItem(`${STORAGE_PREFIX}/${data.key}`, value);
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.warn(e.message);
+    console.warn((util.maybeError(e)).message);
   }
 }
 

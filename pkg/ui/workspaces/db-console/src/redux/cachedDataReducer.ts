@@ -31,7 +31,7 @@ import { PayloadAction, WithRequest } from "src/interfaces/action";
 
 import { clearTenantCookie } from "./cookies";
 
-const { isForbiddenRequestError } = clusterUiUtil;
+const { isForbiddenRequestError, maybeError } = clusterUiUtil;
 
 export interface WithPaginationRequest {
   page_size: number;
@@ -643,9 +643,10 @@ export class PaginatedCachedDataReducer<
           } else {
             req.page_token = resp.next_page_token;
           }
-        } catch (error) {
+        } catch (e) {
+          const error = maybeError(e);
           // duplicate the same error handling as in base CachedDataReducer#refresh method.
-          if (error.message === "Unauthorized") {
+          if ((error as Error).message === "Unauthorized") {
             // TODO(couchand): This is an unpleasant dependency snuck in here...
             const { location } = createHashHistory();
             if (

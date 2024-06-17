@@ -8,12 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import Select, {
-  components,
-  OptionsType,
-  DeselectOptionActionMeta,
-  SelectOptionActionMeta,
-} from "react-select";
+import Select, { components, OptionsType, ActionMeta } from "react-select";
 import React from "react";
 import classNames from "classnames/bind";
 import { Gear } from "@cockroachlabs/icons";
@@ -152,11 +147,13 @@ export default class ColumnsSelector extends React.Component<
   handleChange = (
     _selectedOptions: OptionsType<SelectOption>,
     // get actual selection of specific option and action type from "actionMeta"
-    actionMeta:
-      | SelectOptionActionMeta<SelectOption>
-      | DeselectOptionActionMeta<SelectOption>,
+    actionMeta: ActionMeta<SelectOption>,
   ): void => {
-    const { option, action } = actionMeta;
+    const { action } = actionMeta;
+    if (action !== "select-option" && action !== "deselect-option") {
+      return;
+    }
+    const option = actionMeta.option;
     const selectionState = new Map(this.state.selectionState);
     // true - if option was selected, false - otherwise
     const isSelectedOption = action === "select-option";
@@ -244,7 +241,7 @@ export default class ColumnsSelector extends React.Component<
         <div className={dropdownArea}>
           <div className={dropdownContentWrapper}>
             <div className={cx("label")}>Hide/show columns</div>
-            <Select
+            <Select<SelectOption, true>
               isMulti
               menuIsOpen={true}
               options={options}

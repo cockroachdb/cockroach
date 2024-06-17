@@ -14,6 +14,7 @@ import { PayloadAction } from "@reduxjs/toolkit";
 import { getTxnInsightsApi, TxnInsightsRequest } from "src/api/txnInsightsApi";
 
 import { actions as txnActions } from "../transactionInsights/transactionInsights.reducer";
+import { maybeError } from "../../../util";
 
 export function* refreshTransactionInsightsSaga(
   action?: PayloadAction<TxnInsightsRequest>,
@@ -28,7 +29,7 @@ export function* requestTransactionInsightsSaga(
     const result = yield call(getTxnInsightsApi, action?.payload);
     yield put(txnActions.received(result));
   } catch (e) {
-    yield put(txnActions.failed(e));
+    yield put(txnActions.failed(maybeError(e)));
   }
 }
 

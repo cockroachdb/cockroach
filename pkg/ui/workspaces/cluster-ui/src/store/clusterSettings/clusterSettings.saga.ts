@@ -15,6 +15,7 @@ import {
   getClusterSettings,
   SettingsRequestMessage,
 } from "../../api/clusterSettingsApi";
+import { maybeError } from "../../util";
 
 import { actions } from "./clusterSettings.reducer";
 
@@ -31,7 +32,7 @@ export function* requestClusterSettingsSaga(
     const result = yield call(getClusterSettings, action.payload, "1M");
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(maybeError(e)));
   }
 }
 

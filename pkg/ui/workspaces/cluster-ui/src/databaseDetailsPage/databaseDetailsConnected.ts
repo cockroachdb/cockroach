@@ -189,7 +189,8 @@ export const ConnectedDatabaseDetailsPage = withRouter(
   connect<
     DatabaseDetailsPageData,
     DatabaseDetailsPageActions,
-    RouteComponentProps
+    RouteComponentProps,
+    AppState
   >(
     mapStateToProps,
     mapDispatchToProps,

@@ -17,6 +17,8 @@ import { bar, approximify } from "src/barCharts/utils";
 
 import styles from "../barCharts/barCharts.module.scss";
 
+import { TransactionInfo } from "./transactionsTable";
+
 type Transaction =
   protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
 const cx = classNames.bind(styles);
@@ -46,7 +48,7 @@ const latencyStdDev = bar(cx("bar-chart__overall-dev"), (d: Transaction) =>
 const contentionBar = [
   bar(
     "contention",
-    (d: Transaction) => d.stats_data.stats.exec_stats.contention_time?.mean,
+    (d: TransactionInfo) => d.stats_data.stats.exec_stats.contention_time?.mean,
   ),
 ];
 const contentionStdDev = bar(cx("contention-dev"), (d: Transaction) =>
@@ -58,7 +60,7 @@ const contentionStdDev = bar(cx("contention-dev"), (d: Transaction) =>
 const cpuBar = [
   bar(
     "cpu",
-    (d: Transaction) => d.stats_data.stats.exec_stats.cpu_sql_nanos?.mean,
+    (d: TransactionInfo) => d.stats_data.stats.exec_stats.cpu_sql_nanos?.mean,
   ),
 ];
 const cpuStdDev = bar(cx("cpu-dev"), (d: Transaction) =>
@@ -68,7 +70,7 @@ const cpuStdDev = bar(cx("cpu-dev"), (d: Transaction) =>
   ),
 );
 const maxMemUsageBar = [
-  bar("max-mem-usage", (d: Transaction) =>
+  bar("max-mem-usage", (d: TransactionInfo) =>
     longToInt(d.stats_data.stats.exec_stats.max_mem_usage?.mean),
   ),
 ];
@@ -79,7 +81,7 @@ const maxMemUsageStdDev = bar(cx("max-mem-usage-dev"), (d: Transaction) =>
   ),
 );
 const networkBytesBar = [
-  bar("network-bytes", (d: Transaction) =>
+  bar("network-bytes", (d: TransactionInfo) =>
     longToInt(d.stats_data.stats.exec_stats.network_bytes?.mean),
   ),
 ];

@@ -64,7 +64,12 @@ const mapDispatchToProps = (dispatch: Dispatch): JobDetailsDispatchProps => ({
 });
 
 export const JobDetailsPageConnected = withRouter(
-  connect<JobDetailsStateProps, JobDetailsDispatchProps, RouteComponentProps>(
+  connect<
+    JobDetailsStateProps,
+    JobDetailsDispatchProps,
+    RouteComponentProps,
+    AppState
+  >(
     mapStateToProps,
     mapDispatchToProps,
   )(JobDetails),

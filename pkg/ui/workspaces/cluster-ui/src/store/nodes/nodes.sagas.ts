@@ -15,6 +15,7 @@ import { getNodes } from "src/api/nodesApi";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 
 import { rootActions } from "../rootActions";
+import { maybeError } from "../../util";
 
 import { actions } from "./nodes.reducer";
 
@@ -28,7 +29,7 @@ export function* requestNodesSaga() {
       yield call(getNodes);
     yield put(actions.received(result.nodes));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(maybeError(e)));
   }
 }
 

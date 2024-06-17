@@ -80,21 +80,21 @@ function ErrorPage(props: {
   );
 }
 
-function rangeRequestFromProps(props: RangeProps) {
+function rangeRequestFromProps(props: RouteComponentProps) {
   const rangeId = getMatchParamByName(props.match, rangeIDAttr);
   return new protos.cockroach.server.serverpb.RangeRequest({
     range_id: Long.fromString(rangeId),
   });
 }
 
-function allocatorRequestFromProps(props: RangeProps) {
+function allocatorRequestFromProps(props: RouteComponentProps) {
   const rangeId = getMatchParamByName(props.match, rangeIDAttr);
   return new protos.cockroach.server.serverpb.AllocatorRangeRequest({
     range_id: Long.fromString(rangeId),
   });
 }
 
-function rangeLogRequestFromProps(props: RangeProps) {
+function rangeLogRequestFromProps(props: RouteComponentProps) {
   const rangeId = getMatchParamByName(props.match, rangeIDAttr);
   // TODO(bram): Remove this limit once #18159 is resolved.
   return new protos.cockroach.server.serverpb.RangeLogRequest({
@@ -233,7 +233,7 @@ export class Range extends React.Component<RangeProps, {}> {
   }
 }
 
-const mapStateToProps = (state: AdminUIState, props: RangeProps) => ({
+const mapStateToProps = (state: AdminUIState, props: RouteComponentProps) => ({
   range: state.cachedData.range[rangeRequestKey(rangeRequestFromProps(props))],
   allocator:
     state.cachedData.allocatorRange[
@@ -252,7 +252,7 @@ const mapDispatchToProps = {
 };
 
 export default withRouter(
-  connect<RangeStateProps, RangeDispatchProps>(
+  connect<RangeStateProps, RangeDispatchProps, RouteComponentProps, AdminUIState>(
     mapStateToProps,
     mapDispatchToProps,
   )(Range),

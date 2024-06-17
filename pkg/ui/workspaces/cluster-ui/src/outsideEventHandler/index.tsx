@@ -38,7 +38,7 @@ export class OutsideEventHandler extends React.Component<OutsideEventHandlerProp
     this.removeEventListener();
   }
 
-  onClick = (event: PointerEvent): void => {
+  onClick = (event: MouseEvent): void => {
     if (!(event.target instanceof Node)) {
       return;
     }
