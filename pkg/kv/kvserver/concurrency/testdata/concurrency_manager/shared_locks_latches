@@ -211,6 +211,7 @@ write count: 3
 finish req=req7
 ----
 [-] finish req7: finishing request
+[10] sequence req10: latch table conflict with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [10] sequence req10: scanning lock table for conflicting locks
 [10] sequence req10: sequencing complete, returned guard
 
@@ -223,6 +224,7 @@ finish req=req8
 finish req=req9
 ----
 [-] finish req9: finishing request
+[12] sequence req12: latch table conflict with ‹00000001-0000-0000-0000-000000000000› on ‹"c"› for 0.000s
 [12] sequence req12: scanning lock table for conflicting locks
 [12] sequence req12: sequencing complete, returned guard
 
@@ -321,6 +323,7 @@ write count: 3
 finish req=req13
 ----
 [-] finish req13: finishing request
+[16] sequence req16: latch table conflict with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [16] sequence req16: scanning lock table for conflicting locks
 [16] sequence req16: sequencing complete, returned guard
 
@@ -333,6 +336,7 @@ finish req=req14
 finish req=req15
 ----
 [-] finish req15: finishing request
+[18] sequence req18: latch table conflict with ‹00000001-0000-0000-0000-000000000000› on ‹"c"› for 0.000s
 [18] sequence req18: scanning lock table for conflicting locks
 [18] sequence req18: sequencing complete, returned guard
 
@@ -505,6 +509,7 @@ write count: 3
 finish req=req23
 ----
 [-] finish req23: finishing request
+[26] sequence req26: latch table conflict with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [26] sequence req26: scanning lock table for conflicting locks
 [26] sequence req26: sequencing complete, returned guard
 
@@ -517,6 +522,7 @@ finish req=req24
 finish req=req25
 ----
 [-] finish req25: finishing request
+[28] sequence req28: latch table conflict with ‹00000001-0000-0000-0000-000000000000› on ‹"c"› for 0.000s
 [28] sequence req28: scanning lock table for conflicting locks
 [28] sequence req28: sequencing complete, returned guard
 
@@ -615,6 +621,7 @@ write count: 3
 finish req=req29
 ----
 [-] finish req29: finishing request
+[32] sequence req32: latch table conflict with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [32] sequence req32: scanning lock table for conflicting locks
 [32] sequence req32: sequencing complete, returned guard
 
@@ -627,6 +634,7 @@ finish req=req30
 finish req=req31
 ----
 [-] finish req31: finishing request
+[34] sequence req34: latch table conflict with ‹00000001-0000-0000-0000-000000000000› on ‹"c"› for 0.000s
 [34] sequence req34: scanning lock table for conflicting locks
 [34] sequence req34: sequencing complete, returned guard
 

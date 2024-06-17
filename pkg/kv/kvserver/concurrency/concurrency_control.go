@@ -515,7 +515,13 @@ type latchManager interface {
 	// WaitFor waits for conflicting latches on the specified spans without adding
 	// any latches itself. Fast path for operations that only require flushing out
 	// old operations without blocking any new ones.
-	WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter) *Error
+	WaitFor(
+		ctx context.Context,
+		spans *spanset.SpanSet,
+		pp poison.Policy,
+		baFmt redact.SafeFormatter,
+		txn *roachpb.Transaction,
+	) *Error
 
 	// Poison a guard's latches, allowing waiters to fail fast.
 	Poison(latchGuard)

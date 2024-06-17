@@ -179,6 +179,7 @@ sequence req=req6 eval-kind=pess-after-opt
 finish req=req4
 ----
 [-] finish req4: finishing request
+[8] sequence req6: latch table conflict with ‹00000003-0000-0000-0000-000000000000› on ‹"d"› for 0.000s
 [8] sequence req6: scanning lock table for conflicting locks
 [8] sequence req6: sequencing complete, returned guard
 

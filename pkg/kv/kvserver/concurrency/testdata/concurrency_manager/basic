@@ -154,6 +154,7 @@ write count: 1
 finish req=req3
 ----
 [-] finish req3: finishing request
+[3] sequence req4: latch table conflict with ‹00000003-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [3] sequence req4: scanning lock table for conflicting locks
 [3] sequence req4: sequencing complete, returned guard
 
