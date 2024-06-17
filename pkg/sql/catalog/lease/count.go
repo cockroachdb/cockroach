@@ -34,6 +34,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type countDetail struct {
+	// count is the number of unexpired leases
+	count int
+	// numSQLInstances is the number of distinct SQL instances with unexpired leases.
+	numSQLInstances int
+	// sampleSQLInstanceID is one of the sql_instance_id values we are waiting on,
+	// but only if we are waiting on at least one lease. If the count is 0, this
+	// value will also be 0.
+	sampleSQLInstanceID int
+}
+
 // CountLeases returns the number of unexpired leases for a number of descriptors
 // each at a particular version at a particular time.
 func CountLeases(
@@ -46,6 +57,24 @@ func CountLeases(
 	at hlc.Timestamp,
 	forAnyVersion bool,
 ) (int, error) {
+	detail, err := countLeasesWithDetail(ctx, db, codec, cachedDatabaseRegions,
+		settings, versions, at, forAnyVersion)
+	if err != nil {
+		return 0, err
+	}
+	return detail.count, nil
+}
+
+func countLeasesWithDetail(
+	ctx context.Context,
+	db isql.DB,
+	codec keys.SQLCodec,
+	cachedDatabaseRegions regionliveness.CachedDatabaseRegions,
+	settings *clustersettings.Settings,
+	versions []IDVersion,
+	at hlc.Timestamp,
+	forAnyVersion bool,
+) (countDetail, error) {
 	// Indicates if the leasing descriptor has been upgraded for session based
 	// leasing. Note: Unit tests will never provide cached database regions
 	// so resolve the version from the cluster settings.
@@ -80,6 +109,7 @@ func CountLeases(
 		)
 	}
 	whereClauseIdx := make([]int, 0, 2)
+	usesOldSchema := make([]bool, 0, 2)
 	syntheticDescriptors := make(catalog.Descriptors, 0, 2)
 	if leasingMode != SessionBasedOnly {
 		// The leasing descriptor is session based, so we need to inject
@@ -90,7 +120,7 @@ func CountLeases(
 			syntheticDescriptors = append(syntheticDescriptors, nil)
 		}
 		whereClauseIdx = append(whereClauseIdx, 0)
-
+		usesOldSchema = append(usesOldSchema, true)
 	}
 	if leasingMode >= SessionBasedDrain {
 		// The leasing descriptor is not yet session based, so inject the session
@@ -101,9 +131,10 @@ func CountLeases(
 			syntheticDescriptors = append(syntheticDescriptors, nil)
 		}
 		whereClauseIdx = append(whereClauseIdx, 1)
+		usesOldSchema = append(usesOldSchema, false)
 	}
 
-	var count int
+	var detail countDetail
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		txn.KV().SetDebugName("count-leases")
 		if err := txn.KV().SetFixedTimestamp(ctx, at); err != nil {
@@ -129,9 +160,10 @@ func CountLeases(
 						forceMultiRegionQuery {
 						// If we are injecting a raw leases descriptors, that will not have the enum
 						// type set, so convert the region to byte equivalent physical representation.
-						count, err = countLeasesByRegion(ctx, txn, prober, regionMap, cachedDatabaseRegions, len(descsToInject) > 0, at, whereClause)
+						detail, err = countLeasesByRegion(ctx, txn, prober, regionMap, cachedDatabaseRegions,
+							len(descsToInject) > 0, at, whereClause, usesOldSchema[i])
 					} else {
-						count, err = countLeasesNonMultiRegion(ctx, txn, at, whereClause)
+						detail, err = countLeasesNonMultiRegion(ctx, txn, at, whereClause, usesOldSchema[i])
 						// It's possible that our cached database descriptor is stale relative to the
 						// visible lease table descriptor. Because the lease manager uses rangefeeds to
 						// keep track of new descriptor versions, when converting to a multi-region
@@ -150,26 +182,28 @@ func CountLeases(
 				return err
 			}
 			// Exit if either the session or expiry based counts are zero.
-			if count > 0 {
+			if detail.count > 0 {
 				return nil
 			}
 		}
 		return nil
 	}); err != nil {
-		return 0, err
+		return countDetail{}, err
 	}
-	return count, nil
+	return detail, nil
 }
 
 // Counts leases in non multi-region environments.
 func countLeasesNonMultiRegion(
-	ctx context.Context, txn isql.Txn, at hlc.Timestamp, whereClauses []string,
-) (int, error) {
+	ctx context.Context, txn isql.Txn, at hlc.Timestamp, whereClauses []string, usesOldSchema bool,
+) (countDetail, error) {
 	stmt := fmt.Sprintf(
-		`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE 
-crdb_region=$2 AND`,
+		`SELECT %[1]s FROM system.public.lease AS OF SYSTEM TIME '%[2]s' WHERE 
+crdb_region=$2 AND %[3]s`,
+		getCountLeaseColumns(usesOldSchema),
 		at.AsOfSystemTime(),
-	) + strings.Join(whereClauses, " OR ")
+		strings.Join(whereClauses, " OR "),
+	)
 	values, err := txn.QueryRowEx(
 		ctx, "count-leases", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
@@ -178,13 +212,16 @@ crdb_region=$2 AND`,
 		enum.One, // Single region database can only have one region prefix assigned.
 	)
 	if err != nil {
-		return 0, err
+		return countDetail{}, err
 	}
 	if values == nil {
-		return 0, errors.New("failed to count leases")
+		return countDetail{}, errors.New("failed to count leases")
 	}
-	count := int(tree.MustBeDInt(values[0]))
-	return count, nil
+	return countDetail{
+		count:               int(tree.MustBeDInt(values[0])),
+		numSQLInstances:     int(tree.MustBeDInt(values[1])),
+		sampleSQLInstanceID: int(tree.MustBeDInt(values[2])),
+	}, nil
 }
 
 // Counts leases by region in MR environments.
@@ -197,16 +234,19 @@ func countLeasesByRegion(
 	convertRegionsToBytes bool,
 	at hlc.Timestamp,
 	whereClauses []string,
-) (int, error) {
+	usesOldSchema bool,
+) (countDetail, error) {
 	regionClause := "crdb_region=$2::system.crdb_internal_region"
 	if convertRegionsToBytes {
 		regionClause = "crdb_region=$2"
 	}
 	stmt := fmt.Sprintf(
-		`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE `,
+		`SELECT %[1]s FROM system.public.lease AS OF SYSTEM TIME '%[2]s' WHERE %[3]s `,
+		getCountLeaseColumns(usesOldSchema),
 		at.AsOfSystemTime(),
-	) + regionClause + ` AND (` + strings.Join(whereClauses, " OR ") + ")"
-	var count int
+		regionClause+` AND (`+strings.Join(whereClauses, " OR ")+")",
+	)
+	var detail countDetail
 	if err := regionMap.ForEach(func(region string) error {
 		regionEnumValue := region
 		// The leases table descriptor injected does not have the type of the column
@@ -261,10 +301,32 @@ func countLeasesByRegion(
 		if values == nil {
 			return errors.New("failed to count leases")
 		}
-		count += int(tree.MustBeDInt(values[0]))
+		detail.count += int(tree.MustBeDInt(values[0]))
+		detail.numSQLInstances += int(tree.MustBeDInt(values[1]))
+		if detail.sampleSQLInstanceID == 0 { // only retain the first sample ID
+			detail.sampleSQLInstanceID = int(tree.MustBeDInt(values[2]))
+		}
 		return nil
 	}); err != nil {
-		return 0, err
+		return countDetail{}, err
 	}
-	return count, nil
+	return detail, nil
+}
+
+func getCountLeaseColumns(usesOldSchema bool) string {
+	var sb strings.Builder
+	sb.WriteString("count(1)")
+	// We only care about the count of leases, which is the first column. For
+	// debugging purposes, we also return the number of distinct nodes we are
+	// waiting on and one of the nodes we are waiting on. These two details will
+	// appear in the periodic dumping of wait stats.
+	//
+	// The system.lease table went through some column renames in past versions.
+	// Pick the correct version.
+	if usesOldSchema {
+		sb.WriteString(`, count(distinct "nodeID"), ifnull(min("nodeID"),0)`)
+		return sb.String()
+	}
+	sb.WriteString(`, count(distinct sql_instance_id), ifnull(min(sql_instance_id),0)`)
+	return sb.String()
 }
