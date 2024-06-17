@@ -32,6 +32,11 @@ type JobRunDependencies interface {
 
 	// ClusterSettings returns the cluster settings.
 	ClusterSettings() *cluster.Settings
+
+	// GetExplain returns the explain output for the current phase.
+	GetExplain() string
+	// SetExplain uses a callback to store the explain output for later retrieval.
+	SetExplain(string, error)
 }
 
 // EventLogger contains the dependencies required for logging schema change

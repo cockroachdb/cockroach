@@ -41,6 +41,7 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",

@@ -18,6 +18,10 @@ usage: $0 <command>
       ldr start
       ldr run -- whoami
 
+  * 'setup'
+    Shortand to run 'create', 'start', 'workload init', 'jobs start', and then 'workload run' to
+    get LDR up and running in one command. Any extra arguments are passed along to 'create'.
+
   * 'create'
     creates two clusters, \$USER-a and \$USER-b, defaulting to 3x16vCPU but any optional extra args
     including overriding those defaults are passed through to 'roachprod create'. It stages cockroach
@@ -36,13 +40,10 @@ usage: $0 <command>
   * 'settings <fast,reset>'
     alters some clusters settings for experimentation.
 
-  A typical test run with all defaults and staged binaries might thus look like:
-    ldr create
-    ldr start
-    ldr workload init
-    ldr jobs start
-    ldr workload run
+  A typical test run with defaults, staged binaries, etc might thus look like:
+    ldr setup -n 5
     ...
+    ldr jobs stats
     ldr adminurl --path /debug/pprof/ui/cpu/?node=1&seconds=5&labels=true --open
     ...
     ldr destroy
@@ -52,16 +53,28 @@ fi
 
 
 case $1 in
+  "setup")
+    shift
+    $0 create "$@"
+    $0 start
+    $0 workload init
+    $0 jobs start
+    echo "starting the workload..."
+    $0 workload run
+    echo "LDR is setup and running!"
+    echo
+    roachprod adminurl $A:1 --path "/#/metrics/logicalDataReplication/cluster"
+    roachprod adminurl $B:1 --path "/#/metrics/logicalDataReplication/cluster"
+    ;;
+
   "create")
     shift
     roachprod create $A \
       --clouds gce --gce-machine-type n2-standard-16 --nodes 3 --username "$USER" --lifetime 24h "$@"
     roachprod create $B \
       --clouds gce --gce-machine-type n2-standard-16 --nodes 3 --username "$USER" --lifetime 24h "$@"
-    roachprod stage $A cockroach
-    roachprod stage $B cockroach
-    roachprod stage $A workload
-    roachprod stage $B workload
+    $0 stage cockroach
+    $0 stage workload
     ;;
 
   "jobs")
@@ -85,11 +98,11 @@ case $1 in
       roachprod sql $A:1 -- -e "CANCEL JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running' OR status = 'paused');"
       roachprod sql $B:1 -- -e "CANCEL JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running' OR status = 'paused');"
       ;;
-    "stats")
+    "producer-stats")
       roachprod sql $A -- -e "select * from crdb_internal.cluster_replication_node_streams;"  --format=table
       roachprod sql $B -- -e "select * from crdb_internal.cluster_replication_node_streams;"  --format=table
       ;;
-    "flushes")
+    "stats")
       roachprod sql $A -- -e "select * from crdb_internal.logical_replication_node_processors;"  --format=table
       roachprod sql $B -- -e "select * from crdb_internal.logical_replication_node_processors;"  --format=table
       ;;
