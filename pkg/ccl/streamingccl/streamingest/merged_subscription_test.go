@@ -30,10 +30,10 @@ func TestMergeSubscriptionsRun(t *testing.T) {
 	ctx := context.Background()
 	events := func(partition string) []streamingccl.Event {
 		return []streamingccl.Event{
-			streamingccl.MakeKVEvent([]roachpb.KeyValue{{
+			streamingccl.MakeKVEventFromKVs([]roachpb.KeyValue{{
 				Key: []byte(partition + "_key1"),
 			}}),
-			streamingccl.MakeKVEvent([]roachpb.KeyValue{{
+			streamingccl.MakeKVEventFromKVs([]roachpb.KeyValue{{
 				Key: []byte(partition + "_key2"),
 			}}),
 		}
@@ -67,7 +67,7 @@ func TestMergeSubscriptionsRun(t *testing.T) {
 		events := []string{}
 		g.Go(func() error {
 			for ev := range merged.Events() {
-				events = append(events, string(ev.GetKVs()[0].Key))
+				events = append(events, string(ev.GetKVs()[0].KeyValue.Key))
 			}
 			return nil
 		})
