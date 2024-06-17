@@ -254,6 +254,62 @@ SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_injected]
 ----
 20000
 
+# Verify that we can configure the minimum and maximum automatically-determined
+# sample size.
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.min = 15000
+
+statement ok
+CREATE STATISTICS s_dynamic_min FROM big
+
+let $hist_id_dynamic_min
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_dynamic_min';
+
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_dynamic_min]
+----
+15000
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.min
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.max = 10500
+
+statement ok
+CREATE STATISTICS s_dynamic_max FROM big
+
+let $hist_id_dynamic_max
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE big] WHERE statistics_name = 's_dynamic_max';
+
+# Perform integer division by 10 because there may be 2 extra buckets added
+# on either end of the histogram to account for the 20000 distinct values.
+query I
+SELECT (count(*) // 10) * 10 FROM [SHOW HISTOGRAM $hist_id_dynamic_max]
+----
+10500
+
+# Verify that we can't set the minimum sample size to be greater than the
+# maximum.
+
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.min = 11000
+
+statement error pgcode 22003 maxAutoHistogramSamples cannot be less than minAutoHistogramSamples
+CREATE STATISTICS s_dynamic_max FROM big
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.min
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.max
+
+# Verify that specifying the number of samples in the cluster setting overrides
+# the dynamically determined number of samples.
+
 statement ok
 SET CLUSTER SETTING sql.stats.histogram_samples.count = 20000
 

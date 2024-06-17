@@ -14,8 +14,10 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestComputeNumberSamples(t *testing.T) {
@@ -43,7 +45,11 @@ func TestComputeNumberSamples(t *testing.T) {
 			t.Fatalf("expected %d samples, got %d", expectedNumSamples, computedNumSamples)
 		}
 	}
+
+	st := cluster.MakeTestingClusterSettings()
 	for _, td := range testData {
-		checkComputeNumberSamples(int(computeNumberSamples(uint64(td.numRows))), td.expectedNumSamples)
+		numSamples, err := computeNumberSamples(uint64(td.numRows), st)
+		require.NoError(t, err)
+		checkComputeNumberSamples(int(numSamples), td.expectedNumSamples)
 	}
 }

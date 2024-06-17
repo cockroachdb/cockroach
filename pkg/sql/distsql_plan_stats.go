@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats/bounds"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -74,13 +76,33 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 	5*time.Minute,
 )
 
+// minAutoHistogramSamples and maxAutoHistogramSamples are the bounds used by
+// computeNumberSamples to determine the number of samples to collect for
+// histogram construction.
+var minAutoHistogramSamples = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.histogram_samples.min",
+	"minimum sample size to be selected when sample size is automatically determined",
+	10000,
+	settings.NonNegativeIntWithMaximum(math.MaxUint32),
+	settings.WithVisibility(settings.Reserved))
+
+var maxAutoHistogramSamples = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.histogram_samples.max",
+	"maximum sample size to be selected when sample size is automatically determined",
+	300000,
+	settings.NonNegativeIntWithMaximum(math.MaxUint32),
+	settings.WithVisibility(settings.Reserved))
+
 // computeNumberSamples dynamically determines the number of samples to collect
 // based on the estimated number of rows in the table. The formula 582n^0.29 is
 // based on empirical data collected by running the sampler with different
 // sample sizes on a variety of table sizes and observing the proportion of
 // heavy hitters (most frequent elements) represented in the sample. It was
 // derived by fitting a best-fit curve to the table below. The number of samples
-// returned is bounded between 10,000 and 300,000.
+// returned is bounded between minAutoHistogramSamples and
+// maxAutoHistogramSamples (10,000 and 300,000 by default).
 // +---------------+-------------+
 // | Table Size    | Sample Size |
 // +---------------+-------------+
@@ -103,15 +125,25 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 //     ~65% down to 1000x, ~10% down to 100x
 //   - 1b rows/300k samples: ~100% coverage of multiplicities down to 100000x,
 //     ~95% down to 10000x, ~25% down to 1000x
-func computeNumberSamples(numRows uint64) uint32 {
+func computeNumberSamples(numRows uint64, st *cluster.Settings) (uint32, error) {
+	maxSampleSize := float64(maxAutoHistogramSamples.Get(&st.SV))
+	minSampleSize := float64(minAutoHistogramSamples.Get(&st.SV))
+
+	if maxSampleSize < minSampleSize {
+		return 0, pgerror.New(
+			pgcode.NumericValueOutOfRange,
+			"maxAutoHistogramSamples cannot be less than minAutoHistogramSamples",
+		)
+	}
+
 	numSamples := math.Max(
 		math.Min(
 			582.0*math.Pow(float64(numRows), 0.29),
-			300000.0,
+			maxSampleSize,
 		),
-		10000.0,
+		minSampleSize,
 	)
-	return uint32(numSamples)
+	return uint32(numSamples), nil
 }
 
 func (dsp *DistSQLPlanner) createAndAttachSamplers(
@@ -124,7 +156,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 	jobID jobspb.JobID,
 	reqStats []requestedStat,
 	sketchSpec, invSketchSpec []execinfrapb.SketchSpec,
-) *PhysicalPlan {
+) (*PhysicalPlan, error) {
 	// Estimate the expected number of rows based on existing stats in the cache.
 	var rowsExpected uint64
 	if len(tableStats) > 0 {
@@ -156,7 +188,15 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 			} else if clusterSampleCount := histogramSamples.Get(&dsp.st.SV); clusterSampleCount != histogramSamples.Default() {
 				histogramSamplesCount = uint32(clusterSampleCount)
 			} else {
-				histogramSamplesCount = computeNumberSamples(rowsExpected)
+				var err error
+				histogramSamplesCount, err = computeNumberSamples(
+					rowsExpected,
+					dsp.st,
+				)
+				if err != nil {
+					return nil, err
+				}
+				log.Infof(ctx, "using computed sample size of %d for histogram construction", histogramSamplesCount)
 			}
 			sampler.SampleSize = histogramSamplesCount
 			// This could be anything >= 2 to produce a histogram, but the max number
@@ -221,7 +261,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		[]*types.T{},
 	)
 	p.PlanToStreamColMap = []int{}
-	return p
+	return p, nil
 }
 
 func (dsp *DistSQLPlanner) createPartialStatsPlan(
@@ -403,7 +443,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		sampledColumnIDs,
 		jobID,
 		reqStats,
-		sketchSpec, invSketchSpec), nil
+		sketchSpec, invSketchSpec)
 }
 
 func (dsp *DistSQLPlanner) createStatsPlan(
@@ -639,7 +679,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		sampledColumnIDs,
 		jobID,
 		reqStats,
-		sketchSpecs, invSketchSpecs), nil
+		sketchSpecs, invSketchSpecs)
 }
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
