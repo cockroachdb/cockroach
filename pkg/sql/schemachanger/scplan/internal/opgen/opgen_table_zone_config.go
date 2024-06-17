@@ -20,8 +20,11 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.TableZoneConfig) *scop.NotImplemented {
-					return &scop.NotImplemented{}
+				emit(func(this *scpb.TableZoneConfig) *scop.AddTableZoneConfig {
+					return &scop.AddTableZoneConfig{
+						TableID:    this.TableID,
+						ZoneConfig: this.ZoneConfig,
+					}
 				}),
 			),
 		),
