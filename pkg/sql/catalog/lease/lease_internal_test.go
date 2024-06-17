@@ -29,7 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -1610,4 +1613,117 @@ func TestSessionLeasingClusterSetting(t *testing.T) {
 			require.False(t, lm.sessionBasedLeasingModeAtLeast(ctx, mode))
 		}
 	}
+}
+
+// TestLeaseCountDetailCrossNode will test out the extra debugging info that is
+// emitted from countLeasesWithDetail. This version tests leases that are spread
+// across multiple nodes.
+func TestLeaseCountDetailCrossNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// We are going to disable session based leasing as its easier to add a lot of
+	// fake leases into system.leases.
+	LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, int64(SessionBasedLeasingOff))
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings:          st,
+		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+		Knobs:             base.TestingKnobs{},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	idb := srv.InternalDB().(isql.DB)
+	executor := idb.Executor()
+
+	// Do cross node lease testing. It is easy to mock this if we use the old
+	// version of the lease table, which lets you insert your own expiration
+	// times.
+	descID := 10 // Descriptor ID that we will insert and query in this test
+	// Insert using a synthetic descriptor.
+	err := executor.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable_V23_2()}, func() error {
+		nodeIDs := []string{"2", "2", "8", "3", "2"}
+		for i, nodeID := range nodeIDs {
+			version := i + 1
+			expiration := "2124-06-12-10:10:10" // Choose a long expiration, so they are unexpired when we count
+			region := "E'\\\\x80'"              // Single region
+			_, err := executor.Exec(ctx, "add-rows-for-test", nil,
+				fmt.Sprintf("INSERT INTO system.lease VALUES (%d, %d, %s, '%s', %s)",
+					descID, version, nodeID, expiration, region))
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	codec := s.Codec()
+	now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	// Count leases for any version
+	detail, err := countLeasesWithDetail(ctx, idb, codec, nil, st,
+		[]IDVersion{{ID: descpb.ID(descID), Version: 1}}, now, true)
+	require.NoError(t, err)
+	require.Equal(t, 5, detail.count)
+	require.Equal(t, 3, detail.numSQLInstances)
+	require.Equal(t, 2, detail.sampleSQLInstanceID)
+
+	// Count leases only for a specific version
+	detail, err = countLeasesWithDetail(ctx, idb, codec, nil, st,
+		[]IDVersion{{ID: descpb.ID(descID), Version: 3}}, now, false)
+	require.NoError(t, err)
+	// We should see the fake leases we added plus the one added by the system.
+	require.Equal(t, 1, detail.count)
+	require.Equal(t, 1, detail.numSQLInstances)
+	require.Equal(t, 8, detail.sampleSQLInstanceID)
+}
+
+// TestLeaseCountDetailSessionBased will test out the extra debugging info that
+// comes from countLeasesWithDetail. This version targets session based leasing.
+func TestLeaseCountDetailSessionBased(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings:          st,
+		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
+		Knobs:             base.TestingKnobs{},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	idb := srv.InternalDB().(isql.DB)
+	executor := idb.Executor()
+
+	descID := 890 // Descriptor ID that we will insert and query in this test
+	session, err := srv.SQLLivenessProvider().(sqlliveness.Provider).Session(ctx)
+	require.NoError(t, err)
+	err = executor.WithSyntheticDescriptors(catalog.Descriptors{systemschema.LeaseTable()}, func() error {
+		nodeID := "0" // Hard code the node rather than getting it from srv to avoid import cycle
+		version := 1
+		region := "E'\\\\x80'" // Single region
+		_, err := executor.Exec(ctx, "add-rows-for-test", nil,
+			fmt.Sprintf("INSERT INTO system.lease VALUES (%d, %d, %s, '%s', %s)",
+				descID, version, nodeID, session.ID(), region))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	codec := s.Codec()
+	now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	detail, err := countLeasesWithDetail(ctx, idb, codec, nil, st,
+		[]IDVersion{{ID: descpb.ID(descID), Version: 1}}, now, true)
+	require.NoError(t, err)
+	require.Equal(t, 1, detail.count)
+	require.Equal(t, 1, detail.numSQLInstances)
+	require.Equal(t, 0, detail.sampleSQLInstanceID)
 }
