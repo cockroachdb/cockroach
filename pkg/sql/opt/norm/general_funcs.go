@@ -975,7 +975,7 @@ func (c *CustomFuncs) findConstantFilterCols(
 			colTyp := tab.Column(scanPrivate.Table.ColumnOrdinal(colID)).DatumType()
 
 			span := cons.Spans.Get(0)
-			if !span.HasSingleKey(c.f.evalCtx) {
+			if !span.HasSingleKey(c.f.ctx, c.f.evalCtx) {
 				continue
 			}
 
@@ -1112,7 +1112,7 @@ func CombineComputedColFilters(
 	for k := 0; k < cons.Spans.Count(); k++ {
 		filterAdded := false
 		span := cons.Spans.Get(k)
-		if !span.HasSingleKey(f.evalCtx) {
+		if !span.HasSingleKey(f.ctx, f.evalCtx) {
 			// If we don't have a single value, or combination of single values
 			// to use in folding the computed column expression, don't use this
 			// constraint.
@@ -1528,12 +1528,20 @@ func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 // IsGreaterThan returns true if the first datum compares as greater than the
 // second.
 func (c *CustomFuncs) IsGreaterThan(first, second tree.Datum) bool {
-	return first.Compare(c.f.evalCtx, second) == 1
+	cmp, err := first.Compare(c.f.ctx, c.f.evalCtx, second)
+	if err != nil {
+		panic(err)
+	}
+	return cmp == 1
 }
 
 // DatumsEqual returns true if the first datum compares as equal to the second.
 func (c *CustomFuncs) DatumsEqual(first, second tree.Datum) bool {
-	return first.Compare(c.f.evalCtx, second) == 0
+	cmp, err := first.Compare(c.f.ctx, c.f.evalCtx, second)
+	if err != nil {
+		panic(err)
+	}
+	return cmp == 0
 }
 
 // ----------------------------------------------------------------------

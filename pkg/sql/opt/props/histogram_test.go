@@ -11,6 +11,7 @@
 package props
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -29,6 +30,7 @@ import (
 )
 
 func TestCanFilter(t *testing.T) {
+	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	// The histogram column ID is 1 for all test cases. CanFilter should only
@@ -96,7 +98,7 @@ func TestCanFilter(t *testing.T) {
 	h.Init(&evalCtx, opt.ColumnID(1), []cat.HistogramBucket{})
 	for _, tc := range testData {
 		c := constraint.ParseConstraint(&evalCtx, tc.constraint)
-		colIdx, _, ok := h.CanFilter(&c)
+		colIdx, _, ok := h.CanFilter(ctx, &c)
 		if ok != tc.canFilter {
 			t.Fatalf(
 				"for constraint %s, expected canFilter=%v but found %v", tc.constraint, tc.canFilter, ok,
@@ -111,6 +113,7 @@ func TestCanFilter(t *testing.T) {
 }
 
 func TestHistogram(t *testing.T) {
+	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	//   0  1  3  3   4  5   0  0   40  35
@@ -311,10 +314,10 @@ func TestHistogram(t *testing.T) {
 
 		// Make sure all test cases work with both ascending and descending columns.
 		for _, c := range ascAndDesc {
-			if _, _, ok := h.CanFilter(&c); !ok {
+			if _, _, ok := h.CanFilter(ctx, &c); !ok {
 				t.Fatalf("constraint %s cannot filter histogram %v", c.String(), *h)
 			}
-			filtered := h.Filter(&c)
+			filtered := h.Filter(ctx, &c)
 			count := roundVal(filtered.ValuesCount())
 			if testData[i].count != count {
 				t.Fatalf("expected %f but found %f", testData[i].count, count)
@@ -336,8 +339,9 @@ func TestHistogram(t *testing.T) {
 }
 
 func TestFilterBucket(t *testing.T) {
+	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	keyCtx := constraint.KeyContext{EvalCtx: &evalCtx}
+	keyCtx := constraint.KeyContext{Ctx: ctx, EvalCtx: &evalCtx}
 	col := opt.ColumnID(1)
 
 	type testCase struct {
@@ -402,7 +406,7 @@ func TestFilterBucket(t *testing.T) {
 	// getPrevUpperBound is used to find the upper bound of the first bucket so
 	// that the lower bound of the second bucket will equal upperBound.Next().
 	getPrevUpperBound := func(lowerBound tree.Datum) tree.Datum {
-		res, ok := lowerBound.Prev(&evalCtx)
+		res, ok := lowerBound.Prev(ctx, &evalCtx)
 		if !ok {
 			res = lowerBound
 		}
@@ -1080,6 +1084,7 @@ func roundHistogram(h *Histogram) {
 // BenchmarkHistogram measures the performance of various common props.Histogram
 // operations.
 func BenchmarkHistogram(b *testing.B) {
+	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	typs := []*types.T{
@@ -1159,7 +1164,7 @@ func BenchmarkHistogram(b *testing.B) {
 					})
 					b.Run("Filter", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
-							h.Filter(c)
+							h.Filter(ctx, c)
 						}
 					})
 					b.Run("ApplySelectivity", func(b *testing.B) {

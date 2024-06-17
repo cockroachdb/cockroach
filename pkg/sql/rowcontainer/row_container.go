@@ -62,7 +62,7 @@ type SortableRowContainer interface {
 	// InitTopK is called. Once InitTopK is called, callers should not call
 	// AddRow. Iterators created after calling InitTopK are guaranteed to read the
 	// top k rows only.
-	InitTopK()
+	InitTopK(context.Context)
 	// MaybeReplaceMax checks whether the given row belongs in the top k rows,
 	// potentially evicting a row in favor of the given row.
 	MaybeReplaceMax(context.Context, rowenc.EncDatumRow) error
@@ -167,6 +167,8 @@ type MemRowContainer struct {
 	scratchRow    tree.Datums
 	scratchEncRow rowenc.EncDatumRow
 
+	// ctx is only stored to be passed in MemRowContainer.Less.
+	ctx     context.Context
 	evalCtx *eval.Context
 
 	datumAlloc tree.DatumAlloc
@@ -199,7 +201,7 @@ func (mc *MemRowContainer) InitWithMon(
 
 // Less is part of heap.Interface and is only meant to be used internally.
 func (mc *MemRowContainer) Less(i, j int) bool {
-	cmp := colinfo.CompareDatums(mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
+	cmp := colinfo.CompareDatums(mc.ctx, mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
 	if mc.invertSorting {
 		cmp = -cmp
 	}
@@ -237,6 +239,7 @@ func (mc *MemRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
 	var cancelChecker cancelchecker.CancelChecker
 	cancelChecker.Reset(ctx)
+	mc.ctx = ctx
 	sort.Sort(mc, &cancelChecker)
 }
 
@@ -257,7 +260,7 @@ func (mc *MemRowContainer) Pop() interface{} { panic("unimplemented") }
 // smaller. Assumes InitTopK was called.
 func (mc *MemRowContainer) MaybeReplaceMax(ctx context.Context, row rowenc.EncDatumRow) error {
 	max := mc.At(0)
-	cmp, err := row.CompareToDatums(mc.types, &mc.datumAlloc, mc.ordering, mc.evalCtx, max)
+	cmp, err := row.CompareToDatums(ctx, mc.types, &mc.datumAlloc, mc.ordering, mc.evalCtx, max)
 	if err != nil {
 		return err
 	}
@@ -272,14 +275,16 @@ func (mc *MemRowContainer) MaybeReplaceMax(ctx context.Context, row rowenc.EncDa
 		if err := mc.Replace(ctx, 0, mc.scratchRow); err != nil {
 			return err
 		}
+		mc.ctx = ctx
 		heap.Fix(mc, 0)
 	}
 	return nil
 }
 
 // InitTopK rearranges the rows in the MemRowContainer into a Max-Heap.
-func (mc *MemRowContainer) InitTopK() {
+func (mc *MemRowContainer) InitTopK(ctx context.Context) {
 	mc.invertSorting = true
+	mc.ctx = ctx
 	heap.Init(mc)
 }
 
@@ -547,8 +552,8 @@ func (f *DiskBackedRowContainer) Reorder(
 }
 
 // InitTopK is part of the SortableRowContainer interface.
-func (f *DiskBackedRowContainer) InitTopK() {
-	f.src.InitTopK()
+func (f *DiskBackedRowContainer) InitTopK(ctx context.Context) {
+	f.src.InitTopK(ctx)
 }
 
 // MaybeReplaceMax is part of the SortableRowContainer interface.

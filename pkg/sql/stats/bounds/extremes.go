@@ -11,6 +11,8 @@
 package bounds
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -84,7 +86,7 @@ func ConstructUsingExtremesSpans(
 // GetUsingExtremesBounds returns a tree.Datum representing the exclusive upper
 // and exclusive lower bounds of the USING EXTREMES span for partial statistics.
 func GetUsingExtremesBounds(
-	evalCtx *eval.Context, histogram []cat.HistogramBucket,
+	ctx context.Context, evalCtx *eval.Context, histogram []cat.HistogramBucket,
 ) (lowerBound tree.Datum, upperBound tree.Datum, _ error) {
 
 	upperBound = histogram[len(histogram)-1].UpperBound
@@ -92,7 +94,7 @@ func GetUsingExtremesBounds(
 	// but if none exist, return error
 	for i := range histogram {
 		hist := &histogram[i]
-		if cmp, err := hist.UpperBound.CompareError(evalCtx, tree.DNull); err != nil {
+		if cmp, err := hist.UpperBound.Compare(ctx, evalCtx, tree.DNull); err != nil {
 			return lowerBound, nil, err
 		} else if cmp != 0 {
 			lowerBound = hist.UpperBound

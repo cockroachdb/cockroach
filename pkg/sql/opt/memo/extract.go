@@ -11,6 +11,8 @@
 package memo
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -423,12 +425,14 @@ func ExtractRemainingJoinFilters(on FiltersExpr, leftEq, rightEq opt.ColList) Fi
 
 // ExtractConstColumns returns columns in the filters expression that have been
 // constrained to fixed values.
-func ExtractConstColumns(on FiltersExpr, evalCtx *eval.Context) (fixedCols opt.ColSet) {
+func ExtractConstColumns(
+	ctx context.Context, on FiltersExpr, evalCtx *eval.Context,
+) (fixedCols opt.ColSet) {
 	for i := range on {
 		scalar := on[i]
 		scalarProps := scalar.ScalarProps()
 		if scalarProps.Constraints != nil && !scalarProps.Constraints.IsUnconstrained() {
-			fixedCols.UnionWith(scalarProps.Constraints.ExtractConstCols(evalCtx))
+			fixedCols.UnionWith(scalarProps.Constraints.ExtractConstCols(ctx, evalCtx))
 		}
 	}
 	return fixedCols
@@ -437,13 +441,13 @@ func ExtractConstColumns(on FiltersExpr, evalCtx *eval.Context) (fixedCols opt.C
 // ExtractValueForConstColumn returns the constant value of a column returned by
 // ExtractConstColumns.
 func ExtractValueForConstColumn(
-	on FiltersExpr, evalCtx *eval.Context, col opt.ColumnID,
+	ctx context.Context, on FiltersExpr, evalCtx *eval.Context, col opt.ColumnID,
 ) tree.Datum {
 	for i := range on {
 		scalar := on[i]
 		scalarProps := scalar.ScalarProps()
 		if scalarProps.Constraints != nil {
-			if val := scalarProps.Constraints.ExtractValueForConstCol(evalCtx, col); val != nil {
+			if val := scalarProps.Constraints.ExtractValueForConstCol(ctx, evalCtx, col); val != nil {
 				return val
 			}
 		}

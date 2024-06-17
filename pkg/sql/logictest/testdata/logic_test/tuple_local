@@ -4,7 +4,7 @@
 # a distributed fashion. We should fix that and merge this file into 'tuple'
 # (tracked in #94970).
 
-# Regression test for not using CompareError when dealing with tuples (#93396).
+# Regression test for using old Compare method when dealing with tuples (#93396).
 statement ok
 CREATE TABLE t93396 (c1 TIME PRIMARY KEY, c2 INT8);
 INSERT INTO t93396 VALUES ('0:0:0'::TIME, 0);

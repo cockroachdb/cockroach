@@ -138,7 +138,7 @@ func TestAddUniqChecks(t *testing.T) {
 			// The following 2 checks mimic ones found in a subsequent commit in
 			// insert_funcs.go.
 			// Verify there is a single key...
-			if span.Prefix(&evalCtx) != span.StartKey().Length() {
+			if span.Prefix(ctx, &evalCtx) != span.StartKey().Length() {
 				if expectedError == "More than one key found" {
 					return
 				}
@@ -206,7 +206,9 @@ func TestAddUniqChecks(t *testing.T) {
 					if datum == out.DatumsFromConstraint[i][j] {
 						continue
 					}
-					if datum.Compare(&evalCtx, out.DatumsFromConstraint[i][j]) != 0 {
+					if cmp, err := datum.Compare(ctx, &evalCtx, out.DatumsFromConstraint[i][j]); err != nil {
+						t.Fatal(err)
+					} else if cmp != 0 {
 						t.Fatalf("expected built row datum, %v, to match DatumsFromConstraint item, %v", datum, out.DatumsFromConstraint[i][j])
 					}
 				}

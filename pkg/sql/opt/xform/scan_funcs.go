@@ -224,7 +224,7 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	localScanPrivate := c.DuplicateScanPrivate(scanPrivate)
 	localScanPrivate.LocalityOptimized = true
 	localConstraint.Columns = localConstraint.Columns.RemapColumns(scanPrivate.Table, localScanPrivate.Table)
-	localScanPrivate.SetConstraint(c.e.evalCtx, &localConstraint)
+	localScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, &localConstraint)
 	localScanPrivate.HardLimit = scanPrivate.HardLimit
 	if scanPrivate.InvertedConstraint != nil {
 		localScanPrivate.InvertedConstraint = make(inverted.Spans, len(scanPrivate.InvertedConstraint))
@@ -256,7 +256,7 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	remoteScanPrivate := c.DuplicateScanPrivate(scanPrivate)
 	remoteScanPrivate.LocalityOptimized = true
 	remoteConstraint.Columns = remoteConstraint.Columns.RemapColumns(scanPrivate.Table, remoteScanPrivate.Table)
-	remoteScanPrivate.SetConstraint(c.e.evalCtx, &remoteConstraint)
+	remoteScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, &remoteConstraint)
 	remoteScanPrivate.HardLimit = scanPrivate.HardLimit
 	if scanPrivate.InvertedConstraint != nil {
 		remoteScanPrivate.InvertedConstraint = make(inverted.Spans, len(scanPrivate.InvertedConstraint))
@@ -490,7 +490,7 @@ func (c *CustomFuncs) splitSpans(
 			remoteSpans.Append(span)
 		}
 	}
-	keyCtx := constraint.MakeKeyContext(&origConstraint.Columns, c.e.evalCtx)
+	keyCtx := constraint.MakeKeyContext(c.e.ctx, &origConstraint.Columns, c.e.evalCtx)
 	localConstraint.Init(&keyCtx, &localSpans)
 	remoteConstraint.Init(&keyCtx, &remoteSpans)
 	return localConstraint, remoteConstraint

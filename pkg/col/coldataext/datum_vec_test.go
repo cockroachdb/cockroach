@@ -11,6 +11,7 @@
 package coldataext
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -25,6 +26,7 @@ import (
 func TestDatumVec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
 	evalCtx := &eval.Context{}
 
 	dv1 := newDatumVec(types.Jsonb, 0 /* n */, evalCtx)
@@ -32,11 +34,15 @@ func TestDatumVec(t *testing.T) {
 	var expected coldata.Datum
 	expected = tree.NewDJSON(json.FromString("str1"))
 	dv1.AppendVal(expected)
-	require.True(t, dv1.Get(0).(tree.Datum).Compare(evalCtx, expected.(tree.Datum)) == 0)
+	cmp, err := dv1.Get(0).(tree.Datum).Compare(ctx, evalCtx, expected.(tree.Datum))
+	require.NoError(t, err)
+	require.True(t, cmp == 0)
 
 	expected = tree.NewDJSON(json.FromString("str2"))
 	dv1.AppendVal(expected)
-	require.True(t, dv1.Get(1).(tree.Datum).Compare(evalCtx, expected.(tree.Datum)) == 0)
+	cmp, err = dv1.Get(1).(tree.Datum).Compare(ctx, evalCtx, expected.(tree.Datum))
+	require.NoError(t, err)
+	require.True(t, cmp == 0)
 	require.Equal(t, 2, dv1.Len())
 
 	invalidDatum, _ := tree.ParseDInt("10")
@@ -65,7 +71,9 @@ func TestDatumVec(t *testing.T) {
 		dv1.AppendSlice(dv2, i, 0 /* srcStartIdx */, dv2.Len())
 		require.Equal(t, i+1, dv1.Len())
 		for j := 0; j <= i; j++ {
-			require.True(t, dv1.Get(j).(tree.Datum).Compare(evalCtx, tree.NewDJSON(json.FromString("dv2 str"))) == 0)
+			cmp, err = dv1.Get(j).(tree.Datum).Compare(ctx, evalCtx, tree.NewDJSON(json.FromString("dv2 str")))
+			require.NoError(t, err)
+			require.True(t, cmp == 0)
 		}
 	}
 
@@ -77,9 +85,13 @@ func TestDatumVec(t *testing.T) {
 
 	dv1.AppendSlice(dv2, 1 /* destIdx */, 1 /* srcStartIdx */, 3 /* srcEndIdx */)
 	require.Equal(t, 3 /* expected */, dv1.Len())
-	require.True(t, dv1.Get(0).(tree.Datum).Compare(evalCtx, tree.NewDJSON(json.FromString("dv2 str"))) == 0)
-	require.True(t, dv1.Get(1).(tree.Datum).Compare(evalCtx, tree.NewDJSON(json.FromString("dv2 str2"))) == 0)
-	require.True(t, dv1.Get(2).(tree.Datum).Compare(evalCtx, tree.DNull) == 0)
+	cmp, err = dv1.Get(0).(tree.Datum).Compare(ctx, evalCtx, tree.NewDJSON(json.FromString("dv2 str")))
+	require.NoError(t, err)
+	require.True(t, cmp == 0)
+	cmp, err = dv1.Get(1).(tree.Datum).Compare(ctx, evalCtx, tree.NewDJSON(json.FromString("dv2 str2")))
+	require.NoError(t, err)
+	require.True(t, cmp == 0)
+	require.True(t, dv1.Get(2).(tree.Datum) == tree.DNull)
 
 	dv2 = newDatumVec(types.Jsonb, 0 /* n */, evalCtx)
 	dv2.AppendVal(tree.NewDJSON(json.FromString("string0")))
@@ -88,7 +100,11 @@ func TestDatumVec(t *testing.T) {
 
 	dv1.CopySlice(dv2, 0 /* destIdx */, 0 /* srcStartIdx */, 3 /* srcEndIdx */)
 	require.Equal(t, 3 /* expected */, dv1.Len())
-	require.True(t, dv1.Get(0).(tree.Datum).Compare(evalCtx, tree.NewDJSON(json.FromString("string0"))) == 0)
-	require.True(t, dv1.Get(1).(tree.Datum).Compare(evalCtx, tree.DNull) == 0)
-	require.True(t, dv1.Get(2).(tree.Datum).Compare(evalCtx, tree.NewDJSON(json.FromString("string2"))) == 0)
+	cmp, err = dv1.Get(0).(tree.Datum).Compare(ctx, evalCtx, tree.NewDJSON(json.FromString("string0")))
+	require.NoError(t, err)
+	require.True(t, cmp == 0)
+	require.True(t, dv1.Get(1).(tree.Datum) == tree.DNull)
+	cmp, err = dv1.Get(2).(tree.Datum).Compare(ctx, evalCtx, tree.NewDJSON(json.FromString("string2")))
+	require.NoError(t, err)
+	require.True(t, cmp == 0)
 }

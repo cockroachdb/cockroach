@@ -350,7 +350,7 @@ func (it *scanIndexIter) filtersImplyPredicate(
 // extractConstNonCompositeColumns returns the set of columns held constant by
 // the given filters and of types that do not have composite encodings.
 func (it *scanIndexIter) extractConstNonCompositeColumns(f memo.FiltersExpr) opt.ColSet {
-	constCols := memo.ExtractConstColumns(f, it.evalCtx)
+	constCols := memo.ExtractConstColumns(it.e.ctx, f, it.evalCtx)
 	var constNonCompositeCols opt.ColSet
 	for col, ok := constCols.Next(0); ok; col, ok = constCols.Next(col + 1) {
 		ord := it.tabMeta.MetaID.ColumnOrdinal(col)
@@ -374,7 +374,7 @@ func (it *scanIndexIter) buildConstProjectionsFromPredicate(
 		ord := it.tabMeta.MetaID.ColumnOrdinal(col)
 		typ := it.tabMeta.Table.Column(ord).DatumType()
 
-		val := memo.ExtractValueForConstColumn(pred, it.evalCtx, col)
+		val := memo.ExtractValueForConstColumn(it.e.ctx, pred, it.evalCtx, col)
 		if val == nil {
 			panic(errors.AssertionFailedf("could not extract constant value for column %d", col))
 		}

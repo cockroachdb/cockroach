@@ -111,7 +111,11 @@ func (c *CustomFuncs) IsConstValueEqual(const1, const2 opt.ScalarExpr) bool {
 	case opt.ConstOp:
 		datum1 := const1.(*memo.ConstExpr).Value
 		datum2 := const2.(*memo.ConstExpr).Value
-		return datum1.Compare(c.f.evalCtx, datum2) == 0
+		cmp, err := datum1.Compare(c.f.ctx, c.f.evalCtx, datum2)
+		if err != nil {
+			panic(err)
+		}
+		return cmp == 0
 	default:
 		panic(errors.AssertionFailedf("unexpected Op type: %v", redact.Safe(op1)))
 	}
@@ -149,7 +153,9 @@ func (c *CustomFuncs) UnifyComparison(
 		return nil, false
 	}
 
-	if convertedBack.Compare(c.f.evalCtx, cnst.Value) != 0 {
+	if cmp, err := convertedBack.Compare(c.f.ctx, c.f.evalCtx, cnst.Value); err != nil {
+		panic(err)
+	} else if cmp != 0 {
 		return nil, false
 	}
 

@@ -136,7 +136,10 @@ func boolFromCmp(cmp int, op treecmp.ComparisonOperator) *tree.DBool {
 }
 
 func cmpOpTupleFn(
-	ctx tree.CompareContext, left, right tree.DTuple, op treecmp.ComparisonOperator,
+	ctx context.Context,
+	cmpCtx tree.CompareContext,
+	left, right tree.DTuple,
+	op treecmp.ComparisonOperator,
 ) (tree.Datum, error) {
 	cmp := 0
 	sawNull := false
@@ -170,7 +173,7 @@ func cmpOpTupleFn(
 			}
 		} else {
 			var err error
-			cmp, err = leftElem.CompareError(ctx, rightElem)
+			cmp, err = leftElem.Compare(ctx, cmpCtx, rightElem)
 			if err != nil {
 				return tree.DNull, err
 			}

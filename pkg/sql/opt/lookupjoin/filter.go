@@ -11,6 +11,8 @@
 package lookupjoin
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -20,12 +22,12 @@ import (
 // HasJoinFilterConstants returns true if the filter constrains the given column
 // to a constant, non-NULL value or set of constant, non-NULL values.
 func HasJoinFilterConstants(
-	filters memo.FiltersExpr, col opt.ColumnID, evalCtx *eval.Context,
+	ctx context.Context, filters memo.FiltersExpr, col opt.ColumnID, evalCtx *eval.Context,
 ) bool {
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
 		if props.TightConstraints {
-			if ok := props.Constraints.HasSingleColumnNonNullConstValues(evalCtx, col); ok {
+			if ok := props.Constraints.HasSingleColumnNonNullConstValues(ctx, evalCtx, col); ok {
 				return true
 			}
 		}
@@ -40,14 +42,14 @@ func HasJoinFilterConstants(
 // the number of returned values is chosen. Note that the returned constant
 // values do not contain NULL.
 func FindJoinFilterConstants(
-	filters memo.FiltersExpr, col opt.ColumnID, evalCtx *eval.Context,
+	ctx context.Context, filters memo.FiltersExpr, col opt.ColumnID, evalCtx *eval.Context,
 ) (values tree.Datums, filterIdx int, ok bool) {
 	var bestValues tree.Datums
 	var bestFilterIdx int
 	for filterIdx := range filters {
 		props := filters[filterIdx].ScalarProps()
 		if props.TightConstraints {
-			constVals, ok := props.Constraints.ExtractSingleColumnNonNullConstValues(evalCtx, col)
+			constVals, ok := props.Constraints.ExtractSingleColumnNonNullConstValues(ctx, evalCtx, col)
 			if !ok {
 				continue
 			}

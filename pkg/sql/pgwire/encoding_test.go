@@ -292,7 +292,9 @@ func TestEncodings(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				if d.Compare(&evalCtx, tc.Datum) != 0 {
+				if cmp, err := d.Compare(ctx, &evalCtx, tc.Datum); err != nil {
+					t.Fatal(err)
+				} else if cmp != 0 {
 					t.Fatalf("%v != %v", d, tc.Datum)
 				}
 			}
@@ -334,24 +336,20 @@ func TestExoticNumericEncodings(t *testing.T) {
 		{apd.New(1234123400, -2), []byte{0, 4, 0, 1, 0, 0, 0, 2, 0x4, 0xd2, 0x4, 0xd2, 0, 0, 0, 0}},
 	}
 
+	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(nil)
 	var da tree.DatumAlloc
 	for i, c := range testCases {
 		t.Run(fmt.Sprintf("%d_%s", i, c.Value), func(t *testing.T) {
-			d, err := pgwirebase.DecodeDatum(
-				context.Background(),
-				&evalCtx,
-				types.Decimal,
-				pgwirebase.FormatBinary,
-				c.Encoding,
-				&da,
-			)
+			d, err := pgwirebase.DecodeDatum(ctx, &evalCtx, types.Decimal, pgwirebase.FormatBinary, c.Encoding, &da)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			expected := &tree.DDecimal{Decimal: *c.Value}
-			if d.Compare(&evalCtx, expected) != 0 {
+			if cmp, err := d.Compare(ctx, &evalCtx, expected); err != nil {
+				t.Fatal(err)
+			} else if cmp != 0 {
 				t.Fatalf("%v != %v", d, expected)
 			}
 		})

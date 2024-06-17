@@ -78,7 +78,9 @@ func TestColumnarizeMaterialize(t *testing.T) {
 			t.Fatal("unexpected nil row")
 		}
 		for j := range typs {
-			if row[j].Datum.Compare(&evalCtx, rows[i][j].Datum) != 0 {
+			if cmp, err := row[j].Datum.Compare(ctx, &evalCtx, rows[i][j].Datum); err != nil {
+				t.Fatal(err)
+			} else if cmp != 0 {
 				t.Fatal("unequal rows", row, rows[i])
 			}
 		}

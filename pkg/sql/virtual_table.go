@@ -255,7 +255,7 @@ var _ rowPusher = &vTableLookupJoinNode{}
 
 // startExec implements the planNode interface.
 func (v *vTableLookupJoinNode) startExec(params runParams) error {
-	v.run.keyCtx = constraint.KeyContext{EvalCtx: params.EvalContext()}
+	v.run.keyCtx = constraint.KeyContext{Ctx: params.ctx, EvalCtx: params.EvalContext()}
 	if v.joinType == descpb.InnerJoin || v.joinType == descpb.LeftOuterJoin {
 		v.run.rows = rowcontainer.NewRowContainer(
 			params.p.Mon().MakeBoundAccount(),

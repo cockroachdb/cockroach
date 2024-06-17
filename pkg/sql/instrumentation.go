@@ -395,8 +395,6 @@ func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *Executo
 		// helper setup.
 		ih.traceMetadata = make(execNodeTraceMetadata)
 	}
-	// Make sure that the builtins use the correct context.
-	ih.evalCtx.SetDeprecatedContext(ctx)
 	if ih.collectBundle {
 		if pollInterval := inFlightTraceCollectorPollInterval.Get(cfg.SV()); pollInterval > 0 {
 			ih.startInFlightTraceCollector(ctx, cfg.InternalDB.Executor(), pollInterval)

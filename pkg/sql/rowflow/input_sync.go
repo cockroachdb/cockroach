@@ -66,6 +66,7 @@ type serialSynchronizer interface {
 type serialSynchronizerBase struct {
 	state serialSynchronizerState
 
+	ctx      context.Context
 	types    []*types.T
 	sources  []srcInfo
 	rowAlloc rowenc.EncDatumRowAlloc
@@ -79,6 +80,7 @@ func (s *serialSynchronizerBase) getSources() []srcInfo {
 
 // Start is part of the RowSource interface.
 func (s *serialSynchronizerBase) Start(ctx context.Context) {
+	s.ctx = ctx
 	for _, src := range s.sources {
 		src.src.Start(ctx)
 	}
@@ -133,7 +135,7 @@ func (s *serialOrderedSynchronizer) Len() int {
 func (s *serialOrderedSynchronizer) Less(i, j int) bool {
 	si := &s.sources[s.heap[i]]
 	sj := &s.sources[s.heap[j]]
-	cmp, err := si.row.Compare(s.types, &s.alloc, s.ordering, s.evalCtx, sj.row)
+	cmp, err := si.row.Compare(s.ctx, s.types, &s.alloc, s.ordering, s.evalCtx, sj.row)
 	if err != nil {
 		s.err = err
 		return false
@@ -271,7 +273,7 @@ func (s *serialOrderedSynchronizer) advanceRoot() error {
 	} else {
 		heap.Fix(s, 0)
 		// TODO(radu): this check may be costly, we could disable it in production
-		if cmp, err := oldRow.Compare(s.types, &s.alloc, s.ordering, s.evalCtx, src.row); err != nil {
+		if cmp, err := oldRow.Compare(s.ctx, s.types, &s.alloc, s.ordering, s.evalCtx, src.row); err != nil {
 			return err
 		} else if cmp > 0 {
 			return errors.Errorf(

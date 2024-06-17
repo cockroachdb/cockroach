@@ -53,6 +53,7 @@ func TestImplicator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, tu.TestDataPath(t, "implicator"), func(t *testing.T, path string) {
+		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
@@ -107,7 +108,7 @@ func TestImplicator(t *testing.T) {
 			}
 
 			im := partialidx.Implicator{}
-			im.Init(&f, md, &evalCtx)
+			im.Init(ctx, &f, md, &evalCtx)
 			remainingFilters, ok := im.FiltersImplyPredicate(filters, pred, computedCols)
 			if !ok {
 				return "false"
@@ -119,7 +120,7 @@ func TestImplicator(t *testing.T) {
 				buf.WriteString("none")
 			} else {
 				execBld := execbuilder.New(
-					context.Background(), nil /* factory */, nil, /* optimizer */
+					ctx, nil /* factory */, nil, /* optimizer */
 					f.Memo(), nil /* catalog */, &remainingFilters, &semaCtx, &evalCtx,
 					false /* allowAutoCommit */, false, /* isANSIDML */
 				)
@@ -299,12 +300,13 @@ func BenchmarkImplicator(b *testing.B) {
 		testCases = append(testCases, tc)
 	}
 
+	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for _, tc := range testCases {
 		var f norm.Factory
-		f.Init(context.Background(), &evalCtx, nil /* catalog */)
+		f.Init(ctx, &evalCtx, nil /* catalog */)
 		md := f.Metadata()
 
 		// Parse the variable types.
@@ -333,7 +335,7 @@ func BenchmarkImplicator(b *testing.B) {
 		}
 
 		im := partialidx.Implicator{}
-		im.Init(&f, md, &evalCtx)
+		im.Init(ctx, &f, md, &evalCtx)
 		b.Run(tc.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				// Reset the implicator every 10 iterations to simulate its

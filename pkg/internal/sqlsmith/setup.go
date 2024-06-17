@@ -11,6 +11,7 @@
 package sqlsmith
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"regexp"
@@ -116,7 +117,7 @@ func randTablesN(r *rand.Rand, n int, prefix string) []string {
 
 	// Create the random tables.
 	createTableStatements := randgen.RandCreateTables(
-		r, "table", n, false /* isMultiRegion */, randgen.StatisticsMutator,
+		context.Background(), r, "table", n, false /* isMultiRegion */, randgen.StatisticsMutator,
 		randgen.PartialIndexMutator, randgen.ForeignKeyMutator, //prefixStringConstsMutator,
 	)
 

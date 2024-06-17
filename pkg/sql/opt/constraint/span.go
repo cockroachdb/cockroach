@@ -12,6 +12,7 @@ package constraint
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,7 +76,7 @@ func (sp *Span) IsUnconstrained() bool {
 
 // HasSingleKey is true if the span contains exactly one key. This is true when
 // the start key is the same as the end key, and both boundaries are inclusive.
-func (sp *Span) HasSingleKey(evalCtx *eval.Context) bool {
+func (sp *Span) HasSingleKey(ctx context.Context, evalCtx *eval.Context) bool {
 	l := sp.start.Length()
 	if l == 0 || l != sp.end.Length() {
 		return false
@@ -84,7 +85,9 @@ func (sp *Span) HasSingleKey(evalCtx *eval.Context) bool {
 		return false
 	}
 	for i, n := 0, l; i < n; i++ {
-		if sp.start.Value(i).Compare(evalCtx, sp.end.Value(i)) != 0 {
+		if cmp, err := sp.start.Value(i).Compare(ctx, evalCtx, sp.end.Value(i)); err != nil {
+			panic(err)
+		} else if cmp != 0 {
 			return false
 		}
 	}
@@ -94,13 +97,17 @@ func (sp *Span) HasSingleKey(evalCtx *eval.Context) bool {
 // Prefix returns the length of the longest prefix of values for which the
 // span has the same start and end values. For example, [/1/1/1 - /1/1/2]
 // has prefix 2.
-func (sp *Span) Prefix(evalCtx *eval.Context) int {
+func (sp *Span) Prefix(ctx context.Context, evalCtx *eval.Context) int {
 	start := sp.StartKey()
 	end := sp.EndKey()
 
 	for prefix := 0; ; prefix++ {
-		if start.Length() <= prefix || end.Length() <= prefix ||
-			start.Value(prefix).Compare(evalCtx, end.Value(prefix)) != 0 {
+		if start.Length() <= prefix || end.Length() <= prefix {
+			return prefix
+		}
+		if cmp, err := start.Value(prefix).Compare(ctx, evalCtx, end.Value(prefix)); err != nil {
+			panic(err)
+		} else if cmp != 0 {
 			return prefix
 		}
 	}
@@ -399,7 +406,7 @@ func (sp *Span) KeyCount(keyCtx *KeyContext, prefixLength int) (int64, bool) {
 		start, end = end, start
 	}
 
-	return tree.MaxDistinctCount(keyCtx.EvalCtx, start, end)
+	return tree.MaxDistinctCount(keyCtx.Ctx, keyCtx.EvalCtx, start, end)
 }
 
 // Split returns a Spans object that describes an equivalent set of rows to the

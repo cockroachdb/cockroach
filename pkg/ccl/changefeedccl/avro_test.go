@@ -382,6 +382,7 @@ func TestAvroSchema(t *testing.T) {
 		tests = append(tests, randTypeTest)
 	}
 
+	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -411,15 +412,17 @@ func TestAvroSchema(t *testing.T) {
 				require.NoError(t, err)
 				roundtripped, err := roundtrippedSchema.rowFromTextual(serialized)
 				require.NoError(t, err)
-				require.Equal(t, 0, encDatums[1].Datum.Compare(evalCtx, roundtripped[1].Datum),
-					`%s != %s`, encDatums[1].Datum, roundtripped[1].Datum)
+				cmp, err := encDatums[1].Datum.Compare(ctx, evalCtx, roundtripped[1].Datum)
+				require.NoError(t, err)
+				require.Equal(t, 0, cmp, `%s != %s`, encDatums[1].Datum, roundtripped[1].Datum)
 
 				serialized, err = origSchema.BinaryFromRow(nil, row.ForEachColumn())
 				require.NoError(t, err)
 				roundtripped, err = roundtrippedSchema.RowFromBinary(serialized)
 				require.NoError(t, err)
-				require.Equal(t, 0, encDatums[1].Datum.Compare(evalCtx, roundtripped[1].Datum),
-					`%s != %s`, encDatums[1].Datum, roundtripped[1].Datum)
+				cmp, err = encDatums[1].Datum.Compare(ctx, evalCtx, roundtripped[1].Datum)
+				require.NoError(t, err)
+				require.Equal(t, 0, cmp, `%s != %s`, encDatums[1].Datum, roundtripped[1].Datum)
 			}
 		})
 	}

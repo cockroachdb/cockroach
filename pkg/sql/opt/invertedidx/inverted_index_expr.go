@@ -97,7 +97,7 @@ func TryFilterInvertedIndex(
 	columns, notNullCols := prefixCols(tabID, index)
 	if len(columns) > 0 {
 		constraint, filters, ok = constrainNonInvertedCols(
-			evalCtx, factory, columns, notNullCols, filters,
+			ctx, evalCtx, factory, columns, notNullCols, filters,
 			optionalFilters, tabID, index, checkCancellation,
 		)
 		if !ok {
@@ -198,6 +198,7 @@ func TryFilterInvertedIndex(
 // optimization allows us to avoid scanning over some trigrams of the constant
 // string. See similarityTrigramsToScan for more details.
 func TryFilterInvertedIndexBySimilarity(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	f *norm.Factory,
 	filters memo.FiltersExpr,
@@ -266,8 +267,7 @@ func TryFilterInvertedIndexBySimilarity(
 			continue
 		}
 
-		var keyCtx constraint.KeyContext
-		keyCtx.EvalCtx = evalCtx
+		keyCtx := constraint.KeyContext{Ctx: ctx, EvalCtx: evalCtx}
 		keyCtx.Columns.Init(cols[prefixColumnCount:])
 
 		var spans constraint.Spans
@@ -304,13 +304,13 @@ func TryFilterInvertedIndexBySimilarity(
 	// prefix columns.
 	var prefixConstraint *constraint.Constraint
 	prefixConstraint, remainingFilters, ok = constrainNonInvertedCols(
-		evalCtx, f, cols, notNullCols, filters,
+		ctx, evalCtx, f, cols, notNullCols, filters,
 		optionalFilters, tabID, index, checkCancellation,
 	)
 	if !ok {
 		return nil, nil, false
 	}
-	prefixConstraint.Combine(evalCtx, con, checkCancellation)
+	prefixConstraint.Combine(ctx, evalCtx, con, checkCancellation)
 	return prefixConstraint, remainingFilters, true
 }
 
@@ -673,6 +673,7 @@ func prefixCols(
 // building spans for scanning multi-column inverted indexes (see
 // span.Builder.SpansFromInvertedSpans).
 func constrainNonInvertedCols(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
 	columns []opt.OrderingColumn,
@@ -706,7 +707,7 @@ func constrainNonInvertedCols(
 	//
 	var ic idxconstraint.Instance
 	ic.Init(
-		filters, optionalFilters,
+		ctx, filters, optionalFilters,
 		columns, notNullCols, tabMeta.ComputedCols,
 		tabMeta.ColsInComputedColsExpressions,
 		false, /* consolidate */
@@ -714,7 +715,7 @@ func constrainNonInvertedCols(
 	)
 	var c constraint.Constraint
 	ic.UnconsolidatedConstraint(&c)
-	if c.Prefix(evalCtx) != prefixColumnCount {
+	if c.Prefix(ctx, evalCtx) != prefixColumnCount {
 		// The prefix columns must be constrained to single values.
 		return nil, nil, false
 	}

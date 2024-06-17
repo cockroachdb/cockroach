@@ -354,7 +354,7 @@ func retrieveAuthInfo(
 		case "REPLICATION":
 			aInfo.CanUseReplicationRoleOpt = true
 		case "VALID UNTIL":
-			if tree.DNull.Compare(nil, row[1]) != 0 {
+			if row[1] != tree.DNull {
 				ts := string(tree.MustBeDString(row[1]))
 				// This is okay because the VALID UNTIL is stored as a string
 				// representation of a TimestampTZ which has the same underlying

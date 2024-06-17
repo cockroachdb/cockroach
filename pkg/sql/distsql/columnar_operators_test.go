@@ -346,7 +346,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 							// possible that some NULL values are present here and there, so we
 							// need to sort the rows to satisfy the ordering conditions.
 							sort.Slice(rows, func(i, j int) bool {
-								cmp, err := rows[i].Compare(inputTypes, &da, orderedCols, &evalCtx, rows[j])
+								cmp, err := rows[i].Compare(context.Background(), inputTypes, &da, orderedCols, &evalCtx, rows[j])
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -474,11 +474,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 							outputOrdering.Columns = ordCols
 						}
 						sort.Slice(rows, func(i, j int) bool {
-							cmp, err := rows[i].Compare(
-								inputTypes, &da,
-								execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: ordCols}),
-								&evalCtx, rows[j],
-							)
+							cmp, err := rows[i].Compare(context.Background(), inputTypes, &da, execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: ordCols}), &evalCtx, rows[j])
 							if err != nil {
 								t.Fatal(err)
 							}
@@ -635,7 +631,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 					matchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: orderingCols[:matchLen]})
 					// Presort the input on first matchLen columns.
 					sort.Slice(rows, func(i, j int) bool {
-						cmp, err := rows[i].Compare(inputTypes, &da, matchedCols, &evalCtx, rows[j])
+						cmp, err := rows[i].Compare(context.Background(), inputTypes, &da, matchedCols, &evalCtx, rows[j])
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -967,14 +963,14 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 						lMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: lOrderingCols})
 						rMatchedCols := execinfrapb.ConvertToColumnOrdering(execinfrapb.Ordering{Columns: rOrderingCols})
 						sort.Slice(lRows, func(i, j int) bool {
-							cmp, err := lRows[i].Compare(lInputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
+							cmp, err := lRows[i].Compare(context.Background(), lInputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
 							if err != nil {
 								t.Fatal(err)
 							}
 							return cmp < 0
 						})
 						sort.Slice(rRows, func(i, j int) bool {
-							cmp, err := rRows[i].Compare(rInputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
+							cmp, err := rRows[i].Compare(context.Background(), rInputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
 							if err != nil {
 								t.Fatal(err)
 							}

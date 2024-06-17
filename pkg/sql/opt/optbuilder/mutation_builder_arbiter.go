@@ -676,7 +676,7 @@ func (h *arbiterPredicateHelper) init(mb *mutationBuilder, arbiterPredicate tree
 		tabMeta:          mb.md.TableMeta(mb.tabID),
 		arbiterPredicate: arbiterPredicate,
 	}
-	h.im.Init(mb.b.factory, mb.md, mb.b.evalCtx)
+	h.im.Init(mb.b.ctx, mb.b.factory, mb.md, mb.b.evalCtx)
 }
 
 // tableScope returns a scope that can be used to build predicate expressions.

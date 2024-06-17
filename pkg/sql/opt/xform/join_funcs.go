@@ -371,6 +371,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 
 	// Initialize the constraint builder.
 	c.cb.Init(
+		c.e.ctx,
 		c.e.f,
 		c.e.mem.Metadata(),
 		c.e.evalCtx,
@@ -858,7 +859,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			}
 
 			// Try to constrain prefixCol to constant, non-ranging values.
-			foundVals, allIdx, ok := lookupjoin.FindJoinFilterConstants(allFilters, prefixCol, c.e.evalCtx)
+			foundVals, allIdx, ok := lookupjoin.FindJoinFilterConstants(c.e.ctx, allFilters, prefixCol, c.e.evalCtx)
 			if !ok {
 				// Cannot constrain prefix column and therefore cannot generate
 				// an inverted join.
@@ -1145,7 +1146,7 @@ func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
 // first expression of the memo group is used for construction of the join
 // graph. For more information, see the comment in join_order_builder.go.
 func (c *CustomFuncs) ReorderJoins(grp memo.RelExpr, required *physical.Required) memo.RelExpr {
-	c.e.o.JoinOrderBuilder().Init(c.e.f, c.e.evalCtx)
+	c.e.o.JoinOrderBuilder().Init(c.e.ctx, c.e.f, c.e.evalCtx)
 	c.e.o.JoinOrderBuilder().Reorder(grp.FirstExpr())
 	return grp
 }
@@ -1232,7 +1233,7 @@ func (c *CustomFuncs) FindLeftJoinCanaryColumn(
 	// Find any column from the right which is null-rejected by the ON condition.
 	// right rows where such a column is NULL will never contribute to the join
 	// result.
-	nullRejectedCols := memo.NullColsRejectedByFilter(c.e.evalCtx, on)
+	nullRejectedCols := memo.NullColsRejectedByFilter(c.e.ctx, c.e.evalCtx, on)
 	nullRejectedCols.IntersectionWith(right.Relational().OutputCols)
 
 	canaryCol, ok = nullRejectedCols.Next(0)
@@ -1414,7 +1415,7 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	// can target a local partition and one can target a remote partition.
 	idx := md.Table(private.Table).Index(private.Index)
 	firstCol := private.Table.ColumnID(idx.Column(0).Ordinal())
-	vals, ok := filter.ScalarProps().Constraints.ExtractSingleColumnNonNullConstValues(c.e.evalCtx, firstCol)
+	vals, ok := filter.ScalarProps().Constraints.ExtractSingleColumnNonNullConstValues(c.e.ctx, c.e.evalCtx, firstCol)
 	if !ok || len(vals) < 2 {
 		return nil, nil, false
 	}
