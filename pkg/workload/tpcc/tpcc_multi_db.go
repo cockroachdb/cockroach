@@ -50,6 +50,7 @@ var tpccMultiDBMeta = workload.Meta{
 	New: func() workload.Generator {
 		g := tpccMultiDB{}
 		g.tpcc = tpccMeta.New().(*tpcc)
+		g.tpcc.workloadName = "tpccmultidb"
 		g.flags.Meta["txn-preamble-file"] = workload.FlagMeta{RuntimeOnly: true}
 		// Support accessing multiple databases via the client driver.
 		g.flags.StringVar(&g.dbListFile, "db-list-file", "", "a file containing a list of databases.")
