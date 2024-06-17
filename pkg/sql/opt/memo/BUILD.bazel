@@ -15,6 +15,7 @@ go_library(
         "group.go",
         "insert_fastpath.go",
         "interner.go",
+        "list_sorter.go",
         "logical_props_builder.go",
         "memo.go",
         "multiplicity_builder.go",

@@ -101,9 +101,9 @@ build
 SELECT * FROM a WHERE a.x IN (1, 2) AND a.y NOT IN (3, 4)
 ----
 project
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
  └── select
-      ├── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
+      ├── columns: x:1(int!null) y:2(int!null) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
       ├── scan a
       │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
       └── filters

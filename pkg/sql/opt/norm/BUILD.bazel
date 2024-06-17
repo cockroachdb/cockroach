@@ -13,7 +13,6 @@ go_library(
         "inline_funcs.go",
         "join_funcs.go",
         "limit_funcs.go",
-        "list_sorter.go",
         "mutation_funcs.go",
         "ordering_funcs.go",
         "project_builder.go",
