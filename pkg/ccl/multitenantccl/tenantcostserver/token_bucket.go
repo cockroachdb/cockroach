@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -51,12 +52,17 @@ func (s *instance) TokenBucketRequest(
 	metrics.mutex.Lock()
 	defer metrics.mutex.Unlock()
 
+	// Check whether the consumption rates migration has run. If not, then do not
+	// attempt to read/write the new rates columns.
+	// TODO(andyk): Remove this after 24.3.
+	ratesAvailable := s.settings.Version.IsActive(ctx, clusterversion.V24_2_TenantRates)
+
 	result := &kvpb.TokenBucketResponse{}
 	var consumption kvpb.TenantConsumption
 	if err := s.ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		*result = kvpb.TokenBucketResponse{}
 
-		h := makeSysTableHelper(ctx, tenantID)
+		h := makeSysTableHelper(ctx, tenantID, ratesAvailable)
 		tenant, instance, err := h.readTenantAndInstanceState(txn, instanceID)
 		if err != nil {
 			return err
@@ -70,11 +76,13 @@ func (s *instance) TokenBucketRequest(
 				return err
 			}
 		}
+
 		now := s.timeSource.Now()
+		last := tenant.LastUpdate.Time
 		tenant.update(now)
 
 		if !instance.Present {
-			if err := h.accomodateNewInstance(txn, &tenant, &instance); err != nil {
+			if err := h.accommodateNewInstance(txn, &tenant, &instance); err != nil {
 				return err
 			}
 		}
@@ -99,14 +107,18 @@ func (s *instance) TokenBucketRequest(
 		// level control loop that periodically reconfigures the token bucket to
 		// correct such errors.
 		if instance.Seq == 0 || instance.Seq < in.SeqNum {
-			tenant.Consumption.Add(&in.ConsumptionSinceLastRequest)
 			instance.Seq = in.SeqNum
+			tenant.Consumption.Add(&in.ConsumptionSinceLastRequest)
+
+			// Update consumption rates.
+			tenant.Rates.Update(now, last, &in.ConsumptionSinceLastRequest, in.ConsumptionPeriod)
 		}
 
 		*result = tenant.Bucket.Request(ctx, in)
+		result.ConsumptionRates = *tenant.Rates.Current()
 
 		instance.LastUpdate.Time = now
-		if err := h.updateTenantAndInstanceState(txn, tenant, instance); err != nil {
+		if err := h.updateTenantAndInstanceState(txn, &tenant, &instance); err != nil {
 			return err
 		}
 

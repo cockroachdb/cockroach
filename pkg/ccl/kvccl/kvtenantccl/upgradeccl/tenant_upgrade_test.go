@@ -233,8 +233,7 @@ func TestTenantUpgrade(t *testing.T) {
 		false, // initializeVersion
 	)
 	// Initialize the version to the MinSupportedVersion.
-	require.NoError(t, clusterversion.Initialize(ctx,
-		clusterversion.MinSupported.Version(), &settings.SV))
+	require.NoError(t, clusterversion.Initialize(ctx, v1, &settings.SV))
 
 	t.Log("starting server")
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -252,7 +251,6 @@ func TestTenantUpgrade(t *testing.T) {
 	defer ts.Stopper().Stop(ctx)
 	sysDB := sqlutils.MakeSQLRunner(ts.SQLConn(t))
 
-	expectedInitialTenantVersion, _, _ := v0v1v2()
 	startAndConnectToTenant := func(t *testing.T, id uint64) (tenant serverutils.ApplicationLayerInterface, tenantDB *gosql.DB) {
 		settings := cluster.MakeTestingClusterSettingsWithVersions(
 			v2,
@@ -260,8 +258,7 @@ func TestTenantUpgrade(t *testing.T) {
 			false, // initializeVersion
 		)
 		// Initialize the version to the minimum it could be.
-		require.NoError(t,
-			clusterversion.Initialize(ctx, expectedInitialTenantVersion, &settings.SV))
+		require.NoError(t, clusterversion.Initialize(ctx, v1, &settings.SV))
 		tenantArgs := base.TestTenantArgs{
 			TenantID: roachpb.MustMakeTenantID(id),
 			TestingKnobs: base.TestingKnobs{
@@ -285,8 +282,7 @@ func TestTenantUpgrade(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(conn)
 
 		t.Log("ensure that the tenant works")
-		db.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
-			[][]string{{expectedInitialTenantVersion.String()}})
+		db.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v1.String()}})
 		db.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
 		db.Exec(t, "INSERT INTO t VALUES (1), (2)")
 
@@ -344,21 +340,6 @@ func TestTenantUpgrade(t *testing.T) {
 		sqlutils.MakeSQLRunner(conn).CheckQueryResults(t,
 			"SHOW CLUSTER SETTING version", [][]string{{v2.String()}})
 	})
-}
-
-// Returns three versions :
-//   - v0 corresponds to the bootstrapped version of the tenant,
-//   - v1, v2 correspond to adjacent releases.
-func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
-	v0 := clusterversion.MinSupported.Version()
-	v1 := clusterversion.Latest.Version()
-	v2 := clusterversion.Latest.Version()
-	if v1.Internal > 2 {
-		v1.Internal -= 2
-	} else {
-		v2.Internal += 2
-	}
-	return v0, v1, v2
 }
 
 // TestTenantUpgradeFailure exercises cases where the tenant dies
