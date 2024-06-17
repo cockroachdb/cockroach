@@ -11,6 +11,7 @@
 package span
 
 import (
+	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -323,6 +324,16 @@ func (s *Builder) encodeConstraintKey(
 	key = append(key, s.KeyPrefix...)
 	for i := 0; i < ck.Length(); i++ {
 		val := ck.Value(i)
+
+		if p, ok := val.(*tree.Placeholder); ok {
+			var err error
+			// TODO(mgartner): Don't use background context here.
+			val, err = eval.Expr(context.Background(), s.evalCtx, p)
+			if err != nil {
+				return nil, false, err
+			}
+		}
+
 		if val == tree.DNull {
 			containsNull = true
 		}

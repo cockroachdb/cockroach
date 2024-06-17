@@ -602,6 +602,18 @@ func (c *Constraint) ExactPrefix(evalCtx *eval.Context) int {
 				return col
 			}
 			startVal := sp.start.Value(col)
+			// TODO(mgartner): Don't need to use the Value API here and have all
+			// this complexity if we just add an Equal API.
+			if p, ok := startVal.(*tree.Placeholder); ok {
+				if ep, ok := sp.end.Value(col).(*tree.Placeholder); ok && p.Idx == ep.Idx {
+					continue
+				}
+				return col
+			}
+			if _, ok := sp.end.Value(col).(*tree.Placeholder); ok {
+				return col
+			}
+
 			if startVal.Compare(evalCtx, sp.end.Value(col)) != 0 {
 				return col
 			}
@@ -661,8 +673,23 @@ func (c *Constraint) Prefix(evalCtx *eval.Context) int {
 			sp := c.Spans.Get(i)
 			start := sp.StartKey()
 			end := sp.EndKey()
-			if start.Length() <= prefix || end.Length() <= prefix ||
-				start.Value(prefix).Compare(evalCtx, end.Value(prefix)) != 0 {
+			if start.Length() <= prefix || end.Length() <= prefix {
+				return prefix
+			}
+			v := start.Value(prefix)
+			s, ok := v.(*tree.Placeholder)
+			_ = ok
+			_ = s
+			if sp, ok := start.Value(prefix).(*tree.Placeholder); ok {
+				if ep, ok := end.Value(prefix).(*tree.Placeholder); ok && sp.Idx == ep.Idx {
+					continue
+				}
+				return prefix
+			}
+			if _, ok := end.Value(prefix).(*tree.Placeholder); ok {
+				return prefix
+			}
+			if start.Value(prefix).Compare(evalCtx, end.Value(prefix)) != 0 {
 				return prefix
 			}
 		}

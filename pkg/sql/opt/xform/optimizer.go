@@ -13,6 +13,7 @@ package xform
 import (
 	"context"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -256,6 +257,10 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 			}
 		}
 	}()
+
+	// Simulate long planning time.
+	// TODO(mgartner): Remove this.
+	time.Sleep(5 * time.Millisecond)
 
 	if o.mem.IsOptimized() {
 		return nil, errors.AssertionFailedf("cannot optimize a memo multiple times")
