@@ -284,7 +284,7 @@ var opWeights = []int{
 	createIndex:                       1,
 	createSchema:                      1,
 	createSequence:                    1,
-	createTable:                       1,
+	createTable:                       300,
 	createTableAs:                     1,
 	createTypeEnum:                    1,
 	createView:                        1,

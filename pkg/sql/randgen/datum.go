@@ -46,8 +46,7 @@ import (
 // regardless of the null flag.
 func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
 	nullChance := NullChance(nullOk)
-	return RandDatumWithNullChance(rng, typ, nullChance,
-		false /* favorCommonData */, false /* targetColumnIsUnique */)
+	return RandDatumWithNullChance(rng, typ, nullChance, false /* favorCommonData */, false /* targetColumnIsUnique */)
 }
 
 // NullChance returns `n` representing a 1 out of `n` probability of generating
@@ -301,11 +300,10 @@ func RandDatumWithNullChance(
 		return tree.DNull
 	case types.ArrayFamily:
 		return RandArrayWithCommonDataChance(rng, typ, 0, /* nullChance */
-			favorCommonData, targetColumnIsUnique)
+			favorCommonData)
 	case types.AnyFamily:
 		return RandDatumWithNullChance(rng, RandType(rng), nullChance,
-			favorCommonData, targetColumnIsUnique,
-		)
+			favorCommonData, targetColumnIsUnique)
 	case types.EnumFamily:
 		// If the input type is not hydrated with metadata, or doesn't contain
 		// any enum values, then return NULL.
@@ -337,7 +335,7 @@ func RandDatumWithNullChance(
 // of being null.
 func RandArray(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
 	return RandArrayWithCommonDataChance(rng, typ, nullChance,
-		false /* favorCommonData */, false /* targetColumnIsUnique */)
+		false /* favorCommonData */)
 }
 
 // RandArrayWithCommonDataChance generates a random DArray where the contents
