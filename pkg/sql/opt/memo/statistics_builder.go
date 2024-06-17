@@ -3374,6 +3374,8 @@ func (sb *statisticsBuilder) applyFilters(
 func (sb *statisticsBuilder) applyFiltersItem(
 	filter *FiltersItem, e RelExpr, relProps *props.Relational, unapplied *filterCount,
 ) (constrainedCols, histCols opt.ColSet) {
+	s := relProps.Statistics()
+
 	// Before checking anything, try to replace any virtual computed column
 	// expressions with the corresponding virtual column.
 	if sb.evalCtx.SessionData().OptimizerUseVirtualComputedColumnStats &&
@@ -3397,6 +3399,13 @@ func (sb *statisticsBuilder) applyFiltersItem(
 		sb.evalCtx.SessionData().OptimizerUseImprovedTrigramSimilaritySelectivity {
 		unapplied.similarity++
 		return opt.ColSet{}, opt.ColSet{}
+	}
+
+	// Special case: a placeholder equality filter.
+	if col, ok := isPlaceholderEqualityFilter(filter.Condition); ok {
+		cols := opt.MakeColSet(col)
+		sb.ensureColStat(cols, 1 /* maxDistinctCount */, e, s)
+		return cols, opt.ColSet{}
 	}
 
 	// Special case: The current conjunct is an inverted join condition which is
@@ -3438,7 +3447,6 @@ func (sb *statisticsBuilder) applyFiltersItem(
 	// want to make sure that we don't include columns that were only present in
 	// equality conjuncts such as var1=var2. The selectivity of these conjuncts
 	// will be accounted for in selectivityFromEquivalencies.
-	s := relProps.Statistics()
 	scalarProps := filter.ScalarProps()
 	constrainedCols.UnionWith(scalarProps.OuterCols)
 	if scalarProps.Constraints != nil {
@@ -4859,6 +4867,17 @@ func isSimilarityFilter(e opt.ScalarExpr) bool {
 			sim.Right.DataType().Family() == types.StringFamily
 	}
 	return false
+}
+
+// isPlaceholderEqualityFilter returns a column ID and true if the given
+// condition is an equality between a column and a placeholder.
+func isPlaceholderEqualityFilter(e opt.ScalarExpr) (opt.ColumnID, bool) {
+	if e.Op() == opt.EqOp && e.Child(1).Op() == opt.PlaceholderOp {
+		if v, ok := e.Child(0).(*VariableExpr); ok {
+			return v.Col, true
+		}
+	}
+	return 0, false
 }
 
 // isInvertedJoinCond returns true if the given condition is either an index-
