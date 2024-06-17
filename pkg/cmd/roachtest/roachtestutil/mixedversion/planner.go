@@ -245,9 +245,14 @@ func (p *testPlanner) Plan() *TestPlan {
 		}
 	}
 
+	// Use first tested upgrade version in the context passed to startup
+	// functions; the setup upgrades that happened before should be
+	// invisible to them.
+	firstTestedUpgradeVersion := testUpgrades[0].from
+
 	testPlan := &TestPlan{
 		setup:          setup,
-		initSteps:      p.testStartSteps(),
+		initSteps:      p.testStartSteps(firstTestedUpgradeVersion),
 		upgrades:       testUpgrades,
 		deploymentMode: p.deploymentMode,
 		isLocal:        p.isLocal,
@@ -267,14 +272,14 @@ func (p *testPlanner) Plan() *TestPlan {
 	return testPlan
 }
 
-func (p *testPlanner) longRunningContext() *Context {
+func (p *testPlanner) longRunningContext(fromVersion *clusterupgrade.Version) *Context {
 	var tenantDescriptor *ServiceDescriptor
 	if p.currentContext.Tenant != nil {
 		tenantDescriptor = p.currentContext.Tenant.Descriptor
 	}
 
 	return newContext(
-		p.versions[0], p.versions[len(p.versions)-1],
+		fromVersion, p.versions[len(p.versions)-1],
 		p.currentContext.DefaultService().Stage,
 		p.currentContext.DefaultService().Descriptor.Nodes,
 		tenantDescriptor,
@@ -311,18 +316,20 @@ func (p *testPlanner) clusterSetupSteps() []testStep {
 
 // startupSteps returns the list of steps that should be executed once
 // the test (as defined by user-provided functions) is ready to start.
-func (p *testPlanner) startupSteps() []testStep {
+func (p *testPlanner) startupSteps(firstUpgradeVersion *clusterupgrade.Version) []testStep {
 	p.currentContext.System.Stage = OnStartupStage
-	return p.hooks.StartupSteps(p.longRunningContext(), p.prng, p.isLocal)
+	return p.hooks.StartupSteps(p.longRunningContext(firstUpgradeVersion), p.prng, p.isLocal)
 }
 
 // testStartSteps are the user-provided steps that should run when the
 // test is starting i.e., when the cluster is running and at a
 // supported version.
-func (p *testPlanner) testStartSteps() []testStep {
+func (p *testPlanner) testStartSteps(firstUpgradeVersion *clusterupgrade.Version) []testStep {
 	return append(
-		p.startupSteps(),
-		p.hooks.BackgroundSteps(p.longRunningContext(), p.bgChans, p.prng, p.isLocal)...,
+		p.startupSteps(firstUpgradeVersion),
+		p.hooks.BackgroundSteps(
+			p.longRunningContext(firstUpgradeVersion), p.bgChans, p.prng, p.isLocal,
+		)...,
 	)
 }
 
