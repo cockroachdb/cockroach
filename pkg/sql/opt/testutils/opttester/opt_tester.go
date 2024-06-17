@@ -460,7 +460,7 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //     modifies the existing set of the flags.
 //
 //   - no-stable-folds: disallows constant folding for stable operators; only
-//     used with "norm".
+//     used with "norm", "opt", "exprnorm", and "expropt".
 //
 //   - fully-qualify-names: fully qualify all column names in the test output.
 //
@@ -1225,7 +1225,9 @@ func (ot *OptTester) OptimizeWithTables(tables map[cat.StableID]cat.Table) (opt.
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		return !ot.Flags.DisableRules.Contains(int(ruleName))
 	})
-	o.Factory().FoldingControl().AllowStableFolds()
+	if !ot.Flags.NoStableFolds {
+		o.Factory().FoldingControl().AllowStableFolds()
+	}
 	return ot.optimizeExpr(o, tables)
 }
 
