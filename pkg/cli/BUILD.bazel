@@ -348,6 +348,7 @@ go_test(
         "userfiletable_test.go",
         "workload_test.go",
         "zip_helpers_test.go",
+        "zip_per_node_test.go",
         "zip_table_registry_test.go",
         "zip_tenant_test.go",
         "zip_test.go",
