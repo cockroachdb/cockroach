@@ -78,11 +78,19 @@ var ReplanFrequency = settings.RegisterDurationSetting(
 	settings.WithName("physical_replication.consumer.replan_flow_frequency"),
 )
 
+var LagCheckFrequency = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"stream_replication.lag_check_frequency",
+	"frequency at which the consumer job checks for lagging nodes",
+	3*time.Minute,
+	settings.PositiveDuration,
+)
+
 var InterNodeLag = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"physical_replication.consumer.node_lag_replanning_threshold",
 	"the maximum difference in lag tolerated across two destination nodes; if 0, disabled",
-	0,
+	5*time.Minute,
 	settings.NonNegativeDuration,
 )
 
