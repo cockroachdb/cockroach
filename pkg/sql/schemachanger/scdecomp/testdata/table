@@ -728,7 +728,24 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - TableZoneConfig:
+    seqNum: 0
     tableId: 105
+    zoneConfig:
+      constraints: []
+      gc:
+        ttlSeconds: 10
+      globalReads: null
+      inheritedConstraints: true
+      inheritedLeasePreferences: true
+      leasePreferences: []
+      nullVoterConstraintsIsEmpty: false
+      numReplicas: null
+      numVoters: null
+      rangeMaxBytes: null
+      rangeMinBytes: null
+      subzoneSpans: []
+      subzones: []
+      voterConstraints: []
   Status: PUBLIC
 - UniqueWithoutIndexConstraint:
     columnIds:

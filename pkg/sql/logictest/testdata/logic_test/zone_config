@@ -295,15 +295,26 @@ CREATE VIEW v (x, y) AS SELECT a, b FROM zc; ALTER TABLE v CONFIGURE ZONE USING 
 
 user root
 
-statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation pg_type
+skipif config local-legacy-schema-changer
+statement error pq: pg_type is a system catalog
 ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation columns
+skipif config local-legacy-schema-changer
+statement error pq: columns is a virtual object and cannot be modified
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
+
+statement ok
+CREATE TABLE roachie(i int)
+
+user testuser
+
+statement error pq: user testuser does not have CREATE or ZONECONFIG privilege on relation roachie
+ALTER TABLE roachie CONFIGURE ZONE USING gc.ttlseconds = 1
+
+user root
 
 # Test tables in different schemas do not show the zone configs
 # of the other.
-
 statement ok
 CREATE TABLE same_table_name();
 ALTER TABLE same_table_name CONFIGURE ZONE USING gc.ttlseconds = 500;
@@ -363,7 +374,8 @@ zc   27:46:40
 statement error pgcode 23514 pq: cannot remove default zone
 ALTER RANGE default CONFIGURE ZONE DISCARD;
 
-# https://github.com/cockroachdb/cockroach/issues/108253
+# Regression test for #108253. Ensure that transactional configure zone changes
+# do not produce an error.
 subtest transactional_schemachanges
 
 statement ok
@@ -377,5 +389,20 @@ ALTER DATABASE foo CONFIGURE ZONE USING gc.ttlseconds = 3; ALTER DATABASE foo CO
 
 statement ok
 ALTER DATABASE foo CONFIGURE ZONE DISCARD; ALTER DATABASE foo CONFIGURE ZONE DISCARD;
+
+subtest end
+
+subtest seq_zone_config
+
+statement ok
+CREATE SEQUENCE seq
+START WITH 1
+INCREMENT BY 1
+NO MINVALUE
+NO MAXVALUE
+CACHE 1;
+
+statement ok
+ALTER TABLE seq CONFIGURE ZONE USING gc.ttlseconds = 100000;
 
 subtest end

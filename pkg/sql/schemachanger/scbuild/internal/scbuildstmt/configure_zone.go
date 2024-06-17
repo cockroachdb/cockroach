@@ -37,6 +37,18 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// zoneConfigObjType is an enum to represent various types of "objects" that are
+// supported by the CONFIGURE ZONE statement. This is used to determine the
+// scpb that will be generated.
+type zoneConfigObjType int
+
+const (
+	// unspecifiedObj is used when the object type is not specified.
+	unspecifiedObj zoneConfigObjType = iota
+	databaseObj
+	tableObj
+)
+
 func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 	// Block secondary tenants from ALTER CONFIGURE ZONE unless cluster setting is set.
 	if err := sqlclustersettings.RequireSystemTenantOrClusterSetting(
@@ -48,12 +60,15 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 	// TODO(annie): implement complete support for CONFIGURE ZONE. This currently
 	// Supports:
 	// - Database
-	// Left to support:
 	// - Table
+	// Left to support:
 	// - Index
 	// - Partition/row
 	// - System Ranges
-	fallBackIfNotDatabaseZoneConfig(n)
+	objectType, err := fallBackIfNotSupportedZoneConfig(n)
+	if err != nil {
+		panic(err)
+	}
 
 	// Fall back to the legacy schema changer if this is a YAML config (deprecated).
 	// Block from using YAML config unless we are discarding a YAML config.
@@ -62,11 +77,12 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 			"YAML config is deprecated and not supported in the declarative schema changer"))
 	}
 
-	if err := checkPrivilegeForSetZoneConfig(b, n); err != nil {
+	if err := checkPrivilegeForSetZoneConfig(b, n, objectType); err != nil {
 		panic(err)
 	}
 
-	if err := checkZoneConfigChangePermittedForMultiRegion(b, n.ZoneSpecifier, n.Options); err != nil {
+	err = checkZoneConfigChangePermittedForMultiRegion(b, n.ZoneSpecifier, n.Options, objectType)
+	if err != nil {
 		panic(err)
 	}
 
@@ -80,23 +96,85 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		panic(err)
 	}
 
+	telemetryName := n.ZoneSpecifier.TelemetryName()
 	telemetry.Inc(
-		sqltelemetry.SchemaChangeAlterCounterWithExtra(n.ZoneSpecifier.TelemetryName(), "configure_zone"),
+		sqltelemetry.SchemaChangeAlterCounterWithExtra(telemetryName, "configure_zone"),
 	)
 
-	elem, err := applyZoneConfig(b, copyFromParentList, n.ZoneSpecifier, n, setters)
+	zc, seqNum, err := applyZoneConfig(b, n, copyFromParentList, setters, objectType)
 	if err != nil {
 		panic(err)
 	}
-	elem.SeqNum = elem.SeqNum + 1
 
-	b.Add(elem)
+	// For tables, we have to directly modify the AST to full resolve the table name.
+	if objectType == tableObj {
+		resolvePhysicalTableName(b, n)
+	}
+
+	addZoneConfigToBuildCtx(b, n, zc, seqNum, objectType)
+}
+
+// resolvePhysicalTableName resolves the table name for a physical table
+// in the SetZoneConfig AST by directly modifying its TableOrIndex.Table.
+func resolvePhysicalTableName(b BuildCtx, n *tree.SetZoneConfig) {
+	uon := n.ZoneSpecifier.TableOrIndex.Table.ToUnresolvedObjectName()
+	tn := uon.ToTableName()
+	elts := b.ResolvePhysicalTable(uon, ResolveParams{})
+	tbl := elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
+		switch e := e.(type) {
+		case *scpb.Table:
+			return true
+		case *scpb.View:
+			if e.IsMaterialized {
+				return true
+			}
+		case *scpb.Sequence:
+			return true
+		}
+		return false
+	}).MustGetOneElement()
+	tn.ObjectNamePrefix = b.NamePrefix(tbl)
+	n.ZoneSpecifier.TableOrIndex.Table = tn
 }
 
 // checkPrivilegeForSetZoneConfig checks whether current user has the right
-// privilege for configuring zone on a database object.
-func checkPrivilegeForSetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) error {
+// privilege for configuring zone on the specified object(s).
+func checkPrivilegeForSetZoneConfig(
+	b BuildCtx, n *tree.SetZoneConfig, objType zoneConfigObjType,
+) error {
 	zs := n.ZoneSpecifier
+
+	// For the system database, the user must be an admin. Otherwise, we
+	// require CREATE or ZONECONFIG privilege on the database in question.
+	reqNonAdminPrivs := []privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}
+	if objType == databaseObj {
+		return checkPrivilegeForDBSetZoneConfig(b, zs, reqNonAdminPrivs)
+	}
+
+	tblID, err := getTargetIDFromZoneSpecifier(b, zs, objType)
+	if err != nil {
+		return err
+	}
+	tblElem := mustRetrievePhysicalTableElem(b, tblID)
+	tblNamespaceElem := mustRetrieveNamespaceElem(b, tblID)
+	if tblNamespaceElem.DatabaseID == keys.SystemDatabaseID {
+		return b.CheckGlobalPrivilege(privilege.REPAIRCLUSTER)
+	}
+	// Can configure zone of a table (or its index) if user has either CREATE or
+	// ZONECONFIG privilege on the table.
+	tableCreatePrivilegeErr := b.CheckPrivilege(tblElem, privilege.CREATE)
+	tableZoneConfigPrivilegeErr := b.CheckPrivilege(tblElem, privilege.ZONECONFIG)
+	if tableCreatePrivilegeErr == nil || tableZoneConfigPrivilegeErr == nil {
+		return nil
+	}
+
+	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(b.CurrentUser(),
+		reqNonAdminPrivs, string(catalog.Table), tblNamespaceElem.Name)
+}
+
+func checkPrivilegeForDBSetZoneConfig(
+	b BuildCtx, zs tree.ZoneSpecifier, reqNonAdminPrivs []privilege.Kind,
+) error {
 	if zs.Database == "system" {
 		return b.CheckGlobalPrivilege(privilege.REPAIRCLUSTER)
 	}
@@ -110,19 +188,16 @@ func checkPrivilegeForSetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) error {
 		return nil
 	}
 
-	// For the system database, the user must be an admin. Otherwise, we
-	// require CREATE or ZONECONFIG privilege on the database in question.
-	reqNonAdminPrivs := []privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}
 	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(b.CurrentUser(),
 		reqNonAdminPrivs, string(catalog.Database), mustRetrieveNamespaceElem(b, dbElem.DatabaseID).Name)
 }
 
 // checkZoneConfigChangePermittedForMultiRegion checks if a zone config
-// change is permitted for a multi-region database.
+// change is permitted for a multi-region database or table.
 // The change is permitted iff it is not modifying a protected multi-region
 // field of the zone configs (as defined by zonepb.MultiRegionZoneConfigFields).
 func checkZoneConfigChangePermittedForMultiRegion(
-	b BuildCtx, zs tree.ZoneSpecifier, options tree.KVOptions,
+	b BuildCtx, zs tree.ZoneSpecifier, options tree.KVOptions, objType zoneConfigObjType,
 ) error {
 	// If the user has specified that they're overriding, then the world is
 	// their oyster.
@@ -138,11 +213,26 @@ func checkZoneConfigChangePermittedForMultiRegion(
 		return nil
 	}
 
-	// Check if the database we are altering is multi-region.
-	dbRegionConfigElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabaseRegionConfig().MustGetZeroOrOneElement()
-	if dbRegionConfigElem == nil {
-		// Not a multi-region database, we're done here.
-		return nil
+	isDB := objType == databaseObj
+	// Check if what we're altering is a multi-region entity.
+	if isDB {
+		dbRegionConfigElem := b.ResolveDatabase(zs.Database,
+			ResolveParams{}).FilterDatabaseRegionConfig().MustGetZeroOrOneElement()
+		if dbRegionConfigElem == nil {
+			// Not a multi-region database, we're done here.
+			return nil
+		}
+	} else {
+		// We're dealing with a table zone configuration change. Get the table descriptor so we can
+		// determine if this is a multi-region table.
+		tableID, err := getTargetIDFromZoneSpecifier(b, zs, objType)
+		if err != nil {
+			return err
+		}
+		if !isMultiRegionTable(b, tableID) {
+			// Not a multi-region table, we're done here.
+			return nil
+		}
 	}
 
 	hint := "to override this error, SET override_multi_region_zone_config = true and reissue the command"
@@ -155,8 +245,8 @@ func checkZoneConfigChangePermittedForMultiRegion(
 			if opt.Key == cfg {
 				// User is trying to update a zone config value that's protected for
 				// multi-region databases. Return the constructed error.
-				err := errors.Newf("attempting to modify protected field %q of a multi-region zone configuration",
-					string(opt.Key),
+				err := errors.Newf("attempting to modify protected field %q of a multi-region zone "+
+					"configuration", string(opt.Key),
 				)
 				return errors.WithHint(err, hint)
 			}
@@ -166,14 +256,65 @@ func checkZoneConfigChangePermittedForMultiRegion(
 	return nil
 }
 
+// isMultiRegionTable returns True if this table is a multi-region table,
+// meaning it has locality GLOBAL, or REGIONAL BY TABLE, or REGIONAL BY ROW.
+func isMultiRegionTable(b BuildCtx, tableID catid.DescID) bool {
+	tableElems := b.QueryByID(tableID)
+	globalElem := tableElems.FilterTableLocalityGlobal().MustGetZeroOrOneElement()
+	primaryRegionElem := tableElems.FilterTableLocalityPrimaryRegion().MustGetZeroOrOneElement()
+	secondaryRegionElem := tableElems.FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
+	RBRElem := tableElems.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+	return globalElem != nil || primaryRegionElem != nil || secondaryRegionElem != nil ||
+		RBRElem != nil
+}
+
 // getTargetIDFromZoneSpecifier attempts to find the ID of the target by the
 // zone specifier.
-//
-// N.B. Until we add full support of CONFIGURE ZONE in the DSC, this assumes
-// we have a zone specifier that specifies a database.
-func getTargetIDFromZoneSpecifier(b BuildCtx, zs tree.ZoneSpecifier) (catid.DescID, error) {
-	dbElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabase().MustGetOneElement()
-	return dbElem.DatabaseID, nil
+// Recall that a zone specifier specifies either a database or a table. This
+// function will return the ID of the database or the table.
+func getTargetIDFromZoneSpecifier(
+	b BuildCtx, zs tree.ZoneSpecifier, objType zoneConfigObjType,
+) (catid.DescID, error) {
+	if objType == databaseObj {
+		dbElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabase().MustGetOneElement()
+		return dbElem.DatabaseID, nil
+	}
+	return getTableIDFromZoneSpecifier(b, zs, objType)
+}
+
+// getTableIDFromZoneSpecifier attempts to find the table ID specified by the
+// zone specifier. If the zone does not specify a table, a non-nil error is
+// returned. Otherwise (for tables), the associated table ID is returned.
+func getTableIDFromZoneSpecifier(
+	b BuildCtx, zs tree.ZoneSpecifier, objType zoneConfigObjType,
+) (catid.DescID, error) {
+	if objType == databaseObj {
+		return 0, errors.AssertionFailedf("programming error: zone specifier is for a " +
+			"database; not a table")
+	}
+	if objType != tableObj {
+		return 0, errors.AssertionFailedf("programming error: zs does not specify a proper " +
+			"target")
+	}
+	tblName := zs.TableOrIndex.Table.ToUnresolvedObjectName()
+	elems := b.ResolvePhysicalTable(tblName, ResolveParams{})
+	var tableID catid.DescID
+	elems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+		switch e := e.(type) {
+		case *scpb.Table:
+			tableID = e.TableID
+		case *scpb.View:
+			if e.IsMaterialized {
+				tableID = e.ViewID
+			}
+		case *scpb.Sequence:
+			tableID = e.SequenceID
+		}
+	})
+	if tableID == catid.InvalidDescID {
+		panic("uh oh")
+	}
+	return tableID, nil
 }
 
 // getUpdatedZoneConfigOptions unpacks all kv options for a `CONFIGURE ZONE
@@ -211,7 +352,8 @@ func getUpdatedZoneConfigOptions(
 			}
 
 			// Type check and normalize value expr.
-			typedExpr, err := tree.TypeCheckAndRequire(b, opt.Value, b.SemaCtx(), req.RequiredType, string(opt.Key))
+			typedExpr, err := tree.TypeCheckAndRequire(b, opt.Value, b.SemaCtx(), req.RequiredType,
+				string(opt.Key))
 			if err != nil {
 				return nil, err
 			}
@@ -263,8 +405,9 @@ func evaluateZoneOptions(
 				return nil, nil, nil, err
 			}
 			if datum == tree.DNull {
-				return nil, nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
-					"unsupported NULL value for %q", tree.ErrString(name))
+				return nil, nil, nil,
+					pgerror.Newf(pgcode.InvalidParameterValue, "unsupported NULL value for %q",
+						tree.ErrString(name))
 			}
 			opt := zone.SupportedZoneConfigOptions[*name] // Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
 			if opt.CheckAllowed != nil {
@@ -282,36 +425,30 @@ func evaluateZoneOptions(
 
 func applyZoneConfig(
 	b BuildCtx,
-	copyFromParentList []tree.Name,
-	zs tree.ZoneSpecifier,
 	n *tree.SetZoneConfig,
+	copyFromParentList []tree.Name,
 	setters []func(c *zonepb.ZoneConfig),
-) (*scpb.DatabaseZoneConfig, error) {
-	// Determines the ID of the target database of the zone specifier.
-	targetID, err := getTargetIDFromZoneSpecifier(b, zs)
+	objType zoneConfigObjType,
+) (*zonepb.ZoneConfig, uint32, error) {
+	// Determines the ID of the target object of the zone specifier. This is the
+	// ID of either a database or a table.
+	targetID, err := getTargetIDFromZoneSpecifier(b, n.ZoneSpecifier, objType)
 	if err != nil {
-		return &scpb.DatabaseZoneConfig{}, err
+		return nil, 0, err
 	}
 
 	// TODO(annie): once we allow configuring zones for named zones/system ranges,
 	// we will need to guard against secondary tenants from configuring such
 	// ranges.
+	if objType == tableObj {
+		// Check that we are not trying to configure a system table.
+		if err = checkIfConfigurationAllowed(targetID); err != nil {
+			return nil, 0, err
+		}
+	}
 
 	// Retrieve the partial zone configuration
-	partialZone := zonepb.NewZoneConfig()
-	var databaseZoneConfigElem *scpb.DatabaseZoneConfig
-	dbZoneElems := b.QueryByID(targetID).FilterDatabaseZoneConfig()
-	dbZoneElems.ForEach(func(current scpb.Status, target scpb.TargetStatus, e *scpb.DatabaseZoneConfig) {
-		// We want to get the most recent change that has not applied yet. For transactions, this will
-		// be the most recent (last) zone config elem added.
-		if e.DatabaseID == targetID {
-			databaseZoneConfigElem = e
-		}
-	})
-
-	if databaseZoneConfigElem != nil {
-		partialZone = databaseZoneConfigElem.ZoneConfig
-	}
+	partialZone, zc := retrievePartialZoneConfig(b, targetID, objType)
 
 	// Retrieve the zone configuration.
 	//
@@ -321,9 +458,9 @@ func applyZoneConfig(
 	// use the last parameter getInheritedDefault to retrieveCompleteZoneConfig().
 	// These zones are only used for validations. The merged zone will not
 	// be written.
-	_, completeZone, seqNum, err := retrieveCompleteZoneConfig(b, targetID, false /* getInheritedDefault */)
+	_, completeZone, seqNum, err := retrieveCompleteZoneConfig(b, targetID, objType, n.SetDefault /* getInheritedDefault */)
 	if err != nil {
-		return &scpb.DatabaseZoneConfig{}, err
+		return nil, 0, err
 	}
 
 	// We need to inherit zone configuration information from the correct zone,
@@ -333,14 +470,18 @@ func applyZoneConfig(
 		// inherit from its parent. We do this by using an empty zoneConfig
 		// and completing at the level of the current zone.
 		zoneInheritedFields := zonepb.ZoneConfig{}
-		if err := completeZoneConfig(b, &zoneInheritedFields); err != nil {
-			return &scpb.DatabaseZoneConfig{}, err
+		if err := completeZoneConfig(b, targetID, objType, &zoneInheritedFields); err != nil {
+			return nil, 0, err
 		}
 		partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
 	}
 
 	newZoneForVerification := *completeZone
 	finalZone := *partialZone
+
+	if n.SetDefault {
+		finalZone = *zonepb.NewZoneConfig()
+	}
 
 	// Load settings from var = val assignments. If there were no such
 	// settings, (e.g. because the query specified CONFIGURE ZONE = or
@@ -365,21 +506,21 @@ func applyZoneConfig(
 			setter(&finalZone)
 			return nil
 		}(); err != nil {
-			return &scpb.DatabaseZoneConfig{}, err
+			return nil, 0, err
 		}
 	}
 
 	// Validate that there are no conflicts in the zone setup.
 	if err := zonepb.ValidateNoRepeatKeysInZone(&newZoneForVerification); err != nil {
-		return &scpb.DatabaseZoneConfig{}, err
+		return nil, 0, err
 	}
 
 	currentZone := zonepb.NewZoneConfig()
-	if databaseZoneConfigElem != nil {
-		currentZone = databaseZoneConfigElem.ZoneConfig
+	if zc != nil {
+		currentZone = zc
 	}
 	if err := validateZoneAttrsAndLocalities(b, currentZone, &newZoneForVerification); err != nil {
-		return &scpb.DatabaseZoneConfig{}, err
+		return nil, 0, err
 	}
 
 	completeZone = &newZoneForVerification
@@ -390,22 +531,92 @@ func applyZoneConfig(
 	// anymore. If the settings applied to this zone don't touch the
 	// NumReplicas field, set it to nil so that the zone isn't considered a
 	// placeholder anymore.
-	if databaseZoneConfigElem != nil && partialZone.IsSubzonePlaceholder() {
+	if zc != nil && partialZone.IsSubzonePlaceholder() {
 		partialZone.NumReplicas = nil
 	}
 
 	// Finally, revalidate everything. Validate only the completeZone config.
 	if err := completeZone.Validate(); err != nil {
-		return &scpb.DatabaseZoneConfig{}, pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
+		return nil, 0, pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
 	}
 
-	zoneConfig := &scpb.DatabaseZoneConfig{
-		DatabaseID: targetID,
-		ZoneConfig: partialZone,
-		SeqNum:     seqNum,
+	// Finally, check for the extra protection partial zone configs would
+	// require from changes made to parent zones. The extra protections are:
+	//
+	// RangeMinBytes and RangeMaxBytes must be set together
+	// LeasePreferences cannot be set unless Constraints/VoterConstraints are
+	// explicitly set
+	// Per-replica constraints cannot be set unless num_replicas is explicitly
+	// set
+	// Per-voter constraints cannot be set unless num_voters is explicitly set
+	if err := finalZone.ValidateTandemFields(); err != nil {
+		err = errors.Wrap(err, "could not validate zone config")
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		err = errors.WithHint(err,
+			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to "+
+				"populate the field")
+		return nil, 0, err
 	}
+	return partialZone, seqNum, nil
+}
 
-	return zoneConfig, nil
+// checkIfConfigurationAllowed determines whether a zone config can be set.
+// This consists of checking that we are not trying to configure a system table.
+func checkIfConfigurationAllowed(targetID catid.DescID) error {
+	// Zones of "system config tables" (i.e. `system.descriptor` and
+	// `system.zones` table) and NamespaceTable cannot be configured.
+	if descpb.IsSystemConfigID(targetID) || targetID == keys.NamespaceTableID {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			`cannot set zone configs for system config tables; `+
+				`try setting your config on the entire "system" database instead`)
+	}
+	return nil
+}
+
+// retrievePartialZoneConfig retrieves the partial zone configuration of the
+// specified targetID.
+func retrievePartialZoneConfig(
+	b BuildCtx, targetID catid.DescID, objectType zoneConfigObjType,
+) (*zonepb.ZoneConfig, *zonepb.ZoneConfig) {
+	partialZone := zonepb.NewZoneConfig()
+	var zc *zonepb.ZoneConfig
+
+	// Retrieve the partial zone configuration for specified objectType. Fall back
+	// to the default zone configuration if the zone configuration does not exist.
+	switch objectType {
+	case databaseObj:
+		var dbZoneConfigElem *scpb.DatabaseZoneConfig
+		dbZoneElems := b.QueryByID(targetID).FilterDatabaseZoneConfig()
+		dbZoneElems.ForEach(func(current scpb.Status, target scpb.TargetStatus, e *scpb.DatabaseZoneConfig) {
+			// We want to get the most recent change that has not applied yet. For transactions, this will
+			// be the most recent (last) zone config elem added.
+			if e.DatabaseID == targetID {
+				dbZoneConfigElem = e
+			}
+		})
+		if dbZoneConfigElem != nil {
+			partialZone = dbZoneConfigElem.ZoneConfig
+			zc = dbZoneConfigElem.ZoneConfig
+		}
+	case tableObj:
+		var tblZoneConfigElem *scpb.TableZoneConfig
+		tblZoneElems := b.QueryByID(targetID).FilterTableZoneConfig()
+		tblZoneElems.ForEach(func(current scpb.Status, target scpb.TargetStatus, e *scpb.TableZoneConfig) {
+			// We want to get the most recent change that has not applied yet. For transactions, this will
+			// be the most recent (last) zone config elem added.
+			if e.TableID == targetID {
+				tblZoneConfigElem = e
+			}
+		})
+		if tblZoneConfigElem != nil {
+			partialZone = tblZoneConfigElem.ZoneConfig
+			zc = tblZoneConfigElem.ZoneConfig
+		}
+	default:
+		panic(errors.AssertionFailedf("programming error: unsupported object type for " +
+			"CONFIGURE ZONE"))
+	}
+	return partialZone, zc
 }
 
 // retrieveCompleteZoneConfig looks up the zone for the specified database.
@@ -416,11 +627,11 @@ func applyZoneConfig(
 // to ignore the zone config that exists on targetID and instead skip to the
 // inherited default.
 func retrieveCompleteZoneConfig(
-	b BuildCtx, targetID catid.DescID, getInheritedDefault bool,
+	b BuildCtx, targetID catid.DescID, objType zoneConfigObjType, getInheritedDefault bool,
 ) (zoneID descpb.ID, zone *zonepb.ZoneConfig, seqNum uint32, err error) {
 	zc := &zonepb.ZoneConfig{}
 	if getInheritedDefault {
-		zoneID, zc, seqNum, err = getInheritedDefaultZoneConfig(b)
+		zoneID, zc, seqNum, err = getInheritedDefaultZoneConfig(b, targetID)
 	} else {
 		zoneID, zc, _, _, seqNum, err = getZoneConfig(b, targetID)
 	}
@@ -429,7 +640,7 @@ func retrieveCompleteZoneConfig(
 	}
 
 	completeZc := *zc
-	if err = completeZoneConfig(b, &completeZc); err != nil {
+	if err = completeZoneConfig(b, targetID, objType, &completeZc); err != nil {
 		return 0, nil, 0, err
 	}
 
@@ -438,16 +649,28 @@ func retrieveCompleteZoneConfig(
 }
 
 // getInheritedDefaultZoneConfig returns the inherited default zone config of
-// the DEFAULT RANGE.
+// `targetID`. This means
+//   - if `targetID` is a table ID, returns the zone config of its parent database
+//     (if exists) or the DEFAULT RANGE.
+//   - otherwise, returns the zone config of the DEFAULT RANGE
 func getInheritedDefaultZoneConfig(
-	b BuildCtx,
+	b BuildCtx, targetID catid.DescID,
 ) (zoneID catid.DescID, zc *zonepb.ZoneConfig, seqNum uint32, err error) {
+	// Is `targetID` a table?
+	maybeTblElem := retrievePhysicalTableElem(b, targetID)
+	// Yes: get the zone config of its parent database.
+	if maybeTblElem != nil {
+		parentDBID := mustRetrieveNamespaceElem(b, targetID).DatabaseID
+		zoneID, zc, _, _, seqNum, err = getZoneConfig(b, parentDBID)
+		return zoneID, zc, seqNum, err
+	}
+	// No: get the zone config of the DEFAULT RANGE.
 	zoneID, zc, _, _, seqNum, err = getZoneConfig(b, keys.RootNamespaceID)
 	return zoneID, zc, seqNum, err
 }
 
-// getZoneConfig attempts to find the zone config from `system.zones` with `targetID`
-// (`targetID` is a database ID).
+// getZoneConfig attempts to find the zone config from `system.zones` with
+// `targetID` (`targetID` is either a database ID or a table ID).
 func getZoneConfig(
 	b BuildCtx, targetID catid.DescID,
 ) (
@@ -467,8 +690,20 @@ func getZoneConfig(
 		return zoneID, zc, 0, nil, seqNum, nil
 	}
 
-	// Otherwise, retrieve the default zc config, but only as long as that wasn't the ID
-	// we were trying to retrieve (avoid infinite recursion).
+	// No zone config for this ID. If `targetID` is a table, then recursively
+	// get zone config of its parent database.
+	tblElem := retrievePhysicalTableElem(b, targetID)
+	if tblElem != nil {
+		parentDBID := mustRetrieveNamespaceElem(b, targetID).DatabaseID
+		zoneID, zc, _, _, seqNum, err = getZoneConfig(b, parentDBID)
+		if err != nil {
+			return 0, nil, 0, nil, 0, err
+		}
+		return zoneID, zc, 0, nil, seqNum, nil
+	}
+
+	// Otherwise, retrieve the default zone config, but only as long as that
+	// wasn't the ID we were trying to retrieve (avoid infinite recursion).
 	if targetID != keys.RootNamespaceID {
 		zoneID, zc, _, _, seqNum, err := getZoneConfig(b, keys.RootNamespaceID)
 		if err != nil {
@@ -497,11 +732,16 @@ func lookUpSystemZonesTable(
 	} else {
 		// It's a descriptor-backed target (i.e. a database ID or a table ID)
 		b.QueryByID(targetID).ForEach(func(
-			current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+			_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
 		) {
 			switch e := e.(type) {
 			case *scpb.DatabaseZoneConfig:
 				if e.DatabaseID == targetID {
+					zone = e.ZoneConfig
+					seqNum = e.SeqNum
+				}
+			case *scpb.TableZoneConfig:
+				if e.TableID == targetID {
 					zone = e.ZoneConfig
 					seqNum = e.SeqNum
 				}
@@ -511,10 +751,25 @@ func lookUpSystemZonesTable(
 	return zone, seqNum, nil
 }
 
-// completeZoneConfig takes a zone config pointer for a database and
-// fills in missing fields by following the chain of inheritance.
+// completeZoneConfig takes a zone config pointer and fills in the
+// missing fields by following the chain of inheritance.
 // In the worst case, will have to inherit from the default zone config.
-func completeZoneConfig(b BuildCtx, zone *zonepb.ZoneConfig) error {
+func completeZoneConfig(
+	b BuildCtx, targetID catid.DescID, objType zoneConfigObjType, zone *zonepb.ZoneConfig,
+) error {
+	if zone.IsComplete() {
+		return nil
+	}
+	// Check to see if it's a table. If so, inherit from the database.
+	// For all other cases, inherit from the default.
+	if objType == tableObj {
+		dbID := mustRetrieveNamespaceElem(b, targetID).DatabaseID
+		_, dbZone, _, _, _, err := getZoneConfig(b, dbID)
+		if err != nil {
+			return err
+		}
+		zone.InheritFromParent(dbZone)
+	}
 	// Check if zone is complete. If not, inherit from the default zone config
 	if zone.IsComplete() {
 		return nil
@@ -740,13 +995,82 @@ func accumulateNewUniqueConstraints(currentZone, newZone *zonepb.ZoneConfig) []z
 	return retConstraints
 }
 
-// fallBackIfNotDatabaseZoneConfig determines if the table has a database
+// fallBackIfNotSupportedZoneConfig determines if the table has a database
 // zone config.
-func fallBackIfNotDatabaseZoneConfig(n *tree.SetZoneConfig) {
-	{
-		// This might not be sufficient - let's double check after we have tests
-		if n.Database == "" || n.Discard {
-			panic(scerrors.NotImplementedErrorf(n, "ALTER DATABASE is the only CONFIGURE ZONE supported"))
-		}
+func fallBackIfNotSupportedZoneConfig(n *tree.SetZoneConfig) (zoneConfigObjType, error) {
+	if n.Discard {
+		return unspecifiedObj,
+			scerrors.NotImplementedErrorf(n, "CONFIGURE ZONE DISCARD is not supported in DSC")
 	}
+	if n.Database != "" {
+		return databaseObj, nil
+	}
+
+	if n.TargetsTable() && !n.TargetsIndex() && !n.TargetsPartition() {
+		return tableObj, nil
+	}
+	return unspecifiedObj, scerrors.NotImplementedErrorf(n, "unsupported CONFIGURE ZONE target")
+}
+
+// addZoneConfigToBuildCtx adds the zone config to the build context.
+func addZoneConfigToBuildCtx(
+	b BuildCtx,
+	n *tree.SetZoneConfig,
+	zc *zonepb.ZoneConfig,
+	seqNum uint32,
+	objType zoneConfigObjType,
+) {
+	var elem scpb.Element
+	// Increment the value of seqNum to ensure a new zone config is being
+	// updated with a different seqNum.
+	seqNum += 1
+	targetID, err := getTargetIDFromZoneSpecifier(b, n.ZoneSpecifier, objType)
+	if err != nil {
+		panic(err)
+	}
+	switch objType {
+	case databaseObj:
+		elem = &scpb.DatabaseZoneConfig{
+			DatabaseID: targetID,
+			ZoneConfig: zc,
+			SeqNum:     seqNum,
+		}
+	case tableObj:
+		elem = &scpb.TableZoneConfig{
+			TableID:    targetID,
+			ZoneConfig: zc,
+			SeqNum:     seqNum,
+		}
+	default:
+		panic(errors.AssertionFailedf("programming error: unsupported object type for CONFIGURE ZONE"))
+	}
+	b.Add(elem)
+	b.LogEventForExistingTarget(elem)
+}
+
+func retrievePhysicalTableElem(b BuildCtx, tableID catid.DescID) scpb.Element {
+	return b.QueryByID(tableID).Filter(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) bool {
+		switch e := e.(type) {
+		case *scpb.Table:
+			return e.TableID == tableID
+		case *scpb.View:
+			if e.IsMaterialized {
+				return e.ViewID == tableID
+			}
+		case *scpb.Sequence:
+			return e.SequenceID == tableID
+		}
+		return false
+	}).MustGetZeroOrOneElement()
+}
+
+func mustRetrievePhysicalTableElem(b BuildCtx, tableID catid.DescID) scpb.Element {
+	physicalTableElem := retrievePhysicalTableElem(b, tableID)
+	if physicalTableElem == nil {
+		panic(errors.AssertionFailedf("programming error: cannot find a physical table "+
+			"element for table %v", tableID))
+	}
+	return physicalTableElem
 }
