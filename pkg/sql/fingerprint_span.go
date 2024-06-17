@@ -36,7 +36,7 @@ var maxFingerprintNumWorkers = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.fingerprint.max_span_parallelism",
 	"the maximum number of workers used to issue fingerprint ExportRequests",
-	8,
+	64,
 	settings.PositiveInt,
 )
 
@@ -48,7 +48,6 @@ func (p *planner) FingerprintSpan(
 ) (uint64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "sql.FingerprintSpan")
 	defer sp.Finish()
-
 	evalCtx := p.EvalContext()
 	fingerprint, ssts, err := p.fingerprintSpanFanout(ctx, span, startTime, allRevisions, stripped)
 	if err != nil {
@@ -129,14 +128,26 @@ func (p *planner) fingerprintSpanFanout(
 		return 0, nil, err
 	}
 
-	var workerPartitions []SpanPartition
-	if len(spanPartitions) <= maxWorkerCount {
-		workerPartitions = spanPartitions
-	} else {
-		workerPartitions = make([]SpanPartition, maxWorkerCount)
-		for i, sp := range spanPartitions {
-			idx := i % maxWorkerCount
-			workerPartitions[idx].Spans = append(workerPartitions[idx].Spans, sp.Spans...)
+	maxLen := 0
+	count := 0
+	for _, partition := range spanPartitions {
+		length := len(partition.Spans)
+		maxLen = max(maxLen, length)
+		count += length
+	}
+	// Take as many workers as partitions to efficiently distribute work
+	maxWorkerCount = min(maxWorkerCount, count)
+
+	// Each span partition contains spans that are likely to be served by
+	// the same node. By round robin grabbing a span from each partition
+	// and pushing to the channel, ideally sequential workers won't attempt
+	// to read from the same node at the same time.
+	spanChannel := make(chan roachpb.Span, count)
+	for i := range maxLen {
+		for _, partition := range spanPartitions {
+			if i < len(partition.Spans) {
+				spanChannel <- partition.Spans[i]
+			}
 		}
 	}
 
@@ -145,15 +156,18 @@ func (p *planner) fingerprintSpanFanout(
 		ssts        [][]byte
 		fingerprint uint64
 	}{
-		ssts: make([][]byte, 0, len(workerPartitions)),
+		ssts: make([][]byte, 0, len(spanPartitions)),
 	}
 
 	grp := ctxgroup.WithContext(ctx)
-	for i := range workerPartitions {
-		workerIdx := i
+	for range maxWorkerCount {
 		grp.GoCtx(func(ctx context.Context) error {
-			spans := workerPartitions[workerIdx].Spans
-			for _, sp := range spans {
+			// Run until channel is empty
+			for {
+				sp, ok := <-spanChannel
+				if !ok {
+					return nil
+				}
 				localFingerprint, localSSTs, err := fingerprintSpanImpl(ctx, evalCtx, sp, startTime, allRevisions, stripped)
 				if err != nil {
 					return err
@@ -163,14 +177,13 @@ func (p *planner) fingerprintSpanFanout(
 				rv.fingerprint = rv.fingerprint ^ localFingerprint
 				rv.Unlock()
 			}
-			return nil
 		})
 	}
+
+	close(spanChannel)
 	if err := grp.Wait(); err != nil {
 		return 0, nil, err
 	}
-	rv.Lock()
-	defer rv.Unlock()
 	return rv.fingerprint, rv.ssts, nil
 }
 
