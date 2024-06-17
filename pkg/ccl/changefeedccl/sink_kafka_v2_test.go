@@ -175,7 +175,6 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 }
 
 // TODOs:
-// - adapt sink_test's topic naming tests (prefix, escaping, etc)
 // - test opts construction. using client.OptValues() (neat trick!)
 
 // These are really tests of the TopicNamer and our configuration of it.
