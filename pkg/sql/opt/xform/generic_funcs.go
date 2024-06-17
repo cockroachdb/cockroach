@@ -16,72 +16,92 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/errors"
 )
 
-// HasPlaceholders returns true if the given relational expression's subtree has
+// HasPlaceholdersOrStableExprs returns true if the given relational expression's subtree has
 // at least one placeholder.
-func (c *CustomFuncs) HasPlaceholders(e memo.RelExpr) bool {
-	return e.Relational().HasPlaceholder
+func (c *CustomFuncs) HasPlaceholdersOrStableExprs(e memo.RelExpr) bool {
+	return e.Relational().HasPlaceholder || e.Relational().VolatilitySet.HasStable()
 }
 
-// GeneratePlaceholderValuesAndJoinFilters returns a single-row Values
-// expression containing placeholders in the given filters. It also returns a
-// new set of filters where the placeholders have been replaced with variables
-// referencing the columns produced by the returned Values expression. If the
-// given filters have no placeholders, ok=false is returned.
-func (c *CustomFuncs) GeneratePlaceholderValuesAndJoinFilters(
+// GenerateParameterizedJoinValuesAndFilters returns a single-row Values
+// expression containing placeholders and stable expressions in the given
+// filters. It also returns a new set of filters where the placeholders and
+// stable expressions have been replaced with variables referencing the columns
+// produced by the returned Values expression. If the given filters have no
+// placeholders or stable expressions, ok=false is returned.
+func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 	filters memo.FiltersExpr,
 ) (values memo.RelExpr, newFilters memo.FiltersExpr, ok bool) {
-	// Collect all the placeholders in the filters.
+	// Collect all the placeholders and stable expressions in the filters.
 	//
-	// collectPlaceholders recursively walks the scalar expression and collects
-	// placeholder expressions into the placeholders slice.
-	var placeholders []*memo.PlaceholderExpr
+	// collectExprs recursively walks the scalar expression and collects
+	// placeholders  and stable expressions into the exprs slice.
+	var exprs memo.ScalarListExpr
 	var seenIndexes intsets.Fast
-	var collectPlaceholders func(e opt.Expr)
-	collectPlaceholders = func(e opt.Expr) {
-		if p, ok := e.(*memo.PlaceholderExpr); ok {
-			idx := int(p.Value.(*tree.Placeholder).Idx)
+	var collectExprs func(e opt.Expr)
+	collectExprs = func(e opt.Expr) {
+		switch t := e.(type) {
+		case *memo.PlaceholderExpr:
+			idx := int(t.Value.(*tree.Placeholder).Idx)
 			// Don't include the same placeholder multiple times.
 			if !seenIndexes.Contains(idx) {
 				seenIndexes.Add(idx)
-				placeholders = append(placeholders, p)
+				exprs = append(exprs, t)
 			}
-			return
-		}
-		for i, n := 0, e.ChildCount(); i < n; i++ {
-			collectPlaceholders(e.Child(i))
+
+		case *memo.FunctionExpr:
+			// TODO(mgartner): Consider including other expressions that could
+			// be stable: casts, assignment casts, UDFCallExprs, unary ops,
+			// comparisons, binary ops.
+			// TODO(mgartner): Include functions with arguments if they are all
+			// constants or placeholders.
+			if t.Overload.Volatility == volatility.Stable && len(t.Args) == 0 {
+				exprs = append(exprs, t)
+			}
+
+		default:
+			for i, n := 0, e.ChildCount(); i < n; i++ {
+				collectExprs(e.Child(i))
+			}
 		}
 	}
 
 	for i := range filters {
-		// Only traverse the scalar expression if it contains a placeholder.
-		if filters[i].ScalarProps().HasPlaceholder {
-			collectPlaceholders(filters[i].Condition)
+		// Only traverse the scalar expression if it contains a placeholder or a
+		// stable expression.
+		props := filters[i].ScalarProps()
+		if props.HasPlaceholder || props.VolatilitySet.HasStable() {
+			collectExprs(filters[i].Condition)
 		}
 	}
 
-	// If there are no placeholders in the filters, there is nothing to do.
-	if len(placeholders) == 0 {
+	// If there are no placeholders or stable expressions the filters, there is
+	// nothing to do.
+	if len(exprs) == 0 {
 		return nil, nil, false
 	}
 
 	// Create the Values expression with one row and one column for each
-	// placeholder.
-	cols := make(opt.ColList, len(placeholders))
-	colIDs := make(map[tree.PlaceholderIdx]opt.ColumnID, len(placeholders))
-	typs := make([]*types.T, len(placeholders))
-	exprs := make(memo.ScalarListExpr, len(placeholders))
-	for i, p := range placeholders {
-		idx := p.Value.(*tree.Placeholder).Idx
-		col := c.e.f.Metadata().AddColumn(fmt.Sprintf("$%d", idx+1), p.DataType())
+	// collected expression.
+	cols := make(opt.ColList, len(exprs))
+	colIDs := make(map[opt.Expr]opt.ColumnID, len(exprs))
+	typs := make([]*types.T, len(exprs))
+	for i, e := range exprs {
+		var col opt.ColumnID
+		switch t := e.(type) {
+		case *memo.PlaceholderExpr:
+			idx := t.Value.(*tree.Placeholder).Idx
+			col = c.e.f.Metadata().AddColumn(fmt.Sprintf("$%d", idx+1), t.DataType())
+		default:
+			col = c.e.f.Metadata().AddColumn(fmt.Sprintf("stable%d", i), t.DataType())
+		}
 		cols[i] = col
-		colIDs[idx] = col
-		exprs[i] = p
-		typs[i] = p.DataType()
+		colIDs[e] = col
+		typs[i] = e.DataType()
 	}
 
 	tupleTyp := types.MakeTuple(typs)
@@ -91,16 +111,11 @@ func (c *CustomFuncs) GeneratePlaceholderValuesAndJoinFilters(
 		ID:   c.e.f.Metadata().NextUniqueID(),
 	})
 
-	// Create new filters by replacing the placeholders in the filters with
-	// variables.
+	// Create new filters by replacing the placeholders and stable expression in
+	// the filters with variables.
 	var replace func(e opt.Expr) opt.Expr
 	replace = func(e opt.Expr) opt.Expr {
-		if p, ok := e.(*memo.PlaceholderExpr); ok {
-			idx := p.Value.(*tree.Placeholder).Idx
-			col, ok := colIDs[idx]
-			if !ok {
-				panic(errors.AssertionFailedf("unknown placeholder %d", idx))
-			}
+		if col, ok := colIDs[e]; ok {
 			return c.e.f.ConstructVariable(col)
 		}
 		return c.e.f.Replace(e, replace)
@@ -121,9 +136,9 @@ func (c *CustomFuncs) GeneratePlaceholderValuesAndJoinFilters(
 	return values, newFilters, true
 }
 
-// GenericJoinPrivate returns JoinPrivate that disabled join reordering and
+// ParameterizedJoinPrivate returns JoinPrivate that disabled join reordering and
 // merge join exploration.
-func (c *CustomFuncs) GenericJoinPrivate() *memo.JoinPrivate {
+func (c *CustomFuncs) ParameterizedJoinPrivate() *memo.JoinPrivate {
 	return &memo.JoinPrivate{
 		Flags:            memo.DisallowMergeJoin,
 		SkipReorderJoins: true,
