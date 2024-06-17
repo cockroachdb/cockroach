@@ -1,0 +1,48 @@
+# =============================================================================
+# generic.opt contains exploration rules for optimizing generic query plans.
+# =============================================================================
+
+# ConvertSelectWithPlaceholdersToJoin is an exploration rule that converts a
+# Select expression with placeholders in the filters into an InnerJoin that
+# joins the Select's input with a Values expression that produces the
+# placeholder values.
+#
+# This rule allows generic query plans, in which placeholder values are not
+# known, to be optimized. By converting the Select into an InnerJoin, the
+# optimizer can plan a lookup join, in many cases, which has similar performance
+# characteristics to the constrained Scan that would be planned if the
+# placeholder values were known. For example, consider a schema and query like:
+#
+#   CREATE TABLE t (i INT PRIMARY KEY)
+#   SELECT * FROM t WHERE i = $1
+#
+# ConvertSelectWithPlaceholdersToJoin will perform the first conversion below,
+# from a Select into a Join. GenerateLookupJoins will perform the second
+# conversion from a (hash) Join into a LookupJoin.
+#
+#
+#   Select (i=$1)              Join (i=col_$1)         LookupJoin (t@t_pkey)
+# 	    |           ->            /   \           ->          |
+# 	    |                        /     \                      |
+# 	  Scan t             Values ($1)   Scan t              Values ($1)
+#
+[ConvertSelectWithPlaceholdersToJoin, Explore]
+(Select
+    $scan:(Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
+    $filters:* &
+        (HasPlaceholders (Root)) &
+        (Let
+            (
+                $values
+                $newFilters
+                $ok
+            ):(GeneratePlaceholderValuesAndJoinFilters $filters)
+            $ok
+        )
+)
+=>
+(Project
+    (InnerJoin $values $scan $newFilters (EmptyJoinPrivate))
+    []
+    (OutputCols (Root))
+)
