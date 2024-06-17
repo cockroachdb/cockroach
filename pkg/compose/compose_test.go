@@ -89,6 +89,12 @@ func TestComposeCompare(t *testing.T) {
 			// Temporarily commented for debugging.
 			// _ = os.RemoveAll(compareDir)
 		})
+		if err = os.MkdirAll(filepath.Join(compareDir, "store1"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err = os.MkdirAll(filepath.Join(compareDir, "store2"), 0755); err != nil {
+			t.Fatal(err)
+		}
 		cockroachBin = filepath.Join(compareDir, "cockroach")
 		libGeosDir = filepath.Join(compareDir, "lib")
 		if err = os.MkdirAll(libGeosDir, 0755); err != nil {
