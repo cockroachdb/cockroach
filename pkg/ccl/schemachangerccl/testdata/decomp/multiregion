@@ -372,7 +372,23 @@ ElementState:
     tableId: 110
   Status: PUBLIC
 - TableZoneConfig:
+    seqNum: 0
     tableId: 110
+    zoneConfig:
+      constraints: []
+      gc: null
+      globalReads: true
+      inheritedConstraints: true
+      inheritedLeasePreferences: true
+      leasePreferences: []
+      nullVoterConstraintsIsEmpty: false
+      numReplicas: null
+      numVoters: null
+      rangeMaxBytes: null
+      rangeMinBytes: null
+      subzoneSpans: []
+      subzones: []
+      voterConstraints: []
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
@@ -651,7 +667,32 @@ ElementState:
     tableId: 109
   Status: PUBLIC
 - TableZoneConfig:
+    seqNum: 0
     tableId: 109
+    zoneConfig:
+      constraints: []
+      gc: null
+      globalReads: null
+      inheritedConstraints: true
+      inheritedLeasePreferences: false
+      leasePreferences:
+      - constraints:
+        - key: region
+          type: REQUIRED
+          value: us-east2
+      nullVoterConstraintsIsEmpty: true
+      numReplicas: null
+      numVoters: 5
+      rangeMaxBytes: null
+      rangeMinBytes: null
+      subzoneSpans: []
+      subzones: []
+      voterConstraints:
+      - constraints:
+        - key: region
+          type: REQUIRED
+          value: us-east2
+        numReplicas: 2
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 109
@@ -1057,7 +1098,110 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - TableZoneConfig:
+    seqNum: 0
     tableId: 108
+    zoneConfig:
+      constraints: []
+      gc: null
+      globalReads: null
+      inheritedConstraints: true
+      inheritedLeasePreferences: true
+      leasePreferences: []
+      nullVoterConstraintsIsEmpty: false
+      numReplicas: 0
+      numVoters: null
+      rangeMaxBytes: null
+      rangeMinBytes: null
+      subzoneSpans:
+      - endKey: null
+        key: iRJAAAE=
+        subzoneIndex: 0
+      - endKey: null
+        key: iRKAAAE=
+        subzoneIndex: 1
+      - endKey: null
+        key: iRLAAAE=
+        subzoneIndex: 2
+      subzones:
+      - config:
+          constraints: []
+          gc: null
+          globalReads: null
+          inheritedConstraints: true
+          inheritedLeasePreferences: false
+          leasePreferences:
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east1
+          nullVoterConstraintsIsEmpty: true
+          numReplicas: null
+          numVoters: 5
+          rangeMaxBytes: null
+          rangeMinBytes: null
+          subzoneSpans: []
+          subzones: []
+          voterConstraints:
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east1
+            numReplicas: 2
+        indexId: 1
+        partitionName: us-east1
+      - config:
+          constraints: []
+          gc: null
+          globalReads: null
+          inheritedConstraints: true
+          inheritedLeasePreferences: false
+          leasePreferences:
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east2
+          nullVoterConstraintsIsEmpty: true
+          numReplicas: null
+          numVoters: 5
+          rangeMaxBytes: null
+          rangeMinBytes: null
+          subzoneSpans: []
+          subzones: []
+          voterConstraints:
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east2
+            numReplicas: 2
+        indexId: 1
+        partitionName: us-east2
+      - config:
+          constraints: []
+          gc: null
+          globalReads: null
+          inheritedConstraints: true
+          inheritedLeasePreferences: false
+          leasePreferences:
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east3
+          nullVoterConstraintsIsEmpty: true
+          numReplicas: null
+          numVoters: 5
+          rangeMaxBytes: null
+          rangeMinBytes: null
+          subzoneSpans: []
+          subzones: []
+          voterConstraints:
+          - constraints:
+            - key: region
+              type: REQUIRED
+              value: us-east3
+            numReplicas: 2
+        indexId: 1
+        partitionName: us-east3
+      voterConstraints: []
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
