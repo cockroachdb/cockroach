@@ -42,7 +42,7 @@
 )
 =>
 (Project
-    (InnerJoin $values $scan $newFilters (EmptyJoinPrivate))
+    (InnerJoin $values $scan $newFilters (GenericJoinPrivate))
     []
     (OutputCols (Root))
 )
