@@ -425,7 +425,9 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		if zoneCfg != nil {
 			w.ev(scpb.Status_PUBLIC,
 				&scpb.TableZoneConfig{
-					TableID: tbl.GetID(),
+					TableID:    tbl.GetID(),
+					ZoneConfig: zoneCfg.ZoneConfigProto(),
+					SeqNum:     0,
 				})
 			for _, subZoneCfg := range zoneCfg.ZoneConfigProto().Subzones {
 				w.ev(scpb.Status_PUBLIC,
