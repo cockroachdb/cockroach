@@ -28,7 +28,8 @@ export default withRouter(
   connect<
     ActiveStatementDetailsStateProps,
     ActiveStatementDetailsDispatchProps,
-    RouteComponentProps
+    RouteComponentProps,
+    AdminUIState
   >(
     (state: AdminUIState, props: RouteComponentProps) => ({
       match: props.match,

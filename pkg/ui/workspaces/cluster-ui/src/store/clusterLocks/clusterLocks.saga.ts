@@ -19,6 +19,8 @@ import {
 
 import { getClusterLocksState } from "src/api/clusterLocksApi";
 
+import { maybeError } from "../../util";
+
 import { actions } from "./clusterLocks.reducer";
 
 export function* requestClusterLocksSaga(): any {
@@ -26,7 +28,7 @@ export function* requestClusterLocksSaga(): any {
     const result = yield call(getClusterLocksState);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(maybeError(e)));
   }
 }
 

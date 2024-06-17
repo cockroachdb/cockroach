@@ -208,10 +208,10 @@ WHERE
     toSchemaInsight: createIndexRecommendationsToSchemaInsight,
   };
 
-const schemaInsightQueries: SchemaInsightQuery<SchemaInsightResponse>[] = [
-  dropUnusedIndexQuery,
-  createIndexRecommendationsQuery,
-];
+const schemaInsightQueries: Array<
+  | SchemaInsightQuery<ClusterIndexUsageStatistic>
+  | SchemaInsightQuery<CreateIndexRecommendationsResponse>
+> = [dropUnusedIndexQuery, createIndexRecommendationsQuery];
 
 function getQuery(
   csIndexUnusedDuration: string,
@@ -248,6 +248,8 @@ export async function getSchemaInsights(
   }
   result.execution.txn_results.map(txnResult => {
     // Note: txn_result.statement values begin at 1, not 0.
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     const insightQuery: SchemaInsightQuery<SchemaInsightResponse> =
       schemaInsightQueries[txnResult.statement - 1];
     if (txnResult.rows) {

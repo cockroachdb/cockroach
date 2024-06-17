@@ -22,6 +22,7 @@ import {
   createStatementDiagnosticsReport,
   getStatementDiagnosticsReports,
 } from "src/api/statementDiagnosticsApi";
+import { maybeError } from "src/util";
 
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
 import { rootActions } from "../rootActions";
@@ -38,7 +39,7 @@ export function* createDiagnosticsReportSaga(
     // requested statement.
     yield put(actions.request());
   } catch (e) {
-    yield put(actions.createReportFailed(e));
+    yield put(actions.createReportFailed(maybeError(e)));
   }
 }
 
@@ -56,7 +57,7 @@ export function* cancelDiagnosticsReportSaga(
     yield put(actions.cancelReportCompleted());
     yield put(actions.request());
   } catch (e) {
-    yield put(actions.cancelReportFailed(e));
+    yield put(actions.cancelReportFailed(maybeError(e)));
   }
 }
 
@@ -69,7 +70,7 @@ export function* requestStatementsDiagnosticsSaga(): any {
     const response = yield call(getStatementDiagnosticsReports);
     yield put(actions.received(response));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(maybeError(e)));
   }
 }
 

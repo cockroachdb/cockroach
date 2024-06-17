@@ -27,10 +27,10 @@ interface TerminateQueryModalProps {
   cancel: (payload: ICancelQueryRequest) => void;
 }
 
-const TerminateQueryModal = (
-  props: TerminateQueryModalProps,
-  ref: React.RefObject<TerminateQueryModalRef>,
-) => {
+const TerminateQueryModal: React.ForwardRefRenderFunction<
+  TerminateQueryModalRef,
+  TerminateQueryModalProps
+> = (props, ref) => {
   const { cancel } = props;
   const [visible, setVisible] = useState(false);
   const [req, setReq] = useState<ICancelQueryRequest>();

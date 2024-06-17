@@ -33,18 +33,12 @@ const statementDiagnosticsSlice = createSlice({
   name: `${DOMAIN_NAME}/statementDiagnostics`,
   initialState,
   reducers: {
-    received: (
-      state: StatementDiagnosticsState,
-      action: PayloadAction<StatementDiagnosticsResponse>,
-    ) => {
+    received: (state, action: PayloadAction<StatementDiagnosticsResponse>) => {
       state.data = action.payload;
       state.lastError = null;
       state.valid = true;
     },
-    failed: (
-      state: StatementDiagnosticsState,
-      action: PayloadAction<Error>,
-    ) => {
+    failed: (state, action: PayloadAction<Error>) => {
       state.lastError = action.payload;
       state.valid = false;
     },

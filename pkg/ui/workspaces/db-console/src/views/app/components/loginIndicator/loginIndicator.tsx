@@ -23,7 +23,7 @@ import "./loginIndicator.styl";
 
 interface LoginIndicatorProps {
   loginState: LoginState;
-  handleLogout: () => null;
+  handleLogout: () => void;
 }
 
 interface LoginIndicatorState {

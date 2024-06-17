@@ -14,6 +14,7 @@ import { getLiveness } from "src/api/livenessApi";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 
 import { rootActions } from "../rootActions";
+import { maybeError } from "../../util";
 
 import { actions } from "./liveness.reducer";
 
@@ -26,7 +27,7 @@ export function* requestLivenessSaga(): any {
     const result = yield call(getLiveness);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(maybeError(e)));
   }
 }
 

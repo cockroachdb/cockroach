@@ -27,7 +27,8 @@ const ActiveTransactionDetailsConnected = withRouter(
   connect<
     ActiveTransactionDetailsStateProps,
     ActiveTransactionDetailsDispatchProps,
-    RouteComponentProps
+    RouteComponentProps,
+    AdminUIState
   >(
     (state: AdminUIState, props: RouteComponentProps) => ({
       transaction: selectActiveTransaction(state, props),

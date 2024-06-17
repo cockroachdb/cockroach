@@ -13,7 +13,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { getUserSQLRoles } from "../../api/userApi";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
-import { getLogger } from "../../util";
+import { maybeError, getLogger } from "../../util";
 import { rootActions } from "../rootActions";
 
 import { actions } from "./uiConfig.reducer";
@@ -28,7 +28,11 @@ export function* requestUserSQLRolesSaga(): any {
       yield call(getUserSQLRoles);
     yield put(actions.receivedUserSQLRoles(result.roles));
   } catch (e) {
-    getLogger().warn(e.message, /* additional context */ undefined, e);
+    getLogger().warn(
+      maybeError(e).message,
+      /* additional context */ undefined,
+      e,
+    );
   }
 }
 

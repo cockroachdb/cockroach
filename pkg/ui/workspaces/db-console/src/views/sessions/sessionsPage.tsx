@@ -21,10 +21,7 @@ import { Pick } from "src/util/pick";
 import { AdminUIState } from "src/redux/state";
 import { LocalSetting } from "src/redux/localsettings";
 import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
-import {
-  SessionsResponseMessage,
-  StatementsResponseMessage,
-} from "src/util/api";
+import { SessionsResponseMessage } from "src/util/api";
 import {
   terminateQueryAction,
   terminateSessionAction,
@@ -34,7 +31,7 @@ type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
 
 export const selectData = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
-  (state: CachedDataReducerState<StatementsResponseMessage>) => {
+  state => {
     if (!state.data || state.inFlight || !state.valid) return null;
     return state.data;
   },

@@ -13,6 +13,7 @@ import { RouteComponentProps } from "react-router-dom";
 import flatMap from "lodash/flatMap";
 import merge from "lodash/merge";
 import groupBy from "lodash/groupBy";
+import isString from "lodash/isString";
 import classNames from "classnames/bind";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import moment from "moment-timezone";
@@ -508,8 +509,9 @@ export class StatementsPage extends React.Component<
 
   hasReqSortOption = (): boolean => {
     let found = false;
-    Object.values(SqlStatsSortOptions).forEach((option: SqlStatsSortType) => {
-      if (getSortColumn(option) === this.props.sortSetting.columnTitle) {
+    Object.values(SqlStatsSortOptions).forEach(option => {
+      const optionString = isString(option) ? option : getSortColumn(option);
+      if (optionString === this.props.sortSetting.columnTitle) {
         found = true;
       }
     });

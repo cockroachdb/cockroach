@@ -11,7 +11,7 @@
 import assign from "lodash/assign";
 import isEmpty from "lodash/isEmpty";
 import * as React from "react";
-import Select from "react-select";
+import Select, { Option } from "react-select";
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 
 import * as protos from "src/js/protos";
@@ -89,37 +89,37 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
     );
   }
 
-  changeMetric = (selectedOption: DropdownOption) => {
+  changeMetric = (selectedOption: Option<string>) => {
     this.changeState({
       metric: selectedOption.value,
     });
   };
 
-  changeDownsampler = (selectedOption: DropdownOption) => {
+  changeDownsampler = (selectedOption: Option<string>) => {
     this.changeState({
       downsampler: +selectedOption.value,
     });
   };
 
-  changeAggregator = (selectedOption: DropdownOption) => {
+  changeAggregator = (selectedOption: Option<string>) => {
     this.changeState({
       aggregator: +selectedOption.value,
     });
   };
 
-  changeDerivative = (selectedOption: DropdownOption) => {
+  changeDerivative = (selectedOption: Option<string>) => {
     this.changeState({
       derivative: +selectedOption.value,
     });
   };
 
-  changeNodeSource = (selectedOption: DropdownOption) => {
+  changeNodeSource = (selectedOption: Option<string>) => {
     this.changeState({
       nodeSource: selectedOption.value,
     });
   };
 
-  changeTenant = (selectedOption: DropdownOption) => {
+  changeTenant = (selectedOption: Option<string>) => {
     this.changeState({
       tenantSource: selectedOption.value,
     });

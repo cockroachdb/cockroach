@@ -28,10 +28,12 @@ type Dictionary<V> = {
   [key: string]: V;
 };
 
+function compose(): <R>(a: R) => R;
+
 // Extend Window interface with possible Redux DevTools extension.
 interface Window {
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  __REDUX_DEVTOOLS_EXTENSION__?: () => () => void;
+  __REDUX_DEVTOOLS_EXTENSION__?: typeof compose;
 }
 
 declare module "highlight.js/lib/core";

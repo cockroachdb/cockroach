@@ -14,7 +14,7 @@ import { PayloadAction } from "@reduxjs/toolkit";
 
 import { ErrorWithKey, getTableDetails, TableDetailsReqParams } from "src/api";
 
-import { generateTableID } from "../../util";
+import { generateTableID, maybeError } from "../../util";
 
 import { actions } from "./tableDetails.reducer";
 
@@ -37,7 +37,7 @@ export function* requestTableDetailsSaga(
     yield put(actions.received({ key, tableDetailsResponse: result }));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: maybeError(e),
       key,
     };
     yield put(actions.failed(err));

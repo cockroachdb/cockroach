@@ -24,6 +24,7 @@ import {
   compose,
   createStore,
   Store,
+  StoreEnhancer,
 } from "redux";
 import { Route } from "react-router-dom";
 
@@ -48,7 +49,7 @@ const store: Store<AppState> = createStore(
   compose(
     applyMiddleware(sagaMiddleware, routerMiddleware(history)),
     window.__REDUX_DEVTOOLS_EXTENSION__ &&
-      window.__REDUX_DEVTOOLS_EXTENSION__(),
+      (window.__REDUX_DEVTOOLS_EXTENSION__() as StoreEnhancer),
   ),
 );
 

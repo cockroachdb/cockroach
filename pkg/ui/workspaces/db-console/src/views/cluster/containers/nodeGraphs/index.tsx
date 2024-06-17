@@ -12,7 +12,6 @@ import map from "lodash/map";
 import has from "lodash/has";
 import React from "react";
 import { Helmet } from "react-helmet";
-import { compose } from "redux";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
@@ -193,7 +192,7 @@ type MapStateToProps = {
   nodeDisplayNameByID: ReturnType<
     typeof nodeDisplayNameByIDSelector.resultFunc
   >;
-  tenantOptions: ReturnType<() => DropdownOption[]>;
+  tenantOptions: DropdownOption[];
   currentTenant: string | null;
 };
 
@@ -564,7 +563,6 @@ const mapDispatchToProps: MapDispatchToProps = {
   setTimeScale: setTimeScale,
 };
 
-export default compose(
-  withRouter,
-  connect(mapStateToProps, mapDispatchToProps),
-)(NodeGraphs);
+export default withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(NodeGraphs),
+);

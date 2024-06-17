@@ -18,6 +18,8 @@ import {
   getDatabaseDetails,
 } from "src/api";
 
+import { maybeError } from "../../util";
+
 import { databaseDetailsReducer } from "./databaseDetails.reducer";
 
 const actions = databaseDetailsReducer.actions;
@@ -44,7 +46,7 @@ export function* requestDatabaseDetailsSaga(
     );
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: maybeError(e),
       key: action.payload.database,
     };
     yield put(actions.failed(err));

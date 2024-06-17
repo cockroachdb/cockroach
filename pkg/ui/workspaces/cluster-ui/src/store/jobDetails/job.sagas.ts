@@ -14,6 +14,7 @@ import { PayloadAction } from "@reduxjs/toolkit";
 import { getJob, JobRequest, JobResponseWithKey } from "src/api/jobsApi";
 
 import { ErrorWithKey } from "../../api";
+import { maybeError } from "../../util";
 
 import { actions } from "./job.reducer";
 
@@ -32,7 +33,7 @@ export function* requestJobSaga(action: PayloadAction<JobRequest>): any {
     yield put(actions.received(resultWithKey));
   } catch (e) {
     const err: ErrorWithKey = {
-      err: e,
+      err: maybeError(e),
       key,
     };
     yield put(actions.failed(err));

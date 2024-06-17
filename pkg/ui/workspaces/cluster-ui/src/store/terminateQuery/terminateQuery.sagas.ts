@@ -15,6 +15,8 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { terminateQuery, terminateSession } from "src/api/terminateQueryApi";
 import { actions as sessionsActions } from "src/store/sessions";
 
+import { maybeError } from "../../util";
+
 import { actions as terminateQueryActions } from "./terminateQuery.reducer";
 
 const CancelSessionRequest = cockroach.server.serverpb.CancelSessionRequest;
@@ -33,7 +35,7 @@ export function* terminateSessionSaga(
     yield put(sessionsActions.invalidated());
     yield put(sessionsActions.refresh());
   } catch (e) {
-    yield put(terminateQueryActions.terminateSessionFailed(e));
+    yield put(terminateQueryActions.terminateSessionFailed(maybeError(e)));
   }
 }
 
@@ -47,7 +49,7 @@ export function* terminateQuerySaga(
     yield put(sessionsActions.invalidated());
     yield put(sessionsActions.refresh());
   } catch (e) {
-    yield put(terminateQueryActions.terminateQueryFailed(e));
+    yield put(terminateQueryActions.terminateQueryFailed(maybeError(e)));
   }
 }
 

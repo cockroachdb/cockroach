@@ -16,10 +16,12 @@ import {
   DatabasesPageActions,
 } from "@cockroachlabs/cluster-ui";
 
+import { AdminUIState } from "src/redux/state";
+
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 
 const connected = withRouter(
-  connect<DatabasesPageData, DatabasesPageActions, RouteComponentProps>(
+  connect<DatabasesPageData, DatabasesPageActions, RouteComponentProps, AdminUIState>(
     mapStateToProps,
     mapDispatchToProps,
   )(DatabasesPage),

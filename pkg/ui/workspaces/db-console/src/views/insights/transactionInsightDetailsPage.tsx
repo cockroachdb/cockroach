@@ -55,7 +55,8 @@ const TransactionInsightDetailsPage = withRouter(
   connect<
     TransactionInsightDetailsStateProps,
     TransactionInsightDetailsDispatchProps,
-    RouteComponentProps
+    RouteComponentProps,
+    AdminUIState
   >(
     mapStateToProps,
     mapDispatchToProps,

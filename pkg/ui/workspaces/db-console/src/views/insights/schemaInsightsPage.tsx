@@ -63,7 +63,8 @@ const SchemaInsightsPage = withRouter(
   connect<
     SchemaInsightsViewStateProps,
     SchemaInsightsViewDispatchProps,
-    RouteComponentProps
+    RouteComponentProps,
+    AdminUIState
   >(
     mapStateToProps,
     mapDispatchToProps,

@@ -43,7 +43,8 @@ const StatementInsightDetailsPage = withRouter(
   connect<
     StatementInsightDetailsStateProps,
     StatementInsightDetailsDispatchProps,
-    RouteComponentProps
+    RouteComponentProps,
+    AdminUIState
   >(
     mapStateToProps,
     mapDispatchToProps,

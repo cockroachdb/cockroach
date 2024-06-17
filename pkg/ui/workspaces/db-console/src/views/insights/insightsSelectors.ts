@@ -102,9 +102,13 @@ export const selectTransactionInsightDetailsError = createSelector(
     if (!insights) {
       return null;
     }
+    // TODO (koorosh): code within IF clause below doesn't look like affect result of the function and
+    // can be removed.
     const reqErrors = insights[insightId]?.data?.results.errors;
     if (insights[insightId]?.lastError) {
       Object.keys(reqErrors).forEach(
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         (key: keyof api.TxnInsightDetailsReqErrs) => {
           reqErrors[key] = insights[insightId].lastError;
         },

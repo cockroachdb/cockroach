@@ -25,7 +25,6 @@ import KeyVisualizer from "src/views/keyVisualizer/keyVisualizer";
 import {
   KeyVisSample,
   KeyVisualizerProps,
-  SampleBucket,
 } from "src/views/keyVisualizer/interfaces";
 import { AdminUIState } from "src/redux/state";
 import { selectClusterSettings } from "src/redux/clusterSettings";
@@ -165,16 +164,18 @@ function buildKeyVisualizerProps(
     );
 
   // Hex encode bucket UUIDs.
-  samples.forEach(sample => {
-    sample.buckets.forEach((bucket: SampleBucket) => {
-      bucket.startKeyHex = encodeToHexString(bucket.start_key_id);
-      bucket.endKeyHex = encodeToHexString(bucket.end_key_id);
-    });
-  });
+  const keySamples: KeyVisSample[] = samples.map(sample => ({
+    ...sample,
+    buckets: sample.buckets.map(bucket => ({
+      ...bucket,
+      startKeyHex: encodeToHexString(bucket.start_key_id),
+      endKeyHex: encodeToHexString(bucket.end_key_id),
+    })),
+  }));
 
   return {
     keys: state.response.pretty_key_for_uuid,
-    samples: samples as KeyVisSample[],
+    samples: keySamples,
     yOffsetsForKey: buildYAxis(state.response.sorted_pretty_keys),
     hottestBucket: hottestBucket(samples),
   };
