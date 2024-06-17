@@ -828,6 +828,7 @@ func TestAdjustCounts(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for i, tc := range testData {
@@ -838,7 +839,7 @@ func TestAdjustCounts(t *testing.T) {
 			if len(tc.h) > 0 {
 				colType = tc.h[0].UpperBound.ResolvedType()
 			}
-			actual.adjustCounts(&evalCtx, colType, tc.rowCount, tc.distinctCount)
+			actual.adjustCounts(ctx, &evalCtx, colType, tc.rowCount, tc.distinctCount)
 			roundHistogram(&actual)
 			if !reflect.DeepEqual(actual.buckets, tc.expected) {
 				t.Fatalf("expected %v but found %v", tc.expected, actual.buckets)
@@ -890,7 +891,7 @@ func TestAdjustCounts(t *testing.T) {
 			distinctCount = max(distinctCount, len(h.buckets))
 
 			// Adjust the counts in the histogram to match the provided counts.
-			h.adjustCounts(&evalCtx, colType, float64(rowCount), float64(distinctCount))
+			h.adjustCounts(ctx, &evalCtx, colType, float64(rowCount), float64(distinctCount))
 
 			// Check that the resulting histogram is valid.
 			if h.buckets[0].NumRange > 0 || h.buckets[0].DistinctRange > 0 {
@@ -900,7 +901,7 @@ func TestAdjustCounts(t *testing.T) {
 			for i := 1; i < len(h.buckets); i++ {
 				lowerBound := h.buckets[i-1].UpperBound
 				upperBound := h.buckets[i].UpperBound
-				maxDistRange, countable := maxDistinctRange(&evalCtx, lowerBound, upperBound)
+				maxDistRange, countable := maxDistinctRange(ctx, &evalCtx, lowerBound, upperBound)
 				if countable && math.Round(h.buckets[i].DistinctRange) > math.Round(maxDistRange) {
 					t.Errorf(
 						"distinct range in bucket exceeds maximum (%f). found %f",
@@ -1066,7 +1067,10 @@ func TestUpperBoundsRoundTrip(t *testing.T) {
 	}
 	evalCtx := eval.MakeTestingEvalContext(st)
 	for i, expected := range upperBounds {
-		if decoded := stat.Histogram[i].UpperBound; expected.Compare(&evalCtx, decoded) != 0 {
+		decoded := stat.Histogram[i].UpperBound
+		if cmp, err := expected.Compare(context.Background(), &evalCtx, decoded); err != nil {
+			t.Fatal(err)
+		} else if cmp != 0 {
 			t.Errorf("type %s: expected %s, decoded %s", typ.SQLString(), expected, decoded)
 		}
 	}

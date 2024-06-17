@@ -102,7 +102,7 @@ func (w *random) Tables() []workload.Table {
 	tables := make([]workload.Table, w.tables)
 	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	for i := 0; i < w.tables; i++ {
-		createTable := randgen.RandCreateTable(rng, "table", rng.Int(), false /* isMultiRegion */)
+		createTable := randgen.RandCreateTable(context.Background(), rng, "table", rng.Int(), false /* isMultiRegion */)
 		ctx := tree.NewFmtCtx(tree.FmtParsable)
 		createTable.FormatBody(ctx)
 		tables[i] = workload.Table{

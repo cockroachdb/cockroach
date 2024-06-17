@@ -604,7 +604,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if cmp, err := args[0].CompareError(evalCtx, DatEncodingUTFId); err != nil {
+				if cmp, err := args[0].Compare(ctx, evalCtx, DatEncodingUTFId); err != nil {
 					return tree.DNull, err
 				} else if cmp == 0 {
 					return datEncodingUTF8ShortName, nil
@@ -1379,7 +1379,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "encoding", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if cmp, err := args[0].CompareError(evalCtx, DatEncodingUTFId); err != nil {
+				if cmp, err := args[0].Compare(ctx, evalCtx, DatEncodingUTFId); err != nil {
 					return tree.DNull, err
 				} else if cmp == 0 {
 					return tree.NewDInt(4), nil

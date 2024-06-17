@@ -41,6 +41,7 @@ import (
 // verifyRows verifies that the rows read with the given RowIterator match up
 // with the given rows. evalCtx and ordering are used to compare rows.
 func verifyRows(
+	ctx context.Context,
 	i RowIterator,
 	expectedRows rowenc.EncDatumRows,
 	evalCtx *eval.Context,
@@ -57,7 +58,7 @@ func verifyRows(
 			return err
 		}
 		if cmp, err := compareEncRows(
-			types.OneIntCol, encRow, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
+			ctx, types.OneIntCol, encRow, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
 		); err != nil {
 			return err
 		} else if cmp != 0 {
@@ -68,7 +69,7 @@ func verifyRows(
 			return err
 		}
 		if cmp, err := compareRowToEncRow(
-			types.OneIntCol, row, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
+			ctx, types.OneIntCol, row, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
 		); err != nil {
 			return err
 		} else if cmp != 0 {
@@ -123,7 +124,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	mc.InitTopK()
+	mc.InitTopK(ctx)
 	// Replace some of the rows with large rows.
 	for i := 0; i < 1000; i++ {
 		err := mc.MaybeReplaceMax(ctx, makeRow(rng.Intn(10000), rng.Intn(100)))
@@ -173,7 +174,7 @@ func TestRowContainerIterators(t *testing.T) {
 			func() {
 				i := mc.NewIterator(ctx)
 				defer i.Close()
-				if err := verifyRows(i, rows, evalCtx, ordering); err != nil {
+				if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
 					t.Fatalf("rows mismatch on the run number %d: %s", k+1, err)
 				}
 			}()
@@ -186,7 +187,7 @@ func TestRowContainerIterators(t *testing.T) {
 	t.Run("NewFinalIterator", func(t *testing.T) {
 		i := mc.NewFinalIterator(ctx)
 		defer i.Close()
-		if err := verifyRows(i, rows, evalCtx, ordering); err != nil {
+		if err := verifyRows(ctx, i, rows, evalCtx, ordering); err != nil {
 			t.Fatal(err)
 		}
 		if mc.Len() != 0 {
@@ -265,7 +266,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		func() {
 			i := rc.NewIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(i, rows[:mid], &evalCtx, ordering); err != nil {
+			if err := verifyRows(ctx, i, rows[:mid], &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying memory rows failed with: %s", err)
 			}
 		}()
@@ -283,7 +284,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		func() {
 			i := rc.NewIterator(ctx)
 			defer i.Close()
-			if err := verifyRows(i, rows, &evalCtx, ordering); err != nil {
+			if err := verifyRows(ctx, i, rows, &evalCtx, ordering); err != nil {
 				t.Fatalf("verifying disk rows failed with: %s", err)
 			}
 		}()
@@ -371,7 +372,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 			iterator := rc.NewIterator(ctx)
 			defer iterator.Close()
 			go func(iterator RowIterator) {
-				if err := verifyRows(iterator, rows, &evalCtx, ordering); err != nil {
+				if err := verifyRows(ctx, iterator, rows, &evalCtx, ordering); err != nil {
 					errCh <- err
 				} else {
 					errCh <- nil
@@ -499,7 +500,7 @@ func verifyOrdering(
 			return err
 		}
 		if prevRow != nil {
-			if cmp, err := prevRow.Compare(types, &datumAlloc, ordering, evalCtx, row); err != nil {
+			if cmp, err := prevRow.Compare(ctx, types, &datumAlloc, ordering, evalCtx, row); err != nil {
 				return err
 			} else if cmp > 0 {
 				return errors.Errorf("rows are not ordered as expected: %s was before %s", prevRow.String(types), row.String(types))
@@ -594,7 +595,9 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 						if err != nil {
 							t.Fatalf("unexpected error: %v", err)
 						}
-						if cmp := datum.Compare(&evalCtx, writtenRow[col].Datum); cmp != 0 {
+						if cmp, err := datum.Compare(ctx, &evalCtx, writtenRow[col].Datum); err != nil {
+							t.Fatal(err)
+						} else if cmp != 0 {
 							t.Fatalf("read row is not equal to written one")
 						}
 					}
@@ -662,7 +665,9 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 						if err != nil {
 							t.Fatalf("unexpected error: %v", err)
 						}
-						if cmp := readDatum.Compare(&evalCtx, expectedDatum.Datum); cmp != 0 {
+						if cmp, err := readDatum.Compare(ctx, &evalCtx, expectedDatum.Datum); err != nil {
+							t.Fatal(err)
+						} else if cmp != 0 {
 							t.Fatalf("read row is not equal to expected one")
 						}
 					}
@@ -689,7 +694,9 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 						if err != nil {
 							t.Fatalf("unexpected error: %v", err)
 						}
-						if cmp := readDatum.Compare(&evalCtx, expectedDatum.Datum); cmp != 0 {
+						if cmp, err := readDatum.Compare(ctx, &evalCtx, expectedDatum.Datum); err != nil {
+							t.Fatal(err)
+						} else if cmp != 0 {
 							t.Fatalf("read row is not equal to expected one")
 						}
 					}
@@ -757,7 +764,9 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 					if err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
-					if readOrderingDatum.Compare(&evalCtx, expectedRow.Row[ordering[0].ColIdx].Datum) != 0 {
+					if cmp, err := readOrderingDatum.Compare(ctx, &evalCtx, expectedRow.Row[ordering[0].ColIdx].Datum); err != nil {
+						t.Fatal(err)
+					} else if cmp != 0 {
 						// We're skipping comparison if both rows are equal on the ordering
 						// column since in this case the order of indexed rows after
 						// sorting is nondeterministic.
@@ -769,7 +778,9 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 							if err != nil {
 								t.Fatalf("unexpected error: %v", err)
 							}
-							if cmp := readDatum.Compare(&evalCtx, expectedDatum.Datum); cmp != 0 {
+							if cmp, err := readDatum.Compare(ctx, &evalCtx, expectedDatum.Datum); err != nil {
+								t.Fatal(err)
+							} else if cmp != 0 {
 								t.Fatalf("read row is not equal to expected one")
 							}
 						}
@@ -924,7 +935,9 @@ func compareIndexedRows(
 		if err != nil {
 			return 0, err
 		}
-		if c := da.Compare(evalCtx, db); c != 0 {
+		if c, err := da.Compare(context.Background(), evalCtx, db); err != nil {
+			return 0, err
+		} else if c != 0 {
 			if o.Direction != encoding.Ascending {
 				return -c, nil
 			}

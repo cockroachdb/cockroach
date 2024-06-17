@@ -181,7 +181,7 @@ func FloatArraysCmp(aString, bString string) (int, error) {
 	aFloats, bFloats := splitFloatArray(aString), splitFloatArray(bString)
 	// Comparison of arrays is such that we check the "shared" elements first,
 	// and only if all of them are equal, then we check the lengths of arrays
-	// (see tree.DArray.CompareError).
+	// (see tree.DArray.Compare).
 	toCheck := min(len(aFloats), len(bFloats))
 	for i := 0; i < toCheck; i++ {
 		cmp, err := FloatsCmp(aFloats[i], bFloats[i])

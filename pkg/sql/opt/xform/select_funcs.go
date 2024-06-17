@@ -321,11 +321,11 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 			return nil, nil, nil, false
 		}
 
-		combinedConstraint.UnionWith(c.e.evalCtx, inBetweenConstraint)
+		combinedConstraint.UnionWith(c.e.ctx, c.e.evalCtx, inBetweenConstraint)
 
 		// Even though the partitioned constraints and the inBetween constraints
 		// were consolidated, we must make sure their Union is as well.
-		combinedConstraint.ConsolidateSpans(c.e.evalCtx, ps)
+		combinedConstraint.ConsolidateSpans(c.e.ctx, c.e.evalCtx, ps)
 		// Add all remaining filters that need to be present in the
 		// inBetween spans. Some of the remaining filters are common
 		// between them, so we must deduplicate them.
@@ -472,7 +472,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 					continue
 				}
 				for j := 0; j < optionalConstraints.Length(); j++ {
-					if combinedConstraint.Contains(c.e.evalCtx, optionalConstraints.Constraint(j)) {
+					if combinedConstraint.Contains(c.e.ctx, c.e.evalCtx, optionalConstraints.Constraint(j)) {
 						return
 					}
 				}
@@ -484,7 +484,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.SetConstraint(c.e.evalCtx, combinedConstraint)
+		newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, combinedConstraint)
 		// Record whether we were able to use partitions to constrain the scan.
 		newScanPrivate.PartitionConstrainedScan = len(partitionFilters) > 0
 
@@ -574,7 +574,7 @@ func (c *CustomFuncs) inBetweenFilters(
 
 	// Sort the partitionValues lexicographically.
 	sort.Slice(partitionValues, func(i, j int) bool {
-		return partitionValues[i].Compare(c.e.evalCtx, partitionValues[j]) < 0
+		return partitionValues[i].Compare(c.e.ctx, c.e.evalCtx, partitionValues[j]) < 0
 	})
 
 	// The beginExpr created below will not include NULL values for the first
@@ -742,7 +742,9 @@ func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
 		return false
 	}
 	for i := range pre {
-		if pre[i].Compare(c.e.evalCtx, other[i]) != 0 {
+		if cmp, err := pre[i].Compare(c.e.ctx, c.e.evalCtx, other[i]); err != nil {
+			panic(err)
+		} else if cmp != 0 {
 			return false
 		}
 	}
@@ -892,7 +894,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
-		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
+		newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, constraint)
 		newScanPrivate.InvertedConstraint = spansToRead
 
 		if scanPrivate.Flags.NoIndexJoin {
@@ -996,7 +998,7 @@ func (c *CustomFuncs) GenerateTrigramSimilarityInvertedIndexScans(
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		// Try to constrain the index.
 		con, remainingFilters, ok := invertedidx.TryFilterInvertedIndexBySimilarity(
-			c.e.evalCtx, c.e.f, filters, optionalFilters,
+			c.e.ctx, c.e.evalCtx, c.e.f, filters, optionalFilters,
 			tabID, index, tabMeta.ComputedCols, c.checkCancellation,
 		)
 		if !ok {
@@ -1017,7 +1019,7 @@ func (c *CustomFuncs) GenerateTrigramSimilarityInvertedIndexScans(
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
-		newScanPrivate.SetConstraint(c.e.evalCtx, con)
+		newScanPrivate.SetConstraint(c.e.ctx, c.e.evalCtx, con)
 		newScanPrivate.Cols = pkCols
 
 		sel := &memo.SelectExpr{
@@ -1142,7 +1144,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		return
 	}
 
-	fixedCols := memo.ExtractConstColumns(filters, c.e.evalCtx)
+	fixedCols := memo.ExtractConstColumns(c.e.ctx, filters, c.e.evalCtx)
 	if fixedCols.Len() < 2 {
 		// Zigzagging requires at least 2 columns to have fixed values.
 		return
@@ -1475,7 +1477,7 @@ func (c *CustomFuncs) fixedColsForZigzag(
 ) (fixedCols opt.ColList, vals memo.ScalarListExpr, typs []*types.T) {
 	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
 		colID := tabID.IndexColumnID(index, i)
-		val := memo.ExtractValueForConstColumn(filters, c.e.evalCtx, colID)
+		val := memo.ExtractValueForConstColumn(c.e.ctx, filters, c.e.evalCtx, colID)
 		if val == nil {
 			break
 		}

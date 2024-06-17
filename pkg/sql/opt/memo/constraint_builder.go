@@ -11,6 +11,7 @@
 package memo
 
 import (
+	"context"
 	"regexp"
 	"strings"
 
@@ -27,9 +28,13 @@ import (
 // expression. A "tight" boolean is also returned which is true if the
 // constraint is exactly equivalent to the expression.
 func BuildConstraints(
-	e opt.ScalarExpr, md *opt.Metadata, evalCtx *eval.Context, skipExtraConstraints bool,
+	ctx context.Context,
+	e opt.ScalarExpr,
+	md *opt.Metadata,
+	evalCtx *eval.Context,
+	skipExtraConstraints bool,
 ) (_ *constraint.Set, tight bool) {
-	cb := constraintsBuilder{md: md, evalCtx: evalCtx, skipExtraConstraints: skipExtraConstraints}
+	cb := constraintsBuilder{md: md, ctx: ctx, evalCtx: evalCtx, skipExtraConstraints: skipExtraConstraints}
 	return cb.buildConstraints(e)
 }
 
@@ -59,6 +64,7 @@ var contradiction = constraint.Contradiction
 // built.
 type constraintsBuilder struct {
 	md                   *opt.Metadata
+	ctx                  context.Context
 	evalCtx              *eval.Context
 	skipExtraConstraints bool
 }
@@ -70,7 +76,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraint(
 ) (_ *constraint.Set, tight bool) {
 	if op == opt.InOp && CanExtractConstTuple(val) {
 		els := val.(*TupleExpr).Elems
-		keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+		keyCtx := constraint.KeyContext{Ctx: cb.ctx, EvalCtx: cb.evalCtx}
 		keyCtx.Columns.InitSingle(opt.MakeOrderingColumn(col, false /* descending */))
 
 		var spans constraint.Spans
@@ -107,7 +113,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraint(
 		res := cb.notNullSpan(col)
 		// Check if the right-hand side is a variable too (e.g. a > b).
 		if v, ok := val.(*VariableExpr); ok {
-			res = res.Intersect(cb.evalCtx, cb.notNullSpan(v.Col))
+			res = res.Intersect(cb.ctx, cb.evalCtx, cb.notNullSpan(v.Col))
 		}
 		return res, false
 	}
@@ -175,12 +181,12 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 		}
 		key := constraint.MakeKey(datum)
 		c := contradiction
-		if startKey.IsEmpty() || !datum.IsMin(cb.evalCtx) {
+		if startKey.IsEmpty() || !datum.IsMin(cb.ctx, cb.evalCtx) {
 			c = cb.singleSpan(col, startKey, startBoundary, key, excludeBoundary)
 		}
-		if !datum.IsMax(cb.evalCtx) {
+		if !datum.IsMax(cb.ctx, cb.evalCtx) {
 			other := cb.singleSpan(col, key, excludeBoundary, emptyKey, includeBoundary)
-			c = c.Union(cb.evalCtx, other)
+			c = c.Union(cb.ctx, cb.evalCtx, other)
 		}
 		return c, true
 
@@ -286,7 +292,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 	// tight.
 	tight = (len(constrainedCols) == len(lhs.Elems))
 
-	keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+	keyCtx := constraint.KeyContext{Ctx: cb.ctx, EvalCtx: cb.evalCtx}
 	keyCtx.Columns.Init(constrainedCols)
 	var sp constraint.Span
 	var spans constraint.Spans
@@ -342,7 +348,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 	if !cb.skipExtraConstraints {
 		for i := 1; i < len(colIdxsInLHS); i++ {
 			var spans constraint.Spans
-			keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+			keyCtx := constraint.KeyContext{Ctx: cb.ctx, EvalCtx: cb.evalCtx}
 			keyCtx.Columns.InitSingle(constrainedCols[i])
 			for _, elem := range rhs.Elems {
 				// Element must be tuple (checked above).
@@ -357,7 +363,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleIn(
 			spans.SortAndMerge(&keyCtx)
 			var c constraint.Constraint
 			c.Init(&keyCtx, &spans)
-			con = con.Intersect(cb.evalCtx, constraint.SingleConstraint(&c))
+			con = con.Intersect(cb.ctx, cb.evalCtx, constraint.SingleConstraint(&c))
 		}
 	}
 
@@ -430,7 +436,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	var span constraint.Span
 	span.Init(startKey, startBoundary, endKey, endBoundary)
 
-	keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+	keyCtx := constraint.KeyContext{Ctx: cb.ctx, EvalCtx: cb.evalCtx}
 	cols := make([]opt.OrderingColumn, len(lhs.Elems))
 	for i := range cols {
 		v := lhs.Elems[i].(*VariableExpr)
@@ -453,7 +459,7 @@ func (cb *constraintsBuilder) buildFunctionConstraints(
 	cs := unconstrained
 	for _, arg := range f.Args {
 		if variable, ok := arg.(*VariableExpr); ok {
-			cs = cs.Intersect(cb.evalCtx, cb.notNullSpan(variable.Col))
+			cs = cs.Intersect(cb.ctx, cb.evalCtx, cb.notNullSpan(variable.Col))
 		}
 	}
 
@@ -475,7 +481,7 @@ func (cb *constraintsBuilder) binaryBuildConstraintsForOr(
 
 	cl, tightl := cb.binaryBuildConstraintsForOr(left)
 	cr, tightr := cb.binaryBuildConstraintsForOr(right)
-	res := cl.Union(cb.evalCtx, cr)
+	res := cl.Union(cb.ctx, cb.evalCtx, cr)
 
 	// The union may not be "tight" because the new constraint set might
 	// allow combinations of values that the expression does not allow.
@@ -559,7 +565,7 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 	case *AndExpr:
 		cl, tightl := cb.buildConstraints(t.Left)
 		cr, tightr := cb.buildConstraints(t.Right)
-		cl = cl.Intersect(cb.evalCtx, cr)
+		cl = cl.Intersect(cb.ctx, cb.evalCtx, cr)
 		tightl = tightl && tightr
 		return cl, (tightl || cl == contradiction)
 
@@ -608,7 +614,7 @@ func (cb *constraintsBuilder) singleSpan(
 ) *constraint.Set {
 	var span constraint.Span
 	span.Init(start, startBoundary, end, endBoundary)
-	keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+	keyCtx := constraint.KeyContext{Ctx: cb.ctx, EvalCtx: cb.evalCtx}
 	keyCtx.Columns.InitSingle(opt.MakeOrderingColumn(col, false /* descending */))
 	span.PreferInclusive(&keyCtx)
 	return constraint.SingleSpanConstraint(&keyCtx, &span)

@@ -211,7 +211,7 @@ func emitExplain(
 		}
 		tabDesc := table.(*optTable).desc
 		idx := index.(*optIndex).idx
-		spans, err := generateScanSpans(evalCtx, codec, tabDesc, idx, scanParams)
+		spans, err := generateScanSpans(ctx, evalCtx, codec, tabDesc, idx, scanParams)
 		if err != nil {
 			return err.Error()
 		}

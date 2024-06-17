@@ -854,7 +854,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 		// Add any not-null columns from the predicate constraints.
 		for i := range pred {
 			if c := pred[i].ScalarProps().Constraints; c != nil {
-				notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
+				notNullCols.UnionWith(c.ExtractNotNullCols(sb.ctx, sb.evalCtx))
 			}
 		}
 		sb.filterRelExpr(pred, scan, notNullCols, relProps, s, MakeTableFuncDep(sb.md, scan.Table))
@@ -904,7 +904,7 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// completely ignored, and the calculated row count would be too high.
 	var spanStats, spanStatsUnion props.Statistics
 	var c constraint.Constraint
-	keyCtx := constraint.KeyContext{EvalCtx: sb.evalCtx, Columns: scan.Constraint.Columns}
+	keyCtx := constraint.KeyContext{Ctx: sb.ctx, EvalCtx: sb.evalCtx, Columns: scan.Constraint.Columns}
 
 	// Make a copy of the stats so we don't modify the original.
 	spanStatsUnion.CopyFrom(s)
@@ -989,7 +989,7 @@ func (sb *statisticsBuilder) constrainScan(
 				// estimate 0 rows.)
 				s.RowCount = max(inputHist.ValuesCount(), 1)
 				if colStat, ok := s.ColStats.Lookup(colSet); ok {
-					colStat.Histogram = inputHist.InvertedFilter(scan.InvertedConstraint)
+					colStat.Histogram = inputHist.InvertedFilter(sb.ctx, scan.InvertedConstraint)
 					histCols.Add(invertedConstrainedCol)
 					sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
 				}
@@ -1028,12 +1028,12 @@ func (sb *statisticsBuilder) constrainScan(
 	notNullCols := relProps.NotNullCols.Copy()
 	if constraint != nil {
 		// Add any not-null columns from this constraint.
-		notNullCols.UnionWith(constraint.ExtractNotNullCols(sb.evalCtx))
+		notNullCols.UnionWith(constraint.ExtractNotNullCols(sb.ctx, sb.evalCtx))
 	}
 	// Add any not-null columns from the predicate constraints.
 	for i := range pred {
 		if c := pred[i].ScalarProps().Constraints; c != nil {
-			notNullCols.UnionWith(c.ExtractNotNullCols(sb.evalCtx))
+			notNullCols.UnionWith(c.ExtractNotNullCols(sb.ctx, sb.evalCtx))
 		}
 	}
 	sb.updateNullCountsFromNotNullCols(notNullCols, s)
@@ -3528,7 +3528,7 @@ func (sb *statisticsBuilder) buildDisjunctionConstraints(
 		return nil, 0
 	}
 
-	cb := constraintsBuilder{md: sb.md, evalCtx: sb.evalCtx}
+	cb := constraintsBuilder{md: sb.md, ctx: sb.ctx, evalCtx: sb.evalCtx}
 
 	var constraints []*constraint.Set
 	var collectConstraints func(opt.ScalarExpr)
@@ -3583,7 +3583,7 @@ func (sb *statisticsBuilder) constrainExpr(
 	// ---------------------------------------------
 	notNullCols := relProps.NotNullCols.Copy()
 	// Add any not-null columns from this constraint set.
-	notNullCols.UnionWith(cs.ExtractNotNullCols(sb.evalCtx))
+	notNullCols.UnionWith(cs.ExtractNotNullCols(sb.ctx, sb.evalCtx))
 	sb.updateNullCountsFromNotNullCols(notNullCols, s)
 
 	// Calculate row count and selectivity
@@ -3621,7 +3621,7 @@ func (sb *statisticsBuilder) applyIndexConstraint(
 	// TODO(rytaft): Consider treating remaining constrained columns as
 	//  "unapplied conjuncts" and account for their selectivity in
 	//  selectivityFromUnappliedConjuncts.
-	prefix := c.Prefix(sb.evalCtx)
+	prefix := c.Prefix(sb.ctx, sb.evalCtx)
 	for i, n := 0, c.ConstrainedColumns(sb.evalCtx); i < n && i <= prefix; i++ {
 		col := c.Columns.Get(i).ID()
 		constrainedCols.Add(col)
@@ -3781,8 +3781,8 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 ) (applied int, lastColMinDistinct float64) {
 	// All of the columns that are part of the prefix have a finite number of
 	// distinct values.
-	prefix := c.Prefix(sb.evalCtx)
-	keyCtx := constraint.MakeKeyContext(&c.Columns, sb.evalCtx)
+	prefix := c.Prefix(sb.ctx, sb.evalCtx)
+	keyCtx := constraint.MakeKeyContext(sb.ctx, &c.Columns, sb.evalCtx)
 
 	// If there are any other columns beyond the prefix, we may be able to
 	// determine the number of distinct values for the first one. For example:
@@ -3810,7 +3810,10 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 			startVal := sp.StartKey().Value(col)
 			endVal := sp.EndKey().Value(col)
 			if i != 0 && val != nil {
-				compare := startVal.Compare(sb.evalCtx, val)
+				compare, err := startVal.Compare(sb.ctx, sb.evalCtx, val)
+				if err != nil {
+					panic(err)
+				}
 				ascending := c.Columns.Get(col).Ascending()
 				if (compare > 0 && ascending) || (compare < 0 && !ascending) {
 					// This check is needed to ensure that we calculate the correct distinct
@@ -3884,8 +3887,8 @@ func (sb *statisticsBuilder) updateHistogram(
 	}
 
 	if inputHist != nil && ok {
-		if _, _, ok := inputHist.CanFilter(c); ok {
-			colStat.Histogram = inputHist.Filter(c)
+		if _, _, ok := inputHist.CanFilter(sb.ctx, c); ok {
+			colStat.Histogram = inputHist.Filter(sb.ctx, c)
 			sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
 			return true
 		}
@@ -5018,14 +5021,14 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 			var values tree.Datums
 			var distinctVals uint64
 			onlyInvertedIndexableColumnType := colinfo.ColumnTypeIsOnlyInvertedIndexable(colType)
-			if distinctVals, ok = filterConstraint.CalculateMaxResults(sb.evalCtx, cols, cols); ok {
+			if distinctVals, ok = filterConstraint.CalculateMaxResults(sb.ctx, sb.evalCtx, cols, cols); ok {
 				// If the number of values is excessive, don't spend too much time building the histogram,
 				// as it may slow down the query.
 				// TODO(msirek): Consider bumping up this limit for tables with high RowCount, as they
 				//   may take longer to scan, and compared to scan costs, a slight increase in query
 				//   planning time may be worth it to get more detailed stats.
 				if distinctVals <= maxValuesForFullHistogramFromCheckConstraint {
-					values, hasNullValue, _ = filterConstraint.CollectFirstColumnValues(sb.evalCtx)
+					values, hasNullValue, _ = filterConstraint.CollectFirstColumnValues(sb.ctx, sb.evalCtx)
 					if hasNullValue {
 						log.Infof(
 							sb.ctx, "null value seen in histogram built from check constraint: %s", filterConstraint.String(),

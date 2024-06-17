@@ -50,9 +50,9 @@ func TestPopulateTableWithRandData(t *testing.T) {
 	tablePrefix := "table"
 	numTables := 10
 
-	stmts := randgen.RandCreateTables(rng, tablePrefix, numTables, false, /* isMultiRegion */
-		randgen.PartialIndexMutator,
-		randgen.ForeignKeyMutator,
+	stmts := randgen.RandCreateTables(
+		ctx, rng, tablePrefix, numTables, false, /* isMultiRegion */
+		randgen.PartialIndexMutator, randgen.ForeignKeyMutator,
 	)
 
 	var sb strings.Builder

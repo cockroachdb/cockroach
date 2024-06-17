@@ -51,7 +51,7 @@ func (e *evaluator) EvalAppendToMaybeNullArrayOp(
 func (e *evaluator) EvalArrayOverlapsOp(
 	ctx context.Context, _ *tree.OverlapsArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {
-	return tree.ArrayOverlaps(e.ctx(), tree.MustBeDArray(a), tree.MustBeDArray(b))
+	return tree.ArrayOverlaps(ctx, e.ctx(), tree.MustBeDArray(a), tree.MustBeDArray(b))
 }
 
 func (e *evaluator) EvalBitAndINetOp(
@@ -158,7 +158,7 @@ func (e *evaluator) EvalCompareScalarOp(
 			return tree.DNull, nil
 		}
 	}
-	cmp, err := left.CompareError(e.ctx(), right)
+	cmp, err := left.Compare(ctx, e.ctx(), right)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (e *evaluator) EvalCompareTupleOp(
 			}
 		} else {
 			var err error
-			cmp, err = leftElem.CompareError(e.ctx(), rightElem)
+			cmp, err = leftElem.Compare(ctx, e.ctx(), rightElem)
 			if err != nil {
 				return tree.DNull, err
 			}
@@ -292,7 +292,7 @@ func (e *evaluator) EvalContainedByArrayOp(
 ) (tree.Datum, error) {
 	needles := tree.MustBeDArray(a)
 	haystack := tree.MustBeDArray(b)
-	return tree.ArrayContains(e.ctx(), haystack, needles)
+	return tree.ArrayContains(ctx, e.ctx(), haystack, needles)
 }
 
 func (e *evaluator) EvalContainedByJsonbOp(
@@ -310,7 +310,7 @@ func (e *evaluator) EvalContainsArrayOp(
 ) (tree.Datum, error) {
 	haystack := tree.MustBeDArray(a)
 	needles := tree.MustBeDArray(b)
-	return tree.ArrayContains(e.ctx(), haystack, needles)
+	return tree.ArrayContains(ctx, e.ctx(), haystack, needles)
 }
 
 func (e *evaluator) EvalContainsJsonbOp(
@@ -507,7 +507,7 @@ func (e *evaluator) EvalInTupleOp(
 		//
 		// We can use binary search to make a determination in this case. This
 		// is the common case when tuples don't contain NULLs.
-		_, result := vtuple.SearchSorted(e.ctx(), arg)
+		_, result := vtuple.SearchSorted(ctx, e.ctx(), arg)
 		return tree.MakeDBool(tree.DBool(result)), nil
 	}
 
@@ -517,7 +517,7 @@ func (e *evaluator) EvalInTupleOp(
 		for _, val := range vtuple.D {
 			if val == tree.DNull {
 				sawNull = true
-			} else if cmp, err := val.CompareError(e.ctx(), arg); err != nil {
+			} else if cmp, err := val.Compare(ctx, e.ctx(), arg); err != nil {
 				return tree.DNull, err
 			} else if cmp == 0 {
 				return tree.DBoolTrue, nil
@@ -533,7 +533,7 @@ func (e *evaluator) EvalInTupleOp(
 			} else {
 				// Use the EQ function which properly handles NULLs.
 				if res, err := cmpOpTupleFn(
-					e.ctx(), *argTuple, *val.(*tree.DTuple),
+					ctx, e.ctx(), *argTuple, *val.(*tree.DTuple),
 					treecmp.MakeComparisonOperator(treecmp.EQ),
 				); err != nil {
 					return tree.DNull, err
@@ -1200,7 +1200,7 @@ func (e *evaluator) EvalOverlapsArrayOp(
 ) (tree.Datum, error) {
 	array := tree.MustBeDArray(left)
 	other := tree.MustBeDArray(right)
-	return tree.ArrayOverlaps(e.ctx(), array, other)
+	return tree.ArrayOverlaps(ctx, e.ctx(), array, other)
 }
 
 func (e *evaluator) EvalOverlapsINetOp(
