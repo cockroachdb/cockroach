@@ -201,6 +201,8 @@ func EncodeRaftCommandPrefix(
 // DecodeRaftAdmissionMeta decodes admission control metadata from a
 // raftpb.Entry.Data. Expects an EntryEncoding{Standard,Sideloaded}WithAC
 // encoding.
+// 
+// TODO(rac-v2): Unit test this function and the corresponding construction.
 func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, error) {
 	prefix := data[0] & encodingMask
 	if !(prefix == entryEncodingStandardWithACPrefixByte || prefix == entryEncodingSideloadedWithACPrefixByte ||
