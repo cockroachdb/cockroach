@@ -441,7 +441,9 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 					&scpb.IndexZoneConfig{
 						TableID:       tbl.GetID(),
 						IndexID:       catid.IndexID(subZoneCfg.IndexID),
+						Subzone:       subZoneCfg,
 						PartitionName: subZoneCfg.PartitionName,
+						SeqNum:        0,
 					})
 			}
 		}
