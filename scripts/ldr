@@ -155,14 +155,11 @@ case $1 in
     "fast")
     for s in \
         "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'" \
-        "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'" \
         "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'" \
         "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'" \
         "SET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency='100ms'" \
         "SET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency = '1s'" \
         "SET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency = '100ms'" \
-        "SET CLUSTER SETTING logical_replication.consumer.minimum_flush_interval = '10ms'" \
-        "SET CLUSTER SETTING logical_replication.consumer.timestamp_granularity = '100ms'" \
       ; do
         echo $s
         roachprod sql $A:1 -- -e "$s"
@@ -172,14 +169,11 @@ case $1 in
     "reset")
       for s in \
         "RESET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval" \
-        "RESET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval" \
         "RESET CLUSTER SETTING kv.closed_timestamp.target_duration" \
         "RESET CLUSTER SETTING kv.closed_timestamp.side_transport_interval" \
         "RESET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency" \
         "RESET CLUSTER SETTING physical_replication.consumer.heartbeat_frequency" \
         "RESET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency" \
-        "RESET CLUSTER SETTING logical_replication.consumer.minimum_flush_interval" \
-        "RESET CLUSTER SETTING logical_replication.consumer.timestamp_granularity" \
       ; do
         echo $s
         roachprod sql $A:1 -- -e "$s"
