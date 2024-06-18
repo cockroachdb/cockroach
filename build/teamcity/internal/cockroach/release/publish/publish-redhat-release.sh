@@ -37,24 +37,24 @@ tc_start_block "Configure docker"
 echo "${QUAY_REGISTRY_KEY}" | docker login --username $rhel_registry_username --password-stdin $rhel_registry
 tc_end_block "Configure docker"
 
-tc_start_block "Rebuild docker image"
-sed \
-  -e "s,@repository@,${dockerhub_repository},g" \
-  -e "s,@tag@,${version},g" \
-  build/deploy-redhat/Dockerfile.in > build/deploy-redhat/Dockerfile
+#tc_start_block "Rebuild docker image"
+#sed \
+#  -e "s,@repository@,${dockerhub_repository},g" \
+#  -e "s,@tag@,${version},g" \
+#  build/deploy-redhat/Dockerfile.in > build/deploy-redhat/Dockerfile
+#
+#cat build/deploy-redhat/Dockerfile
+#
+#docker build --no-cache \
+#  --pull \
+#  --label release=$rhel_release \
+#  --tag="${rhel_repository}:${version}" \
+#  build/deploy-redhat
+#tc_end_block "Rebuild docker image"
 
-cat build/deploy-redhat/Dockerfile
-
-docker build --no-cache \
-  --pull \
-  --label release=$rhel_release \
-  --tag="${rhel_repository}:${version}" \
-  build/deploy-redhat
-tc_end_block "Rebuild docker image"
-
-tc_start_block "Push RedHat docker image"
-retry docker push "${rhel_repository}:${version}"
-tc_end_block "Push RedHat docker image"
+#tc_start_block "Push RedHat docker image"
+#retry docker push "${rhel_repository}:${version}"
+#tc_end_block "Push RedHat docker image"
 
 tc_start_block "Tag docker image as latest"
 if [[ -n "${PUBLISH_LATEST}" ]]; then

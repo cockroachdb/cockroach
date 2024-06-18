@@ -68,19 +68,19 @@ docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
 verify_docker_image "${gcr_staged_repository}:${version}" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" false
 tc_end_block "Verify binaries SHA"
 
-tc_start_block "Check remote tag and tag"
-if [[ -z "${DRY_RUN}" ]]; then
-  github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
-  configure_git_ssh_key
-  if git_wrapped ls-remote --exit-code --tags "ssh://git@github.com/${git_repo_for_tag}.git" "${version}"; then
-    echo "Tag ${version} already exists"
-    exit 1
-  fi
-  git tag "${version}"
-else
-  echo "Skipping for dry-run"
-fi
-tc_end_block "Check remote tag and tag"
+#tc_start_block "Check remote tag and tag"
+#if [[ -z "${DRY_RUN}" ]]; then
+#  github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
+#  configure_git_ssh_key
+#  if git_wrapped ls-remote --exit-code --tags "ssh://git@github.com/${git_repo_for_tag}.git" "${version}"; then
+#    echo "Tag ${version} already exists"
+#    exit 1
+#  fi
+#  git tag "${version}"
+#else
+#  echo "Skipping for dry-run"
+#fi
+#tc_end_block "Check remote tag and tag"
 
 
 tc_start_block "Setup dockerhub credentials"
@@ -88,21 +88,21 @@ configure_docker_creds
 docker_login
 tc_end_block "Setup dockerhub credentials"
 
-tc_start_block "Copy binaries"
-export google_credentials="$gcs_credentials"
-log_into_gcloud
-for product in cockroach cockroach-sql; do
-  for platform in linux-amd64 linux-amd64-fips linux-arm64 darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
-      archive_suffix=tgz
-      if [[ $platform == *"windows"* ]]; then 
-          archive_suffix=zip
-      fi
-      archive="$product-$version.$platform.$archive_suffix"
-      gsutil cp "gs://$gcs_staged_bucket/$archive" "gs://$gcs_bucket/$archive"
-      gsutil cp "gs://$gcs_staged_bucket/$archive.sha256sum" "gs://$gcs_bucket/$archive.sha256sum"
-  done
-done
-tc_end_block "Copy binaries"
+#tc_start_block "Copy binaries"
+#export google_credentials="$gcs_credentials"
+#log_into_gcloud
+#for product in cockroach cockroach-sql; do
+#  for platform in linux-amd64 linux-amd64-fips linux-arm64 darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
+#      archive_suffix=tgz
+#      if [[ $platform == *"windows"* ]]; then
+#          archive_suffix=zip
+#      fi
+#      archive="$product-$version.$platform.$archive_suffix"
+#      gsutil cp "gs://$gcs_staged_bucket/$archive" "gs://$gcs_bucket/$archive"
+#      gsutil cp "gs://$gcs_staged_bucket/$archive.sha256sum" "gs://$gcs_bucket/$archive.sha256sum"
+#  done
+#done
+#tc_end_block "Copy binaries"
 
 
 tc_start_block "Make and push multiarch docker images"
@@ -111,33 +111,33 @@ declare -a dockerhub_arch_tags
 dockerhub_tag="${dockerhub_repository}:${version}"
 gcr_tag="${gcr_repository}:${version}"
 
-for platform_name in amd64 arm64; do
-  dockerhub_arch_tag="${dockerhub_repository}:${platform_name}-${version}"
-  gcr_arch_tag="${gcr_repository}:${platform_name}-${version}"
-  gcr_staged_arch_tag="${gcr_staged_repository}:${platform_name}-${version}"
-  # Update the packages before pushing to the final destination.
-  tmpdir=$(mktemp -d)
-  echo "FROM $gcr_staged_arch_tag" > "$tmpdir/Dockerfile"
-  echo "RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum" >> "$tmpdir/Dockerfile"
-  docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
-  docker build --pull --no-cache --platform "linux/$platform_name" \
-    --tag "$dockerhub_arch_tag" --tag "$gcr_arch_tag" "$tmpdir"
-  docker_login_gcr "$gcr_repository" "$gcr_credentials"
-  docker push "$gcr_arch_tag"
-  docker push "$dockerhub_arch_tag"
-  gcr_arch_tags+=("$gcr_arch_tag")
-  dockerhub_arch_tags+=("$dockerhub_arch_tag")
-done
+#for platform_name in amd64 arm64; do
+#  dockerhub_arch_tag="${dockerhub_repository}:${platform_name}-${version}"
+#  gcr_arch_tag="${gcr_repository}:${platform_name}-${version}"
+#  gcr_staged_arch_tag="${gcr_staged_repository}:${platform_name}-${version}"
+#  # Update the packages before pushing to the final destination.
+#  tmpdir=$(mktemp -d)
+#  echo "FROM $gcr_staged_arch_tag" > "$tmpdir/Dockerfile"
+#  echo "RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum" >> "$tmpdir/Dockerfile"
+#  docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
+#  docker build --pull --no-cache --platform "linux/$platform_name" \
+#    --tag "$dockerhub_arch_tag" --tag "$gcr_arch_tag" "$tmpdir"
+#  docker_login_gcr "$gcr_repository" "$gcr_credentials"
+#  docker push "$gcr_arch_tag"
+#  docker push "$dockerhub_arch_tag"
+#  gcr_arch_tags+=("$gcr_arch_tag")
+#  dockerhub_arch_tags+=("$dockerhub_arch_tag")
+#done
 
 docker_login_gcr "$gcr_repository" "$gcr_credentials"
 
-docker manifest rm "${gcr_tag}" || :
-docker manifest create "${gcr_tag}" "${gcr_arch_tags[@]}"
-docker manifest push "${gcr_tag}"
-
-docker manifest rm "${dockerhub_tag}" || :
-docker manifest create "${dockerhub_tag}" "${dockerhub_arch_tags[@]}"
-docker manifest push "${dockerhub_tag}"
+#docker manifest rm "${gcr_tag}" || :
+#docker manifest create "${gcr_tag}" "${gcr_arch_tags[@]}"
+#docker manifest push "${gcr_tag}"
+#
+#docker manifest rm "${dockerhub_tag}" || :
+#docker manifest create "${dockerhub_tag}" "${dockerhub_arch_tags[@]}"
+#docker manifest push "${dockerhub_tag}"
 
 docker manifest rm "${gcr_repository}:latest" || :
 docker manifest create "${gcr_repository}:latest" "${gcr_arch_tags[@]}"
@@ -151,31 +151,31 @@ docker manifest create "${dockerhub_repository}:latest-${release_branch}" "${doc
 tc_end_block "Make and push multiarch docker images"
 
 
-tc_start_block "Make and push FIPS docker image"
-gcr_staged_tag_fips="${gcr_staged_repository}:${version}-fips"
-gcr_tag_fips="${gcr_repository}:${version}-fips"
-dockerhub_tag_fips="${dockerhub_repository}:${version}-fips"
-# Update the packages before pushing to the final destination.
-tmpdir=$(mktemp -d)
-echo "FROM $gcr_staged_tag_fips" > "$tmpdir/Dockerfile"
-echo "RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum" >> "$tmpdir/Dockerfile"
-docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
-docker build --pull --no-cache --platform "linux/amd64" \
-  --tag "$dockerhub_tag_fips" --tag "$gcr_tag_fips" "$tmpdir"
-docker_login_gcr "$gcr_repository" "$gcr_credentials"
-docker push "$gcr_tag_fips"
-docker push "$dockerhub_tag_fips"
-tc_end_block "Make and push FIPS docker image"
+#tc_start_block "Make and push FIPS docker image"
+#gcr_staged_tag_fips="${gcr_staged_repository}:${version}-fips"
+#gcr_tag_fips="${gcr_repository}:${version}-fips"
+#dockerhub_tag_fips="${dockerhub_repository}:${version}-fips"
+## Update the packages before pushing to the final destination.
+#tmpdir=$(mktemp -d)
+#echo "FROM $gcr_staged_tag_fips" > "$tmpdir/Dockerfile"
+#echo "RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum" >> "$tmpdir/Dockerfile"
+#docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
+#docker build --pull --no-cache --platform "linux/amd64" \
+#  --tag "$dockerhub_tag_fips" --tag "$gcr_tag_fips" "$tmpdir"
+#docker_login_gcr "$gcr_repository" "$gcr_credentials"
+#docker push "$gcr_tag_fips"
+#docker push "$dockerhub_tag_fips"
+#tc_end_block "Make and push FIPS docker image"
 
 
-tc_start_block "Push release tag to GitHub"
-if [[ -z "${DRY_RUN}" ]]; then
-  configure_git_ssh_key
-  git_wrapped push "ssh://git@github.com/${git_repo_for_tag}.git" "$version"
-else
-  echo "skipping for dry-run"
-fi
-tc_end_block "Push release tag to GitHub"
+#tc_start_block "Push release tag to GitHub"
+#if [[ -z "${DRY_RUN}" ]]; then
+#  configure_git_ssh_key
+#  git_wrapped push "ssh://git@github.com/${git_repo_for_tag}.git" "$version"
+#else
+#  echo "skipping for dry-run"
+#fi
+#tc_end_block "Push release tag to GitHub"
 
 
 tc_start_block "Publish binaries and archive as latest"
@@ -185,7 +185,7 @@ if [[ -n "${PUBLISH_LATEST}" && $prerelease == false ]]; then
   for product in cockroach cockroach-sql; do
     for platform in linux-amd64 linux-amd64-fips linux-arm64 darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
         archive_suffix=tgz
-        if [[ $platform == *"windows"* ]]; then 
+        if [[ $platform == *"windows"* ]]; then
             archive_suffix=zip
         fi
         from="$product-$version.$platform.$archive_suffix"
@@ -200,13 +200,13 @@ fi
 tc_end_block "Publish binaries and archive as latest"
 
 
-tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
-if [[ $prerelease == false ]]; then
-  docker manifest push "${dockerhub_repository}:latest-${release_branch}"
-else
-  echo "The ${dockerhub_repository}:latest-${release_branch} docker image tags were _not_ pushed."
-fi
-tc_end_block "Tag docker images as latest-RELEASE_BRANCH"
+#tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
+#if [[ $prerelease == false ]]; then
+#  docker manifest push "${dockerhub_repository}:latest-${release_branch}"
+#else
+#  echo "The ${dockerhub_repository}:latest-${release_branch} docker image tags were _not_ pushed."
+#fi
+#tc_end_block "Tag docker images as latest-RELEASE_BRANCH"
 
 
 tc_start_block "Tag docker images as latest"
