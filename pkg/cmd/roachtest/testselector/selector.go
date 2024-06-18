@@ -49,7 +49,8 @@ type TestDetails struct {
 	Name                string // test name
 	Selected            bool   // whether a test is Selected or not
 	AvgDurationInMillis int64  // average duration of the test
-	TotalRuns           int    // total number of times the test has run
+	TotalRuns           int    // total number of times the test has run successfully
+	LastFailureIsInfra  bool   // indicates that the test failed the last time because of infra flake
 }
 
 // SelectTestsReq is the request for CategoriseTests
@@ -122,15 +123,17 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 		testInfos := make([]string, len(colContainer))
 		copy(testInfos, colContainer)
 		// selected columns:
-		// 0. TEST_NAME
-		// 1. SELECTED (yes/no)
-		// 2. AVG_DURATION
-		// 3. TOTAL_RUNS
+		// 0. test name
+		// 1. whether a test is Selected or not
+		// 2. average duration of the test
+		// 3. total number of times the test has run successfully
+		// 4. indicates that the test failed the last time because of infra flake
 		testDetails := &TestDetails{
 			Name:                testInfos[0],
 			Selected:            testInfos[1] != "no",
 			AvgDurationInMillis: getDuration(testInfos[2]),
 			TotalRuns:           getTotalRuns(testInfos[3]),
+			LastFailureIsInfra:  testInfos[4] == "yes",
 		}
 		if testDetails.Selected {
 			// selected for running
