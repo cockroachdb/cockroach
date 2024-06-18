@@ -1740,12 +1740,15 @@ func getStreamIngestionJobInfo(db *gosql.DB, jobID int) (jobInfo, error) {
 }
 
 func srcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
-	db.ExecMultiple(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true;`)
+	db.ExecMultiple(t,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
+		`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true;`)
 }
 
 func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration time.Duration) {
 	db.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
+		`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true;`,
 		`SET CLUSTER SETTING stream_replication.replan_flow_threshold = 0.1;`,
 		`SET CLUSTER SETTING physical_replication.consumer.node_lag_replanning_threshold = '5m';`)
 
