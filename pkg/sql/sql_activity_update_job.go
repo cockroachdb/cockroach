@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -280,7 +281,7 @@ func (u *sqlActivityUpdater) transferAllStats(
 	_, err := u.db.Executor().ExecEx(ctx,
 		"activity-flush-txn-transfer-all",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		`
 			UPSERT INTO system.public.transaction_activity 
 (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
@@ -326,7 +327,7 @@ func (u *sqlActivityUpdater) transferAllStats(
 	_, err = u.db.Executor().ExecEx(ctx,
 		"activity-flush-stmt-transfer-all",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		`
 			UPSERT
 INTO system.public.statement_activity (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name,
@@ -399,7 +400,7 @@ func (u *sqlActivityUpdater) transferTopStats(
 		_, err := txn.ExecEx(ctx,
 			"activity-flush-txn-transfer-tops",
 			txn.KV(), /* txn */
-			sessiondata.NodeUserSessionDataOverride,
+			sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 			`DELETE FROM system.public.transaction_activity WHERE aggregated_ts = $1;`,
 			aggTs)
 
@@ -416,7 +417,7 @@ func (u *sqlActivityUpdater) transferTopStats(
 		_, err = txn.ExecEx(ctx,
 			"activity-flush-txn-transfer-tops",
 			txn.KV(), /* txn */
-			sessiondata.NodeUserSessionDataOverride,
+			sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 			`
 UPSERT INTO system.public.transaction_activity
 (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata,
@@ -483,7 +484,7 @@ UPSERT INTO system.public.transaction_activity
 		)
 
 		return err
-	})
+	}, isql.WithPriority(admissionpb.UserLowPri))
 
 	if errTxn != nil {
 		return errTxn
@@ -499,7 +500,7 @@ UPSERT INTO system.public.transaction_activity
 		_, err := txn.ExecEx(ctx,
 			"activity-flush-txn-transfer-tops",
 			txn.KV(), /* txn */
-			sessiondata.NodeUserSessionDataOverride,
+			sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 			`DELETE FROM system.public.statement_activity WHERE aggregated_ts = $1;`,
 			aggTs)
 
@@ -516,7 +517,7 @@ UPSERT INTO system.public.transaction_activity
 		_, err = txn.ExecEx(ctx,
 			"activity-flush-stmt-transfer-tops",
 			txn.KV(), /* txn */
-			sessiondata.NodeUserSessionDataOverride,
+			sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 			`
 WITH agg_stmt_stats AS (SELECT aggregated_ts,
                                fingerprint_id,
@@ -593,7 +594,7 @@ FROM (SELECT ss.aggregated_ts AS aggregated_ts,
 		)
 
 		return err
-	})
+	}, isql.WithPriority(admissionpb.UserLowPri))
 
 	return errTxn
 }
@@ -633,7 +634,7 @@ FROM (SELECT count_rows():::int                     AS row_count,
 	it, err := u.db.Executor().QueryIteratorEx(ctx,
 		"activity-flush-count",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		query,
 		aggTs,
 	)
@@ -706,7 +707,7 @@ func (u *sqlActivityUpdater) compactActivityTables(ctx context.Context, maxRowCo
 	_, err = u.db.Executor().ExecEx(ctx,
 		"activity-stmt-compaction",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		`
 				DELETE
 FROM system.statement_activity
@@ -723,7 +724,7 @@ WHERE aggregated_ts IN (SELECT DISTINCT aggregated_ts FROM (SELECT aggregated_ts
 	_, err = u.db.Executor().ExecEx(ctx,
 		"activity-txn-compaction",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		`
 				DELETE
 FROM system.transaction_activity
@@ -748,7 +749,7 @@ func (u *sqlActivityUpdater) getTableRowCount(
 	datums, err := u.db.Executor().QueryRowEx(ctx,
 		"activity-total-count",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		query,
 	)
 
