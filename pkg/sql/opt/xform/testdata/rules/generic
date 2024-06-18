@@ -209,6 +209,85 @@ project
       └── filters
            └── k:1 = int8:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
+exec-ddl
+CREATE INDEX partial_idx ON t(t) WHERE t IS NOT NULL
+----
+
+opt expect=ConvertSelectWithPlaceholdersToJoin
+SELECT * FROM t WHERE t = $1
+----
+project
+ ├── columns: k:1!null i:2 s:3 b:4 t:5!null
+ ├── has-placeholder
+ ├── key: (1)
+ ├── fd: ()-->(5), (1)-->(2-4)
+ └── inner-join (lookup t)
+      ├── columns: k:1!null i:2 s:3 b:4 t:5!null "$1":8!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── has-placeholder
+      ├── key: (1)
+      ├── fd: ()-->(5,8), (1)-->(2-4), (5)==(8), (8)==(5)
+      ├── inner-join (lookup t@partial_idx,partial)
+      │    ├── columns: k:1!null t:5!null "$1":8!null
+      │    ├── flags: disallow merge join
+      │    ├── key columns: [8] = [5]
+      │    ├── has-placeholder
+      │    ├── key: (1)
+      │    ├── fd: ()-->(5,8), (5)==(8), (8)==(5)
+      │    ├── values
+      │    │    ├── columns: "$1":8
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── has-placeholder
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(8)
+      │    │    └── ($1,)
+      │    └── filters (true)
+      └── filters (true)
+
+exec-ddl
+DROP INDEX partial_idx
+----
+
+exec-ddl
+CREATE INDEX partial_idx ON t(i, t) WHERE i IS NOT NULL AND t IS NOT NULL
+----
+
+opt expect=ConvertSelectWithPlaceholdersToJoin
+SELECT * FROM t WHERE i = $1 AND t = $2
+----
+project
+ ├── columns: k:1!null i:2!null s:3 b:4 t:5!null
+ ├── has-placeholder
+ ├── key: (1)
+ ├── fd: ()-->(2,5), (1)-->(3,4)
+ └── inner-join (lookup t)
+      ├── columns: k:1!null i:2!null s:3 b:4 t:5!null "$1":8!null "$2":9!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── has-placeholder
+      ├── key: (1)
+      ├── fd: ()-->(2,5,8,9), (1)-->(3,4), (2)==(8), (8)==(2), (5)==(9), (9)==(5)
+      ├── inner-join (lookup t@partial_idx,partial)
+      │    ├── columns: k:1!null i:2!null t:5!null "$1":8!null "$2":9!null
+      │    ├── flags: disallow merge join
+      │    ├── key columns: [8 9] = [2 5]
+      │    ├── has-placeholder
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,5,8,9), (2)==(8), (8)==(2), (5)==(9), (9)==(5)
+      │    ├── values
+      │    │    ├── columns: "$1":8 "$2":9
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── has-placeholder
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(8,9)
+      │    │    └── ($1, $2)
+      │    └── filters (true)
+      └── filters (true)
+
+exec-ddl
+DROP INDEX partial_idx
+----
 
 # The rule does not match if there are no placeholders in the filters.
 opt expect-not=ConvertSelectWithPlaceholdersToJoin
