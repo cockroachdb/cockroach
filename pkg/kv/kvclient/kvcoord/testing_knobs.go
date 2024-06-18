@@ -71,6 +71,11 @@ type ClientTestingKnobs struct {
 	// TransactionRetryFilter allows transaction retry loops to inject retriable
 	// errors.
 	TransactionRetryFilter func(roachpb.Transaction) bool
+
+	// DisableTxnAnchorKeyRandomization, if set, disables randomization when
+	// picking a transaction's anchor key; instead, the transaction is anchored at
+	// the first key it locks.
+	DisableTxnAnchorKeyRandomization bool
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

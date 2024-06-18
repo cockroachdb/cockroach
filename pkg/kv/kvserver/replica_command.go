@@ -294,11 +294,20 @@ func splitTxnStickyUpdateAttempt(
 	newDesc := *desc
 	newDesc.StickyBit = expiration
 
-	b := txn.NewBatch()
-	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
-		return err
+	{
+		b := txn.NewBatch()
+		descKey := keys.RangeDescriptorKey(desc.StartKey)
+		if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
+			return err
+		}
+		// Run this batch first to ensure that the transaction record is created in
+		// the right place. The sticky bit trigger relies on this.
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
 	}
+
+	b := txn.NewBatch()
 	if err := updateRangeAddressing(b, &newDesc); err != nil {
 		return err
 	}
@@ -611,10 +620,20 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		newDesc.StickyBit = hlc.Timestamp{}
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
 
-		b := txn.NewBatch()
-		if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
-			return err
+		{
+			b := txn.NewBatch()
+			if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
+				return err
+			}
+			// Run this batch first to ensure that the transaction record is
+			// created in the right place. The sticky bit trigger relies on
+			// this.
+			if err := txn.Run(ctx, b); err != nil {
+				return err
+			}
 		}
+
+		b := txn.NewBatch()
 		if err := updateRangeAddressing(b, &newDesc); err != nil {
 			return err
 		}
