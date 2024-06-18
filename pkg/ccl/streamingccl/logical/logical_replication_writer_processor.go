@@ -176,6 +176,9 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	ctx = lrw.StartInternal(ctx, logicalReplicationWriterProcessorName)
 
 	lrw.metrics = lrw.flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
+	for _, bh := range lrw.bh {
+		bh.SetMetrics(lrw.metrics)
+	}
 
 	db := lrw.FlowCtx.Cfg.DB
 
@@ -545,17 +548,23 @@ type batchStats struct {
 }
 
 type BatchHandler interface {
+	SetMetrics(metrics *Metrics)
 	HandleBatch(context.Context, []streampb.StreamEvent_KVWithDiff) (batchStats, error)
 }
 
 // RowProcessor knows how to process a single row from an event stream.
 type RowProcessor interface {
-	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue) error
+	SetMetrics(metrics *Metrics)
+	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) error
 }
 
 type txnBatch struct {
 	db descs.DB
 	rp RowProcessor
+}
+
+func (t *txnBatch) SetMetrics(metrics *Metrics) {
+	t.rp.SetMetrics(metrics)
 }
 
 func (t *txnBatch) HandleBatch(
@@ -576,7 +585,7 @@ func (t *txnBatch) HandleBatch(
 		txn.KV().SetOmitInRangefeeds()
 		for _, kv := range batch {
 			stats.byteSize += kv.Size()
-			if err := t.rp.ProcessRow(ctx, txn, kv.KeyValue); err != nil {
+			if err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue); err != nil {
 				return err
 			}
 

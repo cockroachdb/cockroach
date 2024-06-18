@@ -108,25 +108,32 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaOptimisticInsertConflictCount = metric.Metadata{
+		Name:        "logical_replication.optimistic_insert_conflict_count",
+		Help:        "Total number of times the optimistic insert encountered a conflict",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of logical replication jobs.
 type Metrics struct {
-	IngestedEvents        *metric.Counter
-	IngestedLogicalBytes  *metric.Counter
-	Flushes               *metric.Counter
-	JobProgressUpdates    *metric.Counter
-	CheckpointEvents      *metric.Counter
-	ReplanCount           *metric.Counter
-	FlushRowCountHist     metric.IHistogram
-	FlushBytesHist        metric.IHistogram
-	FlushHistNanos        metric.IHistogram
-	FlushWaitHistNanos    metric.IHistogram
-	BatchBytesHist        metric.IHistogram
-	BatchHistNanos        metric.IHistogram
-	CommitLatency         metric.IHistogram
-	AdmitLatency          metric.IHistogram
-	ReplicatedTimeSeconds *metric.Gauge
+	IngestedEvents                *metric.Counter
+	IngestedLogicalBytes          *metric.Counter
+	Flushes                       *metric.Counter
+	JobProgressUpdates            *metric.Counter
+	CheckpointEvents              *metric.Counter
+	ReplanCount                   *metric.Counter
+	OptimisticInsertConflictCount *metric.Counter
+	FlushRowCountHist             metric.IHistogram
+	FlushBytesHist                metric.IHistogram
+	FlushHistNanos                metric.IHistogram
+	FlushWaitHistNanos            metric.IHistogram
+	BatchBytesHist                metric.IHistogram
+	BatchHistNanos                metric.IHistogram
+	CommitLatency                 metric.IHistogram
+	AdmitLatency                  metric.IHistogram
+	ReplicatedTimeSeconds         *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -135,12 +142,13 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for logical replication job monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	return &Metrics{
-		IngestedEvents:       metric.NewCounter(metaReplicationEventsIngested),
-		IngestedLogicalBytes: metric.NewCounter(metaReplicationIngestedBytes),
-		Flushes:              metric.NewCounter(metaReplicationFlushes),
-		CheckpointEvents:     metric.NewCounter(metaReplicationCheckpointEventsIngested),
-		JobProgressUpdates:   metric.NewCounter(metaJobProgressUpdates),
-		ReplanCount:          metric.NewCounter(metaDistSQLReplanCount),
+		IngestedEvents:                metric.NewCounter(metaReplicationEventsIngested),
+		IngestedLogicalBytes:          metric.NewCounter(metaReplicationIngestedBytes),
+		Flushes:                       metric.NewCounter(metaReplicationFlushes),
+		CheckpointEvents:              metric.NewCounter(metaReplicationCheckpointEventsIngested),
+		JobProgressUpdates:            metric.NewCounter(metaJobProgressUpdates),
+		ReplanCount:                   metric.NewCounter(metaDistSQLReplanCount),
+		OptimisticInsertConflictCount: metric.NewCounter(metaOptimisticInsertConflictCount),
 		FlushHistNanos: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationFlushHistNanos,
