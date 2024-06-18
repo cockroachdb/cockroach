@@ -60,12 +60,6 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaStreamsRunning = metric.Metadata{
-		Name:        "logical_replication.running",
-		Help:        "Number of currently running replication streams",
-		Measurement: "Replication Streams",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaReplicatedTimeSeconds = metric.Metadata{
 		Name:        "logical_replication.replicated_time_seconds",
 		Help:        "The replicated time of the logical replication stream in seconds since the unix epoch.",
@@ -95,18 +89,6 @@ var (
 		Help:        "Time spenting waiting for an in-progress flush",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaReplicationFlushOnSize = metric.Metadata{
-		Name:        "logical_replication.flush_on_size",
-		Help:        "Number of flushes caused by hitting the buffer size limit",
-		Measurement: "Count",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicationFlushOnTime = metric.Metadata{
-		Name:        "logical_replication.flush_on_time",
-		Help:        "Number of flushes caused by hitting the time limit",
-		Measurement: "Count",
-		Unit:        metric.Unit_COUNT,
 	}
 	metaReplicationBatchBytes = metric.Metadata{
 		Name:        "logical_replication.batch_bytes",
@@ -140,13 +122,10 @@ type Metrics struct {
 	FlushBytesHist        metric.IHistogram
 	FlushHistNanos        metric.IHistogram
 	FlushWaitHistNanos    metric.IHistogram
-	FlushOnSize           *metric.Counter
-	FlushOnTime           *metric.Counter
 	BatchBytesHist        metric.IHistogram
 	BatchHistNanos        metric.IHistogram
 	CommitLatency         metric.IHistogram
 	AdmitLatency          metric.IHistogram
-	RunningCount          *metric.Gauge
 	ReplicatedTimeSeconds *metric.Gauge
 }
 
@@ -198,8 +177,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
-		FlushOnSize: metric.NewCounter(metaReplicationFlushOnSize),
-		FlushOnTime: metric.NewCounter(metaReplicationFlushOnTime),
 		BatchBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationBatchBytes,
@@ -212,7 +189,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
-		RunningCount:          metric.NewGauge(metaStreamsRunning),
 		ReplicatedTimeSeconds: metric.NewGauge(metaReplicatedTimeSeconds),
 	}
 }
