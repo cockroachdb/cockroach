@@ -1,0 +1,22 @@
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 1), (2, 2), (3, 3);
+
+statement ok
+CREATE FUNCTION foo() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE 'HERE!'; RETURN 1; END; $$;
+
+statement ok
+CREATE TRIGGER bar AFTER UPDATE ON xy EXECUTE FUNCTION foo();
+
+query T noticetrace rowsort
+UPDATE xy SET y = y * 100 WHERE x > 1;
+----
+NOTICE: HERE!
+NOTICE: HERE!
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+2  200
+3  300

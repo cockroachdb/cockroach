@@ -106,6 +106,12 @@ type Table interface {
 	// Check returns the ith check constraint, where i < CheckCount.
 	Check(i int) CheckConstraint
 
+	// TriggerCount returns the number of triggers present on the table.
+	TriggerCount() int
+
+	// Trigger returns the ith trigger, where i < TriggerCount.
+	Trigger(i int) string
+
 	// FamilyCount returns the number of column families present on the table.
 	// There is always at least one primary family (always family 0) where columns
 	// go if they are not explicitly assigned to another family. The primary

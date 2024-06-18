@@ -93,6 +93,7 @@ const (
 	AlterTableTag          = "ALTER TABLE"
 	BackupTag              = "BACKUP"
 	CreateIndexTag         = "CREATE INDEX"
+	CreateTriggerTag       = "CREATE TRIGGER"
 	CreateFunctionTag      = "CREATE FUNCTION"
 	CreateProcedureTag     = "CREATE PROCEDURE"
 	CreateSchemaTag        = "CREATE SCHEMA"
@@ -932,6 +933,15 @@ func (*CreateIndex) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateIndex) StatementTag() string { return CreateIndexTag }
+
+// StatementReturnType implements the Statement interface.
+func (*CreateTrigger) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CreateTrigger) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateTrigger) StatementTag() string { return CreateTriggerTag }
 
 // StatementReturnType implements the Statement interface.
 func (n *CreateSchema) StatementReturnType() StatementReturnType { return DDL }
@@ -2334,6 +2344,7 @@ func (n *CreateDatabase) String() string                      { return AsString(
 func (n *CreateExtension) String() string                     { return AsString(n) }
 func (n *CreateRoutine) String() string                       { return AsString(n) }
 func (n *CreateIndex) String() string                         { return AsString(n) }
+func (n *CreateTrigger) String() string                       { return AsString(n) }
 func (n *CreateRole) String() string                          { return AsString(n) }
 func (n *CreateTable) String() string                         { return AsString(n) }
 func (n *CreateTenant) String() string                        { return AsString(n) }

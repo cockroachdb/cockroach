@@ -768,6 +768,9 @@ type optTable struct {
 	// constraints for user defined types.
 	checkConstraints []optCheckConstraint
 
+	// triggers is the set of triggers for this table. TODO(drewk): continue...
+	triggers []string
+
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
 	colMap catalog.TableColMap
@@ -1079,6 +1082,9 @@ func newOptTable(
 	}
 	ot.checkConstraints = append(ot.checkConstraints, synthesizedChecks...)
 
+	ot.triggers = make([]string, len(desc.Triggers()))
+	copy(ot.triggers, desc.Triggers())
+
 	// Add stats last, now that other metadata is initialized.
 	if stats != nil {
 		ot.stats = make([]optTableStat, len(stats))
@@ -1259,6 +1265,16 @@ func (ot *optTable) CheckCount() int {
 // Check is part of the cat.Table interface.
 func (ot *optTable) Check(i int) cat.CheckConstraint {
 	return &ot.checkConstraints[i]
+}
+
+// TriggerCount is part of the cat.Table interface.
+func (ot *optTable) TriggerCount() int {
+	return len(ot.triggers)
+}
+
+// Trigger is part of the cat.Table interface.
+func (ot *optTable) Trigger(i int) string {
+	return ot.triggers[i]
 }
 
 // FamilyCount is part of the cat.Table interface.
@@ -2362,6 +2378,16 @@ func (ot *optVirtualTable) Check(i int) cat.CheckConstraint {
 			return ot.lookupColumnOrdinal(check.CheckDesc().ColumnIDs[j])
 		},
 	}
+}
+
+// TriggerCount is part of the cat.Table interface.
+func (ot *optVirtualTable) TriggerCount() int {
+	return 0
+}
+
+// Trigger is part of the cat.Table interface.
+func (ot *optVirtualTable) Trigger(i int) string {
+	panic(errors.AssertionFailedf("not implemented"))
 }
 
 // FamilyCount is part of the cat.Table interface.

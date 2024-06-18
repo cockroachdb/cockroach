@@ -1,6 +1,7 @@
 create_ddl_stmt ::=
 	create_database_stmt
 	| create_index_stmt
+	| create_trigger_stmt
 	| create_schema_stmt
 	| create_table_stmt
 	| create_table_as_stmt

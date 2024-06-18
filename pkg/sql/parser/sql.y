@@ -889,6 +889,12 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
     return u.val.(*tree.ShowFingerprintOptions)
 }
+func (u *sqlSymUnion) triggerEvent() tree.TriggerEvent {
+		return u.val.(tree.TriggerEvent)
+}
+func (u *sqlSymUnion) triggerTiming() tree.TriggerTiming {
+		return u.val.(tree.TriggerTiming)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -928,7 +934,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEBUG_IDS DEC DEBUG_DUMP_METADATA_SST DECIMAL DEFAULT DEFAULTS DEFINER
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED DETAILS
-%token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
+%token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP EACH INSTEAD STATEMENT
 
 %token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_INFO_DIR ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
@@ -1196,6 +1202,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <tree.Statement> create_extension_stmt
 %type <tree.Statement> create_external_connection_stmt
 %type <tree.Statement> create_index_stmt
+%type <tree.Statement> create_trigger_stmt
 %type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_schedule_for_backup_stmt
 %type <tree.Statement> alter_backup_schedule
@@ -1233,7 +1240,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <tree.Statement> drop_func_stmt
 %type <tree.Statement> drop_proc_stmt
 %type <tree.Statement> drop_virtual_cluster_stmt
-%type <bool>           opt_immediate
+%type <bool>           opt_immediate trigger_for
 
 %type <tree.Statement> analyze_stmt
 %type <tree.Statement> explain_stmt
@@ -1445,6 +1452,9 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 
 %type <tree.IsolationLevel> iso_level
 %type <tree.UserPriority> user_priority
+
+%type <tree.TriggerEvent> create_trigger_event create_trigger_event_list
+%type <tree.TriggerTiming> create_trigger_timing
 
 %type <tree.TableDefs> opt_table_elem_list table_elem_list create_as_opt_col_list create_as_table_defs
 %type <[]tree.LikeTableOption> like_table_option_list
@@ -5241,7 +5251,6 @@ create_unsupported:
 | CREATE SUBSCRIPTION error { return unimplemented(sqllex, "create subscription") }
 | CREATE TABLESPACE error { return unimplementedWithIssueDetail(sqllex, 54113, "create tablespace") }
 | CREATE TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "create text") }
-| CREATE TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "create trigger") }
 
 opt_trusted:
   TRUSTED {}
@@ -5269,11 +5278,11 @@ drop_unsupported:
 | DROP SERVER error { return unimplemented(sqllex, "drop server") }
 | DROP SUBSCRIPTION error { return unimplemented(sqllex, "drop subscription") }
 | DROP TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "drop text") }
-| DROP TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "drop") }
 
 create_ddl_stmt:
   create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
 | create_index_stmt    // EXTEND WITH HELP: CREATE INDEX
+| create_trigger_stmt  // EXTEND WITH HELP: CREATE TRIGGER
 | create_schema_stmt   // EXTEND WITH HELP: CREATE SCHEMA
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
@@ -11313,6 +11322,79 @@ composite_type_list:
     )
   }
 
+create_trigger_stmt:
+	CREATE TRIGGER name create_trigger_timing create_trigger_event_list ON table_name trigger_for EXECUTE function_or_procedure func_name '(' ')'
+	{
+		$$.val = &tree.CreateTrigger{
+			Name:     tree.Name($3),
+			Timing:  $4.triggerTiming(),
+			Event:    $5.triggerEvent(),
+			Table:    $7.unresolvedObjectName().ToTableName(),
+			ForEachRow:  $8.bool(),
+			Func: $11.resolvableFuncRefFromName(),
+		}
+	}
+
+create_trigger_timing:
+	BEFORE
+	{
+		$$.val = tree.TriggerTimingBefore
+	}
+| AFTER
+	{
+		$$.val = tree.TriggerTimingAfter
+	}
+| INSTEAD OF
+	{
+		$$.val = tree.TriggerTimingInsteadOf
+	}
+
+function_or_procedure:
+  FUNCTION
+| PROCEDURE
+
+create_trigger_event_list:
+	create_trigger_event
+	{
+		$$.val = $1.triggerEvent()
+	}
+| create_trigger_event OR create_trigger_event_list
+	{
+		$$.val = $1.triggerEvent() | $3.triggerEvent()
+	}
+
+create_trigger_event:
+	INSERT
+	{
+		$$.val = tree.TriggerEventInsert
+	}
+| UPDATE
+	{
+		$$.val = tree.TriggerEventUpdate
+	}
+| DELETE
+	{
+		$$.val = tree.TriggerEventDelete
+	}
+
+trigger_for:
+	FOR trigger_opt_each ROW
+	{
+		$$.val = true
+	}
+| FOR trigger_opt_each STATEMENT
+	{
+		$$.val = false
+	}
+| /* EMPTY */
+	{
+		$$.val = false
+	}
+
+trigger_opt_each:
+  EACH {}
+| /* EMPTY */ {}
+
 // %Help: CREATE INDEX - create a new index
 // %Category: DDL
 // %Text:
@@ -17141,6 +17223,9 @@ unreserved_keyword:
 | EXCLUDE
 | EXCLUDING
 | EXECUTE
+| EACH
+| INSTEAD
+| STATEMENT
 | EXECUTION
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT
@@ -17638,6 +17723,9 @@ bare_label_keywords:
 | DISCARD
 | DISTINCT
 | DO
+| EACH
+| INSTEAD
+| STATEMENT
 | DOMAIN
 | DOUBLE
 | DROP

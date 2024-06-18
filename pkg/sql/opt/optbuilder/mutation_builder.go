@@ -1139,10 +1139,17 @@ func (mb *mutationBuilder) mapToReturnColID(tabOrd int) opt.ColumnID {
 func (mb *mutationBuilder) buildReturning(returning *tree.ReturningExprs) {
 	// Handle case of no RETURNING clause.
 	if returning == nil {
-		expr := mb.outScope.expr
-		mb.outScope = mb.b.allocScope()
-		mb.outScope.expr = expr
-		return
+		if mb.tab.TriggerCount() == 0 {
+			expr := mb.outScope.expr
+			mb.outScope = mb.b.allocScope()
+			mb.outScope.expr = expr
+			return
+		}
+		returning = &tree.ReturningExprs{tree.StarSelectExpr()}
+	}
+	for i := 0; i < mb.tab.TriggerCount(); i++ {
+		trigger := mb.tab.Trigger(i)
+		*returning = append(*returning, tree.SelectExpr{Expr: &tree.FuncExpr{Func: tree.ResolvableFunctionReference{FunctionReference: tree.NewUnresolvedName(trigger)}}})
 	}
 
 	// Start out by constructing a scope containing one column for each non-

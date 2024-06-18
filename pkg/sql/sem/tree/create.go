@@ -309,6 +309,85 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	}
 }
 
+type TriggerTiming uint8
+
+const (
+	TriggerTimingBefore TriggerTiming = iota
+	TriggerTimingAfter
+	TriggerTimingInsteadOf
+)
+
+func (t TriggerTiming) String() string {
+	switch t {
+	case TriggerTimingBefore:
+		return "BEFORE"
+	case TriggerTimingAfter:
+		return "AFTER"
+	case TriggerTimingInsteadOf:
+		return "INSTEAD OF"
+	}
+	return fmt.Sprintf("invalid trigger timing: %d", t)
+}
+
+type TriggerEvent uint8
+
+const (
+	TriggerEventInsert TriggerEvent = 1 << iota
+	TriggerEventUpdate
+	TriggerEventDelete
+)
+
+func (e TriggerEvent) String() string {
+	res := ""
+	if e&TriggerEventInsert != 0 {
+		res = "INSERT"
+	}
+	if e&TriggerEventUpdate != 0 {
+		if res != "" {
+			res += " OR "
+		}
+		res += "UPDATE"
+	}
+	if e&TriggerEventDelete != 0 {
+		if res != "" {
+			res += " OR "
+		}
+		res += "DELETE"
+	}
+	return res
+}
+
+type CreateTrigger struct {
+	Name       Name
+	Timing     TriggerTiming
+	Event      TriggerEvent
+	Table      TableName
+	ForEachRow bool
+	Condition  Expr
+	Func       ResolvableFunctionReference
+}
+
+func (node *CreateTrigger) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE TRIGGER ")
+	ctx.FormatName(string(node.Name))
+	ctx.WriteString(fmt.Sprintf(" %s", node.Timing))
+	ctx.WriteString(fmt.Sprintf(" %s", node.Event))
+	ctx.WriteString(" ON ")
+	ctx.FormatNode(&node.Table)
+	if node.ForEachRow {
+		ctx.WriteString(" FOR EACH ROW")
+	} else {
+		ctx.WriteString(" FOR EACH STATEMENT")
+	}
+	if node.Condition != nil {
+		ctx.WriteString(" WHEN ")
+		ctx.FormatNode(node.Condition)
+	}
+	ctx.WriteString(" EXECUTE FUNCTION ")
+	ctx.FormatNode(node.Func)
+	ctx.WriteString("()")
+}
+
 // CreateTypeVariety represents a particular variety of user defined types.
 type CreateTypeVariety int
 
