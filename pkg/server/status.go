@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -505,6 +506,7 @@ type systemStatusServer struct {
 	gossip             *gossip.Gossip
 	storePool          *storepool.StorePool
 	stores             *kvserver.Stores
+	engines            *Engines
 	nodeLiveness       *liveness.NodeLiveness
 	spanConfigReporter spanconfig.Reporter
 	rangeStatsFetcher  *rangestats.Fetcher
@@ -622,6 +624,7 @@ func newSystemStatusServer(
 	storePool *storepool.StorePool,
 	rpcCtx *rpc.Context,
 	stores *kvserver.Stores,
+	engines *Engines,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
 	closedSessionCache *sql.ClosedSessionCache,
@@ -657,6 +660,7 @@ func newSystemStatusServer(
 		gossip:             gossip,
 		storePool:          storePool,
 		stores:             stores,
+		engines:            engines,
 		nodeLiveness:       nodeLiveness,
 		spanConfigReporter: spanConfigReporter,
 		rangeStatsFetcher:  rangeStatsFetcher,
@@ -786,21 +790,14 @@ func (s *systemStatusServer) EngineStats(
 		return status.EngineStats(ctx, req)
 	}
 
-	resp := new(serverpb.EngineStatsResponse)
-	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		engineStatsInfo := serverpb.EngineStatsInfo{
-			StoreID:              store.Ident.StoreID,
-			TickersAndHistograms: nil,
-			EngineType:           store.TODOEngine().Type(),
-		}
-
-		resp.Stats = append(resp.Stats, engineStatsInfo)
-		return nil
-	})
+	metrics, err := debug.GetEngineMetrics(*s.engines)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
-	return resp, nil
+
+	return &serverpb.EngineStatsResponse{
+		Metrics: metrics,
+	}, nil
 }
 
 // Allocator returns simulated allocator info for the ranges on the given node.

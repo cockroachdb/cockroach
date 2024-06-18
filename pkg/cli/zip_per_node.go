@@ -47,12 +47,6 @@ func makePerNodeZipRequests(prefix, id string, status serverpb.StatusClient) []z
 			},
 			pathName: prefix + "/gossip",
 		},
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return status.EngineStats(ctx, &serverpb.EngineStatsRequest{NodeId: id})
-			},
-			pathName: prefix + "/enginestats",
-		},
 	}
 }
 
@@ -365,6 +359,21 @@ func (zc *debugZipContext) collectPerNodeData(
 			return err
 		})
 	if err := zc.z.createRawOrError(s, prefix+"/heap.pprof", heapData, requestErr); err != nil {
+		return err
+	}
+
+	// Collect storage engine metrics using the same format as the /debug/lsm route.
+	var engineMetrics string
+	s = nodePrinter.start("requesting engine stats")
+	requestErr = zc.runZipFn(ctx, s,
+		func(ctx context.Context) error {
+			resp, err := zc.status.EngineStats(ctx, &serverpb.EngineStatsRequest{NodeId: id})
+			if err == nil {
+				engineMetrics = resp.Metrics
+			}
+			return err
+		})
+	if err := zc.z.createRawOrError(s, prefix+"/lsm.txt", []byte(engineMetrics), requestErr); err != nil {
 		return err
 	}
 

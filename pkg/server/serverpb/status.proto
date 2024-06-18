@@ -599,16 +599,6 @@ message GossipRequest {
   bool redact = 2;
 }
 
-message EngineStatsInfo {
-  int32 store_id = 1 [
-    (gogoproto.customname) = "StoreID",
-    (gogoproto.casttype) =
-        "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
-  ];
-  cockroach.storage.enginepb.TickersAndHistograms tickers_and_histograms = 2;
-  cockroach.storage.enginepb.EngineType engine_type = 3;
-}
-
 message EngineStatsRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
@@ -616,7 +606,8 @@ message EngineStatsRequest {
 }
 
 message EngineStatsResponse {
-  repeated EngineStatsInfo stats = 1 [ (gogoproto.nullable) = false ];
+  // contains LSM metrics for all stores on the requested node
+  string metrics = 1;
 }
 
 message DownloadSpanRequest {

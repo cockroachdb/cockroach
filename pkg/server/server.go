@@ -1006,6 +1006,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		storePool,
 		rpcContext,
 		node.stores,
+		&engines,
 		stopper,
 		sessionRegistry,
 		closedSessionCache,

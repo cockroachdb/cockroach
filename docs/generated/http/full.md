@@ -1971,23 +1971,8 @@ Support status: [reserved](#support-status)
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| stats | [EngineStatsInfo](#cockroach.server.serverpb.EngineStatsResponse-cockroach.server.serverpb.EngineStatsInfo) | repeated |  | [reserved](#support-status) |
+| metrics | [string](#cockroach.server.serverpb.EngineStatsResponse-string) |  | contains LSM metrics for all stores on the requested node | [reserved](#support-status) |
 
-
-
-
-
-
-<a name="cockroach.server.serverpb.EngineStatsResponse-cockroach.server.serverpb.EngineStatsInfo"></a>
-#### EngineStatsInfo
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| store_id | [int32](#cockroach.server.serverpb.EngineStatsResponse-int32) |  |  | [reserved](#support-status) |
-| tickers_and_histograms | [cockroach.storage.enginepb.TickersAndHistograms](#cockroach.server.serverpb.EngineStatsResponse-cockroach.storage.enginepb.TickersAndHistograms) |  |  | [reserved](#support-status) |
-| engine_type | [cockroach.storage.enginepb.EngineType](#cockroach.server.serverpb.EngineStatsResponse-cockroach.storage.enginepb.EngineType) |  |  | [reserved](#support-status) |
 
 
 
