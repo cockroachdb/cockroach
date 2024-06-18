@@ -390,6 +390,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.IndexZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(SeqNum, "SeqNum"),
 	),
 	rel.EntityMapping(t((*scpb.DatabaseData)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),
