@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -25,11 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,6 +56,9 @@ import (
 type sqlLastWriteWinsRowProcessor struct {
 	decoder     cdcevent.Decoder
 	queryBuffer queryBuffer
+	settings    *cluster.Settings
+
+	metrics *Metrics
 
 	// scratch allows us to reuse some allocations between multiple calls to
 	// insertRow and deleteRow.
@@ -63,8 +70,16 @@ type sqlLastWriteWinsRowProcessor struct {
 
 type queryBuffer struct {
 	deleteQueries map[catid.DescID]statements.Statement[tree.Statement]
-	insertQueries map[catid.DescID]map[catid.FamilyID]statements.Statement[tree.Statement]
+	// insertQueries stores a mapping from the table ID to a mapping from the
+	// column family ID to two INSERT statements (one optimistic that assumes
+	// there is no conflicting row in the table, and another pessimistic one).
+	insertQueries map[catid.DescID]map[catid.FamilyID][2]statements.Statement[tree.Statement]
 }
+
+const (
+	insertQueriesOptimisticIndex  = 0
+	insertQueriesPessimisticIndex = 1
+)
 
 func makeSQLLastWriteWinsHandler(
 	ctx context.Context, settings *cluster.Settings, tableDescs map[int32]descpb.TableDescriptor,
@@ -72,7 +87,7 @@ func makeSQLLastWriteWinsHandler(
 	descs := make(map[catid.DescID]catalog.TableDescriptor)
 	qb := queryBuffer{
 		deleteQueries: make(map[catid.DescID]statements.Statement[tree.Statement], len(tableDescs)),
-		insertQueries: make(map[catid.DescID]map[catid.FamilyID]statements.Statement[tree.Statement], len(tableDescs)),
+		insertQueries: make(map[catid.DescID]map[catid.FamilyID][2]statements.Statement[tree.Statement], len(tableDescs)),
 	}
 	cdcEventTargets := changefeedbase.Targets{}
 	var err error
@@ -103,11 +118,16 @@ func makeSQLLastWriteWinsHandler(
 	return &sqlLastWriteWinsRowProcessor{
 		queryBuffer: qb,
 		decoder:     cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
+		settings:    settings,
 	}, nil
 }
 
+func (lww *sqlLastWriteWinsRowProcessor) SetMetrics(metrics *Metrics) {
+	lww.metrics = metrics
+}
+
 func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
-	ctx context.Context, txn isql.Txn, kv roachpb.KeyValue,
+	ctx context.Context, txn isql.Txn, kv roachpb.KeyValue, prevValue roachpb.Value,
 ) error {
 	var err error
 	kv.Key, err = keys.StripTenantPrefix(kv.Key)
@@ -122,7 +142,7 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	if row.IsDeleted() {
 		return lww.deleteRow(ctx, txn, row)
 	} else {
-		return lww.insertRow(ctx, txn, row)
+		return lww.insertRow(ctx, txn, row, prevValue)
 	}
 }
 
@@ -130,8 +150,17 @@ var attributeToUser = sessiondata.InternalExecutorOverride{
 	AttributeToUser: true,
 }
 
+var tryOptimisticInsertEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.try_optimistic_insert.enabled",
+	"determines whether the consumer attempts to execute the 'optimistic' INSERT "+
+		"first (when there was no previous value on the source) which will succeed only "+
+		"if there is no conflict with an existing row",
+	metamorphic.ConstantWithTestBool("logical_replication.consumer.try_optimistic_insert.enabled", true),
+)
+
 func (lww *sqlLastWriteWinsRowProcessor) insertRow(
-	ctx context.Context, txn isql.Txn, row cdcevent.Row,
+	ctx context.Context, txn isql.Txn, row cdcevent.Row, prevValue roachpb.Value,
 ) error {
 	datums := lww.scratch.datums[:0]
 	err := row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
@@ -160,12 +189,33 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 	if !ok {
 		return errors.Errorf("no pre-generated insert query for table %d", row.TableID)
 	}
-	insertQuery, ok := insertQueriesForTable[row.FamilyID]
+	insertQueries, ok := insertQueriesForTable[row.FamilyID]
 	if !ok {
 		return errors.Errorf("no pre-generated insert query for table %d column family %d", row.TableID, row.FamilyID)
 	}
-	if _, err := txn.ExecParsed(ctx, "replicated-insert", txn.KV(), attributeToUser, insertQuery, datums...); err != nil {
-		log.Warningf(ctx, "replicated insert failed (query: %s): %s", insertQuery.SQL, err.Error())
+	if prevValue.RawBytes == nil && tryOptimisticInsertEnabled.Get(&lww.settings.SV) {
+		// If there was no value before this change on the source, it means that
+		// either we are processing an initial scan or the original stmt was an
+		// insert that didn't hit a conflict. In both cases we'll try the
+		// optimistic insert first.
+		query := insertQueries[insertQueriesOptimisticIndex]
+		if _, err = txn.ExecParsed(ctx, "replicated-optimistic-insert", txn.KV(), attributeToUser, query, datums...); err != nil {
+			// If the optimistic insert failed with unique violation, we have to
+			// fall back to the pessimistic path. If we got a different error,
+			// then we bail completely.
+			if pgerror.GetPGCode(err) != pgcode.UniqueViolation {
+				log.Warningf(ctx, "replicated optimistic insert failed (query: %s): %s", query.SQL, err.Error())
+				return err
+			}
+			lww.metrics.OptimisticInsertConflictCount.Inc(1)
+		} else {
+			// There was no conflict - we're done.
+			return nil
+		}
+	}
+	query := insertQueries[insertQueriesPessimisticIndex]
+	if _, err = txn.ExecParsed(ctx, "replicated-insert", txn.KV(), attributeToUser, query, datums...); err != nil {
+		log.Warningf(ctx, "replicated insert failed (query: %s): %s", query.SQL, err.Error())
 		return err
 	}
 	return nil
@@ -194,8 +244,8 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 
 func makeInsertQueries(
 	dstTableDescID int32, td catalog.TableDescriptor,
-) (map[catid.FamilyID]statements.Statement[tree.Statement], error) {
-	queries := make(map[catid.FamilyID]statements.Statement[tree.Statement], td.NumFamilies())
+) (map[catid.FamilyID][2]statements.Statement[tree.Statement], error) {
+	queries := make(map[catid.FamilyID][2]statements.Statement[tree.Statement], td.NumFamilies())
 	if err := td.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		var columnNames strings.Builder
 		var valueStrings strings.Builder
@@ -253,8 +303,19 @@ func makeInsertQueries(
 			}
 		}
 		addColumnByNameNoCheck("crdb_internal_origin_timestamp")
+		var insertQueries [2]statements.Statement[tree.Statement]
 		var err error
-		const baseQuery = `
+		insertQueries[insertQueriesOptimisticIndex], err = parser.ParseOne(fmt.Sprintf(`
+INSERT INTO [%d AS t] (%s)
+VALUES (%s)`,
+			dstTableDescID,
+			columnNames.String(),
+			valueStrings.String(),
+		))
+		if err != nil {
+			return err
+		}
+		insertQueries[insertQueriesPessimisticIndex], err = parser.ParseOne(fmt.Sprintf(`
 INSERT INTO [%d AS t] (%s)
 VALUES (%s)
 ON CONFLICT ON CONSTRAINT %s
@@ -263,14 +324,14 @@ DO UPDATE SET
 WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_internal_origin_timestamp
        AND t.crdb_internal_origin_timestamp IS NULL)
    OR (t.crdb_internal_origin_timestamp <= excluded.crdb_internal_origin_timestamp
-       AND t.crdb_internal_origin_timestamp IS NOT NULL)`
-		queries[family.ID], err = parser.ParseOne(fmt.Sprintf(baseQuery,
+       AND t.crdb_internal_origin_timestamp IS NOT NULL)`,
 			dstTableDescID,
 			columnNames.String(),
 			valueStrings.String(),
 			td.GetPrimaryIndex().GetName(),
 			onConflictUpdateClause.String(),
 		))
+		queries[family.ID] = insertQueries
 		return err
 	}); err != nil {
 		return nil, err
