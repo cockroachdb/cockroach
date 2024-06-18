@@ -145,7 +145,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 
 // DeleteClusterConfig deletes the cluster config in the promUrl
 func (c *PromClient) DeleteClusterConfig(
-	ctx context.Context, clusterName string, forceFetchCreds bool, l *logger.Logger,
+	ctx context.Context, clusterName string, forceFetchCreds, insecure bool, l *logger.Logger,
 ) error {
 
 	if c.disabled {
@@ -156,6 +156,9 @@ func (c *PromClient) DeleteClusterConfig(
 		return err
 	}
 	url := getUrl(c.promUrl, clusterName)
+	if insecure {
+		url = fmt.Sprintf("%s?insecure=true", url)
+	}
 	l.Printf("invoking DELETE for URL: %s", url)
 	h := &http.Header{}
 	h.Set("Authorization", token)
@@ -166,7 +169,7 @@ func (c *PromClient) DeleteClusterConfig(
 	if response.StatusCode != http.StatusNoContent {
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode == http.StatusUnauthorized && !forceFetchCreds {
-			return c.DeleteClusterConfig(ctx, clusterName, true, l)
+			return c.DeleteClusterConfig(ctx, clusterName, true, insecure, l)
 		}
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
