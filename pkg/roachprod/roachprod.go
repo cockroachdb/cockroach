@@ -474,6 +474,7 @@ func SQL(
 	tenantName string,
 	tenantInstance int,
 	authMode install.PGAuthMode,
+	database string,
 	cmdArray []string,
 ) error {
 	c, err := getClusterFromCache(l, clusterName, install.SecureOption(secure))
@@ -481,10 +482,10 @@ func SQL(
 		return err
 	}
 	if len(c.Nodes) == 1 {
-		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, authMode, cmdArray)
+		return c.ExecOrInteractiveSQL(ctx, l, tenantName, tenantInstance, authMode, database, cmdArray)
 	}
 
-	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, authMode, cmdArray)
+	results, err := c.ExecSQL(ctx, l, c.Nodes, tenantName, tenantInstance, authMode, database, cmdArray)
 	if err != nil {
 		return err
 	}
@@ -1032,6 +1033,7 @@ func Get(ctx context.Context, l *logger.Logger, clusterName, src, dest string) e
 }
 
 type PGURLOptions struct {
+	Database           string
 	Secure             bool
 	External           bool
 	VirtualClusterName string
@@ -1071,7 +1073,7 @@ func PgURL(
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode, opts.Auth))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode, opts.Auth, opts.Database))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
@@ -2224,7 +2226,8 @@ func StartJaeger(
 			return err
 		}
 		_, err = c.ExecSQL(
-			ctx, l, nodes, virtualClusterName, 0, install.DefaultAuthMode, []string{"-e", setupStmt},
+			ctx, l, nodes, virtualClusterName, 0, install.DefaultAuthMode, "", /* database */
+			[]string{"-e", setupStmt},
 		)
 		if err != nil {
 			return err
@@ -2650,7 +2653,7 @@ func LoadBalancerPgURL(
 	if err != nil {
 		return "", err
 	}
-	return c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth), nil
+	return c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth, opts.Database), nil
 }
 
 // LoadBalancerIP resolves the IP of a load balancer serving the
