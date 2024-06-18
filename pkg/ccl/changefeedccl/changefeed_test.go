@@ -2205,13 +2205,13 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			Changefeed.(*TestingKnobs)
 
 		// Initialize table
-		sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
-		sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 1000)`)
+		sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`)
 
 		// Ensure Scan Requests are always small enough that we receive multiple
 		// resolved events during a backfill
 		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
-			b.Header.MaxSpanRequestKeys = 10
+			b.Header.MaxSpanRequestKeys = 50
 			return nil
 		}
 
@@ -2291,6 +2291,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 				// change due to a primary index swap.
 				refreshTableSpan()
 				backfillTimestamp = r.Timestamp
+				t.Logf("backfill timestamp: %s", backfillTimestamp)
 				return false, nil
 			}
 
@@ -2309,7 +2310,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			// Filter non-backfill-related spans
 			if !r.Timestamp.Equal(backfillTimestamp.Next()) {
 				// Only allow spans prior to a valid backfillTimestamp to avoid moving past the backfill
-				return !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next())), nil
+				return backfillTimestamp.IsSet() && !r.Timestamp.LessEq(backfillTimestamp.Next()), nil
 			}
 
 			// At the end of a backfill, kv feed will emit a resolved span for the whole table.
@@ -2337,6 +2338,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			}
 			return errors.New("waiting for checkpoint")
 		})
+		t.Logf("initial checkpoint: %s", initialCheckpoint.Slice())
 
 		require.NoError(t, jobFeed.Pause())
 
@@ -2375,7 +2377,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			// Filter non-backfill-related spans
 			if !r.Timestamp.Equal(backfillTimestamp.Next()) {
 				// Only allow spans prior to a valid backfillTimestamp to avoid moving past the backfill
-				return !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next())), nil
+				return backfillTimestamp.IsSet() && !r.Timestamp.LessEq(backfillTimestamp.Next()), nil
 			}
 
 			require.Falsef(t, initialCheckpoint.Encloses(r.Span), "second backfill should not resolve checkpointed span")
@@ -2401,6 +2403,7 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			}
 			return errors.New("waiting for second checkpoint")
 		})
+		t.Logf("second checkpoint: %s", secondCheckpoint.Slice())
 
 		require.NoError(t, jobFeed.Pause())
 		for _, span := range initialCheckpoint.Slice() {
@@ -2420,10 +2423,11 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 		// checkpoint should eventually be gone once backfill completes.
 		testutils.SucceedsSoon(t, func() error {
 			progress := loadProgress()
-			if p := progress.GetChangefeed(); p == nil || p.Checkpoint == nil || len(p.Checkpoint.Spans) == 0 {
-				return nil
+			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+				t.Logf("non-empty checkpoint: %s", progress.GetChangefeed().Checkpoint.Spans)
+				return errors.New("checkpoint still non-empty")
 			}
-			return errors.New("checkpoint still non-empty")
+			return nil
 		})
 
 		// Pause job to avoid race on the resolved array
