@@ -150,7 +150,7 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 		ctx,
 		"fetch-stmt-count",
 		nil,
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowSystemPrioritySessionDataOverride,
 		readStmt,
 		randomShard,
 	)
@@ -285,7 +285,7 @@ SET
 		ctx,
 		"upsert-txn-stats",
 		txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowSystemPrioritySessionDataOverride,
 		upsertStmt,
 		aggregatedTs,            // aggregated_ts
 		serializedFingerprintID, // fingerprint_id
@@ -361,7 +361,7 @@ SET
 		ctx,
 		"upsert-stmt-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowSystemPrioritySessionDataOverride,
 		upsertStmt,
 		args...,
 	)

@@ -345,6 +345,10 @@ const (
 	LockingHighName = "locking-high"
 )
 
+var (
+	SystemLowQoS = SystemLow
+)
+
 var qosLevelsDict = map[QoSLevel]string{
 	SystemLow:     SystemLowName,
 	TTLLow:        TTLLowName,
