@@ -170,7 +170,14 @@ func NewMaterializer(
 		input:                 input.Root,
 		typs:                  typs,
 		converter:             colconv.NewAllVecToDatumConverter(len(typs)),
-		row:                   make(rowenc.EncDatumRow, len(typs)),
+		row:                   m.row,
+	}
+	if cap(m.row) >= len(typs) && cap(m.row) > 0 {
+		// The latter part of the condition is needed in order to distinguish
+		// between a row with no columns and no rows.
+		m.row = m.row[:len(typs)]
+	} else {
+		m.row = make(rowenc.EncDatumRow, len(typs))
 	}
 	m.drainHelper.allocator = allocator
 	m.drainHelper.statsCollectors = input.StatsCollectors
@@ -294,10 +301,14 @@ func (m *Materializer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 func (m *Materializer) Release() {
 	m.ProcessorBaseNoHelper.Reset()
 	m.converter.Release()
+	for i := range m.row {
+		m.row[i] = rowenc.EncDatum{}
+	}
 	*m = Materializer{
 		// We're keeping the reference to the same ProcessorBaseNoHelper since
 		// it allows us to reuse some of the slices.
 		ProcessorBaseNoHelper: m.ProcessorBaseNoHelper,
+		row:                   m.row[:0],
 	}
 	materializerPool.Put(m)
 }
