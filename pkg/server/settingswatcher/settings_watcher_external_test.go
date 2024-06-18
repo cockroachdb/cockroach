@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -714,15 +715,21 @@ func TestNotifyCalledUponReadOnlySettingChanges(t *testing.T) {
 			}
 			require.Equal(t, "newval", v)
 
+			seen, v = contains("version")
+			if !seen {
+				return errors.New("version not seen yet")
+			}
+			require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey).String(), v)
+
 			// The rangefeed event for str.baz was delivered after those for
 			// str.foo and str.yay. If we had incorrectly notified an update
 			// for non-SystemVisible setting, they would show up in the
 			// updated list.
 			mu.Lock()
 			defer mu.Unlock()
-			if len(mu.updated) != 1 {
-				t.Errorf("expected 1 setting update, got: %+v", mu.updated)
-			}
+			// The updates should include only the setting being updated and
+			// the `version` setting.
+			require.Len(t, mu.updated, 2)
 			return nil
 		})
 	})
