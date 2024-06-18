@@ -798,10 +798,10 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 }
 
 func (r *raft) appliedSnap(snap *pb.Snapshot) {
-	index := snap.Metadata.Index
-	r.raftLog.stableSnapTo(index)
-	r.appliedTo(index, 0 /* size */)
-	r.adm.OnSnapshot(snap.Metadata.Index)
+	id := entryID{term: snap.Metadata.Term, index: snap.Metadata.Index}
+	r.raftLog.stableSnapTo(id)
+	r.appliedTo(id.index, 0 /* size */)
+	r.adm.OnSnapshot(id.index)
 }
 
 // maybeCommit attempts to advance the commit index. Returns true if the commit

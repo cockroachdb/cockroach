@@ -172,28 +172,29 @@ func (u *unstable) acceptInProgress() {
 //
 // The method makes sure the entries can not be overwritten by an in-progress
 // log append. See the related comment in newStorageAppendRespMsg.
-func (u *unstable) stableTo(mark logMark) {
+func (u *unstable) stableTo(mark logMark) bool {
 	if mark.term != u.term {
 		// The last accepted term has changed. Ignore. This is possible if part or
 		// all of the unstable log was replaced between that time that a set of
 		// entries started to be written to stable storage and when they finished.
 		u.logger.Infof("mark (term,index)=(%d,%d) mismatched the last accepted "+
 			"term %d in unstable log; ignoring ", mark.term, mark.index, u.term)
-		return
+		return false
 	}
 	if u.snapshot != nil && mark.index == u.snapshot.Metadata.Index {
 		// Index matched unstable snapshot, not unstable entry. Ignore.
 		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", mark.index)
-		return
+		return false
 	}
 	if mark.index <= u.prev.index || mark.index > u.lastIndex() {
 		// Unstable entry missing. Ignore.
 		u.logger.Infof("entry at index %d missing from unstable log; ignoring", mark.index)
-		return
+		return false
 	}
 	if u.snapshot != nil {
 		u.logger.Panicf("mark %+v acked earlier than the snapshot(in-progress=%t): %s",
 			mark, u.snapshotInProgress, DescribeSnapshot(*u.snapshot))
+		return false
 	}
 	u.logSlice = u.forward(mark.index)
 	// TODO(pav-kv): why can mark.index overtake u.entryInProgress? Probably bugs
@@ -201,6 +202,7 @@ func (u *unstable) stableTo(mark logMark) {
 	// takes nextUnstableEnts() without acceptInProgress().
 	u.entryInProgress = max(u.entryInProgress, mark.index)
 	u.shrinkEntriesArray()
+	return true
 }
 
 // shrinkEntriesArray discards the underlying array used by the entries slice
@@ -222,11 +224,13 @@ func (u *unstable) shrinkEntriesArray() {
 	}
 }
 
-func (u *unstable) stableSnapTo(i uint64) {
-	if u.snapshot != nil && u.snapshot.Metadata.Index == i {
-		u.snapshotInProgress = false
-		u.snapshot = nil
+func (u *unstable) stableSnapTo(i uint64) bool {
+	if u.snapshot == nil || u.snapshot.Metadata.Index != i {
+		return false
 	}
+	u.snapshotInProgress = false
+	u.snapshot = nil
+	return true
 }
 
 // restore resets the state to the given snapshot. It effectively truncates the

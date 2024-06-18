@@ -27,6 +27,8 @@ type raftLog struct {
 	// storage contains all stable entries since the last snapshot.
 	storage Storage
 
+	// stable is the last log index acknowledged by storage to be durable.
+	stable uint64
 	// unstable contains all unstable entries and snapshot.
 	// they will be saved into storage.
 	unstable unstable
@@ -91,6 +93,7 @@ func newLogWithSize(
 	last := entryID{term: lastTerm, index: lastIndex}
 	return &raftLog{
 		storage:             storage,
+		stable:              lastIndex,
 		unstable:            newUnstable(last, logger),
 		maxApplyingEntsSize: maxApplyingEntsSize,
 
@@ -400,9 +403,17 @@ func (l *raftLog) acceptApplying(i uint64, size entryEncodingSize, allowUnstable
 		i < l.maxAppliableIndex(allowUnstable)
 }
 
-func (l *raftLog) stableTo(mark logMark) { l.unstable.stableTo(mark) }
+func (l *raftLog) stableTo(mark logMark) {
+	if l.unstable.stableTo(mark) {
+		l.stable = mark.index
+	}
+}
 
-func (l *raftLog) stableSnapTo(i uint64) { l.unstable.stableSnapTo(i) }
+func (l *raftLog) stableSnapTo(id entryID) {
+	if l.unstable.stableSnapTo(id.index) {
+		l.stable = id.index
+	}
+}
 
 // acceptUnstable indicates that the application has started persisting the
 // unstable entries in storage, and that the current unstable entries are thus

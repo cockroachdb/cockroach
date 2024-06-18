@@ -548,16 +548,7 @@ func (rn *RawNode) LastIndex() uint64 {
 }
 
 func (rn *RawNode) StableIndex() uint64 {
-	// TODO(pav-kv): this call is not cheap. Track the stable index in the
-	// raftLog.unstable data structure properly.
-	//
-	// A close candidate for this is rn.raft.raftLog.unstable.offset-1, but it's
-	// not correct when snapshots come into play.
-	index, err := rn.raft.raftLog.storage.LastIndex()
-	if err != nil {
-		panic(err)
-	}
-	return index
+	return rn.raft.raftLog.stable
 }
 
 func (rn *RawNode) GetAdmitted() tracker.AdmittedMarks {
