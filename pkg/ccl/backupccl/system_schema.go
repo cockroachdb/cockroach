@@ -109,7 +109,6 @@ const roleIDSequenceRestoreOrder = 1
 func defaultSystemTableRestoreFunc(
 	ctx context.Context, _ customRestoreFuncDeps, txn isql.Txn, systemTableName, tempTableName string,
 ) error {
-
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
 	opName := systemTableName + "-data-deletion"
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
@@ -142,7 +141,7 @@ func tenantSettingsTableRestoreFunc(
 	systemTableName, tempTableName string,
 ) error {
 	if deps.codec.ForSystemTenant() {
-		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
+		return systemTenantSettingsTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
 
 	if count, err := queryTableRowCount(ctx, txn, tempTableName); err == nil && count > 0 {
@@ -536,6 +535,41 @@ func tableHasNotNullColumn(
 	return hasNotNullColumn, nil
 }
 
+// systemTenantSettingsTableRestoreFunc implements custom logic when
+// restoring the `system.tenant_settings` table on the system
+// tenant. Specifically, it does not restore a row for the `version`
+// setting that applies to all-tenants (tenant_id = 0). See issue
+// #125702 for more details.
+//
+// TODO(multitenant): revert back to using the default restore func
+// for system.tenant_settings when the MinSupportedVersion is 24.2+.
+func systemTenantSettingsTableRestoreFunc(
+	ctx context.Context,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
+	systemTableName, tempTableName string,
+) error {
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	opName := systemTableName + "-data-deletion"
+	log.Eventf(ctx, "clearing data from system table %s with query %q",
+		systemTableName, deleteQuery)
+
+	_, err := txn.Exec(ctx, opName, txn.KV(), deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	restoreQuery := fmt.Sprintf(
+		"INSERT INTO system.%s (SELECT * FROM %s WHERE NOT (tenant_id = 0 AND name = 'version'));",
+		systemTableName, tempTableName)
+	opName = systemTableName + "-data-insert"
+	if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery); err != nil {
+		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+	}
+
+	return nil
+}
+
 // When restoring the settings table, we want to make sure to not override the
 // version.
 func settingsRestoreFunc(
@@ -544,7 +578,6 @@ func settingsRestoreFunc(
 	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE name <> 'version'", systemTableName)
 	opName := systemTableName + "-data-deletion"
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
