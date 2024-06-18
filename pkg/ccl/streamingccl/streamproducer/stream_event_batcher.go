@@ -19,12 +19,11 @@ type streamEventBatcher struct {
 	batch              streampb.StreamEvent_Batch
 	size               int
 	spanConfigFrontier hlc.Timestamp
+	wrappedKVs         bool
 }
 
-func makeStreamEventBatcher() *streamEventBatcher {
-	return &streamEventBatcher{
-		batch: streampb.StreamEvent_Batch{},
-	}
+func makeStreamEventBatcher(supportsWrapping bool) *streamEventBatcher {
+	return &streamEventBatcher{wrappedKVs: supportsWrapping}
 }
 
 func (seb *streamEventBatcher) reset() {
@@ -42,8 +41,13 @@ func (seb *streamEventBatcher) addSST(sst kvpb.RangeFeedSSTable) {
 }
 
 func (seb *streamEventBatcher) addKV(kv streampb.StreamEvent_KV) {
-	seb.batch.KVs = append(seb.batch.KVs, kv)
-	seb.size += (kv.Size())
+	if seb.wrappedKVs {
+		seb.batch.KVs = append(seb.batch.KVs, kv)
+		seb.size += (kv.Size())
+	} else {
+		seb.batch.DeprecatedKeyValues = append(seb.batch.DeprecatedKeyValues, kv.KeyValue)
+		seb.size += (kv.Size())
+	}
 }
 
 func (seb *streamEventBatcher) addDelRange(d kvpb.RangeFeedDeleteRange) {

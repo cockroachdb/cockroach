@@ -144,6 +144,8 @@ message StreamPartitionSpec {
 
   bool with_diff = 10;
 
+  bool wrapped_events = 11;
+
   // NEXT ID: 11.
 }
 
@@ -156,7 +158,7 @@ message SpanConfigEventStreamSpec {
   // Controls how often checkpoint records are published.
   google.protobuf.Duration min_checkpoint_frequency = 3
   [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
-
+  bool wrapped_events = 4;
 }
 
 message ReplicationStreamSpec {

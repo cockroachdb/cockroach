@@ -559,5 +559,6 @@ func streamPartition(
 		spec:     spec,
 		execCfg:  execCfg,
 		mon:      evalCtx.Planner.Mon(),
+		seb:      streamEventBatcher{wrappedKVs: spec.WrappedEvents},
 	}, nil
 }
