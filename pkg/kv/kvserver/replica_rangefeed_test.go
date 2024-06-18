@@ -50,7 +50,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-// testStream is a mock implementation of kvpb.Internal_RangeFeedServer.
+// testStream is a mock implementation of kvpb.RangeFeedEventSink.
 type testStream struct {
 	ctx    context.Context
 	cancel func()
