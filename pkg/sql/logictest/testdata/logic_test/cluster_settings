@@ -294,8 +294,19 @@ statement error cannot use this statement to access cluster settings in system t
 ALTER TENANT [1] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
 skipif config 3node-tenant-default-configs
+statement error cannot set 'version' for all tenants
+ALTER TENANT ALL SET CLUSTER SETTING version='23.1'
+
+skipif config 3node-tenant-default-configs
 statement ok
 SELECT crdb_internal.create_tenant(10)
+
+# While not specifically useful, we continue to allow setting the
+# `version` key for a specific virtual cluster, in case it's necessary
+# to overwrite the tenant's view of the storage cluster's version.
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT "cluster-10" SET CLUSTER SETTING version='23.1'
 
 skipif config 3node-tenant-default-configs
 statement ok
