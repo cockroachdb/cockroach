@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -387,8 +388,18 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 		if _, ok := promhelperclient.SupportedPromProjects[node.Project]; ok &&
 			node.Provider == gce.ProviderName {
 			if err := promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
-				c.Name, false, l); err != nil {
-				l.Errorf("Failed to delete the cluster config: %v", err)
+				c.Name, false, false /* insecure */, l); err != nil {
+				// TODO(bhaskar): Obtain secure cluster information.
+				// Cluster does not have the information on secure or not. So, we retry as insecure
+				// if delete fails with cluster as secure
+				if strings.Contains(err.Error(), "request failed with status 404") {
+					if err = promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
+						c.Name, false, true /* insecure */, l); err != nil {
+						l.Errorf("Failed to delete the cluster config with cluster as insecure and secure: %v", err)
+					}
+				} else {
+					l.Errorf("Failed to delete the cluster config with cluster as secure: %v", err)
+				}
 			}
 			break
 		}
