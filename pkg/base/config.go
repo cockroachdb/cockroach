@@ -617,6 +617,10 @@ type RaftConfig struct {
 	// to 2.5 MB/s. See Little's law to understand the maths behind.
 	RaftMaxInflightBytes uint64
 
+	// RaftEnableLazyAppends enables the lazy MsgApp behaviour. Most MsgApp
+	// messages (containing log entries) will be triggered by Replication AC v2.
+	RaftEnableLazyAppends bool
+
 	// Splitting a range which has a replica needing a snapshot results in two
 	// ranges in that state. The delay configured here slows down splits when in
 	// that situation (limiting to those splits not run through the split
@@ -690,6 +694,8 @@ func (cfg *RaftConfig) SetDefaults() {
 	); cfg.RaftMaxInflightBytes < other {
 		cfg.RaftMaxInflightBytes = other
 	}
+
+	cfg.RaftEnableLazyAppends = true
 
 	if cfg.RaftDelaySplitToSuppressSnapshot == 0 {
 		// Use a generous delay to make sure even a backed up Raft snapshot queue is

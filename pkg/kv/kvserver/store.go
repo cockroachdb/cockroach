@@ -404,6 +404,7 @@ func newRaftConfig(
 		MaxSizePerMsg:               storeCfg.RaftMaxSizePerMsg,
 		MaxInflightMsgs:             storeCfg.RaftMaxInflightMsgs,
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
+		EnableLazyAppends:           storeCfg.RaftEnableLazyAppends,
 		Storage:                     strg,
 		Logger:                      logger,
 		StoreLiveness:               storeLiveness,
