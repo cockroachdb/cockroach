@@ -134,7 +134,7 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 		ctx,
 		"fetch-stmt-count",
 		nil,
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		readStmt,
 		randomShard,
 	)
@@ -409,7 +409,7 @@ DO NOTHING
 		ctx,
 		"insert-txn-stats",
 		txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		insertStmt,
 		aggregatedTs,            // aggregated_ts
 		serializedFingerprintID, // fingerprint_id
@@ -449,7 +449,7 @@ WHERE fingerprint_id = $2
 		ctx,
 		"update-stmt-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		updateStmt,
 		statistics,              // statistics
 		serializedFingerprintID, // fingerprint_id
@@ -507,7 +507,7 @@ WHERE fingerprint_id = $3
 		ctx,
 		"update-stmt-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		updateStmt,
 		statistics,                         // statistics
 		indexRecommendations,               // index_recommendations
@@ -599,7 +599,7 @@ DO NOTHING
 		ctx,
 		"insert-stmt-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		insertStmt,
 		args...,
 	)
@@ -634,7 +634,7 @@ FOR UPDATE
 		ctx,
 		"fetch-txn-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		readStmt,                // stmt
 		serializedFingerprintID, // fingerprint_id
 		appName,                 // app_name
@@ -690,7 +690,7 @@ FOR UPDATE
 		ctx,
 		"fetch-stmt-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		readStmt,                           // stmt
 		serializedFingerprintID,            // fingerprint_id
 		serializedTransactionFingerprintID, // transaction_fingerprint_id
