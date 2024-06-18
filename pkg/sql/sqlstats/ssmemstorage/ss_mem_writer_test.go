@@ -48,7 +48,6 @@ func TestRecordStatement(t *testing.T) {
 			testMonitor(ctx, "test-mon", settings),
 			"test-app",
 			knobs,
-			nil, /* insightsWriter */
 			insights.New(settings, insights.NewMetrics()).LatencyInformation(),
 		)
 		// Record a statement, ensure no insights are generated.
@@ -83,7 +82,6 @@ func TestRecordTransaction(t *testing.T) {
 			testMonitor(ctx, "test-mon", settings),
 			"test-app",
 			knobs,
-			nil, /* insightsWriter */
 			insights.New(settings, insights.NewMetrics()).LatencyInformation(),
 		)
 		// Record a transaction, ensure no insights are generated.

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -121,6 +122,10 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	}
 }
 
+var attributeToUser = sessiondata.InternalExecutorOverride{
+	AttributeToUser: true,
+}
+
 func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row,
 ) error {
@@ -155,7 +160,7 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 	if !ok {
 		return errors.Errorf("no pre-generated insert query for table %d column family %d", row.TableID, row.FamilyID)
 	}
-	if _, err := txn.ExecParsed(ctx, "replicated-insert", txn.KV(), insertQuery, datums...); err != nil {
+	if _, err := txn.ExecParsed(ctx, "replicated-insert", txn.KV(), attributeToUser, insertQuery, datums...); err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", insertQuery.SQL, err.Error())
 		return err
 	}
@@ -176,7 +181,7 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 	datums = append(datums, &lww.scratch.ts)
 	lww.scratch.datums = datums[:0]
 	deleteQuery := lww.queryBuffer.deleteQueries[row.TableID]
-	if _, err := txn.ExecParsed(ctx, "replicated-delete", txn.KV(), deleteQuery, datums...); err != nil {
+	if _, err := txn.ExecParsed(ctx, "replicated-delete", txn.KV(), attributeToUser, deleteQuery, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", deleteQuery.SQL, err.Error())
 		return err
 	}

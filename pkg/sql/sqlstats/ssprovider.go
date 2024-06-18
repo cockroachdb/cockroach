@@ -142,7 +142,7 @@ type Storage interface {
 
 	// GetApplicationStats returns an ApplicationStats instance for the given
 	// application name.
-	GetApplicationStats(appName string, internal bool) ApplicationStats
+	GetApplicationStats(appName string) ApplicationStats
 
 	// Reset resets all the statistics stored in-memory in the current Storage.
 	Reset(context.Context) error
