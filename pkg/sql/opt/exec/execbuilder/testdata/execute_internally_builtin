@@ -212,3 +212,6 @@ query T
 SELECT crdb_internal.execute_internally('SELECT session_user;', 'User=testuser');
 ----
 root
+
+statement ok
+SELECT crdb_internal.execute_internally('EXPLAIN ANALYZE SELECT 1;');
