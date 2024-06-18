@@ -13,8 +13,10 @@ go_library(
         "resolved_timestamp.go",
         "scheduled_processor.go",
         "scheduler.go",
+        "stream.go",
         "task.go",
         "testutil.go",
+        "util_helper.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed",
     visibility = ["//visibility:public"],
@@ -48,6 +50,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@org_uber_go_atomic//:atomic",
     ],
 )
 

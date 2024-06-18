@@ -207,9 +207,8 @@ type Processor interface {
 		catchUpIter *CatchUpIterator,
 		withDiff bool,
 		withFiltering bool,
-		stream Stream,
+		stream BufferedStream,
 		disconnectFn func(),
-		done *future.ErrorFuture,
 	) (bool, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
@@ -254,10 +253,8 @@ type Processor interface {
 func NewProcessor(cfg Config) Processor {
 	cfg.SetDefaults()
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
-	if cfg.Scheduler != nil {
-		return NewScheduledProcessor(cfg)
-	}
-	return NewLegacyProcessor(cfg)
+	return NewScheduledProcessor(cfg)
+	//return NewLegacyProcessor(cfg)
 }
 
 type LegacyProcessor struct {
@@ -361,7 +358,7 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 // IntentScannerConstructor is used to construct an IntentScanner. It
 // should be called from underneath a stopper task to ensure that the
 // engine has not been closed.
-type IntentScannerConstructor func() IntentScanner
+type IntentScannerConstructor func() (IntentScanner, error)
 
 // Start implements Processor interface.
 //
@@ -404,7 +401,7 @@ func (p *LegacyProcessor) run(
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
 	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+		rtsIter, _ := rtsIterFunc()
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
@@ -432,7 +429,7 @@ func (p *LegacyProcessor) run(
 		// Handle new registrations.
 		case r := <-p.regC:
 			if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
-				log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
+				log.Fatalf(ctx, "registration %v not in Processor's key range %v", r, p.Span)
 			}
 
 			// Add the new registration to the registry.
@@ -449,20 +446,20 @@ func (p *LegacyProcessor) run(
 			r.publish(ctx, p.newCheckpointEvent(), nil)
 
 			// Run an output loop for the registry.
-			runOutputLoop := func(ctx context.Context) {
-				r.runOutputLoop(ctx, p.RangeID)
-				select {
-				case p.unregC <- &r:
-					if r.unreg != nil {
-						r.unreg()
-					}
-				case <-p.stoppedC:
-				}
-			}
-			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
-				r.disconnect(kvpb.NewError(err))
-				p.reg.Unregister(ctx, &r)
-			}
+			//runOutputLoop := func(ctx context.Context) {
+			//	r.runOutputLoop(ctx, p.RangeID)
+			//	select {
+			//	//case p.unregC <- &r:
+			//	//	if r.unreg != nil {
+			//	//		r.unreg()
+			//	//	}
+			//	//case <-p.stoppedC:
+			//	//}
+			//}
+			//if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
+			//	r.disconnect(kvpb.NewError(err))
+			//	p.reg.Unregister(ctx, &r)
+			//}
 
 		// Respond to unregistration requests; these come from registrations that
 		// encounter an error during their output loop.
@@ -585,27 +582,28 @@ func (p *LegacyProcessor) Register(
 	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
-	stream Stream,
+	//stream Stream,
 	disconnectFn func(),
 	done *future.ErrorFuture,
 ) (bool, *Filter) {
-	// Synchronize the event channel so that this registration doesn't see any
-	// events that were consumed before this registration was called. Instead,
-	// it should see these events during its catch up scan.
-	p.syncEventC()
-
-	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
-	)
-	select {
-	case p.regC <- r:
-		// Wait for response.
-		return true, <-p.filterResC
-	case <-p.stoppedC:
-		return false, nil
-	}
+	//// Synchronize the event channel so that this registration doesn't see any
+	//// events that were consumed before this registration was called. Instead,
+	//// it should see these events during its catch up scan.
+	//p.syncEventC()
+	//
+	//blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
+	//r := newRegistration(
+	//	span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
+	//	p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
+	//)
+	//select {
+	//case p.regC <- r:
+	//	// Wait for response.
+	//	return true, <-p.filterResC
+	//case <-p.stoppedC:
+	//	return false, nil
+	//}
+	return false, nil
 }
 
 // Len implements Processor interface.
@@ -795,15 +793,15 @@ func (p *LegacyProcessor) consumeEvent(ctx context.Context, e *event) {
 	case e.sst != nil:
 		p.consumeSSTable(ctx, e.sst.data, e.sst.span, e.sst.ts, e.alloc)
 	case e.sync != nil:
-		if e.sync.testRegCatchupSpan != nil {
-			if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
-				log.Errorf(
-					ctx,
-					"error waiting for registries to catch up during test, results might be impacted: %s",
-					err,
-				)
-			}
-		}
+		//if e.sync.testRegCatchupSpan != nil {
+		//	if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
+		//		log.Errorf(
+		//			ctx,
+		//			"error waiting for registries to catch up during test, results might be impacted: %s",
+		//			err,
+		//		)
+		//	}
+		//}
 		close(e.sync.c)
 	default:
 		panic(fmt.Sprintf("missing event variant: %+v", e))
