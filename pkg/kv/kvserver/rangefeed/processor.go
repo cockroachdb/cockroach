@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -207,9 +206,8 @@ type Processor interface {
 		catchUpIter *CatchUpIterator,
 		withDiff bool,
 		withFiltering bool,
-		stream Stream,
+		stream *StreamSink,
 		disconnectFn func(),
-		done *future.ErrorFuture,
 	) (bool, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.
@@ -361,7 +359,7 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 // IntentScannerConstructor is used to construct an IntentScanner. It
 // should be called from underneath a stopper task to ensure that the
 // engine has not been closed.
-type IntentScannerConstructor func() IntentScanner
+type IntentScannerConstructor func() (IntentScanner, error)
 
 // Start implements Processor interface.
 //
@@ -404,9 +402,13 @@ func (p *LegacyProcessor) run(
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
 	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+		rtsIter, err := rtsIterFunc()
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
-		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
+		if err != nil {
+			// TODO(wenyihu6): check what should be done here
+			p.reg.DisconnectAllOnShutdown(ctx, kvpb.NewError(err))
+		}
+		err = stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
 			initScan.Cancel()
 		}
@@ -585,27 +587,29 @@ func (p *LegacyProcessor) Register(
 	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
-	stream Stream,
+	stream *StreamSink,
 	disconnectFn func(),
-	done *future.ErrorFuture,
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
-	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
-	)
-	select {
-	case p.regC <- r:
-		// Wait for response.
-		return true, <-p.filterResC
-	case <-p.stoppedC:
-		return false, nil
-	}
+	//blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
+
+	//streamSink := stream.StreamMuxer.Register(stream.StreamID, stream.RangeID)
+	// TODO(wenyihu6): add done handling for legacy
+	//r := newRegistration(
+	//	span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
+	//	p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn)
+	//select {
+	//case p.regC <- r:
+	//	// Wait for response.
+	//	return true, <-p.filterResC
+	//case <-p.stoppedC:
+	//	return false, nil
+	//}
+	return false, nil
 }
 
 // Len implements Processor interface.

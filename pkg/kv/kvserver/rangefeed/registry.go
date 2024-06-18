@@ -28,15 +28,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Stream is a object capable of transmitting RangeFeedEvents.
-type Stream interface {
-	// Context returns the context for this stream.
-	Context() context.Context
-	// Send blocks until it sends m, the stream is done, or the stream breaks.
-	// Send must be safe to call on the same stream in different goroutines.
-	Send(*kvpb.RangeFeedEvent) error
-}
-
 // Shared event is an entry stored in registration channel. Each entry is
 // specific to registration but allocation is shared between all registrations
 // to track memory budgets. event itself could either be shared or not in case
@@ -50,6 +41,11 @@ var sharedEventSyncPool = sync.Pool{
 	New: func() interface{} {
 		return new(sharedEvent)
 	},
+}
+
+func newPooledSharedEvent() *sharedEvent {
+	ev := sharedEventSyncPool.Get().(*sharedEvent)
+	return ev
 }
 
 func getPooledSharedEvent(e sharedEvent) *sharedEvent {
@@ -83,7 +79,7 @@ type registration struct {
 	metrics          *Metrics
 
 	// Output.
-	stream Stream
+	stream BufferedStream
 	done   *future.ErrorFuture
 	unreg  func()
 	// Internal.
@@ -122,9 +118,8 @@ func newRegistration(
 	bufferSz int,
 	blockWhenFull bool,
 	metrics *Metrics,
-	stream Stream,
+	stream BufferedStream,
 	unregisterFn func(),
-	done *future.ErrorFuture,
 ) registration {
 	r := registration{
 		span:             span,
@@ -133,7 +128,6 @@ func newRegistration(
 		withFiltering:    withFiltering,
 		metrics:          metrics,
 		stream:           stream,
-		done:             done,
 		unreg:            unregisterFn,
 		buf:              make(chan *sharedEvent, bufferSz),
 		blockWhenFull:    blockWhenFull,
@@ -142,6 +136,12 @@ func newRegistration(
 	r.mu.caughtUp = true
 	r.mu.catchUpIter = catchUpIter
 	return r
+}
+
+var _ filterable = (*registration)(nil)
+
+func (r *registration) needsPrev() bool {
+	return r.withDiff
 }
 
 // publish attempts to send a single event to the output buffer for this
@@ -288,7 +288,7 @@ func (r *registration) maybeStripEvent(
 // disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
-func (r *registration) disconnect(pErr *kvpb.Error) {
+func (r *registration) disconnect(_ *kvpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.mu.disconnected {
@@ -300,7 +300,6 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 			r.mu.outputLoopCancelFn()
 		}
 		r.mu.disconnected = true
-		r.done.Set(pErr.GoError())
 	}
 }
 
@@ -343,16 +342,13 @@ func (r *registration) outputLoop(ctx context.Context) error {
 		firstIteration = false
 		select {
 		case nextEvent := <-r.buf:
-			err := r.stream.Send(nextEvent.event)
-			nextEvent.alloc.Release(ctx)
+			r.stream.SendBuffered(nextEvent.event, nextEvent.alloc)
+			//nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
-			if err != nil {
-				return err
-			}
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-r.stream.Context().Done():
-			return r.stream.Context().Err()
+			//case <-r.stream.Context().Done():
+			//	return r.stream.Context().Err()
 		}
 	}
 }
@@ -405,7 +401,7 @@ func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff, r.withFiltering)
+	return catchUpIter.CatchUpScan(ctx, r.stream.SendUnbuffered, r.withDiff, r.withFiltering)
 }
 
 // ID implements interval.Interface.
@@ -444,7 +440,7 @@ func (reg *registry) Len() int {
 // NewFilter returns a operation filter reflecting the registrations
 // in the registry.
 func (reg *registry) NewFilter() *Filter {
-	return newFilterFromRegistry(reg)
+	return newFilterFromRegistryTree(reg.tree)
 }
 
 // Register adds the provided registration to the registry.
@@ -543,9 +539,6 @@ func (reg *registry) DisconnectWithErr(ctx context.Context, span roachpb.Span, p
 		return true /* disconned */, pErr
 	})
 }
-
-// all is a span that overlaps with all registrations.
-var all = roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}
 
 // forOverlappingRegs calls the provided function on each registration that
 // overlaps the span. If the function returns true for a given registration
