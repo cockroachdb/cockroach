@@ -2899,7 +2899,16 @@ func TestPutsInStagingTxn(t *testing.T) {
 	s, _, db := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Settings: settings,
-			Knobs:    base.TestingKnobs{Store: &storeKnobs},
+			Knobs: base.TestingKnobs{
+				Store: &storeKnobs,
+				KVClient: &kvcoord.ClientTestingKnobs{
+					// Disable randomization of the transaction's anchor key so that the
+					// txn record, and by extension the EndTxn request constructed to
+					// commit the transaction, ends up on the same range on which the
+					// first write is performed.
+					DisableTxnAnchorKeyRandomization: true,
+				},
+			},
 		})
 	defer s.Stopper().Stop(ctx)
 
@@ -2916,10 +2925,11 @@ func TestPutsInStagingTxn(t *testing.T) {
 	require.NoError(t, db.Put(ctx, keyB, "b"))
 
 	// Send a batch that will be split into two sub-batches: [Put(a)+EndTxn,
-	// Put(b)] (the EndTxn is grouped with the first write). These sub-batches are
-	// sent serially since we've inhibited the DistSender's concurrency. The first
-	// one will transition the txn to STAGING, and the DistSender will use that
-	// updated txn when sending the 2nd sub-batch.
+	// Put(b)] (the EndTxn is grouped with the first write because we've disabled
+	// randomization). These sub-batches are sent serially since we've inhibited
+	// the DistSender's concurrency. The first one will transition the txn to
+	// STAGING, and the DistSender will use that updated txn when sending the 2nd
+	// sub-batch.
 	b := txn.NewBatch()
 	b.Put(keyA, "a")
 	b.Put(keyB, "b")
