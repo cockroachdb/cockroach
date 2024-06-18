@@ -2414,8 +2414,20 @@ func (n *Node) TenantSettings(
 			// All-tenant overrides have changed, send them again.
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
+
+			// Inject the current storage logical version as an override to
+			// work around the situation where the `system.tenant_settings`
+			// has a wrong version data (see #125702).
+			//
+			// TODO(multitenant): remove this override when the minimum
+			// supported version is 24.1+.
+			verSetting, versionUpdateCh = n.getVersionSettingWithUpdateCh(ctx)
 			allOverrides, allCh = settingsWatcher.GetAllTenantOverrides(ctx)
-			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
+			actualOverrides := append(
+				append([]kvpb.TenantSetting{}, allOverrides...),
+				verSetting,
+			)
+			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, actualOverrides, false /* incremental */); err != nil {
 				return err
 			}
 
