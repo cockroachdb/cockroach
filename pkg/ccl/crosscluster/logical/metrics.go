@@ -76,6 +76,12 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaOptimisticInsertConflictCount = metric.Metadata{
+		Name:        "logical_replication.optimistic_insert_conflict_count",
+		Help:        "Total number of times the optimistic insert encountered a conflict",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of logical replication jobs.
@@ -96,9 +102,10 @@ type Metrics struct {
 	// a specific way.
 	CheckpointEvents *metric.Counter
 	// TODO(dt): are these stream batch size or latency numbers useful?
-	StreamBatchRowsHist  metric.IHistogram
-	StreamBatchBytesHist metric.IHistogram
-	StreamBatchNanosHist metric.IHistogram
+	StreamBatchRowsHist           metric.IHistogram
+	StreamBatchBytesHist          metric.IHistogram
+	StreamBatchNanosHist          metric.IHistogram
+	OptimisticInsertConflictCount *metric.Counter
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -141,5 +148,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
+		OptimisticInsertConflictCount: metric.NewCounter(metaOptimisticInsertConflictCount),
 	}
 }
