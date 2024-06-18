@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -54,6 +55,7 @@ import (
 //
 // See the design document for possible solutions to both of these problems.
 type sqlLastWriteWinsRowProcessor struct {
+	ie          isql.Executor
 	decoder     cdcevent.Decoder
 	queryBuffer queryBuffer
 	settings    *cluster.Settings
@@ -82,7 +84,10 @@ const (
 )
 
 func makeSQLLastWriteWinsHandler(
-	ctx context.Context, settings *cluster.Settings, tableDescs map[int32]descpb.TableDescriptor,
+	ctx context.Context,
+	settings *cluster.Settings,
+	tableDescs map[int32]descpb.TableDescriptor,
+	ie isql.Executor,
 ) (*sqlLastWriteWinsRowProcessor, error) {
 	descs := make(map[catid.DescID]catalog.TableDescriptor)
 	qb := queryBuffer{
@@ -116,6 +121,7 @@ func makeSQLLastWriteWinsHandler(
 	}
 
 	return &sqlLastWriteWinsRowProcessor{
+		ie:          ie,
 		queryBuffer: qb,
 		decoder:     cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
 		settings:    settings,
@@ -146,8 +152,18 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	}
 }
 
-var attributeToUser = sessiondata.InternalExecutorOverride{
+var ieOverrides = sessiondata.InternalExecutorOverride{
 	AttributeToUser: true,
+	// Regardless of whether we're using an explicit or implicit txn, we always
+	// disable the changefeed replication for now (in the former case it'll
+	// effectively be a no-op).
+	// TODO(ssd): we do this for now to prevent the data from being emitted back
+	// to the source. However, I don't think we want to do this in the long run.
+	// Rather, we want to store the inbound cluster ID and store that in a way
+	// that allows us to choose to filter it out from or not. Doing it this way
+	// means that you can't choose to run CDC just from one side and not the
+	// other.
+	DisableChangefeedReplication: true,
 }
 
 var tryOptimisticInsertEnabled = settings.RegisterBoolSetting(
@@ -162,6 +178,10 @@ var tryOptimisticInsertEnabled = settings.RegisterBoolSetting(
 func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row, prevValue roachpb.Value,
 ) error {
+	var kvTxn *kv.Txn
+	if txn != nil {
+		kvTxn = txn.KV()
+	}
 	datums := lww.scratch.datums[:0]
 	err := row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		if col.Computed {
@@ -199,7 +219,7 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 		// insert that didn't hit a conflict. In both cases we'll try the
 		// optimistic insert first.
 		query := insertQueries[insertQueriesOptimisticIndex]
-		if _, err = txn.ExecParsed(ctx, "replicated-optimistic-insert", txn.KV(), attributeToUser, query, datums...); err != nil {
+		if _, err = lww.ie.ExecParsed(ctx, "replicated-optimistic-insert", kvTxn, ieOverrides, query, datums...); err != nil {
 			// If the optimistic insert failed with unique violation, we have to
 			// fall back to the pessimistic path. If we got a different error,
 			// then we bail completely.
@@ -214,7 +234,7 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 		}
 	}
 	query := insertQueries[insertQueriesPessimisticIndex]
-	if _, err = txn.ExecParsed(ctx, "replicated-insert", txn.KV(), attributeToUser, query, datums...); err != nil {
+	if _, err = lww.ie.ExecParsed(ctx, "replicated-insert", kvTxn, ieOverrides, query, datums...); err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", query.SQL, err.Error())
 		return err
 	}
@@ -224,6 +244,10 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row,
 ) error {
+	var kvTxn *kv.Txn
+	if txn != nil {
+		kvTxn = txn.KV()
+	}
 	datums := lww.scratch.datums[:0]
 	if err := row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		datums = append(datums, d)
@@ -235,7 +259,7 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 	datums = append(datums, &lww.scratch.ts)
 	lww.scratch.datums = datums[:0]
 	deleteQuery := lww.queryBuffer.deleteQueries[row.TableID]
-	if _, err := txn.ExecParsed(ctx, "replicated-delete", txn.KV(), attributeToUser, deleteQuery, datums...); err != nil {
+	if _, err := lww.ie.ExecParsed(ctx, "replicated-delete", kvTxn, ieOverrides, deleteQuery, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", deleteQuery.SQL, err.Error())
 		return err
 	}

@@ -920,6 +920,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.OptimizerUseHistograms {
 		sd.OptimizerUseHistograms = true
 	}
+	if o.DisableChangefeedReplication {
+		sd.DisableChangefeedReplication = true
+	}
 
 	if o.MultiOverride != "" {
 		overrides := strings.Split(o.MultiOverride, ",")

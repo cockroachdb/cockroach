@@ -54,7 +54,11 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 					// evaluating INSERT stmts via the internal executor, we'll
 					// inject errors for them so that the processing of the KV
 					// request stops once it reaches the KV client.
-					if !discardWrite.Load() || !ba.IsWrite() || len(ba.Requests) != 1 {
+					//
+					// With explicit txns we expect to have a batch with a
+					// single request, with implicit txns - with two requests
+					// (second being EndTxn).
+					if !discardWrite.Load() || !ba.IsWrite() || len(ba.Requests) > 2 {
 						return nil
 					}
 					switch req := ba.Requests[0].GetInner().(type) {
@@ -88,7 +92,7 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
 		int32(desc.GetID()): *desc.TableDesc(),
-	})
+	}, s.InternalExecutor().(isql.Executor))
 	require.NoError(b, err)
 
 	// We'll be simulating processing the same INSERT over and over in the loop.
@@ -96,33 +100,49 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 	keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	key = keyValue.Key
 
-	for _, tc := range []struct {
-		name      string
-		prevValue roachpb.Value
-	}{
-		{name: "noPrevValue"},
-		{name: "withPrevValue", prevValue: keyValue.Value},
-	} {
-		b.Run(tc.name, func(b *testing.B) {
-			b.ReportAllocs()
-			numInjectedErrors.Store(0)
-			defer discardWrite.Store(false)
-			discardWrite.Store(true)
-			var lastTxnErr, lastRowErr error
-			var i int
-			for i = 0; i < b.N; i++ {
-				// We need to start a fresh Txn since we're injecting an error.
-				lastTxnErr = s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-					// The error is expected here due to injected error.
-					lastRowErr = rp.ProcessRow(ctx, txn, keyValue, tc.prevValue)
-					keyValue.Value.Timestamp.WallTime += 1
-					return nil
-				})
-			}
-			require.Error(b, lastTxnErr)
-			require.Error(b, lastRowErr)
-			// Sanity check that an error was injected on each iteration.
-			require.Equal(b, numInjectedErrors.Load(), int64(i))
-		})
+	for _, implicitTxn := range []bool{false, true} {
+		namePrefix := "explicitTxn"
+		if implicitTxn {
+			namePrefix = "implicitTxn"
+		}
+		for _, tc := range []struct {
+			name      string
+			prevValue roachpb.Value
+		}{
+			{name: "noPrevValue"},
+			{name: "withPrevValue", prevValue: keyValue.Value},
+		} {
+			b.Run(namePrefix+"/"+tc.name, func(b *testing.B) {
+				b.ReportAllocs()
+				numInjectedErrors.Store(0)
+				defer discardWrite.Store(false)
+				discardWrite.Store(true)
+				var lastRowErr error
+				var i int
+				if implicitTxn {
+					for i = 0; i < b.N; i++ {
+						// The error is expected here due to injected error.
+						lastRowErr = rp.ProcessRow(ctx, nil /* txn */, keyValue, tc.prevValue)
+						keyValue.Value.Timestamp.WallTime += 1
+					}
+				} else {
+					var lastTxnErr error
+					for i = 0; i < b.N; i++ {
+						// We need to start a fresh Txn since we're injecting an
+						// error.
+						lastTxnErr = s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+							// The error is expected here due to injected error.
+							lastRowErr = rp.ProcessRow(ctx, txn, keyValue, tc.prevValue)
+							keyValue.Value.Timestamp.WallTime += 1
+							return nil
+						})
+					}
+					require.Error(b, lastTxnErr)
+				}
+				require.Error(b, lastRowErr)
+				// Sanity check that an error was injected on each iteration.
+				require.Equal(b, numInjectedErrors.Load(), int64(i))
+			})
+		}
 	}
 }
