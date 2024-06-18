@@ -4575,25 +4575,26 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err != nil {
 			return nil, nil, err
 		}
-		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		viewActOrViewActRedact, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
-		descs := all.OrderedDescriptors()
+		var descs catalog.Descriptors
+		// Admin or viewActivity roles have access to all information, so
+		// don't bother fetching all the descriptors unecessarily.
+		if !hasAdmin && !viewActOrViewActRedact {
+			all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+			if err != nil {
+				return nil, nil, err
+			}
+			descs = all.OrderedDescriptors()
+		}
 
 		privCheckerFunc := func(desc catalog.Descriptor) (bool, error) {
-			if hasAdmin {
-				return true, nil
-			}
-			viewActOrViewActRedact, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
-			// Return if we have permission or encountered an error.
-			if viewActOrViewActRedact || err != nil {
-				return viewActOrViewActRedact, err
-			}
 			return p.HasPrivilege(ctx, desc, privilege.ZONECONFIG, p.User())
 		}
 
-		hasPermission := false
+		hasPermission := hasAdmin || viewActOrViewActRedact
 		for _, desc := range descs {
 			if ok, err := privCheckerFunc(desc); err != nil {
 				return nil, nil, err
