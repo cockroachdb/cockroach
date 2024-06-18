@@ -63,6 +63,9 @@ func subscribeInternal(
 			}
 			return nil, err
 		}
+		if streamEvent.Batch != nil && isEmptyBatch(streamEvent.Batch) {
+			return nil, errors.New("unexpected empty batch in stream event (source cluster version may not be supported)")
+		}
 		bufferedEvent = &streamEvent
 		return parseEvent(bufferedEvent), nil
 	}
@@ -119,13 +122,18 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 			streamEvent.Batch.SplitPoints = streamEvent.Batch.SplitPoints[1:]
 		}
 
-		if len(streamEvent.Batch.KeyValues) == 0 &&
-			len(streamEvent.Batch.Ssts) == 0 &&
-			len(streamEvent.Batch.DelRanges) == 0 &&
-			len(streamEvent.Batch.SpanConfigs) == 0 &&
-			len(streamEvent.Batch.SplitPoints) == 0 {
+		if isEmptyBatch(streamEvent.Batch) {
 			streamEvent.Batch = nil
 		}
 	}
 	return event
+}
+
+func isEmptyBatch(b *streampb.StreamEvent_Batch) bool {
+	return len(b.KeyValues) == 0 &&
+		len(b.KeyValuesWithDiff) == 0 &&
+		len(b.Ssts) == 0 &&
+		len(b.DelRanges) == 0 &&
+		len(b.SpanConfigs) == 0 &&
+		len(b.SplitPoints) == 0
 }
