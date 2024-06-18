@@ -56,6 +56,15 @@ type InternalExecutorOverride struct {
 	// overrides are performed on the best-effort basis - see SessionData.Update
 	// for more details.
 	MultiOverride string
+	// AttributeToUser notifies the internal executor that the query is executed
+	// directly on the user's behalf, and as such it should be included into
+	// "external" / user-owned observability features (like SQL Activity page
+	// and number of statements executed).
+	//
+	// Note that unlike other fields in this struct, this boolean doesn't
+	// directly result in modification of the SessionData. Instead, it changes
+	// the construction of the connExecutor used for the query.
+	AttributeToUser bool
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not

@@ -832,7 +832,7 @@ func (s *Server) SetupConn(
 		clientComm,
 		memMetrics,
 		&s.Metrics,
-		s.sqlStats.GetApplicationStats(sd.ApplicationName, false /* internal */),
+		s.sqlStats.GetApplicationStats(sd.ApplicationName),
 		sessionID,
 		false, /* fromOuterTxn */
 		nil,   /* postSetupFn */
@@ -1150,7 +1150,7 @@ func (s *Server) newConnExecutor(
 	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
-		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName, false /* internal */)
+		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName)
 	}
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())

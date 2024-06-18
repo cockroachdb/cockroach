@@ -98,6 +98,7 @@ type Executor interface {
 		ctx context.Context,
 		opName string,
 		txn *kv.Txn,
+		o sessiondata.InternalExecutorOverride,
 		parsedStmt statements.Statement[tree.Statement],
 		qargs ...interface{},
 	) (int, error)
