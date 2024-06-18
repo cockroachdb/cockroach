@@ -65,6 +65,9 @@ type InternalExecutorOverride struct {
 	// directly result in modification of the SessionData. Instead, it changes
 	// the construction of the connExecutor used for the query.
 	AttributeToUser bool
+	// DisableChangefeedReplication, when true, disables changefeed events from
+	// being emitted for changes to data made in a session.
+	DisableChangefeedReplication bool
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
