@@ -829,10 +829,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// in raft. This will also eliminate the "side channel" plumbing hack with
 			// this bytesAccount.
 			syncRd := raftGroup.Ready()
-			// We apply committed entries during this handleRaftReady, so it is ok to
-			// release the corresponding memory tokens at the end of this func. Next
-			// time we enter this function, the account will be empty again.
-			defer r.detachRaftEntriesMonitorRaftMuLocked()
 
 			logRaftReady(ctx, syncRd)
 			asyncRd := makeAsyncReady(syncRd)
@@ -854,6 +850,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		unquiesceAndWakeLeader := hasReady || numFlushed > 0 || len(r.mu.proposals) > 0
 		return unquiesceAndWakeLeader, nil
 	})
+	if hasReady {
+		// We called r.attachRaftEntriesMonitorRaftMuLocked() above, so need to
+		// detach the byte size monitor.
+		//
+		// We apply committed entries during this handleRaftReady, so it is ok to
+		// release the corresponding memory tokens at the end of this func. Next
+		// time we enter this function, the account will be empty again.
+		defer r.detachRaftEntriesMonitorRaftMuLocked()
+	}
+
 	r.mu.applyingEntries = hasMsg(msgStorageApply)
 	pausedFollowers := r.mu.pausedFollowers
 	r.mu.Unlock()
