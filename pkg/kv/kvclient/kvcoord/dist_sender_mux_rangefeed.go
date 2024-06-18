@@ -423,6 +423,8 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 		toRestart := ms.close()
 
+		// TODO(wenyihu6): rework this - doesn't feel right to call
+		// handleRangefeedError here but seems needed for unit tests
 		// make sure that the underlying error is not fatal. If it is, there is no
 		// reason to restart each rangefeed, so just bail out.
 		if _, err := handleRangefeedError(ctx, m.metrics, recvErr, false); err != nil {
@@ -535,7 +537,6 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 func (m *rangefeedMuxer) restartActiveRangeFeed(
 	ctx context.Context, active *activeMuxRangeFeed, reason error,
 ) error {
-	m.metrics.Errors.RangefeedRestartRanges.Inc(1)
 	active.setLastError(reason)
 
 	// Release catchup scan reservation if any -- we will acquire another
