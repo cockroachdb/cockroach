@@ -38,6 +38,7 @@ go_library(
         "migration.go",
         "node.go",
         "node_http_router.go",
+        "node_stream_muxer.go",
         "node_tenant.go",
         "node_tombstone_storage.go",
         "nodes_response.go",
