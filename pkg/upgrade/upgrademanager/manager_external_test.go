@@ -831,7 +831,7 @@ func TestMigrationFailure(t *testing.T) {
 	t.Logf("test will fail at version: %s", failVersion.String())
 
 	// Create a storage cluster for the tenant.
-	s, goDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
 			SQLEvalContext: &eval.TestingKnobs{
@@ -840,12 +840,6 @@ func TestMigrationFailure(t *testing.T) {
 		},
 	})
 	defer s.Stopper().Stop(ctx)
-
-	// Set the version override so that the tenant is able to upgrade. If this is
-	// not set, the tenant treats the storage cluster as if it had the oldest
-	// supported binary version.
-	_, err := goDB.Exec(`ALTER TENANT ALL SET CLUSTER SETTING version = $1`, endVersion.String())
-	require.NoError(t, err)
 
 	// setting failUpgrade to false disables the upgrade error logic.
 	var failUpgrade atomic.Bool
@@ -910,7 +904,7 @@ func TestMigrationFailure(t *testing.T) {
 	checkSettingVersion(t, startVersion)
 
 	// Try to finalize.
-	_, err = db.Exec(`SET CLUSTER SETTING version = $1`, endVersion.String())
+	_, err := db.Exec(`SET CLUSTER SETTING version = $1`, endVersion.String())
 	require.Error(t, err)
 	checkActiveVersion(t, fenceVersion)
 	// Note: we don't check the setting version here because the fence setting
