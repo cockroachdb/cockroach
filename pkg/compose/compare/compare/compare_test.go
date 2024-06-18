@@ -15,11 +15,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
+	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -42,6 +44,16 @@ func TestCompare(t *testing.T) {
 	// N.B. randomized SQL workload performed by this test may require CCL
 	var license = envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
 	require.NotEmptyf(t, license, "COCKROACH_DEV_LICENSE must be set")
+
+	// Initialize GEOS libraries so that the test can use geospatial types.
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, path.Join(workingDir, "lib"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	uris := map[string]struct {
 		addr string

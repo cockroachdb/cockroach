@@ -49,13 +49,6 @@ type testRangefeedClient struct {
 	count func()
 }
 
-func (c *testRangefeedClient) RangeFeed(
-	ctx context.Context, args *kvpb.RangeFeedRequest, opts ...grpc.CallOption,
-) (kvpb.Internal_RangeFeedClient, error) {
-	defer c.count()
-	panic(errors.AssertionFailedf("unexpected call to RangeFeed"))
-}
-
 func (c *testRangefeedClient) MuxRangeFeed(
 	ctx context.Context, opts ...grpc.CallOption,
 ) (kvpb.Internal_MuxRangeFeedClient, error) {

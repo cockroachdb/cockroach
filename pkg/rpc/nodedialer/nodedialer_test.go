@@ -423,10 +423,6 @@ func (*internalServer) RangeLookup(
 	panic("unimplemented")
 }
 
-func (*internalServer) RangeFeed(*kvpb.RangeFeedRequest, kvpb.Internal_RangeFeedServer) error {
-	panic("unimplemented")
-}
-
 func (s *internalServer) MuxRangeFeed(server kvpb.Internal_MuxRangeFeedServer) error {
 	panic("implement me")
 }

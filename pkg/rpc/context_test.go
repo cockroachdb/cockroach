@@ -274,7 +274,6 @@ var _ kvpb.InternalServer = &internalServer{}
 type internalServer struct {
 	// rangeFeedEvents are returned on RangeFeed() calls.
 	rangeFeedEvents   []kvpb.RangeFeedEvent
-	rfServerStream    kvpb.Internal_RangeFeedServer
 	muxRfServerStream kvpb.Internal_MuxRangeFeedServer
 }
 
@@ -311,17 +310,6 @@ func (*internalServer) RangeLookup(
 	context.Context, *kvpb.RangeLookupRequest,
 ) (*kvpb.RangeLookupResponse, error) {
 	panic("unimplemented")
-}
-
-func (s *internalServer) RangeFeed(
-	_ *kvpb.RangeFeedRequest, stream kvpb.Internal_RangeFeedServer,
-) error {
-	s.rfServerStream = stream
-	err := s.singleRangeFeed(stream)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (s *internalServer) singleRangeFeed(sink kvpb.RangeFeedEventSink) error {
