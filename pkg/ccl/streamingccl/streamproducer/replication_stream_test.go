@@ -327,6 +327,7 @@ func encodeSpecForSpans(
 		PreviousReplicatedTimestamp: previousReplicatedTime,
 		Spans:                       spans,
 		Progress:                    progress,
+		WrappedEvents:               true,
 		Config: streampb.StreamPartitionSpec_ExecutionConfig{
 			MinCheckpointFrequency: 10 * time.Millisecond,
 		},
