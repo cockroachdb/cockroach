@@ -14,16 +14,16 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -57,10 +57,8 @@ func testBase(
 	sc := ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	// cancelCh ensures that async goroutines terminate if the test
-	// goroutine terminates due to a Fatal call or a panic.
-	cancelCh := make(chan struct{})
-	defer func() { close(cancelCh) }()
+	logHangWg := sync.WaitGroup{}
+	logHangWg.Add(1)
 
 	// seenMessage is true after the request predicate
 	// has seen the expected message from the client.
@@ -78,7 +76,7 @@ func testBase(
 		if hangServer {
 			// The test is requesting the server to simulate a timeout. Just
 			// do nothing until the test terminates.
-			<-cancelCh
+			logHangWg.Wait()
 		} else {
 			// The test is expecting some message via a predicate.
 			if err := fn(r.Header, string(buf)); err != nil {
@@ -90,45 +88,11 @@ func testBase(
 		}
 	}
 
-	{
-		// Start the HTTP server that receives the logging events from the
-		// test.
-
-		l, err := net.Listen("tcp", "127.0.0.1:")
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, port, err := addr.SplitHostPort(l.Addr().String(), "port")
-		if err != nil {
-			t.Fatal(err)
-		}
-		*defaults.Address += ":" + port
-		s := http.Server{Handler: http.HandlerFunc(handler)}
-
-		// serverErrCh collects errors and signals the termination of the
-		// server async goroutine.
-		serverErrCh := make(chan error, 1)
-		go func() {
-			defer func() { close(serverErrCh) }()
-			err := s.Serve(l)
-			if !errors.Is(err, http.ErrServerClosed) {
-				select {
-				case serverErrCh <- err:
-				case <-cancelCh:
-				}
-			}
-		}()
-
-		// At the end of this function, close the server
-		// allowing the above goroutine to finish and close serverClosedCh
-		// allowing the deferred read to proceed and this function to return.
-		// (Basically, it's a WaitGroup of one.)
-		defer func() {
-			require.NoError(t, s.Close())
-			serverErr := <-serverErrCh
-			require.NoError(t, serverErr)
-		}()
-	}
+	// Start the HTTP server that receives the logging events from the
+	// test.
+	s2 := httptest.NewServer(http.HandlerFunc(handler))
+	defer s2.Close()
+	defaults.Address = &s2.URL
 
 	// Set up a logging configuration with the server we've just set up
 	// as target for the OPS channel.
@@ -160,7 +124,16 @@ func testBase(
 		t.Error("Log call exceeded timeout")
 	}
 
+	// If we don't properly hang in the handler when we want to test a
+	// timeout, we'll just log very quickly. This check ensures that we
+	// catch that testing error.
+	if deadline > 0 && logDuration < *defaults.Timeout {
+		require.Greaterf(t, logDuration, *defaults.Timeout,
+			"Log call was too fast, expected to be greater than %s, got %s", defaults.Timeout.String(), logDuration.String())
+	}
+
 	if hangServer {
+		logHangWg.Done()
 		return
 	}
 
@@ -176,11 +149,9 @@ func testBase(
 func TestMessageReceived(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	address := "http://localhost" // testBase appends the port
 	timeout := 5 * time.Second
 	tb := true
 	defaults := logconfig.HTTPDefaults{
-		Address:     &address,
 		Timeout:     &timeout,
 		Compression: &logconfig.NoneCompression,
 
@@ -208,11 +179,9 @@ func TestMessageReceived(t *testing.T) {
 func TestHTTPSinkTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	address := "http://localhost" // testBase appends the port
-	timeout := time.Millisecond
+	timeout := time.Millisecond * 100
 	tb := true
 	defaults := logconfig.HTTPDefaults{
-		Address: &address,
 		Timeout: &timeout,
 
 		// We need to disable keepalives otherwise the HTTP server in the
@@ -231,13 +200,11 @@ func TestHTTPSinkTimeout(t *testing.T) {
 func TestHTTPSinkContentTypeJSON(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	address := "http://localhost" // testBase appends the port
 	timeout := 5 * time.Second
 	tb := true
 	format := "json-fluent"
 	expectedContentType := "application/json"
 	defaults := logconfig.HTTPDefaults{
-		Address: &address,
 		Timeout: &timeout,
 
 		// We need to disable keepalives otherwise the HTTP server in the
@@ -266,13 +233,11 @@ func TestHTTPSinkContentTypeJSON(t *testing.T) {
 func TestHTTPSinkContentTypePlainText(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	address := "http://localhost" // testBase appends the port
 	timeout := 5 * time.Second
 	tb := true
 	format := "crdb-v1"
 	expectedContentType := "text/plain"
 	defaults := logconfig.HTTPDefaults{
-		Address: &address,
 		Timeout: &timeout,
 
 		// We need to disable keepalives otherwise the HTTP server in the
@@ -299,14 +264,12 @@ func TestHTTPSinkContentTypePlainText(t *testing.T) {
 func TestHTTPSinkHeadersAndCompression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	address := "http://localhost" // testBase appends the port
 	timeout := 5 * time.Second
 	tb := true
 	format := "json"
 	expectedContentType := "application/json"
 	expectedContentEncoding := logconfig.GzipCompression
 	defaults := logconfig.HTTPDefaults{
-		Address: &address,
 		Timeout: &timeout,
 
 		// We need to disable keepalives otherwise the HTTP server in the

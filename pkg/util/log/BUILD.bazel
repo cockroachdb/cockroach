@@ -174,7 +174,6 @@ go_test(
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
-        "//pkg/util/netutil/addr",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
