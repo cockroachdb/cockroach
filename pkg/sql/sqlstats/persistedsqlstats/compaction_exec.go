@@ -113,7 +113,7 @@ func (c *StatsCompactor) getRowCountForShard(
 	row, err := c.db.Executor().QueryRowEx(ctx,
 		"scan-row-count",
 		nil,
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		stmt,
 		shardIdx,
 	)
@@ -210,7 +210,7 @@ func (c *StatsCompactor) executeDeleteStmt(
 	it, err := c.db.Executor().QueryIteratorEx(ctx,
 		"delete-old-sql-stats",
 		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		delStmt,
 		qargs...,
 	)

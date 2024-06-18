@@ -333,6 +333,14 @@ const (
 	LockingName = "locking"
 )
 
+// When providing SessionData overrides to the internal executor,
+// we need to use pointers to specify the QoSLevel. Since we can't
+// use pointers to constants, we define these variables to use in
+// those cases.
+var (
+	UserLowQoS = UserLow
+)
+
 var qosLevelsDict = map[QoSLevel]string{
 	SystemLow:  SystemLowName,
 	TTLLow:     TTLLowName,
