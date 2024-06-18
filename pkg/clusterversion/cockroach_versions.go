@@ -251,6 +251,11 @@ const (
 	// system.statement_diagnostics_requests table.
 	V24_2_StmtDiagRedacted
 
+	// V24_2_DeleteAllTenantSettingsVersion is the migration that
+	// deleted the `system.tenant_settings` row for the `version`
+	// setting and tenant_id = 0 (all tenants).
+	V24_2_DeleteAllTenantSettingsVersion
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -310,7 +315,8 @@ var versionTable = [numKeys]roachpb.Version{
 	// v24.2 versions. Internal versions must be even.
 	V24_2Start: {Major: 24, Minor: 1, Internal: 2},
 
-	V24_2_StmtDiagRedacted: {Major: 24, Minor: 1, Internal: 4},
+	V24_2_StmtDiagRedacted:               {Major: 24, Minor: 1, Internal: 4},
+	V24_2_DeleteAllTenantSettingsVersion: {Major: 24, Minor: 1, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

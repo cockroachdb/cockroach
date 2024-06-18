@@ -132,6 +132,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"delete all-tenants version row in system.tenant_settings",
+		clusterversion.V24_2_DeleteAllTenantSettingsVersion.Version(),
+		upgrade.NoPrecondition,
+		deleteAllTenantsVersionTenantSettings,
+		upgrade.RestoreActionNotRequired("TODO"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

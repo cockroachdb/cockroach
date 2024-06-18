@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "upgrades",
     srcs = [
+        "delete_all_tenants_version_tenant_settings.go",
         "descriptor_utils.go",
         "first_upgrade.go",
         "permanent_create_jobs_metrics_polling_job.go",
@@ -71,6 +72,7 @@ go_test(
     size = "large",
     srcs = [
         "builtins_test.go",
+        "delete_all_tenants_version_tenant_settings_test.go",
         "descriptor_utils_test.go",
         "first_upgrade_test.go",
         "helpers_test.go",
