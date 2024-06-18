@@ -645,7 +645,23 @@ func (s *SettingsWatcher) setSystemVisibleDefault(ctx context.Context, key setti
 
 	log.VEventf(ctx, 1, "propagating read-only default %+v", payload)
 
-	s.notifySystemVisibleChange(ctx, []kvpb.TenantSetting{payload})
+	// Inject the current cluster version in the overrides to work
+	// around the possibility of incorrect data in the
+	// `system.tenant_settings` table. See #125702 for details.
+	//
+	// TODO(multitenant): remove this logic once the minimum supported
+	// version is 24.2+.
+	overrides := []kvpb.TenantSetting{
+		payload,
+		{
+			InternalKey: clusterversion.KeyVersionSetting,
+			Value: settings.EncodedValue{
+				Type:  settings.VersionSettingValueType,
+				Value: s.settings.Version.ActiveVersion(ctx).String(),
+			},
+		},
+	}
+	s.notifySystemVisibleChange(ctx, overrides)
 }
 
 func (s *SettingsWatcher) getSettingAndValue(key settings.InternalKey) (bool, kvpb.TenantSetting) {
