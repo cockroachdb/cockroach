@@ -41,11 +41,12 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 	}
 	for i := range disableRuleSpecs {
 		disableRuleSpec := &disableRuleSpecs[i]
-		for _, setupName := range []string{sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+		for _, setupName := range []string{sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName,
+			sqlsmith.RandMultiRegionSetupName} {
 			setupName := setupName
 			var clusterSpec spec.ClusterSpec
 			switch setupName {
-			case sqlsmith.SeedMultiRegionSetupName:
+			case sqlsmith.SeedMultiRegionSetupName, sqlsmith.RandMultiRegionSetupName:
 				clusterSpec = r.MakeClusterSpec(9, spec.Geo(), spec.GatherCores())
 			default:
 				clusterSpec = r.MakeClusterSpec(1)
@@ -63,8 +64,10 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 				Suites:           registry.Suites(registry.Nightly),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runQueryComparison(ctx, t, c, &queryComparisonTest{
-						name:      "unoptimized-query-oracle",
-						setupName: setupName,
+						name:          "unoptimized-query-oracle",
+						setupName:     setupName,
+						isMultiRegion: clusterSpec.Geo,
+						nodeCount:     clusterSpec.NodeCount,
 						run: func(s queryGenerator, r *rand.Rand, h queryComparisonHelper) error {
 							return runUnoptimizedQueryOracleImpl(s, r, h, disableRuleSpec.disableRuleProbability)
 						},

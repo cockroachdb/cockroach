@@ -29,13 +29,14 @@ import (
 const WorkloadReplaySetupName = "workload-replay"
 
 func registerCostFuzz(r registry.Registry) {
-	for _, setupName := range []string{WorkloadReplaySetupName, sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+	for _, setupName := range []string{WorkloadReplaySetupName, sqlsmith.RandTableSetupName,
+		sqlsmith.SeedMultiRegionSetupName, sqlsmith.RandMultiRegionSetupName} {
 		setupName := setupName
 		redactResults := false
 		timeOut := time.Hour * 1
 		var clusterSpec spec.ClusterSpec
 		switch setupName {
-		case sqlsmith.SeedMultiRegionSetupName:
+		case sqlsmith.SeedMultiRegionSetupName, sqlsmith.RandMultiRegionSetupName:
 			clusterSpec = r.MakeClusterSpec(9, spec.Geo(), spec.GatherCores())
 		case WorkloadReplaySetupName:
 			clusterSpec = r.MakeClusterSpec(1)
@@ -63,7 +64,11 @@ func registerCostFuzz(r registry.Registry) {
 					return
 				}
 				runQueryComparison(ctx, t, c, &queryComparisonTest{
-					name: "costfuzz", setupName: setupName, run: runCostFuzzQuery,
+					name:          "costfuzz",
+					setupName:     setupName,
+					isMultiRegion: clusterSpec.Geo,
+					nodeCount:     clusterSpec.NodeCount,
+					run:           runCostFuzzQuery,
 				})
 			},
 			ExtraLabels: []string{"O-rsg"},
