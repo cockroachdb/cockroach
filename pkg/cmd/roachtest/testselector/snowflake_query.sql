@@ -8,20 +8,21 @@ with builds as (
   where
     start_date > dateadd(DAY, ?, current_date()) -- last "forPastDays" days
     and lower(status) = 'success' -- consider only successful builds
-    and branch_name = 'master' -- consider only builds from master branch
+    and branch_name = ? -- consider the builds from target branch
     and lower(name) like ? -- name is based on the suite and cloud e.g. '%roachtest nightly - gce%'
   group by 1
 ), test_stats as (
   -- for all the build IDs select do a inner join on all the tests
   select test_name, -- distinct test names
-         count(case when duration>0 then test_name end) as total_runs, -- all runs with duration>0 (excluding all ignored test runs)
+         count(case when duration>0 and status='SUCCESS' then test_name end) as total_runs, -- all successful runs with duration>0
          -- count by status
          count(case when status='SUCCESS' then test_name end) as success_count,
-         count(case when status='FAILURE' then test_name end) as failure_count,
+         -- count the number of failed tests. tests failed due to preempted VMs are ignored.
+         count(case when status='FAILURE' and details not like '%VMs preempted during the test run%' then test_name end) as failure_count,
          -- get the first_run and last_run only if the status is not UNKNOWN. This returns nil for runs that have never run
          min(case when status!='UNKNOWN' then b.first_run end) as first_run,
          max(case when status!='UNKNOWN' then b.last_run end) as last_run,
-         sum(duration) as total_duration -- the total duration of the test
+         sum(case when status='SUCCESS' then duration end) as total_duration -- the total duration of the tests that are successful
   from DATAMART_PROD.TEAMCITY.TESTS t
          -- inner join as explained in the beginning
          inner join builds b on
