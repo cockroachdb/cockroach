@@ -134,17 +134,17 @@ func (u *unstable) acceptInProgress() {
 // The method should only be called when the caller can attest that the entries
 // can not be overwritten by an in-progress log append. See the related comment
 // in newStorageAppendRespMsg.
-func (u *unstable) stableTo(id entryID) {
+func (u *unstable) stableTo(id entryID) bool {
 	gt, ok := u.maybeTerm(id.index)
 	if !ok {
 		// Unstable entry missing. Ignore.
 		u.logger.Infof("entry at index %d missing from unstable log; ignoring", id.index)
-		return
+		return false
 	}
 	if id.index < u.offset {
 		// Index matched unstable snapshot, not unstable entry. Ignore.
 		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", id.index)
-		return
+		return false
 	}
 	if gt != id.term {
 		// Term mismatch between unstable entry and specified entry. Ignore.
@@ -153,13 +153,14 @@ func (u *unstable) stableTo(id entryID) {
 		// stable storage and when they finished.
 		u.logger.Infof("entry at (index,term)=(%d,%d) mismatched with "+
 			"entry at (%d,%d) in unstable log; ignoring", id.index, id.term, id.index, gt)
-		return
+		return false
 	}
 	num := int(id.index + 1 - u.offset)
 	u.entries = u.entries[num:]
 	u.offset = id.index + 1
 	u.offsetInProgress = max(u.offsetInProgress, u.offset)
 	u.shrinkEntriesArray()
+	return true
 }
 
 // shrinkEntriesArray discards the underlying array used by the entries slice
@@ -181,11 +182,13 @@ func (u *unstable) shrinkEntriesArray() {
 	}
 }
 
-func (u *unstable) stableSnapTo(i uint64) {
-	if u.snapshot != nil && u.snapshot.Metadata.Index == i {
-		u.snapshot = nil
-		u.snapshotInProgress = false
+func (u *unstable) stableSnapTo(i uint64) bool {
+	if u.snapshot == nil || u.snapshot.Metadata.Index != i {
+		return false
 	}
+	u.snapshot = nil
+	u.snapshotInProgress = false
+	return true
 }
 
 func (u *unstable) restore(s pb.Snapshot) {
