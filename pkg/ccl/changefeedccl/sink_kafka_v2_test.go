@@ -2,6 +2,7 @@ package changefeedccl
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -26,6 +27,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kversion"
+	"github.com/twmb/franz-go/pkg/sasl"
 )
 
 // TODO: why no worky
@@ -274,26 +276,21 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 
 		opts := []check{
 			{"ClientID", "CockroachDB"},
-			{"Compression", kgo.NoCompression()},
-			{"RequiredAcks", kgo.NoAck()},
-			{"Version", nil}, // Unset.
-			{"DialTLSConfig", nil},
-			{"SASL", nil},
+			{"ProducerBatchCompression", []kgo.CompressionCodec{kgo.NoCompression()}},
+			{"RequiredAcks", kgo.LeaderAck()},
+			{"MaxVersions", kversion.Stable()}, // We don't set this but it's kgo's default.
+			{"DialTLSConfig", (*tls.Config)(nil)},
+			{"SASL", ([]sasl.Mechanism)(nil)},
 		}
 
 		client := fx.bs.client.(*kafkaSinkClient).client.(*kgo.Client)
 		for _, o := range opts {
-			vals := client.OptValues(o.opt) // This lets us distinguis between zero and unset.
-			var val any
-			if vals != nil {
-				val = vals[0]
-			}
-			assert.Equal(t, o.expected, val, "opt %q has value %v (expected %v)", o.opt, val, o.expected)
+			val := client.OptValue(o.opt)
+			assert.Equal(t, o.expected, val, "opt %q has value %+#v, expected %+#v", o.opt, val, o.expected)
 		}
 		assert.Equal(t, 1000, fx.bs.client.(*kafkaSinkClient).batchCfg.Messages)
 		assert.Equal(t, 0, fx.bs.client.(*kafkaSinkClient).batchCfg.Bytes)
-		assert.Equal(t, 1*time.Millisecond, fx.bs.client.(*kafkaSinkClient).batchCfg.Frequency)
-
+		assert.Equal(t, jsonDuration(1*time.Millisecond), fx.bs.client.(*kafkaSinkClient).batchCfg.Frequency)
 	})
 
 	t.Run("custom", func(t *testing.T) {
@@ -316,24 +313,19 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 
 		opts := []check{
 			{"ClientID", "test"},
-			{"Compression", kgo.GzipCompression()},
+			{"ProducerBatchCompression", []kgo.CompressionCodec{kgo.GzipCompression()}},
 			{"RequiredAcks", kgo.AllISRAcks()},
-			{"Version", kgo.MaxVersions(kversion.V3_6_0())},
+			{"MaxVersions", kversion.V3_6_0()},
 		}
 
 		client := fx.bs.client.(*kafkaSinkClient).client.(*kgo.Client)
 		for _, o := range opts {
-			vals := client.OptValues(o.opt)
-			var val any
-			if vals != nil {
-				val = vals[0]
-			}
-			assert.Equal(t, o.expected, val, "opt %q has value %v (expected %v)", o.opt, val, o.expected)
+			val := client.OptValue(o.opt)
+			assert.Equal(t, o.expected, val, "opt %q has value %+#v, expected %+#v", o.opt, val, o.expected)
 		}
-
 		assert.Equal(t, 100, fx.bs.client.(*kafkaSinkClient).batchCfg.Messages) // Takes the minimum of the two, for backwards compatibility.
 		assert.Equal(t, 1000, fx.bs.client.(*kafkaSinkClient).batchCfg.Bytes)
-		assert.Equal(t, 1*time.Second, fx.bs.client.(*kafkaSinkClient).batchCfg.Frequency)
+		assert.Equal(t, jsonDuration(1*time.Second), fx.bs.client.(*kafkaSinkClient).batchCfg.Frequency)
 	})
 }
 
@@ -448,7 +440,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 
 	q := u.Query()
 	if fx.topicOverride != "" {
-		q.Set("topic_override", fx.topicOverride)
+		q.Set("topic_name", fx.topicOverride)
 	}
 	if fx.topicPrefix != "" {
 		q.Set("topic_prefix", fx.topicPrefix)

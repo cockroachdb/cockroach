@@ -446,18 +446,19 @@ func buildKgoConfig(
 	}
 
 	switch sinkCfg.RequiredAcks {
-	case ``, `ONE`:
+	case ``, `ONE`, `1`: // This is our default.
 		// NOTE: idempotency is on by default, but is incompatible with acks<all. TODO: should we have it on by default? i feel like yes
 		opts = append(opts, kgo.RequiredAcks(kgo.LeaderAck()), kgo.DisableIdempotentWrite())
-	case `ALL`:
+	case `ALL`, `-1`:
 		opts = append(opts, kgo.RequiredAcks(kgo.AllISRAcks()))
-	case `NONE`:
+	case `NONE`, `0`:
 		opts = append(opts, kgo.RequiredAcks(kgo.NoAck()), kgo.DisableIdempotentWrite())
 	default:
 		return nil, errors.Errorf(`unknown required acks value: %s`, sinkCfg.RequiredAcks)
 	}
 
 	// TODO: remove this sarama dep
+	// NOTE: kgo lets you give multiple compression options in preference order, which is cool but the config json doesnt support that. Should we?
 	switch sarama.CompressionCodec(sinkCfg.Compression) {
 	case sarama.CompressionNone:
 		opts = append(opts, kgo.ProducerBatchCompression(kgo.NoCompression()))
