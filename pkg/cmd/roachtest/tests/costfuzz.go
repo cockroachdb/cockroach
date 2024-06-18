@@ -29,13 +29,14 @@ import (
 const WorkloadReplaySetupName = "workload-replay"
 
 func registerCostFuzz(r registry.Registry) {
-	for _, setupName := range []string{WorkloadReplaySetupName, sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+	for _, setupName := range []string{WorkloadReplaySetupName, sqlsmith.RandTableSetupName,
+		sqlsmith.SeedMultiRegionSetupName, sqlsmith.RandMultiRegionSetupName} {
 		setupName := setupName
 		redactResults := false
 		timeOut := time.Hour * 1
 		var clusterSpec spec.ClusterSpec
 		switch setupName {
-		case sqlsmith.SeedMultiRegionSetupName:
+		case sqlsmith.SeedMultiRegionSetupName, sqlsmith.RandMultiRegionSetupName:
 			clusterSpec = r.MakeClusterSpec(9, spec.Geo(), spec.GatherCores())
 		case WorkloadReplaySetupName:
 			clusterSpec = r.MakeClusterSpec(1)
@@ -63,7 +64,11 @@ func registerCostFuzz(r registry.Registry) {
 					return
 				}
 				runQueryComparison(ctx, t, c, &queryComparisonTest{
-					name: "costfuzz", setupName: setupName, run: runCostFuzzQuery,
+					name:          "costfuzz",
+					setupName:     setupName,
+					isMultiRegion: clusterSpec.Geo,
+					nodeCount:     clusterSpec.NodeCount,
+					run:           runCostFuzzQuery,
 				})
 			},
 			ExtraLabels: []string{"O-rsg"},
@@ -83,30 +88,34 @@ func runCostFuzzQuery(qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelp
 	}()
 
 	stmt := qgen.Generate()
+	conn, connInfo := h.chooseConn()
 
 	// First, run the statement without cost perturbation.
-	controlRows, err := h.runQuery(stmt)
+	controlRows, err := h.runQuery(stmt, conn, connInfo)
 	if err != nil {
 		// Skip statements that fail with an error.
 		//nolint:returnerrcheck
 		return nil
 	}
 
+	// Maybe use a different connection for the second query.
+	conn, connInfo = h.chooseConn()
+
 	seedStmt := fmt.Sprintf("SET testing_optimizer_random_seed = %d", rnd.Int63())
-	if err := h.execStmt(seedStmt); err != nil {
+	if err := h.execStmt(seedStmt, conn, connInfo); err != nil {
 		h.logStatements()
 		return h.makeError(err, "failed to set random seed")
 	}
 	// Perturb costs such that an expression with cost c will be randomly assigned
 	// a new cost in the range [0, 2*c).
 	perturbCostsStmt := "SET testing_optimizer_cost_perturbation = 1.0"
-	if err := h.execStmt(perturbCostsStmt); err != nil {
+	if err := h.execStmt(perturbCostsStmt, conn, connInfo); err != nil {
 		h.logStatements()
 		return h.makeError(err, "failed to perturb costs")
 	}
 
 	// Then, rerun the statement with cost perturbation.
-	perturbRows, err2 := h.runQuery(stmt)
+	perturbRows, err2 := h.runQuery(stmt, conn, connInfo)
 	if err2 != nil {
 		// If the perturbed plan fails with an internal error while the normal plan
 		// succeeds, we'd like to know, so consider this a test failure.
@@ -146,12 +155,12 @@ func runCostFuzzQuery(qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelp
 
 	// Finally, disable cost perturbation for the next statement.
 	resetSeedStmt := "RESET testing_optimizer_random_seed"
-	if err := h.execStmt(resetSeedStmt); err != nil {
+	if err := h.execStmt(resetSeedStmt, conn, connInfo); err != nil {
 		h.logStatements()
 		return h.makeError(err, "failed to reset random seed")
 	}
 	resetPerturbCostsStmt := "RESET testing_optimizer_cost_perturbation"
-	if err := h.execStmt(resetPerturbCostsStmt); err != nil {
+	if err := h.execStmt(resetPerturbCostsStmt, conn, connInfo); err != nil {
 		h.logStatements()
 		return h.makeError(err, "failed to disable cost perturbation")
 	}

@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -41,11 +42,12 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 	}
 	for i := range disableRuleSpecs {
 		disableRuleSpec := &disableRuleSpecs[i]
-		for _, setupName := range []string{sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+		for _, setupName := range []string{sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName,
+			sqlsmith.RandMultiRegionSetupName} {
 			setupName := setupName
 			var clusterSpec spec.ClusterSpec
 			switch setupName {
-			case sqlsmith.SeedMultiRegionSetupName:
+			case sqlsmith.SeedMultiRegionSetupName, sqlsmith.RandMultiRegionSetupName:
 				clusterSpec = r.MakeClusterSpec(9, spec.Geo(), spec.GatherCores())
 			default:
 				clusterSpec = r.MakeClusterSpec(1)
@@ -63,8 +65,10 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 				Suites:           registry.Suites(registry.Nightly),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runQueryComparison(ctx, t, c, &queryComparisonTest{
-						name:      "unoptimized-query-oracle",
-						setupName: setupName,
+						name:          "unoptimized-query-oracle",
+						setupName:     setupName,
+						isMultiRegion: clusterSpec.Geo,
+						nodeCount:     clusterSpec.NodeCount,
 						run: func(s queryGenerator, r *rand.Rand, h queryComparisonHelper) error {
 							return runUnoptimizedQueryOracleImpl(s, r, h, disableRuleSpec.disableRuleProbability)
 						},
@@ -106,28 +110,53 @@ func runUnoptimizedQueryOracleImpl(
 		}
 	}()
 
-	// First, run the statement with some optimizer rules and vectorized execution
-	// disabled.
-	seedStmt := fmt.Sprintf("SET testing_optimizer_random_seed = %d", rnd.Int63())
-	if err := h.execStmt(seedStmt); err != nil {
-		return h.makeError(err, "failed to set random seed")
-	}
-	disableOptimizerStmt := fmt.Sprintf(
-		"SET testing_optimizer_disable_rule_probability = %f", disableRuleProbability,
-	)
-	if err := h.execStmt(disableOptimizerStmt); err != nil {
-		return h.makeError(err, "failed to disable optimizer rules")
-	}
-	disableVectorizeStmt := "SET vectorize = off"
-	if err := h.execStmt(disableVectorizeStmt); err != nil {
-		return h.makeError(err, "failed to disable the vectorized engine")
-	}
-	disableDistSQLStmt := "SET distsql = off"
-	if err := h.execStmt(disableDistSQLStmt); err != nil {
-		return h.makeError(err, "failed to disable DistSQL")
+	// Choose the connections for the unoptimized and optimized queries.
+	uConn, uConnInfo := h.chooseConn()
+	oConn, oConnInfo := h.chooseConn()
+
+	// Disable optimizer rules, the vectorized execution engine, and DistSQL on
+	// both connections.
+	seed := rnd.Int63()
+	for _, c := range []struct {
+		conn     *gosql.DB
+		connInfo string
+	}{
+		{uConn, uConnInfo},
+		{oConn, oConnInfo},
+	} {
+		for _, s := range []struct {
+			stmt string
+			kind string
+		}{
+			{
+				stmt: fmt.Sprintf("SET testing_optimizer_random_seed = %d", seed),
+				kind: "set random seed",
+			},
+			{
+				stmt: fmt.Sprintf("SET testing_optimizer_disable_rule_probability = %f", disableRuleProbability),
+				kind: "disable optimizer rules",
+			},
+			{
+				stmt: "SET vectorize = off",
+				kind: "disable the vectorized engine",
+			},
+			{
+				stmt: "SET distsql = off",
+				kind: "disable DistSQL",
+			},
+		} {
+			if err := h.execStmt(s.stmt, c.conn, c.connInfo); err != nil {
+				return h.makeError(err, "failed to "+s.kind)
+			}
+		}
+		if uConn == oConn {
+			break
+		}
 	}
 
-	unoptimizedRows, err := h.runQuery(stmt)
+	// Run the statement with optimizer rules, the vectorized execution engine,
+	// and DistSQL disabled.
+	unoptimizedRows, err := h.runQuery(stmt, uConn, uConnInfo)
 	if err != nil {
 		// Skip unoptimized statements that fail with an error (unless it's an
 		// internal error).
@@ -142,26 +171,27 @@ func runUnoptimizedQueryOracleImpl(
 		return nil
 	}
 
-	// It then changes the settings to re-enable optimizer and/or re-enable
-	// vectorized execution and/or disable not visible index feature.
+	// Change the settings for the oConn connection to re-enable optimizer and/or
+	// re-enable vectorized execution and/or disable not
+	// visible index feature and/or re-enable DistSQL.
 	resetSeedStmt := "RESET testing_optimizer_random_seed"
 	resetOptimizerStmt := "RESET testing_optimizer_disable_rule_probability"
 	resetVectorizeStmt := "RESET vectorize"
 	enable := rnd.Intn(3)
 	if enable > 0 {
-		if err := h.execStmt(resetSeedStmt); err != nil {
+		if err := h.execStmt(resetSeedStmt, oConn, oConnInfo); err != nil {
 			return h.makeError(err, "failed to reset random seed")
 		}
-		if err := h.execStmt(resetOptimizerStmt); err != nil {
+		if err := h.execStmt(resetOptimizerStmt, oConn, oConnInfo); err != nil {
 			return h.makeError(err, "failed to reset the optimizer")
 		}
 	}
 	if enable < 2 {
-		if err := h.execStmt(resetVectorizeStmt); err != nil {
+		if err := h.execStmt(resetVectorizeStmt, oConn, oConnInfo); err != nil {
 			return h.makeError(err, "failed to reset the vectorized engine")
 		}
 		// Disable not visible index feature to run the statement with more optimization.
-		if err := h.execStmt("SET optimizer_use_not_visible_indexes = true"); err != nil {
+		if err := h.execStmt("SET optimizer_use_not_visible_indexes = true", oConn, oConnInfo); err != nil {
 			return h.makeError(err, "failed to disable not visible index feature")
 		}
 	}
@@ -170,14 +200,14 @@ func runUnoptimizedQueryOracleImpl(
 		if roll == 3 {
 			distSQLMode = "on"
 		}
-		if err := h.execStmt(fmt.Sprintf("SET distsql = %s", distSQLMode)); err != nil {
+		if err := h.execStmt(fmt.Sprintf("SET distsql = %s", distSQLMode), oConn, oConnInfo); err != nil {
 			return h.makeError(err, "failed to re-enable DistSQL")
 		}
 	}
 
-	// Then, rerun the statement with optimization and/or vectorization enabled
-	// and/or not visible index feature disabled.
-	optimizedRows, err := h.runQuery(stmt)
+	// Then, rerun the statement with optimization and/or vectorization and/or
+	// DistSQL enabled and/or not visible index feature disabled.
+	optimizedRows, err := h.runQuery(stmt, oConn, oConnInfo)
 	if err != nil {
 		// If the optimized plan fails with an internal error while the unoptimized plan
 		// succeeds, we'd like to know, so consider this a test failure.
@@ -211,17 +241,45 @@ func runUnoptimizedQueryOracleImpl(
 	}
 
 	// Reset all settings in case they weren't reset above.
-	if err := h.execStmt(resetSeedStmt); err != nil {
-		return h.makeError(err, "failed to reset random seed")
-	}
-	if err := h.execStmt(resetOptimizerStmt); err != nil {
-		return h.makeError(err, "failed to reset the optimizer")
-	}
-	if err := h.execStmt(resetVectorizeStmt); err != nil {
-		return h.makeError(err, "failed to reset the vectorized engine")
-	}
-	if err := h.execStmt("RESET optimizer_use_not_visible_indexes"); err != nil {
-		return h.makeError(err, "failed to reset not visible index feature")
+	for _, c := range []struct {
+		conn     *gosql.DB
+		connInfo string
+	}{
+		{uConn, uConnInfo},
+		{oConn, oConnInfo},
+	} {
+		for _, s := range []struct {
+			stmt string
+			kind string
+		}{
+			{
+				stmt: resetSeedStmt,
+				kind: "reset random seed",
+			},
+			{
+				stmt: resetOptimizerStmt,
+				kind: "reset the optimizer",
+			},
+			{
+				stmt: resetVectorizeStmt,
+				kind: "reset the vectorized engine",
+			},
+			{
+				stmt: "RESET distsql",
+				kind: "reset DistSQL",
+			},
+			{
+				stmt: "RESET optimizer_use_not_visible_indexes",
+				kind: "reset not visible index feature",
+			},
+		} {
+			if err := h.execStmt(s.stmt, c.conn, c.connInfo); err != nil {
+				return h.makeError(err, "failed to "+s.kind)
+			}
+		}
+		if uConn == oConn {
+			break
+		}
 	}
 
 	return nil
