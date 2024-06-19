@@ -217,7 +217,7 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 	// don't clog up the rangefeed. Consider using async flushing.
 	pacer := makeCheckpointPacer(s.spec.MinCheckpointFrequency)
 	bufferedEvents := make([]streampb.StreamedSpanConfigEntry, 0)
-	batcher := makeStreamEventBatcher()
+	batcher := makeStreamEventBatcher(s.spec.WrappedEvents)
 	frontier := makeSpanConfigFrontier(s.spec.Span)
 
 	for {

@@ -717,7 +717,7 @@ func (sip *streamIngestionProcessor) handleEvent(event PartitionEvent) error {
 
 	if event.Type() == streamingccl.KVEvent {
 		sip.metrics.AdmitLatency.RecordValue(
-			timeutil.Since(event.GetKVs()[0].Value.Timestamp.GoTime()).Nanoseconds())
+			timeutil.Since(event.GetKVs()[0].KeyValue.Value.Timestamp.GoTime()).Nanoseconds())
 	}
 
 	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
@@ -802,13 +802,14 @@ func (sip *streamIngestionProcessor) bufferSST(sst *kvpb.RangeFeedSSTable) error
 				return err
 			}
 
-			return sip.bufferKVs([]roachpb.KeyValue{{
-				Key: keyVal.Key.Key,
-				Value: roachpb.Value{
-					RawBytes:  mvccValue.RawBytes,
-					Timestamp: keyVal.Key.Timestamp,
-				},
-			}})
+			return sip.bufferKVs([]streampb.StreamEvent_KV{{
+				KeyValue: roachpb.KeyValue{
+					Key: keyVal.Key.Key,
+					Value: roachpb.Value{
+						RawBytes:  mvccValue.RawBytes,
+						Timestamp: keyVal.Key.Timestamp,
+					},
+				}}})
 		}, func(rangeKeyVal storage.MVCCRangeKeyValue) error {
 			return sip.bufferRangeKeyVal(rangeKeyVal)
 		})
@@ -879,14 +880,15 @@ func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	return kvDB.AdminSplit(ctx, rekey, expiration)
 }
 
-func (sip *streamIngestionProcessor) bufferKVs(kvs []roachpb.KeyValue) error {
+func (sip *streamIngestionProcessor) bufferKVs(kvs []streampb.StreamEvent_KV) error {
 	// TODO: In addition to flushing when receiving a checkpoint event, we
 	// should also flush when we've buffered sufficient KVs. A buffering adder
 	// would save us here.
 	if kvs == nil {
 		return errors.New("kv event expected to have kv")
 	}
-	for _, kv := range kvs {
+	for _, ev := range kvs {
+		kv := ev.KeyValue
 		var err error
 		var ok bool
 		kv.Key, ok, err = sip.rekey(kv.Key)

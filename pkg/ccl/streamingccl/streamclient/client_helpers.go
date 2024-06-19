@@ -63,6 +63,9 @@ func subscribeInternal(
 			}
 			return nil, err
 		}
+		if streamEvent.Batch != nil && isEmptyBatch(streamEvent.Batch) {
+			return nil, errors.New("unexpected empty batch in stream event (source cluster version may not be supported)")
+		}
 		bufferedEvent = &streamEvent
 		return parseEvent(bufferedEvent), nil
 	}
@@ -102,12 +105,12 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 		case len(streamEvent.Batch.Ssts) > 0:
 			event = streamingccl.MakeSSTableEvent(streamEvent.Batch.Ssts[0])
 			streamEvent.Batch.Ssts = streamEvent.Batch.Ssts[1:]
-		case len(streamEvent.Batch.KeyValues) > 0:
-			event = streamingccl.MakeKVEvent(streamEvent.Batch.KeyValues)
-			streamEvent.Batch.KeyValues = nil
-		case len(streamEvent.Batch.KeyValuesWithDiff) > 0:
-			event = streamingccl.MakeKVWithDiffEvent(streamEvent.Batch.KeyValuesWithDiff)
-			streamEvent.Batch.KeyValuesWithDiff = nil
+		case len(streamEvent.Batch.DeprecatedKeyValues) > 0:
+			event = streamingccl.MakeKVEventFromKVs(streamEvent.Batch.DeprecatedKeyValues)
+			streamEvent.Batch.DeprecatedKeyValues = nil
+		case len(streamEvent.Batch.KVs) > 0:
+			event = streamingccl.MakeKVEvent(streamEvent.Batch.KVs)
+			streamEvent.Batch.KVs = nil
 		case len(streamEvent.Batch.DelRanges) > 0:
 			event = streamingccl.MakeDeleteRangeEvent(streamEvent.Batch.DelRanges[0])
 			streamEvent.Batch.DelRanges = streamEvent.Batch.DelRanges[1:]
@@ -119,13 +122,18 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 			streamEvent.Batch.SplitPoints = streamEvent.Batch.SplitPoints[1:]
 		}
 
-		if len(streamEvent.Batch.KeyValues) == 0 &&
-			len(streamEvent.Batch.Ssts) == 0 &&
-			len(streamEvent.Batch.DelRanges) == 0 &&
-			len(streamEvent.Batch.SpanConfigs) == 0 &&
-			len(streamEvent.Batch.SplitPoints) == 0 {
+		if isEmptyBatch(streamEvent.Batch) {
 			streamEvent.Batch = nil
 		}
 	}
 	return event
+}
+
+func isEmptyBatch(b *streampb.StreamEvent_Batch) bool {
+	return len(b.KVs) == 0 &&
+		len(b.DeprecatedKeyValues) == 0 &&
+		len(b.Ssts) == 0 &&
+		len(b.DelRanges) == 0 &&
+		len(b.SpanConfigs) == 0 &&
+		len(b.SplitPoints) == 0
 }
