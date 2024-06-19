@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamproducer
+package producer
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
