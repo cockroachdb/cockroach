@@ -487,7 +487,6 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 				batchTime := timeutil.Since(preBatchTime)
 
 				lrw.debug.RecordBatchApplied(batchTime, int64(batchEnd-batchStart))
-				lrw.metrics.BatchBytesHist.RecordValue(int64(batchStats.byteSize))
 				lrw.metrics.BatchHistNanos.RecordValue(batchTime.Nanoseconds())
 				flushByteSize.Add(int64(batchStats.byteSize))
 			}

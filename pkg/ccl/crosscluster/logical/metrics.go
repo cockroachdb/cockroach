@@ -65,12 +65,6 @@ var (
 		Measurement: "Logical bytes",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaReplicationBatchBytes = metric.Metadata{
-		Name:        "logical_replication.batch_bytes",
-		Help:        "Number of bytes in a given batch",
-		Measurement: "Bytes",
-		Unit:        metric.Unit_BYTES,
-	}
 	metaReplicationBatchHistNanos = metric.Metadata{
 		Name:        "logical_replication.batch_hist_nanos",
 		Help:        "Time spent flushing a batch",
@@ -87,7 +81,6 @@ type Metrics struct {
 	FlushRowCountHist     metric.IHistogram
 	FlushBytesHist        metric.IHistogram
 	FlushHistNanos        metric.IHistogram
-	BatchBytesHist        metric.IHistogram
 	BatchHistNanos        metric.IHistogram
 	CommitLatency         metric.IHistogram
 	ReplicatedTimeSeconds *metric.Gauge
@@ -123,12 +116,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		FlushBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationFlushBytesHist,
-			Duration:     histogramWindow,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
-		}),
-		BatchBytesHist: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaReplicationBatchBytes,
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
