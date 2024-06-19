@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingest
+package physical
 
 import (
 	"context"
@@ -342,7 +342,7 @@ func createInitialSplits(
 	destNodeCount int,
 	destTenantID roachpb.TenantID,
 ) error {
-	ctx, sp := tracing.ChildSpan(ctx, "streamingest.createInitialSplits")
+	ctx, sp := tracing.ChildSpan(ctx, "physical.createInitialSplits")
 	defer sp.Finish()
 
 	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(codec,

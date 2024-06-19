@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingest
+package physical
 
 import (
 	"context"
@@ -430,7 +430,7 @@ func maybeRevertToCutoverTimestamp(
 	ctx context.Context, p sql.JobExecContext, ingestionJob *jobs.Job,
 ) (hlc.Timestamp, bool, error) {
 
-	ctx, span := tracing.ChildSpan(ctx, "streamingest.revertToCutoverTimestamp")
+	ctx, span := tracing.ChildSpan(ctx, "physical.revertToCutoverTimestamp")
 	defer span.Finish()
 
 	// The update below sets the ReplicationStatus to
