@@ -66,12 +66,6 @@ var (
 		Measurement: "Seconds",
 		Unit:        metric.Unit_SECONDS,
 	}
-	metaJobProgressUpdates = metric.Metadata{
-		Name:        "logical_replication.job_progress_updates",
-		Help:        "Total number of updates to the ingestion job progress",
-		Measurement: "Job Updates",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaReplicationFlushRowCountHist = metric.Metadata{
 		Name:        "logical_replication.flush_row_count",
 		Help:        "Number of rows in a given flush",
@@ -83,12 +77,6 @@ var (
 		Help:        "Number of bytes in a given flush",
 		Measurement: "Logical bytes",
 		Unit:        metric.Unit_BYTES,
-	}
-	metaReplicationFlushWaitHistNanos = metric.Metadata{
-		Name:        "logical_replication.flush_wait_nanos",
-		Help:        "Time spenting waiting for an in-progress flush",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaReplicationBatchBytes = metric.Metadata{
 		Name:        "logical_replication.batch_bytes",
@@ -102,12 +90,6 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaDistSQLReplanCount = metric.Metadata{
-		Name:        "logical_replication.distsql_replan_count",
-		Help:        "Total number of dist sql replanning events",
-		Measurement: "Events",
-		Unit:        metric.Unit_COUNT,
-	}
 )
 
 // Metrics are for production monitoring of logical replication jobs.
@@ -115,13 +97,10 @@ type Metrics struct {
 	IngestedEvents        *metric.Counter
 	IngestedLogicalBytes  *metric.Counter
 	Flushes               *metric.Counter
-	JobProgressUpdates    *metric.Counter
 	CheckpointEvents      *metric.Counter
-	ReplanCount           *metric.Counter
 	FlushRowCountHist     metric.IHistogram
 	FlushBytesHist        metric.IHistogram
 	FlushHistNanos        metric.IHistogram
-	FlushWaitHistNanos    metric.IHistogram
 	BatchBytesHist        metric.IHistogram
 	BatchHistNanos        metric.IHistogram
 	CommitLatency         metric.IHistogram
@@ -139,8 +118,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		IngestedLogicalBytes: metric.NewCounter(metaReplicationIngestedBytes),
 		Flushes:              metric.NewCounter(metaReplicationFlushes),
 		CheckpointEvents:     metric.NewCounter(metaReplicationCheckpointEventsIngested),
-		JobProgressUpdates:   metric.NewCounter(metaJobProgressUpdates),
-		ReplanCount:          metric.NewCounter(metaDistSQLReplanCount),
 		FlushHistNanos: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationFlushHistNanos,
@@ -168,12 +145,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		FlushBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaReplicationFlushBytesHist,
-			Duration:     histogramWindow,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
-		}),
-		FlushWaitHistNanos: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaReplicationFlushWaitHistNanos,
 			Duration:     histogramWindow,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
