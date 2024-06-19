@@ -343,6 +343,15 @@ func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
 	}
 }
 
+func (nm nodeMetrics) incrementRangefeedCounter() {
+	nm.NumMuxRangeFeed.Inc(1)
+	nm.ActiveMuxRangeFeed.Inc(1)
+}
+
+func (nm nodeMetrics) decrementRangefeedCounter() {
+	nm.ActiveMuxRangeFeed.Dec(1)
+}
+
 // A Node manages a map of stores (by store ID) for which it serves
 // traffic. A node is the top-level data structure. There is one node
 // instance per process. A node accepts incoming RPCs and services
@@ -1861,15 +1870,6 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	return s.wrapped.Send(e)
 }
 
-func (n *Node) incrementRangefeedCounter() {
-	n.metrics.NumMuxRangeFeed.Inc(1)
-	n.metrics.ActiveMuxRangeFeed.Inc(1)
-}
-
-func (n *Node) decrementRangefeedCounter() {
-	n.metrics.ActiveMuxRangeFeed.Dec(1)
-}
-
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	muxStream := &lockedMuxStream{wrapped: stream}
@@ -1879,7 +1879,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
 
-	streamMuxer := newStreamMuxer(muxStream.Send, n)
+	streamMuxer := newStreamMuxer(muxStream, rangefeedMetricsRecorder(n.metrics))
 
 	var wg sync.WaitGroup
 	wg.Add(1)

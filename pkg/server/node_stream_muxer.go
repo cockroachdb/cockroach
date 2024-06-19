@@ -25,14 +25,21 @@ type rangefeedMetricsRecorder interface {
 	decrementRangefeedCounter()
 }
 
+type streamSender interface {
+	Send(*kvpb.MuxRangeFeedEvent) error
+}
+
+var _ streamSender = (*lockedMuxStream)(nil)
+
 type streamMuxer struct {
-	notify       chan struct{}
-	sendToStream func(*kvpb.MuxRangeFeedEvent) error
+	stream  streamSender
+	metrics rangefeedMetricsRecorder
+
+	notify chan struct{}
 	// need active streams here so that stream  muxer know if the stream already
 	// terminates -> we only want to send one error back
 	// streamID -> context.CancelFunc
-	activeStreams    sync.Map
-	rangefeedMetrics rangefeedMetricsRecorder
+	activeStreams sync.Map
 
 	mu struct {
 		syncutil.Mutex
@@ -41,7 +48,7 @@ type streamMuxer struct {
 }
 
 func (s *streamMuxer) newStream(streamID int64, cancel context.CancelFunc) {
-	s.rangefeedMetrics.incrementRangefeedCounter()
+	s.metrics.incrementRangefeedCounter()
 	s.activeStreams.Store(streamID, cancel)
 }
 
@@ -56,13 +63,11 @@ func transformRangefeedErrToClientError(err *kvpb.Error) *kvpb.Error {
 	return err
 }
 
-func newStreamMuxer(
-	sendToStream func(*kvpb.MuxRangeFeedEvent) error, metrics rangefeedMetricsRecorder,
-) *streamMuxer {
+func newStreamMuxer(stream *lockedMuxStream, metrics rangefeedMetricsRecorder) *streamMuxer {
 	return &streamMuxer{
-		sendToStream:     sendToStream,
-		notify:           make(chan struct{}, 1),
-		rangefeedMetrics: metrics,
+		stream:  stream,
+		notify:  make(chan struct{}, 1),
+		metrics: metrics,
 	}
 }
 
@@ -94,7 +99,7 @@ func (s *streamMuxer) disconnectRangefeedWithError(
 		})
 
 		s.notifyMuxErrors(ev)
-		s.rangefeedMetrics.decrementRangefeedCounter()
+		s.metrics.decrementRangefeedCounter()
 	}
 }
 
@@ -111,7 +116,7 @@ func (s *streamMuxer) run(ctx context.Context, stopper *stop.Stopper) {
 		select {
 		case <-s.notify:
 			for _, clientErr := range s.detachMuxErrors() {
-				if err := s.sendToStream(clientErr); err != nil {
+				if err := s.stream.Send(clientErr); err != nil {
 					return
 				}
 			}
