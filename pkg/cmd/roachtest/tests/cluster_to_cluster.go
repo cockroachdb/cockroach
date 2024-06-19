@@ -23,7 +23,7 @@ import (
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"

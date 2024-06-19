@@ -207,7 +207,7 @@ go_library(
         "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/storageccl/engineccl/enginepbccl",
-        "//pkg/ccl/streamingccl/replicationutils",
+        "//pkg/ccl/crosscluster/replicationutils",
         "//pkg/cli",
         "//pkg/cli/clisqlclient",
         "//pkg/cloud",
