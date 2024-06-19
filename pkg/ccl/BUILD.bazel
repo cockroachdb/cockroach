@@ -27,7 +27,7 @@ go_library(
         "//pkg/ccl/storageccl/engineccl",
         "//pkg/ccl/streamingccl/logical",
         "//pkg/ccl/streamingccl/physical",
-        "//pkg/ccl/streamingccl/streamproducer",
+        "//pkg/ccl/streamingccl/producer",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
         "//pkg/server",

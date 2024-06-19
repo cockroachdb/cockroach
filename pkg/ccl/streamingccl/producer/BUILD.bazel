@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "streamproducer",
+    name = "producer",
     srcs = [
         "event_stream.go",
         "producer_job.go",
@@ -10,7 +10,7 @@ go_library(
         "stream_event_batcher.go",
         "stream_lifetime.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer",
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/producer",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/kvccl/kvfollowerreadsccl",
@@ -69,7 +69,7 @@ go_library(
 )
 
 go_test(
-    name = "streamproducer_test",
+    name = "producer_test",
     size = "large",
     srcs = [
         "main_test.go",
@@ -79,7 +79,7 @@ go_test(
         "stream_event_batcher_test.go",
         "stream_lifetime_test.go",
     ],
-    embed = [":streamproducer"],
+    embed = [":producer"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
