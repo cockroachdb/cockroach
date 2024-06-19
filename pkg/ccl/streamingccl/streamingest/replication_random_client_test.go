@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -164,7 +165,6 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	client.ClearInterceptors()
 	client.RegisterInterception(completeJobAfterCheckpoints)
-	client.RegisterInterception(validateFnWithValidator(t, streamValidator))
 	client.RegisterSSTableGenerator(func(keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable {
 		return replicationtestutils.SSTMaker(t, keyValues)
 	})
@@ -201,6 +201,26 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.Streaming = &sql.StreamingTestingKnobs{
 		SkipSpanConfigReplication: true,
+	}
+
+	// We plan the ingestion job a few times below. Make sure we register the validator once.
+	var planAvailable sync.Once
+	params.ServerArgs.Knobs.Streaming = &sql.StreamingTestingKnobs{
+		AfterReplicationFlowPlan: func(ingestionSpecs []*execinfrapb.StreamIngestionDataSpec,
+			frontierSpec *execinfrapb.StreamIngestionFrontierSpec) {
+			planAvailable.Do(func() {
+				var partitionInfo []streamclient.PartitionInfo
+				for _, spec := range ingestionSpecs {
+					for _, partitionSpec := range spec.PartitionSpecs {
+						partitionInfo = append(partitionInfo, streamclient.PartitionInfo{
+							SubscriptionToken: []byte(partitionSpec.SubscriptionToken),
+							Spans:             partitionSpec.Spans},
+						)
+					}
+				}
+				client.RegisterInterception(validateFnWithValidator(t, streamValidator, partitionInfo))
+			})
+		},
 	}
 
 	numNodes := 3

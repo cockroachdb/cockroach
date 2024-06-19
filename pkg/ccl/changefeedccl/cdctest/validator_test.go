@@ -96,6 +96,15 @@ func TestOrderValidator(t *testing.T) {
 				`: saw new row timestamp 2.0000000000 after 3.0000000000 was resolved`,
 		)
 	})
+	t.Run(`regression in resolved timestamp`, func(t *testing.T) {
+		v := NewOrderValidator(`t1`)
+		noteResolved(t, v, `p2`, ts(2))
+		noteResolved(t, v, `p2`, ts(1))
+		assertValidatorFailures(t, v,
+			`new resolved timestamp 0.000000001,0 is lower than existing resolved timestamp`+
+				` 0.000000002,0 for partition p2`,
+		)
+	})
 }
 
 func TestBeforeAfterValidator(t *testing.T) {
