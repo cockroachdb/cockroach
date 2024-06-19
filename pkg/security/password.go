@@ -104,9 +104,9 @@ var PasswordHashMethod = settings.RegisterEnumSetting(
 	// previous-version nodes do not know anything about SCRAM. This is handled
 	// in the GetConfiguredPasswordHashMethod() function.
 	"scram-sha-256",
-	map[int64]string{
-		int64(password.HashBCrypt):      password.HashBCrypt.String(),
-		int64(password.HashSCRAMSHA256): password.HashSCRAMSHA256.String(),
+	map[password.HashMethod]string{
+		password.HashBCrypt:      password.HashBCrypt.String(),
+		password.HashSCRAMSHA256: password.HashSCRAMSHA256.String(),
 	},
 	settings.WithPublic)
 
@@ -130,7 +130,7 @@ func GetConfiguredPasswordCost(
 // GetConfiguredPasswordHashMethod returns the configured hash method
 // to use before storing passwords provided in cleartext from clients.
 func GetConfiguredPasswordHashMethod(sv *settings.Values) (method password.HashMethod) {
-	return password.HashMethod(PasswordHashMethod.Get(sv))
+	return PasswordHashMethod.Get(sv)
 }
 
 // AutoDetectPasswordHashes is the cluster setting that configures whether

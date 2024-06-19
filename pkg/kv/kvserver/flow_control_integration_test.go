@@ -775,7 +775,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
-	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
+	kvflowcontrol.Mode.Override(ctx, &st.SV, kvflowcontrol.ApplyToAll)
 
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
@@ -2338,7 +2338,7 @@ func (h *flowControlTestHelper) init() {
 	// SETTING`) interferes with the later activities in these tests.
 	for _, s := range h.tc.Servers {
 		kvflowcontrol.Enabled.Override(context.Background(), &s.ClusterSettings().SV, true)
-		kvflowcontrol.Mode.Override(context.Background(), &s.ClusterSettings().SV, int64(kvflowcontrol.ApplyToAll))
+		kvflowcontrol.Mode.Override(context.Background(), &s.ClusterSettings().SV, kvflowcontrol.ApplyToAll)
 	}
 }
 

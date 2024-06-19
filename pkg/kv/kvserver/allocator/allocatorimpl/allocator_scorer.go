@@ -180,10 +180,10 @@ var ReplicaIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 		"targets of rebalance actions, `block_all` will exclude candidate stores "+
 		"from being targets of both allocation and rebalancing",
 	"block_rebalance_to",
-	map[int64]string{
-		int64(IOOverloadThresholdIgnore):         "ignore",
-		int64(IOOverloadThresholdBlockTransfers): "block_rebalance_to",
-		int64(IOOverloadThresholdBlockAll):       "block_all",
+	map[IOOverloadEnforcementLevel]string{
+		IOOverloadThresholdIgnore:         "ignore",
+		IOOverloadThresholdBlockTransfers: "block_rebalance_to",
+		IOOverloadThresholdBlockAll:       "block_all",
 	},
 )
 
@@ -227,10 +227,10 @@ var LeaseIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 		"`shed`: a store will receive no new leases and shed existing leases to "+
 		"non io-overloaded stores, this is a superset of block_transfer_to",
 	"shed",
-	map[int64]string{
-		int64(IOOverloadThresholdIgnore):         "ignore",
-		int64(IOOverloadThresholdBlockTransfers): "block_transfer_to",
-		int64(IOOverloadThresholdShed):           "shed",
+	map[IOOverloadEnforcementLevel]string{
+		IOOverloadThresholdIgnore:         "ignore",
+		IOOverloadThresholdBlockTransfers: "block_transfer_to",
+		IOOverloadThresholdShed:           "shed",
 	},
 )
 

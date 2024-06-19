@@ -177,7 +177,7 @@ func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 		mode := sessiondatapb.DistSQLOff
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(mode))
+		sql.DistSQLClusterExecMode.Override(ctx, &st.SV, mode)
 		// Disable automatic stats - they can interfere with the test shutdown.
 		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
 		stats.UseStatisticsOnSystemTables.Override(ctx, &st.SV, false)
