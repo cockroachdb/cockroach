@@ -113,9 +113,10 @@ func newLogicalReplicationWriterProcessor(
 			return nil, err
 		}
 	}
+
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
-		rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Codec(), flowCtx.Cfg.Settings, spec.TableDescriptors)
+		rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Cfg.Settings, spec.TableDescriptors)
 		if err != nil {
 			return nil, err
 		}
@@ -343,7 +344,7 @@ func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context)
 			return err
 		}
 	}
-	return nil
+	return lrw.subscription.Err()
 }
 
 func (lrw *logicalReplicationWriterProcessor) handleEvent(

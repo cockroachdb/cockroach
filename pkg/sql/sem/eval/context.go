@@ -916,7 +916,7 @@ type ReplicationStreamManager interface {
 
 	PlanLogicalReplication(
 		ctx context.Context,
-		spans []roachpb.Span,
+		req streampb.LogicalReplicationPlanRequest,
 	) (*streampb.ReplicationStreamSpec, error)
 
 	StartReplicationStreamForTables(

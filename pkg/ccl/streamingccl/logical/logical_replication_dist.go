@@ -33,7 +33,7 @@ func constructLogicalReplicationWriterSpecs(
 	initialScanTimestamp hlc.Timestamp,
 	previousReplicatedTimestamp hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
-	tableDescs map[string]descpb.TableDescriptor,
+	tableDescs map[int32]descpb.TableDescriptor,
 	jobID jobspb.JobID,
 	streamID streampb.StreamID,
 ) (map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, error) {
