@@ -6,8 +6,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cmdccl/clusterrepl",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/ccl/streamingccl",
-        "//pkg/ccl/streamingccl/streamclient",
+        "//pkg/ccl/crosscluster",
+        "//pkg/ccl/crosscluster/streamclient",
         "//pkg/cli/exit",
         "//pkg/keys",
         "//pkg/repstream/streampb",

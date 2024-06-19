@@ -17,8 +17,8 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -243,16 +243,16 @@ func subscriptionConsumer(
 					return sub.Err()
 				}
 				switch event.Type() {
-				case streamingccl.KVEvent:
+				case crosscluster.KVEvent:
 					sz = 0
 					for _, kv := range event.GetKVs() {
 						sz += kv.Size()
 					}
-				case streamingccl.SSTableEvent:
+				case crosscluster.SSTableEvent:
 					ssTab := event.GetSSTable()
 					sz = ssTab.Size()
-				case streamingccl.DeleteRangeEvent:
-				case streamingccl.CheckpointEvent:
+				case crosscluster.DeleteRangeEvent:
+				case crosscluster.CheckpointEvent:
 					fmt.Printf("%s checkpoint\n", timeutil.Now().Format(time.RFC3339))
 					resolved := event.GetResolvedSpans()
 					for _, r := range resolved {
