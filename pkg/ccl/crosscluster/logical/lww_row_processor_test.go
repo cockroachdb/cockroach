@@ -10,6 +10,7 @@ package logical
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 
@@ -30,6 +31,80 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestLWWInsertQueryGeneration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	type testCase struct {
+		name       string
+		schemaTmpl string
+		row        []interface{}
+	}
+
+	testCases := []testCase{
+		{
+			name:       "column with special characters",
+			schemaTmpl: `CREATE TABLE %s (pk int primary key, "payload-col" string)`,
+			row:        []interface{}{1, "hello"},
+		},
+		{
+			name:       "primary constraint with special characters",
+			schemaTmpl: `CREATE TABLE %s (pk int, payload string, CONSTRAINT "primary-idx" PRIMARY KEY (pk ASC))`,
+			row:        []interface{}{1, "hello"},
+		},
+	}
+
+	tableNumber := 0
+	createTable := func(stmt string) string {
+		tableName := fmt.Sprintf("tab%d", tableNumber)
+		runner.Exec(t, fmt.Sprintf(stmt, tableName))
+		runner.Exec(t, fmt.Sprintf(
+			"ALTER TABLE %s ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL",
+			tableName))
+		tableNumber++
+		return tableName
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s/insert", tc.name), func(t *testing.T) {
+			tableName := createTable(tc.schemaTmpl)
+			desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
+			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
+				int32(desc.GetID()): *desc.TableDesc(),
+			})
+			require.NoError(t, err)
+
+			keyValue := replicationtestutils.EncodeKV(t, s.Codec(), desc, tc.row...)
+			keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return rp.ProcessRow(ctx, txn, keyValue)
+			}))
+		})
+		t.Run(fmt.Sprintf("%s/delete", tc.name), func(t *testing.T) {
+			tableName := createTable(tc.schemaTmpl)
+			desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
+			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
+				int32(desc.GetID()): *desc.TableDesc(),
+			})
+			require.NoError(t, err)
+
+			keyValue := replicationtestutils.EncodeKV(t, s.Codec(), desc, tc.row...)
+			keyValue.Value.RawBytes = nil
+			keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return rp.ProcessRow(ctx, txn, keyValue)
+			}))
+		})
+	}
+}
 
 // BenchmarkLastWriteWinsInsert is a microbenchmark that targets overhead of the
 // SQL layer when processing the INSERT query of the LWW handler. It mocks out
