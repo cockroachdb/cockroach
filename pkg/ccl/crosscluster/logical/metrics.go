@@ -53,13 +53,6 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaReplicationAdmitLatency = metric.Metadata{
-		Name: "logical_replication.admit_latency",
-		Help: "Event admission latency: a difference between event MVCC timestamp " +
-			"and the time it was admitted into ingestion processor",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
 	metaReplicatedTimeSeconds = metric.Metadata{
 		Name:        "logical_replication.replicated_time_seconds",
 		Help:        "The replicated time of the logical replication stream in seconds since the unix epoch.",
@@ -104,7 +97,6 @@ type Metrics struct {
 	BatchBytesHist        metric.IHistogram
 	BatchHistNanos        metric.IHistogram
 	CommitLatency         metric.IHistogram
-	AdmitLatency          metric.IHistogram
 	ReplicatedTimeSeconds *metric.Gauge
 }
 
@@ -129,12 +121,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Metadata:     metaReplicationCommitLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
-		}),
-		AdmitLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaReplicationAdmitLatency,
-			Duration:     histogramWindow,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
 		FlushRowCountHist: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
