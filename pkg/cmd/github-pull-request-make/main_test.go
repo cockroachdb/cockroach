@@ -24,12 +24,12 @@ func TestPkgsFromDiff(t *testing.T) {
 			"pkg/ccl/storageccl": makePkg([]string{"TestPutS3"}),
 		},
 		datapathutils.TestDataPath(t, "modified.diff"): {
-			"pkg/ccl/streamingccl/streamingest": makePkg([]string{"TestStreamingAutoReplan"}),
+			"pkg/ccl/crosscluster/physical": makePkg([]string{"TestStreamingAutoReplan"}),
 		},
 		datapathutils.TestDataPath(t, "removed.diff"): {},
 		datapathutils.TestDataPath(t, "not_go.diff"):  {},
 		datapathutils.TestDataPath(t, "new_test.diff"): {
-			"pkg/ccl/streamingccl/streamclient": makePkg([]string{
+			"pkg/ccl/crosscluster/streamclient": makePkg([]string{
 				"TestExternalConnectionClient",
 				"TestGetFirstActiveClientEmpty",
 			}),
