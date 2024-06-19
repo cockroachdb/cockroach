@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -252,10 +253,10 @@ func makeInsertQueries(
 		var onConflictUpdateClause strings.Builder
 		argIdx := 1
 		seenIds := make(map[catid.ColumnID]struct{})
-
 		publicColumns := td.PublicColumns()
 		colOrd := catalog.ColumnIDToOrdinalMap(publicColumns)
 		addColumnByNameNoCheck := func(colName string) {
+			colName = lexbase.EscapeSQLIdent(colName)
 			if argIdx == 1 {
 				columnNames.WriteString(colName)
 				fmt.Fprintf(&valueStrings, "$%d", argIdx)
@@ -328,7 +329,7 @@ WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_internal_origin_timestamp
 			dstTableDescID,
 			columnNames.String(),
 			valueStrings.String(),
-			td.GetPrimaryIndex().GetName(),
+			lexbase.EscapeSQLIdent(td.GetPrimaryIndex().GetName()),
 			onConflictUpdateClause.String(),
 		))
 		queries[family.ID] = insertQueries
@@ -343,10 +344,11 @@ func makeDeleteQuery(dstTableDescID int32, td catalog.TableDescriptor) string {
 	var whereClause strings.Builder
 	names := td.TableDesc().PrimaryIndex.KeyColumnNames
 	for i := 0; i < len(names); i++ {
+		colName := lexbase.EscapeSQLIdent(names[i])
 		if i == 0 {
-			fmt.Fprintf(&whereClause, "%s = $%d", names[i], i+1)
+			fmt.Fprintf(&whereClause, "%s = $%d", colName, i+1)
 		} else {
-			fmt.Fprintf(&whereClause, "AND %s = $%d", names[i], i+1)
+			fmt.Fprintf(&whereClause, "AND %s = $%d", colName, i+1)
 		}
 	}
 	originTSIdx := len(names) + 1
