@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -240,17 +239,17 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *kvpb.RangeFeedRequest, stream kvpb.RangeFeedEventSink, pacer *admission.Pacer,
-) *future.ErrorFuture {
+	args *kvpb.RangeFeedRequest, stream rangefeed.Stream, pacer *admission.Pacer,
+) error {
 	ctx := r.AnnotateCtx(stream.Context())
 
 	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
-		return future.MakeCompletedErrorFuture(err)
+		return err
 	}
 
 	if err := r.ensureClosedTimestampStarted(ctx); err != nil {
-		return future.MakeCompletedErrorFuture(err.GoError())
+		return err.GoError()
 	}
 
 	// If the RangeFeed is performing a catch-up scan then it will observe all
@@ -276,7 +275,7 @@ func (r *Replica) RangeFeed(
 		usingCatchUpIter = true
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(ctx)
 		if err != nil {
-			return future.MakeCompletedErrorFuture(err)
+			return err
 		}
 
 		// Finish the iterator limit if we exit before the iterator finishes.
@@ -301,7 +300,7 @@ func (r *Replica) RangeFeed(
 	if err := r.checkExecutionCanProceedForRangeFeed(ctx, rSpan, checkTS); err != nil {
 		r.raftMu.Unlock()
 		iterSemRelease()
-		return future.MakeCompletedErrorFuture(err)
+		return err
 	}
 
 	// Register the stream with a catch-up iterator.
@@ -315,24 +314,21 @@ func (r *Replica) RangeFeed(
 		if err != nil {
 			r.raftMu.Unlock()
 			iterSemRelease()
-			return future.MakeCompletedErrorFuture(err)
+			return err
 		}
 		if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
 			catchUpIter.OnEmit = f
 		}
 	}
-	var done future.ErrorFuture
-	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, stream, &done,
-	)
+	p, err := r.registerWithRangefeedRaftMuLocked(
+		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, stream)
 	r.raftMu.Unlock()
 
 	// This call is a no-op if we have successfully registered; but in case we
 	// encountered an error after we created processor, disconnect if processor
 	// is empty.
 	defer r.maybeDisconnectEmptyRangefeed(p)
-
-	return &done
+	return err
 }
 
 func (r *Replica) getRangefeedProcessorAndFilter() (rangefeed.Processor, *rangefeed.Filter) {
@@ -409,6 +405,7 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 // already running. Requires raftMu be locked.
 // Returns Future[*roachpb.Error] which will return an error once rangefeed
 // completes.
+// TODO(wenyihu6): think abt if returning error here == stream.Disconnect()
 // Note that caller delegates lifecycle of catchUpIter to this method in both
 // success and failure cases. So it is important that this method closes
 // iterator in case registration fails. Successful registration takes iterator
@@ -421,8 +418,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	withDiff bool,
 	withFiltering bool,
 	stream rangefeed.Stream,
-	done *future.ErrorFuture,
-) rangefeed.Processor {
+) (rangefeed.Processor, error) {
 	defer logSlowRangefeedRegistration(ctx)()
 
 	// Always defer closing iterator to cover old and new failure cases.
@@ -442,7 +438,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	if p != nil {
 		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, withFiltering,
-			stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
+			stream, func() { r.maybeDisconnectEmptyRangefeed(p) })
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -450,7 +446,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			r.setRangefeedFilterLocked(filter)
 			r.rangefeedMu.Unlock()
 			catchUpIter = nil
-			return p
+			return p, nil
 		}
 		// If the registration failed, the processor was already being shut
 		// down. Help unset it and then continue on with initializing a new
@@ -508,7 +504,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 		scanner, err := rangefeed.NewSeparatedIntentScanner(ctx, r.store.TODOEngine(), desc.RSpan())
 		if err != nil {
-			done.Set(err)
+			stream.Disconnect(kvpb.NewError(err))
 			return nil
 		}
 		return scanner
@@ -520,8 +516,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// due to stopping, but before it enters the quiescing state, then the select
 	// below will fall through to the panic.
 	if err := p.Start(r.store.Stopper(), rtsIter); err != nil {
-		done.Set(err)
-		return nil
+		return nil, err
 	}
 
 	// Register with the processor *before* we attach its reference to the
@@ -530,12 +525,11 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
 	reg, filter := p.Register(span, startTS, catchUpIter, withDiff,
-		withFiltering, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
+		withFiltering, stream, func() { r.maybeDisconnectEmptyRangefeed(p) })
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
-			done.Set(&kvpb.NodeUnavailableError{})
-			return nil
+			return nil, &kvpb.NodeUnavailableError{}
 		default:
 			panic("unexpected Stopped processor")
 		}
@@ -551,7 +545,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
 	r.handleClosedTimestampUpdateRaftMuLocked(ctx, r.GetCurrentClosedTimestamp(ctx))
-	return p
+	return p, nil
 }
 
 // maybeDisconnectEmptyRangefeed tears down the provided Processor if it is
