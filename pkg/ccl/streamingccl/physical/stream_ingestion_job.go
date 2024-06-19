@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/producer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -185,7 +185,7 @@ func startPostCutoverRetentionJob(
 		req := streampb.ReplicationProducerRequest{
 			ReplicationStartTime: cutoverTime,
 		}
-		_, err = streamproducer.StartReplicationProducerJob(ctx, evalCtx, txn, info.Name, req, true)
+		_, err = producer.StartReplicationProducerJob(ctx, evalCtx, txn, info.Name, req, true)
 		return err
 	})
 }
