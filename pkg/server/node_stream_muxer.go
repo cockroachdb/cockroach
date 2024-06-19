@@ -35,7 +35,10 @@ type streamMuxer struct {
 	stream  streamSender
 	metrics rangefeedMetricsRecorder
 
+	// notify is a channel that is used to signal that there are disconnect
+	// errors.
 	notify chan struct{}
+
 	// need active streams here so that stream  muxer know if the stream already
 	// terminates -> we only want to send one error back
 	// streamID -> context.CancelFunc
@@ -111,11 +114,14 @@ func (s *streamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	return toSend
 }
 
+// If this returns, there is nothing we could do. We expect registrations to
+// receive the same error.
 func (s *streamMuxer) run(ctx context.Context, stopper *stop.Stopper) {
 	for {
 		select {
 		case <-s.notify:
-			for _, clientErr := range s.detachMuxErrors() {
+			toSend := s.detachMuxErrors()
+			for _, clientErr := range toSend {
 				if err := s.stream.Send(clientErr); err != nil {
 					return
 				}
