@@ -1627,7 +1627,7 @@ func TestLeaseCountDetailCrossNode(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	// We are going to disable session based leasing as its easier to add a lot of
 	// fake leases into system.leases.
-	LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, int64(SessionBasedLeasingOff))
+	LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, SessionBasedLeasingOff)
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Settings:          st,
 		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,

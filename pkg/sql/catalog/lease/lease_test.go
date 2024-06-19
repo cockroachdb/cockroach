@@ -109,7 +109,7 @@ func newLeaseTest(tb testing.TB, params base.TestClusterArgs) *leaseTest {
 	if params.ServerArgs.Settings == nil {
 		params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
 	}
-	lease.LeaseEnableSessionBasedLeasing.Override(context.Background(), &params.ServerArgs.Settings.SV, int64(lease.SessionBasedDualWrite))
+	lease.LeaseEnableSessionBasedLeasing.Override(context.Background(), &params.ServerArgs.Settings.SV, lease.SessionBasedDualWrite)
 	c := serverutils.StartCluster(tb, 3, params)
 	s := c.Server(0).ApplicationLayer()
 	lt := &leaseTest{
@@ -2119,7 +2119,7 @@ func TestDeleteOrphanedLeases(testingT *testing.T) {
 	t := newLeaseTest(testingT, params)
 	// Force dual writing, so that entries exist within both versions of the
 	// leasing table to clean up.
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &t.server.ClusterSettings().SV, int64(lease.SessionBasedDualWrite))
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &t.server.ClusterSettings().SV, lease.SessionBasedDualWrite)
 	defer t.cleanup()
 
 	if _, err := t.db.Exec(`
@@ -3009,7 +3009,7 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	params.PartOfCluster = true
 	// Disable session based leasing, since a zero duration only
 	// applies to the expiry, and not the acquisition length.
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &params.Settings.SV, int64(lease.SessionBasedLeasingOff))
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &params.Settings.SV, lease.SessionBasedLeasingOff)
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			filterMu.Lock()
@@ -3210,7 +3210,7 @@ func TestLeaseTxnDeadlineExtensionWithSession(t *testing.T) {
 	params.PartOfCluster = true
 	// Disable session based leasing, since a zero duration only
 	// applies to the expiry, and not the acquisition length.
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &params.Settings.SV, int64(lease.SessionBasedOnly))
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &params.Settings.SV, lease.SessionBasedOnly)
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			filterMu.Lock()
@@ -3566,7 +3566,7 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, int64(lease.SessionBasedLeasingOff))
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, lease.SessionBasedLeasingOff)
 	codec := s.Codec()
 
 	sqlutils.MakeSQLRunner(sqlDB).Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
@@ -3819,7 +3819,7 @@ func TestDescriptorRemovedFromCacheWhenLeaseRenewalForThisDescriptorFails(t *tes
 	// Set lease duration to something small so that the periodical lease refresh is kicked off often where the testing
 	// knob will be invoked, and eventually the logic to remove unfound descriptor from cache will be triggered.
 	lease.LeaseDuration.Override(ctx, &s.ClusterSettings().SV, time.Second)
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, int64(lease.SessionBasedLeasingOff))
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, lease.SessionBasedLeasingOff)
 	tdb = sqlutils.MakeSQLRunner(sqlDB)
 
 	sql := `
@@ -3867,7 +3867,7 @@ func TestSessionLeasingTable(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.MinSupported.Version(), false)
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, int64(lease.SessionBasedDualWrite))
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, lease.SessionBasedDualWrite)
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings:          st,
 		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
@@ -3943,7 +3943,7 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.MinSupported.Version(), false)
 	// Force dual writes and instantly expire any leases.
-	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, int64(lease.SessionBasedDualWrite))
+	lease.LeaseEnableSessionBasedLeasing.Override(ctx, &st.SV, lease.SessionBasedDualWrite)
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings:          st,
 		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,

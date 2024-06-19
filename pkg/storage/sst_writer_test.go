@@ -150,7 +150,7 @@ func TestSSTWriterOption(t *testing.T) {
 	makeCompressionWriterOpt := func(alg compressionAlgorithm) SSTWriterOption {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		CompressionAlgorithmStorage.Override(ctx, &st.SV, int64(alg))
+		CompressionAlgorithmStorage.Override(ctx, &st.SV, alg)
 		return WithCompressionFromClusterSetting(ctx, st, CompressionAlgorithmStorage)
 	}
 

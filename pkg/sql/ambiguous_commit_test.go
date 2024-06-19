@@ -156,7 +156,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		for _, server := range tc.Servers {
 			st := server.ClusterSettings()
 			st.Manual.Store(true)
-			sql.DistSQLClusterExecMode.Override(ctx, &st.SV, int64(sessiondatapb.DistSQLOff))
+			sql.DistSQLClusterExecMode.Override(ctx, &st.SV, sessiondatapb.DistSQLOff)
 		}
 
 		sqlDB := tc.Conns[0]

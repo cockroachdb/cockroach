@@ -128,7 +128,7 @@ func TestDataDriven(t *testing.T) {
 				if !ok {
 					t.Fatalf("unknown authorizer mode %s", valStr)
 				}
-				authorizerMode.Override(ctx, &clusterSettings.SV, val)
+				authorizerMode.Override(ctx, &clusterSettings.SV, authorizerModeType(val))
 			case "is-exempt-from-rate-limiting":
 				return fmt.Sprintf("%t", authorizer.IsExemptFromRateLimiting(context.Background(), tenID))
 			default:
