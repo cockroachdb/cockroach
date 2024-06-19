@@ -133,7 +133,12 @@ func TestOIDCEnabled(t *testing.T) {
 	sqlDB.Exec(t, `set cluster setting server.oidc_authentication.claim_json_key = "email"`)
 	sqlDB.Exec(t, `set cluster setting server.oidc_authentication.principal_regex = '^([^@]+)@[^@]+$'`)
 	sqlDB.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING server.http.base_path = "%s"`, basePath))
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
+	// Setting the `server.oidc_authentication.enabled` cluster setting through
+	// SQL command adds an overhead in updating the `OIDCEnabled` var.
+	// This fails the test under stress as the value of `OIDCEnabled` var
+	// determines the response to the `/oidc/v1/login` API handler.
+	// Hence, it is recommended to override the value directly.
+	OIDCEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
 	client, err := testCertsContext.GetHTTPClient()
