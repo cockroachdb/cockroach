@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Licensed as a CockroachDB Enterprise file under the Cockroach Community
 // License (the "License"); you may not use this file except in compliance with
@@ -15,31 +15,20 @@ import (
 )
 
 var (
-	metaReplicationEventsIngested = metric.Metadata{
+	// Top-line metrics.
+	metaAppliedRowUpdates = metric.Metadata{
 		Name:        "logical_replication.events_ingested",
 		Help:        "Events ingested by all replication jobs",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaReplicationCheckpointEventsIngested = metric.Metadata{
-		Name:        "logical_replication.checkpoint_events_ingested",
-		Help:        "Checkpoint events ingested by all replication jobs",
-		Measurement: "Events",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaReplicationIngestedBytes = metric.Metadata{
+	metaAppliedLogicalBytes = metric.Metadata{
 		Name:        "logical_replication.logical_bytes",
 		Help:        "Logical bytes (sum of keys + values) ingested by all replication jobs",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaReplicationFlushHistNanos = metric.Metadata{
-		Name:        "logical_replication.flush_hist_nanos",
-		Help:        "Time spent flushing messages across all replication streams",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaReplicationCommitLatency = metric.Metadata{
+	metaCommitToCommitLatency = metric.Metadata{
 		Name: "logical_replication.commit_latency",
 		Help: "Event commit latency: a difference between event MVCC timestamp " +
 			"and the time it was flushed into disk. If we batch events, then the difference " +
@@ -53,21 +42,37 @@ var (
 		Measurement: "Seconds",
 		Unit:        metric.Unit_SECONDS,
 	}
-	metaReplicationFlushRowCountHist = metric.Metadata{
+
+	// User-visible health and ops metrics.
+	metaApplyBatchNanosHist = metric.Metadata{
+		Name:        "logical_replication.batch_hist_nanos",
+		Help:        "Time spent flushing a batch",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	// Internal metrics.
+	metaCheckpointEvents = metric.Metadata{
+		Name:        "logical_replication.checkpoint_events_ingested",
+		Help:        "Checkpoint events ingested by all replication jobs",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaStreamBatchRowsHist = metric.Metadata{
 		Name:        "logical_replication.flush_row_count",
 		Help:        "Number of rows in a given flush",
 		Measurement: "Rows",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaReplicationFlushBytesHist = metric.Metadata{
+	metaStreamBatchBytesHist = metric.Metadata{
 		Name:        "logical_replication.flush_bytes",
 		Help:        "Number of bytes in a given flush",
 		Measurement: "Logical bytes",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaReplicationBatchHistNanos = metric.Metadata{
-		Name:        "logical_replication.batch_hist_nanos",
-		Help:        "Time spent flushing a batch",
+	metaStreamBatchNanosHist = metric.Metadata{
+		Name:        "logical_replication.flush_hist_nanos",
+		Help:        "Time spent flushing messages across all replication streams",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -75,15 +80,25 @@ var (
 
 // Metrics are for production monitoring of logical replication jobs.
 type Metrics struct {
-	IngestedEvents        *metric.Counter
-	IngestedLogicalBytes  *metric.Counter
-	CheckpointEvents      *metric.Counter
-	FlushRowCountHist     metric.IHistogram
-	FlushBytesHist        metric.IHistogram
-	FlushHistNanos        metric.IHistogram
-	BatchHistNanos        metric.IHistogram
-	CommitLatency         metric.IHistogram
+	// Top-line user-facing numbers that how many events and how much data are
+	// bring moved and applied/rejected/etc.
+	AppliedRowUpdates     *metric.Counter
+	AppliedLogicalBytes   *metric.Counter
+	CommitToCommitLatency metric.IHistogram
 	ReplicatedTimeSeconds *metric.Gauge
+
+	// User-surfaced information about the health/operation of the stream; this
+	// should be a narrow subset of numbers that are actually relevant to a user
+	// such as the latency of application as that could be their supplied UDF.
+	ApplyBatchNanosHist metric.IHistogram
+
+	// Internal numbers that are useful for determining why a stream is behaving
+	// a specific way.
+	CheckpointEvents *metric.Counter
+	// TODO(dt): are these stream batch size or latency numbers useful?
+	StreamBatchRowsHist  metric.IHistogram
+	StreamBatchBytesHist metric.IHistogram
+	StreamBatchNanosHist metric.IHistogram
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -92,39 +107,39 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for logical replication job monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	return &Metrics{
-		IngestedEvents:       metric.NewCounter(metaReplicationEventsIngested),
-		IngestedLogicalBytes: metric.NewCounter(metaReplicationIngestedBytes),
-		CheckpointEvents:     metric.NewCounter(metaReplicationCheckpointEventsIngested),
-		FlushHistNanos: metric.NewHistogram(metric.HistogramOptions{
+		AppliedRowUpdates:   metric.NewCounter(metaAppliedRowUpdates),
+		AppliedLogicalBytes: metric.NewCounter(metaAppliedLogicalBytes),
+		CommitToCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaReplicationFlushHistNanos,
-			Duration:     histogramWindow,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
-		}),
-		CommitLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaReplicationCommitLatency,
+			Metadata:     metaCommitToCommitLatency,
 			Duration:     histogramWindow,
 			BucketConfig: metric.LongRunning60mLatencyBuckets,
 		}),
-		FlushRowCountHist: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaReplicationFlushRowCountHist,
-			Duration:     histogramWindow,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
-		}),
-		FlushBytesHist: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaReplicationFlushBytesHist,
-			Duration:     histogramWindow,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
-		}),
-		BatchHistNanos: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaReplicationBatchHistNanos,
-			Duration:     histogramWindow,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
-		}),
 		ReplicatedTimeSeconds: metric.NewGauge(metaReplicatedTimeSeconds),
+		ApplyBatchNanosHist: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaApplyBatchNanosHist,
+			Duration:     histogramWindow,
+			BucketConfig: metric.BatchProcessLatencyBuckets,
+		}),
+		CheckpointEvents: metric.NewCounter(metaCheckpointEvents),
+		StreamBatchRowsHist: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaStreamBatchRowsHist,
+			Duration:     histogramWindow,
+			BucketConfig: metric.BatchProcessLatencyBuckets,
+		}),
+		StreamBatchBytesHist: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaStreamBatchBytesHist,
+			Duration:     histogramWindow,
+			BucketConfig: metric.BatchProcessLatencyBuckets,
+		}),
+		StreamBatchNanosHist: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePrometheus,
+			Metadata:     metaStreamBatchNanosHist,
+			Duration:     histogramWindow,
+			BucketConfig: metric.BatchProcessLatencyBuckets,
+		}),
 	}
 }
