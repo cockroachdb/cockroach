@@ -824,10 +824,12 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	historicalQuery.Store(`SELECT * FROM test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`)
 	recCh := make(chan tracingpb.Recording, 1)
 
+	settings := cluster.MakeClusterSettings()
 	tc := testcluster.StartTestCluster(t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings:          settings,
 				DefaultTestTenant: base.TODOTestTenantDisabled,
 				UseDatabase:       "t",
 			},
@@ -865,6 +867,10 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
+
+	// Further down, we'll set up the test to pin the lease to store 1. Turn off
+	// load based rebalancing to make sure it doesn't move.
+	kvserver.LoadBasedRebalancingMode.Override(ctx, &settings.SV, kvserver.LBRebalancingOff)
 
 	n1 := sqlutils.MakeSQLRunner(tc.Conns[0])
 	n1.Exec(t, `CREATE DATABASE t`)
@@ -1078,6 +1084,9 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			systemSQL := sqlutils.MakeSQLRunner(tc.Conns[0])
 			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
 			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
+			// Disable the store rebalancer to make sure leases stay where they are;
+			// the test cares about this.
+			systemSQL.Exec(t, `SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off`)
 
 			historicalQuery := `SELECT * FROM t.test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
 			useExplainAnalyze := rng.Float64() < 0.5
