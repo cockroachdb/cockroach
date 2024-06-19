@@ -118,12 +118,12 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 	"sql.catalog.experimental_use_session_based_leasing",
 	"enables session based leasing for internal testing.",
 	"auto",
-	map[int64]string{
-		int64(SessionBasedLeasingAuto): "auto",
-		int64(SessionBasedLeasingOff):  "off",
-		int64(SessionBasedDualWrite):   "dual_write",
-		int64(SessionBasedDrain):       "drain",
-		int64(SessionBasedOnly):        "session",
+	map[SessionBasedLeasingMode]string{
+		SessionBasedLeasingAuto: "auto",
+		SessionBasedLeasingOff:  "off",
+		SessionBasedDualWrite:   "dual_write",
+		SessionBasedDrain:       "drain",
+		SessionBasedOnly:        "session",
 	},
 )
 
@@ -140,7 +140,7 @@ func readSessionBasedLeasingMode(
 ) SessionBasedLeasingMode {
 	// When leasing mode is set to OFF we will use the version to determine what
 	// mode we are executing in.
-	settingMode := SessionBasedLeasingMode(LeaseEnableSessionBasedLeasing.Get(&settings.SV))
+	settingMode := LeaseEnableSessionBasedLeasing.Get(&settings.SV)
 	if settingMode == SessionBasedLeasingAuto {
 		if settings.Version.IsActive(ctx, clusterversion.V24_1_SessionBasedLeasingOnly) {
 			return SessionBasedOnly

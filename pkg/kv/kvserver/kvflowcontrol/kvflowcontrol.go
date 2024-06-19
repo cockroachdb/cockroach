@@ -45,10 +45,7 @@ var Mode = settings.RegisterEnumSetting(
 		modeDict[ApplyToElastic], /* default value */
 		modeDict[ApplyToAll],     /* other value */
 	).(string),
-	map[int64]string{
-		int64(ApplyToElastic): modeDict[ApplyToElastic],
-		int64(ApplyToAll):     modeDict[ApplyToAll],
-	},
+	modeDict,
 )
 
 var modeDict = map[ModeT]string{

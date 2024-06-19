@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -945,7 +944,7 @@ func (*mvccGCQueue) updateChan() <-chan time.Time {
 }
 
 func gcAdmissionHeader(st *cluster.Settings) kvpb.AdmissionHeader {
-	pri := admissionpb.WorkPriority(gc.AdmissionPriority.Get(&st.SV))
+	pri := gc.AdmissionPriority.Get(&st.SV)
 	return kvpb.AdmissionHeader{
 		// TODO(irfansharif): GC could be expected to be BulkNormalPri, so
 		// that it does not impact user-facing traffic when resources (e.g.

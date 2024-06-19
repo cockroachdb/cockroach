@@ -148,10 +148,10 @@ var AdmissionPriority = settings.RegisterEnumSetting(
 	"kv.gc.admission_priority",
 	"the admission priority to use for mvcc gc work",
 	"bulk_normal_pri",
-	map[int64]string{
-		int64(admissionpb.BulkNormalPri): "bulk_normal_pri",
-		int64(admissionpb.NormalPri):     "normal_pri",
-		int64(admissionpb.UserHighPri):   "user_high_pri",
+	map[admissionpb.WorkPriority]string{
+		admissionpb.BulkNormalPri: "bulk_normal_pri",
+		admissionpb.NormalPri:     "normal_pri",
+		admissionpb.UserHighPri:   "user_high_pri",
 	},
 )
 

@@ -218,7 +218,7 @@ func getShowClusterSettingPlanColumns(
 	switch val.(type) {
 	case *settings.IntSetting:
 		dType = types.Int
-	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.VersionSetting, *settings.EnumSetting, *settings.ProtobufSetting:
+	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.VersionSetting, settings.AnyEnumSetting, *settings.ProtobufSetting:
 		dType = types.String
 	case *settings.BoolSetting:
 		dType = types.Bool
@@ -256,7 +256,7 @@ func planShowClusterSetting(
 			if isNotNull {
 				switch s := val.(type) {
 				case *settings.IntSetting:
-					v, err := s.DecodeValue(encoded)
+					v, err := s.DecodeNumericValue(encoded)
 					if err != nil {
 						return nil, err
 					}

@@ -82,7 +82,7 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 			srv, sqlDB, kvDB := serverutils.StartServer(t, serverArgs)
 			defer srv.Stopper().Stop(ctx)
 			s := srv.ApplicationLayer()
-			LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, int64(mode))
+			LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, mode)
 
 			// Otherwise, we wouldn't get complete SSTs in our export under stress.
 			sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(

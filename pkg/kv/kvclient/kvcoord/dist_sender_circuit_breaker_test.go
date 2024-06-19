@@ -51,7 +51,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
 		kvcoord.CircuitBreakersMode.Override(
-			ctx, &st.SV, int64(kvcoord.DistSenderCircuitBreakersAllRanges),
+			ctx, &st.SV, kvcoord.DistSenderCircuitBreakersAllRanges,
 		)
 		kvcoord.CircuitBreakerCancellation.Override(ctx, &st.SV, true)
 		kvcoord.CircuitBreakerProbeThreshold.Override(ctx, &st.SV, time.Second)
@@ -146,7 +146,7 @@ func TestDistSenderCircuitBreakerModes(t *testing.T) {
 				// speed up the test by reducing various intervals and timeouts.
 				st := cluster.MakeTestingClusterSettings()
 				kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
-				kvcoord.CircuitBreakersMode.Override(ctx, &st.SV, int64(mode))
+				kvcoord.CircuitBreakersMode.Override(ctx, &st.SV, mode)
 				kvcoord.CircuitBreakerCancellation.Override(ctx, &st.SV, true)
 				kvcoord.CircuitBreakerProbeThreshold.Override(ctx, &st.SV, time.Second)
 				kvcoord.CircuitBreakerProbeInterval.Override(ctx, &st.SV, time.Second)
@@ -278,7 +278,7 @@ func BenchmarkDistSenderCircuitBreakersForReplica(b *testing.B) {
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 	st := cluster.MakeTestingClusterSettings()
 	kvcoord.CircuitBreakersMode.Override(
-		ctx, &st.SV, int64(kvcoord.DistSenderCircuitBreakersAllRanges),
+		ctx, &st.SV, kvcoord.DistSenderCircuitBreakersAllRanges,
 	)
 
 	cbs := kvcoord.NewDistSenderCircuitBreakers(
@@ -346,13 +346,9 @@ func benchmarkCircuitBreakersTrack(
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 	st := cluster.MakeTestingClusterSettings()
 	if enable {
-		kvcoord.CircuitBreakersMode.Override(
-			ctx, &st.SV, int64(kvcoord.DistSenderCircuitBreakersAllRanges),
-		)
+		kvcoord.CircuitBreakersMode.Override(ctx, &st.SV, kvcoord.DistSenderCircuitBreakersAllRanges)
 	} else {
-		kvcoord.CircuitBreakersMode.Override(
-			ctx, &st.SV, int64(kvcoord.DistSenderCircuitBreakersNoRanges),
-		)
+		kvcoord.CircuitBreakersMode.Override(ctx, &st.SV, kvcoord.DistSenderCircuitBreakersNoRanges)
 	}
 	kvcoord.CircuitBreakerCancellation.Override(ctx, &st.SV, cancel)
 

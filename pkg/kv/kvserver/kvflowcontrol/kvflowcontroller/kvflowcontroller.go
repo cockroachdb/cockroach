@@ -146,7 +146,7 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 }
 
 func (c *Controller) mode() kvflowcontrol.ModeT {
-	return kvflowcontrol.ModeT(kvflowcontrol.Mode.Get(&c.settings.SV))
+	return kvflowcontrol.Mode.Get(&c.settings.SV)
 }
 
 // Admit is part of the kvflowcontrol.Controller interface. It blocks until

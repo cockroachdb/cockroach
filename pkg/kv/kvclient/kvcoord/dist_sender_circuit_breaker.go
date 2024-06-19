@@ -71,10 +71,10 @@ var (
 		"kv.dist_sender.circuit_breakers.mode",
 		"set of ranges to trip circuit breakers for failing or stalled replicas",
 		"liveness range only",
-		map[int64]string{
-			int64(DistSenderCircuitBreakersNoRanges):          "no ranges",
-			int64(DistSenderCircuitBreakersLivenessRangeOnly): "liveness range only",
-			int64(DistSenderCircuitBreakersAllRanges):         "all ranges",
+		map[DistSenderCircuitBreakersMode]string{
+			DistSenderCircuitBreakersNoRanges:          "no ranges",
+			DistSenderCircuitBreakersLivenessRangeOnly: "liveness range only",
+			DistSenderCircuitBreakersAllRanges:         "all ranges",
 		},
 		settings.WithPublic,
 	)
@@ -433,7 +433,7 @@ func (d *DistSenderCircuitBreakers) ForReplica(
 }
 
 func (d *DistSenderCircuitBreakers) Mode() DistSenderCircuitBreakersMode {
-	return DistSenderCircuitBreakersMode(CircuitBreakersMode.Get(&d.settings.SV))
+	return CircuitBreakersMode.Get(&d.settings.SV)
 }
 
 // ReplicaCircuitBreaker is a circuit breaker for an individual replica.

@@ -4498,7 +4498,7 @@ func TestMergeQueue(t *testing.T) {
 
 		setSplitObjective := func(dim kvserver.LBRebalancingObjective) {
 			for _, s := range tc.Servers {
-				kvserver.LoadBasedRebalancingObjective.Override(ctx, &s.ClusterSettings().SV, int64(dim))
+				kvserver.LoadBasedRebalancingObjective.Override(ctx, &s.ClusterSettings().SV, dim)
 			}
 		}
 
