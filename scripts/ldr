@@ -22,6 +22,9 @@ usage: $0 <command>
     Shortand to run 'create', 'start', 'workload init', 'jobs start', and then 'workload run' to
     get LDR up and running in one command. Any extra arguments are passed along to 'create'.
 
+  * 'go'
+    Like 'setup' but without 'create', e.g. to run again after a wipe/put. 
+
   * 'create'
     creates two clusters, \$USER-a and \$USER-b, defaulting to 3x16vCPU but any optional extra args
     including overriding those defaults are passed through to 'roachprod create'. It stages cockroach
@@ -56,6 +59,10 @@ case $1 in
   "setup")
     shift
     $0 create "$@"
+    $0 go
+    ;;
+
+  "go")
     $0 start
     $0 workload init
     $0 jobs start
