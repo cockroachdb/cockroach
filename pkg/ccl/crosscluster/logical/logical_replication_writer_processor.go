@@ -350,13 +350,6 @@ func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context)
 func (lrw *logicalReplicationWriterProcessor) handleEvent(
 	ctx context.Context, event crosscluster.Event,
 ) error {
-	switch event.Type() {
-	case crosscluster.KVEvent:
-		ts := event.GetKVs()[0].KeyValue.Value.Timestamp.GoTime()
-		lrw.metrics.AdmitLatency.RecordValue(
-			timeutil.Since(ts).Nanoseconds())
-	}
-
 	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.RunAfterReceivingEvent != nil {
 			if err := streamingKnobs.RunAfterReceivingEvent(lrw.Ctx()); err != nil {
