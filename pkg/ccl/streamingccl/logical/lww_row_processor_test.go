@@ -79,9 +79,9 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 	runner.Exec(b, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
-	tableDescs := make(map[string]descpb.TableDescriptor, 1)
-	tableDescs["defaultdb.public."+tableName] = *desc.TableDesc()
-	rp, err := makeSQLLastWriteWinsHandler(ctx, s.Codec(), s.ClusterSettings(), tableDescs)
+	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
+		int32(desc.GetID()): *desc.TableDesc(),
+	})
 	require.NoError(b, err)
 
 	// We'll be simulating processing the same INSERT over and over in the loop.

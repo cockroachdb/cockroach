@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -38,7 +38,7 @@ import (
 type replicationStreamManagerImpl struct {
 	evalCtx   *eval.Context
 	resolver  resolver.SchemaResolver
-	txn       isql.Txn
+	txn       descs.Txn
 	sessionID clusterunique.ID
 }
 
@@ -69,17 +69,16 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		}
 	}
 
-	// Resolve table names to spans.
-	//
-	// TODO(ssd): Sort out the rules we want for this resolution. Right now
-	// the source sends fully qualified names and we accept them. I think we
-	// should probably do resolution
+	// Resolve table names to tableIDs and spans.
 	spans := make([]roachpb.Span, 0, len(req.TableNames))
 	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
 	for _, name := range req.TableNames {
-		parts := strings.SplitN(name, ".", 3)
-		dbName, schemaName, tblName := parts[0], parts[1], parts[2]
-		tn := tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(schemaName), tree.Name(tblName))
+		un := tree.MakeUnresolvedName(name)
+		uon, err := un.ToUnresolvedObjectName(tree.NoAnnotation)
+		if err != nil {
+			return streampb.ReplicationProducerSpec{}, err
+		}
+		tn := uon.ToTableName()
 		_, td, err := resolver.ResolveMutableExistingTableObject(ctx, r.resolver, &tn, true, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return streampb.ReplicationProducerSpec{}, err
@@ -121,19 +120,35 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		StreamID:             streampb.StreamID(jr.JobID),
 		SourceClusterID:      r.evalCtx.ClusterID,
 		ReplicationStartTime: replicationStartTime,
-		TableSpans:           spans,
 		TableDescriptors:     tableDescs,
 	}, nil
 }
 
 func (r *replicationStreamManagerImpl) PlanLogicalReplication(
-	ctx context.Context, spans []roachpb.Span,
+	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
 ) (*streampb.ReplicationStreamSpec, error) {
 	_, tenID, err := keys.DecodeTenantPrefix(r.evalCtx.Codec.TenantPrefix())
 	if err != nil {
 		return nil, err
 	}
-	return buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans)
+
+	spans := make([]roachpb.Span, 0, len(req.TableIDs))
+	tableDescs := make([]descpb.TableDescriptor, 0, len(req.TableIDs))
+	for _, requestedTableID := range req.TableIDs {
+		td, err := r.txn.Descriptors().MutableByID(r.txn.KV()).Table(ctx, descpb.ID(requestedTableID))
+		if err != nil {
+			return nil, err
+		}
+		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
+		tableDescs = append(tableDescs, td.TableDescriptor)
+	}
+	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans)
+	if err != nil {
+		return nil, err
+	}
+	spec.TableDescriptors = tableDescs
+	spec.TableSpans = spans
+	return spec, nil
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.
@@ -235,7 +250,7 @@ func newReplicationStreamManagerWithPrivilegesCheck(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	sc resolver.SchemaResolver,
-	txn isql.Txn,
+	txn descs.Txn,
 	sessionID clusterunique.ID,
 ) (eval.ReplicationStreamManager, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
