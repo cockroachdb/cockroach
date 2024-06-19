@@ -19,17 +19,16 @@ type streamEventBatcher struct {
 	batch              streampb.StreamEvent_Batch
 	size               int
 	spanConfigFrontier hlc.Timestamp
+	wrappedKVs         bool
 }
 
-func makeStreamEventBatcher() *streamEventBatcher {
-	return &streamEventBatcher{
-		batch: streampb.StreamEvent_Batch{},
-	}
+func makeStreamEventBatcher(supportsWrapping bool) *streamEventBatcher {
+	return &streamEventBatcher{wrappedKVs: supportsWrapping}
 }
 
 func (seb *streamEventBatcher) reset() {
 	seb.size = 0
-	seb.batch.KeyValues = seb.batch.KeyValues[:0]
+	seb.batch.KVs = seb.batch.KVs[:0]
 	seb.batch.Ssts = seb.batch.Ssts[:0]
 	seb.batch.DelRanges = seb.batch.DelRanges[:0]
 	seb.batch.SpanConfigs = seb.batch.SpanConfigs[:0]
@@ -41,17 +40,14 @@ func (seb *streamEventBatcher) addSST(sst kvpb.RangeFeedSSTable) {
 	seb.size += sst.Size()
 }
 
-func (seb *streamEventBatcher) addKVWithDiff(kv roachpb.KeyValue, prev roachpb.Value) {
-	seb.batch.KeyValuesWithDiff = append(seb.batch.KeyValuesWithDiff, streampb.StreamEvent_KVWithDiff{
-		KeyValue:  kv,
-		PrevValue: prev,
-	})
-	seb.size += (kv.Size() + prev.Size())
-}
-
-func (seb *streamEventBatcher) addKV(kv roachpb.KeyValue) {
-	seb.batch.KeyValues = append(seb.batch.KeyValues, kv)
-	seb.size += kv.Size()
+func (seb *streamEventBatcher) addKV(kv streampb.StreamEvent_KV) {
+	if seb.wrappedKVs {
+		seb.batch.KVs = append(seb.batch.KVs, kv)
+		seb.size += (kv.Size())
+	} else {
+		seb.batch.DeprecatedKeyValues = append(seb.batch.DeprecatedKeyValues, kv.KeyValue)
+		seb.size += (kv.Size())
+	}
 }
 
 func (seb *streamEventBatcher) addDelRange(d kvpb.RangeFeedDeleteRange) {

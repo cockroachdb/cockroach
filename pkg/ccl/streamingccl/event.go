@@ -36,10 +36,6 @@ const (
 	SpanConfigEvent
 	// SplitEvent indicates that the SplitKey field of an event holds a split key.
 	SplitEvent
-
-	// KVWithDiffEvent indicates that the event is a KV event from
-	// an event stream WithDiff enabled.
-	KVWithDiffEvent
 )
 
 // Event describes an event emitted by a cluster to cluster stream.  Its Type
@@ -51,7 +47,7 @@ type Event interface {
 	Type() EventType
 
 	// GetKVs returns a KV event if the EventType is KVEvent.
-	GetKVs() []roachpb.KeyValue
+	GetKVs() []streampb.StreamEvent_KV
 
 	// GetSSTable returns a AddSSTable event if the EventType is SSTableEvent.
 	GetSSTable() *kvpb.RangeFeedSSTable
@@ -68,15 +64,12 @@ type Event interface {
 
 	// GetSplitEvent returns the split event if the EventType is a SplitEvent
 	GetSplitEvent() *roachpb.Key
-
-	// GetKVWithDiff returns the KVWithDiff event if the EventType is a KVWithDiff
-	GetKVWithDiff() []streampb.StreamEvent_KVWithDiff
 }
 
 // kvEvent is a key value pair that needs to be ingested.
 type kvEvent struct {
 	emptyEvent
-	kv []roachpb.KeyValue
+	kv []streampb.StreamEvent_KV
 }
 
 var _ Event = kvEvent{}
@@ -87,7 +80,7 @@ func (kve kvEvent) Type() EventType {
 }
 
 // GetKVs implements the Event interface.
-func (kve kvEvent) GetKVs() []roachpb.KeyValue {
+func (kve kvEvent) GetKVs() []streampb.StreamEvent_KV {
 	return kve.kv
 }
 
@@ -180,26 +173,17 @@ func (se splitEvent) GetSplitEvent() *roachpb.Key {
 	return &se.splitKey
 }
 
-// kvEvent is a key value pair that needs to be ingested.
-type kvEventWithDiff struct {
-	emptyEvent
-	kvsWithDiff []streampb.StreamEvent_KVWithDiff
-}
-
-var _ Event = kvEventWithDiff{}
-
-// Type implements the Event interface.
-func (kve kvEventWithDiff) Type() EventType {
-	return KVWithDiffEvent
-}
-
-// GetKVWithDiff implements the Event interface.
-func (kve kvEventWithDiff) GetKVWithDiff() []streampb.StreamEvent_KVWithDiff {
-	return kve.kvsWithDiff
+// MakeKVEvent creates an Event from a KV.
+func MakeKVEventFromKVs(kv []roachpb.KeyValue) Event {
+	kvs := make([]streampb.StreamEvent_KV, len(kv))
+	for i := range kv {
+		kvs[i].KeyValue = kv[i]
+	}
+	return kvEvent{kv: kvs}
 }
 
 // MakeKVEvent creates an Event from a KV.
-func MakeKVEvent(kv []roachpb.KeyValue) Event {
+func MakeKVEvent(kv []streampb.StreamEvent_KV) Event {
 	return kvEvent{kv: kv}
 }
 
@@ -226,16 +210,12 @@ func MakeSplitEvent(splitKey roachpb.Key) Event {
 	return splitEvent{splitKey: splitKey}
 }
 
-func MakeKVWithDiffEvent(kvsWithDiff []streampb.StreamEvent_KVWithDiff) Event {
-	return kvEventWithDiff{kvsWithDiff: kvsWithDiff}
-}
-
 // emptyEvent is not an event (no Type method) but it is used to
 // reduce the boilerplate above.
 type emptyEvent struct{}
 
 // GetKVs implements the Event interface.
-func (ee emptyEvent) GetKVs() []roachpb.KeyValue {
+func (ee emptyEvent) GetKVs() []streampb.StreamEvent_KV {
 	return nil
 }
 
@@ -261,10 +241,5 @@ func (ee emptyEvent) GetSpanConfigEvent() *streampb.StreamedSpanConfigEntry {
 
 // GetSplitEvent implements the Event interface.
 func (ee emptyEvent) GetSplitEvent() *roachpb.Key {
-	return nil
-}
-
-// GetKVWithDiff implements the Event interface.
-func (ee emptyEvent) GetKVWithDiff() []streampb.StreamEvent_KVWithDiff {
 	return nil
 }

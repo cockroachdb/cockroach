@@ -459,6 +459,7 @@ func setupSpanConfigsStream(
 		Span:                   span,
 		TenantID:               tenantID,
 		MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
+		WrappedEvents:          true,
 	}
 	return streamSpanConfigs(evalCtx, spec)
 }

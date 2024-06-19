@@ -28,13 +28,13 @@ func TestStreamEventBatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	seb := makeStreamEventBatcher()
+	seb := makeStreamEventBatcher(true)
 
 	var runningSize int
 	kv := roachpb.KeyValue{Key: roachpb.Key{'1'}}
-	runningSize += kv.Size()
-	seb.addKV(kv)
-	require.Equal(t, 1, len(seb.batch.KeyValues))
+	runningSize += (&streampb.StreamEvent_KV{KeyValue: kv}).Size()
+	seb.addKV(streampb.StreamEvent_KV{KeyValue: kv})
+	require.Equal(t, 1, len(seb.batch.KVs))
 	require.Equal(t, runningSize, seb.getSize())
 
 	delRange := kvpb.RangeFeedDeleteRange{Span: roachpb.Span{Key: roachpb.KeyMin}, Timestamp: hlc.Timestamp{}}
@@ -58,7 +58,7 @@ func TestStreamEventBatcher(t *testing.T) {
 	// Reset should clear the batch.
 	seb.reset()
 	require.Equal(t, 0, seb.getSize())
-	require.Equal(t, 0, len(seb.batch.KeyValues))
+	require.Equal(t, 0, len(seb.batch.KVs))
 	require.Equal(t, 0, len(seb.batch.Ssts))
 	require.Equal(t, 0, len(seb.batch.DelRanges))
 }
@@ -72,7 +72,7 @@ func TestBatchSpanConfigs(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	t.Logf("Replication helper seed %d", seed)
 
-	seb := makeStreamEventBatcher()
+	seb := makeStreamEventBatcher(true)
 	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(2))
 	bufferedEvents := make([]streampb.StreamedSpanConfigEntry, 0)
 

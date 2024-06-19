@@ -351,11 +351,7 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(
 ) error {
 	switch event.Type() {
 	case streamingccl.KVEvent:
-		ts := event.GetKVs()[0].Value.Timestamp.GoTime()
-		lrw.metrics.AdmitLatency.RecordValue(
-			timeutil.Since(ts).Nanoseconds())
-	case streamingccl.KVWithDiffEvent:
-		ts := event.GetKVWithDiff()[0].KeyValue.Value.Timestamp.GoTime()
+		ts := event.GetKVs()[0].KeyValue.Value.Timestamp.GoTime()
 		lrw.metrics.AdmitLatency.RecordValue(
 			timeutil.Since(ts).Nanoseconds())
 	}
@@ -370,18 +366,7 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(
 
 	switch event.Type() {
 	case streamingccl.KVEvent:
-		// TODO(dt): change producer to always make the stream event rather than the
-		// raw roachpb.KeyValue, so we can skip this copy.
-		kvs := event.GetKVs()
-		withDiffs := make([]streampb.StreamEvent_KVWithDiff, len(kvs))
-		for i := range kvs {
-			withDiffs[i].KeyValue = kvs[i]
-		}
-		if err := lrw.flushBuffer(ctx, withDiffs); err != nil {
-			return err
-		}
-	case streamingccl.KVWithDiffEvent:
-		if err := lrw.flushBuffer(ctx, event.GetKVWithDiff()); err != nil {
+		if err := lrw.flushBuffer(ctx, event.GetKVs()); err != nil {
 			return err
 		}
 	case streamingccl.CheckpointEvent:
@@ -438,7 +423,7 @@ const maxWriterWorkers = 32
 
 // flushBuffer flushes the given flusableBufferand returns the underlying streamIngestionBuffer to the pool.
 func (lrw *logicalReplicationWriterProcessor) flushBuffer(
-	ctx context.Context, kvs []streampb.StreamEvent_KVWithDiff,
+	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "logical-replication-writer-flush")
 	defer sp.Finish()
@@ -458,7 +443,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	// same key in the same batch. Also, it's possible batching
 	// will make things much worse in practice.
 
-	k := func(kv streampb.StreamEvent_KVWithDiff) roachpb.Key {
+	k := func(kv streampb.StreamEvent_KV) roachpb.Key {
 		if p, err := keys.EnsureSafeSplitKey(kv.KeyValue.Key); err == nil {
 			return p
 		}
@@ -467,7 +452,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	firstKeyTS := kvs[0].KeyValue.Value.Timestamp.GoTime()
 
-	slices.SortFunc(kvs, func(a, b streampb.StreamEvent_KVWithDiff) int {
+	slices.SortFunc(kvs, func(a, b streampb.StreamEvent_KV) int {
 		if c := k(a).Compare(k(b)); c != 0 {
 			return c
 		}
@@ -545,7 +530,7 @@ type batchStats struct {
 }
 
 type BatchHandler interface {
-	HandleBatch(context.Context, []streampb.StreamEvent_KVWithDiff) (batchStats, error)
+	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
 }
 
 // RowProcessor knows how to process a single row from an event stream.
@@ -559,7 +544,7 @@ type txnBatch struct {
 }
 
 func (t *txnBatch) HandleBatch(
-	ctx context.Context, batch []streampb.StreamEvent_KVWithDiff,
+	ctx context.Context, batch []streampb.StreamEvent_KV,
 ) (batchStats, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "txnBatch.HandleBatch")
 	defer sp.Finish()

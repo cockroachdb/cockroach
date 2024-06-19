@@ -274,7 +274,7 @@ func (s *eventStream) onValues(ctx context.Context, values []kv.KeyValue) {
 		defer s.addMu.Unlock()
 	}
 	for _, i := range values {
-		s.seb.addKV(roachpb.KeyValue{Key: i.Key, Value: *i.Value})
+		s.seb.addKV(streampb.StreamEvent_KV{KeyValue: roachpb.KeyValue{Key: i.Key, Value: *i.Value}})
 	}
 	s.setErr(s.maybeFlushBatch(ctx))
 }
@@ -287,14 +287,9 @@ func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
 		s.addMu.Lock()
 		defer s.addMu.Unlock()
 	}
-	if s.spec.WithDiff {
-		s.seb.addKVWithDiff(
-			roachpb.KeyValue{Key: value.Key, Value: value.Value},
-			value.PrevValue,
-		)
-	} else {
-		s.seb.addKV(roachpb.KeyValue{Key: value.Key, Value: value.Value})
-	}
+	s.seb.addKV(streampb.StreamEvent_KV{
+		KeyValue: roachpb.KeyValue{Key: value.Key, Value: value.Value}, PrevValue: value.PrevValue,
+	})
 	s.setErr(s.maybeFlushBatch(ctx))
 }
 
@@ -478,7 +473,10 @@ func (s *eventStream) addSST(sst *kvpb.RangeFeedSSTable, registeredSpan roachpb.
 			if err != nil {
 				return err
 			}
-			s.seb.addKV(roachpb.KeyValue{Key: k.Key.Key, Value: roachpb.Value{RawBytes: v.RawBytes, Timestamp: k.Key.Timestamp}})
+			s.seb.addKV(
+				streampb.StreamEvent_KV{KeyValue: roachpb.KeyValue{
+					Key: k.Key.Key, Value: roachpb.Value{RawBytes: v.RawBytes, Timestamp: k.Key.Timestamp}},
+				})
 			return nil
 		}, func(rk storage.MVCCRangeKeyValue) error {
 			s.seb.addDelRange(kvpb.RangeFeedDeleteRange{
@@ -561,5 +559,6 @@ func streamPartition(
 		spec:     spec,
 		execCfg:  execCfg,
 		mon:      evalCtx.Planner.Mon(),
+		seb:      streamEventBatcher{wrappedKVs: spec.WrappedEvents},
 	}, nil
 }
