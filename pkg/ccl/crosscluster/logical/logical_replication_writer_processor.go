@@ -350,13 +350,6 @@ func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context)
 func (lrw *logicalReplicationWriterProcessor) handleEvent(
 	ctx context.Context, event crosscluster.Event,
 ) error {
-	switch event.Type() {
-	case crosscluster.KVEvent:
-		ts := event.GetKVs()[0].KeyValue.Value.Timestamp.GoTime()
-		lrw.metrics.AdmitLatency.RecordValue(
-			timeutil.Since(ts).Nanoseconds())
-	}
-
 	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.RunAfterReceivingEvent != nil {
 			if err := streamingKnobs.RunAfterReceivingEvent(lrw.Ctx()); err != nil {
@@ -494,8 +487,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 				batchTime := timeutil.Since(preBatchTime)
 
 				lrw.debug.RecordBatchApplied(batchTime, int64(batchEnd-batchStart))
-				lrw.metrics.BatchBytesHist.RecordValue(int64(batchStats.byteSize))
-				lrw.metrics.BatchHistNanos.RecordValue(batchTime.Nanoseconds())
+				lrw.metrics.ApplyBatchNanosHist.RecordValue(batchTime.Nanoseconds())
 				flushByteSize.Add(int64(batchStats.byteSize))
 			}
 			return nil
@@ -514,15 +506,13 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	keyCount, byteCount := int64(len(kvs)), flushByteSize.Load()
 	lrw.debug.RecordFlushComplete(flushTime, keyCount, byteCount)
 
-	lrw.metrics.Flushes.Inc(1)
-	lrw.metrics.FlushHistNanos.RecordValue(flushTime)
-	lrw.metrics.FlushRowCountHist.RecordValue(keyCount)
-	lrw.metrics.FlushBytesHist.RecordValue(byteCount)
-	lrw.metrics.IngestedLogicalBytes.Inc(byteCount)
+	lrw.metrics.AppliedRowUpdates.Inc(int64(len(kvs)))
+	lrw.metrics.AppliedLogicalBytes.Inc(byteCount)
+	lrw.metrics.CommitToCommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
 
-	lrw.metrics.CommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
-	lrw.metrics.IngestedEvents.Inc(int64(len(kvs)))
-
+	lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
+	lrw.metrics.StreamBatchRowsHist.RecordValue(keyCount)
+	lrw.metrics.StreamBatchBytesHist.RecordValue(byteCount)
 	return nil
 }
 
