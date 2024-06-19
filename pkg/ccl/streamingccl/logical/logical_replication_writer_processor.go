@@ -344,7 +344,7 @@ func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context)
 			return err
 		}
 	}
-	return nil
+	return lrw.subscription.Err()
 }
 
 func (lrw *logicalReplicationWriterProcessor) handleEvent(
