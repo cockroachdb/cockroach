@@ -1861,6 +1861,15 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	return s.wrapped.Send(e)
 }
 
+func (n *Node) incrementRangefeedCounter() {
+	n.metrics.NumMuxRangeFeed.Inc(1)
+	n.metrics.ActiveMuxRangeFeed.Inc(1)
+}
+
+func (n *Node) decrementRangefeedCounter() {
+	n.metrics.ActiveMuxRangeFeed.Dec(1)
+}
+
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	muxStream := &lockedMuxStream{wrapped: stream}
@@ -1870,7 +1879,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
 
-	streamMuxer := newStreamMuxer(muxStream.Send)
+	streamMuxer := newStreamMuxer(muxStream.Send, n)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -1883,10 +1892,6 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		return err
 	}
 
-	n.metrics.NumMuxRangeFeed.Inc(1)
-	n.metrics.ActiveMuxRangeFeed.Inc(1)
-	defer n.metrics.ActiveMuxRangeFeed.Inc(-1)
-
 	for {
 		req, err := stream.Recv()
 		if err != nil {
@@ -1894,7 +1899,6 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		}
 
 		if req.CloseStream {
-			n.metrics.ActiveMuxRangeFeed.Inc(-1)
 			streamMuxer.disconnectRangefeedWithError(
 				req.StreamID, req.RangeID,
 				kvpb.NewError(
@@ -1917,11 +1921,8 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 
 		streamMuxer.newStream(req.StreamID, cancel)
 
-		n.metrics.NumMuxRangeFeed.Inc(1)
-		n.metrics.ActiveMuxRangeFeed.Inc(1)
 		f := n.stores.RangeFeed(req, streamSink)
 		f.WhenReady(func(err error) {
-			n.metrics.ActiveMuxRangeFeed.Inc(-1)
 			streamMuxer.disconnectRangefeedWithError(
 				req.StreamID, req.RangeID, kvpb.NewError(err))
 		})
