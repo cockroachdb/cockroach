@@ -12,17 +12,41 @@ package server
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type streamMuxer struct {
-	syncutil.Mutex
-	muxErrors    []*kvpb.MuxRangeFeedEvent
 	notify       chan struct{}
 	sendToStream func(*kvpb.MuxRangeFeedEvent) error
+	// need active streams here so that stream  muxer know if the stream already
+	// terminates -> we only want to send one error back
+	// streamID -> context.CancelFunc
+	activeStreams sync.Map
+
+	mu struct {
+		syncutil.Mutex
+		muxErrors []*kvpb.MuxRangeFeedEvent
+	}
+}
+
+func (s *streamMuxer) newStream(streamID int64, cancel context.CancelFunc) {
+	s.activeStreams.Store(streamID, cancel)
+}
+
+func transformRangefeedErrToClientError(err *kvpb.Error) *kvpb.Error {
+	// TODO(wenyihu6): try to make server return an error here instead
+	if err == nil {
+		return kvpb.NewError(
+			kvpb.NewRangeFeedRetryError(
+				kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
+	}
+
+	return err
 }
 
 func newStreamMuxer(sendToStream func(*kvpb.MuxRangeFeedEvent) error) *streamMuxer {
@@ -33,9 +57,9 @@ func newStreamMuxer(sendToStream func(*kvpb.MuxRangeFeedEvent) error) *streamMux
 }
 
 func (s *streamMuxer) notifyMuxErrors(ev *kvpb.MuxRangeFeedEvent) {
-	s.Lock()
-	defer s.Unlock()
-	s.muxErrors = append(s.muxErrors, ev)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.muxErrors = append(s.mu.muxErrors, ev)
 	// Note that notify is unblocking.
 	select {
 	case s.notify <- struct{}{}:
@@ -43,11 +67,31 @@ func (s *streamMuxer) notifyMuxErrors(ev *kvpb.MuxRangeFeedEvent) {
 	}
 }
 
+func (s *streamMuxer) disconnectRangefeedWithError(
+	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
+) {
+	if cancelFunc, ok := s.activeStreams.LoadAndDelete(streamID); ok {
+		f := cancelFunc.(context.CancelFunc)
+		f()
+
+		clientErrorEvent := transformRangefeedErrToClientError(err)
+		ev := &kvpb.MuxRangeFeedEvent{
+			StreamID: streamID,
+			RangeID:  rangeID,
+		}
+		ev.SetValue(&kvpb.RangeFeedError{
+			Error: *clientErrorEvent,
+		})
+
+		s.notifyMuxErrors(ev)
+	}
+}
+
 func (s *streamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
-	s.Lock()
-	defer s.Unlock()
-	toSend := s.muxErrors
-	s.muxErrors = nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	toSend := s.mu.muxErrors
+	s.mu.muxErrors = nil
 	return toSend
 }
 
