@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -588,8 +589,18 @@ func TestAlterTenantStartReplicationAfterRestore(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
+	srcTenantName := roachpb.TenantName("t1")
 	db.Exec(t, "CREATE TENANT t1")
+	db.Exec(t, "ALTER TENANT t1 START SERVICE SHARED")
 	db.Exec(t, "BACKUP TENANT 3 TO 'nodelocal://1/t'")
+
+	t1Conn := srv.SystemLayer().SQLConn(t, serverutils.DBName("cluster:"+string(srcTenantName)+"/defaultdb"))
+	t1Sql := sqlutils.MakeSQLRunner(t1Conn)
+	testutils.SucceedsSoon(t, func() error {
+		return t1Conn.Ping()
+	})
+	t1Sql.Exec(t, "CREATE TABLE r (a INT PRIMARY KEY)")
+	t1Sql.Exec(t, "INSERT INTO r VALUES (1)")
 
 	afterBackup := srv.Clock().Now()
 	enforcedGC.Lock()
@@ -599,11 +610,38 @@ func TestAlterTenantStartReplicationAfterRestore(t *testing.T) {
 	u, cleanupURLA := sqlutils.PGUrl(t, srv.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupURLA()
 
+	destTenantName := "t2"
 	db.Exec(t, "RESTORE TENANT 3 FROM 'nodelocal://1/t' WITH TENANT = '5', TENANT_NAME = 't2'")
+
+	t2ConnPreRestore := srv.SystemLayer().SQLConn(t, serverutils.DBName("cluster:"+destTenantName+"/defaultdb"))
+	testutils.SucceedsSoon(t, func() error {
+		return t2ConnPreRestore.Ping()
+	})
+
+  // This table and value should get reverted before the replication stream begins.
+	t2SqlPreRestore := sqlutils.MakeSQLRunner(t2ConnPreRestore)
+	t2SqlPreRestore.Exec(t, "CREATE TABLE r (a INT PRIMARY KEY)")
+	t2SqlPreRestore.Exec(t, "INSERT INTO r VALUES (2)")
+
+	db.Exec(t, "ALTER TENANT t2 STOP SERVICE")
 	db.Exec(t, "ALTER TENANT t2 START REPLICATION OF t1 ON $1", u.String())
 	srv.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
-	_, ingestionJobID := replicationtestutils.GetStreamJobIds(t, ctx, db, "t2")
+	_, ingestionJobID := replicationtestutils.GetStreamJobIds(t, ctx, db, roachpb.TenantName(destTenantName))
 	srcTime := srv.Clock().Now()
 	replicationtestutils.WaitUntilReplicatedTime(t, srcTime, db, catpb.JobID(ingestionJobID))
+
+	db.Exec(t, `ALTER TENANT t2 COMPLETE REPLICATION TO LATEST`)
+	jobutils.WaitForJobToSucceed(t, db, jobspb.JobID(ingestionJobID))
+
+	db.Exec(t, `ALTER TENANT $1 START SERVICE SHARED`, destTenantName)
+	t2Conn := srv.SystemLayer().SQLConn(t, serverutils.DBName("cluster:"+destTenantName+"/defaultdb"))
+	testutils.SucceedsSoon(t, func() error {
+		return t2Conn.Ping()
+	})
+	t2Sql := sqlutils.MakeSQLRunner(t2Conn)
+
+	t1Res := t1Sql.QueryStr(t, "SELECT * FROM r")
+	t2Res := t2Sql.QueryStr(t, "SELECT * FROM r")
+	require.Equal(t, t1Res, t2Res)
 }
