@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/keys" // hook up pretty printer
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -45,6 +45,7 @@ var (
 type testStream struct {
 	ctx     context.Context
 	ctxDone func()
+	done    chan *kvpb.Error
 	mu      struct {
 		syncutil.Mutex
 		sendErr error
@@ -54,7 +55,7 @@ type testStream struct {
 
 func newTestStream() *testStream {
 	ctx, done := context.WithCancel(context.Background())
-	return &testStream{ctx: ctx, ctxDone: done}
+	return &testStream{ctx: ctx, ctxDone: done, done: make(chan *kvpb.Error, 1)}
 }
 
 func (s *testStream) Context() context.Context {
@@ -73,6 +74,20 @@ func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 	}
 	s.mu.events = append(s.mu.events, e)
 	return nil
+}
+
+func (s *testStream) Disconnect(err *kvpb.Error) {
+	s.done <- err
+}
+
+func (s *testStream) Err(t *testing.T) error {
+	select {
+	case err := <-s.done:
+		return err.GoError()
+	case <-time.After(30 * time.Second):
+		t.Fatalf("time out waiting for rangefeed completion")
+		return nil
+	}
 }
 
 func (s *testStream) SetSendErr(err error) {
@@ -134,7 +149,6 @@ func newTestRegistration(
 		NewMetrics(),
 		s,
 		func() {},
-		&future.ErrorFuture{},
 	)
 	return &testRegistration{
 		registration: r,
@@ -147,12 +161,17 @@ func (r *testRegistration) Events() []*kvpb.RangeFeedEvent {
 }
 
 func (r *testRegistration) Err() error {
-	err, _ := future.Wait(context.Background(), r.done)
-	return err
+	err := <-r.stream.done
+	return err.GoError()
 }
 
 func (r *testRegistration) TryErr() error {
-	return future.MakeAwaitableFuture(r.done).Get()
+	select {
+	case err := <-r.stream.done:
+		return err.GoError()
+	default:
+		return nil
+	}
 }
 
 func TestRegistrationBasic(t *testing.T) {

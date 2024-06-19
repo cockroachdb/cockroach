@@ -1855,6 +1855,10 @@ func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	return s.wrapped.send(s.streamID, s.rangeID, event)
 }
 
+func (s *setRangeIDEventSink) Disconnect(err *kvpb.Error) {
+	s.wrapped.disconnectRangefeedWithError(s.streamID, s.rangeID, err)
+}
+
 var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
 
 // lockedMuxStream provides support for concurrent calls to Send. Note that the
@@ -1921,11 +1925,10 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 
 		streamMuxer.newStream(req.StreamID, cancel)
 
-		f := n.stores.RangeFeed(req, streamSink)
-		f.WhenReady(func(err error) {
+		if err := n.stores.RangeFeed(req, streamSink); err != nil {
 			streamMuxer.disconnectRangefeedWithError(
 				req.StreamID, req.RangeID, kvpb.NewError(err))
-		})
+		}
 	}
 }
 
