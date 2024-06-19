@@ -857,15 +857,15 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.Cluster(ctx, &serverpb.ClusterRequest{})
 			return err
 		}},
-		{"Databases", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Databases", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.Databases(ctx, &serverpb.DatabasesRequest{})
 			return err
 		}},
-		{"DatabaseDetails", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"DatabaseDetails", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{Database: "foo"})
 			return err
 		}},
-		{"DataDistribution", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"DataDistribution", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.DataDistribution(ctx, &serverpb.DataDistributionRequest{})
 			return err
 		}},
@@ -876,13 +876,13 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			})
 			return err
 		}},
-		{"DecommissionStatus", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"DecommissionStatus", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{
 				NodeIDs: []roachpb.NodeID{srv.NodeID(), decomSrv.NodeID()},
 			})
 			return err
 		}},
-		{"EnqueueRange", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"EnqueueRange", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.EnqueueRange(ctx, &serverpb.EnqueueRangeRequest{
 				RangeID: scratchRange.RangeID,
 				Queue:   "replicaGC",
@@ -897,19 +897,19 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.Health(ctx, &serverpb.HealthRequest{})
 			return err
 		}},
-		{"Jobs", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Jobs", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.Jobs(ctx, &serverpb.JobsRequest{})
 			return err
 		}},
-		{"Liveness", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Liveness", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		}},
-		{"Locations", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Locations", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.Locations(ctx, &serverpb.LocationsRequest{})
 			return err
 		}},
-		{"NonTableStats", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"NonTableStats", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.NonTableStats(ctx, &serverpb.NonTableStatsRequest{})
 			return err
 		}},
@@ -917,7 +917,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.QueryPlan(ctx, &serverpb.QueryPlanRequest{Query: "SELECT 1"})
 			return err
 		}},
-		{"RangeLog", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"RangeLog", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.RangeLog(ctx, &serverpb.RangeLogRequest{})
 			return err
 		}},
@@ -925,20 +925,20 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.Settings(ctx, &serverpb.SettingsRequest{})
 			return err
 		}},
-		{"TableStats", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"TableStats", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.TableStats(ctx, &serverpb.TableStatsRequest{Database: "foo", Table: "bar"})
 			return err
 		}},
-		{"TableDetails", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"TableDetails", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.TableDetails(ctx, &serverpb.TableDetailsRequest{Database: "foo", Table: "bar"})
 			return err
 		}},
-		{"Users", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Users", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.Users(ctx, &serverpb.UsersRequest{})
 			return err
 		}},
 		// We drain at the end, since it may evict us.
-		{"Drain", codes.Unknown, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Drain", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			stream, err := c.Drain(ctx, &serverpb.DrainRequest{DoDrain: true})
 			if err != nil {
 				return err
