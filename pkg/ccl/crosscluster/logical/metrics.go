@@ -33,12 +33,6 @@ var (
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaReplicationFlushes = metric.Metadata{
-		Name:        "logical_replication.flushes",
-		Help:        "Total flushes across all replication jobs",
-		Measurement: "Flushes",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaReplicationFlushHistNanos = metric.Metadata{
 		Name:        "logical_replication.flush_hist_nanos",
 		Help:        "Time spent flushing messages across all replication streams",
@@ -89,7 +83,6 @@ var (
 type Metrics struct {
 	IngestedEvents        *metric.Counter
 	IngestedLogicalBytes  *metric.Counter
-	Flushes               *metric.Counter
 	CheckpointEvents      *metric.Counter
 	FlushRowCountHist     metric.IHistogram
 	FlushBytesHist        metric.IHistogram
@@ -108,7 +101,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	return &Metrics{
 		IngestedEvents:       metric.NewCounter(metaReplicationEventsIngested),
 		IngestedLogicalBytes: metric.NewCounter(metaReplicationIngestedBytes),
-		Flushes:              metric.NewCounter(metaReplicationFlushes),
 		CheckpointEvents:     metric.NewCounter(metaReplicationCheckpointEventsIngested),
 		FlushHistNanos: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,

@@ -507,7 +507,6 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	keyCount, byteCount := int64(len(kvs)), flushByteSize.Load()
 	lrw.debug.RecordFlushComplete(flushTime, keyCount, byteCount)
 
-	lrw.metrics.Flushes.Inc(1)
 	lrw.metrics.FlushHistNanos.RecordValue(flushTime)
 	lrw.metrics.FlushRowCountHist.RecordValue(keyCount)
 	lrw.metrics.FlushBytesHist.RecordValue(byteCount)
