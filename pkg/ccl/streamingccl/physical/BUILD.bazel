@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "streamingest",
+    name = "physical",
     srcs = [
         "alter_replication_job.go",
         "external_connection.go",
@@ -17,7 +17,7 @@ go_library(
         "stream_ingestion_planning.go",
         "stream_ingestion_processor.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest",
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/physical",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
@@ -89,7 +89,7 @@ go_library(
 )
 
 go_test(
-    name = "streamingest_test",
+    name = "physical_test",
     size = "large",
     srcs = [
         "alter_replication_job_test.go",
@@ -109,7 +109,7 @@ go_test(
         "stream_ingestion_processor_test.go",
     ],
     data = glob(["testdata/**"]),
-    embed = [":streamingest"],
+    embed = [":physical"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
         "//conditions:default": {"test.Pool": "large"},

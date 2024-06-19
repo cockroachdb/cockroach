@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/physical"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
@@ -195,7 +195,7 @@ func (r *logicalReplicationResumer) ingest(
 	if err != nil {
 		return err
 	}
-	destNodeLocalities, err := streamingest.GetDestNodeLocalities(ctx, distSQLPlanner, nodes)
+	destNodeLocalities, err := physical.GetDestNodeLocalities(ctx, distSQLPlanner, nodes)
 	if err != nil {
 		return err
 	}
