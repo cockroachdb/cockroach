@@ -31,5 +31,5 @@ func TestErrorBehaviour(t *testing.T) {
 	wrap1 := errors.Wrap(orig, "wrap1")
 	wrap2 := errors.Wrap(wrap1, "wrap2")
 	assert.Equal(t, "wrap1: googleapi: Error 403: ACCESS DENIED. ALL YOUR BASE ARE BELONG TO US", wrap1.Error())
-	assert.Equal(t, "wrap2: wrap1: googleapi: Error 403: ACCESS DENIED. ALL YOUR BASE ARE BELONG TO US", wrap2.Error())
+	assert.Equal(t, "wrap2: wrap1: grpc: ACCESS DENIED. ALL YOUR BASE ARE BELONG TO US [code 2/Unknown]", wrap2.Error())
 }
