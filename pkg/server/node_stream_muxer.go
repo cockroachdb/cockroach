@@ -20,13 +20,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+type rangefeedMetricsRecorder interface {
+	incrementRangefeedCounter()
+	decrementRangefeedCounter()
+}
+
 type streamMuxer struct {
 	notify       chan struct{}
 	sendToStream func(*kvpb.MuxRangeFeedEvent) error
 	// need active streams here so that stream  muxer know if the stream already
 	// terminates -> we only want to send one error back
 	// streamID -> context.CancelFunc
-	activeStreams sync.Map
+	activeStreams    sync.Map
+	rangefeedMetrics rangefeedMetricsRecorder
 
 	mu struct {
 		syncutil.Mutex
@@ -35,6 +41,7 @@ type streamMuxer struct {
 }
 
 func (s *streamMuxer) newStream(streamID int64, cancel context.CancelFunc) {
+	s.rangefeedMetrics.incrementRangefeedCounter()
 	s.activeStreams.Store(streamID, cancel)
 }
 
@@ -49,10 +56,13 @@ func transformRangefeedErrToClientError(err *kvpb.Error) *kvpb.Error {
 	return err
 }
 
-func newStreamMuxer(sendToStream func(*kvpb.MuxRangeFeedEvent) error) *streamMuxer {
+func newStreamMuxer(
+	sendToStream func(*kvpb.MuxRangeFeedEvent) error, metrics rangefeedMetricsRecorder,
+) *streamMuxer {
 	return &streamMuxer{
-		notify:       make(chan struct{}, 1),
-		sendToStream: sendToStream,
+		sendToStream:     sendToStream,
+		notify:           make(chan struct{}, 1),
+		rangefeedMetrics: metrics,
 	}
 }
 
@@ -84,6 +94,7 @@ func (s *streamMuxer) disconnectRangefeedWithError(
 		})
 
 		s.notifyMuxErrors(ev)
+		s.rangefeedMetrics.decrementRangefeedCounter()
 	}
 }
 
