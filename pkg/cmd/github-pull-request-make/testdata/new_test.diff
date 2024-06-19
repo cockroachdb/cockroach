@@ -1,12 +1,12 @@
 index 6c20afaef23..879494bdadd 100644
---- a/pkg/ccl/streamingccl/streamclient/client_test.go
-+++ b/pkg/ccl/streamingccl/streamclient/client_test.go
+--- a/pkg/ccl/crosscluster/streamclient/client_test.go
++++ b/pkg/ccl/crosscluster/streamclient/client_test.go
 @@ -15,13 +15,19 @@ import (
         "testing"
         "time"
 
 +       "github.com/cockroachdb/cockroach/pkg/base"
-        "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+        "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
         "github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
         "github.com/cockroachdb/cockroach/pkg/repstream/streampb"
         "github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,8 +43,8 @@ abled})
 +       sql.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION "%s" AS "%s"`,
 +               externalConnection, pgURL.String()))
 +       nonExistentConnection := "i-dont-exist"
-+       address := streamingccl.StreamAddress(fmt.Sprintf("external://%s", externalConnection))
-+       dontExistAddress := streamingccl.StreamAddress(fmt.Sprintf("external://%s", nonExistentConnection))
++       address := crosscluster.StreamAddress(fmt.Sprintf("external://%s", externalConnection))
++       dontExistAddress := crosscluster.StreamAddress(fmt.Sprintf("external://%s", nonExistentConnection))
 +
 +       isqlDB := srv.InternalDB().(isql.DB)
 +       client, err := NewStreamClient(ctx, address, isqlDB)
