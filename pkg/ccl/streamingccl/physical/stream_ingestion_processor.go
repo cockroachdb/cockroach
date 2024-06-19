@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingest
+package physical
 
 import (
 	"context"
@@ -968,7 +968,7 @@ type rangeKeySST struct {
 
 // Flush all the range keys buffered so far into storage as an SST.
 func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues) error {
-	_, sp := tracing.ChildSpan(ctx, "streamingest.rangeKeyBatcher.flush")
+	_, sp := tracing.ChildSpan(ctx, "physical.rangeKeyBatcher.flush")
 	defer sp.Finish()
 
 	if len(toFlush) == 0 {

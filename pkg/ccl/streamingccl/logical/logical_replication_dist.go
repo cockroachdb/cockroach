@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/physical"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,7 +51,7 @@ func constructLogicalReplicationWriterSpecs(
 	writerSpecs := make(map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, len(destSQLInstances))
 
 	// Update stream ingestion specs with their matched source node.
-	matcher := streamingest.MakeNodeMatcher(destSQLInstances)
+	matcher := physical.MakeNodeMatcher(destSQLInstances)
 	for _, candidate := range matcher.FindSourceNodePriority(topology) {
 		destID := matcher.FindMatch(candidate.ClosestDestIDs)
 		partition := candidate.Partition
