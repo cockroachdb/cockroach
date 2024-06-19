@@ -76,10 +76,10 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 	"kv.allocator.load_based_rebalancing",
 	"whether to rebalance based on the distribution of load across stores",
 	"leases and replicas",
-	map[int64]string{
-		int64(LBRebalancingOff):               "off",
-		int64(LBRebalancingLeasesOnly):        "leases",
-		int64(LBRebalancingLeasesAndReplicas): "leases and replicas",
+	map[LBRebalancingMode]string{
+		LBRebalancingOff:               "off",
+		LBRebalancingLeasesOnly:        "leases",
+		LBRebalancingLeasesAndReplicas: "leases and replicas",
 	},
 	settings.WithPublic)
 
@@ -240,7 +240,7 @@ type RebalanceContext struct {
 // RebalanceMode returns the mode of the store rebalancer. See
 // LoadBasedRebalancingMode.
 func (sr *StoreRebalancer) RebalanceMode() LBRebalancingMode {
-	return LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV))
+	return LoadBasedRebalancingMode.Get(&sr.st.SV)
 }
 
 // RebalanceDimension returns the dimension the store rebalancer is balancing.

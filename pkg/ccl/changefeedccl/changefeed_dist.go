@@ -359,9 +359,9 @@ var RangeDistributionStrategy = settings.RegisterEnumSetting(
 		"will not override locality restrictions",
 	metamorphic.ConstantWithTestChoice("default_range_distribution_strategy",
 		"default", "balanced_simple").(string),
-	map[int64]string{
-		int64(defaultDistribution):        "default",
-		int64(balancedSimpleDistribution): "balanced_simple",
+	map[rangeDistributionType]string{
+		defaultDistribution:        "default",
+		balancedSimpleDistribution: "balanced_simple",
 	},
 	settings.WithPublic)
 
@@ -415,8 +415,8 @@ func makePlan(
 			log.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
 		}
 		switch {
-		case distMode == sql.LocalDistribution || rangeDistribution == int64(defaultDistribution):
-		case rangeDistribution == int64(balancedSimpleDistribution):
+		case distMode == sql.LocalDistribution || rangeDistribution == defaultDistribution:
+		case rangeDistribution == balancedSimpleDistribution:
 			log.Infof(ctx, "rebalancing ranges using balanced simple distribution")
 			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)

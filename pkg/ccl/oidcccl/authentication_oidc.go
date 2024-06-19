@@ -310,7 +310,7 @@ func reloadConfigLocked(
 		successPath:    server.ServerHTTPBasePath.Get(&st.SV),
 
 		generateJWTAuthTokenEnabled:  OIDCGenerateClusterSSOTokenEnabled.Get(&st.SV),
-		generateJWTAuthTokenUseToken: tokenToUse(OIDCGenerateClusterSSOTokenUseToken.Get(&st.SV)),
+		generateJWTAuthTokenUseToken: OIDCGenerateClusterSSOTokenUseToken.Get(&st.SV),
 		generateJWTAuthTokenSQLHost:  OIDCGenerateClusterSSOTokenSQLHost.Get(&st.SV),
 		generateJWTAuthTokenSQLPort:  OIDCGenerateClusterSSOTokenSQLPort.Get(&st.SV),
 	}

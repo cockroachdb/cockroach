@@ -36,6 +36,7 @@ const intKey = "testing.int"
 const durationKey = "testing.duration"
 const byteSizeKey = "testing.bytesize"
 const enumKey = "testing.enum"
+const enum2Key = "testing.enum-2"
 
 var strA = settings.RegisterStringSetting(
 	settings.ApplicationLevel, strKey, "desc", "<default>",
@@ -66,6 +67,11 @@ var byteSizeA = settings.RegisterByteSizeSetting(
 )
 var enumA = settings.RegisterEnumSetting(
 	settings.ApplicationLevel, enumKey, "desc", "foo", map[int64]string{1: "foo", 2: "bar"})
+
+type enumBType uint8
+
+var enumB = settings.RegisterEnumSetting(
+	settings.ApplicationLevel, enum2Key, "desc", "foo", map[enumBType]string{1: "foo", 2: "bar"})
 
 func TestSettingsRefresh(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -243,11 +249,27 @@ func TestSettingsSetAndShow(t *testing.T) {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
+	db.Exec(t, fmt.Sprintf(setQ, enum2Key, "2"))
+	if expected, actual := enumBType(2), enumB.Get(&st.SV); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+	if expected, actual := "bar", db.QueryStr(t, fmt.Sprintf(showQ, enum2Key))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+
 	db.Exec(t, fmt.Sprintf(setQ, enumKey, "'foo'"))
 	if expected, actual := int64(1), enumA.Get(&st.SV); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 	if expected, actual := "foo", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+
+	db.Exec(t, fmt.Sprintf(setQ, enum2Key, "'foo'"))
+	if expected, actual := enumBType(1), enumB.Get(&st.SV); expected != actual {
+		t.Fatalf("expected %v, got %v", expected, actual)
+	}
+	if expected, actual := "foo", db.QueryStr(t, fmt.Sprintf(showQ, enum2Key))[0][0]; expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 

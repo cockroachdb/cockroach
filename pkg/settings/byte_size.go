@@ -40,7 +40,7 @@ func (b *ByteSizeSetting) DefaultString() string {
 
 // DecodeToString decodes and renders an encoded value.
 func (b *ByteSizeSetting) DecodeToString(encoded string) (string, error) {
-	iv, err := b.DecodeValue(encoded)
+	iv, err := b.DecodeNumericValue(encoded)
 	if err != nil {
 		return "", err
 	}

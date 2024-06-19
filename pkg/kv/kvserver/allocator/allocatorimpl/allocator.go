@@ -2246,8 +2246,8 @@ func (a *Allocator) DiskOptions() DiskCapacityOptions {
 // enforcement level.
 func (a *Allocator) IOOverloadOptions() IOOverloadOptions {
 	return IOOverloadOptions{
-		ReplicaEnforcementLevel:      IOOverloadEnforcementLevel(ReplicaIOOverloadThresholdEnforcement.Get(&a.st.SV)),
-		LeaseEnforcementLevel:        IOOverloadEnforcementLevel(LeaseIOOverloadThresholdEnforcement.Get(&a.st.SV)),
+		ReplicaEnforcementLevel:      ReplicaIOOverloadThresholdEnforcement.Get(&a.st.SV),
+		LeaseEnforcementLevel:        LeaseIOOverloadThresholdEnforcement.Get(&a.st.SV),
 		UseIOThresholdMax:            a.st.Version.IsActive(context.Background(), clusterversion.V24_1_GossipMaximumIOOverload),
 		ReplicaIOOverloadThreshold:   ReplicaIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadThreshold:     LeaseIOOverloadThreshold.Get(&a.st.SV),

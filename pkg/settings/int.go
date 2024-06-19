@@ -54,7 +54,7 @@ func (i *IntSetting) EncodedDefault() string {
 
 // DecodeToString decodes and renders an encoded value.
 func (i *IntSetting) DecodeToString(encoded string) (string, error) {
-	iv, err := i.DecodeValue(encoded)
+	iv, err := i.DecodeNumericValue(encoded)
 	if err != nil {
 		return "", err
 	}
@@ -62,7 +62,7 @@ func (i *IntSetting) DecodeToString(encoded string) (string, error) {
 }
 
 // DecodeValue decodes the value into an integer.
-func (i *IntSetting) DecodeValue(value string) (int64, error) {
+func (i *IntSetting) DecodeNumericValue(value string) (int64, error) {
 	return strconv.ParseInt(value, 10, 64)
 }
 
