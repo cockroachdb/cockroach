@@ -1068,3 +1068,19 @@ CREATE TABLE public.t_115352 (
 )
 
 subtest end
+
+subtest 125619
+
+statement ok
+SET inject_retry_errors_enabled=true
+
+statement ok
+CREATE TABLE t_125619 (i INT8, j INT8, INDEX ((i + j)));
+
+statement ok
+ALTER TABLE t_125619 ADD CONSTRAINT uni UNIQUE ((i + j + i))
+
+statement ok
+SET inject_retry_errors_enabled=false
+
+subtest end
