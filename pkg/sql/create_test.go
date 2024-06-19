@@ -15,13 +15,16 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,9 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/jackc/pgx/v4"
+	"github.com/stretchr/testify/require"
 )
 
 // createTestTable tries to create a new table named based on the passed in id.
@@ -412,4 +417,77 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCreateTableWithRetry validates that transaction retries on CREATE TABLE
+// function correctly. Previously, we had scenarios where AST modifications could
+// cause these to fail on retries.
+func TestCreateTableWithRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	retryOnce := sync.Once{}
+	runPushTxn := make(chan struct{})
+	pushTxnComplete := make(chan struct{})
+	numCommits := atomic.Int32{}
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeAutoCommit: func(ctx context.Context, stmt string) error {
+					// Setup an auto commit knob that will force the create table
+					// to retry.
+					var err error
+					if strings.Contains(stmt, "t1_retry_this_tbl") {
+						retryOnce.Do(func() {
+							close(runPushTxn)
+							<-pushTxnComplete
+						})
+						numCommits.Add(1)
+					}
+					return err
+				},
+			},
+		},
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	createTableToTest := `CREATE TABLE t1_retry_this_tbl(i int, j int, INDEX ((i + j)))`
+	grp := ctxgroup.WithContext(ctx)
+	grp.Go(func() error {
+		<-runPushTxn
+		defer close(pushTxnComplete)
+		conn := s.SQLConn(t)
+		defer conn.Close()
+		tx, err := s.SQLConn(t).BeginTx(ctx, &gosql.TxOptions{})
+		if err != nil {
+			return err
+		}
+		// Bump the priority so the main implicit txn hits a retry error.
+		_, err = tx.Exec("SET TRANSACTION PRIORITY HIGH")
+		if err != nil {
+			return err
+		}
+		// Push the main connection and clean up the same table.
+		_, err = tx.Exec(createTableToTest)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec("DROP TABLE t1_retry_this_tbl")
+		if err != nil {
+			return err
+		}
+		err = tx.Commit()
+		return err
+	})
+	go func() {
+
+	}()
+	// Invoke a create table that will be blocked by the go routine
+	// above.
+	conn := s.SQLConn(t)
+	defer conn.Close()
+	_, err := conn.Exec(createTableToTest)
+	require.NoError(t, err)
+	require.NoError(t, grp.Wait())
+	// Ensure a retry ocurred because the auto-commit hook will be invoked twice.
+	require.GreaterOrEqual(t, numCommits.Load(), int32(2), "expected a retry")
 }

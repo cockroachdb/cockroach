@@ -1773,6 +1773,15 @@ func NewTableDesc(
 		return newColumns, nil
 	}
 
+	copyIndexElemListAndRestore := func(existingList *tree.IndexElemList) func() {
+		newList := make(tree.IndexElemList, len(*existingList))
+		copy(newList, *existingList)
+		restoreList := *existingList
+		*existingList = newList
+		return func() {
+			*existingList = restoreList
+		}
+	}
 	// Now that we have all the other columns set up, we can validate
 	// any computed columns.
 	for _, def := range n.Defs {
@@ -1811,6 +1820,7 @@ func NewTableDesc(
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
 			}
+			defer copyIndexElemListAndRestore(&d.Columns)()
 			if err := replaceExpressionElemsWithVirtualCols(
 				ctx,
 				&desc,
@@ -1926,6 +1936,7 @@ func NewTableDesc(
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
 			}
+			defer copyIndexElemListAndRestore(&d.Columns)()
 			if err := replaceExpressionElemsWithVirtualCols(
 				ctx,
 				&desc,
