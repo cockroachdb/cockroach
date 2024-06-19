@@ -1039,3 +1039,19 @@ public  generated_by_default_t_notnull_b_seq     INT8
 public  generated_always_t_notnull_b_seq         INT8
 public  generated_by_default_t_b_seq             INT8
 public  generated_always_t_b_seq                 INT8
+
+subtest 125619
+
+statement ok
+SET inject_retry_errors_enabled=true
+
+statement ok
+CREATE TABLE t_125619 (i INT8, j INT8, INDEX ((i + j)));
+
+statement ok
+ALTER TABLE t_125619 ADD CONSTRAINT uni UNIQUE ((i + j + i))
+
+statement ok
+SET inject_retry_errors_enabled=false
+
+subtest end
