@@ -889,7 +889,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			})
 			return err
 		}},
-		{"Events", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Events", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
 			_, err := c.Events(ctx, &serverpb.EventsRequest{})
 			return err
 		}},
