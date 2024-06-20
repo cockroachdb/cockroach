@@ -217,6 +217,9 @@ func TestNonSensitiveColumns(t *testing.T) {
 			// in a system tenant. These would fail if pointed to a
 			// secondary tenant.
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			//We are seeing certificate issue in CI test job. Hence,we are
+			//running cluster in insecure mode.
+			Insecure: true,
 		},
 	})
 	defer cluster.Stopper().Stop(context.Background())
