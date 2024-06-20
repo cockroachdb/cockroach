@@ -16,7 +16,8 @@ import { Provider, ReactReduxContext } from "react-redux";
 import { Redirect, Route, Switch } from "react-router-dom";
 import "react-select/dist/react-select.css";
 import { Action, Store } from "redux";
-import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
+import { CockroachCloudContext , crlTheme, ConfigProvider as ClusterUIConfigProvider } from "@cockroachlabs/cluster-ui";
+import { ConfigProvider } from "antd";
 
 import { AdminUIState } from "src/redux/state";
 import { createLoginRoute, createLogoutRoute } from "src/routes/login";
@@ -115,6 +116,10 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
       <ConnectedRouter history={history} context={ReactReduxContext}>
         <CockroachCloudContext.Provider value={false}>
           <TimezoneProvider>
+            {/* Apply CRL theme twice, with ConfigProvider instance from Db Console and
+             imported instance from Cluster UI as it applies theme imported components only. */}
+            <ClusterUIConfigProvider theme={crlTheme}>
+            <ConfigProvider theme={crlTheme}>
             <Switch>
               {/* login */}
               {createLoginRoute()}
@@ -485,7 +490,9 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 </Layout>
               </Route>
             </Switch>
-          </TimezoneProvider>
+            </ConfigProvider>
+            </ClusterUIConfigProvider>
+            </TimezoneProvider>
         </CockroachCloudContext.Provider>
       </ConnectedRouter>
     </Provider>
