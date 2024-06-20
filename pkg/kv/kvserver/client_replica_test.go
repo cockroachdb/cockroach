@@ -1140,9 +1140,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	var maxNanos int64
 	for _, m := range manuals {
 		m.Pause()
-		if cur := m.UnixNano(); cur > maxNanos {
-			maxNanos = cur
-		}
+		maxNanos = max(maxNanos, m.UnixNano())
 	}
 	// After doing so, perfectly synchronize them.
 	for _, m := range manuals {
@@ -1177,8 +1175,12 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 		t.Fatalf("timeout")
 	}
 
-	// Advance the clock on node 1.
+	// Advance the clock on node 1. This should now lead the clock on node 2 and
+	// the timestamp assigned to the non-txn read, because the two manual clocks
+	// were paused and synchronized up above.
 	manuals[0].Increment(100)
+	clockTs := tc.Servers[0].Clock().Now()
+	require.True(t, nonTxnOrigTs.Less(clockTs), "nonTxnOrigTs: %v, clockTs: %v", nonTxnOrigTs, clockTs)
 
 	// Perform a non-txn write on node 1. This will grab a timestamp from node 1's
 	// clock, which leads the clock on node 2 and the timestamp assigned to the
@@ -1196,11 +1198,12 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	// operations and assert that we observe an uncertainty error even though its
 	// absence would not be a true stale read.
 	ba := &kvpb.BatchRequest{}
+	ba.RangeID = desc.RangeID
 	ba.Add(putArgs(key, []byte("val")))
-	br, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
+	br, pErr := tc.GetFirstStoreFromServer(t, 0).Send(ctx, ba)
 	require.Nil(t, pErr)
 	writeTs := br.Timestamp
-	require.True(t, nonTxnOrigTs.Less(writeTs))
+	require.True(t, nonTxnOrigTs.Less(writeTs), "nonTxnOrigTs: %v, writeTs: %v", nonTxnOrigTs, writeTs)
 
 	// Then transfer the lease to node 2. The new lease should end up with a start
 	// time above the timestamp assigned to the non-txn read.
