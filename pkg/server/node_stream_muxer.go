@@ -25,27 +25,38 @@ type rangefeedMetricsRecorder interface {
 	decrementRangefeedCounter()
 }
 
-type streamSender interface {
+var _ rangefeedMetricsRecorder = (*nodeMetrics)(nil)
+
+type severStreamSender interface {
 	Send(*kvpb.MuxRangeFeedEvent) error
 }
 
-var _ streamSender = (*lockedMuxStream)(nil)
+var _ severStreamSender = (*lockedMuxStream)(nil)
 
 type streamMuxer struct {
-	stream  streamSender
+	// stream is the server stream to which the muxer sends events. Note that the
+	// stream is a locked mux stream, so it is safe for concurrent Sends.
+	sender severStreamSender
+
+	// metrics is nodeMetrics used to update rangefeed metrics.
 	metrics rangefeedMetricsRecorder
 
-	// notify is a channel that is used to signal that there are disconnect
-	// errors.
-	notify chan struct{}
-
-	// need active streams here so that stream  muxer know if the stream already
-	// terminates -> we only want to send one error back
-	// streamID -> context.CancelFunc
+	// streamID -> context.CancelFunc; ActiveStreams is a map of active
+	// rangefeeds. Canceling the context using the associated CancelFunc will
+	// disconnect the registration. It is not expected to repeatedly shut down a
+	// stream.
 	activeStreams sync.Map
+
+	// notifyCompletion is a buffered channel of size 1 used to signal the
+	// presence of muxErrors that need to be sent. Additional signals are dropped
+	// if the channel is already full so that it's unblocking.
+	notifyCompletion chan struct{}
 
 	mu struct {
 		syncutil.Mutex
+
+		// muxErrors is a list of errors that need to be sent to the client to
+		// signal rangefeed completion.
 		muxErrors []*kvpb.MuxRangeFeedEvent
 	}
 }
@@ -55,8 +66,13 @@ func (s *streamMuxer) newStream(streamID int64, cancel context.CancelFunc) {
 	s.activeStreams.Store(streamID, cancel)
 }
 
-func transformRangefeedErrToClientError(err *kvpb.Error) *kvpb.Error {
-	// TODO(wenyihu6): try to make server return an error here instead
+// transformToClientErr transforms a rangefeed completion error to a client side
+// error which will be sent to the client.
+func transformToClientErr(err *kvpb.Error) *kvpb.Error {
+	// When the processor is torn down because it no longer has active
+	// registrations, it would attempt to close all feeds again with a nil error.
+	// However, this should never occur, as the processor should stop with a
+	// reason if registrations are still active.
 	if err == nil {
 		return kvpb.NewError(
 			kvpb.NewRangeFeedRetryError(
@@ -66,33 +82,55 @@ func transformRangefeedErrToClientError(err *kvpb.Error) *kvpb.Error {
 	return err
 }
 
-func newStreamMuxer(stream *lockedMuxStream, metrics rangefeedMetricsRecorder) *streamMuxer {
+func newStreamMuxer(sender *lockedMuxStream, metrics rangefeedMetricsRecorder) *streamMuxer {
 	return &streamMuxer{
-		stream:  stream,
-		notify:  make(chan struct{}, 1),
-		metrics: metrics,
+		sender:           sender,
+		metrics:          metrics,
+		notifyCompletion: make(chan struct{}, 1),
 	}
 }
 
-func (s *streamMuxer) notifyMuxErrors(ev *kvpb.MuxRangeFeedEvent) {
+// send annotates the rangefeed event with streamID and rangeID and sends it to
+// the grpc stream.
+func (s *streamMuxer) send(
+	streamID int64, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent,
+) error {
+	response := &kvpb.MuxRangeFeedEvent{
+		RangeFeedEvent: *event,
+		StreamID:       streamID,
+		RangeID:        rangeID,
+	}
+	return s.sender.Send(response)
+}
+
+// appendMuxError appends the mux error to the muxer's error slice. This slice
+// is processed by streamMuxer.run and sent to the client. We want to avoid
+// blocking here.
+func (s *streamMuxer) appendMuxError(ev *kvpb.MuxRangeFeedEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.muxErrors = append(s.mu.muxErrors, ev)
-	// Note that notify is unblocking.
+
+	// Note that notifyCompletion is non-blocking. We want to avoid blocking on IO
+	// (stream.Send) on processor goroutine.
 	select {
-	case s.notify <- struct{}{}:
+	case s.notifyCompletion <- struct{}{}:
 	default:
 	}
 }
 
+// disconnectRangefeedWithError disconnects the rangefeed stream with the given
+// streamID and sends the error to the client.
 func (s *streamMuxer) disconnectRangefeedWithError(
 	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
 ) {
 	if cancelFunc, ok := s.activeStreams.LoadAndDelete(streamID); ok {
 		f := cancelFunc.(context.CancelFunc)
+		// Canceling the context will cause the registration to disconnect unless
+		// registration is not set up yet in which case it will be a no-op.
 		f()
 
-		clientErrorEvent := transformRangefeedErrToClientError(err)
+		clientErrorEvent := transformToClientErr(err)
 		ev := &kvpb.MuxRangeFeedEvent{
 			StreamID: streamID,
 			RangeID:  rangeID,
@@ -101,11 +139,13 @@ func (s *streamMuxer) disconnectRangefeedWithError(
 			Error: *clientErrorEvent,
 		})
 
-		s.notifyMuxErrors(ev)
+		s.appendMuxError(ev)
 		s.metrics.decrementRangefeedCounter()
 	}
 }
 
+// detachMuxErrors returns mux errors that need to be sent to the client. The
+// caller should make sure to send these errors to the client.
 func (s *streamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -114,21 +154,23 @@ func (s *streamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	return toSend
 }
 
-// If this returns, there is nothing we could do. We expect registrations to
-// receive the same error.
+// If run returns (due to context cancellation, broken stream, or quiescing),
+// there is nothing we could do. We expect registrations to receive the same
+// error and shut streams down.
 func (s *streamMuxer) run(ctx context.Context, stopper *stop.Stopper) {
 	for {
 		select {
-		case <-s.notify:
+		case <-s.notifyCompletion:
 			toSend := s.detachMuxErrors()
 			for _, clientErr := range toSend {
-				if err := s.stream.Send(clientErr); err != nil {
+				if err := s.sender.Send(clientErr); err != nil {
 					return
 				}
 			}
 		case <-ctx.Done():
 			return
 		case <-stopper.ShouldQuiesce():
+			// TODO(wenyihu6): should we cancel context here?
 			return
 		}
 	}

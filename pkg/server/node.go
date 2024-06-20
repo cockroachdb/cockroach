@@ -1829,6 +1829,13 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
+type eventSender interface {
+	send(streamID int64, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent) error
+	disconnectRangefeedWithError(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error)
+}
+
+var _ eventSender = (*streamMuxer)(nil)
+
 // setRangeIDEventSink is an implementation of rangefeed.Stream which annotates
 // each response with rangeID and streamID. It is used by MuxRangeFeed. Note
 // that the wrapped stream is a locked mux stream, ensuring safe concurrent Send
@@ -1837,7 +1844,7 @@ type setRangeIDEventSink struct {
 	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  *lockedMuxStream
+	wrapped  eventSender
 }
 
 func (s *setRangeIDEventSink) Context() context.Context {
@@ -1845,12 +1852,7 @@ func (s *setRangeIDEventSink) Context() context.Context {
 }
 
 func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
-	response := &kvpb.MuxRangeFeedEvent{
-		RangeFeedEvent: *event,
-		RangeID:        s.rangeID,
-		StreamID:       s.streamID,
-	}
-	return s.wrapped.Send(response)
+	return s.wrapped.send(s.streamID, s.rangeID, event)
 }
 
 var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
@@ -1914,7 +1916,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			ctx:      streamCtx,
 			rangeID:  req.RangeID,
 			streamID: req.StreamID,
-			wrapped:  muxStream,
+			wrapped:  streamMuxer,
 		}
 
 		streamMuxer.newStream(req.StreamID, cancel)
