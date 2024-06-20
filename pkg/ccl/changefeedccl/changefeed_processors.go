@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -32,6 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -43,7 +48,13 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+const EnableCloudBillingAccountingEnvVar = "COCKROACH_ENABLE_CLOUD_BILLING_ACCOUNTING"
+
+var EnableCloudBillingAccounting = envutil.EnvOrDefaultBool(EnableCloudBillingAccountingEnvVar, false)
 
 type changeAggregator struct {
 	execinfra.ProcessorBase
@@ -826,6 +837,9 @@ type changeFrontier struct {
 	sliMetricsID int64
 
 	knobs TestingKnobs
+
+	usageWg       sync.WaitGroup
+	usageWgCancel context.CancelFunc
 }
 
 const (
@@ -972,6 +986,7 @@ func newChangeFrontierProcessor(
 		input:         input,
 		frontier:      sf,
 		slowLogEveryN: log.Every(slowSpanMaxFrequency),
+		usageWgCancel: func() {},
 	}
 
 	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
@@ -1117,6 +1132,15 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 			// running status around for a while before we override it.
 			cf.js.lastRunStatusUpdate = timeutil.Now()
 		}
+
+		// Start the usage metric reporting goroutine.
+		usageCtx, usageCancel := context.WithCancel(ctx)
+		cf.usageWgCancel = usageCancel
+		cf.usageWg.Add(1)
+		go func() {
+			defer cf.usageWg.Done()
+			cf.runUsageMetricReporting(usageCtx)
+		}()
 	} else {
 		cf.js = newJobState(nil,
 			cf.EvalCtx.ChangefeedState.(*coreChangefeedProgress),
@@ -1144,7 +1168,72 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	}()
 }
 
+func (cf *changeFrontier) runUsageMetricReporting(ctx context.Context) {
+	if cf.spec.JobID == 0 { // don't report for core (non-enterprise) changefeeds
+		return
+	}
+
+	// If cloud billing accounting is not enabled via an env var, don't do this work.
+	if !EnableCloudBillingAccounting {
+		return
+	}
+
+	// Deregister the usage metric when the goroutine exits so we don't over-report.
+	defer cf.metrics.UsageMetrics.DeregisterJobMetrics(cf.spec.JobID)
+
+	var ts timeutil.TimeSource = timeutil.DefaultTimeSource{}
+	if cf.knobs.TimeSource != nil {
+		ts = cf.knobs.TimeSource
+	}
+
+	t := ts.NewTimer()
+	defer t.Stop()
+	var lastDuration time.Duration
+	for ctx.Err() == nil {
+		reportingInterval := jitter(changefeedbase.UsageMetricsReportingInterval.Get(&cf.flowCtx.Cfg.Settings.SV))
+		var start time.Time
+
+		t.Reset(reportingInterval - lastDuration)
+		select {
+		case start = <-t.Ch():
+			t.MarkRead()
+		case <-ctx.Done():
+			return
+		}
+
+		execCfg := cf.flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+		if cf.knobs.OverrideExecCfg != nil {
+			execCfg = cf.knobs.OverrideExecCfg(execCfg)
+		}
+
+		// Set a timeout of some % of the interval so we still have a duty cycle in degenerate scenarios.
+		var bytes int64
+		var err error
+		percent := changefeedbase.UsageMetricsReportingTimeoutPercent.Get(&cf.flowCtx.Cfg.Settings.SV)
+		err = contextutil.RunWithTimeout(ctx, "fetch usage bytes", time.Duration(float64(reportingInterval)*(float64(percent)/100.)), func(reqCtx context.Context) error {
+			bytes, err = FetchChangefeedUsageBytes(reqCtx, execCfg, cf.js.job.Payload())
+			return err
+		})
+
+		if err != nil {
+			// Don't increment the error count if it's due to us being shut down, or due to a backing table being dropped (since that will result in us shutting down also).
+			if shouldCountUsageError(err) {
+				log.Warningf(ctx, "failed to fetch usage bytes: %v", err)
+				cf.metrics.UsageMetrics.RecordError()
+			}
+			continue
+		}
+		lastDuration = timeutil.Since(start)
+		cf.metrics.UsageMetrics.UpdateTableBytes(cf.spec.JobID, bytes, lastDuration)
+	}
+}
+
 func (cf *changeFrontier) close() {
+	// Shut down the usage metric reporting goroutine first, since otherwise
+	// we can use a span after it's finished.
+	cf.usageWgCancel()
+	cf.usageWg.Wait()
+
 	if cf.InternalClose() {
 		if cf.metrics != nil {
 			cf.closeMetrics()
@@ -1779,4 +1868,20 @@ func (f *schemaChangeFrontier) hasLaggingSpans(
 		frontier = defaultIfEmpty
 	}
 	return frontier.Add(lagThresholdNanos, 0).Less(f.latestTs)
+}
+
+// jitter returns a new duration with +-10% jitter applied to the given duration.
+func jitter(d time.Duration) time.Duration {
+	if d == 0 {
+		return 0
+	}
+	start, end := int64(d-d/10), int64(d+d/10)
+	return time.Duration(start + rand.Int63n(end-start))
+}
+
+func shouldCountUsageError(err error) bool {
+	return !errors.Is(err, context.Canceled) &&
+		!errors.Is(err, cancelchecker.QueryCanceledError) &&
+		pgerror.GetPGCode(err) != pgcode.UndefinedTable &&
+		status.Code(err) != codes.Canceled
 }
