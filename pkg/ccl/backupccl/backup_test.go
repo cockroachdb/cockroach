@@ -9196,7 +9196,9 @@ func TestRestoreNewDatabaseName(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
 
 	// Should pass because 'new_fkdb' is not in cluster
-	sqlDB.Exec(t, "RESTORE DATABASE fkdb FROM $1 WITH new_db_name = 'new_fkdb'", localFoo)
+	sqlDB.Exec(t, "RESTORE DATABASE fkdb FROM $1 WITH new_db_name = 'new_fkdb', detached", localFoo)
+
+	sqlDB.Exec(t, `SHOW JOB WHEN COMPLETE (WITH x as (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1)`)
 
 	sqlDB.Exec(t, `ALTER DATABASE fkdb RENAME TO "old_fkdb"`)
 
