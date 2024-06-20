@@ -144,7 +144,7 @@ func (p *planner) prepareUsingOptimizer(
 			if !pm.TypeHints.Identical(p.semaCtx.Placeholders.TypeHints) {
 				opc.log(ctx, "query cache hit but type hints don't match")
 			} else {
-				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog)
+				isStale, err := cachedData.CustomMemo.IsStale(ctx, p.EvalContext(), opc.catalog)
 				if err != nil {
 					return 0, err
 				}
@@ -154,7 +154,8 @@ func (p *planner) prepareUsingOptimizer(
 					stmt.Prepared.StatementNoConstants = pm.StatementNoConstants
 					stmt.Prepared.Columns = pm.Columns
 					stmt.Prepared.Types = pm.Types
-					stmt.Prepared.Memo = cachedData.Memo
+					stmt.Prepared.CustomMemo = cachedData.CustomMemo
+					stmt.Prepared.GenericMemo = cachedData.GenericMemo
 					return opc.flags, nil
 				}
 				opc.log(ctx, "query cache hit but memo is stale (prepare)")
@@ -167,13 +168,13 @@ func (p *planner) prepareUsingOptimizer(
 		opc.flags.Set(planFlagOptCacheMiss)
 	}
 
-	memo, err := opc.buildReusableMemo(ctx)
+	customMemo, genericMemo, err := opc.buildReusableMemos(ctx)
 	if err != nil {
 		return 0, err
 	}
 
-	md := memo.Metadata()
-	physical := memo.RootProps()
+	md := customMemo.Metadata()
+	physical := customMemo.RootProps()
 	resultCols := make(colinfo.ResultColumns, len(physical.Presentation))
 	for i, col := range physical.Presentation {
 		colMeta := md.ColumnMeta(col.ID)
@@ -217,7 +218,8 @@ func (p *planner) prepareUsingOptimizer(
 	stmt.Prepared.Columns = resultCols
 	stmt.Prepared.Types = p.semaCtx.Placeholders.Types
 	if opc.allowMemoReuse {
-		stmt.Prepared.Memo = memo
+		stmt.Prepared.CustomMemo = customMemo
+		stmt.Prepared.GenericMemo = genericMemo
 		if opc.useCache {
 			// execPrepare sets the PrepareMetadata.InferredTypes field after this
 			// point. However, once the PrepareMetadata goes into the cache, it
@@ -228,7 +230,8 @@ func (p *planner) prepareUsingOptimizer(
 			pm := stmt.Prepared.PrepareMetadata
 			cachedData := querycache.CachedData{
 				SQL:             stmt.SQL,
-				Memo:            memo,
+				CustomMemo:      customMemo,
+				GenericMemo:     genericMemo,
 				PrepareMetadata: &pm,
 			}
 			p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
@@ -407,30 +410,32 @@ func (opc *optPlanningCtx) log(ctx context.Context, msg redact.SafeString) {
 	}
 }
 
-// buildReusableMemo builds the statement into a memo that can be stored for
+// buildReusableMemos builds the statement into memos that can be stored for
 // prepared statements and can later be used as a starting point for
-// optimization. The returned memo is fully detached from the planner and can be
-// used with reuseMemo independently and concurrently by multiple threads.
-func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo, _ error) {
+// optimization. The returned memos are fully detached from the planner and can
+// be used with reuseMemo independently and concurrently by multiple threads.
+func (opc *optPlanningCtx) buildReusableMemos(
+	ctx context.Context,
+) (customMemo, genericMemo *memo.Memo, _ error) {
 	p := opc.p
 
 	_, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan)
 	if isCanned {
 		if !p.EvalContext().SessionData().AllowPrepareAsOptPlan {
-			return nil, pgerror.New(pgcode.InsufficientPrivilege,
+			return nil, nil, pgerror.New(pgcode.InsufficientPrivilege,
 				"PREPARE AS OPT PLAN is a testing facility that should not be used directly",
 			)
 		}
 
 		if !p.SessionData().User().IsRootUser() {
-			return nil, pgerror.New(pgcode.InsufficientPrivilege,
+			return nil, nil, pgerror.New(pgcode.InsufficientPrivilege,
 				"PREPARE AS OPT PLAN may only be used by root",
 			)
 		}
 	}
 
 	if p.SessionData().SaveTablesPrefix != "" && !p.SessionData().User().IsRootUser() {
-		return nil, pgerror.New(pgcode.InsufficientPrivilege,
+		return nil, nil, pgerror.New(pgcode.InsufficientPrivilege,
 			"sub-expression tables creation may only be used by root",
 		)
 	}
@@ -448,7 +453,7 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 		bld.SkipAOST = true
 	}
 	if err := bld.Build(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if bld.DisableMemoReuse {
@@ -462,18 +467,18 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 			// We don't support placeholders inside the canned plan. The main reason
 			// is that they would be invisible to the parser (which reports the number
 			// of placeholders, used to initialize the relevant structures).
-			return nil, pgerror.Newf(pgcode.Syntax,
+			return nil, nil, pgerror.Newf(pgcode.Syntax,
 				"placeholders are not supported with PREPARE AS OPT PLAN")
 		}
 		// With a canned plan, we don't want to optimize the memo.
-		return opc.optimizer.DetachMemo(ctx), nil
+		return opc.optimizer.DetachMemo(ctx), nil, nil
 	}
 
 	if f.Memo().HasPlaceholders() {
 		// Try the placeholder fast path.
 		_, ok, err := opc.optimizer.TryPlaceholderFastPath()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if ok {
 			opc.log(ctx, "placeholder fast path")
@@ -485,15 +490,32 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 		if !f.FoldingControl().PreventedStableFold() {
 			opc.log(ctx, "optimizing (no placeholders)")
 			if _, err := opc.optimizer.Optimize(); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
 
-	// Detach the prepared memo from the factory and transfer its ownership
-	// to the prepared statement. DetachMemo will re-initialize the optimizer
-	// to an empty memo.
-	return opc.optimizer.DetachMemo(ctx), nil
+	// Detach the normalized memo from the factory and transfer its ownership to
+	// the prepared statement. DetachMemo will re-initialize the optimizer to an
+	// empty memo.
+	customMemo = opc.optimizer.DetachMemo(ctx)
+
+	if opc.allowMemoReuse && !customMemo.IsOptimized() {
+		// Copy the normalized memo back into the optimizer to fully optimize (with
+		// placeholders) into a generic plan.
+		f.CopyAndReplace(
+			customMemo.RootExpr().(memo.RelExpr),
+			customMemo.RootProps(),
+			f.CopyWithoutAssigningPlaceholders,
+		)
+		if _, err := opc.optimizer.Optimize(); err != nil {
+			// Maybe we should ignore this error?
+			return nil, nil, err
+		}
+		genericMemo = opc.optimizer.DetachMemo(ctx)
+	}
+
+	return customMemo, genericMemo, nil
 }
 
 // reuseMemo returns an optimized memo using a cached memo as a starting point.
@@ -509,7 +531,10 @@ func (opc *optPlanningCtx) reuseMemo(
 	if cachedMemo.IsOptimized() {
 		// The query could have been already fully optimized if there were no
 		// placeholders or the placeholder fast path succeeded (see
-		// buildReusableMemo).
+		// buildReusableMemos).
+		//
+		// Is this where we would tap into? But we don't have placeholders filled in
+		// completely, so we need to do something like that, right?
 		return cachedMemo, nil
 	}
 	f := opc.optimizer.Factory()
@@ -543,39 +568,49 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 
 	prepared := opc.p.stmt.Prepared
 	p := opc.p
-	if opc.allowMemoReuse && prepared != nil && prepared.Memo != nil {
+	if opc.allowMemoReuse && prepared != nil && prepared.CustomMemo != nil {
 		// We are executing a previously prepared statement and a reusable memo is
 		// available.
 
 		// If the prepared memo has been invalidated by schema or other changes,
 		// re-prepare it.
-		if isStale, err := prepared.Memo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
+		if isStale, err := prepared.CustomMemo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
 			return nil, err
 		} else if isStale {
 			opc.log(ctx, "rebuilding cached memo")
-			prepared.Memo, err = opc.buildReusableMemo(ctx)
+			customMemo, genericMemo, err := opc.buildReusableMemos(ctx)
 			if err != nil {
 				return nil, err
 			}
+			prepared.CustomMemo = customMemo
+			prepared.GenericMemo = genericMemo
 		}
 		opc.log(ctx, "reusing cached memo")
-		return opc.reuseMemo(ctx, prepared.Memo)
+		if opc.p.SessionData().PlanCacheMode == sessiondatapb.PlanCacheModeForceGeneric &&
+			prepared.GenericMemo != nil {
+			return opc.reuseMemo(ctx, prepared.GenericMemo)
+		}
+		// TODO: PlanCacheModeAuto
+		return opc.reuseMemo(ctx, prepared.CustomMemo)
 	}
 
 	if opc.useCache {
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
 		if ok {
-			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
+			if isStale, err := cachedData.CustomMemo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
 				return nil, err
 			} else if isStale {
 				opc.log(ctx, "query cache hit but needed update")
-				cachedData.Memo, err = opc.buildReusableMemo(ctx)
+				customMemo, genericMemo, err := opc.buildReusableMemos(ctx)
 				if err != nil {
 					return nil, err
 				}
+				cachedData.CustomMemo = customMemo
+				cachedData.GenericMemo = genericMemo
 				// Update the plan in the cache. If the cache entry had PrepareMetadata
 				// populated, it may no longer be valid.
+				// Does this mean we shouldn't set GenericMemo?? Hmm
 				cachedData.PrepareMetadata = nil
 				p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 				opc.flags.Set(planFlagOptCacheMiss)
@@ -583,7 +618,12 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 				opc.log(ctx, "query cache hit")
 				opc.flags.Set(planFlagOptCacheHit)
 			}
-			return opc.reuseMemo(ctx, cachedData.Memo)
+			if opc.p.SessionData().PlanCacheMode == sessiondatapb.PlanCacheModeForceGeneric &&
+				cachedData.GenericMemo != nil {
+				return opc.reuseMemo(ctx, cachedData.GenericMemo)
+			}
+			// TODO: PlanCacheModeAuto
+			return opc.reuseMemo(ctx, cachedData.CustomMemo)
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
 		opc.log(ctx, "query cache miss")
@@ -631,8 +671,9 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		opc.log(ctx, "query cache add")
 		memo := opc.optimizer.DetachMemo(ctx)
 		cachedData := querycache.CachedData{
-			SQL:  opc.p.stmt.SQL,
-			Memo: memo,
+			SQL:        opc.p.stmt.SQL,
+			CustomMemo: memo,
+			// at this point, why would the statement ever have placeholders?
 		}
 		p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 		return memo, nil
