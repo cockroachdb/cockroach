@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -47,6 +48,7 @@ type objType int
 const (
 	databaseObj objType = iota
 	tableObj
+	idxObj
 
 	// unspecifiedObj is used when the object type is not specified.
 	unspecifiedObj
@@ -64,9 +66,9 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 	// TODO(annie): implement complete support for CONFIGURE ZONE. This currently
 	// Supports:
 	// - Database
-	// Left to support:
 	// - Table
 	// - Index
+	// Left to support:
 	// - Partition/row
 	// - System Ranges
 	typ, err := fallBackIfNotSupportedZoneConfig(n)
@@ -199,8 +201,9 @@ func checkZoneConfigChangePermittedForMultiRegion(
 			return nil
 		}
 	} else {
-		// We're dealing with a table zone configuration change. Get the table descriptor so we can
-		// determine if this is a multi-region table.
+		// We're dealing with a table or index zone configuration change. Get the
+		// table descriptor so we can determine if this is a multi-region
+		// table/index.
 		tableID, err = getTargetIDFromZoneSpecifier(b, zs)
 		if err != nil {
 			return err
@@ -252,6 +255,22 @@ func isMultiRegionTable(b BuildCtx, tableID catid.DescID) bool {
 func getTargetIDFromZoneSpecifier(b BuildCtx, zs tree.ZoneSpecifier) (catid.DescID, error) {
 	dbElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabase().MustGetOneElement()
 	return dbElem.DatabaseID, nil
+}
+
+// getTableIDFromZoneSpecifier attempts to find the table ID specified by the
+// zone specifier. If the zone does not specify a table, a non-nil error is
+// returned. Otherwise (for tables), the associated table ID is returned.
+func getTableIDFromZoneSpecifier(b BuildCtx, zs tree.ZoneSpecifier) (catid.DescID, error) {
+	if zs.Database != "" {
+		return 0, errors.AssertionFailedf("zone specifier is for a database; not a table")
+	}
+
+	if zs.TargetsTable() {
+		tblName := zs.TableOrIndex.Table.ToUnresolvedObjectName()
+		tableID := b.ResolveTable(tblName, ResolveParams{}).FilterTable().MustGetOneElement().TableID
+		return tableID, nil
+	}
+	return 0, errors.AssertionFailedf("progrmaming error: zs does not specify a proper target")
 }
 
 // getUpdatedZoneConfigOptions unpacks all kv options for a `CONFIGURE ZONE
@@ -384,18 +403,48 @@ func applyZoneConfig(
 		}
 	}
 
+	// If we are configuring an index or a partition, then determine the index ID
+	// and partition name as well.
+	indexID, partition, err := getIndexAndPartitionFromZoneSpecifier(b, zs)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var tempIndexID catid.IndexID
+	if indexID != 0 {
+		tempIndexID = mustRetrieveIndexElement(b, targetID, indexID).TemporaryIndexID
+	}
+
 	// Retrieve the partial zone configuration
 	partialZone, zc := retrievePartialZoneConfig(b, targetID, objectType)
+
+	subzonePlaceholder := false
+	// No zone was found. Possibly a SubzonePlaceholder depending on the index.
+	if partialZone == nil {
+		partialZone = zonepb.NewZoneConfig()
+		if indexID != 0 {
+			subzonePlaceholder = true
+		}
+	}
+
+	var partialSubzone *zonepb.Subzone
+	if indexID != 0 {
+		partialSubzone = partialZone.GetSubzoneExact(uint32(indexID), partition)
+		if partialSubzone == nil {
+			partialSubzone = &zonepb.Subzone{Config: *zonepb.NewZoneConfig()}
+		}
+	}
 
 	// Retrieve the zone configuration.
 	//
 	// If the statement was USING DEFAULT, we want to ignore the zone
 	// config that exists on targetID and instead skip to the inherited
-	// default (default since the targetID is a database). For this, we
-	// use the last parameter getInheritedDefault to retrieveCompleteZoneConfig().
+	// default (whichever applies -- a database if targetID is a table, default
+	// if targetID is a database, etc.). For this, we use the last parameter
+	// getInheritedDefault to retrieveCompleteZoneConfig().
 	// These zones are only used for validations. The merged zone will not
 	// be written.
-	_, completeZone, seqNum, err := retrieveCompleteZoneConfig(b, targetID, false /* getInheritedDefault */)
+	_, completeZone, completeSubZone, seqNum, err := retrieveCompleteZoneConfig(b, targetID, indexID, partition, n.SetDefault /* getInheritedDefault */)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -403,18 +452,55 @@ func applyZoneConfig(
 	// We need to inherit zone configuration information from the correct zone,
 	// not completeZone.
 	{
-		// If we are operating on a zone, get all fields that the zone would
-		// inherit from its parent. We do this by using an empty zoneConfig
-		// and completing at the level of the current zone.
-		zoneInheritedFields := zonepb.ZoneConfig{}
-		if err := completeZoneConfig(b, &zoneInheritedFields); err != nil {
-			return nil, 0, err
+		if indexID == 0 {
+			// If we are operating on a zone, get all fields that the zone would
+			// inherit from its parent. We do this by using an empty zoneConfig
+			// and completing at the level of the current zone.
+			zoneInheritedFields := zonepb.ZoneConfig{}
+			if err := completeZoneConfig(b, &zoneInheritedFields); err != nil {
+				return nil, 0, err
+			}
+			partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
+		} else {
+			// If we are operating on a subZone, we need to inherit all remaining
+			// unset fields in its parent zone, which is partialZone.
+			zoneInheritedFields := *partialZone
+			if err := completeZoneConfig(b, &zoneInheritedFields); err != nil {
+				return nil, 0, err
+			}
+			// In the case we have just an index, we should copy from the inherited
+			// zone's fields (whether that was the table or database).
+			if partition == "" {
+				partialSubzone.Config.CopyFromZone(zoneInheritedFields, copyFromParentList)
+			} else {
+				// In the case of updating a partition, we need to try inheriting fields
+				// from the subzone's index, and inherit the remainder from the zone.
+				subzoneInheritedFields := zonepb.ZoneConfig{}
+				if indexSubzone := completeZone.GetSubzone(uint32(indexID), ""); indexSubzone != nil {
+					subzoneInheritedFields.InheritFromParent(&indexSubzone.Config)
+				}
+				subzoneInheritedFields.InheritFromParent(&zoneInheritedFields)
+				// After inheriting fields, copy the requested ones into the
+				// partialSubzone.Config.
+				partialSubzone.Config.CopyFromZone(subzoneInheritedFields, copyFromParentList)
+			}
 		}
-		partialZone.CopyFromZone(zoneInheritedFields, copyFromParentList)
 	}
 
-	newZoneForVerification := *completeZone
+	// Determine where to load the configuration.
+	newZone := *completeZone
+	if completeSubZone != nil {
+		newZone = completeSubZone.Config
+	}
+
+	// Determine where to load the partial configuration.
+	// finalZone is where the new changes are unmarshalled onto.
+	// It must be a fresh ZoneConfig if a new subzone if being created.
+	// If an existing subzone is being modified, finalZone if overridden.
 	finalZone := *partialZone
+	if partialSubzone != nil {
+		finalZone = partialSubzone.Config
+	}
 
 	// Load settings from var = val assignments. If there were no such
 	// settings, (e.g. because the query specified CONFIGURE ZONE = or
@@ -435,7 +521,7 @@ func applyZoneConfig(
 				}
 			}()
 
-			setter(&newZoneForVerification)
+			setter(&newZone)
 			setter(&finalZone)
 			return nil
 		}(); err != nil {
@@ -444,7 +530,7 @@ func applyZoneConfig(
 	}
 
 	// Validate that there are no conflicts in the zone setup.
-	if err := zonepb.ValidateNoRepeatKeysInZone(&newZoneForVerification); err != nil {
+	if err := zonepb.ValidateNoRepeatKeysInZone(&newZone); err != nil {
 		return nil, 0, err
 	}
 
@@ -452,25 +538,78 @@ func applyZoneConfig(
 	if zc != nil {
 		currentZone = zc
 	}
-	if err := validateZoneAttrsAndLocalities(b, currentZone, &newZoneForVerification); err != nil {
+	if err := validateZoneAttrsAndLocalities(b, currentZone, &newZone); err != nil {
 		return nil, 0, err
 	}
 
-	completeZone = &newZoneForVerification
-	partialZone = &finalZone
+	// Are we operating on an index?
+	if indexID == 0 {
+		// No: the final zone config is the one we just processed.
+		completeZone = &newZone
+		partialZone = &finalZone
+		// Since we are writing to a zone that is not a subzone, we need to
+		// make sure that the zone config is not considered a placeholder
+		// anymore. If the settings applied to this zone don't touch the
+		// NumReplicas field, set it to nil so that the zone isn't considered a
+		// placeholder anymore.
+		if partialZone.IsSubzonePlaceholder() {
+			partialZone.NumReplicas = nil
+		}
+	} else {
+		completeZone.SetSubzone(zonepb.Subzone{
+			IndexID:       uint32(indexID),
+			PartitionName: partition,
+			Config:        newZone,
+		})
 
-	// Since we are writing to a zone that is not a subzone, we need to
-	// make sure that the zone config is not considered a placeholder
-	// anymore. If the settings applied to this zone don't touch the
-	// NumReplicas field, set it to nil so that the zone isn't considered a
-	// placeholder anymore.
-	if zc != nil && partialZone.IsSubzonePlaceholder() {
-		partialZone.NumReplicas = nil
+		// The partial zone might just be empty. If so,
+		// replace it with a SubzonePlaceholder.
+		if subzonePlaceholder {
+			partialZone.DeleteTableConfig()
+		}
+
+		partialZone.SetSubzone(zonepb.Subzone{
+			IndexID:       uint32(indexID),
+			PartitionName: partition,
+			Config:        finalZone,
+		})
+
+		// Also set the same zone configs for any corresponding temporary indexes.
+		if tempIndexID != 0 {
+			completeZone.SetSubzone(zonepb.Subzone{
+				IndexID:       uint32(tempIndexID),
+				PartitionName: partition,
+				Config:        newZone,
+			})
+
+			partialZone.SetSubzone(zonepb.Subzone{
+				IndexID:       uint32(tempIndexID),
+				PartitionName: partition,
+				Config:        finalZone,
+			})
+		}
 	}
 
 	// Finally, revalidate everything. Validate only the completeZone config.
 	if err := completeZone.Validate(); err != nil {
 		return nil, 0, pgerror.Wrap(err, pgcode.CheckViolation, "could not validate zone config")
+	}
+
+	// Finally check for the extra protection partial zone configs would
+	// require from changes made to parent zones. The extra protections are:
+	//
+	// RangeMinBytes and RangeMaxBytes must be set together
+	// LeasePreferences cannot be set unless Constraints/VoterConstraints are
+	// explicitly set
+	// Per-replica constraints cannot be set unless num_replicas is explicitly
+	// set
+	// Per-voter constraints cannot be set unless num_voters is explicitly set
+	if err := finalZone.ValidateTandemFields(); err != nil {
+		err = errors.Wrap(err, "could not validate zone config")
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		err = errors.WithHint(err,
+			"try ALTER ... CONFIGURE ZONE USING <field_name> = COPY FROM PARENT [, ...] to populate the field")
+		return nil, 0, err
 	}
 
 	return partialZone, seqNum, nil
@@ -489,12 +628,50 @@ func checkIfConfigurationAllowed(targetID catid.DescID) error {
 	return nil
 }
 
+// getIndexAndPartitionFromZoneSpecifier finds the index id and partition name
+// in the zone specifier. If the zone specifier targets other than an index or
+// partition, then the returned indexID is zero. If the zone specifier specifies
+// an index, then the returned partition is empty.
+func getIndexAndPartitionFromZoneSpecifier(
+	b BuildCtx, zs tree.ZoneSpecifier,
+) (indexID catid.IndexID, partitionName string, err error) {
+	if !zs.TargetsIndex() && !zs.TargetsPartition() {
+		return 0, "", nil
+	}
+
+	tableID, err := getTableIDFromZoneSpecifier(b, zs)
+	if err != nil {
+		return 0, "", nil
+	}
+
+	indexName := string(zs.TableOrIndex.Index)
+	if indexName == "" {
+		// Use the primary index if index name is unspecified.
+		primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tableID)
+		indexID = primaryIndexElem.IndexID
+		indexName = mustRetrieveIndexNameElem(b, tableID, indexID).Name
+	} else {
+		indexElems := b.ResolveIndex(tableID, tree.Name(indexName), ResolveParams{})
+		indexID = indexElems.FilterIndexName().MustGetOneElement().IndexID
+	}
+
+	partitionName = string(zs.Partition)
+	if partitionName != "" {
+		indexPartitionElem := maybeRetrieveIndexPartitioningElem(b, tableID, indexID)
+		if indexPartitionElem == nil ||
+			tabledesc.NewPartitioning(&indexPartitionElem.PartitioningDescriptor).FindPartitionByName(partitionName) == nil {
+			return 0, "", errors.Newf("partitionName %q does not exist on index %q", partitionName, indexName)
+		}
+	}
+	return indexID, partitionName, nil
+}
+
 // retrievePartialZoneConfig retrieves the partial zone configuration of the
 // specified targetID.
 func retrievePartialZoneConfig(
 	b BuildCtx, targetID catid.DescID, objectType objType,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig) {
-	partialZone := zonepb.NewZoneConfig()
+	var partialZone *zonepb.ZoneConfig
 	var zc *zonepb.ZoneConfig
 
 	// Retrieve the partial zone configuration for specified objectType. Fall back
@@ -534,7 +711,8 @@ func retrievePartialZoneConfig(
 	return partialZone, zc
 }
 
-// retrieveCompleteZoneConfig looks up the zone for the specified database.
+// retrieveCompleteZoneConfig looks up the zone and subzone for the specified
+// object ID, index, and partition.
 //
 // If `getInheritedDefault` is true, the direct zone configuration, if it exists,
 // is ignored, and the default zone config that would apply if it did not exist
@@ -542,25 +720,49 @@ func retrievePartialZoneConfig(
 // to ignore the zone config that exists on targetID and instead skip to the
 // inherited default.
 func retrieveCompleteZoneConfig(
-	b BuildCtx, targetID catid.DescID, getInheritedDefault bool,
-) (zoneID descpb.ID, zone *zonepb.ZoneConfig, seqNum uint32, err error) {
+	b BuildCtx,
+	targetID catid.DescID,
+	indexID catid.IndexID,
+	partition string,
+	getInheritedDefault bool,
+) (zoneID descpb.ID, zone *zonepb.ZoneConfig, subzone *zonepb.Subzone, seqNum uint32, err error) {
+	var placeholderID descpb.ID
+	var placeholder *zonepb.ZoneConfig
 	zc := &zonepb.ZoneConfig{}
 	if getInheritedDefault {
 		zoneID, zc, seqNum, err = getInheritedDefaultZoneConfig(b, targetID)
 	} else {
-		zoneID, zc, _, _, seqNum, err = getZoneConfig(b, targetID)
+		zoneID, zc, placeholderID, placeholder, seqNum, err = getZoneConfig(b, targetID)
 	}
 	if err != nil {
-		return 0, nil, 0, err
+		return 0, nil, nil, 0, err
 	}
 
 	completeZc := *zc
 	if err = completeZoneConfig(b, &completeZc); err != nil {
-		return 0, nil, 0, err
+		return 0, nil, nil, 0, err
 	}
 
-	zone = &completeZc
-	return zoneID, zone, seqNum, nil
+	if indexID != 0 {
+		if placeholder != nil {
+			if subzone = placeholder.GetSubzone(uint32(indexID), partition); subzone != nil {
+				if indexSubzone := placeholder.GetSubzone(uint32(indexID), ""); indexSubzone != nil {
+					subzone.Config.InheritFromParent(&indexSubzone.Config)
+				}
+				subzone.Config.InheritFromParent(zc)
+				return placeholderID, placeholder, subzone, seqNum, nil
+			}
+		} else {
+			if subzone = zc.GetSubzone(uint32(indexID), partition); subzone != nil {
+				if indexSubzone := zc.GetSubzone(uint32(indexID), ""); indexSubzone != nil {
+					subzone.Config.InheritFromParent(&indexSubzone.Config)
+				}
+				subzone.Config.InheritFromParent(zc)
+			}
+		}
+	}
+
+	return zoneID, zc, subzone, seqNum, nil
 }
 
 // getInheritedDefaultZoneConfig returns the inherited default zone config of
@@ -905,6 +1107,9 @@ func fallBackIfNotSupportedZoneConfig(n *tree.SetZoneConfig) (objType, error) {
 	}
 	if n.TargetsTable() {
 		return tableObj, nil
+	}
+	if n.TargetsIndex() {
+		return idxObj, nil
 	}
 	return unspecifiedObj, scerrors.NotImplementedErrorf(n, "unsupported CONFIGURE ZONE target")
 }
