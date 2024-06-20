@@ -210,6 +210,7 @@ func (og *operationGenerator) randOp(
 			}
 			return nil, err
 		}
+
 		// Screen for schema change after write in the same transaction.
 		og.stmtsInTxt = append(og.stmtsInTxt, stmt)
 		// Add candidateExpectedCommitErrors to expectedCommitErrors
@@ -2635,13 +2636,21 @@ func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, 
 }
 
 func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	var onType string
+
+	// COMMENT ON TYPE is only implemented in the declarative schema changer.
+	if og.useDeclarativeSchemaChanger {
+		onType = `UNION ALL
+	SELECT 'TYPE ' || quote_ident(schema) || '.' || quote_ident(name) FROM [SHOW TYPES]`
+	}
+
 	q := With([]CTE{
 		{"descriptors", descJSONQuery},
 		{"tables", tableDescQuery},
 		{"columns", `SELECT schema_id::REGNAMESPACE::TEXT as schema_name, name AS table_name, jsonb_array_elements(descriptor->'table'->'columns') AS column FROM tables`},
 		{"indexes", `SELECT schema_id::REGNAMESPACE::TEXT as schema_name, name AS table_name, jsonb_array_elements(descriptor->'table'->'indexes') AS index FROM tables`},
 		{"constraints", `SELECT schema_id::REGNAMESPACE::TEXT as schema_name, name AS table_name, jsonb_array_elements(descriptor->'table'->'checks') AS constraint FROM tables`},
-	}, `
+	}, fmt.Sprintf(`
 	SELECT 'SCHEMA ' || quote_ident(schema_name) FROM [SHOW SCHEMAS] WHERE owner != 'node'
 		UNION ALL
 	SELECT 'TABLE ' || quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type = 'table'
@@ -2651,7 +2660,7 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	SELECT 'INDEX ' || quote_ident(schema_name) || '.' || quote_ident(table_name) || '@' || quote_ident("index"->>'name') FROM indexes
 		UNION ALL
 	SELECT 'CONSTRAINT ' || quote_ident("constraint"->>'name') || ' ON ' || quote_ident(schema_name) || '.' || quote_ident(table_name) FROM constraints
-	`)
+		%s`, onType))
 
 	commentables, err := Collect(ctx, og, tx, pgx.RowTo[string], q)
 	if err != nil {
