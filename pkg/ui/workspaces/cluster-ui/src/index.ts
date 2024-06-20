@@ -56,3 +56,4 @@ export * from "./selectors";
 export * from "./contexts";
 export * from "./timestamp";
 export * from "./databases";
+export * from "./antdTheme";
