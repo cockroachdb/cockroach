@@ -292,6 +292,11 @@ func UpdateIndexPartitioning(
 	return true
 }
 
+// NewPartitioning
+func NewPartitioning(partDesc *catpb.PartitioningDescriptor) catalog.Partitioning {
+	return &partitioning{desc: partDesc}
+}
+
 // GetPrimaryIndex implements the TableDescriptor interface.
 func (desc *wrapper) GetPrimaryIndex() catalog.UniqueWithIndexConstraint {
 	return desc.getExistingOrNewIndexCache().primary

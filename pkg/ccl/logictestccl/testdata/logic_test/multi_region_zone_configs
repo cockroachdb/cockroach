@@ -979,13 +979,117 @@ CREATE TABLE tbl2 (
 statement ok
 SET override_multi_region_zone_config = true;
 ALTER INDEX tbl2@tbl2_i_idx CONFIGURE ZONE USING num_replicas=10;
-SET override_multi_region_zone_config = false
+SET override_multi_region_zone_config = false;
 
 statement error attempting to update zone config which contains an extra zone configuration for index tbl2@tbl2_i_idx with field num_replicas populated
 ALTER TABLE tbl2 SET LOCALITY GLOBAL
 
 statement ok
 ALTER INDEX tbl2@tbl2_i_idx CONFIGURE ZONE USING gc.ttlseconds=10
+
+query T
+select jsonb_pretty(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config)) from system.zones where id = 'tbl2'::regclass;
+----
+{
+                "inheritedConstraints": true,
+                "inheritedLeasePreferences": true,
+                "numReplicas": 0,
+                "subzoneSpans": [
+                    {
+                        "key": "iRKAAAE=",
+                        "subzoneIndex": 1
+                    },
+                    {
+                        "endKey": "ihKAAAE=",
+                        "key": "ig==",
+                        "subzoneIndex": 2
+                    },
+                    {
+                        "key": "ihKAAAE=",
+                        "subzoneIndex": 1
+                    },
+                    {
+                        "endKey": "iw==",
+                        "key": "ihKAAAI=",
+                        "subzoneIndex": 2
+                    }
+                ],
+                "subzones": [
+                    {
+                        "config": {
+                            "inheritedConstraints": true,
+                            "leasePreferences": [
+                                {
+                                    "constraints": [
+                                        {
+                                            "key": "region",
+                                            "type": "REQUIRED",
+                                            "value": "us-east-1"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "nullVoterConstraintsIsEmpty": true,
+                            "numVoters": 3,
+                            "voterConstraints": [
+                                {
+                                    "constraints": [
+                                        {
+                                            "key": "region",
+                                            "type": "REQUIRED",
+                                            "value": "us-east-1"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        "indexId": 1,
+                        "partitionName": "us-east-1"
+                    },
+                    {
+                        "config": {
+                            "inheritedConstraints": true,
+                            "leasePreferences": [
+                                {
+                                    "constraints": [
+                                        {
+                                            "key": "region",
+                                            "type": "REQUIRED",
+                                            "value": "us-east-1"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "nullVoterConstraintsIsEmpty": true,
+                            "numVoters": 3,
+                            "voterConstraints": [
+                                {
+                                    "constraints": [
+                                        {
+                                            "key": "region",
+                                            "type": "REQUIRED",
+                                            "value": "us-east-1"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        "indexId": 2,
+                        "partitionName": "us-east-1"
+                    },
+                    {
+                        "config": {
+                            "gc": {
+                                "ttlSeconds": 10
+                            },
+                            "inheritedConstraints": true,
+                            "inheritedLeasePreferences": true,
+                            "numReplicas": 10
+                        },
+                        "indexId": 2
+                    }
+                ]
+            }
 
 query TT
 SHOW ZONE CONFIGURATION FOR INDEX tbl2@tbl2_i_idx
