@@ -68,6 +68,7 @@ type jwtAuthenticatorConf struct {
 	audience             []string
 	enabled              bool
 	issuers              []string
+	issuerCA             string
 	jwks                 jwk.Set
 	claim                string
 	jwksAutoFetchEnabled bool
@@ -89,10 +90,15 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 		audience:             mustParseValueOrArray(JWTAuthAudience.Get(&st.SV)),
 		enabled:              JWTAuthEnabled.Get(&st.SV),
 		issuers:              mustParseValueOrArray(JWTAuthIssuers.Get(&st.SV)),
+		issuerCA:             JWTAuthIssuerCustomCA.Get(&st.SV),
 		jwks:                 mustParseJWKS(JWTAuthJWKS.Get(&st.SV)),
 		claim:                JWTAuthClaim.Get(&st.SV),
 		jwksAutoFetchEnabled: JWKSAutoFetchEnabled.Get(&st.SV),
-		httpClient:           httputil.NewClientWithTimeout(httputil.StandardHTTPTimeout),
+		httpClient: httputil.NewClient(
+			httputil.WithClientTimeout(httputil.StandardHTTPTimeout),
+			httputil.WithDialerTimeout(httputil.StandardHTTPTimeout),
+			httputil.WithCustomCAPEM(JWTAuthIssuerCustomCA.Get(&st.SV)),
+		),
 	}
 
 	if !authenticator.mu.conf.enabled && conf.enabled {
@@ -360,6 +366,9 @@ var ConfigureJWTAuth = func(
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	JWTAuthIssuers.SetOnChange(&st.SV, func(ctx context.Context) {
+		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
+	})
+	JWTAuthIssuerCustomCA.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	JWTAuthJWKS.SetOnChange(&st.SV, func(ctx context.Context) {

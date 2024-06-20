@@ -14,17 +14,21 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -810,4 +814,121 @@ func TestJWTAuthCanUseHTTPProxy(t *testing.T) {
 	res, err := getHttpResponse(ctx, "http://my-server/.well-known/openid-configuration", &authenticator)
 	require.NoError(t, err)
 	require.EqualValues(t, "proxied-http://my-server/.well-known/openid-configuration", string(res))
+}
+
+func TestJWTAuthWithCustomCACert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Initiate a test JWKS server locally over HTTPS.
+	testServer := httptest.NewUnstartedServer(nil)
+	testServerURL := "https://" + testServer.Listener.Addr().String()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(
+		"GET /.well-known/openid-configuration",
+		func(w http.ResponseWriter, r *http.Request) {
+			// Serve the response locally from testdata.
+			dataBytes, err := os.ReadFile("testdata/accounts.idp1.com_.well-known_openid-configuration")
+			require.NoError(t, err)
+
+			type providerJSON struct {
+				Issuer      string   `json:"issuer"`
+				AuthURL     string   `json:"authorization_endpoint"`
+				TokenURL    string   `json:"token_endpoint"`
+				JWKSURL     string   `json:"jwks_uri"`
+				UserInfoURL string   `json:"userinfo_endpoint"`
+				Algorithms  []string `json:"id_token_signing_alg_values_supported"`
+			}
+
+			var p providerJSON
+			err = json.Unmarshal(dataBytes, &p)
+			require.NoError(t, err)
+
+			// We need to update the 'jwks_uri' to point to the local test server.
+			p.JWKSURL = testServerURL + "/jwks"
+
+			updatedBytes, err := json.Marshal(p)
+			require.NoError(t, err)
+			_, err = w.Write(updatedBytes)
+			require.NoError(t, err)
+		},
+	)
+	mux.HandleFunc(
+		"GET /jwks",
+		func(w http.ResponseWriter, r *http.Request) {
+			// Serve the JWKS response locally from testdata.
+			dataBytes, err := os.ReadFile("testdata/www.idp1apis.com_oauth2_v3_certs")
+			require.NoError(t, err)
+			_, err = w.Write(dataBytes)
+			require.NoError(t, err)
+		},
+	)
+
+	testServer.Config = &http.Server{
+		Handler: mux,
+	}
+
+	certPEMBlock, err := securityassets.GetLoader().ReadFile(
+		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedNodeCert))
+	require.NoError(t, err)
+	keyPEMBlock, err := securityassets.GetLoader().ReadFile(
+		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedNodeKey))
+	require.NoError(t, err)
+	tlsCert, err := tls.X509KeyPair(certPEMBlock, keyPEMBlock)
+	require.NoError(t, err)
+
+	testServer.TLS = &tls.Config{Certificates: []tls.Certificate{tlsCert}}
+	testServer.StartTLS()
+	defer testServer.Close()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	identMapString := ""
+	identMap, err := identmap.From(strings.NewReader(identMapString))
+	require.NoError(t, err)
+
+	// Create a key to sign the token using testdata.
+	// The same will be fetched through the JWKS URL to verify the token.
+	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
+	key, _ := keySet.Get(0)
+	issuer := testServerURL
+	token := createJWT(
+		t, username1, audience1, issuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+
+	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer)
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
+
+	// Validate that the JWT verification fails if the CA certificate is not
+	// provided in the cluster settings.
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	_, err = verifier.ValidateJWTLogin(
+		ctx,
+		s.ClusterSettings(),
+		username.MakeSQLUsernameFromPreNormalizedString(username1),
+		token,
+		identMap,
+	)
+	require.NotNil(t, err)
+
+	// Validate that the JWT verification succeeds once the CA certificate is
+	// provided in the cluster settings.
+	publicKeyPEM, err := securityassets.GetLoader().ReadFile(
+		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedCACert))
+	require.NoError(t, err)
+	JWTAuthIssuerCustomCA.Override(ctx, &s.ClusterSettings().SV, string(publicKeyPEM))
+
+	_, err = verifier.ValidateJWTLogin(
+		ctx,
+		s.ClusterSettings(),
+		username.MakeSQLUsernameFromPreNormalizedString(username1),
+		token,
+		identMap,
+	)
+	require.NoError(t, err)
 }
