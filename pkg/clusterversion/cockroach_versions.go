@@ -251,6 +251,11 @@ const (
 	// system.statement_diagnostics_requests table.
 	V24_2_StmtDiagRedacted
 
+	// V24_2_TenantSystemTables is the migration that creates the system tables
+	// in app tenants that were previously missing due to only being present in
+	// the system tenant.
+	V24_2_TenantSystemTables
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -310,7 +315,8 @@ var versionTable = [numKeys]roachpb.Version{
 	// v24.2 versions. Internal versions must be even.
 	V24_2Start: {Major: 24, Minor: 1, Internal: 2},
 
-	V24_2_StmtDiagRedacted: {Major: 24, Minor: 1, Internal: 4},
+	V24_2_StmtDiagRedacted:   {Major: 24, Minor: 1, Internal: 4},
+	V24_2_TenantSystemTables: {Major: 24, Minor: 1, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
