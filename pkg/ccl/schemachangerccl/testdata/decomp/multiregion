@@ -1050,16 +1050,25 @@ ElementState:
 - IndexZoneConfig:
     indexId: 1
     partitionName: us-east1
+    seqNum: 0
+    subzoneSpans: []
+    subzones: []
     tableId: 108
   Status: PUBLIC
 - IndexZoneConfig:
     indexId: 1
     partitionName: us-east2
+    seqNum: 0
+    subzoneSpans: []
+    subzones: []
     tableId: 108
   Status: PUBLIC
 - IndexZoneConfig:
     indexId: 1
     partitionName: us-east3
+    seqNum: 0
+    subzoneSpans: []
+    subzones: []
     tableId: 108
   Status: PUBLIC
 - Namespace:

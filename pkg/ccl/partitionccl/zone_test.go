@@ -256,44 +256,64 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
-	defer s.Stopper().Stop(context.Background())
-
-	for i, tc := range []struct {
-		query string
-		err   string
-	}{
-		{
-			"ALTER INDEX foo CONFIGURE ZONE USING DEFAULT",
-			`index "foo" does not exist`,
-		},
-		{
-			"SHOW ZONE CONFIGURATION FOR INDEX foo",
-			`index "foo" does not exist`,
-		},
-		{
-			"USE system; ALTER INDEX foo CONFIGURE ZONE USING DEFAULT",
-			`index "foo" does not exist`,
-		},
-		{
-			"USE system; SHOW ZONE CONFIGURATION FOR INDEX foo",
-			`index "foo" does not exist`,
-		},
-		{
-			"ALTER PARTITION p0 OF TABLE system.jobs CONFIGURE ZONE = 'foo'",
-			`partition "p0" does not exist`,
-		},
-		{
-			"SHOW ZONE CONFIGURATION FOR PARTITION p0 OF TABLE system.jobs",
-			`partition "p0" does not exist`,
-		},
-	} {
-		if _, err := db.Exec(tc.query); !testutils.IsError(err, tc.err) {
-			t.Errorf("#%d: expected error matching %q, but got %v", i, tc.err, err)
+	testutils.RunTrueAndFalse(t, "use-declarative-schema-changer", func(t *testing.T, useDeclarativeSchemaChanger bool) {
+		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+			DefaultTestTenant: base.TODOTestTenantDisabled,
+		})
+		defer s.Stopper().Stop(context.Background())
+		// Set up
+		if useDeclarativeSchemaChanger {
+			if _, err := db.Exec("SET use_declarative_schema_changer = on;"); err != nil {
+				t.Error("error during setup", err)
+			}
+		} else {
+			if _, err := db.Exec("SET use_declarative_schema_changer = off;"); err != nil {
+				t.Error("error during setup", err)
+			}
 		}
-	}
+
+		fooErr := `index "foo" does not exist`
+		if useDeclarativeSchemaChanger {
+			fooErr = `relation "" does not exist`
+		}
+		for i, tc := range []struct {
+			query string
+			err   string
+		}{
+			{
+				"ALTER INDEX foo CONFIGURE ZONE USING DEFAULT",
+				fooErr,
+			},
+			{
+				"SHOW ZONE CONFIGURATION FOR INDEX foo",
+				`index "foo" does not exist`,
+			},
+			// N.B. The following will always fallback to the legacy schema changer
+			// because multi-statement txns are not yet supported by our declarative
+			// schema changer.
+			{
+				"USE system; ALTER INDEX foo CONFIGURE ZONE USING DEFAULT",
+				`index "foo" does not exist`,
+			},
+			{
+				"USE system; SHOW ZONE CONFIGURATION FOR INDEX foo",
+				`index "foo" does not exist`,
+			},
+			{
+				"ALTER PARTITION p0 OF TABLE system.jobs CONFIGURE ZONE = 'foo'",
+				`partition "p0" does not exist`,
+			},
+			{
+				"SHOW ZONE CONFIGURATION FOR PARTITION p0 OF TABLE system.jobs",
+				`partition "p0" does not exist`,
+			},
+		} {
+			if _, err := db.Exec(tc.query); !testutils.IsError(err, tc.err) {
+				t.Errorf("#%d: expected error matching %q, but got %v", i, tc.err, err)
+			}
+		}
+
+	})
 }
 
 // partitioningTest represents a single test case used in the various
