@@ -214,18 +214,17 @@ func shouldCatchPanic(panicEmittedFrom string) bool {
 // stack, such as the network or storage layers. A StorageError will be bubbled
 // up all the way past the SQL layer unchanged.
 type StorageError struct {
-	error
+	cause error
 }
 
-// Cause implements the Causer interface.
-func (s *StorageError) Cause() error {
-	return s.error
-}
+func (s *StorageError) Error() string { return s.cause.Error() }
+func (s *StorageError) Cause() error  { return s.cause }
+func (s *StorageError) Unwrap() error { return s.cause }
 
 // NewStorageError returns a new storage error. This can be used to propagate
 // an error through the exec subsystem unchanged.
 func NewStorageError(err error) *StorageError {
-	return &StorageError{error: err}
+	return &StorageError{cause: err}
 }
 
 // notInternalError is an error that occurs not because the vectorized engine
