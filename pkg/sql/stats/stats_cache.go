@@ -669,7 +669,7 @@ func (sc *TableStatisticsCache) parseStats(
 	}
 	res := &TableStatistic{TableStatisticProto: *tsp}
 	var udt *types.T
-	if res.HistogramData != nil {
+	if res.HistogramData != nil && (len(res.HistogramData.Buckets) > 0 || res.RowCount == res.NullCount) {
 		// hydrate the type in case any user defined types are present.
 		// There are cases where typ is nil, so don't do anything if so.
 		if typ := res.HistogramData.ColumnType; typ != nil && typ.UserDefined() {
