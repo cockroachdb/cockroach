@@ -193,31 +193,68 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 	return nil
 }
 
+// makeValuesClause creates a string used for referencing values by
+// placeholder. For example, makeValuesClause(3, 2) should produce:
+//
+//	($1, $2, $3), ($4, $5, $6)
+func makeValuesClause(numColumns, numRows int) string {
+	argIdx := 1
+	var valuesString strings.Builder
+	for i := 0; i < numRows; i++ {
+		if i == 0 {
+			valuesString.WriteByte('(')
+		} else {
+			valuesString.WriteString(", (")
+		}
+
+		for j := 0; j < numColumns; j++ {
+			if j == 0 {
+				fmt.Fprintf(&valuesString, "$%d", argIdx)
+			} else {
+				fmt.Fprintf(&valuesString, ", $%d", argIdx)
+			}
+			argIdx++
+		}
+		valuesString.WriteByte(')')
+	}
+	return valuesString.String()
+}
+
+// makeOnConflictClause creates a string for use
+// in an ON CONFLICT clause that sets all columns to the value
+// in the excluded table.
+func makeOnConflictClause(colNames []string) string {
+	var onConflictUpdateClause strings.Builder
+	for i, colName := range colNames {
+		if i == 0 {
+			fmt.Fprintf(&onConflictUpdateClause, "%s = excluded.%[1]s", colName)
+		} else {
+			fmt.Fprintf(&onConflictUpdateClause, ",\n%s = excluded.%[1]s", colName)
+		}
+	}
+	return onConflictUpdateClause.String()
+}
+
 func makeInsertQueries(
 	dstTableDescID int32, td catalog.TableDescriptor,
 ) (map[catid.FamilyID]statements.Statement[tree.Statement], error) {
 	queries := make(map[catid.FamilyID]statements.Statement[tree.Statement], td.NumFamilies())
 	if err := td.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
-		var columnNames strings.Builder
-		var valueStrings strings.Builder
-		var onConflictUpdateClause strings.Builder
-		argIdx := 1
-		seenIds := make(map[catid.ColumnID]struct{})
-		publicColumns := td.PublicColumns()
-		colOrd := catalog.ColumnIDToOrdinalMap(publicColumns)
-		addColumnByNameNoCheck := func(colName string) {
-			colName = lexbase.EscapeSQLIdent(colName)
-			if argIdx == 1 {
-				columnNames.WriteString(colName)
-				fmt.Fprintf(&valueStrings, "$%d", argIdx)
-				fmt.Fprintf(&onConflictUpdateClause, "%s = excluded.%[1]s", colName)
-			} else {
-				fmt.Fprintf(&columnNames, ", %s", colName)
-				fmt.Fprintf(&valueStrings, ", $%d", argIdx)
-				fmt.Fprintf(&onConflictUpdateClause, ",\n%s = excluded.%[1]s", colName)
+
+		var (
+			publicColumns   = td.PublicColumns()
+			primaryIndex    = td.GetPrimaryIndex()
+			colOrd          = catalog.ColumnIDToOrdinalMap(publicColumns)
+			seenIds         = make(map[string]struct{})
+			escapedColNames = make([]string, 0, primaryIndex.NumKeyColumns()+len(family.ColumnNames))
+		)
+		addEscapedColumnName := func(colName string) {
+			if _, seen := seenIds[colName]; !seen {
+				seenIds[colName] = struct{}{}
+				escapedColNames = append(escapedColNames, lexbase.EscapeSQLIdent(colName))
 			}
-			argIdx++
 		}
+
 		addColumnByID := func(colID catid.ColumnID) error {
 			ord, ok := colOrd.Get(colID)
 			if !ok {
@@ -233,15 +270,11 @@ func makeInsertQueries(
 			if colName == "crdb_internal_origin_timestamp" {
 				return nil
 			}
-			if _, seen := seenIds[colID]; seen {
-				return nil
-			}
-			addColumnByNameNoCheck(colName)
-			seenIds[colID] = struct{}{}
+
+			addEscapedColumnName(colName)
 			return nil
 		}
 
-		primaryIndex := td.GetPrimaryIndex()
 		for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
 			if err := addColumnByID(primaryIndex.GetKeyColumnID(i)); err != nil {
 				return err
@@ -253,11 +286,17 @@ func makeInsertQueries(
 				return err
 			}
 		}
-		addColumnByNameNoCheck("crdb_internal_origin_timestamp")
+		addEscapedColumnName("crdb_internal_origin_timestamp")
+
+		const rowCount = 1
+		columnNames := strings.Join(escapedColNames, ", ")
+		valuesPlaceholders := makeValuesClause(len(escapedColNames), rowCount)
+		onConflictClause := makeOnConflictClause(escapedColNames)
+
 		var err error
 		const baseQuery = `
 INSERT INTO [%d AS t] (%s)
-VALUES (%s)
+VALUES %s
 ON CONFLICT ON CONSTRAINT %s
 DO UPDATE SET
 %s
@@ -267,10 +306,10 @@ WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_internal_origin_timestamp
        AND t.crdb_internal_origin_timestamp IS NOT NULL)`
 		queries[family.ID], err = parser.ParseOne(fmt.Sprintf(baseQuery,
 			dstTableDescID,
-			columnNames.String(),
-			valueStrings.String(),
+			columnNames,
+			valuesPlaceholders,
 			lexbase.EscapeSQLIdent(td.GetPrimaryIndex().GetName()),
-			onConflictUpdateClause.String(),
+			onConflictClause,
 		))
 		return err
 	}); err != nil {
@@ -282,8 +321,8 @@ WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_internal_origin_timestamp
 func makeDeleteQuery(dstTableDescID int32, td catalog.TableDescriptor) string {
 	var whereClause strings.Builder
 	names := td.TableDesc().PrimaryIndex.KeyColumnNames
-	for i := 0; i < len(names); i++ {
-		colName := lexbase.EscapeSQLIdent(names[i])
+	for i, name := range names {
+		colName := lexbase.EscapeSQLIdent(name)
 		if i == 0 {
 			fmt.Fprintf(&whereClause, "%s = $%d", colName, i+1)
 		} else {
