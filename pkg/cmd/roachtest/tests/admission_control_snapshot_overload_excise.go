@@ -127,7 +127,7 @@ func registerSnapshotOverloadExcise(r registry.Registry) {
 			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", 2*time.Hour))
 			c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
 				"./cockroach workload init kv --drop --insert-count=40000000 "+
-					"--max-block-bytes=12288 --min-block-bytes=12288 {pgurl:1}")
+					"--max-block-bytes=12288 --min-block-bytes=12288 {pgurl:1-3}")
 
 			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
 			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
@@ -136,7 +136,7 @@ func registerSnapshotOverloadExcise(r registry.Registry) {
 					fmt.Sprintf("./cockroach workload run kv --tolerate-errors "+
 						"--splits=1000 --histograms=%s/stats.json --read-percent=75 "+
 						"--max-rate=600 --max-block-bytes=12288 --min-block-bytes=12288 "+
-						"--concurrency=4000 --duration=%s {pgurl:1}",
+						"--concurrency=4000 --duration=%s {pgurl:1-2}",
 						t.PerfArtifactsDir(), (6*time.Hour).String()))
 				return nil
 			})
@@ -151,7 +151,7 @@ func registerSnapshotOverloadExcise(r registry.Registry) {
 			time.Sleep(2 * time.Hour)
 
 			t.Status(fmt.Sprintf("starting node 3... (<%s)", time.Minute))
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(envOptions), c.Node(3))
+			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(envOptions), c.Node(3))
 
 			t.Status(fmt.Sprintf("waiting for snapshot transfers to finish %s", 2*time.Hour))
 			m.Go(func(ctx context.Context) error {
