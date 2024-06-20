@@ -4511,6 +4511,10 @@ comment_stmt:
   {
     $$.val = &tree.CommentOnSchema{Name: $4.objectNamePrefix(), Comment: $6.strPtr()}
   }
+| COMMENT ON TYPE type_name IS comment_text
+  {
+    $$.val = &tree.CommentOnType{Name: $4.unresolvedObjectName(), Comment: $6.strPtr()}
+  }
 | COMMENT ON TABLE table_name IS comment_text
   {
     $$.val = &tree.CommentOnTable{Table: $4.unresolvedObjectName(), Comment: $6.strPtr()}

@@ -1,0 +1,35 @@
+/* setup */
+CREATE TYPE roach_legs AS (legs INT);
+COMMENT ON TYPE roach_legs IS 'Second-CRDB-comment-on-types';
+----
+...
++object {100 101 roach_legs} -> 104
++object {100 101 _roach_legs} -> 105
+
+/* test */
+COMMENT ON TYPE roach_legs IS NULL;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: COMMENT ON
+write *eventpb.CommentOnType to event log:
+  comment: Second-CRDB-comment-on-types
+  nullComment: true
+  sql:
+    descriptorId: 104
+    statement: COMMENT ON TYPE ‹defaultdb›.‹public›.‹roach_legs› IS NULL
+    tag: COMMENT ON TYPE
+    user: root
+  typeName: defaultdb.public.roach_legs
+## StatementPhase stage 1 of 1 with 1 MutationType op
+delete comment TypeCommentType(objID: 104, subID: 0)
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 1 MutationType op
+delete comment TypeCommentType(objID: 104, subID: 0)
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

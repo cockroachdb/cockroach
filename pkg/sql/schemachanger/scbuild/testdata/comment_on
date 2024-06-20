@@ -267,3 +267,37 @@ COMMENT ON CONSTRAINT customer_age_gt_21 ON customer IS NULL
   {comment: real constraint comment, constraintId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+
+setup
+CREATE TYPE roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+CREATE TYPE roach_legs AS (legs INT);
+----
+
+build
+COMMENT ON TYPE roach_dwellings IS 'First CRDB comment on types';
+----
+- [[TypeComment:{DescID: 106, Comment: First CRDB comment on types}, PUBLIC], ABSENT]
+  {comment: First CRDB comment on types, typeId: 106}
+
+build
+COMMENT ON TYPE roach_legs IS 'Second CRDB comment on types';
+----
+- [[TypeComment:{DescID: 108, Comment: Second CRDB comment on types}, PUBLIC], ABSENT]
+  {comment: Second CRDB comment on types, typeId: 108}
+
+setup
+COMMENT ON TYPE roach_dwellings IS 'First CRDB comment on types';
+COMMENT ON TYPE roach_legs IS 'Second CRDB comment on types';
+----
+
+build
+COMMENT ON TYPE roach_dwellings IS NULL;
+----
+- [[TypeComment:{DescID: 106, Comment: First CRDB comment on types}, ABSENT], PUBLIC]
+  {comment: First CRDB comment on types, typeId: 106}
+
+build
+COMMENT ON TYPE roach_legs IS NULL;
+----
+- [[TypeComment:{DescID: 108, Comment: Second CRDB comment on types}, ABSENT], PUBLIC]
+  {comment: Second CRDB comment on types, typeId: 108}
