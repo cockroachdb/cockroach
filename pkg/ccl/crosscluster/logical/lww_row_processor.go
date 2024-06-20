@@ -54,6 +54,8 @@ type sqlLastWriteWinsRowProcessor struct {
 	decoder     cdcevent.Decoder
 	queryBuffer queryBuffer
 
+	currentMutationGroup mutationGroup
+
 	// scratch allows us to reuse some allocations between multiple calls to
 	// insertRow and deleteRow.
 	scratch struct {
@@ -62,9 +64,48 @@ type sqlLastWriteWinsRowProcessor struct {
 	}
 }
 
+type mutationGroup struct {
+	tableID  catid.DescID
+	familyID catid.FamilyID
+	rowCount int
+	datums   []interface{}
+}
+
+func (m *mutationGroup) reset() {
+	m.rowCount = 0
+	m.datums = m.datums[:0]
+}
+
+func (m *mutationGroup) empty() bool {
+	return m.rowCount == 0
+}
+
+func (m *mutationGroup) rows() int {
+	return m.rowCount
+}
+
+const maxMutationGroupSize = 8
+
+func (m *mutationGroup) canAddRowToGroup(row *cdcevent.Row) bool {
+	if m.empty() || (row.TableID == m.tableID &&
+		row.FamilyID == m.familyID &&
+		m.rowCount <= maxMutationGroupSize) {
+		m.familyID = row.FamilyID
+		m.tableID = row.TableID
+		m.rowCount++
+		return true
+	}
+	return false
+
+}
+
+func (m *mutationGroup) addMutation(datums []interface{}) {
+	m.rowCount++
+}
+
 type queryBuffer struct {
 	deleteQueries map[catid.DescID]statements.Statement[tree.Statement]
-	insertQueries map[catid.DescID]map[catid.FamilyID]statements.Statement[tree.Statement]
+	insertQueries map[catid.DescID]map[catid.FamilyID]map[int]statements.Statement[tree.Statement]
 }
 
 func makeSQLLastWriteWinsHandler(
@@ -73,7 +114,7 @@ func makeSQLLastWriteWinsHandler(
 	descs := make(map[catid.DescID]catalog.TableDescriptor)
 	qb := queryBuffer{
 		deleteQueries: make(map[catid.DescID]statements.Statement[tree.Statement], len(tableDescs)),
-		insertQueries: make(map[catid.DescID]map[catid.FamilyID]statements.Statement[tree.Statement], len(tableDescs)),
+		insertQueries: make(map[catid.DescID]map[catid.FamilyID]map[int]statements.Statement[tree.Statement], len(tableDescs)),
 	}
 	cdcEventTargets := changefeedbase.Targets{}
 	var err error
@@ -107,6 +148,57 @@ func makeSQLLastWriteWinsHandler(
 	}, nil
 }
 
+func (lww *sqlLastWriteWinsRowProcessor) insertQueryForCurrentMigrationGroup() (
+	statements.Statement[tree.Statement],
+	error,
+) {
+	var (
+		tableID   = lww.currentMutationGroup.tableID
+		familyID  = lww.currentMutationGroup.familyID
+		groupSize = lww.currentMutationGroup.rows()
+	)
+	insertQueriesForTable, ok := lww.queryBuffer.insertQueries[tableID]
+	if !ok {
+		return statements.Statement[tree.Statement]{}, errors.Errorf("no pre-generated insert query for table %d", tableID)
+	}
+	insertQueriesForFamily, ok := insertQueriesForTable[familyID]
+	if !ok {
+		return statements.Statement[tree.Statement]{}, errors.Errorf("no pre-generated insert query for table %d column family %d",
+			tableID,
+			familyID)
+	}
+
+	// TODO(ssd): make these on demand
+	insertQuery, ok := insertQueriesForFamily[groupSize]
+	if !ok {
+		return statements.Statement[tree.Statement]{}, errors.Errorf("no pre-generated insert query for table %d column family %d, size %d",
+			tableID,
+			familyID,
+			groupSize,
+		)
+	}
+	return insertQuery, nil
+}
+
+func (lww *sqlLastWriteWinsRowProcessor) flushCurrentMutationGroup(
+	ctx context.Context, txn isql.Txn,
+) error {
+	if lww.currentMutationGroup.empty() {
+		return nil
+	}
+	defer lww.currentMutationGroup.reset()
+	insertQuery, err := lww.insertQueryForCurrentMigrationGroup()
+	if err != nil {
+		return err
+	}
+	if _, err := txn.ExecParsed(ctx, "replicated-insert", txn.KV(), attributeToUser, insertQuery, lww.currentMutationGroup.datums...); err != nil {
+		log.Warningf(ctx, "replicated insert failed (query: %s): %s", insertQuery.SQL, err.Error())
+		return err
+	}
+	return nil
+
+}
+
 func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, kv roachpb.KeyValue,
 ) error {
@@ -121,10 +213,17 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 		return errors.Wrap(err, "decoding KeyValue")
 	}
 	if row.IsDeleted() {
+		if err := lww.flushCurrentMutationGroup(ctx, txn); err != nil {
+			return err
+		}
 		return lww.deleteRow(ctx, txn, row)
 	} else {
 		return lww.insertRow(ctx, txn, row)
 	}
+}
+
+func (lww *sqlLastWriteWinsRowProcessor) FinishBatch(ctx context.Context, txn isql.Txn) error {
+	return lww.flushCurrentMutationGroup(ctx, txn)
 }
 
 var attributeToUser = sessiondata.InternalExecutorOverride{
@@ -134,7 +233,13 @@ var attributeToUser = sessiondata.InternalExecutorOverride{
 func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row,
 ) error {
-	datums := lww.scratch.datums[:0]
+	if !lww.currentMutationGroup.canAddRowToGroup(&row) {
+		if err := lww.flushCurrentMutationGroup(ctx, txn); err != nil {
+			return err
+		}
+		return lww.insertRow(ctx, txn, row)
+	}
+
 	err := row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		if col.Computed {
 			return nil
@@ -148,27 +253,14 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 			return nil
 		}
 
-		datums = append(datums, d)
+		lww.currentMutationGroup.datums = append(lww.currentMutationGroup.datums, d)
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	lww.scratch.ts.Decimal = eval.TimestampToDecimal(row.MvccTimestamp)
-	datums = append(datums, &lww.scratch.ts)
-	lww.scratch.datums = datums[:0]
-	insertQueriesForTable, ok := lww.queryBuffer.insertQueries[row.TableID]
-	if !ok {
-		return errors.Errorf("no pre-generated insert query for table %d", row.TableID)
-	}
-	insertQuery, ok := insertQueriesForTable[row.FamilyID]
-	if !ok {
-		return errors.Errorf("no pre-generated insert query for table %d column family %d", row.TableID, row.FamilyID)
-	}
-	if _, err := txn.ExecParsed(ctx, "replicated-insert", txn.KV(), attributeToUser, insertQuery, datums...); err != nil {
-		log.Warningf(ctx, "replicated insert failed (query: %s): %s", insertQuery.SQL, err.Error())
-		return err
-	}
+	lww.currentMutationGroup.datums = append(lww.currentMutationGroup.datums,
+		&tree.DDecimal{Decimal: eval.TimestampToDecimal(row.MvccTimestamp)})
 	return nil
 }
 
@@ -191,6 +283,58 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 		return err
 	}
 	return nil
+}
+
+func makeInsertQueries(
+	dstTableDescID int32, td catalog.TableDescriptor,
+) (map[catid.FamilyID]map[int]statements.Statement[tree.Statement], error) {
+	queries := make(map[catid.FamilyID]map[int]statements.Statement[tree.Statement], td.NumFamilies())
+	if err := td.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+		var err error
+		queries[family.ID], err = makeInsertQueriesForColumnFamily(dstTableDescID, td, family)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return queries, nil
+}
+
+func makeInsertQueriesForColumnFamily(
+	dstTableDescID int32, td catalog.TableDescriptor, family *descpb.ColumnFamilyDescriptor,
+) (map[int]statements.Statement[tree.Statement], error) {
+	escapedColNames, err := insertColumnsForFamily(td, family)
+	if err != nil {
+		return nil, err
+	}
+	columnNames := strings.Join(escapedColNames, ", ")
+	onConflictClause := makeOnConflictClause(escapedColNames)
+
+	const baseQuery = `
+INSERT INTO [%d AS t] (%s)
+VALUES %s
+ON CONFLICT ON CONSTRAINT %s
+DO UPDATE SET
+%s
+WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_internal_origin_timestamp
+       AND t.crdb_internal_origin_timestamp IS NULL)
+   OR (t.crdb_internal_origin_timestamp <= excluded.crdb_internal_origin_timestamp
+       AND t.crdb_internal_origin_timestamp IS NOT NULL)`
+	queries := make(map[int]statements.Statement[tree.Statement], maxMutationGroupSize)
+	for i := 1; i <= maxMutationGroupSize; i++ {
+		valuesPlaceholders := makeValuesClause(len(escapedColNames), i)
+		var err error
+		queries[i], err = parser.ParseOne(fmt.Sprintf(baseQuery,
+			dstTableDescID,
+			columnNames,
+			valuesPlaceholders,
+			lexbase.EscapeSQLIdent(td.GetPrimaryIndex().GetName()),
+			onConflictClause,
+		))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return queries, err
 }
 
 // makeValuesClause creates a string used for referencing values by
@@ -235,87 +379,56 @@ func makeOnConflictClause(colNames []string) string {
 	return onConflictUpdateClause.String()
 }
 
-func makeInsertQueries(
-	dstTableDescID int32, td catalog.TableDescriptor,
-) (map[catid.FamilyID]statements.Statement[tree.Statement], error) {
-	queries := make(map[catid.FamilyID]statements.Statement[tree.Statement], td.NumFamilies())
-	if err := td.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
-
-		var (
-			publicColumns   = td.PublicColumns()
-			primaryIndex    = td.GetPrimaryIndex()
-			colOrd          = catalog.ColumnIDToOrdinalMap(publicColumns)
-			seenIds         = make(map[string]struct{})
-			escapedColNames = make([]string, 0, primaryIndex.NumKeyColumns()+len(family.ColumnNames))
-		)
-		addEscapedColumnName := func(colName string) {
-			if _, seen := seenIds[colName]; !seen {
-				seenIds[colName] = struct{}{}
-				escapedColNames = append(escapedColNames, lexbase.EscapeSQLIdent(colName))
-			}
+func insertColumnsForFamily(
+	td catalog.TableDescriptor, family *descpb.ColumnFamilyDescriptor,
+) ([]string, error) {
+	var (
+		publicColumns   = td.PublicColumns()
+		primaryIndex    = td.GetPrimaryIndex()
+		colOrd          = catalog.ColumnIDToOrdinalMap(publicColumns)
+		seenIds         = make(map[string]struct{})
+		escapedColNames = make([]string, 0, primaryIndex.NumKeyColumns()+len(family.ColumnNames))
+	)
+	addEscapedColumnName := func(colName string) {
+		if _, seen := seenIds[colName]; !seen {
+			seenIds[colName] = struct{}{}
+			escapedColNames = append(escapedColNames, lexbase.EscapeSQLIdent(colName))
 		}
+	}
 
-		addColumnByID := func(colID catid.ColumnID) error {
-			ord, ok := colOrd.Get(colID)
-			if !ok {
-				return errors.AssertionFailedf("expected to find column %d", colID)
-			}
-			col := publicColumns[ord]
-			if col.IsComputed() {
-				return nil
-			}
-			colName := col.GetName()
-			// We will set crdb_internal_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
-			// We should never see this on the rangefeed as a non-null value as that would imply we've looped data around.
-			if colName == "crdb_internal_origin_timestamp" {
-				return nil
-			}
-
-			addEscapedColumnName(colName)
+	addColumnByID := func(colID catid.ColumnID) error {
+		ord, ok := colOrd.Get(colID)
+		if !ok {
+			return errors.AssertionFailedf("expected to find column %d", colID)
+		}
+		col := publicColumns[ord]
+		if col.IsComputed() {
+			return nil
+		}
+		colName := col.GetName()
+		// We will set crdb_internal_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
+		// We should never see this on the rangefeed as a non-null value as that would imply we've looped data around.
+		if colName == "crdb_internal_origin_timestamp" {
 			return nil
 		}
 
-		for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
-			if err := addColumnByID(primaryIndex.GetKeyColumnID(i)); err != nil {
-				return err
-			}
-		}
-
-		for i := range family.ColumnNames {
-			if err := addColumnByID(family.ColumnIDs[i]); err != nil {
-				return err
-			}
-		}
-		addEscapedColumnName("crdb_internal_origin_timestamp")
-
-		const rowCount = 1
-		columnNames := strings.Join(escapedColNames, ", ")
-		valuesPlaceholders := makeValuesClause(len(escapedColNames), rowCount)
-		onConflictClause := makeOnConflictClause(escapedColNames)
-
-		var err error
-		const baseQuery = `
-INSERT INTO [%d AS t] (%s)
-VALUES %s
-ON CONFLICT ON CONSTRAINT %s
-DO UPDATE SET
-%s
-WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_internal_origin_timestamp
-       AND t.crdb_internal_origin_timestamp IS NULL)
-   OR (t.crdb_internal_origin_timestamp <= excluded.crdb_internal_origin_timestamp
-       AND t.crdb_internal_origin_timestamp IS NOT NULL)`
-		queries[family.ID], err = parser.ParseOne(fmt.Sprintf(baseQuery,
-			dstTableDescID,
-			columnNames,
-			valuesPlaceholders,
-			lexbase.EscapeSQLIdent(td.GetPrimaryIndex().GetName()),
-			onConflictClause,
-		))
-		return err
-	}); err != nil {
-		return nil, err
+		addEscapedColumnName(colName)
+		return nil
 	}
-	return queries, nil
+
+	for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
+		if err := addColumnByID(primaryIndex.GetKeyColumnID(i)); err != nil {
+			return nil, err
+		}
+	}
+
+	for i := range family.ColumnNames {
+		if err := addColumnByID(family.ColumnIDs[i]); err != nil {
+			return nil, err
+		}
+	}
+	addEscapedColumnName("crdb_internal_origin_timestamp")
+	return escapedColNames, nil
 }
 
 func makeDeleteQuery(dstTableDescID int32, td catalog.TableDescriptor) string {

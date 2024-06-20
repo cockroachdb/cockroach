@@ -527,6 +527,7 @@ type BatchHandler interface {
 // RowProcessor knows how to process a single row from an event stream.
 type RowProcessor interface {
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue) error
+	FinishBatch(context.Context, isql.Txn) error
 }
 
 type txnBatch struct {
@@ -555,9 +556,8 @@ func (t *txnBatch) HandleBatch(
 			if err := t.rp.ProcessRow(ctx, txn, kv.KeyValue); err != nil {
 				return err
 			}
-
 		}
-		return nil
+		return t.rp.FinishBatch(ctx, txn)
 	})
 	return stats, err
 }
