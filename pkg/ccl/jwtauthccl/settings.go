@@ -19,13 +19,14 @@ import (
 
 // All cluster settings necessary for the JWT authentication feature.
 const (
-	baseJWTAuthSettingName          = "server.jwt_authentication."
-	JWTAuthAudienceSettingName      = baseJWTAuthSettingName + "audience"
-	JWTAuthEnabledSettingName       = baseJWTAuthSettingName + "enabled"
-	JWTAuthIssuersSettingName       = baseJWTAuthSettingName + "issuers"
-	JWTAuthJWKSSettingName          = baseJWTAuthSettingName + "jwks"
-	JWTAuthClaimSettingName         = baseJWTAuthSettingName + "claim"
-	JWKSAutoFetchEnabledSettingName = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
+	baseJWTAuthSettingName           = "server.jwt_authentication."
+	JWTAuthAudienceSettingName       = baseJWTAuthSettingName + "audience"
+	JWTAuthEnabledSettingName        = baseJWTAuthSettingName + "enabled"
+	JWTAuthIssuersSettingName        = baseJWTAuthSettingName + "issuers"
+	JWTAuthJWKSSettingName           = baseJWTAuthSettingName + "jwks"
+	JWTAuthClaimSettingName          = baseJWTAuthSettingName + "claim"
+	JWKSAutoFetchEnabledSettingName  = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
+	jwtAuthIssuerCustomCASettingName = baseJWTAuthSettingName + "issuer_custom_ca"
 )
 
 // JWTAuthClaim sets the JWT claim that is parsed to get the username.
@@ -72,6 +73,16 @@ var JWTAuthIssuers = settings.RegisterStringSetting(
 		"string with an array of issuer strings in it",
 	"",
 	settings.WithValidateString(validateJWTAuthIssuers),
+)
+
+// JWTAuthIssuerCustomCA is the custom root CA for verifying certificates while
+// fetching JWKS from the JWT issuer.
+var JWTAuthIssuerCustomCA = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	jwtAuthIssuerCustomCASettingName,
+	"sets the custom root CA for verifying certificates while fetching JWKS from the JWT issuer",
+	"",
+	settings.WithPublic,
 )
 
 // JWKSAutoFetchEnabled enables or disables automatic fetching of JWKs from the issuer's well-known endpoint.
