@@ -8,3 +8,6 @@ bazel build //pkg/roachpb:roachpb_test --config=test --build_event_binary_file=/
 mkdir crdb-checkout/bin
 ----
 
+bazel info bazel-bin --color=no --config=test
+----
+/path/to/bazel/bin
