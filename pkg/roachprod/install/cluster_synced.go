@@ -2041,8 +2041,6 @@ func (c *SyncedCluster) Put(
 	}
 
 	results := make(chan result, len(nodes))
-	lines := make([]string, len(nodes))
-	var linesMu syncutil.Mutex
 	var wg sync.WaitGroup
 	wg.Add(len(nodes))
 
@@ -2085,10 +2083,15 @@ func (c *SyncedCluster) Put(
 		return fmt.Sprintf("%s@%s:%s", c.user(nodes[i]), c.Host(nodes[i]), dest), nil
 	}
 
+	spinner := ui.NewDefaultTaskSpinner(l, "")
+	nodeTaskStatus := func(nodeID Node, msg string, done bool) {
+		spinner.TaskStatus(nodeID, fmt.Sprintf("  %2d: %s", nodeID, msg), done)
+	}
+
 	for i := range nodes {
+		nodeTaskStatus(nodes[i], "copying", false)
 		go func(i int, dest string) {
 			defer wg.Done()
-
 			if c.IsLocal() {
 				// Expand the destination to allow, for example, putting directly
 				// into {store-dir}.
@@ -2168,19 +2171,12 @@ func (c *SyncedCluster) Put(
 		}(i, dest)
 	}
 
+	defer spinner.Start()()
 	go func() {
 		wg.Wait()
 		close(results)
 	}()
 
-	var writer ui.Writer
-	var ticker *time.Ticker
-	if !config.Quiet {
-		ticker = time.NewTicker(100 * time.Millisecond)
-	} else {
-		ticker = time.NewTicker(1000 * time.Millisecond)
-	}
-	defer ticker.Stop()
 	var errOnce sync.Once
 	var finalErr error
 	setErr := func(e error) {
@@ -2191,59 +2187,19 @@ func (c *SyncedCluster) Put(
 		}
 	}
 
-	var spinner = []string{"|", "/", "-", "\\"}
-	spinnerIdx := 0
-
-	for done := false; !done; {
-		select {
-		case <-ticker.C:
-			if config.Quiet && l.File == nil {
-				fmt.Printf(".")
-			}
-		case r, ok := <-results:
-			done = !ok
-			if ok {
-				func() {
-					linesMu.Lock()
-					defer linesMu.Unlock()
-					if r.err != nil {
-						setErr(r.err)
-						lines[r.index] = r.err.Error()
-					} else {
-						lines[r.index] = "done"
-					}
-				}()
-			}
+	for {
+		r, ok := <-results
+		if !ok {
+			break
 		}
-		if !config.Quiet {
-			func() {
-				linesMu.Lock()
-				defer linesMu.Unlock()
-				for i := range lines {
-					fmt.Fprintf(&writer, "  %2d: ", nodes[i])
-					if lines[i] != "" {
-						fmt.Fprintf(&writer, "%s", lines[i])
-					} else {
-						fmt.Fprintf(&writer, "%s", spinner[spinnerIdx%len(spinner)])
-					}
-					fmt.Fprintf(&writer, "\n")
-				}
-			}()
-			_ = writer.Flush(l.Stdout)
-			spinnerIdx++
+		if r.err != nil {
+			setErr(r.err)
+			nodeTaskStatus(nodes[r.index], r.err.Error(), true)
+		} else {
+			nodeTaskStatus(nodes[r.index], "done", true)
 		}
 	}
-
-	if config.Quiet && l.File != nil {
-		l.Printf("\n")
-		func() {
-			linesMu.Lock()
-			defer linesMu.Unlock()
-			for i := range lines {
-				l.Printf("  %2d: %s", nodes[i], lines[i])
-			}
-		}()
-	}
+	spinner.MaybeLogTasks(l)
 
 	if finalErr != nil {
 		return errors.Wrapf(finalErr, "put %q failed", src)
@@ -2426,13 +2382,16 @@ func (c *SyncedCluster) Get(
 		err   error
 	}
 
-	var writer ui.Writer
 	results := make(chan result, len(nodes))
-	lines := make([]string, len(nodes))
-	var linesMu syncutil.Mutex
+
+	spinner := ui.NewDefaultTaskSpinner(l, "")
+	nodeTaskStatus := func(nodeID Node, msg string, done bool) {
+		spinner.TaskStatus(nodeID, fmt.Sprintf("  %2d: %s", nodeID, msg), done)
+	}
 
 	var wg sync.WaitGroup
 	for i := range nodes {
+		nodeTaskStatus(nodes[i], "copying", false)
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -2455,9 +2414,7 @@ func (c *SyncedCluster) Get(
 			}
 
 			progress := func(p float64) {
-				linesMu.Lock()
-				defer linesMu.Unlock()
-				lines[i] = formatProgress(p)
+				nodeTaskStatus(nodes[i], formatProgress(p), false)
 			}
 
 			if c.IsLocal() {
@@ -2570,67 +2527,21 @@ func (c *SyncedCluster) Get(
 		close(results)
 	}()
 
-	var ticker *time.Ticker
-	if config.Quiet {
-		ticker = time.NewTicker(100 * time.Millisecond)
-	} else {
-		ticker = time.NewTicker(1000 * time.Millisecond)
-	}
-	defer ticker.Stop()
+	defer spinner.Start()()
 	haveErr := false
-
-	var spinner = []string{"|", "/", "-", "\\"}
-	spinnerIdx := 0
-
-	for done := false; !done; {
-		select {
-		case <-ticker.C:
-			if config.Quiet && l.File == nil {
-				fmt.Printf(".")
-			}
-		case r, ok := <-results:
-			done = !ok
-			if ok {
-				func() {
-					linesMu.Lock()
-					defer linesMu.Unlock()
-					if r.err != nil {
-						haveErr = true
-						lines[r.index] = r.err.Error()
-					} else {
-						lines[r.index] = "done"
-					}
-				}()
-			}
+	for {
+		r, ok := <-results
+		if !ok {
+			break
 		}
-		if !config.Quiet && l.File == nil {
-			func() {
-				linesMu.Lock()
-				defer linesMu.Unlock()
-				for i := range lines {
-					fmt.Fprintf(&writer, "  %2d: ", nodes[i])
-					if lines[i] != "" {
-						fmt.Fprintf(&writer, "%s", lines[i])
-					} else {
-						fmt.Fprintf(&writer, "%s", spinner[spinnerIdx%len(spinner)])
-					}
-					fmt.Fprintf(&writer, "\n")
-				}
-			}()
-			_ = writer.Flush(l.Stdout)
-			spinnerIdx++
+		if r.err != nil {
+			haveErr = true
+			nodeTaskStatus(nodes[r.index], r.err.Error(), true)
+		} else {
+			nodeTaskStatus(nodes[r.index], "done", true)
 		}
 	}
-
-	if config.Quiet && l.File != nil {
-		func() {
-			linesMu.Lock()
-			defer linesMu.Unlock()
-			for i := range lines {
-				l.Printf("  %2d: %s", nodes[i], lines[i])
-			}
-		}()
-	}
+	spinner.MaybeLogTasks(l)
 
 	if haveErr {
 		return errors.Newf("get %s failed", src)
@@ -2950,36 +2861,16 @@ func (c *SyncedCluster) ParallelE(
 		wg.Wait()
 	}()
 
-	var writer ui.Writer
-	out := l.Stdout
-	if options.Display == "" {
-		out = io.Discard
+	spinner := ui.NewDefaultCountingSpinner(l, options.Display, count)
+	if options.Display != "" {
+		defer spinner.Start()()
 	}
-
-	var ticker *time.Ticker
-	if !config.Quiet {
-		ticker = time.NewTicker(100 * time.Millisecond)
-	} else {
-		ticker = time.NewTicker(1000 * time.Millisecond)
-		fmt.Fprintf(out, "%s", options.Display)
-		if l.File != nil {
-			fmt.Fprintf(out, "\n")
-		}
-	}
-	defer ticker.Stop()
-
-	var spinner = []string{"|", "/", "-", "\\"}
-	spinnerIdx := 0
 
 	var hasError bool
 	n := 0
 	results := make([]*RunResultDetails, count)
 	for done := false; !done; {
 		select {
-		case <-ticker.C:
-			if config.Quiet && l.File == nil {
-				fmt.Fprintf(out, ".")
-			}
 		case r, ok := <-completed:
 			if ok {
 				results[r.Index] = r.RunResultDetails
@@ -3002,21 +2893,7 @@ func (c *SyncedCluster) ParallelE(
 				return nil, false, err
 			}
 		}
-
-		if !config.Quiet && l.File == nil {
-			fmt.Fprint(&writer, options.Display)
-			fmt.Fprintf(&writer, " %d/%d", n, count)
-			if !done {
-				fmt.Fprintf(&writer, " %s", spinner[spinnerIdx%len(spinner)])
-			}
-			fmt.Fprintf(&writer, "\n")
-			_ = writer.Flush(out)
-			spinnerIdx++
-		}
-	}
-
-	if config.Quiet && l.File == nil {
-		fmt.Fprintf(out, "\n")
+		spinner.CountStatus(n)
 	}
 
 	return results, hasError, nil
