@@ -2482,7 +2482,9 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 		}
 	}
 
-	verify(h.Context().FromVersion)
+	if h.Context().FromVersion.AtLeast(mixedversion.OldestSupportedVersion) {
+		verify(h.Context().FromVersion)
+	}
 	verify(h.Context().ToVersion)
 
 	// If the context was canceled (most likely due to a test timeout),
