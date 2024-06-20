@@ -19,7 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -61,8 +60,7 @@ func testBase(
 	sc := ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	logHangWg := sync.WaitGroup{}
-	logHangWg.Add(1)
+	logHangCh := make(chan (struct{}))
 
 	// seenMessage is true after the request predicate
 	// has seen the expected message from the client.
@@ -80,7 +78,7 @@ func testBase(
 		if hangServer {
 			// The test is requesting the server to simulate a timeout. Just
 			// do nothing until the test terminates.
-			logHangWg.Wait()
+			<-logHangCh
 		} else {
 			// The test is expecting some message via a predicate.
 			if err := fn(r.Header, string(buf)); err != nil {
@@ -138,7 +136,7 @@ func testBase(
 	}
 
 	if hangServer {
-		logHangWg.Done()
+		logHangCh <- struct{}{}
 		return
 	}
 
