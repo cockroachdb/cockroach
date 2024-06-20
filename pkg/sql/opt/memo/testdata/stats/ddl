@@ -1,0 +1,173 @@
+exec-ddl
+CREATE TABLE a (a INT PRIMARY KEY)
+----
+
+build colstat=1
+ALTER TABLE a SPLIT AT (SELECT 1)
+----
+alter-table-split a
+ ├── columns: key:2(bytes) pretty:3(string) split_enforced_until:4(timestamp)
+ ├── volatile, mutations
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0]
+ ├── project
+ │    ├── columns: "?column?":1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── () [type=tuple]
+ │    └── projections
+ │         └── 1 [as="?column?":1, type=int]
+ └── CAST(NULL AS STRING) [type=string]
+
+build colstat=1
+ALTER TABLE a UNSPLIT AT (SELECT 1)
+----
+alter-table-unsplit a
+ ├── columns: key:1(bytes) pretty:2(string)
+ ├── volatile, mutations
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0]
+ └── project
+      ├── columns: "?column?":6(int!null)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── key: ()
+      ├── fd: ()-->(6)
+      ├── values
+      │    ├── cardinality: [1 - 1]
+      │    ├── stats: [rows=1]
+      │    ├── key: ()
+      │    └── () [type=tuple]
+      └── projections
+           └── 1 [as="?column?":6, type=int]
+
+build colstat=1
+ALTER TABLE a UNSPLIT ALL
+----
+alter-table-unsplit-all a
+ ├── columns: key:1(bytes) pretty:2(string)
+ ├── volatile, mutations
+ └── stats: [rows=10, distinct(1)=10, null(1)=0]
+
+build colstat=1
+CANCEL JOB 1
+----
+control-jobs (CANCEL)
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0]
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,) [type=tuple{int}]
+ └── CAST(NULL AS STRING) [type=string]
+
+build colstat=1
+PAUSE JOB 1
+----
+control-jobs (PAUSE)
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0]
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (1,) [type=tuple{int}]
+ └── CAST(NULL AS STRING) [type=string]
+
+build colstat=1
+PAUSE SCHEDULE 1
+----
+control-schedules
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0]
+ └── values
+      ├── columns: column1:1(int!null)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── key: ()
+      ├── fd: ()-->(1)
+      └── (1,) [type=tuple{int}]
+
+build colstat=1
+SHOW COMPLETIONS AT OFFSET 10 FOR 'SHOW CREAT'
+----
+show-completions &{SHOW COMPLETIONS AT OFFSET 10 FOR 'SHOW CREAT' [1 2 3 4 5]}
+ ├── columns: completion:1(string) category:2(string) description:3(string) start:4(int) end:5(int)
+ └── stats: [rows=10, distinct(1)=10, null(1)=0]
+
+build colstat=1
+CANCEL QUERIES VALUES ('foo'), ('bar')
+----
+cancel-queries
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0]
+ └── values
+      ├── columns: column1:1(string!null)
+      ├── cardinality: [2 - 2]
+      ├── stats: [rows=2]
+      ├── ('foo',) [type=tuple{string}]
+      └── ('bar',) [type=tuple{string}]
+
+build colstat=1
+CANCEL SESSION '14d2355b9cccbca50000000000000001'
+----
+cancel-sessions
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0]
+ └── values
+      ├── columns: column1:1(string!null)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── key: ()
+      ├── fd: ()-->(1)
+      └── ('14d2355b9cccbca50000000000000001',) [type=tuple{string}]
+
+build colstat=1
+CANCEL SESSIONS SELECT 'a' LIMIT 0
+----
+cancel-sessions
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0]
+ └── limit
+      ├── columns: "?column?":1(string!null)
+      ├── cardinality: [0 - 0]
+      ├── stats: [rows=0]
+      ├── key: ()
+      ├── fd: ()-->(1)
+      ├── project
+      │    ├── columns: "?column?":1(string!null)
+      │    ├── cardinality: [1 - 1]
+      │    ├── stats: [rows=1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(1)
+      │    ├── limit hint: 1.00
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── stats: [rows=1]
+      │    │    ├── key: ()
+      │    │    ├── limit hint: 1.00
+      │    │    └── () [type=tuple]
+      │    └── projections
+      │         └── 'a' [as="?column?":1, type=string]
+      └── 0 [type=int]
+
+build colstat=1
+EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM a
+----
+export
+ ├── columns: filename:4(string) rows:5(int) bytes:6(int)
+ ├── format: CSV
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0]
+ ├── project
+ │    ├── columns: a:1(int!null)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (1)
+ │    └── scan a
+ │         ├── columns: a:1(int!null) crdb_internal_mvcc_timestamp:2(decimal) tableoid:3(oid)
+ │         ├── stats: [rows=1000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2,3)
+ └── 'nodelocal://1/export1/' [type=string]
