@@ -23,11 +23,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
@@ -78,10 +80,24 @@ func TestComposeCompare(t *testing.T) {
 		// start up docker-compose, but the files themselves will be
 		// Bazel-built symlinks. We want to copy these files to a
 		// different temporary location.
-		composeBinsDir := t.TempDir()
-		compareDir = composeBinsDir
-		cockroachBin = filepath.Join(composeBinsDir, "cockroach")
-		libGeosDir = filepath.Join(composeBinsDir, "lib")
+		compareDir, err = os.MkdirTemp(datapathutils.DebuggableTempDir(), "TestComposeCompare")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if t.Failed() {
+				return
+			}
+			_ = os.RemoveAll(compareDir)
+		})
+		if err = os.MkdirAll(filepath.Join(compareDir, "store1"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err = os.MkdirAll(filepath.Join(compareDir, "store2"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		cockroachBin = filepath.Join(compareDir, "cockroach")
+		libGeosDir = filepath.Join(compareDir, "lib")
 		if err = os.MkdirAll(libGeosDir, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -95,7 +111,7 @@ func TestComposeCompare(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if err = copyBin(*flagCompare, filepath.Join(composeBinsDir, "compare.test")); err != nil {
+		if err = copyBin(*flagCompare, filepath.Join(compareDir, "compare.test")); err != nil {
 			t.Fatal(err)
 		}
 		if *flagArtifacts == "" {
@@ -128,7 +144,13 @@ func TestComposeCompare(t *testing.T) {
 		"--force-recreate",
 		"--exit-code-from", "test",
 	)
+	userInfo, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
 	cmd.Env = []string{
+		fmt.Sprintf("UID=%s", userInfo.Uid),
+		fmt.Sprintf("GID=%s", userInfo.Gid),
 		fmt.Sprintf("EACH=%s", *flagEach),
 		fmt.Sprintf("TESTS=%s", *flagTests),
 		fmt.Sprintf("COCKROACH_PATH=%s", cockroachBin),
@@ -137,6 +159,7 @@ func TestComposeCompare(t *testing.T) {
 		fmt.Sprintf("ARTIFACTS=%s", *flagArtifacts),
 		fmt.Sprintf("COCKROACH_DEV_LICENSE=%s", envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")),
 	}
+	t.Logf("running: %s", cmd)
 	out, err := cmd.CombinedOutput()
 	t.Log(string(out))
 	if err != nil {
