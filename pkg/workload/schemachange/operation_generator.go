@@ -3803,7 +3803,10 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	}, `SELECT
 				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
 				quote_literal(member->>'logicalRepresentation') AS value,
-				COALESCE(member->>'direction' = 'REMOVE', false) AS dropping
+				(
+					COALESCE(member->>'direction' = 'REMOVE', false) OR
+					COALESCE(member->>'capability' = 'READ_ONLY', false)
+				) AS non_public
 			FROM enum_members
 		`)
 	schemasQuery := With([]CTE{
@@ -3847,7 +3850,7 @@ FROM
 	useReturnRefs := og.randIntn(2) == 0
 
 	var nonPublicEnums []string
-	var droppingEnumMembers []string
+	var nonPublicEnumMembers []string
 	var possibleBodyReferences []string
 	var possibleParamReferences []string
 	var possibleParamReferencesWithDefaults []string
@@ -3895,8 +3898,8 @@ FROM
 	}
 
 	for _, member := range enumMembers {
-		if member["dropping"].(bool) {
-			droppingEnumMembers = append(droppingEnumMembers, fmt.Sprintf(`%s::%s`, member["value"], member["name"]))
+		if member["non_public"].(bool) {
+			nonPublicEnumMembers = append(nonPublicEnumMembers, fmt.Sprintf(`%s::%s`, member["value"], member["name"]))
 			continue
 		}
 		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`(%s::%s IS NULL)`, member["value"], member["name"]))
@@ -3970,8 +3973,8 @@ FROM
 		"NonPublicEnum": func() (string, error) {
 			return PickOne(og.params.rng, nonPublicEnums)
 		},
-		"DroppingEnumMember": func() (string, error) {
-			return PickOne(og.params.rng, droppingEnumMembers)
+		"NonPublicEnumMember": func() (string, error) {
+			return PickOne(og.params.rng, nonPublicEnumMembers)
 		},
 		"ParamRefs": func() (string, error) {
 			refs, err := PickBetween(
@@ -4027,7 +4030,7 @@ FROM
 		// 5. Reference an Enum that's in the process of being dropped
 		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 { NonPublicEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
 		// 6. Reference an Enum value that's in the process of being dropped
-		{pgcode.InvalidParameterValue, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT { DroppingEnumMember } $$`},
+		{pgcode.InvalidParameterValue, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT { NonPublicEnumMember } $$`},
 	}, placeholderMap)
 	if err != nil {
 		return nil, err
