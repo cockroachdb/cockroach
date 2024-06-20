@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -235,6 +236,24 @@ func InvestigateFingerprints(
 		return fmt.Errorf("failed revision history fingerprint: %w", err)
 	}
 	return nil
+}
+
+func ResolveHeartbeatTime(
+	replicatedTime, replicationStartTime, cutoverTime hlc.Timestamp, replicationTTLWindow int32,
+) hlc.Timestamp {
+	newProtectAbove := replicatedTime.Add(-int64(replicationTTLWindow)*time.Second.Nanoseconds(), 0)
+
+	if newProtectAbove.Less(replicationStartTime) {
+		newProtectAbove = replicationStartTime
+	}
+
+	// If we have a CutoverTime set, keep the protected
+	// timestamp at or below the cutover time.
+	if !cutoverTime.IsEmpty() && cutoverTime.Less(newProtectAbove) {
+		newProtectAbove = cutoverTime
+	}
+
+	return newProtectAbove
 }
 
 func fingerprintClustersByTable(

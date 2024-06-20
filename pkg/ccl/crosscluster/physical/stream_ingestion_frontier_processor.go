@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -367,14 +368,14 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		if err != nil {
 			return err
 		}
-		newProtectAbove := replicatedTime.Add(
-			-int64(replicationDetails.ReplicationTTLSeconds)*time.Second.Nanoseconds(), 0)
 
-		// If we have a CutoverTime set, keep the protected
-		// timestamp at or below the cutover time.
-		if !cutoverTime.IsEmpty() && cutoverTime.Less(newProtectAbove) {
-			newProtectAbove = cutoverTime
-		}
+		// No need to protect anything below replication start time.
+		replicationStartTime := md.Payload.GetStreamIngestion().ReplicationStartTime
+		newProtectAbove := replicationutils.ResolveHeartbeatTime(
+			replicatedTime, replicationStartTime, cutoverTime, replicationDetails.ReplicationTTLSeconds)
+
+		// Heartbeat the retained time to the source cluster.
+		sf.heartbeatTime = newProtectAbove
 
 		if record.Timestamp.Less(newProtectAbove) {
 			return ptp.UpdateTimestamp(ctx, *replicationDetails.ProtectedTimestampRecordID, newProtectAbove)
@@ -386,12 +387,6 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	}
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedReplicatedTime = f.Frontier()
-
-	if cutoverTime.IsEmpty() || sf.persistedReplicatedTime.Less(cutoverTime) {
-		sf.heartbeatTime = sf.persistedReplicatedTime
-	} else {
-		sf.heartbeatTime = cutoverTime
-	}
 	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
 }

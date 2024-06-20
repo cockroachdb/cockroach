@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -64,7 +65,8 @@ func startDistIngestion(
 	// Start from the last checkpoint if it exists.
 	var heartbeatTimestamp hlc.Timestamp
 	if !replicatedTime.IsEmpty() {
-		heartbeatTimestamp = replicatedTime
+		heartbeatTimestamp = replicationutils.ResolveHeartbeatTime(
+			replicatedTime, details.ReplicationStartTime, streamProgress.CutoverTime, details.ReplicationTTLSeconds)
 	} else {
 		heartbeatTimestamp = initialScanTimestamp
 	}
