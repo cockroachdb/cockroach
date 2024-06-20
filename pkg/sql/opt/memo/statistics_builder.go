@@ -510,7 +510,11 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return sb.colStatSequenceSelect(colSet, e.(*SequenceSelectExpr))
 
 	case opt.ExplainOp, opt.ShowTraceForSessionOp,
-		opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp, opt.RecursiveCTEOp:
+		opt.OpaqueRelOp, opt.OpaqueMutationOp, opt.OpaqueDDLOp, opt.RecursiveCTEOp,
+		opt.AlterTableSplitOp, opt.AlterTableUnsplitOp,
+		opt.AlterTableUnsplitAllOp, opt.AlterTableRelocateOp,
+		opt.ControlJobsOp, opt.ControlSchedulesOp, opt.ShowCompletionsOp,
+		opt.CancelQueriesOp, opt.CancelSessionsOp, opt.ExportOp:
 		return sb.colStatUnknown(colSet, e.Relational())
 
 	case opt.WithOp:
