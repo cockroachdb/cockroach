@@ -10,6 +10,7 @@ package jwtauthccl
 
 import (
 	"bytes"
+	"crypto/x509"
 	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -19,13 +20,14 @@ import (
 
 // All cluster settings necessary for the JWT authentication feature.
 const (
-	baseJWTAuthSettingName          = "server.jwt_authentication."
-	JWTAuthAudienceSettingName      = baseJWTAuthSettingName + "audience"
-	JWTAuthEnabledSettingName       = baseJWTAuthSettingName + "enabled"
-	JWTAuthIssuersSettingName       = baseJWTAuthSettingName + "issuers"
-	JWTAuthJWKSSettingName          = baseJWTAuthSettingName + "jwks"
-	JWTAuthClaimSettingName         = baseJWTAuthSettingName + "claim"
-	JWKSAutoFetchEnabledSettingName = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
+	baseJWTAuthSettingName           = "server.jwt_authentication."
+	JWTAuthAudienceSettingName       = baseJWTAuthSettingName + "audience"
+	JWTAuthEnabledSettingName        = baseJWTAuthSettingName + "enabled"
+	JWTAuthIssuersSettingName        = baseJWTAuthSettingName + "issuers"
+	JWTAuthJWKSSettingName           = baseJWTAuthSettingName + "jwks"
+	JWTAuthClaimSettingName          = baseJWTAuthSettingName + "claim"
+	JWKSAutoFetchEnabledSettingName  = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
+	jwtAuthIssuerCustomCASettingName = baseJWTAuthSettingName + "issuer_custom_ca"
 )
 
 // JWTAuthClaim sets the JWT claim that is parsed to get the username.
@@ -72,6 +74,19 @@ var JWTAuthIssuers = settings.RegisterStringSetting(
 		"string with an array of issuer strings in it",
 	"",
 	settings.WithValidateString(validateJWTAuthIssuers),
+)
+
+// JWTAuthIssuerCustomCA is the custom root CA for verifying certificates while
+// fetching JWKS from the JWT issuer.
+var JWTAuthIssuerCustomCA = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	jwtAuthIssuerCustomCASettingName,
+	"sets the custom root CA for verifying certificates while fetching JWKS from the JWT issuer",
+	"",
+	settings.WithPublic,
+	settings.WithReportable(false),
+	settings.Sensitive,
+	settings.WithValidateString(validateCACert),
 )
 
 // JWKSAutoFetchEnabled enables or disables automatic fetching of JWKs from the issuer's well-known endpoint.
@@ -150,4 +165,13 @@ func mustParseJWKS(jwks string) jwk.Set {
 		return jwk.NewSet()
 	}
 	return keySet
+}
+
+func validateCACert(values *settings.Values, s string) error {
+	if len(s) != 0 {
+		if ok := x509.NewCertPool().AppendCertsFromPEM([]byte(s)); !ok {
+			return errors.Newf("Invalid CA cert PEM")
+		}
+	}
+	return nil
 }
