@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -102,7 +103,7 @@ func (s *topLevelServer) createAdminUser(
 func (s *topLevelServer) disableReplication(ctx context.Context) (retErr error) {
 	ie := s.sqlServer.internalExecutor
 
-	it, err := ie.QueryIterator(ctx, "get-zones", nil,
+	it, err := ie.QueryIteratorEx(ctx, "get-zones", nil, sessiondata.NodeUserSessionDataOverride,
 		"SELECT target FROM crdb_internal.zones")
 	if err != nil {
 		return err
@@ -121,6 +122,9 @@ func (s *topLevelServer) disableReplication(ctx context.Context) (retErr error) 
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		zone := string(*it.Cur()[0].(*tree.DString))
 		zones = append(zones, zone)
+	}
+	if err != nil {
+		return err
 	}
 
 	for _, zone := range zones {
