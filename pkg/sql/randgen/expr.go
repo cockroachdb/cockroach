@@ -216,8 +216,9 @@ func randExpr(
 	switch xTyp.Family() {
 	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
 		typ = xTyp
+		// Avoid using an arithmetic operation that could overflow.
 		expr = &tree.BinaryExpr{
-			Operator: treebin.MakeBinaryOperator(treebin.Plus),
+			Operator: treebin.MakeBinaryOperator(treebin.Div),
 			Left:     tree.NewUnresolvedName(string(x.Name)),
 			Right:    RandDatum(rng, xTyp, nullOk),
 		}
