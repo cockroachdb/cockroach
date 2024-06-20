@@ -27,6 +27,8 @@ type rangefeedMetricsRecorder interface {
 
 var _ rangefeedMetricsRecorder = (*nodeMetrics)(nil)
 
+// severStreamSender is a wrapper around a grpc stream. Note that it should be
+// safe for concurrent Sends.
 type severStreamSender interface {
 	Send(*kvpb.MuxRangeFeedEvent) error
 }
@@ -82,7 +84,7 @@ func transformToClientErr(err *kvpb.Error) *kvpb.Error {
 	return err
 }
 
-func newStreamMuxer(sender *lockedMuxStream, metrics rangefeedMetricsRecorder) *streamMuxer {
+func newStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) *streamMuxer {
 	return &streamMuxer{
 		sender:           sender,
 		metrics:          metrics,
