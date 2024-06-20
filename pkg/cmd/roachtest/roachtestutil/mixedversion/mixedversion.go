@@ -159,7 +159,7 @@ var (
 	// creating flakes in unsupported versions or rediscovering
 	// already-fixed bugs. This variable should be updated periodically
 	// as releases reach end of life.
-	OldestSupportedVersion = clusterupgrade.MustParseVersion("v22.2.0")
+	OldestSupportedVersion = clusterupgrade.MustParseVersion("v23.1.0")
 
 	// Catch divergences between `stepFunc` and `Run`'s signature in
 	// `singleStepProtocol` at compile time.
