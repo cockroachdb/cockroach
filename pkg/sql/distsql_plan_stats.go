@@ -184,22 +184,26 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 	sampler.MaxFractionIdle = details.MaxFractionIdle
 	// For partial statistics this loop should only iterate once
 	// since we only support one reqStat at a time.
+	var histogramSamplesCount uint32
+	var computedHistogramSamplesCount bool
 	for _, s := range reqStats {
 		if s.histogram {
-			var histogramSamplesCount uint32
-			if tableSampleCount, ok := desc.HistogramSamplesCount(); ok {
-				histogramSamplesCount = tableSampleCount
-			} else if clusterSampleCount := histogramSamples.Get(&dsp.st.SV); clusterSampleCount != histogramSamples.Default() {
-				histogramSamplesCount = uint32(clusterSampleCount)
-			} else {
-				histogramSamplesCount = computeNumberSamples(
-					ctx,
-					rowsExpected,
-					dsp.st,
-				)
-				log.Infof(ctx, "using computed sample size of %d for histogram construction", histogramSamplesCount)
+			if !computedHistogramSamplesCount {
+				if tableSampleCount, ok := desc.HistogramSamplesCount(); ok {
+					histogramSamplesCount = tableSampleCount
+				} else if clusterSampleCount := histogramSamples.Get(&dsp.st.SV); clusterSampleCount != histogramSamples.Default() {
+					histogramSamplesCount = uint32(clusterSampleCount)
+				} else {
+					histogramSamplesCount = computeNumberSamples(
+						ctx,
+						rowsExpected,
+						dsp.st,
+					)
+					log.Infof(ctx, "using computed sample size of %d for histogram construction", histogramSamplesCount)
+				}
+				sampler.SampleSize = histogramSamplesCount
+				computedHistogramSamplesCount = true
 			}
-			sampler.SampleSize = histogramSamplesCount
 			// This could be anything >= 2 to produce a histogram, but the max number
 			// of buckets is probably also a reasonable minimum number of samples. (If
 			// there are fewer rows than this in the table, there will be fewer
