@@ -148,7 +148,7 @@ func testBase(
 
 	// Apply the configuration.
 	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg, FileSinkMetrics{})
+	cleanup, err := ApplyConfig(cfg, FileSinkMetrics{}, nil /* fatalOnLogStall */)
 	require.NoError(t, err)
 	defer cleanup()
 
