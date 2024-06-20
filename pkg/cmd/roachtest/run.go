@@ -218,7 +218,7 @@ func setLogConfig(baseDir string) {
 	if err := logConf.Validate(&baseDir); err != nil {
 		panic(err)
 	}
-	if _, err := log.ApplyConfig(logConf, log.FileSinkMetrics{}); err != nil {
+	if _, err := log.ApplyConfig(logConf, log.FileSinkMetrics{}, nil /* fatalOnLogStall */); err != nil {
 		panic(err)
 	}
 }
