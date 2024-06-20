@@ -1773,6 +1773,17 @@ func NewTableDesc(
 		return newColumns, nil
 	}
 
+	// Copies the index elements, and returns a closure to restore them back,
+	// so that any mutation to the AST is undone once this statement completes.
+	copyIndexElemListAndRestore := func(existingList *tree.IndexElemList) func() {
+		newList := make(tree.IndexElemList, len(*existingList))
+		copy(newList, *existingList)
+		restoreList := *existingList
+		*existingList = newList
+		return func() {
+			*existingList = restoreList
+		}
+	}
 	// Now that we have all the other columns set up, we can validate
 	// any computed columns.
 	for _, def := range n.Defs {
@@ -1811,6 +1822,11 @@ func NewTableDesc(
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
 			}
+			// We are going to modify the AST to replace any index expressions with
+			// virtual columns. If the txn ends up retrying, then this change is not
+			// syntactically valid, since the virtual column is only added in the descriptor
+			// and not in the AST.
+			defer copyIndexElemListAndRestore(&d.Columns)()
 			if err := replaceExpressionElemsWithVirtualCols(
 				ctx,
 				&desc,
@@ -1926,6 +1942,11 @@ func NewTableDesc(
 			if err := validateColumnsAreAccessible(&desc, d.Columns); err != nil {
 				return nil, err
 			}
+			// We are going to modify the AST to replace any index expressions with
+			// virtual columns. If the txn ends up retrying, then this change is not
+			// syntactically valid, since the virtual descriptor is only added in the descriptor
+			// and not in the AST.
+			defer copyIndexElemListAndRestore(&d.Columns)()
 			if err := replaceExpressionElemsWithVirtualCols(
 				ctx,
 				&desc,
