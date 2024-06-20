@@ -40,6 +40,7 @@ go_test(
     srcs = [
         "context_test.go",
         "helper_test.go",
+        "main_test.go",
         "mixedversion_test.go",
         "mutators_test.go",
         "planner_test.go",
