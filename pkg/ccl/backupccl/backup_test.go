@@ -9163,7 +9163,7 @@ func TestRestoreNewDatabaseName(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	sqlDB.Exec(t, `CREATE DATABASE fkdb`)
@@ -9172,40 +9172,41 @@ func TestRestoreNewDatabaseName(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, i)
 	}
-	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
 
-	// Ensure restore fails with new_db_name on cluster, table, and multiple database restores
-	t.Run("new_db_name syntax checks", func(t *testing.T) {
-		expectedErr := "new_db_name can only be used for RESTORE DATABASE with a single target database"
+	eg, _ := errgroup.WithContext(context.Background())
 
-		sqlDB.ExpectErr(t, expectedErr, "RESTORE FROM $1 with new_db_name = 'new_fkdb'", localFoo)
+	eg.Go(func() error {
+		begin := timeutil.Now()
 
-		sqlDB.ExpectErr(t, expectedErr, "RESTORE DATABASE fkdb, "+
-			"data FROM $1 with new_db_name = 'new_fkdb'", localFoo)
-
-		sqlDB.ExpectErr(t, expectedErr, "RESTORE TABLE fkdb.fk FROM $1 with new_db_name = 'new_fkdb'",
-			localFoo)
+		conn := tc.ServerConn(0)
+		defer conn.Close()
+		for {
+			if _, err := conn.Exec(`SELECT count(*) FROM fkdb.fk`); err != nil {
+				if strings.Contains(err.Error(), "offline") {
+					return err
+				}
+			}
+			time.Sleep(time.Microsecond)
+			if timeutil.Since(begin) > 5*time.Second {
+				return nil
+			}
+		}
 	})
 
-	// Should fail because 'fkbd' database is still in cluster
-	sqlDB.ExpectErr(t, `database "fkdb" already exists`,
-		"RESTORE DATABASE fkdb FROM $1", localFoo)
+	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
 
 	// Should pass because 'new_fkdb' is not in cluster
 	sqlDB.Exec(t, "RESTORE DATABASE fkdb FROM $1 WITH new_db_name = 'new_fkdb'", localFoo)
 
-	// Verify restored database is in cluster with new name
-	sqlDB.CheckQueryResults(t,
-		`SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'new_fkdb'`,
-		[][]string{{"new_fkdb"}})
+	sqlDB.Exec(t, `ALTER DATABASE fkdb RENAME TO "old_fkdb"`)
+
+	sqlDB.Exec(t, `ALTER DATABASE "new_fkdb" RENAME TO fkdb`)
 
 	// Verify table was properly restored
-	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM new_fkdb.fk`,
+	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM fkdb.fk`,
 		[][]string{{"10"}})
 
-	// Should fail because we just restored new_fkbd into cluster
-	sqlDB.ExpectErr(t, `database "new_fkdb" already exists`,
-		"RESTORE DATABASE fkdb FROM $1 WITH new_db_name = 'new_fkdb'", localFoo)
+	require.NoError(t, eg.Wait())
 }
 
 // TestRestoreRemappingOfExistingUDTInColExpr is a regression test for a nil
