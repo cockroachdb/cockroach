@@ -205,6 +205,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 			// there are fewer rows than this in the table, there will be fewer
 			// samples of course, which is fine.)
 			sampler.MinSampleSize = s.histogramMaxBuckets
+			break
 		}
 	}
 
