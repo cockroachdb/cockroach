@@ -4267,3 +4267,45 @@ query T rowsort
 SELECT oidvectortypes(proargtypes) FROM pg_proc WHERE proname='custom_fn'
 ----
 custom_typ
+
+subtest obj_description_with_comment_on_type
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.2
+statement ok
+CREATE TYPE roach_dwellings AS ENUM ('roach_motel','roach_kitchen','roach_bathroom','roach_house');
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.2
+statement ok
+COMMENT ON TYPE roach_dwellings IS 'roach_penthouse coming soon';
+
+# This select statement tests the underlying statement run with \dT
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.2
+query TTT colnames
+SELECT n.nspname AS "Schema",
+         pg_catalog.format_type(t.oid, NULL) AS "Name",
+         COALESCE(pg_catalog.obj_description(t.oid, 'pg_type'),'') AS "Description"
+    FROM pg_catalog.pg_type t
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+   WHERE (t.typrelid = 0
+         OR (SELECT c.relkind = 'c'
+               FROM pg_catalog.pg_class c
+              WHERE c.oid = t.typrelid))
+     AND (NOT EXISTS(
+         SELECT 1
+           FROM pg_catalog.pg_type el
+          WHERE el.oid = t.typelem AND el.typarray = t.oid))
+     AND n.nspname !~ '^pg_'
+     AND n.nspname <> 'information_schema'
+     AND n.nspname <> 'crdb_internal'
+     AND pg_catalog.pg_type_is_visible(t.oid)
+ORDER BY 1, 2;
+----
+Schema  Name             Description
+public  custom_typ       ·
+public  roach_dwellings  ·
+public  testenum         ·
+
+subtest end

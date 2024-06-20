@@ -397,6 +397,12 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			Comment:     e.Comment,
 			NullComment: pb.TargetStatus != scpb.Status_PUBLIC,
 		}
+	case *scpb.TypeComment:
+		return &eventpb.CommentOnType{
+			TypeName:    fullyQualifiedName(b, e),
+			Comment:     e.Comment,
+			NullComment: pb.TargetStatus != scpb.Status_PUBLIC,
+		}
 	case *scpb.ColumnComment:
 		return &eventpb.CommentOnColumn{
 			TableName:   fullyQualifiedName(b, e),

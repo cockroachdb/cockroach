@@ -40,6 +40,7 @@ go_library(
         "comment_on_index.go",
         "comment_on_schema.go",
         "comment_on_table.go",
+        "comment_on_type.go",
         "compact_sql_stats.go",
         "completions.go",
         "conn_executor.go",
