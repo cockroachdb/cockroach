@@ -197,7 +197,7 @@ func registerRestore(r registry.Registry) {
 							// The pause job request should not fail unless the job has already succeeded,
 							// in which case, the test should gracefully succeed.
 							var status string
-							sql.QueryRow(t, `SELECT status FROM [SHOW JOBS $1]`, jobID).Scan(&status)
+							sql.QueryRow(t, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status)
 							if status == "succeeded" {
 								return nil
 							}
