@@ -19,9 +19,10 @@ import "os/exec"
 // Ready sends a readiness signal using the systemd notification
 // protocol. It should be called (once) by a server after it has
 // completed its initialization (including but not necessarily limited
-// to binding ports) and is ready to receive traffic.
-func Ready() error {
-	return ready()
+// to binding ports) and is ready to receive traffic. If preNotify is
+// specified, it will be called before the readiness signal is sent.
+func Ready(preNotify func()) error {
+	return ready(preNotify)
 }
 
 // Exec the given command in the background using the systemd
