@@ -357,6 +357,7 @@ func TestExplainKVInfo(t *testing.T) {
 			scanQuery := "SELECT count(*) FROM ab"
 			info := getKVInfo(t, r, scanQuery)
 
+			assert.Equal(t, 1, info.counters[kvNodes])
 			assert.Equal(t, 1000, info.counters[rowsRead])
 			assert.Equal(t, 1000, info.counters[pairsRead])
 			assert.LessOrEqual(t, 31 /* KiB */, info.counters[bytesRead])
@@ -367,6 +368,7 @@ func TestExplainKVInfo(t *testing.T) {
 			lookupJoinQuery := "SELECT count(*) FROM ab INNER LOOKUP JOIN bc ON ab.b = bc.b"
 			info = getKVInfo(t, r, lookupJoinQuery)
 
+			assert.Equal(t, 1, info.counters[kvNodes])
 			assert.Equal(t, 1000, info.counters[rowsRead])
 			assert.Equal(t, 1000, info.counters[pairsRead])
 			assert.LessOrEqual(t, 13 /* KiB */, info.counters[bytesRead])
@@ -378,7 +380,10 @@ func TestExplainKVInfo(t *testing.T) {
 }
 
 const (
-	rowsRead = iota
+	// Note that kvNodes is not really a counter, but since we're using a single
+	// node cluster, only a single node ID is expected.
+	kvNodes = iota
+	rowsRead
 	pairsRead
 	bytesRead
 	gRPCCalls
@@ -394,6 +399,7 @@ type kvInfo struct {
 var patterns [numKVCounters]*regexp.Regexp
 
 func init() {
+	patterns[kvNodes] = regexp.MustCompile(`kv nodes: n(\d)`)
 	patterns[rowsRead] = regexp.MustCompile(`KV rows decoded: (\d+)`)
 	patterns[pairsRead] = regexp.MustCompile(`KV pairs read: (\d+)`)
 	patterns[bytesRead] = regexp.MustCompile(`KV bytes read: (\d+) \w+`)

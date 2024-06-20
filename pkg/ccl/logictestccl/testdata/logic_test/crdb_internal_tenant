@@ -1,4 +1,4 @@
- # LogicTest: 3node-tenant
+# LogicTest: 3node-tenant
 
 query II
 SELECT count(distinct(node_id)), count(*)  FROM crdb_internal.node_runtime_info
@@ -217,10 +217,10 @@ SELECT * FROM crdb_internal.leases WHERE node_id < 0
 node_id  table_id  name  parent_id  expiration  deleted
 
 
-query ITTTTTIIITTRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRBBTTTTTRRRRRI colnames
+query ITTTTTIIITTRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRBBTTTTTTRRRRRI colnames
 SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
 ----
-node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  last_error_code  rows_avg  rows_var  idle_lat_avg  idle_lat_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  rows_written_avg  rows_written_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  cpu_sql_nanos_avg  cpu_sql_nanos_var  mvcc_step_avg mvcc_step_var mvcc_step_internal_avg mvcc_step_internal_var mvcc_seek_avg mvcc_seek_var mvcc_seek_internal_avg mvcc_seek_internal_var mvcc_block_bytes_avg mvcc_block_bytes_var mvcc_block_bytes_in_cache_avg mvcc_block_bytes_in_cache_var mvcc_key_bytes_avg mvcc_key_bytes_var mvcc_value_bytes_avg mvcc_value_bytes_var mvcc_point_count_avg mvcc_point_count_var mvcc_points_covered_by_range_tombstones_avg mvcc_points_covered_by_range_tombstones_var mvcc_range_key_count_avg mvcc_range_key_count_var mvcc_range_key_contained_points_avg mvcc_range_key_contained_points_var mvcc_range_key_skipped_points_avg mvcc_range_key_skipped_points_var implicit_txn  full_scan  sample_plan  database_name  exec_node_ids  txn_fingerprint_id  index_recommendations latency_seconds_min latency_seconds_max latency_seconds_p50 latency_seconds_p90 latency_seconds_p99 failure_count
+node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  last_error_code  rows_avg  rows_var  idle_lat_avg  idle_lat_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  rows_written_avg  rows_written_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  cpu_sql_nanos_avg  cpu_sql_nanos_var  mvcc_step_avg  mvcc_step_var  mvcc_step_internal_avg  mvcc_step_internal_var  mvcc_seek_avg  mvcc_seek_var  mvcc_seek_internal_avg  mvcc_seek_internal_var  mvcc_block_bytes_avg  mvcc_block_bytes_var  mvcc_block_bytes_in_cache_avg  mvcc_block_bytes_in_cache_var  mvcc_key_bytes_avg  mvcc_key_bytes_var  mvcc_value_bytes_avg  mvcc_value_bytes_var  mvcc_point_count_avg  mvcc_point_count_var  mvcc_points_covered_by_range_tombstones_avg  mvcc_points_covered_by_range_tombstones_var  mvcc_range_key_count_avg  mvcc_range_key_count_var  mvcc_range_key_contained_points_avg  mvcc_range_key_contained_points_var  mvcc_range_key_skipped_points_avg  mvcc_range_key_skipped_points_var  implicit_txn  full_scan  sample_plan  database_name  exec_node_ids  kv_node_ids  txn_fingerprint_id  index_recommendations  latency_seconds_min  latency_seconds_max  latency_seconds_p50  latency_seconds_p90  latency_seconds_p99  failure_count
 
 query ITTTIIRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR colnames
 SELECT * FROM crdb_internal.node_transaction_statistics WHERE node_id < 0
@@ -333,15 +333,15 @@ SELECT * FROM crdb_internal.node_inflight_trace_spans WHERE span_id < 0
 ----
 trace_id  parent_span_id  span_id  goroutine_id  finished  start_time  duration  operation
 
-query TTTBTTTTTIITITTTTTTTTTTTTITT colnames
+query TTTBTTTTTIITITTTTTTTTTTTTTITT colnames
 SELECT * FROM crdb_internal.cluster_execution_insights WHERE query = ''
 ----
-session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  kv_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable
 
-query TTTBTTTTTIITITTTTTTTTTTTTITT colnames
+query TTTBTTTTTIITITTTTTTTTTTTTTITT colnames
 SELECT * FROM crdb_internal.node_execution_insights WHERE query = ''
 ----
-session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable
+session_id  txn_id  txn_fingerprint_id  stmt_id  stmt_fingerprint_id  problem  causes  query  status  start_time  end_time  full_scan  user_name  app_name  database_name  plan_gist  rows_read  rows_written  priority  retries  last_retry_reason  exec_node_ids  kv_node_ids  contention  index_recommendations  implicit_txn  cpu_sql_nanos  error_code  last_error_redactable
 
 query TTTBTTTTTIITITTTTTITTT colnames
 SELECT * FROM crdb_internal.cluster_txn_execution_insights WHERE query = ''

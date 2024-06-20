@@ -5006,6 +5006,21 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, '"')
 	}
 
+	if len(m.KVNodeIDs) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KVNodeIDs\":["...)
+		for i, v := range m.KVNodeIDs {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = strconv.AppendInt(b, int64(v), 10)
+		}
+		b = append(b, ']')
+	}
+
 	return printComma, b
 }
 

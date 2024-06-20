@@ -581,6 +581,7 @@ export class StatementDetails extends React.Component<
     const nodes: string[] = unique(
       (stats.nodes || []).map(node => node.toString()),
     ).sort();
+    // TODO(yuzefovich): use kv_node_ids to show KV regions.
     const regions = unique(
       isTenant
         ? stats.regions || []

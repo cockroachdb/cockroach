@@ -242,6 +242,9 @@ func evaluateBatch(
 		defer func() {
 			if ss.NumGets != 0 || ss.NumScans != 0 || ss.NumReverseScans != 0 {
 				// Only record non-empty ScanStats.
+				ss.NodeID = rec.NodeID()
+				locality := rec.GetNodeLocality()
+				ss.Region, _ = locality.Find("region")
 				sp.RecordStructured(ss)
 			}
 		}()

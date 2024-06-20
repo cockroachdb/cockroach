@@ -105,3 +105,14 @@ func MapFrom[T any, K comparable, V any](collection []T, fn func(T) (K, V)) map[
 	}
 	return out
 }
+
+// InsertUnique inserts an element into an ordered slice if the element is not
+// already present while maintaining the ordering property. Possibly updated
+// slice is returned.
+func InsertUnique[T constraints.Ordered](s []T, v T) []T {
+	idx, found := slices.BinarySearch(s, v)
+	if found {
+		return s
+	}
+	return slices.Insert(s, idx, v)
+}
