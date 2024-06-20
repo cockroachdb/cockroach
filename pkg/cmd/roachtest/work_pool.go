@@ -88,11 +88,11 @@ func (p *workPool) workRemaining() []testWithCount {
 //
 // cr is used for its information about how many clusters with a given tag currently exist.
 func (p *workPool) selectTestForCluster(
-	ctx context.Context, s spec.ClusterSpec, cr *clusterRegistry,
+	ctx context.Context, s spec.ClusterSpec, cr *clusterRegistry, cloud string,
 ) testToRunRes {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	testsWithCounts := p.findCompatibleTestsLocked(s)
+	testsWithCounts := p.findCompatibleTestsLocked(s, cloud)
 
 	if len(testsWithCounts) == 0 {
 		return testToRunRes{noWork: true}
@@ -240,14 +240,16 @@ func scoreTestAgainstCluster(tc testWithCount, tag string, cr *clusterRegistry) 
 }
 
 // findCompatibleTestsLocked returns a list of tests compatible with a cluster spec.
-func (p *workPool) findCompatibleTestsLocked(clusterSpec spec.ClusterSpec) []testWithCount {
+func (p *workPool) findCompatibleTestsLocked(
+	clusterSpec spec.ClusterSpec, cloud string,
+) []testWithCount {
 	if _, ok := clusterSpec.ReusePolicy.(spec.ReusePolicyNone); ok {
 		// Cluster cannot be reused, so no tests are compatible.
 		return nil
 	}
 	var tests []testWithCount
 	for _, tc := range p.mu.tests {
-		if spec.ClustersCompatible(clusterSpec, tc.spec.Cluster) {
+		if spec.ClustersCompatible(clusterSpec, tc.spec.Cluster, cloud) {
 			tests = append(tests, tc)
 		}
 	}
