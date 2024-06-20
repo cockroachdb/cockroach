@@ -132,6 +132,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"create all missing system tables in app tenants",
+		clusterversion.V24_2_TenantSystemTables.Version(),
+		upgrade.NoPrecondition,
+		createTenantSystemTables,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore these tables"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
