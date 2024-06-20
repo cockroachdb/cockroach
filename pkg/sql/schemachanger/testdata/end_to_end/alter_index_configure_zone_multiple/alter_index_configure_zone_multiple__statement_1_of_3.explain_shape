@@ -1,0 +1,9 @@
+/* setup */
+CREATE TABLE t(i int);
+CREATE INDEX foo ON t(i);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER INDEX t@foo CONFIGURE ZONE USING num_replicas = 7;
+----
+Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹foo› CONFIGURE ZONE USING ‹num_replicas› = ‹7›;
+ └── execute 1 system table mutations transaction
