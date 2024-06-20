@@ -1544,9 +1544,6 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 
 	maybeLogBehindSpan(cf.Ctx(), "coordinator", cf.frontier, frontierChanged, &cf.flowCtx.Cfg.Settings.SV)
 
-	// If frontier changed, we emit resolved timestamp.
-	emitResolved := frontierChanged
-
 	checkpointed, err := cf.maybeCheckpointJob(resolved, frontierChanged)
 	if err != nil {
 		return err
@@ -1555,9 +1552,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	// Emit resolved timestamp only if we have checkpointed the job.
 	// Usually, this happens every time frontier changes, but we can skip some updates
 	// if we update frontier too rapidly.
-	emitResolved = checkpointed
-
-	if emitResolved {
+	if checkpointed {
 		// Keeping this after the checkpointJobProgress call will avoid
 		// some duplicates if a restart happens.
 		newResolved := cf.frontier.Frontier()
