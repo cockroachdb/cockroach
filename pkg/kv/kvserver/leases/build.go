@@ -55,8 +55,8 @@ type NodeLivenessManipulation struct {
 	Increment *livenesspb.Liveness
 }
 
-// Input is the set of input parameters for the lease acquisition process.
-type Input struct {
+// BuildInput is the set of input parameters for the lease acquisition process.
+type BuildInput struct {
 	// Information about the local replica.
 	LocalStoreID       roachpb.StoreID
 	Now                hlc.ClockTimestamp
@@ -74,25 +74,25 @@ type Input struct {
 }
 
 // PrevLocal returns whether the previous lease was held by the local store.
-func (i Input) PrevLocal() bool { return i.PrevLease.Replica.StoreID == i.LocalStoreID }
+func (i BuildInput) PrevLocal() bool { return i.PrevLease.Replica.StoreID == i.LocalStoreID }
 
 // NextLocal returns whether the next lease will be held by the local store.
-func (i Input) NextLocal() bool { return i.NextLeaseHolder.StoreID == i.LocalStoreID }
+func (i BuildInput) NextLocal() bool { return i.NextLeaseHolder.StoreID == i.LocalStoreID }
 
 // Acquisition returns whether the lease request is an acquisition.
-func (i Input) Acquisition() bool { return !i.PrevLocal() && i.NextLocal() }
+func (i BuildInput) Acquisition() bool { return !i.PrevLocal() && i.NextLocal() }
 
 // Extension returns whether the lease request is an extension.
-func (i Input) Extension() bool { return i.PrevLocal() && i.NextLocal() }
+func (i BuildInput) Extension() bool { return i.PrevLocal() && i.NextLocal() }
 
 // Transfer returns whether the lease request is a transfer.
-func (i Input) Transfer() bool { return i.PrevLocal() && !i.NextLocal() }
+func (i BuildInput) Transfer() bool { return i.PrevLocal() && !i.NextLocal() }
 
 // Remote returns whether the lease request is a remote transfer.
-func (i Input) Remote() bool { return !i.PrevLocal() && !i.NextLocal() }
+func (i BuildInput) Remote() bool { return !i.PrevLocal() && !i.NextLocal() }
 
 // PrevLeaseExpiration returns the expiration time of the previous lease.
-func (i Input) PrevLeaseExpiration() hlc.Timestamp {
+func (i BuildInput) PrevLeaseExpiration() hlc.Timestamp {
 	if i.PrevLease.Type() == roachpb.LeaseEpoch && i.PrevLeaseNodeLiveness.Epoch != i.PrevLease.Epoch {
 		// For epoch-based leases, we only consider the liveness expiration if it
 		// matches the lease epoch. If the liveness epoch is greater than the lease
@@ -105,7 +105,7 @@ func (i Input) PrevLeaseExpiration() hlc.Timestamp {
 	}.Expiration()
 }
 
-func (i Input) validate() error {
+func (i BuildInput) validate() error {
 	if i.NextLeaseHolder == (roachpb.ReplicaDescriptor{}) {
 		return errors.AssertionFailedf("no lease target provided")
 	}
@@ -123,13 +123,13 @@ func (i Input) validate() error {
 		return err
 	}
 	if i.Acquisition() && !i.PrevLeaseExpired {
-		// If this is a non-cooperative lease change (i.e. an acquisition), it
-		// is up to us to ensure that Lease.Start is greater than the end time
-		// of the previous lease. This means that if Input refers to an expired
-		// epoch lease, we must increment the liveness epoch of the previous
-		// leaseholder *using Input.PrevLeaseNodeLiveness*, which we know to be
-		// expired *at Input.Now*, before we can propose this lease. If this
-		// increment fails, we cannot propose this new lease (see handling of
+		// If this is a non-cooperative lease change (i.e. an acquisition), it is up
+		// to us to ensure that Lease.Start is greater than the end time of the
+		// previous lease. This means that if BuildInput refers to an expired epoch
+		// lease, we must increment the liveness epoch of the previous leaseholder
+		// *using BuildInput.PrevLeaseNodeLiveness*, which we know to be expired *at
+		// BuildInput.Now*, before we can propose this lease. If this increment
+		// fails, we cannot propose this new lease (see handling of
 		// ErrEpochAlreadyIncremented in requestLeaseAsync).
 		//
 		// Note that the request evaluation may decrease our proposed start time
@@ -150,7 +150,7 @@ func (i Input) validate() error {
 	return nil
 }
 
-func (i Input) validatePrevLeaseNodeLiveness() error {
+func (i BuildInput) validatePrevLeaseNodeLiveness() error {
 	epochLease := i.PrevLease.Type() == roachpb.LeaseEpoch
 	livenessSet := i.PrevLeaseNodeLiveness != livenesspb.Liveness{}
 	if epochLease != livenessSet {
@@ -160,7 +160,7 @@ func (i Input) validatePrevLeaseNodeLiveness() error {
 	return nil
 }
 
-func (i Input) validatePrevLeaseExpired() error {
+func (i BuildInput) validatePrevLeaseExpired() error {
 	expired := i.PrevLeaseExpiration().LessEq(i.Now.ToTimestamp())
 	if i.PrevLeaseExpired != expired {
 		return errors.AssertionFailedf("PrevLeaseExpired=%t, but computed %t "+
@@ -176,7 +176,7 @@ type Output struct {
 	NodeLivenessManipulation NodeLivenessManipulation
 }
 
-func (o Output) validate(i Input) error {
+func (o Output) validate(i BuildInput) error {
 	for _, f := range leaseValidationFuncs {
 		if err := f(i, o.NextLease); err != nil {
 			return err
@@ -189,7 +189,7 @@ func (o Output) validate(i Input) error {
 // resulting output will contain the lease to be proposed and any necessary node
 // liveness manipulations that must be performed before the lease can be
 // requested.
-func Build(st Settings, nl NodeLiveness, i Input) (Output, error) {
+func Build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
 	// Validate the input.
 	if err := i.validate(); err != nil {
 		return Output{}, err
@@ -244,7 +244,7 @@ func Build(st Settings, nl NodeLiveness, i Input) (Output, error) {
 	return o, nil
 }
 
-func leaseType(st Settings, i Input) roachpb.LeaseType {
+func leaseType(st Settings, i BuildInput) roachpb.LeaseType {
 	if st.UseExpirationLeases || (i.Transfer() && st.TransferExpirationLeases) {
 		// In addition to ranges that should be using expiration-based leases
 		// (typically the meta and liveness ranges), we also use them during lease
@@ -264,15 +264,15 @@ func leaseType(st Settings, i Input) roachpb.LeaseType {
 	return roachpb.LeaseEpoch
 }
 
-func leaseReplica(i Input) roachpb.ReplicaDescriptor {
+func leaseReplica(i BuildInput) roachpb.ReplicaDescriptor {
 	return i.NextLeaseHolder
 }
 
-func leaseProposedTS(i Input) hlc.ClockTimestamp {
+func leaseProposedTS(i BuildInput) hlc.ClockTimestamp {
 	return i.Now
 }
 
-func leaseStart(i Input) hlc.ClockTimestamp {
+func leaseStart(i BuildInput) hlc.ClockTimestamp {
 	if i.Transfer() {
 		// For lease transfers, we initially set the lease start time to now.
 		// However, this will be adjusted during request evaluation to a clock
@@ -315,14 +315,14 @@ func leaseStart(i Input) hlc.ClockTimestamp {
 	return start
 }
 
-func leaseAcquisitionType(i Input) roachpb.LeaseAcquisitionType {
+func leaseAcquisitionType(i BuildInput) roachpb.LeaseAcquisitionType {
 	if i.Transfer() {
 		return roachpb.LeaseAcquisitionType_Transfer
 	}
 	return roachpb.LeaseAcquisitionType_Request
 }
 
-func leaseExpiration(st Settings, i Input, nextType roachpb.LeaseType) *hlc.Timestamp {
+func leaseExpiration(st Settings, i BuildInput, nextType roachpb.LeaseType) *hlc.Timestamp {
 	if nextType != roachpb.LeaseExpiration {
 		panic("leaseExpiration called for non-expiration lease")
 	}
@@ -331,7 +331,9 @@ func leaseExpiration(st Settings, i Input, nextType roachpb.LeaseType) *hlc.Time
 	return &exp
 }
 
-func leaseEpoch(nl NodeLiveness, i Input, nextType roachpb.LeaseType) (liveness.Record, error) {
+func leaseEpoch(
+	nl NodeLiveness, i BuildInput, nextType roachpb.LeaseType,
+) (liveness.Record, error) {
 	if nextType != roachpb.LeaseEpoch {
 		panic("leaseEpoch called for non-epoch lease")
 	}
@@ -343,7 +345,7 @@ func leaseEpoch(nl NodeLiveness, i Input, nextType roachpb.LeaseType) (liveness.
 	return l, nil
 }
 
-func leaseDeprecatedStartStasis(i Input, nextExpiration *hlc.Timestamp) *hlc.Timestamp {
+func leaseDeprecatedStartStasis(i BuildInput, nextExpiration *hlc.Timestamp) *hlc.Timestamp {
 	if i.Transfer() {
 		// We don't set StartStasis for lease transfers. It's not clear why this was
 		// ok in the past, but the field is unused now and only set for backwards
@@ -353,7 +355,7 @@ func leaseDeprecatedStartStasis(i Input, nextExpiration *hlc.Timestamp) *hlc.Tim
 	return nextExpiration
 }
 
-func leaseSequence(st Settings, i Input, nextLease roachpb.Lease) roachpb.LeaseSequence {
+func leaseSequence(st Settings, i BuildInput, nextLease roachpb.Lease) roachpb.LeaseSequence {
 	// Return a sequence number for the next lease based on whether the lease is
 	// equivalent to the one it's succeeding.
 	if i.PrevLease.Equivalent(nextLease, st.ExpToEpochEquiv) {
@@ -379,7 +381,7 @@ func leaseSequence(st Settings, i Input, nextLease roachpb.Lease) roachpb.LeaseS
 }
 
 func nodeLivenessManipulation(
-	i Input, nextLease roachpb.Lease, nextLeaseLiveness *livenesspb.Liveness,
+	i BuildInput, nextLease roachpb.Lease, nextLeaseLiveness *livenesspb.Liveness,
 ) NodeLivenessManipulation {
 	// If we are promoting an expiration-based lease to an epoch-based lease, we
 	// must make sure the expiration does not regress. We do this here because the
@@ -420,7 +422,7 @@ func nodeLivenessManipulation(
 	return NodeLivenessManipulation{}
 }
 
-var leaseValidationFuncs = []func(i Input, nextLease roachpb.Lease) error{
+var leaseValidationFuncs = []func(i BuildInput, nextLease roachpb.Lease) error{
 	validateReplica,
 	validateProposedTS,
 	validateStart,
@@ -429,15 +431,15 @@ var leaseValidationFuncs = []func(i Input, nextLease roachpb.Lease) error{
 	validateSequence,
 }
 
-func validateReplica(_ Input, nextLease roachpb.Lease) error {
+func validateReplica(_ BuildInput, nextLease roachpb.Lease) error {
 	return validateNonZero(nextLease.Replica, "replica")
 }
 
-func validateProposedTS(_ Input, nextLease roachpb.Lease) error {
+func validateProposedTS(_ BuildInput, nextLease roachpb.Lease) error {
 	return validateNonZero(nextLease.ProposedTS, "proposed timestamp")
 }
 
-func validateStart(i Input, nextLease roachpb.Lease) error {
+func validateStart(i BuildInput, nextLease roachpb.Lease) error {
 	if i.Now.Less(nextLease.Start) {
 		return errors.AssertionFailedf("lease cannot start after now")
 	}
@@ -460,7 +462,7 @@ func validateStart(i Input, nextLease roachpb.Lease) error {
 	return nil
 }
 
-func validateExpiration(_ Input, nextLease roachpb.Lease) error {
+func validateExpiration(_ BuildInput, nextLease roachpb.Lease) error {
 	switch nextLease.Type() {
 	case roachpb.LeaseExpiration:
 		if nextLease.Expiration == nil {
@@ -479,11 +481,11 @@ func validateExpiration(_ Input, nextLease roachpb.Lease) error {
 	return nil
 }
 
-func validateAcquisitionType(_ Input, nextLease roachpb.Lease) error {
+func validateAcquisitionType(_ BuildInput, nextLease roachpb.Lease) error {
 	return validateNonZero(nextLease.AcquisitionType, "acquisition type")
 }
 
-func validateSequence(_ Input, nextLease roachpb.Lease) error {
+func validateSequence(_ BuildInput, nextLease roachpb.Lease) error {
 	return validateNonZero(nextLease.Sequence, "sequence")
 }
 
