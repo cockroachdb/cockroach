@@ -2681,6 +2681,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	require.Nil(t, err)
 	tc.WaitForValues(t, key, []int64{1, 1, 1})
 
+	// Get a handle on the leader and the follower replicas.
 	leaderRepl := tc.GetRaftLeader(t, key)
 	leaderClock := leaderRepl.Clock()
 	followerRepl := func() *kvserver.Replica {
@@ -2697,6 +2698,20 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	if followerRepl == nil {
 		t.Fatal("could not get a handle on a follower replica")
 	}
+
+	// Wait for the leader replica to have three entries in its lastUpdateTimes
+	// map. It should already by this time because it was able to replicate a log
+	// entry to its two followers, but we wait here to be sure and to avoid
+	// flakiness. It is possible that the WaitForValues call above returned as
+	// soon as one of the followers appended and applied a log entry, but before
+	// its response was delivered to the leader.
+	testutils.SucceedsSoon(t, func() error {
+		lastUpdateTimes := leaderRepl.LastUpdateTimes()
+		if len(lastUpdateTimes) == 3 {
+			return nil
+		}
+		return errors.Errorf("expected leader replica to have 3 entries in lastUpdateTimes map, found %s", lastUpdateTimes)
+	})
 
 	// Lock the follower replica to prevent it from making progress from now
 	// on. NB: See TestRaftBlockedReplica/#9914 for why we use a separate
