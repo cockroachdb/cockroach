@@ -87,6 +87,8 @@ func runMain() error {
 	// Configure the command-line flags.
 	clientflags.AddBaseFlags(sqlCmd, &copts, &copts.Insecure, &copts.CertsDir)
 	clientflags.AddSQLFlags(sqlCmd, &copts, cfg, true /* isShell */, false /* isDemo */)
+	// Configure the format flag
+	cliflagcfg.VarFlagDepth(1, sqlCmd.PersistentFlags(), &cfg.ExecCtx.TableDisplayFormat, cliflags.TableDisplayFormat)
 
 	// Apply the configuration defaults from environment variables.
 	// This must occur before the parameters are parsed by cobra, so

@@ -107,17 +107,28 @@ func (s *topLevelServer) disableReplication(ctx context.Context) (retErr error) 
 	if err != nil {
 		return err
 	}
+
 	// We have to make sure to close the iterator since we might return
 	// from the for loop early (before Next() returns false).
 	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
+	// TODO(#125882): For now, we need to cache the zones before we can
+	// modify them. This is because the iterator will open a transaction that
+	// holds a lease to the system database, which will block the ALTER DATABASE
+	// system schema change in declarative-schema-changer-land.
 	var ok bool
+	var zones []string
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		zone := string(*it.Cur()[0].(*tree.DString))
+		zones = append(zones, zone)
+	}
+
+	for _, zone := range zones {
 		if _, err := ie.Exec(ctx, "set-zone", nil,
 			fmt.Sprintf("ALTER %s CONFIGURE ZONE USING num_replicas = 1", zone)); err != nil {
 			return err
 		}
 	}
+
 	return err
 }
