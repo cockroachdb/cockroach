@@ -409,3 +409,129 @@ scan jobs
  ├── fd: (1)-->(2,3,6-12)
  ├── distribution: test
  └── prune: (1-3,6-12)
+
+# Regression test for #125963. Ensure that we get reasonable stats estimates if
+# histograms are empty.
+
+statement ok
+CREATE TABLE tab (
+	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	a STRING NOT NULL,
+	b STRING NOT NULL,
+	c STRING NOT NULL,
+	d STRING NOT NULL,
+	INDEX tab_a_b_c_idx (a ASC, b ASC, c ASC)
+);
+
+statement ok
+ALTER TABLE tab INJECT STATISTICS '[
+    {
+        "columns": [
+            "id"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 10000000,
+        "histo_col_type": "UUID",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 10000000
+    },
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 10000,
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 10000000
+    },
+    {
+        "columns": [
+            "a",
+            "b"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 501000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 10000000
+    },
+    {
+        "columns": [
+            "a",
+            "b",
+            "c"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 1001000,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 10000000
+    },
+    {
+        "columns": [
+            "b"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 500000,
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 10000000
+    },
+    {
+        "columns": [
+            "c"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 1000000,
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 10000000
+    },
+    {
+        "columns": [
+            "d"
+        ],
+        "created_at": "2024-01-01 00:00:00",
+        "distinct_count": 1000000,
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 10000000
+    }
+]';
+
+query T
+EXPLAIN SELECT
+  id,
+  a,
+  b,
+  c,
+  d
+FROM
+  tab@{FORCE_INDEX=tab_a_b_c_idx,NO_FULL_SCAN}
+WHERE
+  a = 'a' AND b = 'b' AND c = 'c'
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ estimated row count: 9
+│ table: tab@tab_pkey
+│
+└── • scan
+      estimated row count: 9 (<0.01% of the table; stats collected <hidden> ago)
+      table: tab@tab_a_b_c_idx
+      spans: [/'a'/'b'/'c' - /'a'/'b'/'c']
