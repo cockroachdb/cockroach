@@ -378,6 +378,9 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 			newProtectAbove = cutoverTime
 		}
 
+		// Heartbeat the retained time to the source cluster.
+		sf.heartbeatTime = newProtectAbove
+
 		if record.Timestamp.Less(newProtectAbove) {
 			return ptp.UpdateTimestamp(ctx, *replicationDetails.ProtectedTimestampRecordID, newProtectAbove)
 		}
@@ -388,12 +391,6 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	}
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedReplicatedTime = f.Frontier()
-
-	if cutoverTime.IsEmpty() || sf.persistedReplicatedTime.Less(cutoverTime) {
-		sf.heartbeatTime = sf.persistedReplicatedTime
-	} else {
-		sf.heartbeatTime = cutoverTime
-	}
 	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
 }
