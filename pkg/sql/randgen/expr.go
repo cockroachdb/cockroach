@@ -198,7 +198,7 @@ func randExpr(
 
 	// Pick a single column and create a computed column that depends on it.
 	// The expression is as follows:
-	//  - for numeric types (int, float, decimal), the expression is "x+1";
+	//  - for numeric types (int, float, decimal), the expression is "abs(x)";
 	//  - for string type, the expression is "lower(x)";
 	//  - for types that can be cast to string in computed columns, the expression
 	//    is "lower(x::string)";
@@ -216,14 +216,11 @@ func randExpr(
 	switch xTyp.Family() {
 	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
 		typ = xTyp
-		expr = &tree.BinaryExpr{
-			Operator: treebin.MakeBinaryOperator(treebin.Plus),
-			Left:     tree.NewUnresolvedName(string(x.Name)),
-			Right:    RandDatum(rng, xTyp, nullOk),
+		// Avoid using an arithmetic operation that could overflow.
+		expr = &tree.FuncExpr{
+			Func:  tree.WrapFunction("abs"),
+			Exprs: tree.Exprs{tree.NewUnresolvedName(string(x.Name))},
 		}
-		// Make sure the data type is large enough to hold the result. For
-		// example, (INT4 + INT8) should be an INT8, not an INT4.
-		typ = tree.InferBinaryType(treebin.Plus, typ, expr.(*tree.BinaryExpr).Right.(tree.Datum).ResolvedType())
 
 	case types.StringFamily:
 		typ = types.String
