@@ -498,14 +498,9 @@ func (m *deferredVisitor) MaybeAddSplitForIndex(
 	return nil
 }
 
-// TODO
 func (i *immediateVisitor) AddIndexZoneConfig(
 	ctx context.Context, op scop.AddIndexZoneConfig,
 ) error {
-	tblDesc, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	i.ImmediateMutationStateUpdater.UpdateZoneConfig(tblDesc.ID, *op.ZoneConfig)
+	i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.TableID, *op.ZoneConfig)
 	return nil
 }

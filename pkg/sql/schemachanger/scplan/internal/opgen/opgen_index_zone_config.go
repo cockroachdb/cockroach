@@ -25,7 +25,6 @@ func init() {
 						TableID:    this.TableID,
 						IndexID:    this.IndexID,
 						ZoneConfig: this.ZoneConfig,
-						SeqNum:     this.SeqNum,
 					}
 				}),
 			),
