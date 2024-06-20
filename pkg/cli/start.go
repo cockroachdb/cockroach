@@ -1548,14 +1548,15 @@ func reportReadinessExternally(ctx context.Context, cmd *cobra.Command, waitForI
 				"Check the log file(s) for progress. ")
 	}
 
-	// Ensure the configuration logging is written to disk in case a
-	// process is waiting for the sdnotify readiness to read important
-	// information from there.
-	log.FlushAllSync()
-
-	// Signal readiness. This unblocks the process when running with
-	// --background or under systemd.
-	if err := sdnotify.Ready(); err != nil {
+	// Try to signal readiness. This unblocks the process when running under
+	// systemd. Otherwise, it will be a no-op.
+	if err := sdnotify.Ready(func() {
+		// Ensure the configuration logging is written to disk in case a
+		// process is waiting for the sdnotify readiness to read important
+		// information from there. Given that this blocks and is only used for
+		// the sdnotify readiness, we will only run it conditionally.
+		log.FlushAllSync()
+	}); err != nil {
 		log.Ops.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
 	}
 }
