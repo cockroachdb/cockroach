@@ -906,5 +906,4 @@ type AddIndexZoneConfig struct {
 	TableID    descpb.ID
 	IndexID    descpb.IndexID
 	ZoneConfig *zonepb.ZoneConfig
-	SeqNum     uint32
 }
