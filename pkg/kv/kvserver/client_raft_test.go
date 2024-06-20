@@ -2670,6 +2670,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	// Pause the manual clock so that we can carefully control the perceived
 	// timing of the follower replica's activity.
 	manual.Pause()
+	t.Logf("paused clock at %s", manual.Now())
 
 	key := []byte("a")
 	tc.SplitRangeOrFatal(t, key)
@@ -2731,8 +2732,11 @@ func TestWedgedReplicaDetection(t *testing.T) {
 
 	// The follower should still be active.
 	followerID := followerRepl.ReplicaID()
-	if !leaderRepl.IsFollowerActiveSince(followerID, leaderClock.PhysicalTime(), inactivityThreshold) {
-		t.Fatalf("expected follower to still be considered active")
+	leaderNow := leaderClock.PhysicalTime()
+	if !leaderRepl.IsFollowerActiveSince(followerID, leaderNow, inactivityThreshold) {
+		t.Fatalf("expected follower to still be considered active; "+
+			"follower id: %d, last update times: %s, leader clock: %s",
+			followerID, leaderRepl.LastUpdateTimes(), leaderNow)
 	}
 
 	// It is possible that there are in-flight heartbeat responses from
@@ -2750,8 +2754,11 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		}
 
 		// The follower should no longer be considered active.
-		if leaderRepl.IsFollowerActiveSince(followerID, leaderClock.PhysicalTime(), inactivityThreshold) {
-			return errors.New("expected follower to be considered inactive")
+		leaderNow = leaderClock.PhysicalTime()
+		if leaderRepl.IsFollowerActiveSince(followerID, leaderNow, inactivityThreshold) {
+			return errors.Errorf("expected follower to be considered inactive; "+
+				"follower id: %d, last update times: %s, leader clock: %s",
+				followerID, leaderRepl.LastUpdateTimes(), leaderNow)
 		}
 		return nil
 	})
