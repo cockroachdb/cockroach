@@ -169,7 +169,7 @@ be fairly distributed across the zones of the cluster).
 		if err != nil || count < 1 {
 			return errors.Wrapf(err, "invalid num-nodes argument")
 		}
-		return roachprod.Grow(context.Background(), config.Logger, args[0], int(count))
+		return roachprod.Grow(context.Background(), config.Logger, args[0], isSecure, int(count))
 	}),
 }
 
