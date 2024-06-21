@@ -2022,6 +2022,25 @@ func (c *clusterImpl) PutString(
 	return errors.Wrap(c.PutE(ctx, c.l, src, dest, nodes...), "cluster.PutString")
 }
 
+// GetString returns the contents of the specified file from the nodes.
+func (c *clusterImpl) GetString(
+	ctx context.Context, src string, nodes option.NodeListOption,
+) ([]string, error) {
+	results, err := c.RunWithDetails(
+		ctx, c.l, option.WithNodes(nodes), "cat", src)
+	if err != nil {
+		return nil, err
+	}
+	contents := make([]string, len(results))
+	for _, result := range results {
+		if result.Err != nil {
+			return nil, result.Err
+		}
+		contents[result.Node-1] = result.Stdout
+	}
+	return contents, nil
+}
+
 // GitClone clones a git repo from src into dest and checks out origin's
 // version of the given branch. The src, dest, and branch arguments must not
 // contain shell special characters.

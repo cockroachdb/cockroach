@@ -57,6 +57,7 @@ type Cluster interface {
 	PutString(
 		ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option,
 	) error
+	GetString(ctx context.Context, src string, nodes option.NodeListOption) ([]string, error)
 
 	// SetRandomSeed allows tests to set their own random seed to be
 	// used by builds with runtime assertions enabled.
