@@ -111,7 +111,8 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		streams[i] = &noopStream{ctx: ctx}
 		futures[i] = &future.ErrorFuture{}
 		ok, _ := p.Register(span, hlc.MinTimestamp, nil,
-			withDiff, withFiltering, streams[i], nil, futures[i])
+			withDiff, withFiltering, false, /* withOmitRemote */
+			streams[i], nil, futures[i])
 		require.True(b, ok)
 	}
 
@@ -148,7 +149,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 			binary.BigEndian.PutUint32(key[len(prefix):], uint32(i))
 			ts := hlc.Timestamp{WallTime: int64(i + 1)}
 			logicalOps[i] = writeIntentOpWithKey(txnID, key, isolation.Serializable, ts)
-			logicalOps[b.N+i] = commitIntentOpWithKV(txnID, key, ts, value, false /* omitInRangefeeds */)
+			logicalOps[b.N+i] = commitIntentOpWithKV(txnID, key, ts, value, false /* omitInRangefeeds */, 0 /* originID */)
 		}
 
 	case closedTSOpType:
