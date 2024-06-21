@@ -2104,6 +2104,26 @@ func (c *clusterImpl) configureClusterSettingOptions(
 	}
 }
 
+// Grow adds nodes to the cluster.
+func (c *clusterImpl) Grow(ctx context.Context, l *logger.Logger, nodeCount int) error {
+	err := roachprod.Grow(ctx, l, c.name, c.IsSecure(), nodeCount)
+	if err != nil {
+		return err
+	}
+	c.spec.NodeCount += nodeCount
+	return nil
+}
+
+// Shrink removes nodes from the cluster.
+func (c *clusterImpl) Shrink(ctx context.Context, l *logger.Logger, nodeCount int) error {
+	err := roachprod.Shrink(ctx, l, c.name, nodeCount)
+	if err != nil {
+		return err
+	}
+	c.spec.NodeCount -= nodeCount
+	return nil
+}
+
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
 // can either be a specific node, empty (to indicate all nodes), or a pair of
 // nodes indicating a range.
