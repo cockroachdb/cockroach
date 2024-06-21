@@ -238,8 +238,8 @@ func (p *proc) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 			return nil, p.DrainHelper()
 		}
 		return rowenc.EncDatumRow{
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(p.EvalCtx.NodeID.SQLInstanceID()))),
-			rowenc.DatumToEncDatum(types.String, tree.NewDString(p.EvalCtx.Locality.String())),
+			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(p.FlowCtx.EvalCtx.NodeID.SQLInstanceID()))),
+			rowenc.DatumToEncDatum(types.String, tree.NewDString(p.FlowCtx.EvalCtx.Locality.String())),
 			rowenc.DatumToEncDatum(types.Bool, tree.MakeDBool(tree.DBool(res.ok))),
 			rowenc.DatumToEncDatum(types.String, tree.NewDString(res.error)),
 			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(res.readBytes))),

@@ -321,8 +321,10 @@ func NewDatumRowConverter(
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,
 		KvCh:      kvCh,
-		EvalCtx:   evalCtx.Copy(),
-		db:        db,
+		// TODO(yuzefovich): audit all callers of NewDatumRowConverter to ensure
+		// that they don't make a redundant copy of the eval context.
+		EvalCtx: evalCtx.Copy(),
+		db:      db,
 	}
 
 	var targetCols []catalog.Column

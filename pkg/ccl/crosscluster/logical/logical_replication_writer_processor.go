@@ -413,7 +413,8 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 
 const maxWriterWorkers = 32
 
-// flushBuffer flushes the given flusableBufferand returns the underlying streamIngestionBuffer to the pool.
+// flushBuffer flushes the given flusableBuffer and returns the underlying
+// streamIngestionBuffer to the pool.
 func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
@@ -424,7 +425,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return nil
 	}
 
-	batchSize := int(flushBatchSize.Get(&lrw.EvalCtx.Settings.SV))
+	batchSize := int(flushBatchSize.Get(&lrw.FlowCtx.Cfg.Settings.SV))
 
 	// Ensure the batcher is always reset, even on early error returns.
 	preFlushTime := timeutil.Now()
