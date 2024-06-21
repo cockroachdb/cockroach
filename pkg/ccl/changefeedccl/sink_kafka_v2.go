@@ -516,6 +516,29 @@ func newKgoChangefeedPartitioner() kgo.Partitioner {
 			return hasher.Sum32()
 		})),
 	}
+
+	// OR:
+	// return kgo.BasicConsistentPartitioner(func(topic string) func(r *kgo.Record, n int) int {
+	// 	// this must (and should) have the same behaviour as our old partitioner which wraps sarama.NewCustomHashPartitioner(fnv.New32a)
+	// 	hasher := fnv.New32a()
+	// 	// rand := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
+	// 	return func(r *kgo.Record, n int) int {
+	// 		if r.Key == nil {
+	// 			// TODO: how to handle resolved msgs? the docs suggest that we can't/shouldnt use r.Partition, but
+	// 			// then there exists the ManualPartitioner which uses it sooooo idk
+	// 			// return rand.Intn(n)
+	// 			return int(r.Partition)
+	// 		}
+	// 		hasher.Reset()
+	// 		_, _ = hasher.Write(r.Key)
+	// 		part := int32(hasher.Sum32()) % int32(n)
+	// 		if part < 0 {
+	// 			part = -part
+	// 		}
+	// 		return int(part)
+	// 	}
+	// })
+
 }
 
 type kgoChangefeedPartitioner struct {
@@ -537,28 +560,6 @@ func (p *kgoChangefeedTopicPartitioner) Partition(r *kgo.Record, n int) int {
 	}
 	return p.inner.Partition(r, n)
 }
-
-// OR:
-// kgo.BasicConsistentPartitioner(func(topic string) func(r *kgo.Record, n int) int {
-// 	// this must (and should) have the same behaviour as our old partitioner which wraps sarama.NewCustomHashPartitioner(fnv.New32a)
-// 	hasher := fnv.New32a()
-// 	// rand := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-// 	return func(r *kgo.Record, n int) int {
-// 		if r.Key == nil {
-// 			// TODO: how to handle resolved msgs? the docs suggest that we can't/shouldnt use r.Partition, but
-// 			// then there exists the ManualPartitioner which uses it sooooo idk
-// 			// return rand.Intn(n)
-// 			return int(r.Partition)
-// 		}
-// 		hasher.Reset()
-// 		_, _ = hasher.Write(r.Key)
-// 		part := int32(hasher.Sum32()) % int32(n)
-// 		if part < 0 {
-// 			part = -part
-// 		}
-// 		return int(part)
-// 	}
-// })
 
 func newKgoOauthTokenProvider(
 	ctx context.Context, dialConfig kafkaDialConfig,
