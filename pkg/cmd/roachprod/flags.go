@@ -450,7 +450,7 @@ func initFlags() {
 		cmd.Flags().StringVarP(&config.Binary,
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
-	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, createLoadBalancerCmd, sqlCmd, pgurlCmd, loadBalancerPGUrl, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd, updateTargetsCmd} {
+	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, createLoadBalancerCmd, sqlCmd, pgurlCmd, loadBalancerPGUrl, adminurlCmd, runCmd, jaegerStartCmd, grafanaAnnotationCmd, updateTargetsCmd, growCmd} {
 		// TODO(renato): remove --secure once the default of secure
 		// clusters has existed in roachprod long enough.
 		cmd.Flags().BoolVar(&secure,
