@@ -81,6 +81,9 @@ func AlterColumnType(
 	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, tableDesc.GetRowLevelTTL(), col); err != nil {
 		return err
 	}
+	if err := schemaexpr.ValidateComputedColumnExpressionDoesNotDependOnColumn(tableDesc, col); err != nil {
+		return err
+	}
 
 	typ, err := tree.ResolveType(ctx, t.ToType, params.p.semaCtx.GetTypeResolver())
 	if err != nil {
