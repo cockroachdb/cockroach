@@ -994,19 +994,21 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return verifyLivenessServer(s, 1)
 	})
-	nl := s.NodeLiveness().(*liveness.NodeLiveness)
-
-	l, ok := nl.Self()
-	assert.True(t, ok)
 
 	// And again on manual heartbeat.
+	// NOTE: we make sure to set pause the heartbeat loop before we grab the
+	// liveness record to ensure that we don't race with the heartbeat loop in
+	// a way that allows our manual heartbeat to short-circuit.
+	nl := s.NodeLiveness().(*liveness.NodeLiveness)
+	defer nl.PauseHeartbeatLoopForTest()
+
 	injectError.Store(true)
-	if err := nl.Heartbeat(context.Background(), l); err != nil {
-		t.Fatal(err)
-	}
-	if count := injectedErrorCount.Load(); count < 2 {
-		t.Errorf("expected injected error count of at least 2; got %d", count)
-	}
+	l, ok := nl.Self()
+	assert.True(t, ok)
+	require.NoError(t, nl.Heartbeat(context.Background(), l))
+
+	// Verify that the error was injected exactly twice.
+	require.Equal(t, int32(2), injectedErrorCount.Load())
 }
 
 // This tests the create code path for node liveness, for that we need to create
