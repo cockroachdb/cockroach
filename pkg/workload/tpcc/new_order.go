@@ -128,7 +128,7 @@ func createNewOrder(
 	return n, nil
 }
 
-func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
+func (n *newOrder) run(ctx context.Context, wID int) (interface{}, time.Duration, error) {
 	n.config.auditor.newOrderTransactions.Add(1)
 
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
@@ -210,7 +210,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 
 	d.oEntryD = timeutil.Now()
 
-	err := n.config.executeTx(
+	onTxnStartDuration, err := n.config.executeTx(
 		ctx, n.mcp.Get(),
 		func(tx pgx.Tx) error {
 			// Select the district tax rate and next available order number, bumping it.
@@ -435,7 +435,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			return nil
 		})
 	if errors.Is(err, errSimulated) {
-		return d, nil
+		return d, 0, nil
 	}
-	return d, err
+	return d, onTxnStartDuration, err
 }

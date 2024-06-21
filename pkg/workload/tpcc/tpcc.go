@@ -1012,37 +1012,41 @@ func (w *tpcc) Ops(
 // executeTx runs fn inside a transaction with retries, if enabled. On
 // non-retryable failures, the transaction is aborted and rolled back; on
 // success, the transaction is committed.
-func (w *tpcc) executeTx(ctx context.Context, conn crdbpgx.Conn, fn func(pgx.Tx) error) error {
+func (w *tpcc) executeTx(
+	ctx context.Context, conn crdbpgx.Conn, fn func(pgx.Tx) error,
+) (onTxnStartDuration time.Duration, err error) {
 	txOpts := pgx.TxOptions{}
-	txnFuncWithPreamble := func(tx pgx.Tx) (err error) {
+	txnFuncWithStartFuncs := func(tx pgx.Tx) (err error) {
 		defer func() {
 			if err != nil && !w.txnRetries {
 				_ = tx.Rollback(ctx)
 			}
 		}()
 		if w.onTxnStartFns != nil {
+			startTime := timeutil.Now()
 			for _, onTxnStart := range w.onTxnStartFns {
 				if err = onTxnStart(ctx, tx); err != nil {
 					return err
 				}
 			}
+			onTxnStartDuration += timeutil.Since(startTime)
 		}
 		return fn(tx)
 	}
 
 	if w.txnRetries {
-		return crdbpgx.ExecuteTx(ctx, conn, txOpts, txnFuncWithPreamble)
+		return onTxnStartDuration, crdbpgx.ExecuteTx(ctx, conn, txOpts, txnFuncWithStartFuncs)
 	}
 
 	tx, err := conn.BeginTx(ctx, txOpts)
 	if err != nil {
-		return err
+		return onTxnStartDuration, err
 	}
-	err = txnFuncWithPreamble(tx)
+	err = txnFuncWithStartFuncs(tx)
 	if err != nil {
-		return err
+		return onTxnStartDuration, err
 	}
-	return tx.Commit(ctx)
+	return onTxnStartDuration, tx.Commit(ctx)
 }
 
 func (w *tpcc) partitionAndScatter(urls []string) error {
