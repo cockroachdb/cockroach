@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	slog "github.com/cockroachdb/cockroach/pkg/util/log/structured"
 )
 
 // flushConsumer is the interface type used to define a post-processing consumer of
@@ -57,6 +58,6 @@ func (l *LogWriteConsumer[K, V]) onFlush(ctx context.Context, aggInfo AggInfo, m
 			Key:     k,
 			Value:   v,
 		}
-		log.Structured(ctx, l.EventMeta, KVLog)
+		slog.EventsLogger.Info(ctx, l.EventMeta, KVLog)
 	}
 }

@@ -122,6 +122,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	slog "github.com/cockroachdb/cockroach/pkg/util/log/structured"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -530,6 +531,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if err := cfg.Config.ValidateAddrs(ctx); err != nil {
 		return nil, err
 	}
+	slog.Init(cfg.Settings)
 	execCfg := &sql.ExecutorConfig{}
 	codec := keys.MakeSQLCodec(cfg.SQLConfig.TenantID)
 	if knobs := cfg.TestingKnobs.TenantTestingKnobs; knobs != nil {

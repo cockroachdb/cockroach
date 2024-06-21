@@ -1,0 +1,77 @@
+enable-slog
+----
+
+slog-channel
+OpsLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+EventsLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+DevLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+HealthLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+StorageLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+SessionsLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+SqlSchemaLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+UserAdminLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+PrivilegesLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+SensitiveAccessLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+SqlExecLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+SqlPerfLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+SqlInternalPerfLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+TelemetryLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}
+
+slog-channel
+KvLogger
+----
+{"metadata":{"event_type":"test_log","version":"0.1"},"payload":{"field1":"log message","field2":1000}}

@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "structured",
+    srcs = ["structured_log_channels.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log/structured",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/log/channel",
+        "//pkg/util/log/severity",
+    ],
+)
+
+go_test(
+    name = "structured_test",
+    srcs = [
+        "main_test.go",
+        "structured_log_channels_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":structured",
+        "//pkg/base",
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/log/logpb",
+        "//pkg/util/log/logtestutils",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)
