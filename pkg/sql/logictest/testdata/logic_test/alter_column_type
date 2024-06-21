@@ -640,3 +640,38 @@ ALTER TABLE t31 ALTER COLUMN b TYPE INT;
 
 statement ok
 ALTER TABLE t31 ALTER COLUMN b TYPE INT USING b::INT8;
+
+subtest alter_type_used_in_computed
+
+statement ok
+CREATE TABLE tab_w_computed (real1 int, real2 int, comp1 bigint as (real1 + real2) stored, comp2 bigint as (real2 * 2) virtual, comp3 int as (real1 * 2) virtual);
+INSERT INTO tab_w_computed (real1, real2) VALUES (1, 2), (3, 4), (5, 6);
+
+statement error pq: cannot alter column "real1" because computed column "comp[0-9]" depends on it\nHINT: consider dropping "comp[0-9]" first.
+ALTER TABLE tab_w_computed ALTER COLUMN real1 TYPE bigint;
+
+statement ok
+ALTER TABLE tab_w_computed DROP COLUMN comp1;
+
+statement error pq: cannot alter column "real1" because computed column "comp[0-9]" depends on it\nHINT: consider dropping "comp[0-9]" first.
+ALTER TABLE tab_w_computed ALTER COLUMN real1 TYPE bigint;
+
+statement ok
+ALTER TABLE tab_w_computed DROP COLUMN comp3;
+
+statement ok
+ALTER TABLE tab_w_computed ALTER COLUMN real1 TYPE bigint;
+
+statement error pq: cannot alter column "real2" because computed column "comp[0-9]" depends on it\nHINT: consider dropping "comp[0-9]" first.
+ALTER TABLE tab_w_computed ALTER COLUMN real2 TYPE string;
+
+statement ok
+ALTER TABLE tab_w_computed DROP COLUMN comp2;
+
+statement ok
+ALTER TABLE tab_w_computed ALTER COLUMN real2 TYPE string;
+
+statement ok
+DROP TABLE tab_w_computed;
+
+subtest end
