@@ -12,12 +12,19 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -26,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -186,6 +194,180 @@ family f2(other_payload, v2))
 	}
 	serverBSQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
 	serverASQL.CheckQueryResults(t, "SELECT * from tab", expectedRows)
+}
+
+func TestRandomTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	args := base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	}
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, args)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	_, err := sqlDB.Exec("CREATE DATABASE a")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("CREATE DATABASE B")
+	require.NoError(t, err)
+
+	sqlA := s.SQLConn(t, serverutils.DBName("a"))
+	runnerA := sqlutils.MakeSQLRunner(sqlA)
+	runnerB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
+
+	for _, s := range testClusterSettings {
+		runnerA.Exec(t, s)
+	}
+
+	tableName := "rand_table"
+	rng, _ := randutil.NewPseudoRand()
+	createStmt := randgen.RandCreateTableWithName(
+		ctx,
+		rng,
+		tableName,
+		1,
+		false, /* isMultiregion */
+		// We do not have full support for column families.
+		randgen.SkipColumnFamilyMutation())
+	stmt := tree.SerializeForDisplay(createStmt)
+	t.Logf(stmt)
+	runnerA.Exec(t, stmt)
+	runnerB.Exec(t, stmt)
+
+	numInserts := 20
+	_, err = randgen.PopulateTableWithRandData(rng,
+		sqlA, tableName, numInserts, nil)
+	require.NoError(t, err)
+
+	addCol := fmt.Sprintf(
+		`ALTER TABLE %s ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL`,
+		tableName)
+	runnerA.Exec(t, addCol)
+	runnerB.Exec(t, addCol)
+
+	dbAURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	dbAURL.Path = "a"
+	defer cleanup()
+
+	streamStartStmt := fmt.Sprintf(
+		"SELECT crdb_internal.start_logical_replication_job('%s', ARRAY['%s'])",
+		dbAURL.String(), tableName)
+	var jobBID jobspb.JobID
+	runnerB.QueryRow(t, streamStartStmt).Scan(&jobBID)
+
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
+
+	compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
+}
+
+// TestPreviouslyInterestingTables tests some schemas from previous failed runs of TestRandomTables.
+func TestPreviouslyInterestingTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	args := base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	}
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, args)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	_, err := sqlDB.Exec("CREATE DATABASE a")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("CREATE DATABASE B")
+	require.NoError(t, err)
+
+	sqlA := s.SQLConn(t, serverutils.DBName("a"))
+	runnerA := sqlutils.MakeSQLRunner(sqlA)
+	runnerB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
+
+	for _, s := range testClusterSettings {
+		runnerA.Exec(t, s)
+	}
+
+	type testCase struct {
+		name   string
+		schema string
+	}
+
+	testCases := []testCase{
+		{
+			// This caught a problem with the comparision we were using rather than the
+			// replication process itself. We leave it here as an example of how to
+			// add new schemas.
+			name:   "comparison-invariant-to-different-covering-indexes",
+			schema: `CREATE TABLE rand_table (col1_0 DECIMAL, INDEX (col1_0) VISIBILITY 0.17, UNIQUE (col1_0 DESC), UNIQUE (col1_0 ASC), INDEX (col1_0 ASC), UNIQUE (col1_0 ASC))`,
+		},
+	}
+
+	baseTableName := "rand_table"
+	rng, _ := randutil.NewPseudoRand()
+	numInserts := 20
+	dbAURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	dbAURL.Path = "a"
+	defer cleanup()
+	for i, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tableName := fmt.Sprintf("%s%d", baseTableName, i)
+			schemaStmt := strings.ReplaceAll(tc.schema, baseTableName, tableName)
+			addCol := fmt.Sprintf(
+				`ALTER TABLE %s ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL`,
+				tableName)
+			runnerA.Exec(t, schemaStmt)
+			runnerB.Exec(t, schemaStmt)
+			runnerA.Exec(t, addCol)
+			runnerB.Exec(t, addCol)
+			_, err = randgen.PopulateTableWithRandData(rng,
+				sqlA, tableName, numInserts, nil)
+			require.NoError(t, err)
+			streamStartStmt := fmt.Sprintf(
+				"SELECT crdb_internal.start_logical_replication_job('%s', ARRAY['%s'])",
+				dbAURL.String(), tableName)
+			var jobBID jobspb.JobID
+			runnerB.QueryRow(t, streamStartStmt).Scan(&jobBID)
+
+			t.Logf("waiting for replication job %d", jobBID)
+			WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
+			compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
+		})
+	}
+}
+
+func compareReplicatedTables(
+	t *testing.T,
+	s serverutils.ApplicationLayerInterface,
+	dbA, dbB, tableName string,
+	runnerA, runnerB *sqlutils.SQLRunner,
+) {
+	descA := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), dbA, tableName)
+	descB := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), dbB, tableName)
+
+	for _, indexA := range descA.AllIndexes() {
+		if indexA.GetType() == descpb.IndexDescriptor_INVERTED {
+			t.Logf("skipping fingerprinting of inverted index %s", indexA.GetName())
+			continue
+		}
+
+		indexB, err := catalog.MustFindIndexByName(descB, indexA.GetName())
+		require.NoError(t, err)
+
+		aFingerprintQuery, err := sql.BuildFingerprintQueryForIndex(descA, indexA, []string{originTimestampColumnName})
+		require.NoError(t, err)
+		bFingerprintQuery, err := sql.BuildFingerprintQueryForIndex(descB, indexB, []string{originTimestampColumnName})
+		require.NoError(t, err)
+		t.Logf("fingerprinting index %s", indexA.GetName())
+		runnerB.CheckQueryResults(t, bFingerprintQuery, runnerA.QueryStr(t, aFingerprintQuery))
+	}
 }
 
 func WaitUntilReplicatedTime(
