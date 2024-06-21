@@ -224,7 +224,6 @@ func newRangeKeyBatcher(
 type streamIngestionProcessor struct {
 	execinfra.ProcessorBase
 
-	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.StreamIngestionDataSpec
 	rekeyer *backupccl.KeyRewriter
 	// rewriteToDiffKey Indicates whether we are rekeying a key into a different key.
@@ -332,7 +331,6 @@ func newStreamIngestionDataProcessor(
 	}
 
 	sip := &streamIngestionProcessor{
-		flowCtx:  flowCtx,
 		spec:     spec,
 		frontier: frontier,
 		cutoverProvider: &cutoverFromJobProgress{
@@ -356,7 +354,7 @@ func newStreamIngestionDataProcessor(
 				sip.close()
 				if sip.agg != nil {
 					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
-						sip.flowCtx.NodeID.SQLInstanceID(), sip.flowCtx.ID, sip.agg)
+						sip.FlowCtx.NodeID.SQLInstanceID(), sip.FlowCtx.ID, sip.agg)
 					return []execinfrapb.ProducerMetadata{*meta}
 				}
 				return nil
@@ -401,7 +399,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName, sip.agg)
 
-	sip.metrics = sip.flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
+	sip.metrics = sip.FlowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
 
 	evalCtx := sip.FlowCtx.EvalCtx
 	db := sip.FlowCtx.Cfg.DB
@@ -409,8 +407,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 	var err error
 	sip.batcher, err = bulk.MakeStreamSSTBatcher(
-		ctx, db.KV(), rc, evalCtx.Settings, sip.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
-		sip.flowCtx.Cfg.BulkSenderLimiter, sip.onFlushUpdateMetricUpdate)
+		ctx, db.KV(), rc, evalCtx.Settings, sip.FlowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
+		sip.FlowCtx.Cfg.BulkSenderLimiter, sip.onFlushUpdateMetricUpdate)
 	if err != nil {
 		sip.MoveToDrainingAndLogError(errors.Wrap(err, "creating stream sst batcher"))
 		return
@@ -459,7 +457,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		}
 
 		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID),
-			int32(sip.flowCtx.NodeID.SQLInstanceID()), sip.ProcessorID,
+			int32(sip.FlowCtx.NodeID.SQLInstanceID()), sip.ProcessorID,
 			token,
 			sip.spec.InitialScanTimestamp, sip.frontier)
 
@@ -528,7 +526,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		sip.aggTimer.Read = true
 		sip.aggTimer.Reset(15 * time.Second)
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(sip.Ctx(),
-			sip.flowCtx.NodeID.SQLInstanceID(), sip.flowCtx.ID, sip.agg)
+			sip.FlowCtx.NodeID.SQLInstanceID(), sip.FlowCtx.ID, sip.agg)
 	case err := <-sip.errCh:
 		sip.MoveToDrainingAndLogError(err)
 		return nil, sip.DrainHelper()
@@ -607,7 +605,7 @@ func (sip *streamIngestionProcessor) close() {
 // checkForCutoverSignal periodically loads the job progress to check for the
 // sentinel value that signals the ingestion job to complete.
 func (sip *streamIngestionProcessor) checkForCutoverSignal(ctx context.Context) error {
-	sv := &sip.flowCtx.Cfg.Settings.SV
+	sv := &sip.FlowCtx.Cfg.Settings.SV
 	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
 	defer tick.Stop()
 	for {

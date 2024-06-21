@@ -44,9 +44,8 @@ const (
 type streamIngestionFrontier struct {
 	execinfra.ProcessorBase
 
-	flowCtx *execinfra.FlowCtx
-	spec    execinfrapb.StreamIngestionFrontierSpec
-	alloc   tree.DatumAlloc
+	spec  execinfrapb.StreamIngestionFrontierSpec
+	alloc tree.DatumAlloc
 
 	// input returns rows from one or more streamIngestion processors.
 	input execinfra.RowSource
@@ -118,7 +117,6 @@ func newStreamIngestionFrontierProcessor(
 		return nil, err
 	}
 	sf := &streamIngestionFrontier{
-		flowCtx:               flowCtx,
 		spec:                  spec,
 		input:                 input,
 		replicatedTimeAtStart: spec.ReplicatedTimeAtStart,
@@ -303,12 +301,12 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 // the status of each partition.
 func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	ctx := sf.Ctx()
-	updateFreq := crosscluster.JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
+	updateFreq := crosscluster.JobCheckpointFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
 		return nil
 	}
 	f := sf.frontier
-	registry := sf.flowCtx.Cfg.JobRegistry
+	registry := sf.FlowCtx.Cfg.JobRegistry
 	jobID := jobspb.JobID(sf.spec.JobID)
 
 	frontierResolvedSpans := make([]jobspb.ResolvedSpan, 0)
@@ -364,7 +362,7 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 			return errors.AssertionFailedf("expected replication job to have a protected timestamp " +
 				"record over the destination tenant's keyspan")
 		}
-		ptp := sf.flowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
+		ptp := sf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 		record, err := ptp.GetRecord(ctx, *replicationDetails.ProtectedTimestampRecordID)
 		if err != nil {
 			return err

@@ -141,8 +141,7 @@ const (
 type backupDataProcessor struct {
 	execinfra.ProcessorBase
 
-	flowCtx *execinfra.FlowCtx
-	spec    execinfrapb.BackupDataSpec
+	spec execinfrapb.BackupDataSpec
 
 	// cancelAndWaitForWorker cancels the producer goroutine and waits for it to
 	// finish. It can be called multiple times.
@@ -183,10 +182,9 @@ func newBackupDataProcessor(
 	}
 	ba := memMonitor.MakeBoundAccount()
 	bp := &backupDataProcessor{
-		flowCtx: flowCtx,
-		spec:    spec,
-		progCh:  make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
-		memAcc:  &ba,
+		spec:   spec,
+		progCh: make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
+		memAcc: &ba,
 	}
 	if err := bp.Init(ctx, bp, post, backupOutputTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -196,7 +194,7 @@ func newBackupDataProcessor(
 				bp.close()
 				if bp.agg != nil {
 					meta := bulk.ConstructTracingAggregatorProducerMeta(ctx,
-						bp.flowCtx.NodeID.SQLInstanceID(), bp.flowCtx.ID, bp.agg)
+						bp.FlowCtx.NodeID.SQLInstanceID(), bp.FlowCtx.ID, bp.agg)
 					return []execinfrapb.ProducerMetadata{*meta}
 				}
 				return nil
@@ -227,11 +225,11 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 		}
 	}
 	log.Infof(ctx, "starting backup data")
-	if err := bp.flowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
+	if err := bp.FlowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
 		TaskName: "backupDataProcessor.runBackupProcessor",
 		SpanOpt:  stop.ChildSpan,
 	}, func(ctx context.Context) {
-		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh, bp.memAcc)
+		bp.backupErr = runBackupProcessor(ctx, bp.FlowCtx, &bp.spec, bp.progCh, bp.memAcc)
 		cancel()
 		close(bp.progCh)
 	}); err != nil {
@@ -248,8 +246,8 @@ func (bp *backupDataProcessor) constructProgressProducerMeta(
 	// Take a copy so that we can send the progress address to the output
 	// processor.
 	p := prog
-	p.NodeID = bp.flowCtx.NodeID.SQLInstanceID()
-	p.FlowID = bp.flowCtx.ID
+	p.NodeID = bp.FlowCtx.NodeID.SQLInstanceID()
+	p.FlowID = bp.FlowCtx.ID
 
 	// Annotate the progress with the fraction completed by this backupDataProcessor.
 	progDetails := backuppb.BackupManifest_Progress{}
@@ -286,7 +284,7 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 		bp.aggTimer.Read = true
 		bp.aggTimer.Reset(15 * time.Second)
 		return nil, bulk.ConstructTracingAggregatorProducerMeta(bp.Ctx(),
-			bp.flowCtx.NodeID.SQLInstanceID(), bp.flowCtx.ID, bp.agg)
+			bp.FlowCtx.NodeID.SQLInstanceID(), bp.FlowCtx.ID, bp.agg)
 	}
 }
 
