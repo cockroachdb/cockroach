@@ -120,6 +120,19 @@ func (r Row) DatumNamed(n string) (Iterator, error) {
 	return iter{r: r, cols: []int{idx}}, nil
 }
 
+// DatumsNamed returns the datums with the specified column names, in the form of an Iterator.
+func (r Row) DatumsNamed(names []string) (Iterator, error) {
+	cols := make([]int, 0, len(names))
+	for _, n := range names {
+		idx, ok := r.EventDescriptor.colsByName[n]
+		if !ok {
+			return nil, errors.AssertionFailedf("No column with name %s in this row", n)
+		}
+		cols = append(cols, idx)
+	}
+	return iter{r: r, cols: cols}, nil
+}
+
 // IsDeleted returns true if event corresponds to a deletion event.
 func (r Row) IsDeleted() bool {
 	return r.deleted
