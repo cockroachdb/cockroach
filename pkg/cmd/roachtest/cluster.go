@@ -2841,6 +2841,25 @@ func (c *clusterImpl) ExternalIP(
 // Silence unused warning.
 var _ = (&clusterImpl{}).ExternalIP
 
+// Localities returns the localities for the specified nodes.
+func (c *clusterImpl) Localities(
+	_ context.Context, _ *logger.Logger, nodes option.NodeListOption,
+) ([]string, error) {
+	cachedCluster, err := getCachedCluster(c.name)
+	if err != nil {
+		return nil, err
+	}
+	localities := make([]string, 0, len(cachedCluster.VMs))
+	for _, cVM := range cachedCluster.VMs {
+		locality, err := cVM.Locality()
+		if err != nil {
+			return nil, err
+		}
+		localities = append(localities, locality)
+	}
+	return localities, nil
+}
+
 // Conn returns a SQL connection to the specified node.
 func (c *clusterImpl) Conn(
 	ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption),

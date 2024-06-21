@@ -91,6 +91,7 @@ type Cluster interface {
 	ExternalAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	ExternalIP(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	SQLPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]int, error)
+	Localities(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 
 	// SQL connection strings.
 
