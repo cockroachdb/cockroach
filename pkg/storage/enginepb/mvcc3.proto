@@ -207,6 +207,11 @@ message MVCCValueHeader {
   // ImportEpoch identifies the number of times a user has called IMPORT
   // INTO on the table this key belongs to when the table was not empty.
   uint32 import_epoch = 4;
+  
+  // OriginID identifes the original cluster that wrote this key in Logical Data
+  // Replication. 0 identifies a local write, 1 identifies a remote write, and
+  // 2+ are reserved to identify remote clusters.
+  uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
 }
 
 // MVCCValueHeaderPure is not to be used directly. It's generated only for use of
@@ -230,6 +235,7 @@ message MVCCValueHeaderCrdbTest {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
   bool omit_in_rangefeeds = 3;
   uint32 import_epoch = 4;
+  uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
