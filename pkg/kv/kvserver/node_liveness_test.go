@@ -960,17 +960,16 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var injectError atomic.Value
-	var injectedErrorCount int32
+	var injectError atomic.Bool
+	var injectedErrorCount atomic.Int32
 
 	injectError.Store(true)
 	testingEvalFilter := func(args kvserverbase.FilterArgs) *kvpb.Error {
 		if _, ok := args.Req.(*kvpb.ConditionalPutRequest); !ok {
 			return nil
 		}
-		if val := injectError.Load(); val != nil && val.(bool) {
-			atomic.AddInt32(&injectedErrorCount, 1)
-			injectError.Store(false)
+		if injectError.Swap(false) {
+			injectedErrorCount.Add(1)
 			return kvpb.NewError(kvpb.NewAmbiguousResultErrorf("test"))
 		}
 		return nil
@@ -1001,7 +1000,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	if err := nl.Heartbeat(context.Background(), l); err != nil {
 		t.Fatal(err)
 	}
-	if count := atomic.LoadInt32(&injectedErrorCount); count < 2 {
+	if count := injectedErrorCount.Load(); count < 2 {
 		t.Errorf("expected injected error count of at least 2; got %d", count)
 	}
 }
