@@ -674,4 +674,127 @@ ALTER TABLE tab_w_computed ALTER COLUMN real2 TYPE string;
 statement ok
 DROP TABLE tab_w_computed;
 
+subtest preserve_hidden_and_default_expr
+
+statement ok
+CREATE TABLE t_with_hidden (vis1 int, hid1 int2 default 1 not visible);
+
+statement ok
+INSERT INTO t_with_hidden VALUES (0),(1),(2);
+
+query I
+SELECT * FROM t_with_hidden ORDER BY vis1
+----
+0
+1
+2
+
+statement ok
+ALTER TABLE t_with_hidden alter column hid1 type string using '1'::string;
+
+statement ok
+INSERT INTO t_with_hidden VALUES (3);
+
+query I
+SELECT * FROM t_with_hidden ORDER BY vis1
+----
+0
+1
+2
+3
+
+query IT
+SELECT vis1, hid1 FROM t_with_hidden ORDER BY vis1
+----
+0 1
+1 1
+2 1
+3 1
+
+statement ok
+DROP TABLE t_with_hidden;
+
+subtest preserve_on_update
+
+statement ok
+CREATE TABLE t_with_on_update(a int primary key, b int on update 3);
+
+statement ok
+INSERT INTO t_with_on_update VALUES (1);
+
+query II
+SELECT a, b FROM t_with_on_update
+----
+1 NULL
+
+statement ok
+UPDATE t_with_on_update SET a=a+1 WHERE a > 0;
+
+query II
+SELECT a, b FROM t_with_on_update ORDER BY a
+----
+2 3
+
+statement ok
+ALTER TABLE t_with_on_update ALTER COLUMN b SET DATA TYPE INT4;
+
+statement ok
+INSERT INTO t_with_on_update VALUES (10);
+UPDATE t_with_on_update SET a=a+1 WHERE a=10;
+INSERT INTO t_with_on_update VALUES (100);
+
+query II
+SELECT a, b FROM t_with_on_update ORDER BY a
+----
+2 3
+11 3
+100 NULL
+
+statement ok
+ALTER TABLE t_with_on_update ALTER COLUMN b SET DATA TYPE STRING;
+
+statement ok
+INSERT INTO t_with_on_update VALUES (1000);
+UPDATE t_with_on_update SET a=a+1 WHERE a=1000;
+INSERT INTO t_with_on_update VALUES (10000);
+
+query IT
+SELECT a, b FROM t_with_on_update ORDER BY a
+----
+2 3
+11 3
+100 NULL
+1001 3
+10000 NULL
+
+statement ok
+DROP TABLE t_with_on_update;
+
+subtest preserve_default
+
+statement ok
+CREATE TABLE t_with_default(c1 int4 default 2147483647);
+
+# Even though c1 has a default value out of range, we allow this. This is
+# consistent with postgres.
+statement ok
+ALTER TABLE t_with_default ALTER COLUMN c1 SET DATA TYPE INT2;
+
+statement error integer out of range for type int2
+INSERT INTO t_with_default VALUES (default);
+
+statement ok
+ALTER TABLE t_with_default ALTER COLUMN c1 SET DEFAULT 32767;
+
+statement ok
+INSERT INTO t_with_default VALUES (default);
+
+query I
+SELECT * FROM t_with_default ORDER BY c1
+----
+32767
+
+statement ok
+DROP TABLE t_with_default;
+
 subtest end

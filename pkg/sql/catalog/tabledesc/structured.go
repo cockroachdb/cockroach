@@ -1679,6 +1679,14 @@ func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) 
 	// Make the oldCol a computed column by setting its computed expression.
 	oldCol.ColumnDesc().ComputeExpr = &swap.InverseExpr
 
+	// Swap the onUpdate/default expressions. These expressions can only be stored
+	// for non-computed columns, so it needs to be swapped at the same time as the
+	// computed expression.
+	newCol.ColumnDesc().OnUpdateExpr = oldCol.ColumnDesc().OnUpdateExpr
+	oldCol.ColumnDesc().OnUpdateExpr = nil
+	newCol.ColumnDesc().DefaultExpr = oldCol.ColumnDesc().DefaultExpr
+	oldCol.ColumnDesc().DefaultExpr = nil
+
 	// Generate unique name for old column.
 	nameExists := func(name string) bool {
 		return catalog.FindColumnByName(desc, name) != nil
