@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -219,8 +220,9 @@ func (ie *InternalExecutor) runWithEx(
 	wg *sync.WaitGroup,
 	syncCallback func([]*streamingCommandResult),
 	errCallback func(error),
+	attributeToUser bool,
 ) error {
-	ex, err := ie.initConnEx(ctx, txn, w, mode, sd, stmtBuf, syncCallback)
+	ex, err := ie.initConnEx(ctx, txn, w, mode, sd, stmtBuf, syncCallback, attributeToUser)
 	if err != nil {
 		return err
 	}
@@ -265,19 +267,21 @@ func (ie *InternalExecutor) initConnEx(
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
 	syncCallback func([]*streamingCommandResult),
+	attributeToUser bool,
 ) (*connExecutor, error) {
 	clientComm := &internalClientComm{
 		w:    w,
 		mode: mode,
 		sync: syncCallback,
 	}
+	clientComm.results = clientComm.resultsScratch[:0]
 	clientComm.rowsAffectedState.rewind = func() {
 		var zero int
 		_ = w.addResult(ctx, ieIteratorResult{rowsAffected: &zero})
 	}
 	clientComm.rowsAffectedState.numRewindsLimit = ieRowsAffectedRetryLimit.Get(&ie.s.cfg.Settings.SV)
 
-	applicationStats := ie.s.sqlStats.GetApplicationStats(sd.ApplicationName, true /* internal */)
+	applicationStats := ie.s.sqlStats.GetApplicationStats(sd.ApplicationName)
 	sds := sessiondata.NewStack(sd)
 	defaults := SessionDefaults(map[string]string{
 		"application_name": sd.ApplicationName,
@@ -294,17 +298,27 @@ func (ie *InternalExecutor) initConnEx(
 				ex.extraTxnState.shouldResetSyntheticDescriptors = true
 			}
 		}
+		srvMetrics := &ie.s.InternalMetrics
+		if attributeToUser {
+			srvMetrics = &ie.s.Metrics
+		}
 		ex = ie.s.newConnExecutor(
 			ctx,
 			sdMutIterator,
 			stmtBuf,
 			clientComm,
+			// memMetrics is only about attributing memory monitoring to the
+			// right metric, so we choose to ignore the 'attributeToUser'
+			// boolean and use "internal memory metrics" unconditionally. (We
+			// will be using the internal sql executor as the parent during
+			// query execution, using different metrics here could lead to
+			// confusion.)
 			ie.memMetrics,
-			&ie.s.InternalMetrics,
+			srvMetrics,
 			applicationStats,
 			ie.s.cfg.GenerateID(),
-			postSetupFn,
-		)
+			false, /* fromOuterTxn */
+			postSetupFn)
 	} else {
 		ex, err = ie.newConnExecutorWithTxn(
 			ctx,
@@ -313,6 +327,7 @@ func (ie *InternalExecutor) initConnEx(
 			stmtBuf,
 			clientComm,
 			applicationStats,
+			attributeToUser,
 		)
 		if err != nil {
 			return nil, err
@@ -344,6 +359,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	applicationStats sqlstats.ApplicationStats,
+	attributeToUser bool,
 ) (ex *connExecutor, _ error) {
 
 	// If the internal executor has injected synthetic descriptors, we will
@@ -363,7 +379,6 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	postSetupFn := func(ex *connExecutor) {
 		if ie.extraTxnState != nil {
 			ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
-			ex.extraTxnState.fromOuterTxn = true
 			ex.extraTxnState.jobs = ie.extraTxnState.jobs
 			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
@@ -371,17 +386,26 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		}
 	}
 
+	srvMetrics := &ie.s.InternalMetrics
+	if attributeToUser {
+		srvMetrics = &ie.s.Metrics
+	}
 	ex = ie.s.newConnExecutor(
 		ctx,
 		sdMutIterator,
 		stmtBuf,
 		clientComm,
+		// memMetrics is only about attributing memory monitoring to the right
+		// metric, so we choose to ignore the 'attributeToUser' boolean and use
+		// "internal memory metrics" unconditionally. (We will be using the
+		// internal sql executor as the parent during query execution, using
+		// different metrics here could lead to confusion.)
 		ie.memMetrics,
-		&ie.s.InternalMetrics,
+		srvMetrics,
 		applicationStats,
 		ie.s.cfg.GenerateID(),
-		postSetupFn,
-	)
+		ie.extraTxnState != nil, /* fromOuterTxn */
+		postSetupFn)
 
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
@@ -671,7 +695,7 @@ func (ie *InternalExecutor) queryInternalBuffered(
 	// We will run the query to completion, so we can use an async result
 	// channel.
 	rw := newAsyncIEResultChannel()
-	it, err := ie.execInternal(ctx, opName, rw, defaultIEExecutionMode, txn, sessionDataOverride, stmt, qargs...)
+	it, err := ie.execInternal(ctx, opName, rw, defaultIEExecutionMode, txn, sessionDataOverride, ieStmt{stmt: stmt}, qargs...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -770,6 +794,37 @@ func (ie *InternalExecutor) ExecEx(
 	stmt string,
 	qargs ...interface{},
 ) (int, error) {
+	return ie.execIEStmt(ctx, opName, txn, session, ieStmt{stmt: stmt}, qargs...)
+}
+
+// ExecParsed is like Exec but allows the caller to provide an already parsed
+// statement.
+func (ie *InternalExecutor) ExecParsed(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	o sessiondata.InternalExecutorOverride,
+	parsedStmt statements.Statement[tree.Statement],
+	qargs ...interface{},
+) (int, error) {
+	return ie.execIEStmt(ctx, opName, txn, o, ieStmt{parsed: parsedStmt}, qargs...)
+}
+
+type ieStmt struct {
+	// Only one should be set.
+	stmt   string
+	parsed statements.Statement[tree.Statement]
+}
+
+// execIEStmt extracts the shared logic between ExecEx and ExecParsed.
+func (ie *InternalExecutor) execIEStmt(
+	ctx context.Context,
+	opName string,
+	txn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	stmt ieStmt,
+	qargs ...interface{},
+) (int, error) {
 	// We will run the query to completion, so we can use an async result
 	// channel.
 	rw := newAsyncIEResultChannel()
@@ -816,7 +871,7 @@ func (ie *InternalExecutor) QueryIteratorEx(
 	qargs ...interface{},
 ) (isql.Rows, error) {
 	return ie.execInternal(
-		ctx, opName, newSyncIEResultChannel(), defaultIEExecutionMode, txn, session, stmt, qargs...,
+		ctx, opName, newSyncIEResultChannel(), defaultIEExecutionMode, txn, session, ieStmt{stmt: stmt}, qargs...,
 	)
 }
 
@@ -934,6 +989,14 @@ func GetInternalOpName(ctx context.Context) (opName string, ok bool) {
 	return tag.ValueStr(), true
 }
 
+var attributeToUserEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.internal_executor.attribute_to_user.enabled",
+	"controls whether internally-executed queries with the AttributeToUser "+
+		"override should actually be attributed to user or not",
+	true,
+)
+
 // execInternal is the main entry point for executing a statement via the
 // InternalExecutor. From the high level it does the following:
 // - parses the statement as well as its arguments
@@ -1038,7 +1101,7 @@ func (ie *InternalExecutor) execInternal(
 	mode ieExecutionMode,
 	txn *kv.Txn,
 	sessionDataOverride sessiondata.InternalExecutorOverride,
-	stmt string,
+	ieStmt ieStmt,
 	qargs ...interface{},
 ) (r *rowsIterator, retErr error) {
 	startup.AssertStartupRetry(ctx)
@@ -1069,6 +1132,7 @@ func (ie *InternalExecutor) execInternal(
 
 	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)
+	attributeToUser := sessionDataOverride.AttributeToUser && attributeToUserEnabled.Get(&ie.s.cfg.Settings.SV)
 	if !rw.async() && (txn != nil && txn.Type() == kv.RootTxn) {
 		// If the "outer" query uses the RootTxn and the sync result channel is
 		// requested, then we must disable both DistSQL and Streamer to ensure
@@ -1094,6 +1158,13 @@ func (ie *InternalExecutor) execInternal(
 	} else if !strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
 		// If this is already an "internal app", don't put more prefix.
 		sd.ApplicationName = catconstants.DelegatedAppNamePrefix + sd.ApplicationName
+	}
+	if attributeToUser {
+		// If this query should be attributable to user, then we discard
+		// previous app name heuristics and use a separate prefix. This is
+		// needed since we hard-code filters that exclude queries with '$
+		// internal' in their app names on the UI.
+		sd.ApplicationName = catconstants.AttributedToUserInternalAppNamePrefix + "-" + opName
 	}
 	// If the caller has injected a mapping to temp schemas, install it, and
 	// leave it installed for the rest of the transaction.
@@ -1138,9 +1209,13 @@ func (ie *InternalExecutor) execInternal(
 
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
-	parsed, err := parser.ParseOne(stmt)
-	if err != nil {
-		return nil, err
+	parsed := ieStmt.parsed
+	if parsed.AST == nil {
+		var err error
+		parsed, err = parser.ParseOne(ieStmt.stmt)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err := ie.checkIfStmtIsAllowed(parsed.AST, txn); err != nil {
 		return nil, err
@@ -1172,7 +1247,7 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	err = ie.runWithEx(ctx, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback)
+	err = ie.runWithEx(ctx, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser)
 	if err != nil {
 		return nil, err
 	}
@@ -1310,7 +1385,10 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	rw := newAsyncIEResultChannel()
 	stmtBuf := NewStmtBuf()
 
-	ex, err := ie.initConnEx(ctx, ie.extraTxnState.txn, rw, defaultIEExecutionMode, sd, stmtBuf, nil /* syncCallback */)
+	ex, err := ie.initConnEx(
+		ctx, ie.extraTxnState.txn, rw, defaultIEExecutionMode, sd, stmtBuf,
+		nil /* syncCallback */, false, /* attributeToUser */
+	)
 	if err != nil {
 		return errors.Wrap(err, "cannot create conn executor to commit txn")
 	}
@@ -1397,6 +1475,8 @@ type internalClientComm struct {
 	// at any point in time (i.e. any command is created, evaluated, and then
 	// closed / discarded, and only after that a new command can be processed).
 	results []*streamingCommandResult
+	// resultsScratch is the underlying storage for results.
+	resultsScratch [4]*streamingCommandResult
 
 	// The results of the query execution will be written into w.
 	w ieResultWriter

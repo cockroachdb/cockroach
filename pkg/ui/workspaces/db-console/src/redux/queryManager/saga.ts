@@ -21,6 +21,7 @@ import {
   take,
   delay,
 } from "redux-saga/effects";
+import { util } from "@cockroachlabs/cluster-ui";
 
 import { queryBegin, queryComplete, queryError } from "./reducer";
 
@@ -324,7 +325,7 @@ export function* runQuery(state: ManagedQuerySagaState) {
     yield put(queryBegin(id));
     yield call(querySaga);
   } catch (e) {
-    err = e;
+    err = util.maybeError(e);
   }
 
   // Yielding to moment lets us easily mock time in tests.

@@ -1230,6 +1230,7 @@ func runCDCInitialScanRollingRestart(
 			t.L().Printf("done restarting nodes")
 		}()
 		t.L().Printf("starting rolling drain+restarts of 2, 3, 4...")
+		timer := time.NewTimer(0 * time.Second)
 		for {
 			for _, n := range []int{2, 3, 4} {
 				select {
@@ -1237,11 +1238,14 @@ func runCDCInitialScanRollingRestart(
 					return nil
 				case <-ctx.Done():
 					return nil
-				default:
-					if err := restart(n); err != nil {
-						return err
-					}
+				case <-timer.C:
 				}
+				if err := restart(n); err != nil {
+					return err
+				}
+				// We wait a bit between restarts so that the change aggregators have
+				// a chance to make some progress.
+				timer.Reset(10 * time.Second)
 			}
 		}
 	})
@@ -1259,8 +1263,8 @@ func runCDCInitialScanRollingRestart(
 		}()
 
 		const numChangefeeds = 5
-		for i := 1; i < numChangefeeds; i++ {
-			t.L().Printf("starting changefeed...")
+		for i := 0; i < numChangefeeds; i++ {
+			t.L().Printf("starting changefeed %d...", i)
 			var job int
 			if err := db.QueryRow(
 				fmt.Sprintf("CREATE CHANGEFEED FOR TABLE large, small INTO 'webhook-%s/?insecure_tls_skip_verify=true' WITH initial_scan='only'", sinkURL),
@@ -1537,7 +1541,7 @@ func registerCDC(r registry.Registry) {
 		RequiresLicense:  true,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          time.Minute * 15,
+		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCInitialScanRollingRestart(ctx, t, c, cdcNormalCheckpoint)
 		},
@@ -1549,7 +1553,7 @@ func registerCDC(r registry.Registry) {
 		RequiresLicense:  true,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          time.Minute * 15,
+		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCInitialScanRollingRestart(ctx, t, c, cdcShutdownCheckpoint)
 		},

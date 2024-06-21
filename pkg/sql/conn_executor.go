@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	crypto_rand "crypto/rand"
 	"fmt"
 	"io"
 	"math"
@@ -86,7 +85,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
-	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -834,9 +832,10 @@ func (s *Server) SetupConn(
 		clientComm,
 		memMetrics,
 		&s.Metrics,
-		s.sqlStats.GetApplicationStats(sd.ApplicationName, false /* internal */),
+		s.sqlStats.GetApplicationStats(sd.ApplicationName),
 		sessionID,
-		nil, /* postSetupFn */
+		false, /* fromOuterTxn */
+		nil,   /* postSetupFn */
 	)
 	return ConnectionHandler{ex}, nil
 }
@@ -1022,6 +1021,7 @@ func (s *Server) newConnExecutor(
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
 	sessionID clusterunique.ID,
+	fromOuterTxn bool,
 	// postSetupFn is to override certain field of a conn executor.
 	// It is set when conn executor is init under an internal executor
 	// with a not-nil txn.
@@ -1145,16 +1145,17 @@ func (s *Server) newConnExecutor(
 		ex.server.insights.Writer(ex.sessionData().Internal),
 		ex.phaseTimes,
 		s.sqlStats.GetCounters(),
-		ex.extraTxnState.fromOuterTxn,
+		fromOuterTxn,
 		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
-		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName, false /* internal */)
+		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName)
 	}
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
 
+	ex.extraTxnState.fromOuterTxn = fromOuterTxn
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts:    make(map[string]*PreparedStatement),
 		prepStmtsLRU: make(map[string]struct{ prev, next string }),
@@ -1695,6 +1696,11 @@ type connExecutor struct {
 		// this field by value so that the same RNG is reused throughout the
 		// whole session.
 		external eval.RNGFactory
+		// ulidEntropy is used to power gen_random_ulid builtin. It is important
+		// to store this field by value so that the same source is reused
+		// throughout the whole session. Under the hood it'll use 'external' RNG
+		// as the entropy source.
+		ulidEntropy eval.ULIDEntropyFactory
 	}
 
 	// mu contains of all elements of the struct that can be changed
@@ -2205,9 +2211,16 @@ func (ex *connExecutor) run(
 
 	defer func() {
 		ex.server.cfg.SessionRegistry.deregister(sessionID, ex.queryCancelKey)
-		addErr := ex.server.cfg.ClosedSessionCache.add(ctx, sessionID, ex.serialize())
-		if addErr != nil {
-			err = errors.CombineErrors(err, addErr)
+		addToClosedSessionCache := ex.executorType == executorTypeExec
+		if ex.executorType == executorTypeInternal {
+			rate := closedSessionCacheInternalSamplingProbability.Get(&ex.server.cfg.Settings.SV)
+			addToClosedSessionCache = ex.rng.internal.Float64() < rate
+		}
+		if addToClosedSessionCache {
+			addErr := ex.server.cfg.ClosedSessionCache.add(ctx, sessionID, ex.serialize())
+			if addErr != nil {
+				err = errors.CombineErrors(err, addErr)
+			}
 		}
 	}()
 
@@ -3103,9 +3116,7 @@ func (ex *connExecutor) execCopyIn(
 		txn:           ex.state.mu.txn,
 		txnTimestamp:  ex.state.sqlTimestamp,
 		stmtTimestamp: ex.server.cfg.Clock.PhysicalTime(),
-		initPlanner: func(ctx context.Context, p *planner) {
-			ex.initPlanner(ctx, p)
-		},
+		initPlanner:   ex.initPlanner,
 		resetPlanner: func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			ex.resetPlanner(ctx, p, txn, stmtTS)
@@ -3720,8 +3731,8 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			DescIDGenerator:                ex.getDescIDGenerator(),
 			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
 			JobsProfiler:                   p,
-			ULIDEntropy:                    ulid.Monotonic(crypto_rand.Reader, 0),
 			RNGFactory:                     &ex.rng.external,
+			ULIDEntropyFactory:             &ex.rng.ulidEntropy,
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
@@ -3766,7 +3777,6 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil
-	evalCtx.SetDeprecatedContext(ex.Ctx())
 	evalCtx.Txn = txn
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
@@ -3820,41 +3830,54 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.schemaResolver.descCollection = p.Descriptors()
 	p.schemaResolver.authAccessor = p
 	p.reducedAuditConfig = &auditlogging.ReducedAuditConfig{}
+	p.datumAlloc = &tree.DatumAlloc{}
+}
+
+// maybeAdjustMaxTimestampBound checks
+func (ex *connExecutor) maybeAdjustMaxTimestampBound(p *planner, txn *kv.Txn) {
+	if autoRetryReason := ex.state.mu.autoRetryReason; autoRetryReason != nil {
+		// If we are retrying due to an unsatisfiable timestamp bound which is
+		// retriable, it means we were unable to serve the previous minimum
+		// timestamp as there was a schema update in between. When retrying, we
+		// want to keep the same minimum timestamp for the AOST read, but set
+		// the maximum timestamp to the point just before our failed read to
+		// ensure we don't try to read data which may be after the schema change
+		// when we retry.
+		var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
+		if errors.As(autoRetryReason, &minTSErr) {
+			nextMax := minTSErr.MinTimestampBound
+			ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)
+			return
+		}
+	}
+	// Otherwise, only change the historical timestamps if this is a new txn.
+	// This is because resetPlanner can be called multiple times for the same
+	// txn during the extended protocol.
+	if newTxn := txn == nil || p.extendedEvalCtx.Txn != txn; newTxn {
+		ex.extraTxnState.descCollection.ResetMaxTimestampBound()
+	}
 }
 
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
-	p.resetPlanner(ctx, txn, stmtTS, ex.sessionData(), ex.state.mon, ex.sessionMon)
-	autoRetryReason := ex.state.mu.autoRetryReason
-	// If we are retrying due to an unsatisfiable timestamp bound which is
-	// retriable, it means we were unable to serve the previous minimum timestamp
-	// as there was a schema update in between. When retrying, we want to keep the
-	// same minimum timestamp for the AOST read, but set the maximum timestamp
-	// to the point just before our failed read to ensure we don't try to read
-	// data which may be after the schema change when we retry.
-	var minTSErr *kvpb.MinTimestampBoundUnsatisfiableError
+	p.resetPlanner(ctx, txn, ex.sessionData(), ex.state.mon, ex.sessionMon)
+	ex.maybeAdjustMaxTimestampBound(p, txn)
 	// Make sure the default locality specifies the actual gateway region at the
 	// start of query compilation. It could have been overridden to a remote
 	// region when the enforce_home_region session setting is true.
 	p.EvalContext().Locality = p.EvalContext().OriginalLocality
-	if err := autoRetryReason; err != nil && errors.As(err, &minTSErr) {
-		nextMax := minTSErr.MinTimestampBound
-		ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)
-	} else if execinfra.IsDynamicQueryHasNoHomeRegionError(autoRetryReason) {
+	if execinfra.IsDynamicQueryHasNoHomeRegionError(ex.state.mu.autoRetryReason) {
 		if int(ex.state.mu.autoRetryCounter) <= len(p.EvalContext().RemoteRegions) {
 			// Set a fake gateway region for use by the optimizer to inform its
-			// decision on which region to access first in locality-optimized scan
-			// and join operations. This setting does not affect the distsql planner,
-			// and local plans will continue to be run from the actual gateway region.
-			p.EvalContext().Locality =
-				p.EvalContext().Locality.CopyReplaceKeyValue("region", string(p.EvalContext().RemoteRegions[ex.state.mu.autoRetryCounter-1]))
+			// decision on which region to access first in locality-optimized
+			// scan and join operations. This setting does not affect the
+			// distsql planner, and local plans will continue to be run from the
+			// actual gateway region.
+			p.EvalContext().Locality = p.EvalContext().Locality.CopyReplaceKeyValue(
+				"region" /* key */, string(p.EvalContext().RemoteRegions[ex.state.mu.autoRetryCounter-1]),
+			)
 		}
-	} else if newTxn := txn == nil || p.extendedEvalCtx.Txn != txn; newTxn {
-		// Otherwise, only change the historical timestamps if this is a new txn.
-		// This is because resetPlanner can be called multiple times for the same
-		// txn during the extended protocol.
-		ex.extraTxnState.descCollection.ResetMaxTimestampBound()
 	}
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 }

@@ -97,7 +97,8 @@ export const SchemaInsightsPageConnected = withRouter(
   connect<
     SchemaInsightsViewStateProps,
     SchemaInsightsViewDispatchProps,
-    RouteComponentProps
+    RouteComponentProps,
+    AppState
   >(
     mapStateToProps,
     mapDispatchToProps,

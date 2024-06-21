@@ -35,6 +35,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// NOTE: the caller is expected to pass the same seed on `init` and
+// `run` when using this workload.
 var RandomSeed = workload.NewInt64RandomSeed()
 
 type random struct {
@@ -100,7 +102,7 @@ func (w *random) Tables() []workload.Table {
 	tables := make([]workload.Table, w.tables)
 	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	for i := 0; i < w.tables; i++ {
-		createTable := randgen.RandCreateTable(rng, "table", rng.Int(), false /* isMultiRegion */)
+		createTable := randgen.RandCreateTable(context.Background(), rng, "table", rng.Int(), false /* isMultiRegion */)
 		ctx := tree.NewFmtCtx(tree.FmtParsable)
 		createTable.FormatBody(ctx)
 		tables[i] = workload.Table{

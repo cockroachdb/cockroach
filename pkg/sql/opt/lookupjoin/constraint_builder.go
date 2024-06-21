@@ -11,6 +11,7 @@
 package lookupjoin
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -101,6 +102,7 @@ func (c *Constraint) IsUnconstrained() bool {
 type ConstraintBuilder struct {
 	f       *norm.Factory
 	md      *opt.Metadata
+	ctx     context.Context
 	evalCtx *eval.Context
 
 	// The table on the right side of the join to perform the lookup into.
@@ -121,6 +123,7 @@ type ConstraintBuilder struct {
 // can be reused to build lookup join constraints for all indexes in the given
 // table, as long as the join input and ON condition do not change.
 func (b *ConstraintBuilder) Init(
+	ctx context.Context,
 	f *norm.Factory,
 	md *opt.Metadata,
 	evalCtx *eval.Context,
@@ -132,6 +135,7 @@ func (b *ConstraintBuilder) Init(
 	*b = ConstraintBuilder{
 		f:         f,
 		md:        md,
+		ctx:       ctx,
 		evalCtx:   evalCtx,
 		table:     table,
 		leftCols:  leftCols,
@@ -191,7 +195,7 @@ func (b *ConstraintBuilder) Build(
 	firstIdxCol := b.table.IndexColumnID(index, 0)
 	if _, ok := rightEq.Find(firstIdxCol); !ok {
 		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEqSet); !ok {
-			if !HasJoinFilterConstants(b.allFilters, firstIdxCol, b.evalCtx) {
+			if !HasJoinFilterConstants(b.ctx, b.allFilters, firstIdxCol, b.evalCtx) {
 				if _, ok := rightCmp.Find(firstIdxCol); !ok {
 					return Constraint{}, false
 				}
@@ -313,7 +317,7 @@ func (b *ConstraintBuilder) Build(
 		// constant values. We cannot use a NULL value because the lookup
 		// join implements logic equivalent to simple equality between
 		// columns (where NULL never equals anything).
-		foundVals, allIdx, ok := FindJoinFilterConstants(b.allFilters, idxCol, b.evalCtx)
+		foundVals, allIdx, ok := FindJoinFilterConstants(b.ctx, b.allFilters, idxCol, b.evalCtx)
 
 		// If a single constant value was found, project it in the input
 		// and use it as an equality column.
@@ -608,10 +612,10 @@ func (b *ConstraintBuilder) findJoinConstantRangeFilter(
 					// "advance" the end boundary to the previous value in order to make
 					// it inclusive. This operation cannot be directly performed on the
 					// encoded key, so the Datum.Prev method is necessary here.
-					if val.IsMin(b.evalCtx) {
+					if val.IsMin(b.ctx, b.evalCtx) {
 						continue
 					}
-					if _, ok := val.Prev(b.evalCtx); !ok {
+					if _, ok := val.Prev(b.ctx, b.evalCtx); !ok {
 						continue
 					}
 				}

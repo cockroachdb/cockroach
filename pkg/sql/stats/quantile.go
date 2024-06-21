@@ -11,6 +11,7 @@
 package stats
 
 import (
+	"context"
 	"math"
 	"sort"
 	"time"
@@ -238,7 +239,9 @@ func makeQuantile(hist histogram, rowCount float64) (quantile, error) {
 // toHistogram converts a quantile into a histogram, using the provided type and
 // row count. It returns an error if the conversion fails. The quantile must be
 // well-formed before calling toHistogram.
-func (q quantile) toHistogram(colType *types.T, rowCount float64) (histogram, error) {
+func (q quantile) toHistogram(
+	ctx context.Context, colType *types.T, rowCount float64,
+) (histogram, error) {
 	if len(q) < 2 || q[0].p != 0 || q[len(q)-1].p != 1 {
 		return histogram{}, errors.AssertionFailedf("invalid quantile: %v", q)
 	}
@@ -286,7 +289,7 @@ func (q quantile) toHistogram(colType *types.T, rowCount float64) (histogram, er
 
 		// Calculate DistinctRange for this bucket now that NumRange is finalized.
 		distinctRange := estimatedDistinctValuesInRange(
-			compareCtx, currentBucket.NumRange, currentLowerBound, currentUpperBound,
+			ctx, compareCtx, currentBucket.NumRange, currentLowerBound, currentUpperBound,
 		)
 		if !isValidCount(distinctRange) {
 			return errors.AssertionFailedf("invalid histogram DistinctRange: %v", distinctRange)
@@ -306,7 +309,7 @@ func (q quantile) toHistogram(colType *types.T, rowCount float64) (histogram, er
 		if err != nil {
 			return histogram{}, err
 		}
-		cmp, err := upperBound.CompareError(compareCtx, currentUpperBound)
+		cmp, err := upperBound.Compare(ctx, compareCtx, currentUpperBound)
 		if err != nil {
 			return histogram{}, err
 		}
@@ -326,7 +329,7 @@ func (q quantile) toHistogram(colType *types.T, rowCount float64) (histogram, er
 			if !isValidCount(numRange) {
 				return histogram{}, errors.AssertionFailedf("invalid histogram NumRange: %v", numRange)
 			}
-			currentLowerBound = getNextLowerBound(compareCtx, currentUpperBound)
+			currentLowerBound = getNextLowerBound(ctx, compareCtx, currentUpperBound)
 			currentUpperBound = upperBound
 			currentBucket = cat.HistogramBucket{
 				NumEq:         0,

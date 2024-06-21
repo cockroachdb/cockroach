@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -457,15 +461,15 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		insightsProvider.LatencyInformation(),
 	)
 
-	appStats := sqlStats.GetApplicationStats("" /* appName */, false /* internal */)
+	appStats := sqlStats.GetApplicationStats("" /* appName */)
 	statsCollector := sslocal.NewStatsCollector(
 		st,
 		appStats,
 		insightsProvider.Writer(false /* internal */),
 		sessionphase.NewTimes(),
 		sqlStats.GetCounters(),
-		false,
-		nil, /* knobs */
+		false, /* fromOuterTxn */
+		nil,   /* knobs */
 	)
 
 	recordStats := func(testCase *tc) {
@@ -585,15 +589,15 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			nil,
 			insightsProvider.LatencyInformation(),
 		)
-		appStats := sqlStats.GetApplicationStats("" /* appName */, false /* internal */)
+		appStats := sqlStats.GetApplicationStats("" /* appName */)
 		statsCollector := sslocal.NewStatsCollector(
 			st,
 			appStats,
 			insightsProvider.Writer(false /* internal */),
 			sessionphase.NewTimes(),
 			sqlStats.GetCounters(),
-			false,
-			nil, /* knobs */
+			false, /* fromOuterTxn */
+			nil,   /* knobs */
 		)
 
 		for _, txn := range simulatedTxns {
@@ -730,7 +734,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 	}
 
 	g := ctxgroup.WithContext(ctx)
-	var finishedExecute syncutil.AtomicBool
+	var finishedExecute atomic.Bool
 	waitTxnFinish := make(chan struct{})
 	const latencyThreshold = time.Second * 5
 
@@ -740,13 +744,13 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 			tc.Lock()
 			defer tc.Unlock()
 			if tc.query == stmt {
-				finishedExecute.Set(true)
+				finishedExecute.Store(true)
 			}
 		},
 		OnRecordTxnFinish: func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, _ sqlstats.RecordedTxnStats) {
 			tc.Lock()
 			defer tc.Unlock()
-			if !isInternal && tc.query == stmt && finishedExecute.Get() {
+			if !isInternal && tc.query == stmt && finishedExecute.Load() {
 				tc.phaseTimes = phaseTimes.Clone()
 				g.GoCtx(func(ctx context.Context) error {
 					waitTxnFinish <- struct{}{}
@@ -765,7 +769,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 	c, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err, "error connecting with pg url")
 
-	finishedExecute.Set(false)
+	finishedExecute.Store(false)
 
 	var p string
 	var q []interface{}
@@ -1774,4 +1778,115 @@ func TestSQLStats_ConsumeStats(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+// TestSQLStatsInternalStatements verifies SQL stats are captured
+// for internal statements.
+func TestSQLStatsInternalStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				// Disable to make the test deterministic.
+				// We'll be checking to ensure that the internal
+				// statements are only sampled once.
+				DisableProbabilisticSampling: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+	conn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
+
+	getStmtRow := func(appName string, attributedToUser bool) (query string, cnt, sampledCnt int) {
+		prefix := catconstants.InternalAppNamePrefix
+		if attributedToUser {
+			prefix = catconstants.AttributedToUserInternalAppNamePrefix
+		}
+		appName = prefix + "-" + appName
+		row := conn.QueryRow(t, `
+SELECT
+  metadata ->> 'query',
+  statistics -> 'statistics' ->> 'cnt',
+  statistics -> 'execution_statistics' ->> 'cnt'
+FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
+		row.Scan(&query, &cnt, &sampledCnt)
+		return
+	}
+
+	// Within each distinct application, we should only sample the
+	// statement if it's the first time we've seen it.
+	t.Run("internal statement without a transaction", func(t *testing.T) {
+		testutils.RunTrueAndFalse(t, "attributed to user", func(t *testing.T, attributedToUser bool) {
+			appName := "without-txn"
+			for i := 0; i < 10; i++ {
+				_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+					ctx,
+					appName,
+					nil, /* txn */
+					sessiondata.InternalExecutorOverride{AttributeToUser: attributedToUser},
+					"SELECT 1",
+				)
+				require.NoError(t, err)
+			}
+
+			// Verify that the internal statement is captured.
+			query, cnt, sampledCnt := getStmtRow(appName, attributedToUser)
+			require.Equal(t, "SELECT _", query)
+			require.Equal(t, 10, cnt)
+			require.Equal(t, 1, sampledCnt)
+		})
+	})
+
+	t.Run("internal statement with a transaction", func(t *testing.T) {
+		testutils.RunTrueAndFalse(t, "attributed to user", func(t *testing.T, attributedToUser bool) {
+			appName := "with-txn"
+			for i := 0; i < 10; i++ {
+				err := ts.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					_, err := txn.ExecEx(
+						ctx,
+						appName,
+						txn.KV(),
+						sessiondata.InternalExecutorOverride{AttributeToUser: attributedToUser},
+						"SELECT 1",
+					)
+					return err
+				})
+				require.NoError(t, err)
+			}
+
+			// Verify that the internal statement is captured.
+			query, cnt, sampledCnt := getStmtRow(appName, attributedToUser)
+			require.Equal(t, "SELECT _", query)
+			require.Equal(t, 10, cnt)
+			require.Equal(t, 1, sampledCnt)
+		})
+	})
+
+	t.Run("internal multi-statement transaction", func(t *testing.T) {
+		// We don't associate internal statements from outer transactions
+		// with a transaction fingerprint ID. Thus we should have already
+		// seen this query in the "with-txn" application from the previous
+		// test. We should see that the execution counts increase but not
+		// the sampling count.
+		appName := "with-txn"
+		err := ts.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			for i := 0; i < 10; i++ {
+				if _, err := txn.Exec(ctx, appName, txn.KV(), "SELECT 1"); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		require.NoError(t, err)
+
+		// Verify that the internal statement is captured.
+		query, cnt, sampledCnt := getStmtRow(appName, false /* attributedToUser */)
+		require.Equal(t, "SELECT _", query)
+		require.Equal(t, 20, cnt)
+		require.Equal(t, 1, sampledCnt)
+	})
 }

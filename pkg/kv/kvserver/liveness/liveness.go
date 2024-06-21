@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -279,7 +280,7 @@ type NodeLiveness struct {
 
 	// Set to true once Start is called. RegisterCallback can not be called after
 	// Start is called.
-	started syncutil.AtomicBool
+	started atomic.Bool
 }
 
 // Record is a liveness record that has been read from the database, together
@@ -605,7 +606,7 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 // be possible.
 func (nl *NodeLiveness) Start(ctx context.Context) {
 	log.VEventf(ctx, 1, "starting node liveness instance")
-	if nl.started.Get() {
+	if nl.started.Load() {
 		// This is meant to prevent tests from calling start twice.
 		log.Fatal(ctx, "liveness already started")
 	}
@@ -613,7 +614,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = nl.stopper.ShouldQuiesce()
 
-	nl.started.Set(true)
+	nl.started.Store(true)
 
 	_ = nl.stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "liveness-hb", SpanOpt: stop.SterileRootSpan}, func(context.Context) {
 		ambient := nl.ambientCtx
@@ -701,7 +702,9 @@ var errNodeAlreadyLive = errors.New("node already live")
 //
 // If this method returns nil, the node's liveness has been extended,
 // relative to the previous value. It may or may not still be alive
-// when this method returns.
+// when this method returns. It may also not have been extended as far
+// as the livenessThreshold, because the caller may have raced with
+// another heartbeater.
 //
 // On failure, this method returns ErrEpochIncremented, although this
 // may not necessarily mean that the epoch was actually incremented.
@@ -711,7 +714,7 @@ var errNodeAlreadyLive = errors.New("node already live")
 // by the Start loop.
 // TODO(bdarnell): Should we just remove this synchronous heartbeat completely?
 func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness livenesspb.Liveness) error {
-	if buildutil.CrdbTestBuild && !nl.started.Get() {
+	if buildutil.CrdbTestBuild && !nl.started.Load() {
 		// This check was added as part of resolving #106706. We were previously
 		// accidentally relying on synchronous heartbeats to paper over problems,
 		// which only worked most of the time but could lead to hangs.
@@ -839,17 +842,6 @@ func (nl *NodeLiveness) heartbeatInternal(
 		// expired while in flight, so maybe we don't have to care about
 		// that and only need to distinguish between same and different
 		// epochs in our return value.
-		//
-		// TODO(nvanbenschoten): Unlike the early return above, this doesn't
-		// guarantee that the resulting expiration is past minExpiration,
-		// only that it's different than our oldLiveness. Is that ok? It
-		// hasn't caused issues so far, but we might want to detect this
-		// case and retry, at least in the case of the liveness heartbeat
-		// loop. The downside of this is that a heartbeat that's intending
-		// to bump the expiration of a record out 9s into the future may
-		// return a success even if the expiration is only 5 seconds in the
-		// future. The next heartbeat will then start with only 0.5 seconds
-		// before expiration.
 		if actual.IsLive(nl.clock.Now()) && !incrementEpoch {
 			return errNodeAlreadyLive
 		}

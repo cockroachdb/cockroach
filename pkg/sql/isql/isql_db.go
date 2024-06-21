@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -88,6 +89,17 @@ type Executor interface {
 		txn *kv.Txn,
 		o sessiondata.InternalExecutorOverride,
 		stmt string,
+		qargs ...interface{},
+	) (int, error)
+
+	// ExecParsed is like Exec but allows the caller to provide an already
+	// parsed statement.
+	ExecParsed(
+		ctx context.Context,
+		opName string,
+		txn *kv.Txn,
+		o sessiondata.InternalExecutorOverride,
+		parsedStmt statements.Statement[tree.Statement],
 		qargs ...interface{},
 	) (int, error)
 

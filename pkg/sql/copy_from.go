@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -475,9 +474,9 @@ func (c *copyMachine) initVectorizedCopy(ctx context.Context, typs []*types.T) e
 	c.vectorized = true
 	factory := coldataext.NewExtendedColumnFactory(c.p.EvalContext())
 	alloc := colmem.NewLimitedAllocator(ctx, &c.rowsMemAcc, nil /*optional unlimited memory account*/, factory)
-	alloc.SetMaxBatchSize(c.copyBatchRowSize)
 	// TODO(cucaroach): Avoid allocating selection vector.
-	c.accHelper.Init(alloc, c.maxRowMem, typs, false /*alwaysReallocate*/)
+	c.accHelper.Init(alloc, c.maxRowMem, typs, false /* alwaysReallocate */)
+	c.accHelper.SetMaxBatchSize(c.copyBatchRowSize)
 	// Start with small number of rows, compromise between going too big and
 	// overallocating memory and avoiding some doubling growth batches.
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
@@ -621,7 +620,7 @@ Loop:
 		switch typ {
 		case pgwirebase.ClientMsgCopyData:
 			if err := c.processCopyData(
-				ctx, unsafeUint8ToString(readBuf.Msg), false, /* final */
+				ctx, encoding.UnsafeConvertBytesToString(readBuf.Msg), false, /* final */
 			); err != nil {
 				return err
 			}
@@ -996,6 +995,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) (bytesRead int, err e
 			c.resultColumns[i].Typ,
 			pgwirebase.FormatBinary,
 			data,
+			c.p.datumAlloc,
 		)
 		if err != nil {
 			return bytesRead, pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
@@ -1143,19 +1143,33 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 			// for the next batch.
 			return c.doneWithRows(ctx)
 		} else {
-			// It is currently only safe to retry if we are not in atomic copy
-			// mode & we are in an implicit transaction.
-			// NOTE: we cannot re-use the connExecutor retry scheme here as COPY
-			// consumes directly from the read buffer, and the data would no
-			// longer be available during the retry.
-			if c.implicitTxn && !c.p.SessionData().CopyFromAtomicEnabled && c.p.SessionData().CopyFromRetriesEnabled && errIsRetriable(err) {
-				log.SqlExec.Infof(ctx, "%s failed on attempt %d and is retrying, error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
-				if c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry != nil {
-					if err := c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry(); err != nil {
-						return err
+			if errIsRetriable(err) {
+				log.SqlExec.Infof(ctx, "%s failed on attempt %d and with retriable error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
+				// It is currently only safe to retry if we are not in atomic copy
+				// mode & we are in an implicit transaction.
+				//
+				// NOTE: we cannot re-use the connExecutor retry scheme here as COPY
+				// consumes directly from the read buffer, and the data would no
+				// longer be available during the retry.
+				if c.implicitTxn && !c.p.SessionData().CopyFromAtomicEnabled && c.p.SessionData().CopyFromRetriesEnabled {
+					log.SqlExec.Infof(ctx, "%s is retrying", c.copyFromAST.String())
+					if c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry != nil {
+						if err := c.p.ExecCfg().TestingKnobs.CopyFromInsertRetry(); err != nil {
+							return err
+						}
 					}
+					continue
+				} else {
+					log.SqlExec.Infof(
+						ctx,
+						"%s is not retrying; "+
+							"implicit: %v; copy_from_atomic_enabled: %v; copy_from_retriable_enabled %v",
+						c.copyFromAST.String(), c.implicitTxn,
+						c.p.SessionData().CopyFromAtomicEnabled, c.p.SessionData().CopyFromRetriesEnabled,
+					)
 				}
-				continue
+			} else {
+				log.SqlExec.Infof(ctx, "%s failed on attempt %d and with non-retriable error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
 			}
 			return err
 		}
@@ -1277,7 +1291,7 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 func (c *copyMachine) readTextTupleDatum(ctx context.Context, parts [][]byte) error {
 	datums := c.scratchRow
 	for i, part := range parts {
-		s := unsafeUint8ToString(part)
+		s := encoding.UnsafeConvertBytesToString(part)
 		// Disable NULL conversion during file uploads.
 		if !c.forceNotNull && s == c.null {
 			datums[i] = tree.DNull
@@ -1320,7 +1334,7 @@ func (c *copyMachine) readTextTupleDatum(ctx context.Context, parts [][]byte) er
 
 func (c *copyMachine) readTextTupleVec(ctx context.Context, parts [][]byte) error {
 	for i, part := range parts {
-		s := unsafeUint8ToString(part)
+		s := encoding.UnsafeConvertBytesToString(part)
 		// Disable NULL conversion during file uploads.
 		if !c.forceNotNull && s == c.null {
 			c.valueHandlers[i].Null()
@@ -1470,7 +1484,3 @@ const (
 	binaryStateRead
 	binaryStateFoundTrailer
 )
-
-func unsafeUint8ToString(data []uint8) string {
-	return *(*string)(unsafe.Pointer(&data))
-}

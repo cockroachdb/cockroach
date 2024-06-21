@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -339,23 +340,44 @@ func CreateCluster(
 }
 
 // GrowCluster adds new nodes to an existing cluster.
-func GrowCluster(l *logger.Logger, c *Cluster, NumNodes int) error {
-	names := make([]string, 0, NumNodes)
+func GrowCluster(l *logger.Logger, c *Cluster, numNodes int) error {
+	names := make([]string, 0, numNodes)
 	offset := len(c.VMs) + 1
-	for i := offset; i < offset+NumNodes; i++ {
+	for i := offset; i < offset+numNodes; i++ {
 		vmName := vm.Name(c.Name, i)
 		names = append(names, vmName)
 	}
 
 	providers := c.Clouds()
-	if len(providers) != 1 && providers[0] != gce.ProviderName {
-		return errors.Errorf("cluster %s is not on gce, growing a cluster is currently only supported on %s",
+	if len(providers) != 1 || providers[0] != gce.ProviderName {
+		return errors.Errorf("cannot grow cluster %s, growing a cluster is currently only supported on %s",
 			c.Name, gce.ProviderName)
 	}
 
 	// Only GCE supports expanding a cluster.
 	return vm.ForProvider(gce.ProviderName, func(p vm.Provider) error {
 		return p.Grow(l, c.VMs, c.Name, names)
+	})
+}
+
+// ShrinkCluster removes tail nodes from an existing cluster.
+func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
+	providers := c.Clouds()
+	if len(providers) != 1 || providers[0] != gce.ProviderName {
+		return errors.Errorf("cannot shrink cluster %s, shrinking a cluster is currently only supported on %s",
+			c.Name, gce.ProviderName)
+	}
+
+	if numNodes >= len(c.VMs) {
+		return errors.Errorf("cannot shrink cluster %s by %d nodes, only %d nodes in cluster",
+			c.Name, numNodes, len(c.VMs))
+	}
+	// Always delete from the tail.
+	vmsToDelete := c.VMs[len(c.VMs)-numNodes:]
+
+	// Only GCE supports shrinking a cluster.
+	return vm.ForProvider(gce.ProviderName, func(p vm.Provider) error {
+		return p.Shrink(l, vmsToDelete, c.Name)
 	})
 }
 
@@ -366,8 +388,18 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 		if _, ok := promhelperclient.SupportedPromProjects[node.Project]; ok &&
 			node.Provider == gce.ProviderName {
 			if err := promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
-				c.Name, false, l); err != nil {
-				l.Errorf("Failed to delete the cluster config: %v", err)
+				c.Name, false, false /* insecure */, l); err != nil {
+				// TODO(bhaskar): Obtain secure cluster information.
+				// Cluster does not have the information on secure or not. So, we retry as insecure
+				// if delete fails with cluster as secure
+				if strings.Contains(err.Error(), "request failed with status 404") {
+					if err = promhelperclient.NewPromClient().DeleteClusterConfig(context.Background(),
+						c.Name, false, true /* insecure */, l); err != nil {
+						l.Errorf("Failed to delete the cluster config with cluster as insecure and secure: %v", err)
+					}
+				} else {
+					l.Errorf("Failed to delete the cluster config with cluster as secure: %v", err)
+				}
 			}
 			break
 		}

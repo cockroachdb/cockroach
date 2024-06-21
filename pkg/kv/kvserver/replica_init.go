@@ -325,7 +325,7 @@ func (r *Replica) initFromSnapshotLockedRaftMuLocked(
 // node. It is false when a replica has been created in response to an incoming
 // message but we are waiting for our initial snapshot.
 func (r *Replica) IsInitialized() bool {
-	return r.isInitialized.Get()
+	return r.isInitialized.Load()
 }
 
 // TenantID returns the associated tenant ID and a boolean to indicate that it
@@ -411,7 +411,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	}
 
 	r.rangeStr.store(r.replicaID, desc)
-	r.isInitialized.Set(desc.IsInitialized())
+	r.isInitialized.Store(desc.IsInitialized())
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc

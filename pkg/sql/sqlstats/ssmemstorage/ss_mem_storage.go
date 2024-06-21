@@ -97,7 +97,6 @@ type Container struct {
 	mon       *mon.BytesMonitor
 
 	knobs              *sqlstats.TestingKnobs
-	insights           insights.Writer
 	latencyInformation insights.LatencyInformation
 }
 
@@ -110,7 +109,6 @@ func New(
 	mon *mon.BytesMonitor,
 	appName string,
 	knobs *sqlstats.TestingKnobs,
-	insightsWriter insights.Writer,
 	latencyInformation insights.LatencyInformation,
 ) *Container {
 	s := &Container{
@@ -118,7 +116,6 @@ func New(
 		appName:            appName,
 		mon:                mon,
 		knobs:              knobs,
-		insights:           insightsWriter,
 		latencyInformation: latencyInformation,
 		uniqueServerCount:  uniqueServerCount,
 	}
@@ -220,7 +217,6 @@ func NewTempContainerFromExistingStmtStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
-		nil, /* insights */
 		nil, /*latencyInformation */
 	)
 
@@ -294,7 +290,6 @@ func NewTempContainerFromExistingTxnStats(
 		nil, /* mon */
 		appName,
 		nil, /* knobs */
-		nil, /* insights */
 		nil, /* latencyInformation */
 	)
 
@@ -322,8 +317,6 @@ func NewTempContainerFromExistingTxnStats(
 // NewApplicationStatsWithInheritedOptions implements the
 // sqlstats.ApplicationStats interface.
 func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.ApplicationStats {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	return New(
 		s.st,
 		// There is no need to constraint txn fingerprint limit since in temporary
@@ -332,7 +325,6 @@ func (s *Container) NewApplicationStatsWithInheritedOptions() sqlstats.Applicati
 		s.mon,
 		s.appName,
 		s.knobs,
-		s.insights,
 		s.latencyInformation,
 	)
 }

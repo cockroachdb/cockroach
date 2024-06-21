@@ -242,8 +242,9 @@ var retiredSettings = map[InternalKey]struct{}{
 	"server.controller.default_tenant.check_service.enabled": {},
 
 	// removed as of 24.2
-	"storage.value_blocks.enabled": {},
-	"kv.gc.sticky_hint.enabled":    {},
+	"storage.value_blocks.enabled":       {},
+	"kv.gc.sticky_hint.enabled":          {},
+	"kv.rangefeed.range_stuck_threshold": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults

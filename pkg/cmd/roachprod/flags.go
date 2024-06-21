@@ -37,6 +37,7 @@ var (
 	numNodes              int
 	numRacks              int
 	username              string
+	database              string
 	dryrun                bool
 	destroyAllMine        bool
 	destroyAllLocal       bool
@@ -68,6 +69,9 @@ var (
 	sig                   = 9
 	waitFlag              = false
 	maxWait               = 0
+	deploySig             = 15
+	deployWaitFlag        = true
+	deployMaxWait         = 300
 	pause                 = time.Duration(0)
 	createVMOpts          = vm.DefaultCreateOpts()
 	startOpts             = roachprod.DefaultStartOpts()
@@ -214,6 +218,7 @@ func initFlags() {
 	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, loadBalancerPGUrl} {
 		cmd.Flags().StringVar(&authMode,
 			"auth-mode", defaultAuthMode, fmt.Sprintf("form of authentication to use, valid auth-modes: %v", maps.Keys(pgAuthModes)))
+		cmd.Flags().StringVar(&database, "database", "", "database to use")
 	}
 
 	pprofCmd.Flags().DurationVar(&pprofOpts.Duration,
@@ -258,19 +263,23 @@ func initFlags() {
 
 	// Flags for processes that stop (kill) processes.
 	for _, stopProcessesCmd := range []*cobra.Command{stopCmd, stopInstanceCmd, deployCmd} {
-		defaultSig := sig
-		defaultWait := waitFlag
-		defaultMaxWait := maxWait
+		// Cobra does not support reusing flags across multiple commands, especially
+		// if the defaults differ, so we need to supply different flags for the case
+		// where the defaults are different.
+		// See: https://github.com/spf13/cobra/issues/1398
+		sigPtr := &sig
+		waitPtr := &waitFlag
+		maxWaitPtr := &maxWait
 		// deployCmd is a special case, because it is used to stop processes in a
 		// rolling restart, and we want to drain the nodes by default.
 		if stopProcessesCmd == deployCmd {
-			defaultSig = 15
-			defaultWait = true
-			defaultMaxWait = 300
+			sigPtr = &deploySig
+			waitPtr = &deployWaitFlag
+			maxWaitPtr = &deployMaxWait
 		}
-		stopProcessesCmd.Flags().IntVar(&sig, "sig", defaultSig, "signal to pass to kill")
-		stopProcessesCmd.Flags().BoolVar(&waitFlag, "wait", defaultWait, "wait for processes to exit")
-		stopProcessesCmd.Flags().IntVar(&maxWait, "max-wait", defaultMaxWait, "approx number of seconds to wait for processes to exit")
+		stopProcessesCmd.Flags().IntVar(sigPtr, "sig", *sigPtr, "signal to pass to kill")
+		stopProcessesCmd.Flags().BoolVar(waitPtr, "wait", *waitPtr, "wait for processes to exit")
+		stopProcessesCmd.Flags().IntVar(maxWaitPtr, "max-wait", *maxWaitPtr, "approx number of seconds to wait for processes to exit")
 	}
 	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
 

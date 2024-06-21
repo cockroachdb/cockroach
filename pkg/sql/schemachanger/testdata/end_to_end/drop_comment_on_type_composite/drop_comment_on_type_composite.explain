@@ -1,0 +1,25 @@
+/* setup */
+CREATE TYPE roach_legs AS (legs INT);
+COMMENT ON TYPE roach_legs IS 'Second-CRDB-comment-on-types';
+
+/* test */
+EXPLAIN (DDL) COMMENT ON TYPE roach_legs IS NULL;
+----
+Schema change plan for COMMENT ON TYPE ‹defaultdb›.‹public›.‹roach_legs› IS NULL;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → ABSENT TypeComment:{DescID: 104 (roach_legs), Comment: "Second-CRDB-comment-on-types"}
+ │         └── 1 Mutation operation
+ │              └── RemoveTypeComment {"TypeID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── ABSENT → PUBLIC TypeComment:{DescID: 104 (roach_legs), Comment: "Second-CRDB-comment-on-types"}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward ABSENT
+           │    └── PUBLIC → ABSENT TypeComment:{DescID: 104 (roach_legs), Comment: "Second-CRDB-comment-on-types"}
+           └── 1 Mutation operation
+                └── RemoveTypeComment {"TypeID":104}

@@ -236,9 +236,10 @@ func createTestStoreWithoutStart(
 	cfg.Transport = NewRaftTransport(
 		cfg.AmbientCtx,
 		cfg.Settings,
+		stopper,
+		cfg.Clock,
 		cfg.NodeDialer,
 		server,
-		stopper,
 		kvflowdispatch.NewDummyDispatch(),
 		NoopStoresFlowControlIntegration{},
 		NoopRaftTransportDisconnectListener{},
@@ -545,7 +546,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	require.NoError(t, eng.PutUnversioned(roachpb.Key("foo"), []byte("bar")))
 
 	cfg := TestStoreConfig(nil)
-	cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings)
+	cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, cfg.Clock)
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.

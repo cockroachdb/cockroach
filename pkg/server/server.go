@@ -630,9 +630,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	raftTransport := kvserver.NewRaftTransport(
 		cfg.AmbientCtx,
 		st,
+		stopper,
+		clock,
 		kvNodeDialer,
 		grpcServer.Server,
-		stopper,
 		admissionControl.kvflowTokenDispatch,
 		admissionControl.storesFlowControl,
 		admissionControl.storesFlowControl,
@@ -2328,7 +2329,7 @@ func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 		return err
 	}
 
-	s.sqlServer.isReady.Set(true)
+	s.sqlServer.isReady.Store(true)
 
 	log.Event(ctx, "server ready")
 	return nil

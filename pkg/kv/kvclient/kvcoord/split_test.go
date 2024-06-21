@@ -319,6 +319,15 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Ensure the sticky bit was removed.
+	err = s.DB.GetProto(ctx, descKey, &desc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !desc.StickyBit.IsEmpty() {
+		t.Fatal("Sticky bit not unset after unsplitting")
+	}
+
 	// Splitting range.
 	if err := s.DB.AdminSplit(
 		ctx,
@@ -336,6 +345,11 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	if desc.StickyBit.IsEmpty() {
 		t.Fatal("Sticky bit not set after splitting")
 	}
+
+	// TODO(arul): we should add something to ensure that the sticky bit is updated
+	// in the in-memory descriptor as well. See the comment on updateRangeDescriptor.
+	// As is, the test wouldn't catch if the StickyBitTrigger wasn't run in
+	// splitTxnStickyUpdateAttempt.
 }
 
 func TestSplitPredicates(t *testing.T) {

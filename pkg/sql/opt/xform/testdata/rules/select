@@ -2772,6 +2772,40 @@ scan singleton_check
  ├── key: ()
  └── fd: ()-->(1,2)
 
+# Regression test for #125422. An equality between with two variables implies
+# that either variable is not null, allowing a scan over a partial index with an
+# IS NOT NULL predicate.
+exec-ddl
+CREATE TABLE t125422 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX t125422_a_idx (a) WHERE a IS NOT NULL
+)
+----
+
+opt
+SELECT k FROM t125422@t125422_a_idx WHERE a = b
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── key: (1)
+      ├── fd: (1)-->(2,3), (2)==(3), (3)==(2)
+      ├── index-join t125422
+      │    ├── columns: k:1!null a:2 b:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── scan t125422@t125422_a_idx,partial
+      │         ├── columns: k:1!null a:2!null
+      │         ├── flags: force-index=t125422_a_idx
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
+      └── filters
+           └── a:2 = b:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+
 # --------------------------------------------------
 # GenerateInvertedIndexScans
 # --------------------------------------------------
@@ -13017,3 +13051,18 @@ select
  │    └── columns: c0:1 c1:2
  └── filters
       └── c0:1 = '2001-12-01 00:00:00' [outer=(1), constraints=(/1: [/'2001-12-01 00:00:00' - /'2001-12-01 00:00:00']; tight), fd=()-->(1)]
+
+# Regression test for 124455: LIKE expressions with an escaped backslash before
+# the wildcard should still become constrained scans.
+
+exec-ddl
+CREATE TABLE t124455 (s STRING PRIMARY KEY)
+----
+
+opt expect=GenerateConstrainedScans
+SELECT * FROM t124455 WHERE s LIKE e'\\\\%'
+----
+scan t124455
+ ├── columns: s:1!null
+ ├── constraint: /1: [/e'\\' - /']')
+ └── key: (1)

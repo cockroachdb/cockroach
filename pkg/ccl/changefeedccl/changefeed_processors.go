@@ -193,9 +193,6 @@ func newChangeAggregatorProcessor(
 	}()
 
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "changeagg-mem")
-	// CDC DistSQL flows are long-living, so we mark the memory monitors
-	// accordingly.
-	memMonitor.MarkLongLiving()
 	ca := &changeAggregator{
 		flowCtx:           flowCtx,
 		spec:              spec,
@@ -409,10 +406,7 @@ func (ca *changeAggregator) startKVFeed(
 	opts changefeedbase.StatementOptions,
 ) (kvevent.Reader, chan struct{}, chan error, error) {
 	cfg := ca.flowCtx.Cfg
-	// CDC DistSQL flows are long-living, so we mark the memory monitors
-	// accordingly.
-	const longLiving = true
-	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", memLimit, parentMemMon, longLiving)
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", memLimit, parentMemMon, false /* longLiving */)
 	kvFeedMemMon.StartNoReserved(ctx, parentMemMon)
 	buf := kvevent.NewThrottlingBuffer(
 		kvevent.NewMemBuffer(kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
@@ -434,16 +428,12 @@ func (ca *changeAggregator) startKVFeed(
 		defer kvFeedMemMon.Stop(ctx)
 		errCh <- kvfeed.Run(ctx, kvfeedCfg)
 	}); err != nil {
+		// Ensure that the memory monitor is closed properly.
+		kvFeedMemMon.Stop(ctx)
 		return nil, nil, nil, err
 	}
 
 	return buf, doneCh, errCh, nil
-}
-
-func (ca *changeAggregator) waitForKVFeedDone() {
-	if ca.kvFeedDoneCh != nil {
-		<-ca.kvFeedDoneCh
-	}
 }
 
 func (ca *changeAggregator) checkKVFeedErr() error {
@@ -602,14 +592,16 @@ func (ca *changeAggregator) close() {
 	if ca.Closed {
 		return
 	}
-	if ca.cancel == nil {
-		// consumer close may be called even before Start is called.
-		// If that's the case, cancel is not initialized.
-		return
+	if ca.cancel != nil {
+		// consumer close may be called even before Start is called. If that's
+		// the case, cancel is not initialized. We still need to perform the
+		// remainder of the cleanup though.
+		ca.cancel()
 	}
-	ca.cancel()
-	// Wait for the poller to finish shutting down.
-	ca.waitForKVFeedDone()
+	// Wait for the poller to finish shutting down if it was started.
+	if ca.kvFeedDoneCh != nil {
+		<-ca.kvFeedDoneCh
+	}
 
 	if ca.eventConsumer != nil {
 		_ = ca.eventConsumer.Close() // context cancellation expected here.
@@ -631,7 +623,6 @@ func (ca *changeAggregator) close() {
 	}
 
 	ca.memAcc.Close(ca.Ctx())
-
 	ca.MemMonitor.Stop(ca.Ctx())
 	ca.InternalClose()
 }
@@ -648,18 +639,22 @@ var aggregatorHeartbeatFrequency = settings.RegisterDurationSetting(
 var aggregatorFlushJitter = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"changefeed.aggregator.flush_jitter",
-	"jitter aggregator flushes as a fraction of min_checkpoint_frequency",
+	"jitter aggregator flushes as a fraction of min_checkpoint_frequency. This "+
+		"setting has no effect if min_checkpoint_frequency is set to 0.",
 	0.1, /* 10% */
 	settings.NonNegativeFloat,
 	settings.WithPublic,
 )
 
-func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) time.Time {
-	if j == 0 {
-		return s.Now().Add(d)
+func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) (time.Time, error) {
+	if j < 0 || d < 0 {
+		return s.Now(), errors.AssertionFailedf("invalid jitter value: %f, duration: %s", j, d)
+	}
+	if j == 0 || d == 0 {
+		return s.Now().Add(d), nil
 	}
 	nextFlush := d + time.Duration(rand.Int63n(int64(j*float64(d))))
-	return s.Now().Add(nextFlush)
+	return s.Now().Add(nextFlush), nil
 }
 
 // Next is part of the RowSource interface.
@@ -805,7 +800,7 @@ func (ca *changeAggregator) flushBufferedEvents() error {
 // noteResolvedSpan periodically flushes Frontier progress from the current
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
-func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
+func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (returnErr error) {
 	if resolved.Timestamp.IsEmpty() {
 		// @0.0 resolved timestamps could come in from rangefeed checkpoint.
 		// When rangefeed starts running, it emits @0.0 resolved timestamp.
@@ -841,8 +836,11 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 	if checkpointFrontier {
 		defer func() {
-			ca.nextHighWaterFlush = nextFlushWithJitter(
+			ca.nextHighWaterFlush, err = nextFlushWithJitter(
 				timeutil.DefaultTimeSource{}, ca.flushFrequency, aggregatorFlushJitter.Get(sv))
+			if err != nil {
+				returnErr = errors.CombineErrors(returnErr, err)
+			}
 		}()
 		return ca.flushFrontier()
 	}
@@ -860,8 +858,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		}()
 		return ca.flushFrontier()
 	}
-
-	return nil
+	return returnErr
 }
 
 // flushFrontier flushes sink and emits resolved timestamp if needed.
@@ -1135,9 +1132,6 @@ func newChangeFrontierProcessor(
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "changefntr-mem")
-	// CDC DistSQL flows are long-living, so we mark the memory monitors
-	// accordingly.
-	memMonitor.MarkLongLiving()
 	sf, err := makeSchemaChangeFrontier(hlc.Timestamp{}, spec.TrackedSpans...)
 	if err != nil {
 		return nil, err
@@ -1550,9 +1544,6 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 
 	maybeLogBehindSpan(cf.Ctx(), "coordinator", cf.frontier, frontierChanged, &cf.flowCtx.Cfg.Settings.SV)
 
-	// If frontier changed, we emit resolved timestamp.
-	emitResolved := frontierChanged
-
 	checkpointed, err := cf.maybeCheckpointJob(resolved, frontierChanged)
 	if err != nil {
 		return err
@@ -1561,9 +1552,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 	// Emit resolved timestamp only if we have checkpointed the job.
 	// Usually, this happens every time frontier changes, but we can skip some updates
 	// if we update frontier too rapidly.
-	emitResolved = checkpointed
-
-	if emitResolved {
+	if checkpointed {
 		// Keeping this after the checkpointJobProgress call will avoid
 		// some duplicates if a restart happens.
 		newResolved := cf.frontier.Frontier()
@@ -1688,7 +1677,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			}
 
 			if updateRunStatus {
-				md.Progress.RunningStatus = fmt.Sprintf("running: resolved=%s", frontier)
+				progress.RunningStatus = fmt.Sprintf("running: resolved=%s", frontier)
 			}
 
 			ju.UpdateProgress(progress)
@@ -1704,6 +1693,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 			return nil
 		}); err != nil {
 			return false, err
+		}
+		if log.V(2) {
+			log.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s", frontier, checkpoint)
 		}
 	}
 

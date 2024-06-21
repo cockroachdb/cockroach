@@ -60,3 +60,6 @@ pkg/testutils/serverutils/*_generated.go
 # Temporary directories during gomock generate
 **/gomock_reflect_*
 __debug_bin*
+
+.DS_Store
+.idea/

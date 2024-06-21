@@ -27,23 +27,35 @@ import (
 
 type timeSource func() time.Time
 
-// ClosedSessionCacheCapacity is the cluster setting that controls the maximum number
-// of sessions in the cache.
-var ClosedSessionCacheCapacity = settings.RegisterIntSetting(
+// closedSessionCacheCapacity is the cluster setting that controls the maximum
+// number of sessions in the cache.
+var closedSessionCacheCapacity = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.closed_session_cache.capacity",
 	"the maximum number of sessions in the cache",
 	1000, // TODO(gtr): Totally arbitrary for now, adjust later.
 	settings.WithPublic)
 
-// ClosedSessionCacheTimeToLive is the cluster setting that controls the maximum time
-// to live for a session's information in the cache, in seconds.
-var ClosedSessionCacheTimeToLive = settings.RegisterIntSetting(
+// closedSessionCacheTimeToLive is the cluster setting that controls the maximum
+// time to live for a session's information in the cache, in seconds.
+var closedSessionCacheTimeToLive = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.closed_session_cache.time_to_live",
 	"the maximum time to live, in seconds",
 	3600, // One hour
 	settings.WithPublic)
+
+// closedSessionCacheInternalSamplingProbability controls the sampling rate for
+// internal queries before including them into the cache. Serializing the
+// connExecutor could have non-trivial overhead for frequently executed internal
+// queries, so we want to reduce that.
+var closedSessionCacheInternalSamplingProbability = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.closed_session_cache.internal_queries.sample_rate",
+	"determines the sampling rate at which internal queries are included into the closed session cache",
+	0.01,
+	settings.Fraction,
+)
 
 // ClosedSessionCache is an in-memory FIFO cache for closed sessions.
 type ClosedSessionCache struct {
@@ -64,14 +76,14 @@ func NewClosedSessionCache(
 	st *cluster.Settings, parentMon *mon.BytesMonitor, timeSrc timeSource,
 ) *ClosedSessionCache {
 	monitor := mon.NewMonitorInheritWithLimit(
-		"closed-session-cache", 0 /* limit*/, parentMon, true, /* longLiving */
+		"closed-session-cache", 0 /* limit */, parentMon, true, /* longLiving */
 	)
 
 	c := &ClosedSessionCache{st: st, timeSrc: timeSrc}
 	c.mu.data = cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheFIFO,
 		ShouldEvict: func(size int, _, _ interface{}) bool {
-			capacity := ClosedSessionCacheCapacity.Get(&st.SV)
+			capacity := closedSessionCacheCapacity.Get(&st.SV)
 			return int64(size) > capacity
 		},
 		OnEvictedEntry: func(entry *cache.Entry) {
@@ -139,7 +151,7 @@ func (c *ClosedSessionCache) getSessions() []*sessionNode {
 
 	c.mu.data.Do(func(entry *cache.Entry) {
 		node := entry.Value.(*sessionNode)
-		if int64(node.getAge(c.timeSrc).Seconds()) > ClosedSessionCacheTimeToLive.Get(&c.st.SV) {
+		if int64(node.getAge(c.timeSrc).Seconds()) > closedSessionCacheTimeToLive.Get(&c.st.SV) {
 			sessionsToEvict = append(sessionsToEvict, node)
 		} else {
 			result = append(result, node)

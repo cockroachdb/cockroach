@@ -446,7 +446,7 @@ func (tm *TableMeta) OrigCheckConstraintsStats(
 // CacheIndexPartitionLocalities caches locality prefix sorters in the table
 // metadata for indexes that have a mix of local and remote partitions. It can
 // be called multiple times if necessary to update with new indexes.
-func (tm *TableMeta) CacheIndexPartitionLocalities(evalCtx *eval.Context) {
+func (tm *TableMeta) CacheIndexPartitionLocalities(ctx context.Context, evalCtx *eval.Context) {
 	tab := tm.Table
 	if cap(tm.indexPartitionLocalities) < tab.IndexCount() {
 		tm.indexPartitionLocalities = make([]partition.PrefixSorter, tab.IndexCount())
@@ -455,7 +455,7 @@ func (tm *TableMeta) CacheIndexPartitionLocalities(evalCtx *eval.Context) {
 	for indexOrd, n := 0, tab.IndexCount(); indexOrd < n; indexOrd++ {
 		index := tab.Index(indexOrd)
 		if localPartitions, ok := partition.HasMixOfLocalAndRemotePartitions(evalCtx, index); ok {
-			ps := partition.GetSortedPrefixes(index, localPartitions, evalCtx)
+			ps := partition.GetSortedPrefixes(ctx, index, localPartitions, evalCtx)
 			tm.indexPartitionLocalities[indexOrd] = ps
 		}
 	}

@@ -12,10 +12,7 @@ package batcheval
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -56,69 +53,14 @@ func evalNewLease(
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
 	prevLease roachpb.Lease,
-	isExtension bool,
 	isTransfer bool,
 ) (result.Result, error) {
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
 
-	// Ensure either an Epoch is set or Start < Expiration.
-	if (lease.Type() == roachpb.LeaseExpiration && lease.GetExpiration().LessEq(lease.Start.ToTimestamp())) ||
-		(lease.Type() == roachpb.LeaseEpoch && lease.Expiration != nil) {
-		// This amounts to a bug.
-		return newFailedLeaseTrigger(isTransfer),
-			&kvpb.LeaseRejectedError{
-				Existing:  prevLease,
-				Requested: lease,
-				Message: fmt.Sprintf("illegal lease: epoch=%d, interval=[%s, %s)",
-					lease.Epoch, lease.Start, lease.Expiration),
-			}
-	}
-
-	// Verify that requesting replica is part of the current replica set.
-	desc := rec.Desc()
-	if _, ok := desc.GetReplicaDescriptor(lease.Replica.StoreID); !ok {
-		return newFailedLeaseTrigger(isTransfer),
-			&kvpb.LeaseRejectedError{
-				Existing:  prevLease,
-				Requested: lease,
-				Message:   "replica not found",
-			}
-	}
-
-	// Requests should not set the sequence number themselves. Set the sequence
-	// number here based on whether the lease is equivalent to the one it's
-	// succeeding.
-	if lease.Sequence != 0 {
-		return newFailedLeaseTrigger(isTransfer),
-			&kvpb.LeaseRejectedError{
-				Existing:  prevLease,
-				Requested: lease,
-				Message:   "sequence number should not be set",
-			}
-	}
-	isV24_1 := rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start)
+	// Construct the prior read summary if the lease sequence is changing.
 	var priorReadSum *rspb.ReadSummary
-	if prevLease.Equivalent(lease, isV24_1 /* expToEpochEquiv */) {
-		// If the proposed lease is equivalent to the previous lease, it is
-		// given the same sequence number. This is subtle, but is important
-		// to ensure that leases which are meant to be considered the same
-		// lease for the purpose of matching leases during command execution
-		// (see Lease.Equivalent) will be considered so. For example, an
-		// extension to an expiration-based lease will result in a new lease
-		// with the same sequence number.
-		lease.Sequence = prevLease.Sequence
-	} else {
-		// We set the new lease sequence to one more than the previous lease
-		// sequence. This is safe and will never result in repeated lease
-		// sequences because the sequence check beneath Raft acts as an atomic
-		// compare-and-swap of sorts. If two lease requests are proposed in
-		// parallel, both with the same previous lease, only one will be
-		// accepted and the other will get a LeaseRejectedError and need to
-		// retry with a different sequence number. This is actually exactly what
-		// the sequence number is used to enforce!
-		lease.Sequence = prevLease.Sequence + 1
-
+	if prevLease.Sequence != lease.Sequence {
 		// If the new lease is not equivalent to the old lease, construct a read
 		// summary to instruct the new leaseholder on how to update its timestamp
 		// cache to respect prior reads served on the range.
@@ -142,13 +84,6 @@ func evalNewLease(
 			worstCaseSum := rspb.FromTimestamp(lease.Start.ToTimestamp())
 			priorReadSum = &worstCaseSum
 		}
-	}
-
-	// Record information about the type of event that resulted in this new lease.
-	if isTransfer {
-		lease.AcquisitionType = roachpb.LeaseAcquisitionType_Transfer
-	} else {
-		lease.AcquisitionType = roachpb.LeaseAcquisitionType_Request
 	}
 
 	// Store the lease to disk & in-memory.

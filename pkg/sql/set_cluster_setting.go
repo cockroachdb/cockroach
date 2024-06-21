@@ -191,7 +191,7 @@ func (p *planner) SetClusterSetting(
 	}
 
 	if nameStatus != settings.NameActive {
-		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
+		p.BufferClientNotice(ctx, settingAlternateNameNotice(name, setting.Name()))
 		name = setting.Name()
 	}
 
@@ -267,7 +267,8 @@ func (p *planner) getAndValidateTypedClusterSetting(
 				requiredType = types.Int
 			case *settings.FloatSetting:
 				requiredType = types.Float
-			case *settings.EnumSetting:
+			case settings.AnyEnumSetting:
+				// EnumSettings can be set with either strings or integers.
 				requiredType = types.Any
 			case *settings.DurationSetting:
 				requiredType = types.Interval
@@ -800,7 +801,7 @@ func toSettingString(
 			return settings.EncodeFloat(float64(*f)), nil
 		}
 		return "", errors.Errorf("cannot use %s %T value for float setting", d.ResolvedType(), d)
-	case *settings.EnumSetting:
+	case settings.AnyEnumSetting:
 		if i, intOK := d.(*tree.DInt); intOK {
 			v, ok := setting.ParseEnum(settings.EncodeInt(int64(*i)))
 			if ok {

@@ -49,9 +49,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/fifo"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/replay"
@@ -129,34 +131,145 @@ var MinCapacityForBulkIngest = settings.RegisterFloatSetting(
 	0.05,
 )
 
-const (
-	compressionAlgorithmSnappy int64 = 1
-	compressionAlgorithmZstd   int64 = 2
+// BlockLoadConcurrencyLimit controls the maximum number of outstanding
+// filesystem read operations for loading sstable blocks. This limit is a
+// last-resort queueing mechanism to avoid memory issues or running against the
+// Go OS system threads limit (see runtime.SetMaxThreads() with default value
+// 10,000).
+//
+// The limit is distributed evenly between all stores (rounding up). This is to
+// provide isolation between the stores - we don't want one bad disk blocking
+// other stores.
+var BlockLoadConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.block_load.node_max_active",
+	"maximum number of outstanding sstable block reads per host",
+	7500,
+	settings.IntInRange(1, 9000),
 )
 
-// compressionAlgorithm determines the compression algorithm used to compress
-// data blocks when writing sstables. Users should call getCompressionAlgorithm
-// rather than calling compressionAlgorithm.Get directly.
-var compressionAlgorithm = settings.RegisterEnumSetting(
-	// NB: We can't use settings.SystemOnly today because we may need to read the
-	// value from within a tenant building an sstable for AddSSTable.
-	settings.SystemVisible,
-	"storage.sstable.compression_algorithm",
-	`determines the compression algorithm to use when compressing sstable data blocks;`+
-		` supported values: "snappy", "zstd"`,
-	// TODO(jackson): Consider using a metamorphic constant here, but many tests
-	// will need to override it because they depend on a deterministic sstable
-	// size.
-	"snappy",
-	map[int64]string{
-		compressionAlgorithmSnappy: "snappy",
-		compressionAlgorithmZstd:   "zstd",
+// readaheadModeInformed controls the pebble.ReadaheadConfig.Informed setting.
+//
+// Note that the setting is taken into account when a table enters the Pebble
+// table cache; it can take a while for an updated setting to take effect.
+var readaheadModeInformed = settings.RegisterEnumSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.readahead_mode.informed",
+	"the readahead mode for operations which are known to read through large chunks of data; "+
+		"sys-readahead performs explicit prefetching via the readahead syscall; "+
+		"fadv-sequential lets the OS perform prefetching via fadvise(FADV_SEQUENTIAL)",
+	"fadv-sequential",
+	map[objstorageprovider.ReadaheadMode]string{
+		objstorageprovider.NoReadahead:       "off",
+		objstorageprovider.SysReadahead:      "sys-readahead",
+		objstorageprovider.FadviseSequential: "fadv-sequential",
 	},
-	settings.WithPublic,
 )
 
-func getCompressionAlgorithm(ctx context.Context, settings *cluster.Settings) pebble.Compression {
-	switch compressionAlgorithm.Get(&settings.SV) {
+// readaheadModeSpeculative controls the pebble.ReadaheadConfig.Speculative setting.
+//
+// Note that the setting is taken into account when a table enters the Pebble
+// table cache; it can take a while for an updated setting to take effect.
+var readaheadModeSpeculative = settings.RegisterEnumSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.readahead_mode.speculative",
+	"the readahead mode that is used automatically when sequential reads are detected; "+
+		"sys-readahead performs explicit prefetching via the readahead syscall; "+
+		"fadv-sequential starts with explicit prefetching via the readahead syscall then automatically "+
+		"switches to OS-driven prefetching via fadvise(FADV_SEQUENTIAL)",
+	"fadv-sequential",
+	map[objstorageprovider.ReadaheadMode]string{
+		objstorageprovider.NoReadahead:       "off",
+		objstorageprovider.SysReadahead:      "sys-readahead",
+		objstorageprovider.FadviseSequential: "fadv-sequential",
+	},
+)
+
+// CompressionAlgorithm is an enumeration of available compression algorithms
+// available.
+type compressionAlgorithm int64
+
+const (
+	compressionAlgorithmSnappy compressionAlgorithm = 1
+	compressionAlgorithmZstd   compressionAlgorithm = 2
+)
+
+// String implements fmt.Stringer for CompressionAlgorithm.
+func (c compressionAlgorithm) String() string {
+	switch c {
+	case compressionAlgorithmSnappy:
+		return "snappy"
+	case compressionAlgorithmZstd:
+		return "zstd"
+	default:
+		panic(errors.Errorf("unknown compression type: %d", c))
+	}
+}
+
+// RegisterCompressionAlgorithmClusterSetting is a helper to register an enum
+// cluster setting with the given name, description and default value.
+func RegisterCompressionAlgorithmClusterSetting(
+	name settings.InternalKey, desc string, defaultValue compressionAlgorithm,
+) *settings.EnumSetting[compressionAlgorithm] {
+	return settings.RegisterEnumSetting(
+		// NB: We can't use settings.SystemOnly today because we may need to read the
+		// value from within a tenant building an sstable for AddSSTable.
+		settings.SystemVisible, name, desc,
+		// TODO(jackson): Consider using a metamorphic constant here, but many tests
+		// will need to override it because they depend on a deterministic sstable
+		// size.
+		defaultValue.String(),
+		map[compressionAlgorithm]string{
+			compressionAlgorithmSnappy: compressionAlgorithmSnappy.String(),
+			compressionAlgorithmZstd:   compressionAlgorithmZstd.String(),
+		},
+		settings.WithPublic,
+	)
+}
+
+// CompressionAlgorithmStorage determines the compression algorithm used to
+// compress data blocks when writing sstables for use in a Pebble store (written
+// directly, or constructed for ingestion on a remote store via AddSSTable).
+// Users should call getCompressionAlgorithm with the cluster setting, rather
+// than calling Get directly.
+var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
+	"storage.sstable.compression_algorithm",
+	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`+
+		` supported values: "snappy", "zstd"`,
+	compressionAlgorithmSnappy, // Default.
+)
+
+// CompressionAlgorithmBackupStorage determines the compression algorithm used
+// to compress data blocks when writing sstables that contain backup row data
+// storage. Users should call getCompressionAlgorithm with the cluster setting,
+// rather than calling Get directly.
+var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetting(
+	"storage.sstable.compression_algorithm_backup_storage",
+	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`+
+		` supported values: "snappy", "zstd"`,
+	compressionAlgorithmSnappy, // Default.
+)
+
+// CompressionAlgorithmBackupTransport determines the compression algorithm used
+// to compress data blocks when writing sstables that will be immediately
+// iterated and will never need to touch disk. These sstables typically have
+// much larger blocks and benefit from compression. However, this compression
+// algorithm may be different to the one used when writing out the sstables for
+// remote storage. Users should call getCompressionAlgorithm with the cluster
+// setting, rather than calling Get directly.
+var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSetting(
+	"storage.sstable.compression_algorithm_backup_transport",
+	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`+
+		` supported values: "snappy", "zstd"`,
+	compressionAlgorithmSnappy, // Default.
+)
+
+func getCompressionAlgorithm(
+	ctx context.Context,
+	settings *cluster.Settings,
+	setting *settings.EnumSetting[compressionAlgorithm],
+) pebble.Compression {
+	switch setting.Get(&settings.SV) {
 	case compressionAlgorithmSnappy:
 		return pebble.SnappyCompression
 	case compressionAlgorithmZstd:
@@ -809,6 +922,21 @@ func DefaultPebbleOptions() *pebble.Options {
 		l.EnsureDefaults()
 	}
 
+	// These size classes are a subset of available size classes in jemalloc[1].
+	// The size classes are used by Pebble for determining target block sizes for
+	// flushes, with the goal of reducing internal fragmentation. There are many
+	// more size classes that could be included, however, sstable blocks have a
+	// target block size of 32KiB, a minimum size threshold of ~19.6KiB and are
+	// unlikely to exceed 128KiB.
+	//
+	// [1] https://jemalloc.net/jemalloc.3.html#size_classes
+	opts.AllocatorSizeClasses = []int{
+		16384,
+		20480, 24576, 28672, 32768,
+		40960, 49152, 57344, 65536,
+		81920, 98304, 114688, 131072,
+	}
+
 	return opts
 }
 
@@ -901,6 +1029,17 @@ type engineConfig struct {
 	// DiskWriteStatsCollector is used to categorically track disk write metrics
 	// across all Pebble stores on this node.
 	DiskWriteStatsCollector *vfs.DiskWriteStatsCollector
+
+	// blockConcurrencyLimitDivisor is used to calculate the block load
+	// concurrency limit: it is the current valuer of the
+	// BlockLoadConcurrencyLimit setting divided by this value. It should be set
+	// to the number of stores.
+	//
+	// This is necessary because we want separate limiters per stores (we don't
+	// want one bad disk to block other stores)
+	//
+	// A value of 0 disables the limit.
+	blockConcurrencyLimitDivisor int
 }
 
 // Pebble is a wrapper around a Pebble database instance.
@@ -1091,7 +1230,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.ErrorIfNotExists = cfg.mustExist
 	for i := range cfg.opts.Levels {
 		cfg.opts.Levels[i].Compression = func() sstable.Compression {
-			return getCompressionAlgorithm(ctx, cfg.settings)
+			return getCompressionAlgorithm(ctx, cfg.settings, CompressionAlgorithmStorage)
 		}
 	}
 
@@ -1111,6 +1250,13 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	storeIDContainer := &base.StoreIDContainer{}
 	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
 	logCtx = logtags.AddTag(logCtx, "pebble", nil)
+
+	cfg.opts.Local.ReadaheadConfigFn = func() pebble.ReadaheadConfig {
+		return pebble.ReadaheadConfig{
+			Informed:    readaheadModeInformed.Get(&cfg.settings.SV),
+			Speculative: readaheadModeSpeculative.Get(&cfg.settings.SV),
+		}
+	}
 
 	cfg.opts.WALMinSyncInterval = func() time.Duration {
 		return minWALSyncInterval.Get(&cfg.settings.SV)
@@ -1142,6 +1288,14 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		}
 	}
 	ballastPath := base.EmergencyBallastFile(cfg.env.PathJoin, cfg.env.Dir)
+
+	if d := int64(cfg.blockConcurrencyLimitDivisor); d != 0 {
+		val := (BlockLoadConcurrencyLimit.Get(&cfg.settings.SV) + d - 1) / d
+		cfg.opts.LoadBlockSema = fifo.NewSemaphore(val)
+		BlockLoadConcurrencyLimit.SetOnChange(&cfg.settings.SV, func(ctx context.Context) {
+			cfg.opts.LoadBlockSema.UpdateCapacity((BlockLoadConcurrencyLimit.Get(&cfg.settings.SV) + d - 1) / d)
+		})
+	}
 
 	cfg.opts.Logger = nil // Defensive, since LoggerAndTracer will be used.
 	if cfg.opts.LoggerAndTracer == nil {
@@ -2041,6 +2195,12 @@ func (p *Pebble) GetMetrics() Metrics {
 		SingleDelIneffectualCount:        atomic.LoadInt64(&p.singleDelIneffectualCount),
 		SharedStorageReadBytes:           atomic.LoadInt64(&p.sharedBytesRead),
 		SharedStorageWriteBytes:          atomic.LoadInt64(&p.sharedBytesWritten),
+	}
+	if sema := p.cfg.opts.LoadBlockSema; sema != nil {
+		semaStats := sema.Stats()
+		m.BlockLoadConcurrencyLimit = semaStats.Capacity
+		m.BlockLoadsInProgress = semaStats.Outstanding
+		m.BlockLoadsQueued = semaStats.NumHadToWait
 	}
 	p.iterStats.Lock()
 	m.Iterator = p.iterStats.AggregatedIteratorStats

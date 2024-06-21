@@ -189,6 +189,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.Nodes = util.CombineUnique(s.Nodes, other.Nodes)
 	s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, other.KVNodeIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
+	s.UsedFollowerRead = s.UsedFollowerRead || other.UsedFollowerRead
 	s.PlanGists = util.CombineUnique(s.PlanGists, other.PlanGists)
 	s.Indexes = util.CombineUnique(s.Indexes, other.Indexes)
 	s.ExecStats.Add(other.ExecStats)

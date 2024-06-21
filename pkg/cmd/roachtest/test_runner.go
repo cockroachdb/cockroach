@@ -605,7 +605,9 @@ func (r *testRunner) runWorker(
 			qp.Release(alloc)
 		}
 	}()
-
+	clusterDestroyWg := &sync.WaitGroup{}
+	// cluster destroy can be done concurrently. The WaitGroup just ensures that all pending Destroy calls have completed.
+	defer clusterDestroyWg.Wait() // wait for the clusters to be destroyed
 	// Loop until there's no more work in the pool, we get interrupted, or an
 	// error occurs.
 	for {
@@ -633,7 +635,7 @@ func (r *testRunner) runWorker(
 		testToRun := testToRunRes{noWork: true}
 		if c != nil {
 			// Try to reuse cluster.
-			testToRun = work.selectTestForCluster(ctx, c.spec, r.cr)
+			testToRun = work.selectTestForCluster(ctx, c.spec, r.cr, roachtestflags.Cloud)
 			if !testToRun.noWork {
 				// We found a test to run on this cluster. Wipe the cluster.
 				if err := c.WipeForReuse(ctx, l, testToRun.spec.Cluster); err != nil {
@@ -661,8 +663,7 @@ func (r *testRunner) runWorker(
 				// We failed to find a test that can take advantage of this cluster. So
 				// we're going to release it, which will deallocate its resources.
 				l.PrintfCtx(ctx, "No tests that can reuse cluster %s found. Destroying.", c)
-				// We use a context that can't be canceled for the Destroy().
-				c.Destroy(context.Background(), closeLogger, l)
+				r.destroyClusterAsync(clusterDestroyWg, c, l)
 				wStatus.SetCluster(nil)
 				c = nil
 			}
@@ -924,6 +925,24 @@ func (r *testRunner) runWorker(
 			}
 		}
 	}
+}
+
+// destroyClusterAsync runs cluster destroy in a goroutine and adds 1 to the wait group.
+// if the cluster is local, the cluster destroy is sequential.
+func (r *testRunner) destroyClusterAsync(
+	clusterDestroyWg *sync.WaitGroup, c *clusterImpl, l *logger.Logger,
+) {
+	if c.IsLocal() {
+		// N.B. multiple local clusters aren't supported, hence we must use a blocking call.
+		c.Destroy(context.Background(), closeLogger, l)
+		return
+	}
+	clusterDestroyWg.Add(1)
+	go func(ci *clusterImpl) {
+		defer clusterDestroyWg.Done()
+		// We use a context that can't be canceled for the Destroy().
+		ci.Destroy(context.Background(), closeLogger, l)
+	}(c)
 }
 
 // getArtifacts retrieves artifacts (like perf or go cover) produced by a
@@ -1859,8 +1878,11 @@ func zipArtifacts(t *testImpl) error {
 		// However, if the order is reversed, or 'stats.json' is created directly on the test runner node,
 		// it will be moved to the zip archive. The corresponding CI script (build/teamcity/util/roachtest_util.sh) will
 		// then fail to find 'stats.json' in the artifacts directory, and the roachperf dashboard will be looking rather sad.
-		if !entry.IsDir() && entry.Name() == "stats.json" {
-			// Skip any 'stats.json' files.
+		if (!entry.IsDir() && entry.Name() == "stats.json") ||
+			// N.B. performance artifacts are expected to be in a directory of the form "2.perf",
+			// where 2 is node id; see `getPerfArtifacts`.
+			(entry.IsDir() && strings.HasSuffix(entry.Name(), "."+t.PerfArtifactsDir())) {
+			// Skip 'stats.json' and directories ending in '.perf'.
 			return false
 		}
 		return true

@@ -24,7 +24,7 @@ import (
 func compare(prefixInfo partition.Prefix, span *Span, ps partition.PrefixSorter) int {
 	prefix := prefixInfo.Prefix
 	prefixLength := len(prefix)
-	spanPrefixLength := span.Prefix(ps.EvalCtx)
+	spanPrefixLength := span.Prefix(ps.Ctx, ps.EvalCtx)
 	// Longer prefixes sort before shorter ones.
 	// The span prefix is allowed to be longer than the partition prefix and still
 	// match.
@@ -34,7 +34,10 @@ func compare(prefixInfo partition.Prefix, span *Span, ps partition.PrefixSorter)
 
 	// Look for an exact match on the shared prefix.
 	for k, datum := range prefix {
-		compareResult := datum.Compare(ps.EvalCtx, span.StartKey().Value(k))
+		compareResult, err := datum.Compare(ps.Ctx, ps.EvalCtx, span.StartKey().Value(k))
+		if err != nil {
+			panic(err)
+		}
 		if compareResult != 0 {
 			return compareResult
 		}
@@ -61,7 +64,7 @@ func searchPrefixes(span *Span, ps partition.PrefixSorter, prefixSearchUpperBoun
 	if prefixSearchUpperBound < 0 {
 		prefixSearchUpperBound = math.MaxInt32
 	}
-	spanPrefix := span.Prefix(ps.EvalCtx)
+	spanPrefix := span.Prefix(ps.Ctx, ps.EvalCtx)
 	i := 0
 	// Get the first slice in the PrefixSorter
 	prefixSlice, startIndex, ok := ps.Slice(i)
@@ -79,7 +82,10 @@ func searchPrefixes(span *Span, ps partition.PrefixSorter, prefixSearchUpperBoun
 		}
 
 		for k, datum := range prefix {
-			compareResult := datum.Compare(ps.EvalCtx, span.StartKey().Value(k))
+			compareResult, err := datum.Compare(ps.Ctx, ps.EvalCtx, span.StartKey().Value(k))
+			if err != nil {
+				panic(err)
+			}
 			if compareResult != 0 {
 				return compareResult > 0
 			}

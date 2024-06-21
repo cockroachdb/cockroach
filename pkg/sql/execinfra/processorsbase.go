@@ -361,9 +361,6 @@ type ProcessorBaseNoHelper struct {
 	// origCtx is the context from which ctx was derived. InternalClose() resets
 	// ctx to this.
 	origCtx context.Context
-	// evalOrigCtx is the original context that was stored in the eval.Context.
-	// InternalClose() uses it to correctly reset the eval.Context.
-	evalOrigCtx context.Context
 
 	State procState
 
@@ -881,7 +878,6 @@ func (pb *ProcessorBaseNoHelper) StartInternal(
 	if !noSpan {
 		pb.ctx, pb.span = ProcessorSpan(ctx, pb.FlowCtx, name, pb.ProcessorID, eventListeners...)
 	}
-	pb.evalOrigCtx = pb.EvalCtx.SetDeprecatedContext(pb.ctx)
 	return pb.ctx
 }
 
@@ -921,7 +917,6 @@ func (pb *ProcessorBaseNoHelper) InternalClose() bool {
 	// Reset the context so that any incidental uses after this point do not
 	// access the finished span.
 	pb.ctx = pb.origCtx
-	pb.EvalCtx.SetDeprecatedContext(pb.evalOrigCtx)
 	return true
 }
 

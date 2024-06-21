@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -47,42 +46,42 @@ func TestTokenBucket(t *testing.T) {
 			t.Errorf("expected: %s\nactual: %s\n", expected, actual)
 		}
 	}
-	check("100.00 RU filling @ 10.00 RU/s")
+	check("100.00 tokens filling @ 10.00 tokens/s")
 
 	// Verify basic update.
 	ts.Advance(1 * time.Second)
-	check("110.00 RU filling @ 10.00 RU/s")
-	// Check RemoveRU.
+	check("110.00 tokens filling @ 10.00 tokens/s")
+	// Check RemoveTokens.
 	tb.RemoveTokens(ts.Now(), 200)
-	check("-70.00 RU filling @ 10.00 RU/s (20.00 waiting debt @ 10.00 RU/s)")
+	check("-70.00 tokens filling @ 10.00 tokens/s (20.00 waiting debt @ 10.00 tokens/s)")
 	ts.Advance(1 * time.Second)
-	check("-70.00 RU filling @ 10.00 RU/s (10.00 waiting debt @ 10.00 RU/s)")
+	check("-70.00 tokens filling @ 10.00 tokens/s (10.00 waiting debt @ 10.00 tokens/s)")
 	tb.RemoveTokens(ts.Now(), 5)
-	check("-70.00 RU filling @ 10.00 RU/s (15.00 waiting debt @ 7.50 RU/s)")
+	check("-70.00 tokens filling @ 10.00 tokens/s (15.00 waiting debt @ 7.50 tokens/s)")
 	ts.Advance(1 * time.Second)
-	check("-67.50 RU filling @ 10.00 RU/s (7.50 waiting debt @ 7.50 RU/s)")
+	check("-67.50 tokens filling @ 10.00 tokens/s (7.50 waiting debt @ 7.50 tokens/s)")
 	tb.RemoveTokens(ts.Now(), 5)
-	check("-67.50 RU filling @ 10.00 RU/s (12.50 waiting debt @ 6.25 RU/s)")
+	check("-67.50 tokens filling @ 10.00 tokens/s (12.50 waiting debt @ 6.25 tokens/s)")
 
 	ts.Advance(15 * time.Second)
-	check("70.00 RU filling @ 10.00 RU/s")
+	check("70.00 tokens filling @ 10.00 tokens/s")
 
-	fulfill := func(amount tenantcostmodel.RU) {
+	fulfill := func(amount float64) {
 		t.Helper()
 		if ok, _ := tb.TryToFulfill(ts.Now(), amount); !ok {
 			t.Fatalf("failed to fulfill")
 		}
 	}
 	fulfill(40)
-	check("30.00 RU filling @ 10.00 RU/s")
+	check("30.00 tokens filling @ 10.00 tokens/s")
 
-	// TryAgainAfter should be the time to reach 60 RU.
+	// TryAgainAfter should be the time to reach 60 tokens.
 	if ok, tryAgainAfter := tb.TryToFulfill(ts.Now(), 60); ok {
 		t.Fatalf("fulfilled incorrectly")
 	} else if exp := 3 * time.Second; tryAgainAfter.Round(time.Millisecond) != exp {
 		t.Fatalf("tryAgainAfter: expected %s, got %s", exp, tryAgainAfter)
 	}
-	check("30.00 RU filling @ 10.00 RU/s")
+	check("30.00 tokens filling @ 10.00 tokens/s")
 
 	// Create massive debt and ensure that delay is = maxTryAgainAfterSeconds.
 	tb.RemoveTokens(ts.Now(), maxTryAgainAfterSeconds*10+60)
@@ -91,9 +90,9 @@ func TestTokenBucket(t *testing.T) {
 	} else if exp := maxTryAgainAfterSeconds * time.Second; tryAgainAfter.Round(time.Millisecond) != exp {
 		t.Fatalf("tryAgainAfter: expected %s, got %s", exp, tryAgainAfter)
 	}
-	check("-10010.00 RU filling @ 10.00 RU/s (20.00 waiting debt @ 10.00 RU/s)")
+	check("-10010.00 tokens filling @ 10.00 tokens/s (20.00 waiting debt @ 10.00 tokens/s)")
 	ts.Advance(maxTryAgainAfterSeconds * time.Second)
-	check("-30.00 RU filling @ 10.00 RU/s")
+	check("-30.00 tokens filling @ 10.00 tokens/s")
 
 	// Set zero rate.
 	args := tokenBucketReconfigureArgs{
@@ -108,7 +107,7 @@ func TestTokenBucket(t *testing.T) {
 
 	// Set infinite rate.
 	args = tokenBucketReconfigureArgs{
-		NewRate: tenantcostmodel.RU(math.Inf(1)),
+		NewRate: math.Inf(1),
 	}
 	tb.Reconfigure(ts.Now(), args)
 	if ok, tryAgainAfter := tb.TryToFulfill(ts.Now(), 0); ok {
@@ -123,17 +122,17 @@ func TestTokenBucket(t *testing.T) {
 		NewTokens: 100,
 		MaxTokens: 50,
 	}
-	check("-30.00 RU filling @ +Inf RU/s")
+	check("-30.00 tokens filling @ +Inf tokens/s")
 	tb.Reconfigure(ts.Now(), args)
-	check("50.00 RU filling @ 10.00 RU/s (limited to 50.00 RU)")
+	check("50.00 tokens filling @ 10.00 tokens/s (limited to 50.00 tokens)")
 	ts.Advance(time.Second)
-	check("50.00 RU filling @ 10.00 RU/s (limited to 50.00 RU)")
+	check("50.00 tokens filling @ 10.00 tokens/s (limited to 50.00 tokens)")
 	ts.Advance(time.Second)
 	tb.RemoveTokens(ts.Now(), 15)
-	check("35.00 RU filling @ 10.00 RU/s (limited to 50.00 RU)")
+	check("35.00 tokens filling @ 10.00 tokens/s (limited to 50.00 tokens)")
 	ts.Advance(2 * time.Second)
 	fulfill(10)
-	check("40.00 RU filling @ 10.00 RU/s (limited to 50.00 RU)")
+	check("40.00 tokens filling @ 10.00 tokens/s (limited to 50.00 tokens)")
 
 	// Fulfill amount > limit.
 	if ok, tryAgainAfter := tb.TryToFulfill(ts.Now(), 60); ok {
@@ -141,10 +140,10 @@ func TestTokenBucket(t *testing.T) {
 	} else if exp := 2 * time.Second; tryAgainAfter.Round(time.Millisecond) != exp {
 		t.Fatalf("tryAgainAfter: expected %s, got %s", exp, tryAgainAfter)
 	}
-	check("40.00 RU filling @ 10.00 RU/s (limited to 50.00 RU)")
+	check("40.00 tokens filling @ 10.00 tokens/s (limited to 50.00 tokens)")
 	ts.Advance(1 * time.Second)
 	fulfill(60)
-	check("0.00 RU filling @ 10.00 RU/s (limited to 50.00 RU) (10.00 waiting debt @ 5.00 RU/s)")
+	check("0.00 tokens filling @ 10.00 tokens/s (limited to 50.00 tokens) (10.00 waiting debt @ 5.00 tokens/s)")
 	ts.Advance(8 * time.Second)
 	if available := tb.AvailableTokens(ts.Now()); available != 50.0 {
 		t.Fatalf("AvailableTokens: expected %.2f, got %.2f", 50.0, available)
@@ -157,8 +156,8 @@ func TestTokenBucketTryToFulfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	r, _ := randutil.NewPseudoRand()
-	randRU := func(min, max float64) tenantcostmodel.RU {
-		return tenantcostmodel.RU(min + r.Float64()*(max-min))
+	randTokens := func(min, max float64) float64 {
+		return min + r.Float64()*(max-min)
 	}
 	randDuration := func(max time.Duration) time.Duration {
 		return time.Duration(r.Intn(int(max + 1)))
@@ -171,8 +170,8 @@ func TestTokenBucketTryToFulfill(t *testing.T) {
 		clock := timeutil.NewManualTime(start)
 		tb.Init(clock.Now())
 		tb.Reconfigure(clock.Now(), tokenBucketReconfigureArgs{
-			NewRate:   randRU(0, 500),
-			NewTokens: randRU(1, 100),
+			NewRate:   randTokens(0, 500),
+			NewTokens: randTokens(1, 100),
 		})
 
 		// Advance a random amount of time.
@@ -180,15 +179,15 @@ func TestTokenBucketTryToFulfill(t *testing.T) {
 
 		if rand.Intn(5) > 0 {
 			// Add some debt and advance more.
-			tb.RemoveTokens(clock.Now(), randRU(1, 500))
+			tb.RemoveTokens(clock.Now(), randTokens(1, 500))
 			clock.Advance(randDuration(100 * time.Millisecond))
 		}
 
 		// Fulfill requests until we can't anymore.
-		var ru tenantcostmodel.RU
+		var ru float64
 		var tryAgainAfter time.Duration
 		for {
-			ru = randRU(0, 100)
+			ru = randTokens(0, 100)
 			var ok bool
 			ok, tryAgainAfter = tb.TryToFulfill(clock.Now(), ru)
 			if !ok {
@@ -239,19 +238,19 @@ func TestTokenBucketDebt(t *testing.T) {
 	const debtPeriod = time.Second
 	const debtTicks = int(debtPeriod / tickDuration)
 	const totalTicks = 10 * debtTicks
-	const debt tenantcostmodel.RU = 50
+	const debt float64 = 50
 
-	const reqRUMean = 1
-	const reqRUStdDev = reqRUMean / 2
+	const reqTokensMean = 1
+	const reqTokensStdDev = reqTokensMean / 2
 
 	// Use a fixed seed so the result is reproducible.
 	r := rand.New(rand.NewSource(1234))
-	randRu := func() tenantcostmodel.RU {
-		ru := r.NormFloat64()*reqRUStdDev + reqRUMean
+	randRu := func() float64 {
+		ru := r.NormFloat64()*reqTokensStdDev + reqTokensMean
 		if ru < 0 {
 			return 0
 		}
-		return tenantcostmodel.RU(ru)
+		return ru
 	}
 
 	ru := randRu()
@@ -271,10 +270,10 @@ func TestTokenBucketDebt(t *testing.T) {
 		out = file
 	}
 
-	fmt.Fprintf(out, "time (s),queue latency (ms),debt applied (RU)\n")
+	fmt.Fprintf(out, "time (s),queue latency (ms),debt applied (tokens)\n")
 	for tick := 0; tick < totalTicks; tick++ {
 		now := ts.Now()
-		var d tenantcostmodel.RU
+		var d float64
 		if tick > 0 && tick%debtTicks == 0 {
 			d = debt
 			tb.RemoveTokens(now, debt)

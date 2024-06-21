@@ -442,6 +442,8 @@ export function getJobs(
 ): Promise<JobsResponseMessage> {
   const url = `${API_PREFIX}/jobs?status=${req.status}&type=${req.type}&limit=${req.limit}`;
   return timeoutFetch(serverpb.JobsResponse, url, null, timeout).then(
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     (response: JobsResponseMessage) => response,
     (err: Error) => {
       if (err instanceof TimeoutError) {

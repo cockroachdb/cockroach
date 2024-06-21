@@ -90,10 +90,21 @@ const flushInterval = time.Second
 // syncInterval is the multiple of flushInterval where the log is also synced to disk.
 const syncInterval = 30
 
-// maxSyncDuration is set to a conservative value since this is a new mechanism.
-// In practice, even a fraction of that would indicate a problem. This metric's
-// default should ideally match its sister metric in the storage engine, set by
-// COCKROACH_ENGINE_MAX_SYNC_DURATION.
+// maxSyncDuration is the maximum duration the file sink is allowed to take to
+// write a log entry before we fatal the process for a disk stall. Note that
+// this fataling behaviour can be disabled by the cluster setting
+// storage.max_sync_duration.fatal.enabled for most uses of the logger.
+//
+// This setting may sound similar to `ExitTimeoutForFatalLog`, however that
+// parameter configures how long we wait to write a *fatal* log entry to _any_
+// log sink before we exit the process. This one configures how long we wait
+// to write any log entry to a _file_ sink before we write a fatal log entry
+// instead (that could then take up to `ExitTimeoutForFatalLog` before crashing
+// the process).
+//
+// This metric's default should ideally match its sister metrics: one in the
+// storage engine, set by COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT and the
+// storage.max_sync_duration cluster setting, and another in `ExitTimeoutForFatalLog`.
 var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_LOG_MAX_SYNC_DURATION", 20*time.Second)
 
 // syncWarnDuration is the threshold after which a slow disk warning is written
@@ -154,7 +165,7 @@ func signalFlusher() {
 // occurs are flushed to logs (in case the error degenerates
 // into a panic / segfault on the way out).
 func StartAlwaysFlush() {
-	logging.flushWrites.Set(true)
+	logging.flushWrites.Store(true)
 	// There may be something in the buffers already; flush it.
 	FlushFiles()
 }

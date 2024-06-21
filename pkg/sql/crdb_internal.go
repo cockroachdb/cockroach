@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -226,6 +227,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalPCRStreamsTableID:                  crdbInternalPCRStreamsTable,
 		catconstants.CrdbInternalPCRStreamSpansTableID:              crdbInternalPCRStreamSpansTable,
 		catconstants.CrdbInternalPCRStreamCheckpointsTableID:        crdbInternalPCRStreamCheckpointsTable,
+		catconstants.CrdbInternalLDRProcessorTableID:                crdbInternalLDRProcessorTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -1836,6 +1838,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   database_name       STRING NOT NULL,
   exec_node_ids       INT[] NOT NULL,
   kv_node_ids         INT[] NOT NULL,
+  used_follower_read  BOOL NOT NULL,
   txn_fingerprint_id  STRING,
   index_recommendations STRING[] NOT NULL,
   latency_seconds_min FLOAT,
@@ -1984,8 +1987,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.MakeDBool(tree.DBool(stats.Key.FullScan)),                                                                           // full_scan
 				alloc.NewDJSON(tree.DJSON{JSON: samplePlan}),                                                                             // sample_plan
 				alloc.NewDString(tree.DString(stats.Key.Database)),                                                                       // database_name
-				execNodeIDs,          // exec_node_ids
-				kvNodeIDs,            // kv_node_ids
+				execNodeIDs, // exec_node_ids
+				kvNodeIDs,   // kv_node_ids
+				tree.MakeDBool(tree.DBool(stats.Stats.UsedFollowerRead)), // used_follower_read
 				txnFingerprintID,     // txn_fingerprint_id
 				indexRecommendations, // index_recommendations
 				alloc.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.Min)), // latency_seconds_min
@@ -2430,10 +2434,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public
 			desc := setting.Description()
-			defaultVal, err := setting.DefaultString()
-			if err != nil {
-				return err
-			}
+			defaultVal := setting.DefaultString()
 			origin := setting.ValueOrigin(ctx, &p.ExecCfg().Settings.SV).String()
 			if err := addRow(
 				tree.NewDString(string(setting.Name())),
@@ -4574,27 +4575,24 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if err != nil {
 			return nil, nil, err
 		}
-		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		viewActOrViewActRedact, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
-		descs := all.OrderedDescriptors()
-
-		privCheckerFunc := func(desc catalog.Descriptor) (bool, error) {
-			if hasAdmin {
-				return true, nil
+		var descs catalog.Descriptors
+		// Admin or viewActivity roles have access to all information, so
+		// don't bother fetching all the descriptors unecessarily.
+		if !hasAdmin && !viewActOrViewActRedact {
+			all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+			if err != nil {
+				return nil, nil, err
 			}
-			viewActOrViewActRedact, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
-			// Return if we have permission or encountered an error.
-			if viewActOrViewActRedact || err != nil {
-				return viewActOrViewActRedact, err
-			}
-			return p.HasPrivilege(ctx, desc, privilege.ZONECONFIG, p.User())
+			descs = all.OrderedDescriptors()
 		}
 
-		hasPermission := false
+		hasPermission := hasAdmin || viewActOrViewActRedact
 		for _, desc := range descs {
-			if ok, err := privCheckerFunc(desc); err != nil {
+			if ok, err := p.HasPrivilege(ctx, desc, privilege.ZONECONFIG, p.User()); err != nil {
 				return nil, nil, err
 			} else if ok {
 				hasPermission = true
@@ -5924,6 +5922,10 @@ var crdbInternalCatalogCommentsTable = virtualSchemaTable{
 
 			case catalogkeys.SchemaCommentType:
 				classOid = tree.NewDOid(catconstants.PgCatalogNamespaceTableID)
+				objOid = tree.NewDOid(oid.Oid(key.ObjectID))
+
+			case catalogkeys.TypeCommentType:
+				classOid = tree.NewDOid(catconstants.PgCatalogTypeTableID)
 				objOid = tree.NewDOid(oid.Oid(key.ObjectID))
 
 			case catalogkeys.ColumnCommentType, catalogkeys.TableCommentType:
@@ -8259,8 +8261,15 @@ func populateTxnExecutionInsights(
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 
+	acc := p.Mon().MakeBoundAccount()
+	defer acc.Close(ctx)
+
 	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
 	if err != nil {
+		return err
+	}
+
+	if err := acc.Grow(ctx, int64(response.Size())); err != nil {
 		return err
 	}
 
@@ -8452,10 +8461,18 @@ func populateStmtInsights(
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 
+	acct := p.Mon().MakeBoundAccount()
+	defer acct.Close(ctx)
+
 	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
 	if err != nil {
 		return err
 	}
+
+	if err := acct.Grow(ctx, int64(response.Size())); err != nil {
+		return err
+	}
+
 	for _, insight := range response.Insights {
 		// We don't expect the transaction to be null here, but we should provide
 		// this check to ensure we only show valid data.
@@ -9028,6 +9045,11 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 	megabytes FLOAT,
 	last_checkpoint INTERVAL,
 	
+	produce_wait INTERVAL,
+	emit_wait INTERVAL,
+	last_produce_wait INTERVAL,
+	last_emit_wait INTERVAL,
+
 	rf_checkpoints INT,
 	rf_advances INT,
 	rf_last_advance INTERVAL,
@@ -9052,24 +9074,53 @@ CREATE TABLE crdb_internal.cluster_replication_node_streams (
 			return tree.NewDInterval(duration.Age(now, t), types.DefaultIntervalTypeMetadata)
 		}
 
+		// Transform `.0000000000` to `.0` to shorted/de-noise HLCs.
+		shortenLogical := func(d *tree.DDecimal) *tree.DDecimal {
+			var tmp apd.Decimal
+			d.Modf(nil, &tmp)
+			if tmp.IsZero() {
+				if _, err := tree.DecimalCtx.Quantize(&tmp, &d.Decimal, -1); err == nil {
+					d.Decimal = tmp
+				}
+			}
+			return d
+		}
+
 		for _, s := range sm.DebugGetProducerStatuses(ctx) {
 			resolved := time.UnixMicro(s.RF.ResolvedMicros.Load())
 			resolvedDatum := tree.DNull
 			if resolved.Unix() != 0 {
-				resolvedDatum = eval.TimestampToDecimalDatum(hlc.Timestamp{WallTime: resolved.UnixNano()})
+				resolvedDatum = shortenLogical(eval.TimestampToDecimalDatum(hlc.Timestamp{WallTime: resolved.UnixNano()}))
 			}
 
 			if err := addRow(
 				tree.NewDInt(tree.DInt(s.StreamID)),
 				tree.NewDString(fmt.Sprintf("%d[%d]", s.Spec.ConsumerNode, s.Spec.ConsumerProc)),
 				tree.NewDInt(tree.DInt(len(s.Spec.Spans))),
-				eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp),
-				eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp),
+				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.InitialScanTimestamp)),
+				shortenLogical(eval.TimestampToDecimalDatum(s.Spec.PreviousReplicatedTimestamp)),
 
 				tree.NewDInt(tree.DInt(s.Flushes.Batches.Load())),
 				tree.NewDInt(tree.DInt(s.Flushes.Checkpoints.Load())),
 				tree.NewDFloat(tree.DFloat(math.Round(float64(s.Flushes.Bytes.Load())/float64(1<<18))/4)),
 				age(time.UnixMicro(s.LastCheckpoint.Micros.Load())),
+
+				tree.NewDInterval(
+					duration.MakeDuration(s.Flushes.ProduceWaitNanos.Load(), 0, 0),
+					types.DefaultIntervalTypeMetadata,
+				),
+				tree.NewDInterval(
+					duration.MakeDuration(s.Flushes.EmitWaitNanos.Load(), 0, 0),
+					types.DefaultIntervalTypeMetadata,
+				),
+				tree.NewDInterval(
+					duration.MakeDuration(s.Flushes.LastProduceWaitNanos.Load(), 0, 0),
+					types.DefaultIntervalTypeMetadata,
+				),
+				tree.NewDInterval(
+					duration.MakeDuration(s.Flushes.LastEmitWaitNanos.Load(), 0, 0),
+					types.DefaultIntervalTypeMetadata,
+				),
 
 				tree.NewDInt(tree.DInt(s.RF.Checkpoints.Load())),
 				tree.NewDInt(tree.DInt(s.RF.Advances.Load())),
@@ -9157,6 +9208,83 @@ CREATE TABLE crdb_internal.cluster_replication_node_stream_checkpoints (
 				); err != nil {
 					return err
 				}
+			}
+		}
+		return nil
+	},
+}
+var crdbInternalLDRProcessorTable = virtualSchemaTable{
+	comment: `node-level table listing all currently running logical replication writer processors`,
+	schema: `
+CREATE TABLE crdb_internal.logical_replication_node_processors (
+	stream_id INT,
+	consumer STRING,
+	recv_wait INTERVAL,
+	last_recv_wait INTERVAL,
+	flush_count INT,
+	flush_time INTERVAL,
+	flush_kvs INT,
+	flush_bytes INT,
+	flush_batches INT,
+	last_time INTERVAL,
+	last_kvs INT,
+	last_bytes INT,
+	last_slowest INTERVAL,
+	cur_time INTERVAL,
+	cur_kvs_done INT,
+	cur_kvs_todo INT,
+	cur_batches INT,
+	cur_slowest INTERVAL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		sm, err := p.EvalContext().StreamManagerFactory.GetReplicationStreamManager(ctx)
+		if err != nil {
+			// A non-CCL binary can't have anything to inspect so just return empty.
+			if err.Error() == "replication streaming requires a CCL binary" {
+				return nil
+			}
+			return err
+		}
+		now := p.EvalContext().GetStmtTimestamp()
+		age := func(t time.Time) tree.Datum {
+			if t.Unix() == 0 {
+				return tree.DNull
+			}
+			return tree.NewDInterval(duration.Age(now, t), types.DefaultIntervalTypeMetadata)
+		}
+		dur := func(nanos int64) tree.Datum {
+			return tree.NewDInterval(duration.MakeDuration(nanos, 0, 0), types.DefaultIntervalTypeMetadata)
+		}
+
+		for _, container := range sm.DebugGetLogicalConsumerStatuses(ctx) {
+			status := container.GetStats()
+			nullCur := func(x tree.Datum) tree.Datum {
+				if status.Flushes.Current.StartedUnixMicros == 0 {
+					return tree.DNull
+				}
+				return x
+			}
+			if err := addRow(
+				tree.NewDInt(tree.DInt(container.StreamID)),
+				tree.NewDString(fmt.Sprintf("%d[%d]", p.extendedEvalCtx.ExecCfg.JobRegistry.ID(), container.ProcessorID)),
+				dur(status.Recv.TotalWaitNanos),
+				dur(status.Recv.LastWaitNanos),
+				tree.NewDInt(tree.DInt(status.Flushes.Count)),
+				dur(status.Flushes.Nanos),
+				tree.NewDInt(tree.DInt(status.Flushes.KVs)),
+				tree.NewDInt(tree.DInt(status.Flushes.Bytes)),
+				tree.NewDInt(tree.DInt(status.Flushes.Batches)),
+				dur(status.Flushes.Last.Nanos),
+				tree.NewDInt(tree.DInt(status.Flushes.Last.KVs)),
+				tree.NewDInt(tree.DInt(status.Flushes.Last.Bytes)),
+				dur(status.Flushes.Last.SlowestBatchNanos),
+				nullCur(age(time.UnixMicro(status.Flushes.Current.StartedUnixMicros))),
+				nullCur(tree.NewDInt(tree.DInt(status.Flushes.Current.TotalKVs))),
+				nullCur(tree.NewDInt(tree.DInt(status.Flushes.Current.ProcessedKVs))),
+				nullCur(tree.NewDInt(tree.DInt(status.Flushes.Current.Batches))),
+				nullCur(dur(status.Flushes.Current.SlowestBatchNanos)),
+			); err != nil {
+				return err
 			}
 		}
 		return nil

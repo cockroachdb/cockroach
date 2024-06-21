@@ -52,8 +52,8 @@ func (s *MaskedSetting) String(sv *Values) string {
 }
 
 // DefaultString returns the default value for the setting as a string.
-func (s *MaskedSetting) DefaultString() (string, error) {
-	return s.setting.DecodeToString(s.setting.EncodedDefault())
+func (s *MaskedSetting) DefaultString() string {
+	return s.setting.DefaultString()
 }
 
 // Visibility returns the visibility setting for the underlying setting.

@@ -1083,6 +1083,9 @@ func (s *TestState) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) (err 
 	return err
 }
 
+func (s *TestState) GetExplain() string           { return "" }
+func (s *TestState) SetExplain(_ string, _ error) {}
+
 // ValidateForwardIndexes implements the validator interface.
 func (s *TestState) ValidateForwardIndexes(
 	_ context.Context,
@@ -1352,6 +1355,11 @@ func (s *TestState) GetSchemaComment(schemaID catid.DescID) (comment string, ok 
 // GetTableComment implements the scdecomp.CommentGetter interface.
 func (s *TestState) GetTableComment(tableID catid.DescID) (comment string, ok bool) {
 	return s.get(tableID, 0, catalogkeys.TableCommentType)
+}
+
+// GetTypeComment implements the scdecomp.CommentGetter interface.
+func (s *TestState) GetTypeComment(typeID catid.DescID) (comment string, ok bool) {
+	return s.get(typeID, 0, catalogkeys.TypeCommentType)
 }
 
 // GetColumnComment implements the scdecomp.CommentGetter interface.

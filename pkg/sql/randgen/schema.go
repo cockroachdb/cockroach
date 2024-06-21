@@ -11,6 +11,7 @@
 package randgen
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"math"
@@ -77,7 +78,12 @@ func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
 
 // RandCreateTables creates random table definitions.
 func RandCreateTables(
-	rng *rand.Rand, prefix string, num int, isMultiRegion bool, mutators ...Mutator,
+	ctx context.Context,
+	rng *rand.Rand,
+	prefix string,
+	num int,
+	isMultiRegion bool,
+	mutators ...Mutator,
 ) []tree.Statement {
 	if num < 1 {
 		panic("at least one table required")
@@ -86,7 +92,7 @@ func RandCreateTables(
 	// Make some random tables.
 	tables := make([]tree.Statement, num)
 	for i := 0; i < num; i++ {
-		t := RandCreateTable(rng, prefix, i+1, isMultiRegion)
+		t := RandCreateTable(ctx, rng, prefix, i+1, isMultiRegion)
 		tables[i] = t
 	}
 
@@ -99,10 +105,12 @@ func RandCreateTables(
 
 // RandCreateTable creates a random CreateTable definition.
 func RandCreateTable(
-	rng *rand.Rand, prefix string, tableIdx int, isMultiRegion bool,
+	ctx context.Context, rng *rand.Rand, prefix string, tableIdx int, isMultiRegion bool,
 ) *tree.CreateTable {
-	return RandCreateTableWithColumnIndexNumberGenerator(rng, prefix, tableIdx,
-		isMultiRegion, true /* allowPartiallyVisibleIndex */, nil /* generateColumnIndexNumber */)
+	return RandCreateTableWithColumnIndexNumberGenerator(
+		ctx, rng, prefix, tableIdx, isMultiRegion,
+		true /* allowPartiallyVisibleIndex */, nil, /* generateColumnIndexNumber */
+	)
 }
 
 var nameGenCfg = func() randidentcfg.Config {
@@ -114,6 +122,7 @@ var nameGenCfg = func() randidentcfg.Config {
 // RandCreateTableWithColumnIndexNumberGenerator creates a random CreateTable definition
 // using the passed function to generate column index numbers for column names.
 func RandCreateTableWithColumnIndexNumberGenerator(
+	ctx context.Context,
 	rng *rand.Rand,
 	prefix string,
 	tableIdx int,
@@ -123,20 +132,22 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 ) *tree.CreateTable {
 	g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
 	name := g.GenerateOne(strconv.Itoa(tableIdx))
-	return RandCreateTableWithColumnIndexNumberGeneratorAndName(
-		rng, name, tableIdx, isMultiRegion, allowPartiallyVisibleIndex, generateColumnIndexSuffix,
+	return randCreateTableWithColumnIndexNumberGeneratorAndName(
+		ctx, rng, name, tableIdx, isMultiRegion, allowPartiallyVisibleIndex, generateColumnIndexSuffix,
 	)
 }
 
 func RandCreateTableWithName(
-	rng *rand.Rand, tableName string, tableIdx int, isMultiRegion bool,
+	ctx context.Context, rng *rand.Rand, tableName string, tableIdx int, isMultiRegion bool,
 ) *tree.CreateTable {
-	return RandCreateTableWithColumnIndexNumberGeneratorAndName(
-		rng, tableName, tableIdx, isMultiRegion, true /* allowPartiallyVisibleIndex */, nil,
+	return randCreateTableWithColumnIndexNumberGeneratorAndName(
+		ctx, rng, tableName, tableIdx, isMultiRegion,
+		true /* allowPartiallyVisibleIndex */, nil, /* generateColumnIndexSuffix */
 	)
 }
 
-func RandCreateTableWithColumnIndexNumberGeneratorAndName(
+func randCreateTableWithColumnIndexNumberGeneratorAndName(
+	ctx context.Context,
 	rng *rand.Rand,
 	tableName string,
 	tableIdx int,
@@ -179,7 +190,7 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make a random primary key with high likelihood.
 	var pk *tree.IndexTableDef
 	if rng.Intn(8) != 0 {
-		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
+		indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
 		if ok {
 			pk = &indexDef
 		}
@@ -205,7 +216,7 @@ func RandCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make indexes.
 	nIdxs := rng.Intn(10)
 	for i := 0; i < nIdxs; i++ {
-		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, false /* isPrimaryIndex */, isMultiRegion)
+		indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, false /* isPrimaryIndex */, isMultiRegion)
 		if !ok {
 			continue
 		}
@@ -455,6 +466,7 @@ func randComputedColumnTableDef(
 // subset of the given columns and a random direction. If unsuccessful, ok=false
 // is returned.
 func randIndexTableDefFromCols(
+	ctx context.Context,
 	rng *rand.Rand,
 	columnTableDefs []*tree.ColumnTableDef,
 	tableName string,
@@ -634,7 +646,7 @@ func randIndexTableDefFromCols(
 				// Don't include the partition if it matches previous partition values.
 				// Include the expressions from this partition, so we also check for
 				// duplicates there.
-				isDup, err := isDuplicateExpr(t.Exprs, append(def.PartitionByIndex.List, partition))
+				isDup, err := isDuplicateExpr(ctx, t.Exprs, append(def.PartitionByIndex.List, partition))
 				if err != nil {
 					return def, false
 				}
@@ -665,7 +677,7 @@ func randIndexTableDefFromCols(
 	return def, true
 }
 
-func isDuplicateExpr(e tree.Exprs, list []tree.ListPartition) (bool, error) {
+func isDuplicateExpr(ctx context.Context, e tree.Exprs, list []tree.ListPartition) (bool, error) {
 	// Iterate over the partitions.
 	for _, p := range list {
 		// Iterate over the tuples of expressions in the partition.
@@ -677,7 +689,7 @@ func isDuplicateExpr(e tree.Exprs, list []tree.ListPartition) (bool, error) {
 			n := 0
 			// Check each expression in the tuple.
 			for ; n < len(tp.Exprs); n++ {
-				cmp, err := tp.Exprs[n].(tree.Datum).CompareError(&eval.Context{}, e[n].(tree.Datum))
+				cmp, err := tp.Exprs[n].(tree.Datum).Compare(ctx, &eval.Context{}, e[n].(tree.Datum))
 				if err != nil {
 					return false, err
 				}

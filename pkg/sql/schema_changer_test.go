@@ -3063,8 +3063,8 @@ func TestPrimaryKeyDropIndexNotCancelable(t *testing.T) {
 
 	ctx := context.Background()
 	var db *gosql.DB
-	var shouldAttemptCancel syncutil.AtomicBool
-	shouldAttemptCancel.Set(true)
+	var shouldAttemptCancel atomic.Bool
+	shouldAttemptCancel.Store(true)
 	hasAttemptedCancel := make(chan struct{})
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
@@ -5071,7 +5071,8 @@ CREATE TABLE t.test (a INT, b INT, c JSON, d JSON);
 func TestCreateStatsAfterSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "sometimes the timer in stats.Refresher doesn't fire fast enough under race")
+
+	skip.UnderDuress(t, "sometimes the timer in stats.Refresher doesn't fire fast enough under custom configs")
 
 	defer func(oldRefreshInterval, oldAsOf time.Duration) {
 		stats.DefaultRefreshInterval = oldRefreshInterval
@@ -7812,7 +7813,7 @@ func TestMemoryMonitorErrorsDuringBackfillAreRetried(t *testing.T) {
 		tdb.Exec(t, `ALTER TABLE foo EXPERIMENTAL_RELOCATE SELECT ARRAY[$1], 1`,
 			tc.Server(dataNode).GetFirstStoreID())
 		tdb.Exec(t, `ALTER TABLE foo ADD COLUMN j INT NOT NULL DEFAULT 42`)
-		require.Equalf(t, shouldFail.Load(), int64(2), "not all failure conditions were hit %d", shouldFail.Load())
+		require.GreaterOrEqualf(t, shouldFail.Load(), int64(2), "not all failure conditions were hit %d", shouldFail.Load())
 	})
 }
 

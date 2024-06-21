@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -38,10 +37,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -221,12 +223,11 @@ func (b *ReadBuffer) GetString() (string, error) {
 	if pos == -1 {
 		return "", NewProtocolViolationErrorf("NUL terminator not found")
 	}
-	// Note: this is a conversion from a byte slice to a string which avoids
-	// allocation and copying. It is safe because we never reuse the bytes in our
-	// read buffer. It is effectively the same as: "s := string(b.Msg[:pos])"
-	s := b.Msg[:pos]
+	// This conversion is safe because we never reuse the bytes in our read
+	// buffer.
+	s := encoding.UnsafeConvertBytesToString(b.Msg[:pos])
 	b.Msg = b.Msg[pos+1:]
-	return *((*string)(unsafe.Pointer(&s))), nil
+	return s, nil
 }
 
 // GetPrepareType returns the buffer's contents as a PrepareType.
@@ -314,11 +315,18 @@ func validateArrayDimensions(nDimensions int, nElements int) error {
 }
 
 // DecodeDatum decodes bytes with specified type and format code into a datum.
+// NB: the caller is **not** allowed to mutate b.
 func DecodeDatum(
-	ctx context.Context, evalCtx *eval.Context, typ *types.T, code FormatCode, b []byte,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	typ *types.T,
+	code FormatCode,
+	b []byte,
+	da *tree.DatumAlloc,
 ) (tree.Datum, error) {
 	id := typ.Oid()
-	// Use a direct string pointing to b where we are sure we aren't retaining this string.
+	// Use a direct string pointing to b where we are sure we aren't retaining
+	// this string.
 	bs := encoding.UnsafeConvertBytesToString(b)
 	switch code {
 	case FormatText:
@@ -336,17 +344,17 @@ func DecodeDatum(
 			}
 			return tree.MakeDBool(tree.DBool(t)), nil
 		case oid.T_bit, oid.T_varbit:
-			t, err := tree.ParseDBitArray(bs)
+			a, err := bitarray.Parse(bs)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return t, nil
+			return da.NewDBitArray(tree.DBitArray{BitArray: a}), nil
 		case oid.T_int2, oid.T_int4, oid.T_int8:
 			i, err := strconv.ParseInt(bs, 10, 64)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return tree.NewDInt(tree.DInt(i)), nil
+			return da.NewDInt(tree.DInt(i)), nil
 		case oid.T_pg_lsn:
 			return tree.ParseDPGLSN(bs)
 		case oid.T_oid,
@@ -366,25 +374,25 @@ func DecodeDatum(
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return tree.NewDFloat(tree.DFloat(f)), nil
+			return da.NewDFloat(tree.DFloat(f)), nil
 		case oidext.T_box2d:
-			d, err := tree.ParseDBox2D(bs)
+			v, err := geo.ParseCartesianBoundingBox(bs)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return d, nil
+			return da.NewDBox2D(tree.DBox2D{CartesianBoundingBox: v}), nil
 		case oidext.T_geography:
-			d, err := tree.ParseDGeography(bs)
+			v, err := geo.ParseGeography(bs)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return d, nil
+			return da.NewDGeography(tree.DGeography{Geography: v}), nil
 		case oidext.T_geometry:
-			d, err := tree.ParseDGeometry(bs)
+			v, err := geo.ParseGeometry(bs)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return d, nil
+			return da.NewDGeometry(tree.DGeometry{Geometry: v}), nil
 		case oid.T_void:
 			return tree.DVoidDatum, nil
 		case oid.T_numeric:
@@ -398,9 +406,7 @@ func DecodeDatum(
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			// Note: we could use encoding.UnsafeConvertBytesToString here if
-			// we were guaranteed all callers never mutated b.
-			return tree.NewDBytes(tree.DBytes(string(res))), nil
+			return da.NewDBytes(tree.DBytes(res)), nil
 		case oid.T_timestamp:
 			d, _, err := tree.ParseDTimestamp(evalCtx, bs, time.Microsecond)
 			if err != nil {
@@ -408,11 +414,11 @@ func DecodeDatum(
 			}
 			return d, nil
 		case oid.T_timestamptz:
-			d, _, err := tree.ParseDTimestampTZ(evalCtx, bs, time.Microsecond)
+			t, _, err := tree.ParseTimestampTZ(evalCtx, bs, time.Microsecond)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return d, nil
+			return da.NewDTimestampTZ(tree.DTimestampTZ{Time: t}), nil
 		case oid.T_date:
 			d, _, err := tree.ParseDDate(evalCtx, bs)
 			if err != nil {
@@ -432,28 +438,33 @@ func DecodeDatum(
 			}
 			return d, nil
 		case oid.T_interval:
-			d, err := tree.ParseDInterval(evalCtx.GetIntervalStyle(), bs)
+			v, err := tree.ParseIntervalWithTypeMetadata(evalCtx.GetIntervalStyle(), bs, types.DefaultIntervalTypeMetadata)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return d, nil
+			return da.NewDInterval(tree.DInterval{Duration: v}), nil
 		case oid.T_uuid:
-			d, err := tree.ParseDUuidFromString(bs)
+			v, err := uuid.FromString(bs)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return d, nil
+			return da.NewDUuid(tree.DUuid{UUID: v}), nil
 		case oid.T_inet:
-			d, err := tree.ParseDIPAddrFromINetString(bs)
+			var ipAddr ipaddr.IPAddr
+			err := ipaddr.ParseINet(bs, &ipAddr)
 			if err != nil {
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return d, nil
+			return da.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
 		case oid.T_jsonb, oid.T_json:
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
-			return tree.ParseDJSON(bs)
+			v, err := json.ParseJSON(bs)
+			if err != nil {
+				return nil, tree.MakeParseError(bs, typ, err)
+			}
+			return da.NewDJSON(tree.DJSON{JSON: v}), nil
 		case oid.T_tsquery:
 			ret, err := tsearch.ParseTSQuery(bs)
 			if err != nil {
@@ -474,12 +485,12 @@ func DecodeDatum(
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
-			return tree.NewDString(bs), nil
+			return da.NewDString(tree.DString(bs)), nil
 		}
 	case FormatBinary:
 		switch id {
 		case oid.T_record:
-			return decodeBinaryTuple(ctx, evalCtx, b)
+			return decodeBinaryTuple(ctx, evalCtx, b, da)
 		case oid.T_bool:
 			if len(b) > 0 {
 				switch b[0] {
@@ -495,37 +506,37 @@ func DecodeDatum(
 				return nil, pgerror.Newf(pgcode.Syntax, "int2 requires 2 bytes for binary format")
 			}
 			i := int16(binary.BigEndian.Uint16(b))
-			return tree.NewDInt(tree.DInt(i)), nil
+			return da.NewDInt(tree.DInt(i)), nil
 		case oid.T_int4:
 			if len(b) < 4 {
 				return nil, pgerror.Newf(pgcode.Syntax, "int4 requires 4 bytes for binary format")
 			}
 			i := int32(binary.BigEndian.Uint32(b))
-			return tree.NewDInt(tree.DInt(i)), nil
+			return da.NewDInt(tree.DInt(i)), nil
 		case oid.T_int8:
 			if len(b) < 8 {
 				return nil, pgerror.Newf(pgcode.Syntax, "int8 requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
-			return tree.NewDInt(tree.DInt(i)), nil
+			return da.NewDInt(tree.DInt(i)), nil
 		case oid.T_pg_lsn:
 			if len(b) < 8 {
 				return nil, pgerror.Newf(pgcode.Syntax, "lsn requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
-			return tree.NewDPGLSN(lsn.LSN(i)), nil
+			return da.NewDPGLSN(tree.DPGLSN{LSN: lsn.LSN(i)}), nil
 		case oid.T_float4:
 			if len(b) < 4 {
 				return nil, pgerror.Newf(pgcode.Syntax, "float4 requires 4 bytes for binary format")
 			}
 			f := math.Float32frombits(binary.BigEndian.Uint32(b))
-			return tree.NewDFloat(tree.DFloat(f)), nil
+			return da.NewDFloat(tree.DFloat(f)), nil
 		case oid.T_float8:
 			if len(b) < 8 {
 				return nil, pgerror.Newf(pgcode.Syntax, "float8 requires 8 bytes for binary format")
 			}
 			f := math.Float64frombits(binary.BigEndian.Uint64(b))
-			return tree.NewDFloat(tree.DFloat(f)), nil
+			return da.NewDFloat(tree.DFloat(f)), nil
 		case oid.T_numeric:
 			r := bytes.NewReader(b)
 
@@ -647,8 +658,7 @@ func DecodeDatum(
 
 			return &alloc.dd, nil
 		case oid.T_bytea:
-			// Note: there's an implicit string cast here reallocating b.
-			return tree.NewDBytes(tree.DBytes(b)), nil
+			return da.NewDBytes(tree.DBytes(bs)), nil
 		case oid.T_timestamp:
 			if len(b) < 8 {
 				return nil, pgerror.Newf(pgcode.Syntax, "timestamp requires 8 bytes for binary format")
@@ -666,20 +676,25 @@ func DecodeDatum(
 				return nil, pgerror.Newf(pgcode.Syntax, "date requires 4 bytes for binary format")
 			}
 			i := int32(binary.BigEndian.Uint32(b))
-			return pgBinaryToDate(i)
+			v, err := pgdate.MakeDateFromPGEpoch(i)
+			if err != nil {
+				return nil, err
+			}
+			return da.NewDDate(tree.DDate{Date: v}), nil
 		case oid.T_time:
 			if len(b) < 8 {
 				return nil, pgerror.Newf(pgcode.Syntax, "time requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
-			return tree.MakeDTime(timeofday.TimeOfDay(i)), nil
+			return da.NewDTime(tree.DTime(i)), nil
 		case oid.T_timetz:
 			if len(b) < 12 {
 				return nil, pgerror.Newf(pgcode.Syntax, "timetz requires 12 bytes for binary format")
 			}
 			timeOfDayMicros := int64(binary.BigEndian.Uint64(b))
 			offsetSecs := int32(binary.BigEndian.Uint32(b[8:]))
-			return tree.NewDTimeTZFromOffset(timeofday.TimeOfDay(timeOfDayMicros), offsetSecs), nil
+			timeTZ := timetz.MakeTimeTZ(timeofday.TimeOfDay(timeOfDayMicros), offsetSecs)
+			return da.NewDTimeTZ(tree.DTimeTZ{TimeTZ: timeTZ}), nil
 		case oid.T_interval:
 			if len(b) < 16 {
 				return nil, pgerror.Newf(pgcode.Syntax, "interval requires 16 bytes for binary format")
@@ -689,24 +704,28 @@ func DecodeDatum(
 			months := int32(binary.BigEndian.Uint32(b[12:]))
 
 			duration := duration.MakeDuration(nanos, int64(days), int64(months))
-			return &tree.DInterval{Duration: duration}, nil
+			return da.NewDInterval(tree.DInterval{Duration: duration}), nil
 		case oid.T_uuid:
-			u, err := tree.ParseDUuidFromBytes(b)
+			v, err := uuid.FromBytes(b)
 			if err != nil {
-				return nil, err
+				return nil, tree.MakeParseError(bs, typ, err)
 			}
-			return u, nil
+			return da.NewDUuid(tree.DUuid{UUID: v}), nil
 		case oid.T_inet:
 			ipAddr, err := pgBinaryToIPAddr(b)
 			if err != nil {
 				return nil, err
 			}
-			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
+			return da.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
 		case oid.T_json:
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
-			return tree.ParseDJSON(bs)
+			v, err := json.ParseJSON(bs)
+			if err != nil {
+				return nil, tree.MakeParseError(bs, typ, err)
+			}
+			return da.NewDJSON(tree.DJSON{JSON: v}), nil
 		case oid.T_jsonb:
 			if len(b) < 1 {
 				return nil, NewProtocolViolationErrorf("no data to decode")
@@ -719,7 +738,11 @@ func DecodeDatum(
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
-			return tree.ParseDJSON(encoding.UnsafeConvertBytesToString(b))
+			v, err := json.ParseJSON(encoding.UnsafeConvertBytesToString(b))
+			if err != nil {
+				return nil, tree.MakeParseError(bs, typ, err)
+			}
+			return da.NewDJSON(tree.DJSON{JSON: v}), nil
 		case oid.T_varbit, oid.T_bit:
 			if len(b) < 4 {
 				return nil, NewProtocolViolationErrorf("insufficient data: %d", len(b))
@@ -754,7 +777,7 @@ func DecodeDatum(
 				words[len(words)-1] = w << (64 - i)
 			}
 			ba, err := bitarray.FromEncodingParts(words, lastBitsUsed)
-			return &tree.DBitArray{BitArray: ba}, err
+			return da.NewDBitArray(tree.DBitArray{BitArray: ba}), err
 		case oid.T_tsquery:
 			ret, err := tsearch.DecodeTSQueryPGBinary(b)
 			if err != nil {
@@ -768,23 +791,23 @@ func DecodeDatum(
 			}
 			return tree.NewDTSVector(ret), nil
 		case oidext.T_geometry:
-			ret, err := geo.ParseGeometryFromEWKB(b)
+			v, err := geo.ParseGeometryFromEWKB(b)
 			if err != nil {
 				return nil, err
 			}
-			return tree.NewDGeometry(ret), nil
+			return da.NewDGeometry(tree.DGeometry{Geometry: v}), nil
 		case oidext.T_geography:
-			ret, err := geo.ParseGeographyFromEWKB(b)
+			v, err := geo.ParseGeographyFromEWKB(b)
 			if err != nil {
 				return nil, err
 			}
-			return tree.NewDGeography(ret), nil
+			return da.NewDGeography(tree.DGeography{Geography: v}), nil
 		default:
 			if typ.Family() == types.ArrayFamily {
-				return decodeBinaryArray(ctx, evalCtx, typ.ArrayContents(), b, code)
+				return decodeBinaryArray(ctx, evalCtx, typ.ArrayContents(), b, code, da)
 			}
 			if typ.Family() == types.TupleFamily {
-				return decodeBinaryTuple(ctx, evalCtx, b)
+				return decodeBinaryTuple(ctx, evalCtx, b, da)
 			}
 			if typ.Family() == types.OidFamily {
 				if len(b) < 4 {
@@ -795,7 +818,7 @@ func DecodeDatum(
 				if t, ok := types.OidToType[id]; ok {
 					oidTyp = t
 				}
-				return tree.NewDOidWithType(oid.Oid(u), oidTyp), nil
+				return da.NewDOid(tree.MakeDOid(oid.Oid(u), oidTyp)), nil
 			}
 		}
 	default:
@@ -813,36 +836,28 @@ func DecodeDatum(
 		if err != nil {
 			return nil, err
 		}
-		return tree.NewDEnum(e), nil
+		return da.NewDEnum(e), nil
 	case types.RefCursorFamily:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		// Note: we could use bs here if we were guaranteed all callers never
-		// mutated b.
-		return tree.NewDRefCursor(string(b)), nil
+		return da.NewDRefCursor(tree.DString(bs)), nil
 	}
 	switch id {
 	case oid.T_text, oid.T_varchar, oid.T_unknown:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		// Note: we could use bs here if we were guaranteed all callers never
-		// mutated b.
-		return tree.NewDString(string(b)), nil
+		return da.NewDString(tree.DString(bs)), nil
 	case oid.T_bpchar:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		// Trim the trailing spaces
-		// Note: we could use bs here if we were guaranteed all callers never
-		// mutated b.
-		sv := strings.TrimRight(string(b), " ")
-		return tree.NewDString(sv), nil
+		// Trim the trailing spaces.
+		sv := strings.TrimRight(bs, " ")
+		return da.NewDString(tree.DString(sv)), nil
 	case oid.T_char:
-		// Note: we could use bs here if we were guaranteed all callers never
-		// mutated b.
-		sv := string(b)
+		sv := bs
 		// Always truncate to 1 byte, and handle the null byte specially.
 		if len(b) >= 1 {
 			if b[0] == 0 {
@@ -851,14 +866,12 @@ func DecodeDatum(
 				sv = string(b[:1])
 			}
 		}
-		return tree.NewDString(sv), nil
+		return da.NewDString(tree.DString(sv)), nil
 	case oid.T_name:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		// Note: we could use bs here if we were guaranteed all callers never
-		// mutated b.
-		return tree.NewDName(string(b)), nil
+		return da.NewDName(tree.DString(bs)), nil
 	}
 
 	// Fallthrough case.
@@ -902,17 +915,6 @@ type PGNumeric struct {
 // delta and adds it to PGEpochJDate.
 func pgBinaryToTime(i int64) time.Time {
 	return duration.AddMicros(PGEpochJDate, i)
-}
-
-// pgBinaryToDate takes an int32 and interprets it as the Postgres binary format
-// for a date. To create a date from this value, it takes the day delta and adds
-// it to PGEpochJDate.
-func pgBinaryToDate(i int32) (*tree.DDate, error) {
-	d, err := pgdate.MakeDateFromPGEpoch(i)
-	if err != nil {
-		return nil, err
-	}
-	return tree.NewDDate(d), nil
 }
 
 // pgBinaryToIPAddr takes an IPAddr and interprets it as the Postgres binary
@@ -963,7 +965,12 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 }
 
 func decodeBinaryArray(
-	ctx context.Context, evalCtx *eval.Context, t *types.T, b []byte, code FormatCode,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	t *types.T,
+	b []byte,
+	code FormatCode,
+	da *tree.DatumAlloc,
 ) (tree.Datum, error) {
 	var hdr struct {
 		Ndims int32
@@ -1008,7 +1015,7 @@ func decodeBinaryArray(
 			continue
 		}
 		buf := r.Next(int(vlen))
-		elem, err := DecodeDatum(ctx, evalCtx, t, code, buf)
+		elem, err := DecodeDatum(ctx, evalCtx, t, code, buf, da)
 		if err != nil {
 			return nil, err
 		}
@@ -1021,7 +1028,9 @@ func decodeBinaryArray(
 
 const tupleHeaderSize, oidSize, elementSize = 4, 4, 4
 
-func decodeBinaryTuple(ctx context.Context, evalCtx *eval.Context, b []byte) (tree.Datum, error) {
+func decodeBinaryTuple(
+	ctx context.Context, evalCtx *eval.Context, b []byte, da *tree.DatumAlloc,
+) (tree.Datum, error) {
 
 	bufferLength := len(b)
 	if bufferLength < tupleHeaderSize {
@@ -1091,7 +1100,7 @@ func decodeBinaryTuple(ctx context.Context, evalCtx *eval.Context, b []byte) (tr
 				return nil, decorateSyntaxError(pgerror.New(pgcode.Syntax, "insufficient bytes reading element for binary format"))
 			}
 
-			colDatum, err := DecodeDatum(ctx, evalCtx, elementType, FormatBinary, b[bufferStartIdx:bufferEndIdx])
+			colDatum, err := DecodeDatum(ctx, evalCtx, elementType, FormatBinary, b[bufferStartIdx:bufferEndIdx], da)
 
 			if err != nil {
 				return nil, err
@@ -1104,7 +1113,7 @@ func decodeBinaryTuple(ctx context.Context, evalCtx *eval.Context, b []byte) (tr
 	}
 
 	tupleTyps := types.MakeTuple(typs)
-	return tree.NewDTuple(tupleTyps, datums...), nil
+	return da.NewDTuple(tree.MakeDTuple(tupleTyps, datums...)), nil
 
 }
 

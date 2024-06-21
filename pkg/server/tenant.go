@@ -985,7 +985,7 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 		return err
 	}
 
-	s.sqlServer.isReady.Set(true)
+	s.sqlServer.isReady.Store(true)
 
 	log.Event(ctx, "server ready")
 	return nil
@@ -1481,7 +1481,11 @@ func (noopTenantSideCostController) GetCPUMovingAvg() float64 {
 	return 0
 }
 
-func (noopTenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
+func (noopTenantSideCostController) GetRequestUnitModel() *tenantcostmodel.RequestUnitModel {
+	return nil
+}
+
+func (noopTenantSideCostController) GetEstimatedCPUModel() *tenantcostmodel.EstimatedCPUModel {
 	return nil
 }
 

@@ -120,9 +120,10 @@ type Context struct {
 	// transaction_timestamp() and the like.
 	TxnTimestamp time.Time
 
-	// AsOfSystemTime denotes the explicit AS OF SYSTEM TIME timestamp for the
-	// query, if any. If the query is not an AS OF SYSTEM TIME query,
-	// AsOfSystemTime is nil.
+	// AsOfSystemTime denotes either the explicit (i.e. in the query text) or
+	// implicit (via the txn mode) AS OF SYSTEM TIME timestamp for the query, if
+	// any. If the query is not an AS OF SYSTEM TIME query, AsOfSystemTime is
+	// nil.
 	// TODO(knz): we may want to support table readers at arbitrary
 	// timestamps, so that each FROM clause can have its own
 	// timestamp. In that case, the timestamp would not be set
@@ -148,12 +149,6 @@ type Context struct {
 	// evaluate an intermediate expression. This keeps track of those which we
 	// need to restore once we finish evaluating it.
 	iVarContainerStack []tree.IndexedVarContainer
-
-	// deprecatedContext holds the context in which the expression is evaluated.
-	//
-	// Deprecated: this field should not be used because an effort to remove it
-	// from Context is under way.
-	deprecatedContext context.Context
 
 	Planner Planner
 
@@ -288,11 +283,6 @@ type Context struct {
 	// during local execution. It may be unset.
 	RoutineSender DeferredRoutineSender
 
-	// ULIDEntropy is the entropy source for ULID generation.
-	// TODO(yuzefovich): consider making its allocation lazy, similar to how
-	// RNG is done, or use the RNG somehow.
-	ULIDEntropy ulid.MonotonicReader
-
 	// RNGFactory, if set, provides the random number generator for the "random"
 	// built-in function.
 	//
@@ -300,11 +290,24 @@ type Context struct {
 	// is exported only for the connExecutor to pass its "external" RNGFactory.
 	RNGFactory *RNGFactory
 
-	// internal provides the random number generator for the "random" built-in
-	// function if RNGFactory is not set. This field exists to allow not setting
-	// RNGFactory on the code paths that don't need to preserve usage of the
-	// same RNG within a session.
+	// internalRNGFactory provides the random number generator for the "random"
+	// built-in function if RNGFactory is not set. This field exists to allow
+	// not setting RNGFactory on the code paths that don't need to preserve
+	// usage of the same RNG within a session.
 	internalRNGFactory RNGFactory
+
+	// ULIDEntropyFactory, if set, is the entropy source for ULID generation.
+	//
+	// NB: do not access this field directly - use GetULIDEntropy() instead.
+	// This field is exported only for the connExecutor to pass its "external"
+	// ULIDEntropyFactory.
+	ULIDEntropyFactory *ULIDEntropyFactory
+
+	// internalULIDEntropyFactory is the entropy source for ULID generation if
+	// ULIDEntropyFactory is not set. This field exists to allow not setting
+	// ULIDEntropyFactory on the code paths that don't need to preserve usage of
+	// the same RNG within a session.
+	internalULIDEntropyFactory ULIDEntropyFactory
 }
 
 // RNGFactory is a simple wrapper to preserve the RNG throughout the session.
@@ -326,6 +329,28 @@ func (r *RNGFactory) getOrCreate() *rand.Rand {
 		r.rng, _ = randutil.NewPseudoRand()
 	}
 	return r.rng
+}
+
+// ULIDEntropyFactory is a simple wrapper to preserve the ULID entropy
+// throughout the session.
+type ULIDEntropyFactory struct {
+	entropy ulid.MonotonicReader
+}
+
+// GetULIDEntropy returns the ULID entropy of the Context (which is lazily
+// instantiated if necessary).
+func (ec *Context) GetULIDEntropy() ulid.MonotonicReader {
+	if ec.ULIDEntropyFactory != nil {
+		return ec.ULIDEntropyFactory.getOrCreate(ec.GetRNG())
+	}
+	return ec.internalULIDEntropyFactory.getOrCreate(ec.GetRNG())
+}
+
+func (f *ULIDEntropyFactory) getOrCreate(rng *rand.Rand) ulid.MonotonicReader {
+	if f.entropy == nil {
+		f.entropy = ulid.Monotonic(rng, 0 /* inc */)
+	}
+	return f.entropy
 }
 
 // JobsProfiler is the interface used to fetch job specific execution details
@@ -382,35 +407,18 @@ type RangeProber interface {
 	) error
 }
 
-// SetDeprecatedContext updates the context.Context of this Context. Previously
-// stored context is returned.
-//
-// Deprecated: this method should not be used because an effort to remove the
-// context.Context from Context is under way.
-func (ec *Context) SetDeprecatedContext(ctx context.Context) context.Context {
-	oldCtx := ec.deprecatedContext
-	ec.deprecatedContext = ctx
-	return oldCtx
-}
-
 // UnwrapDatum encapsulates UnwrapDatum for use in the tree.CompareContext.
-func (ec *Context) UnwrapDatum(d tree.Datum) tree.Datum {
-	if ec == nil {
-		// When ec is nil, then eval.UnwrapDatum is equivalent to
-		// tree.UnwrapDOidWrapper. We have this special handling in order to not
-		// hit a nil pointer exception when accessing deprecatedContext field.
-		return tree.UnwrapDOidWrapper(d)
-	}
-	return UnwrapDatum(ec.deprecatedContext, ec, d)
+func (ec *Context) UnwrapDatum(ctx context.Context, d tree.Datum) tree.Datum {
+	return UnwrapDatum(ctx, ec, d)
 }
 
 // MustGetPlaceholderValue is part of the tree.CompareContext interface.
-func (ec *Context) MustGetPlaceholderValue(p *tree.Placeholder) tree.Datum {
+func (ec *Context) MustGetPlaceholderValue(ctx context.Context, p *tree.Placeholder) tree.Datum {
 	e, ok := ec.Placeholders.Value(p.Idx)
 	if !ok {
 		panic(errors.AssertionFailedf("fail"))
 	}
-	out, err := Expr(ec.deprecatedContext, ec, e)
+	out, err := Expr(ctx, ec, e)
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "fail"))
 	}
@@ -441,7 +449,6 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	ctx.TestingMon = monitor
 	ctx.Planner = &fakePlannerWithMonitor{monitor: monitor}
 	ctx.StreamManagerFactory = &fakeStreamManagerFactory{}
-	ctx.deprecatedContext = context.TODO()
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
@@ -889,8 +896,8 @@ type ReplicationStreamManager interface {
 		opaqueSpec []byte,
 	) (ValueGenerator, error)
 
-	// GetReplicationStreamSpec gets a stream replication spec on the producer side.
-	GetReplicationStreamSpec(
+	// GetPhysicalReplicationStreamSpec gets a physical stream replication spec on the producer side.
+	GetPhysicalReplicationStreamSpec(
 		ctx context.Context,
 		streamID streampb.StreamID,
 	) (*streampb.ReplicationStreamSpec, error)
@@ -905,10 +912,11 @@ type ReplicationStreamManager interface {
 	) error
 
 	DebugGetProducerStatuses(ctx context.Context) []*streampb.DebugProducerStatus
+	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
 
-	PartitionSpans(
+	PlanLogicalReplication(
 		ctx context.Context,
-		spans []roachpb.Span,
+		req streampb.LogicalReplicationPlanRequest,
 	) (*streampb.ReplicationStreamSpec, error)
 
 	StartReplicationStreamForTables(

@@ -11,6 +11,7 @@
 package sqlsmith
 
 import (
+	"context"
 	gosql "database/sql"
 	"sort"
 
@@ -117,7 +118,7 @@ func makeCreateSchema(s *Smither) (tree.Statement, bool) {
 }
 
 func makeCreateTable(s *Smither) (tree.Statement, bool) {
-	table := randgen.RandCreateTable(s.rnd, "", 0, false /* isMultiRegion */)
+	table := randgen.RandCreateTable(context.Background(), s.rnd, "", 0, false /* isMultiRegion */)
 	schemaOrd := s.rnd.Intn(len(s.schemas))
 	schema := s.schemas[schemaOrd]
 	table.Table = tree.MakeTableNameWithSchema(tree.Name(s.dbName), schema.SchemaName, s.name("tab"))

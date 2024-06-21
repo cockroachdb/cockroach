@@ -63,7 +63,7 @@ func TestCreateRandomSchema(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	for i := 0; i < 100; i++ {
-		createTable := randgen.RandCreateTable(rng, "table", i, false /* isMultiRegion */)
+		createTable := randgen.RandCreateTable(ctx, rng, "table", i, false /* isMultiRegion */)
 		setDb(t, db, "test")
 		_, err := db.Exec(toStr(createTable))
 		if err != nil {

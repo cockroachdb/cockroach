@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	crypto_rand "crypto/rand"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -59,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -294,6 +292,10 @@ type planner struct {
 	// This field is embedded into the planner to avoid an allocation in
 	// checkScanParallelizationIfLocal.
 	parallelizationChecker localScanParallelizationChecker
+
+	// datumAlloc is used when decoding datums and is initialized in
+	// initPlanner.
+	datumAlloc *tree.DatumAlloc
 }
 
 // hasFlowForPausablePortal returns true if the planner is for re-executing a
@@ -408,18 +410,6 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	p := &planner{execCfg: execCfg}
-
-	p.txn = txn
-	p.stmt = Statement{}
-	p.cancelChecker.Reset(ctx)
-
-	p.semaCtx = tree.MakeSemaContext(p)
-	p.semaCtx.SearchPath = &sd.SearchPath
-	p.semaCtx.DateStyle = sd.GetDateStyle()
-	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
-	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(execCfg.Settings.Version)
-
 	plannerMon := mon.NewMonitor(mon.Options{
 		Name:     redact.Sprintf("internal-planner.%s.%s", user, opName),
 		CurCount: memMetrics.CurBytesCount,
@@ -427,7 +417,9 @@ func newInternalPlanner(
 		Settings: execCfg.Settings,
 	})
 	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
-	p.monitor = plannerMon
+
+	p := &planner{execCfg: execCfg}
+	p.resetPlanner(ctx, txn, sd, plannerMon, nil /* sessionMon */)
 
 	smi := &sessionDataMutatorIterator{
 		sds: sds,
@@ -459,7 +451,6 @@ func newInternalPlanner(
 	p.extendedEvalCtx.OriginalLocality = execCfg.Locality
 
 	p.sessionDataMutatorIterator = smi
-	p.autoCommit = false
 
 	p.extendedEvalCtx.MemMetrics = memMetrics
 	p.extendedEvalCtx.ExecCfg = execCfg
@@ -554,7 +545,6 @@ func internalExtendedEvalCtx(
 			ConsistencyChecker:             execCfg.ConsistencyChecker,
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
 			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
-			ULIDEntropy:                    ulid.Monotonic(crypto_rand.Reader, 0),
 		},
 		Tracing:         &SessionTracing{},
 		Descs:           tables,
@@ -562,7 +552,6 @@ func internalExtendedEvalCtx(
 		statsProvider:   sqlStatsProvider,
 		jobs:            newTxnJobsCollection(),
 	}
-	ret.SetDeprecatedContext(ctx)
 	ret.copyFromExecCfg(execCfg)
 	return ret
 }
@@ -890,7 +879,6 @@ func (p *planner) QueryBufferedExWithCols(
 func (p *planner) resetPlanner(
 	ctx context.Context,
 	txn *kv.Txn,
-	stmtTS time.Time,
 	sd *sessiondata.SessionData,
 	plannerMon *mon.BytesMonitor,
 	sessionMon *mon.BytesMonitor,
@@ -1025,8 +1013,18 @@ func (p *planner) StartLogicalReplicationJob(
 
 	// TODO(ssd): Name resolution needs to be thought through for
 	// the final syntax.
+	//
+	// Currently, the user passes some name and that name is
+	// resolved by both the source and the destination. The
+	// destination-side resolution is below and happens in the
+	// context of the session calling the built-in. The
+	// source-side resolution happens when creating the remote
+	// producer job and happens in the context of the session we
+	// get when connecting to the source using the user-provided
+	// URL.
 	fullyQualifiedTableNames := make([]string, 0, len(tableNames))
-	for _, t := range tableNames {
+	repPairs := make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(tableNames))
+	for i, t := range tableNames {
 		un := tree.MakeUnresolvedName(t)
 		uon, err := un.ToUnresolvedObjectName(tree.NoAnnotation)
 		if err != nil {
@@ -1044,14 +1042,28 @@ func (p *planner) StartLogicalReplicationJob(
 			tree.Name(td.GetName()),
 		)
 		fullyQualifiedTableNames = append(fullyQualifiedTableNames, tbNameWithSchema.FQString())
+		repPairs[i].DstDescriptorID = int32(td.GetID())
 	}
+
+	spec, err := repstream.CreateRemoteProduceJobForLogicalReplication(ctx, targetConnStr, tableNames)
+	if err != nil {
+		return 0, err
+	}
+	for i, name := range tableNames {
+		repPairs[i].SrcDescriptorID = int32(spec.TableDescriptors[name].ID)
+	}
+
 	jr := jobs.Record{
 		Description: fmt.Sprintf("logical replication ingestion for %s",
 			strings.Join(fullyQualifiedTableNames, ",")),
 		Username: evalCtx.SessionData().User(),
 		Details: jobspb.LogicalReplicationDetails{
+			StreamID:             uint64(spec.StreamID),
+			SourceClusterID:      spec.SourceClusterID,
+			ReplicationStartTime: spec.ReplicationStartTime,
 			TargetClusterConnStr: targetConnStr,
-			TableNames:           fullyQualifiedTableNames},
+			ReplicationPairs:     repPairs,
+			TableNames:           tableNames},
 		Progress: jobspb.LogicalReplicationProgress{},
 		JobID:    registry.MakeJobID(),
 	}

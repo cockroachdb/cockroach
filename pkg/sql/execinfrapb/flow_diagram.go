@@ -558,10 +558,7 @@ func (s *StreamIngestionDataSpec) summary() (string, []string) {
 }
 
 func (s *LogicalReplicationWriterSpec) summary() (string, []string) {
-	const (
-		specLimit = 3
-		spanLimit = 3
-	)
+	const spanLimit = 9
 
 	tableNames := []string{}
 	for _, desc := range s.TableDescriptors {
@@ -570,33 +567,16 @@ func (s *LogicalReplicationWriterSpec) summary() (string, []string) {
 
 	annotations := []string{
 		fmt.Sprintf("Tables: %s", strings.Join(tableNames, ",")),
-		"Partitions:",
+		fmt.Sprintf("Source node %s", s.PartitionSpec.SrcInstanceID),
+		"Spans:",
 	}
 
-	// Sort partitions by ID for stable output.
-	srcIDs := make([]string, 0, len(s.PartitionSpecs))
-	for k := range s.PartitionSpecs {
-		srcIDs = append(srcIDs, k)
-	}
-	sort.Strings(srcIDs)
-
-	specCount := 0
-	for _, srcID := range srcIDs {
-		specCount++
-		if specCount > specLimit {
-			annotations = append(annotations, fmt.Sprintf("and %d more partitions", len(s.PartitionSpecs)-specLimit))
+	for i, span := range s.PartitionSpec.Spans {
+		if i == spanLimit {
+			annotations = append(annotations, fmt.Sprintf("and %d more spans", len(s.PartitionSpec.Spans)-spanLimit))
 			break
 		}
-		p := s.PartitionSpecs[srcID]
-
-		annotations = append(annotations, fmt.Sprintf("Source node %s, spans:", srcID))
-		for i, span := range p.Spans {
-			if i == spanLimit {
-				annotations = append(annotations, fmt.Sprintf("and %d more spans", len(p.Spans)-spanLimit))
-				break
-			}
-			annotations = append(annotations, fmt.Sprintf("%v", span))
-		}
+		annotations = append(annotations, fmt.Sprintf("%v", span))
 	}
 
 	return "LogicalReplicationWriter", annotations

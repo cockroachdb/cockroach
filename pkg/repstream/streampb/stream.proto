@@ -28,6 +28,8 @@ import "sql/catalog/descpb/structured.proto";
 // ReplicationProducerSpec is the specification returned by the replication
 // producer job when it is created.
 message ReplicationProducerSpec {
+  reserved 5, 6;
+
   int64 stream_id = 1 [(gogoproto.customname) = "StreamID", (gogoproto.casttype) = "StreamID"];
 
   // ReplicationStartTime is the initial timestamp from which the replication
@@ -47,11 +49,6 @@ message ReplicationProducerSpec {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "SourceTenantID"
   ];
-
-  // TableSpans is the set of spans that cover the requested tables if
-  // this is in response to a ReplicationProducerRequest that
-  // specified individual tables.
-  repeated roachpb.Span table_spans = 5 [(gogoproto.nullable) = false];
 
   // TableDescriptors are the descriptors for the tables in the
   // ReplicationProducerRequest.
@@ -142,7 +139,11 @@ message StreamPartitionSpec {
   // set.
   bool with_filtering = 8;
 
-  // NEXT ID: 10.
+  bool with_diff = 10;
+
+  bool wrapped_events = 11;
+
+  // NEXT ID: 11.
 }
 
 // SpanConfigEventStreamSpec is the span config event stream specification.
@@ -154,7 +155,14 @@ message SpanConfigEventStreamSpec {
   // Controls how often checkpoint records are published.
   google.protobuf.Duration min_checkpoint_frequency = 3
   [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+  bool wrapped_events = 4;
+}
 
+message LogicalReplicationPlanRequest {
+    // TableIDs are the destination table IDs that the caller would like a plan for.
+    repeated int32 table_ids = 1 [(gogoproto.customname) = "TableIDs"];
+    // PlanAsOf is the time as of which the plan should be produced.
+    util.hlc.Timestamp plan_as_of = 2 [(gogoproto.nullable) = false];
 }
 
 message ReplicationStreamSpec {
@@ -181,6 +189,10 @@ message ReplicationStreamSpec {
   int64 span_config_stream_id = 3 [(gogoproto.customname) = "SpanConfigStreamID", (gogoproto
     .casttype) = "StreamID"];
 
+  // TableSpans is the set of spans that cover the requested tables if
+  // this is in response to a LogicalReplicationPlanRequest.
+  repeated roachpb.Span table_spans = 4 [(gogoproto.nullable) = false];
+  repeated cockroach.sql.sqlbase.TableDescriptor table_descriptors = 5 [(gogoproto.nullable) = false];
 }
 
 // StreamedSpanConfigEntry holds a span config update and its source side commit timestamp
@@ -193,12 +205,18 @@ message StreamedSpanConfigEntry {
 // StreamEvent describes a replication stream event
 message StreamEvent {
 
+  message KV {
+    roachpb.KeyValue key_value = 1 [(gogoproto.nullable) = false];
+    roachpb.Value prev_value = 2 [(gogoproto.nullable) = false];
+  }
+
   message Batch {
-    repeated roachpb.KeyValue key_values = 1 [(gogoproto.nullable) = false];
+    repeated roachpb.KeyValue deprecated_key_values = 1 [(gogoproto.nullable) = false];
     repeated roachpb.RangeFeedSSTable ssts = 2 [(gogoproto.nullable) = false];
     repeated roachpb.RangeFeedDeleteRange del_ranges = 3 [(gogoproto.nullable) = false];
     repeated StreamedSpanConfigEntry span_configs = 4 [(gogoproto.nullable) = false];
     repeated bytes split_points = 5 [(gogoproto.casttype) =  "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    repeated KV kvs = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVs"];
   }
 
   // Checkpoint represents stream checkpoint.

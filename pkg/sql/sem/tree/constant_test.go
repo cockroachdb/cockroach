@@ -668,8 +668,9 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	defer evalCtx.Stop(context.Background())
+	defer evalCtx.Stop(ctx)
 	for i, test := range testCases {
 		t.Run(test.c.String(), func(t *testing.T) {
 			parseableCount := 0
@@ -685,10 +686,10 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				}
 
 				semaCtx := tree.MakeSemaContext(nil /* resolver */)
-				typedExpr, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType)
+				typedExpr, err := test.c.ResolveAsType(ctx, &semaCtx, availType)
 				var res tree.Datum
 				if err == nil {
-					res, err = eval.Expr(context.Background(), evalCtx, typedExpr)
+					res, err = eval.Expr(ctx, evalCtx, typedExpr)
 				}
 				if err != nil {
 					if !strings.Contains(err.Error(), "could not parse") &&
@@ -711,7 +712,9 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 						i, availType, test.c, res)
 				} else {
 					expectedDatum := parseFuncs[availType](t, test.c.RawString())
-					if res.Compare(evalCtx, expectedDatum) != 0 {
+					if cmp, err := res.Compare(ctx, evalCtx, expectedDatum); err != nil {
+						t.Fatal(err)
+					} else if cmp != 0 {
 						t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+
 							", found %v",
 							i, availType, test.c, expectedDatum, res)

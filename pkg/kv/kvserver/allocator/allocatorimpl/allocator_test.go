@@ -715,7 +715,7 @@ func TestAllocatorAllocateVoterIOOverloadCheck(t *testing.T) {
 			defer stopper.Stop(ctx)
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(test.stores, t)
-			ReplicaIOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, int64(test.enforcement))
+			ReplicaIOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, test.enforcement)
 
 			// Allocate a voter where all replicas are alive (e.g. up-replicating a valid range).
 			add, _, err := a.AllocateVoter(
@@ -2109,22 +2109,24 @@ func TestAllocatorTransferLeaseTargetIOOverloadCheck(t *testing.T) {
 			defer stopper.Stop(ctx)
 			n := len(tc.leaseCounts)
 			stores := make([]*roachpb.StoreDescriptor, n)
-			existing := make([]roachpb.ReplicaDescriptor, 0, n)
+			storeIDs := make([]roachpb.StoreID, n)
 			for i := range tc.leaseCounts {
-				existing = append(existing, replicas(roachpb.StoreID(i+1))...)
+				storeID := roachpb.StoreID(i + 1)
 				stores[i] = &roachpb.StoreDescriptor{
-					StoreID: roachpb.StoreID(i + 1),
+					StoreID: storeID,
 					Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)},
 					Capacity: roachpb.StoreCapacity{
 						LeaseCount:     int32(tc.leaseCounts[i]),
 						IOThresholdMax: TestingIOThresholdWithScore(tc.IOScores[i]),
 					},
 				}
+				storeIDs[i] = storeID
 			}
+			existing := replicas(storeIDs...)
 
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(stores, t)
-			LeaseIOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, int64(tc.enforcement))
+			LeaseIOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, tc.enforcement)
 			LeaseIOOverloadThreshold.Override(ctx, &a.st.SV, threshold)
 			LeaseIOOverloadShedThreshold.Override(ctx, &a.st.SV, shedThreshold)
 
@@ -2940,22 +2942,24 @@ func TestAllocatorShouldTransferLeaseIOOverload(t *testing.T) {
 			defer stopper.Stop(ctx)
 			n := len(tc.leaseCounts)
 			stores := make([]*roachpb.StoreDescriptor, n)
-			existing := make([]roachpb.ReplicaDescriptor, 0, n)
+			storeIDs := make([]roachpb.StoreID, n)
 			for i := range tc.leaseCounts {
-				existing = append(existing, replicas(roachpb.StoreID(i+1))...)
+				storeID := roachpb.StoreID(i + 1)
 				stores[i] = &roachpb.StoreDescriptor{
-					StoreID: roachpb.StoreID(i + 1),
+					StoreID: storeID,
 					Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i + 1)},
 					Capacity: roachpb.StoreCapacity{
 						LeaseCount:     int32(tc.leaseCounts[i]),
 						IOThresholdMax: TestingIOThresholdWithScore(tc.IOScores[i]),
 					},
 				}
+				storeIDs[i] = storeID
 			}
+			existing := replicas(storeIDs...)
 
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(stores, t)
-			LeaseIOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, int64(tc.enforcement))
+			LeaseIOOverloadThresholdEnforcement.Override(ctx, &a.st.SV, tc.enforcement)
 			LeaseIOOverloadThreshold.Override(ctx, &a.st.SV, threshold)
 			LeaseIOOverloadShedThreshold.Override(ctx, &a.st.SV, shedThreshold)
 

@@ -700,6 +700,8 @@ func TestServeIndexHTML(t *testing.T) {
 	unlinkFakeUI := func() {
 		ui.HaveUI = false
 	}
+	major, minor := build.BranchReleaseSeries()
+	version := fmt.Sprintf("v%d.%d", major, minor)
 
 	t.Run("Insecure mode", func(t *testing.T) {
 		srv := serverutils.StartServerOnly(t, base.TestServerArgs{
@@ -759,7 +761,7 @@ Binary built without web UI.
 			expected := fmt.Sprintf(
 				`{"Insecure":true,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{"can_view_kv_metric_dashboards":true},"OIDCGenerateJWTAuthTokenEnabled":false,"LicenseType":"OSS","SecondsUntilLicenseExpiry":0,"IsManaged":false}`,
 				build.GetInfo().Tag,
-				build.BinaryVersionPrefix(),
+				version,
 				1,
 			)
 			require.Equal(t, expected, string(respBytes))
@@ -787,7 +789,7 @@ Binary built without web UI.
 				fmt.Sprintf(
 					`{"Insecure":false,"LoggedInUser":"authentic_user","Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{"can_view_kv_metric_dashboards":true},"OIDCGenerateJWTAuthTokenEnabled":false,"LicenseType":"OSS","SecondsUntilLicenseExpiry":0,"IsManaged":false}`,
 					build.GetInfo().Tag,
-					build.BinaryVersionPrefix(),
+					version,
 					1,
 				),
 			},
@@ -796,7 +798,7 @@ Binary built without web UI.
 				fmt.Sprintf(
 					`{"Insecure":false,"LoggedInUser":null,"Tag":"%s","Version":"%s","NodeID":"%d","OIDCAutoLogin":false,"OIDCLoginEnabled":false,"OIDCButtonText":"","FeatureFlags":{"can_view_kv_metric_dashboards":true},"OIDCGenerateJWTAuthTokenEnabled":false,"LicenseType":"OSS","SecondsUntilLicenseExpiry":0,"IsManaged":false}`,
 					build.GetInfo().Tag,
-					build.BinaryVersionPrefix(),
+					version,
 					1,
 				),
 			},
@@ -1129,6 +1131,44 @@ func Test_makeFakeNodeStatuses(t *testing.T) {
 			}
 			require.Equal(t, tt.exp, result)
 			require.True(t, testutils.IsError(err, tt.expErr), "%+v didn't match expectation %s", err, tt.expErr)
+		})
+	}
+}
+
+// TestStorageBlockLoadConcurrencyLimit verifies that the server correctly
+// distributes the limit set by the "storage.block_load.node_max_active"
+// cluster setting between the stores.
+func TestStorageBlockLoadConcurrencyLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, n := range []int{1, 2, 5} {
+		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
+			storeSpecs := make([]base.StoreSpec, n)
+			for i := range storeSpecs {
+				storeSpecs[i] = base.DefaultTestStoreSpec
+			}
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{StoreSpecs: storeSpecs})
+			defer s.Stopper().Stop(context.Background())
+
+			check := func(expected int64) error {
+				return s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+					metrics := s.TODOEngine().GetMetrics()
+					if metrics.BlockLoadConcurrencyLimit != expected {
+						return fmt.Errorf("expected %d, got %d", expected, metrics.BlockLoadConcurrencyLimit)
+					}
+					return nil
+				})
+			}
+
+			require.NoError(t, check((storage.BlockLoadConcurrencyLimit.Default()+int64(n)-1)/int64(n)))
+
+			db := s.SQLConn(t)
+			_, err := db.Exec("SET CLUSTER SETTING storage.block_load.node_max_active = 13")
+			require.NoError(t, err)
+			testutils.SucceedsSoon(t, func() error {
+				return check((13 + int64(n) - 1) / int64(n))
+			})
 		})
 	}
 }

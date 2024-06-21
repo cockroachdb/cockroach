@@ -809,6 +809,19 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaBlockLoadsInProgress = metric.Metadata{
+		Name:        "storage.block-load.active",
+		Help:        "The number of sstable block loads currently in progress",
+		Measurement: "Block loads",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaBlockLoadsQueued = metric.Metadata{
+		Name: "storage.block-load.queued",
+		Help: "The cumulative number of SSTable block loads that were delayed because too many loads " +
+			"were active (see also: `storage.block_load.node_max_active`)",
+		Measurement: "Block loads",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaSecondaryCacheSize = metric.Metadata{
 		Name:        "storage.secondary-cache.size",
 		Help:        "The number of sstable bytes stored in the secondary cache",
@@ -2567,30 +2580,18 @@ type StoreMetrics struct {
 	// Storage (pebble) metrics. Some are named RocksDB which is what we used
 	// before pebble, and this name is kept for backwards compatibility despite
 	// the backing metrics now originating from pebble.
-	//
-	// All of these are cumulative values. Most are maintained by pebble and
-	// so we have to expose them as gauges (lest we start tracking deltas from
-	// the respective last stats we got from pebble).
-	//
-	// There's a bit of a semantic mismatch here because the mechanism of
-	// updating these metrics is a gauge (eg, we're reading the current value,
-	// not incrementing) but semantically some of them are monotonically
-	// increasing counters.
-	//
-	// TODO(jackson): Reconcile this mismatch so that metrics that are
-	// semantically counters are exported as such to Prometheus. See #99922.
-	RdbBlockCacheHits                 *metric.Gauge
-	RdbBlockCacheMisses               *metric.Gauge
+	RdbBlockCacheHits                 *metric.Counter
+	RdbBlockCacheMisses               *metric.Counter
 	RdbBlockCacheUsage                *metric.Gauge
-	RdbBloomFilterPrefixChecked       *metric.Gauge
-	RdbBloomFilterPrefixUseful        *metric.Gauge
+	RdbBloomFilterPrefixChecked       *metric.Counter
+	RdbBloomFilterPrefixUseful        *metric.Counter
 	RdbMemtableTotalSize              *metric.Gauge
-	RdbFlushes                        *metric.Gauge
-	RdbFlushedBytes                   *metric.Gauge
-	RdbCompactions                    *metric.Gauge
-	RdbIngestedBytes                  *metric.Gauge
-	RdbCompactedBytesRead             *metric.Gauge
-	RdbCompactedBytesWritten          *metric.Gauge
+	RdbFlushes                        *metric.Counter
+	RdbFlushedBytes                   *metric.Counter
+	RdbCompactions                    *metric.Counter
+	RdbIngestedBytes                  *metric.Counter
+	RdbCompactedBytesRead             *metric.Counter
+	RdbCompactedBytesWritten          *metric.Counter
 	RdbTableReadersMemEstimate        *metric.Gauge
 	RdbReadAmplification              *metric.Gauge
 	RdbNumSSTables                    *metric.Gauge
@@ -2598,64 +2599,66 @@ type StoreMetrics struct {
 	RdbMarkedForCompactionFiles       *metric.Gauge
 	RdbKeysRangeKeySets               *metric.Gauge
 	RdbKeysTombstones                 *metric.Gauge
-	RdbL0BytesFlushed                 *metric.Gauge
+	RdbL0BytesFlushed                 *metric.Counter
 	RdbL0Sublevels                    *metric.Gauge
 	RdbL0NumFiles                     *metric.Gauge
-	RdbBytesIngested                  [7]*metric.Gauge        // idx = level
+	RdbBytesIngested                  [7]*metric.Counter      // idx = level
 	RdbLevelSize                      [7]*metric.Gauge        // idx = level
 	RdbLevelScore                     [7]*metric.GaugeFloat64 // idx = level
 	RdbWriteStalls                    *metric.Gauge
 	RdbWriteStallNanos                *metric.Gauge
-	SingleDelInvariantViolations      *metric.Gauge
-	SingleDelIneffectualCount         *metric.Gauge
-	SharedStorageBytesRead            *metric.Gauge
-	SharedStorageBytesWritten         *metric.Gauge
+	SingleDelInvariantViolations      *metric.Counter
+	SingleDelIneffectualCount         *metric.Counter
+	SharedStorageBytesRead            *metric.Counter
+	SharedStorageBytesWritten         *metric.Counter
+	BlockLoadsInProgress              *metric.Gauge
+	BlockLoadsQueued                  *metric.Counter
 	SecondaryCacheSize                *metric.Gauge
 	SecondaryCacheCount               *metric.Gauge
-	SecondaryCacheTotalReads          *metric.Gauge
-	SecondaryCacheMultiShardReads     *metric.Gauge
-	SecondaryCacheMultiBlockReads     *metric.Gauge
-	SecondaryCacheReadsWithFullHit    *metric.Gauge
-	SecondaryCacheReadsWithPartialHit *metric.Gauge
-	SecondaryCacheReadsWithNoHit      *metric.Gauge
-	SecondaryCacheEvictions           *metric.Gauge
-	SecondaryCacheWriteBackFails      *metric.Gauge
-	StorageCompactionsPinnedKeys      *metric.Gauge
-	StorageCompactionsPinnedBytes     *metric.Gauge
-	StorageCompactionsDuration        *metric.Gauge
-	IterBlockBytes                    *metric.Gauge
-	IterBlockBytesInCache             *metric.Gauge
-	IterBlockReadDuration             *metric.Gauge
-	IterExternalSeeks                 *metric.Gauge
-	IterExternalSteps                 *metric.Gauge
-	IterInternalSeeks                 *metric.Gauge
-	IterInternalSteps                 *metric.Gauge
-	FlushableIngestCount              *metric.Gauge
-	FlushableIngestTableCount         *metric.Gauge
-	FlushableIngestTableSize          *metric.Gauge
-	BatchCommitCount                  *metric.Gauge
-	BatchCommitDuration               *metric.Gauge
-	BatchCommitSemWaitDuration        *metric.Gauge
-	BatchCommitWALQWaitDuration       *metric.Gauge
-	BatchCommitMemStallDuration       *metric.Gauge
-	BatchCommitL0StallDuration        *metric.Gauge
-	BatchCommitWALRotWaitDuration     *metric.Gauge
-	BatchCommitCommitWaitDuration     *metric.Gauge
+	SecondaryCacheTotalReads          *metric.Counter
+	SecondaryCacheMultiShardReads     *metric.Counter
+	SecondaryCacheMultiBlockReads     *metric.Counter
+	SecondaryCacheReadsWithFullHit    *metric.Counter
+	SecondaryCacheReadsWithPartialHit *metric.Counter
+	SecondaryCacheReadsWithNoHit      *metric.Counter
+	SecondaryCacheEvictions           *metric.Counter
+	SecondaryCacheWriteBackFails      *metric.Counter
+	StorageCompactionsPinnedKeys      *metric.Counter
+	StorageCompactionsPinnedBytes     *metric.Counter
+	StorageCompactionsDuration        *metric.Counter
+	IterBlockBytes                    *metric.Counter
+	IterBlockBytesInCache             *metric.Counter
+	IterBlockReadDuration             *metric.Counter
+	IterExternalSeeks                 *metric.Counter
+	IterExternalSteps                 *metric.Counter
+	IterInternalSeeks                 *metric.Counter
+	IterInternalSteps                 *metric.Counter
+	FlushableIngestCount              *metric.Counter
+	FlushableIngestTableCount         *metric.Counter
+	FlushableIngestTableSize          *metric.Counter
+	BatchCommitCount                  *metric.Counter
+	BatchCommitDuration               *metric.Counter
+	BatchCommitSemWaitDuration        *metric.Counter
+	BatchCommitWALQWaitDuration       *metric.Counter
+	BatchCommitMemStallDuration       *metric.Counter
+	BatchCommitL0StallDuration        *metric.Counter
+	BatchCommitWALRotWaitDuration     *metric.Counter
+	BatchCommitCommitWaitDuration     *metric.Counter
 	SSTableZombieBytes                *metric.Gauge
 	categoryIterMetrics               pebbleCategoryIterMetricsContainer
 	categoryDiskWriteMetrics          pebbleCategoryDiskWriteMetricsContainer
-	WALBytesWritten                   *metric.Gauge
-	WALBytesIn                        *metric.Gauge
-	WALFailoverSwitchCount            *metric.Gauge
-	WALFailoverPrimaryDuration        *metric.Gauge
-	WALFailoverSecondaryDuration      *metric.Gauge
+	WALBytesWritten                   *metric.Counter
+	WALBytesIn                        *metric.Counter
+	WALFailoverSwitchCount            *metric.Counter
+	WALFailoverPrimaryDuration        *metric.Counter
+	WALFailoverSecondaryDuration      *metric.Counter
 	WALFailoverWriteAndSyncLatency    *metric.ManualWindowHistogram
 
 	RdbCheckpoints *metric.Gauge
 
 	// Disk health metrics.
-	DiskSlow    *metric.Gauge
-	DiskStalled *metric.Gauge
+	DiskSlow    *metric.Counter
+	DiskStalled *metric.Counter
 
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
 	// maintained to keep the current structure of NodeStatus; it would be
@@ -3189,7 +3192,7 @@ func newTenantsStorageMetrics() *TenantsStorageMetrics {
 
 func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	storeRegistry := metric.NewRegistry()
-	rdbBytesIngested := storageLevelGaugeSlice(metaRdbBytesIngested)
+	rdbBytesIngested := storageLevelCounterSlice(metaRdbBytesIngested)
 	rdbLevelSize := storageLevelGaugeSlice(metaRdbLevelSize)
 	rdbLevelScore := storageLevelGaugeFloat64Slice(metaRdbLevelScores)
 
@@ -3289,18 +3292,18 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// but the meaning of the metric itself is a counter.
 		// TODO(jackson): Reconcile this mismatch so that metrics that are
 		// semantically counters are exported as such to Prometheus. See #99922.
-		RdbBlockCacheHits:                 metric.NewGauge(metaRdbBlockCacheHits),
-		RdbBlockCacheMisses:               metric.NewGauge(metaRdbBlockCacheMisses),
+		RdbBlockCacheHits:                 metric.NewCounter(metaRdbBlockCacheHits),
+		RdbBlockCacheMisses:               metric.NewCounter(metaRdbBlockCacheMisses),
 		RdbBlockCacheUsage:                metric.NewGauge(metaRdbBlockCacheUsage),
-		RdbBloomFilterPrefixChecked:       metric.NewGauge(metaRdbBloomFilterPrefixChecked),
-		RdbBloomFilterPrefixUseful:        metric.NewGauge(metaRdbBloomFilterPrefixUseful),
+		RdbBloomFilterPrefixChecked:       metric.NewCounter(metaRdbBloomFilterPrefixChecked),
+		RdbBloomFilterPrefixUseful:        metric.NewCounter(metaRdbBloomFilterPrefixUseful),
 		RdbMemtableTotalSize:              metric.NewGauge(metaRdbMemtableTotalSize),
-		RdbFlushes:                        metric.NewGauge(metaRdbFlushes),
-		RdbFlushedBytes:                   metric.NewGauge(metaRdbFlushedBytes),
-		RdbCompactions:                    metric.NewGauge(metaRdbCompactions),
-		RdbIngestedBytes:                  metric.NewGauge(metaRdbIngestedBytes),
-		RdbCompactedBytesRead:             metric.NewGauge(metaRdbCompactedBytesRead),
-		RdbCompactedBytesWritten:          metric.NewGauge(metaRdbCompactedBytesWritten),
+		RdbFlushes:                        metric.NewCounter(metaRdbFlushes),
+		RdbFlushedBytes:                   metric.NewCounter(metaRdbFlushedBytes),
+		RdbCompactions:                    metric.NewCounter(metaRdbCompactions),
+		RdbIngestedBytes:                  metric.NewCounter(metaRdbIngestedBytes),
+		RdbCompactedBytesRead:             metric.NewCounter(metaRdbCompactedBytesRead),
+		RdbCompactedBytesWritten:          metric.NewCounter(metaRdbCompactedBytesWritten),
 		RdbTableReadersMemEstimate:        metric.NewGauge(metaRdbTableReadersMemEstimate),
 		RdbReadAmplification:              metric.NewGauge(metaRdbReadAmplification),
 		RdbNumSSTables:                    metric.NewGauge(metaRdbNumSSTables),
@@ -3308,7 +3311,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbMarkedForCompactionFiles:       metric.NewGauge(metaRdbMarkedForCompactionFiles),
 		RdbKeysRangeKeySets:               metric.NewGauge(metaRdbKeysRangeKeySets),
 		RdbKeysTombstones:                 metric.NewGauge(metaRdbKeysTombstones),
-		RdbL0BytesFlushed:                 metric.NewGauge(metaRdbL0BytesFlushed),
+		RdbL0BytesFlushed:                 metric.NewCounter(metaRdbL0BytesFlushed),
 		RdbL0Sublevels:                    metric.NewGauge(metaRdbL0Sublevels),
 		RdbL0NumFiles:                     metric.NewGauge(metaRdbL0NumFiles),
 		RdbBytesIngested:                  rdbBytesIngested,
@@ -3316,41 +3319,43 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbLevelScore:                     rdbLevelScore,
 		RdbWriteStalls:                    metric.NewGauge(metaRdbWriteStalls),
 		RdbWriteStallNanos:                metric.NewGauge(metaRdbWriteStallNanos),
-		IterBlockBytes:                    metric.NewGauge(metaBlockBytes),
-		IterBlockBytesInCache:             metric.NewGauge(metaBlockBytesInCache),
-		IterBlockReadDuration:             metric.NewGauge(metaBlockReadDuration),
-		IterExternalSeeks:                 metric.NewGauge(metaIterExternalSeeks),
-		IterExternalSteps:                 metric.NewGauge(metaIterExternalSteps),
-		IterInternalSeeks:                 metric.NewGauge(metaIterInternalSeeks),
-		IterInternalSteps:                 metric.NewGauge(metaIterInternalSteps),
-		SingleDelInvariantViolations:      metric.NewGauge(metaStorageSingleDelInvariantViolationCount),
-		SingleDelIneffectualCount:         metric.NewGauge(metaStorageSingleDelIneffectualCount),
-		SharedStorageBytesRead:            metric.NewGauge(metaSharedStorageBytesRead),
-		SharedStorageBytesWritten:         metric.NewGauge(metaSharedStorageBytesWritten),
+		IterBlockBytes:                    metric.NewCounter(metaBlockBytes),
+		IterBlockBytesInCache:             metric.NewCounter(metaBlockBytesInCache),
+		IterBlockReadDuration:             metric.NewCounter(metaBlockReadDuration),
+		IterExternalSeeks:                 metric.NewCounter(metaIterExternalSeeks),
+		IterExternalSteps:                 metric.NewCounter(metaIterExternalSteps),
+		IterInternalSeeks:                 metric.NewCounter(metaIterInternalSeeks),
+		IterInternalSteps:                 metric.NewCounter(metaIterInternalSteps),
+		SingleDelInvariantViolations:      metric.NewCounter(metaStorageSingleDelInvariantViolationCount),
+		SingleDelIneffectualCount:         metric.NewCounter(metaStorageSingleDelIneffectualCount),
+		SharedStorageBytesRead:            metric.NewCounter(metaSharedStorageBytesRead),
+		SharedStorageBytesWritten:         metric.NewCounter(metaSharedStorageBytesWritten),
+		BlockLoadsInProgress:              metric.NewGauge(metaBlockLoadsInProgress),
+		BlockLoadsQueued:                  metric.NewCounter(metaBlockLoadsQueued),
 		SecondaryCacheSize:                metric.NewGauge(metaSecondaryCacheSize),
 		SecondaryCacheCount:               metric.NewGauge(metaSecondaryCacheCount),
-		SecondaryCacheTotalReads:          metric.NewGauge(metaSecondaryCacheTotalReads),
-		SecondaryCacheMultiShardReads:     metric.NewGauge(metaSecondaryCacheMultiShardReads),
-		SecondaryCacheMultiBlockReads:     metric.NewGauge(metaSecondaryCacheMultiBlockReads),
-		SecondaryCacheReadsWithFullHit:    metric.NewGauge(metaSecondaryCacheReadsWithFullHit),
-		SecondaryCacheReadsWithPartialHit: metric.NewGauge(metaSecondaryCacheReadsWithPartialHit),
-		SecondaryCacheReadsWithNoHit:      metric.NewGauge(metaSecondaryCacheReadsWithNoHit),
-		SecondaryCacheEvictions:           metric.NewGauge(metaSecondaryCacheEvictions),
-		SecondaryCacheWriteBackFails:      metric.NewGauge(metaSecondaryCacheWriteBackFailures),
-		StorageCompactionsPinnedKeys:      metric.NewGauge(metaStorageCompactionsKeysPinnedCount),
-		StorageCompactionsPinnedBytes:     metric.NewGauge(metaStorageCompactionsKeysPinnedBytes),
-		StorageCompactionsDuration:        metric.NewGauge(metaStorageCompactionsDuration),
-		FlushableIngestCount:              metric.NewGauge(metaFlushableIngestCount),
-		FlushableIngestTableCount:         metric.NewGauge(metaFlushableIngestTableCount),
-		FlushableIngestTableSize:          metric.NewGauge(metaFlushableIngestTableBytes),
-		BatchCommitCount:                  metric.NewGauge(metaBatchCommitCount),
-		BatchCommitDuration:               metric.NewGauge(metaBatchCommitDuration),
-		BatchCommitSemWaitDuration:        metric.NewGauge(metaBatchCommitSemWaitDuration),
-		BatchCommitWALQWaitDuration:       metric.NewGauge(metaBatchCommitWALQWaitDuration),
-		BatchCommitMemStallDuration:       metric.NewGauge(metaBatchCommitMemStallDuration),
-		BatchCommitL0StallDuration:        metric.NewGauge(metaBatchCommitL0StallDuration),
-		BatchCommitWALRotWaitDuration:     metric.NewGauge(metaBatchCommitWALRotDuration),
-		BatchCommitCommitWaitDuration:     metric.NewGauge(metaBatchCommitCommitWaitDuration),
+		SecondaryCacheTotalReads:          metric.NewCounter(metaSecondaryCacheTotalReads),
+		SecondaryCacheMultiShardReads:     metric.NewCounter(metaSecondaryCacheMultiShardReads),
+		SecondaryCacheMultiBlockReads:     metric.NewCounter(metaSecondaryCacheMultiBlockReads),
+		SecondaryCacheReadsWithFullHit:    metric.NewCounter(metaSecondaryCacheReadsWithFullHit),
+		SecondaryCacheReadsWithPartialHit: metric.NewCounter(metaSecondaryCacheReadsWithPartialHit),
+		SecondaryCacheReadsWithNoHit:      metric.NewCounter(metaSecondaryCacheReadsWithNoHit),
+		SecondaryCacheEvictions:           metric.NewCounter(metaSecondaryCacheEvictions),
+		SecondaryCacheWriteBackFails:      metric.NewCounter(metaSecondaryCacheWriteBackFailures),
+		StorageCompactionsPinnedKeys:      metric.NewCounter(metaStorageCompactionsKeysPinnedCount),
+		StorageCompactionsPinnedBytes:     metric.NewCounter(metaStorageCompactionsKeysPinnedBytes),
+		StorageCompactionsDuration:        metric.NewCounter(metaStorageCompactionsDuration),
+		FlushableIngestCount:              metric.NewCounter(metaFlushableIngestCount),
+		FlushableIngestTableCount:         metric.NewCounter(metaFlushableIngestTableCount),
+		FlushableIngestTableSize:          metric.NewCounter(metaFlushableIngestTableBytes),
+		BatchCommitCount:                  metric.NewCounter(metaBatchCommitCount),
+		BatchCommitDuration:               metric.NewCounter(metaBatchCommitDuration),
+		BatchCommitSemWaitDuration:        metric.NewCounter(metaBatchCommitSemWaitDuration),
+		BatchCommitWALQWaitDuration:       metric.NewCounter(metaBatchCommitWALQWaitDuration),
+		BatchCommitMemStallDuration:       metric.NewCounter(metaBatchCommitMemStallDuration),
+		BatchCommitL0StallDuration:        metric.NewCounter(metaBatchCommitL0StallDuration),
+		BatchCommitWALRotWaitDuration:     metric.NewCounter(metaBatchCommitWALRotDuration),
+		BatchCommitCommitWaitDuration:     metric.NewCounter(metaBatchCommitCommitWaitDuration),
 		SSTableZombieBytes:                metric.NewGauge(metaSSTableZombieBytes),
 		categoryIterMetrics: pebbleCategoryIterMetricsContainer{
 			registry: storeRegistry,
@@ -3358,11 +3363,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		categoryDiskWriteMetrics: pebbleCategoryDiskWriteMetricsContainer{
 			registry: storeRegistry,
 		},
-		WALBytesWritten:              metric.NewGauge(metaWALBytesWritten),
-		WALBytesIn:                   metric.NewGauge(metaWALBytesIn),
-		WALFailoverSwitchCount:       metric.NewGauge(metaStorageWALFailoverSwitchCount),
-		WALFailoverPrimaryDuration:   metric.NewGauge(metaStorageWALFailoverPrimaryDuration),
-		WALFailoverSecondaryDuration: metric.NewGauge(metaStorageWALFailoverSecondaryDuration),
+		WALBytesWritten:              metric.NewCounter(metaWALBytesWritten),
+		WALBytesIn:                   metric.NewCounter(metaWALBytesIn),
+		WALFailoverSwitchCount:       metric.NewCounter(metaStorageWALFailoverSwitchCount),
+		WALFailoverPrimaryDuration:   metric.NewCounter(metaStorageWALFailoverPrimaryDuration),
+		WALFailoverSecondaryDuration: metric.NewCounter(metaStorageWALFailoverSecondaryDuration),
 		WALFailoverWriteAndSyncLatency: metric.NewManualWindowHistogram(
 			metaStorageWALFailoverWriteAndSyncLatency,
 			pebble.FsyncLatencyBuckets,
@@ -3375,8 +3380,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbCheckpoints: metric.NewGauge(metaRdbCheckpoints),
 
 		// Disk health metrics.
-		DiskSlow:    metric.NewGauge(metaDiskSlow),
-		DiskStalled: metric.NewGauge(metaDiskStalled),
+		DiskSlow:    metric.NewCounter(metaDiskSlow),
+		DiskStalled: metric.NewCounter(metaDiskStalled),
 
 		// Range event metrics.
 		RangeSplits:                   metric.NewCounter(metaRangeSplits),
@@ -3762,6 +3767,8 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.SingleDelIneffectualCount.Update(m.SingleDelIneffectualCount)
 	sm.SharedStorageBytesRead.Update(m.SharedStorageReadBytes)
 	sm.SharedStorageBytesWritten.Update(m.SharedStorageWriteBytes)
+	sm.BlockLoadsInProgress.Update(m.BlockLoadsInProgress)
+	sm.BlockLoadsQueued.Update(m.BlockLoadsQueued)
 	sm.SecondaryCacheSize.Update(m.SecondaryCacheMetrics.Size)
 	sm.SecondaryCacheCount.Update(m.SecondaryCacheMetrics.Count)
 	sm.SecondaryCacheTotalReads.Update(m.SecondaryCacheMetrics.TotalReads)
@@ -3959,6 +3966,14 @@ func storageLevelGaugeFloat64Slice(sl [7]metric.Metadata) [7]*metric.GaugeFloat6
 	var gs [7]*metric.GaugeFloat64
 	for i := range sl {
 		gs[i] = metric.NewGaugeFloat64(sl[i])
+	}
+	return gs
+}
+
+func storageLevelCounterSlice(sl [7]metric.Metadata) [7]*metric.Counter {
+	var gs [7]*metric.Counter
+	for i := range sl {
+		gs[i] = metric.NewCounter(sl[i])
 	}
 	return gs
 }

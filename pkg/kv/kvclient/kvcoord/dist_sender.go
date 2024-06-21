@@ -333,6 +333,7 @@ var metamorphicRouteToLeaseholderFirst = metamorphic.ConstantWithTestBool(
 // followerreadsccl code to inject logic to check if follower reads are enabled.
 // By default, without CCL code, this function returns false.
 var CanSendToFollower = func(
+	_ context.Context,
 	_ *cluster.Settings,
 	_ *hlc.Clock,
 	_ roachpb.RangeClosedTimestampPolicy,
@@ -513,7 +514,6 @@ type rangeFeedErrorCounters struct {
 	RangefeedRestartRanges *metric.Counter
 	RangefeedErrorCatchup  *metric.Counter
 	RetryErrors            []*metric.Counter
-	Stuck                  *metric.Counter
 	SendErrors             *metric.Counter
 	StoreNotFound          *metric.Counter
 	NodeNotFound           *metric.Counter
@@ -546,7 +546,6 @@ func makeRangeFeedErrorCounters() rangeFeedErrorCounters {
 		RangefeedRestartRanges: metric.NewCounter(metaDistSenderRangefeedRestartRanges),
 		RangefeedErrorCatchup:  metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
 		RetryErrors:            retryCounters,
-		Stuck:                  metric.NewCounter(retryMeta("stuck")),
 		SendErrors:             metric.NewCounter(retryMeta("send")),
 		StoreNotFound:          metric.NewCounter(retryMeta("store not found")),
 		NodeNotFound:           metric.NewCounter(retryMeta("node not found")),
@@ -2490,7 +2489,7 @@ func (ds *DistSender) sendToReplicas(
 	// otherwise, we may send a request to a remote region unnecessarily.
 	if ba.RoutingPolicy == kvpb.RoutingPolicy_LEASEHOLDER &&
 		CanSendToFollower(
-			ds.st, ds.clock,
+			ctx, ds.st, ds.clock,
 			routing.ClosedTimestampPolicy(defaultSendClosedTimestampPolicy), ba,
 		) {
 		ba = ba.ShallowCopy()
@@ -3182,7 +3181,9 @@ func (ds *DistSender) getLocalityComparison(
 // getCostControllerConfig returns the config for the tenant cost model. This
 // returns nil if no KV interceptors are associated with the DistSender, or the
 // KV interceptor is not a multitenant.TenantSideCostController.
-func (ds *DistSender) getCostControllerConfig(ctx context.Context) *tenantcostmodel.Config {
+func (ds *DistSender) getCostControllerConfig(
+	ctx context.Context,
+) *tenantcostmodel.RequestUnitModel {
 	if ds.kvInterceptor == nil {
 		return nil
 	}
@@ -3191,7 +3192,7 @@ func (ds *DistSender) getCostControllerConfig(ctx context.Context) *tenantcostmo
 		log.VErrEvent(ctx, 2, "kvInterceptor is not a TenantSideCostController")
 		return nil
 	}
-	cfg := costController.GetCostConfig()
+	cfg := costController.GetRequestUnitModel()
 	if cfg == nil {
 		log.VErrEvent(ctx, 2, "cost controller does not have a cost config")
 	}

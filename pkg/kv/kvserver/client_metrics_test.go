@@ -362,22 +362,31 @@ func TestStoreMetrics(t *testing.T) {
 		// filters except when explicitly opted into.
 
 		m := s.Metrics()
-		testcases := []struct {
+
+		for _, tc := range []struct {
 			gauge *metric.Gauge
 			min   int64
 		}{
-			{m.RdbBlockCacheHits, 10},
-			{m.RdbBlockCacheMisses, 0},
 			{m.RdbBlockCacheUsage, 0},
-			{m.RdbBloomFilterPrefixChecked, 0},
-			{m.RdbBloomFilterPrefixUseful, 0},
 			{m.RdbMemtableTotalSize, 5000},
-			{m.RdbCompactions, 0},
 			{m.RdbTableReadersMemEstimate, 50},
-		}
-		for _, tc := range testcases {
+		} {
 			if a := tc.gauge.Value(); a < tc.min {
 				t.Errorf("gauge %s = %d < min %d", tc.gauge.GetName(), a, tc.min)
+			}
+		}
+		for _, tc := range []struct {
+			counter *metric.Counter
+			min     int64
+		}{
+			{m.RdbBlockCacheHits, 10},
+			{m.RdbBlockCacheMisses, 0},
+			{m.RdbBloomFilterPrefixChecked, 0},
+			{m.RdbBloomFilterPrefixUseful, 0},
+			{m.RdbCompactions, 0},
+		} {
+			if a := tc.counter.Count(); a < tc.min {
+				t.Errorf("counter %s = %d < min %d", tc.counter.GetName(), a, tc.min)
 			}
 		}
 	}

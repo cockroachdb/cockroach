@@ -270,7 +270,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				}
 
 				streamID := int64(tree.MustBeDInt(args[0]))
-				spec, err := mgr.GetReplicationStreamSpec(ctx, streampb.StreamID(streamID))
+				spec, err := mgr.GetPhysicalReplicationStreamSpec(ctx, streampb.StreamID(streamID))
 				if err != nil {
 					return nil, err
 				}
@@ -472,7 +472,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 	// TODO(ssd): These functions likely aren't the final API we
 	// want.  Namely, boths should perhaps just be overloads of
 	// existing functions.
-	"crdb_internal.partition_spans": makeBuiltin(
+	"crdb_internal.plan_logical_replication": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategoryClusterReplication,
 			Undocumented:     true,
@@ -480,7 +480,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{Name: "spans", Typ: types.BytesArray},
+				{Name: "req", Typ: types.Bytes},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -488,16 +488,13 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				spanByteArray := tree.MustBeDArray(args[0])
-				spans := make([]roachpb.Span, len(spanByteArray.Array))
-				for i, spanByteExpr := range spanByteArray.Array {
-					spanBytes := []byte(tree.MustBeDBytes(spanByteExpr))
-					if err := protoutil.Unmarshal(spanBytes, &spans[i]); err != nil {
-						return nil, err
-					}
+				reqBytes := []byte(tree.MustBeDBytes(args[0]))
+				req := streampb.LogicalReplicationPlanRequest{}
+				if err := protoutil.Unmarshal(reqBytes, &req); err != nil {
+					return nil, err
 				}
 
-				spec, err := mgr.PartitionSpans(ctx, spans)
+				spec, err := mgr.PlanLogicalReplication(ctx, req)
 				if err != nil {
 					return nil, err
 				}
@@ -507,7 +504,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				}
 				return tree.NewDBytes(tree.DBytes(rawSpec)), err
 			},
-			Info:       "TODO(ssd)",
+			Info:       "Returns a replication stream spec for the given logical replication plan request",
 			Volatility: volatility.Volatile,
 		},
 	),

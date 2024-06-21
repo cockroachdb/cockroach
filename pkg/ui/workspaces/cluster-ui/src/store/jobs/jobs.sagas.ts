@@ -13,6 +13,8 @@ import { PayloadAction } from "@reduxjs/toolkit";
 
 import { getJobs, JobsRequest } from "src/api/jobsApi";
 
+import { maybeError } from "../../util";
+
 import { actions } from "./jobs.reducer";
 
 export function* refreshJobsSaga(action: PayloadAction<JobsRequest>) {
@@ -24,7 +26,7 @@ export function* requestJobsSaga(action: PayloadAction<JobsRequest>): any {
     const result = yield call(getJobs, action.payload);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(maybeError(e)));
   }
 }
 

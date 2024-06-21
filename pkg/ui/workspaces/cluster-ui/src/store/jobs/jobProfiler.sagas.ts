@@ -17,6 +17,8 @@ import {
   listExecutionDetailFiles,
 } from "src/api";
 
+import { maybeError } from "../../util";
+
 import { actions } from "./jobProfiler.reducer";
 
 export function* refreshJobProfilerSaga(
@@ -32,7 +34,7 @@ export function* requestJobProfilerSaga(
     const result = yield call(listExecutionDetailFiles, action.payload);
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(maybeError(e)));
   }
 }
 
@@ -46,7 +48,7 @@ export function* collectExecutionDetailsSaga(
     // requested statement.
     yield put(actions.request());
   } catch (e) {
-    yield put(actions.collectExecutionDetailsFailed(e));
+    yield put(actions.collectExecutionDetailsFailed(maybeError(e)));
   }
 }
 

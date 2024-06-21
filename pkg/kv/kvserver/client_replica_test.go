@@ -1143,9 +1143,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	var maxNanos int64
 	for _, m := range manuals {
 		m.Pause()
-		if cur := m.UnixNano(); cur > maxNanos {
-			maxNanos = cur
-		}
+		maxNanos = max(maxNanos, m.UnixNano())
 	}
 	// After doing so, perfectly synchronize them.
 	for _, m := range manuals {
@@ -1180,8 +1178,12 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 		t.Fatalf("timeout")
 	}
 
-	// Advance the clock on node 1.
+	// Advance the clock on node 1. This should now lead the clock on node 2 and
+	// the timestamp assigned to the non-txn read, because the two manual clocks
+	// were paused and synchronized up above.
 	manuals[0].Increment(100)
+	clockTs := tc.Servers[0].Clock().Now()
+	require.True(t, nonTxnOrigTs.Less(clockTs), "nonTxnOrigTs: %v, clockTs: %v", nonTxnOrigTs, clockTs)
 
 	// Perform a non-txn write on node 1. This will grab a timestamp from node 1's
 	// clock, which leads the clock on node 2 and the timestamp assigned to the
@@ -1199,11 +1201,12 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	// operations and assert that we observe an uncertainty error even though its
 	// absence would not be a true stale read.
 	ba := &kvpb.BatchRequest{}
+	ba.RangeID = desc.RangeID
 	ba.Add(putArgs(key, []byte("val")))
-	br, pErr := tc.Servers[0].DistSenderI().(kv.Sender).Send(ctx, ba)
+	br, pErr := tc.GetFirstStoreFromServer(t, 0).Send(ctx, ba)
 	require.Nil(t, pErr)
 	writeTs := br.Timestamp
-	require.True(t, nonTxnOrigTs.Less(writeTs))
+	require.True(t, nonTxnOrigTs.Less(writeTs), "nonTxnOrigTs: %v, writeTs: %v", nonTxnOrigTs, writeTs)
 
 	// Then transfer the lease to node 2. The new lease should end up with a start
 	// time above the timestamp assigned to the non-txn read.
@@ -2057,8 +2060,8 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			if val := injectLeaseTransferError.Load(); val != nil && val.(bool) {
 				// Note that we can't just return an error here as we only
 				// end up counting failures in the metrics if the command
-				// makes it through to being executed. So use a fake store ID.
-				args.Lease.Replica.StoreID = roachpb.StoreID(1000)
+				// makes it through to being executed. So use a fake replica ID.
+				args.Lease.Replica.ReplicaID = 1000
 			}
 		}
 		return nil
@@ -2337,6 +2340,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 				t.Fatal(err)
 			}
 			leaseReq.PrevLease = leaseInfo.CurrentOrProspective()
+			leaseReq.Lease.Sequence = leaseReq.PrevLease.Sequence + 1
 
 			_, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), &leaseReq)
 			if _, ok := pErr.GetDetail().(*kvpb.AmbiguousResultError); ok {
@@ -4344,18 +4348,17 @@ func TestStrictGCEnforcement(t *testing.T) {
 
 		// Block the KVSubscriber rangefeed from progressing.
 		blockKVSubscriberCh := make(chan struct{})
-		var isBlocked syncutil.AtomicBool
-		isBlocked.Set(false)
+		var isBlocked atomic.Bool
 		mu.Lock()
 		mu.blockOnTimestampUpdate = func() {
-			isBlocked.Set(true)
+			isBlocked.Store(true)
 			<-blockKVSubscriberCh
 		}
 		mu.Unlock()
 
 		// Ensure that the KVSubscriber has been blocked.
 		testutils.SucceedsSoon(t, func() error {
-			if !isBlocked.Get() {
+			if !isBlocked.Load() {
 				return errors.New("kvsubscriber not blocked yet")
 			}
 			return nil
@@ -4389,18 +4392,17 @@ func TestStrictGCEnforcement(t *testing.T) {
 	t.Run("protected timestamps are respected", func(t *testing.T) {
 		// Block the KVSubscriber rangefeed from progressing.
 		blockKVSubscriberCh := make(chan struct{})
-		var isBlocked syncutil.AtomicBool
-		isBlocked.Set(false)
+		var isBlocked atomic.Bool
 		mu.Lock()
 		mu.blockOnTimestampUpdate = func() {
-			isBlocked.Set(true)
+			isBlocked.Store(true)
 			<-blockKVSubscriberCh
 		}
 		mu.Unlock()
 
 		// Ensure that the KVSubscriber has been blocked.
 		testutils.SucceedsSoon(t, func() error {
-			if !isBlocked.Get() {
+			if !isBlocked.Load() {
 				return errors.New("kvsubscriber not blocked yet")
 			}
 			return nil

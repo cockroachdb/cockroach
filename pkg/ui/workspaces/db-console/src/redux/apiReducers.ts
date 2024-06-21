@@ -125,10 +125,14 @@ const databaseDetailsReducerObj = new KeyedCachedDataReducer(
   moment.duration(10, "m"),
 );
 
+export const spanStatsRequestPayloadToID = (
+  params: clusterUiApi.DatabaseDetailsSpanStatsReqParams,
+): string => params.database;
+
 const databaseDetailsSpanStatsReducerObj = new KeyedCachedDataReducer(
   clusterUiApi.getDatabaseDetailsSpanStats,
   "databaseDetailsSpanStats",
-  databaseRequestPayloadToID,
+  spanStatsRequestPayloadToID,
   null,
   moment.duration(10, "m"),
 );
@@ -777,7 +781,7 @@ export function createSelectorForKeyedCachedDataField<
     APIReducersState,
     KeyedCachedDataReducerState<RespType>
   >,
-  selectKey: ParametricSelector<unknown, RouteComponentProps, string>,
+  selectKey: ParametricSelector<AdminUIState, RouteComponentProps, string>,
 ) {
   return createSelector<
     AdminUIState,

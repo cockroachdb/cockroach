@@ -1404,7 +1404,7 @@ func (t *logicTest) newCluster(
 			// DistSQL if it's not disabled, and we have to disable it before
 			// the cluster started (so that we don't have any internal queries
 			// using DistSQL concurrently with updating the span resolver).
-			sql.DistSQLClusterExecMode.Override(context.Background(), &st.SV, int64(sessiondatapb.DistSQLOff))
+			sql.DistSQLClusterExecMode.Override(context.Background(), &st.SV, sessiondatapb.DistSQLOff)
 		}
 		return st
 	}

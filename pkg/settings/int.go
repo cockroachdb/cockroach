@@ -26,7 +26,7 @@ type IntSetting struct {
 	validateFn   func(int64) error
 }
 
-var _ numericSetting = &IntSetting{}
+var _ internalSetting = &IntSetting{}
 
 // Get retrieves the int value in the setting.
 func (i *IntSetting) Get(sv *Values) int64 {
@@ -35,6 +35,11 @@ func (i *IntSetting) Get(sv *Values) int64 {
 
 func (i *IntSetting) String(sv *Values) string {
 	return EncodeInt(i.Get(sv))
+}
+
+// DefaultString returns the default value for the setting as a string.
+func (i *IntSetting) DefaultString() string {
+	return EncodeInt(i.defaultValue)
 }
 
 // Encoded returns the encoded value of the current value of the setting.
@@ -49,7 +54,7 @@ func (i *IntSetting) EncodedDefault() string {
 
 // DecodeToString decodes and renders an encoded value.
 func (i *IntSetting) DecodeToString(encoded string) (string, error) {
-	iv, err := i.DecodeValue(encoded)
+	iv, err := i.DecodeNumericValue(encoded)
 	if err != nil {
 		return "", err
 	}
@@ -57,7 +62,7 @@ func (i *IntSetting) DecodeToString(encoded string) (string, error) {
 }
 
 // DecodeValue decodes the value into an integer.
-func (i *IntSetting) DecodeValue(value string) (int64, error) {
+func (i *IntSetting) DecodeNumericValue(value string) (int64, error) {
 	return strconv.ParseInt(value, 10, 64)
 }
 
@@ -69,11 +74,6 @@ func (*IntSetting) Typ() string {
 // Default returns default value for setting.
 func (i *IntSetting) Default() int64 {
 	return i.defaultValue
-}
-
-// DefaultString returns the default value for the setting as a string.
-func (i *IntSetting) DefaultString() (string, error) {
-	return i.DecodeToString(i.EncodedDefault())
 }
 
 // Defeat the linter.
@@ -97,6 +97,29 @@ func (i *IntSetting) Override(ctx context.Context, sv *Values, v int64) {
 	sv.setValueOrigin(ctx, i.slot, OriginOverride)
 	sv.setInt64(ctx, i.slot, v)
 	sv.setDefaultOverride(i.slot, v)
+}
+
+func (i *IntSetting) decodeAndSet(ctx context.Context, sv *Values, encoded string) error {
+	v, err := strconv.ParseInt(encoded, 10, 64)
+	if err != nil {
+		return err
+	}
+	if err := i.Validate(v); err != nil {
+		return err
+	}
+	sv.setInt64(ctx, i.slot, v)
+	return nil
+}
+
+func (i *IntSetting) decodeAndSetDefaultOverride(
+	ctx context.Context, sv *Values, encoded string,
+) error {
+	v, err := strconv.ParseInt(encoded, 10, 64)
+	if err != nil {
+		return err
+	}
+	sv.setDefaultOverride(i.slot, v)
+	return nil
 }
 
 func (i *IntSetting) set(ctx context.Context, sv *Values, v int64) error {

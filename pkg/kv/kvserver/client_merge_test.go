@@ -2472,10 +2472,11 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	transport := kvserver.NewRaftTransport(
 		tc.Servers[0].AmbientCtx(),
 		cluster.MakeTestingClusterSettings(),
+		tc.Servers[0].Stopper(),
+		tc.Servers[0].Clock(),
 		nodedialer.New(tc.Servers[0].RPCContext(),
 			gossip.AddressResolver(tc.Servers[0].GossipI().(*gossip.Gossip))),
 		nil, /* grpcServer */
-		tc.Servers[0].Stopper(),
 		kvflowdispatch.NewDummyDispatch(),
 		kvserver.NoopStoresFlowControlIntegration{},
 		kvserver.NoopRaftTransportDisconnectListener{},
@@ -4497,7 +4498,7 @@ func TestMergeQueue(t *testing.T) {
 
 		setSplitObjective := func(dim kvserver.LBRebalancingObjective) {
 			for _, s := range tc.Servers {
-				kvserver.LoadBasedRebalancingObjective.Override(ctx, &s.ClusterSettings().SV, int64(dim))
+				kvserver.LoadBasedRebalancingObjective.Override(ctx, &s.ClusterSettings().SV, dim)
 			}
 		}
 

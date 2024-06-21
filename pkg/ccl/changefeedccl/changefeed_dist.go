@@ -315,12 +315,15 @@ func startDistChangefeed(
 
 		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
 
-		// CDC DistSQL flows are long-living, so we want to mark the flow memory
-		// monitor accordingly.
-		planCtx.MarkFlowMonitorAsLongLiving = true
+		// Make sure to use special changefeed monitor going forward as the
+		// parent monitor for the DistSQL infrastructure. This is needed to
+		// prevent a race between the connection that started the changefeed
+		// closing (which closes the current planner's monitor) and changefeed
+		// DistSQL flow being cleaned up.
+		planCtx.OverridePlannerMon = execCfg.DistSQLSrv.ChangefeedMonitor
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
-		// p is the physical plan, recv is the distsqlreceiver
+		// p is the physical plan, recv is the DistSQLReceiver.
 		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)
 		return resultRows.Err()
 	}
@@ -356,9 +359,9 @@ var RangeDistributionStrategy = settings.RegisterEnumSetting(
 		"will not override locality restrictions",
 	metamorphic.ConstantWithTestChoice("default_range_distribution_strategy",
 		"default", "balanced_simple").(string),
-	map[int64]string{
-		int64(defaultDistribution):        "default",
-		int64(balancedSimpleDistribution): "balanced_simple",
+	map[rangeDistributionType]string{
+		defaultDistribution:        "default",
+		balancedSimpleDistribution: "balanced_simple",
 	},
 	settings.WithPublic)
 
@@ -412,8 +415,8 @@ func makePlan(
 			log.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
 		}
 		switch {
-		case distMode == sql.LocalDistribution || rangeDistribution == int64(defaultDistribution):
-		case rangeDistribution == int64(balancedSimpleDistribution):
+		case distMode == sql.LocalDistribution || rangeDistribution == defaultDistribution:
+		case rangeDistribution == balancedSimpleDistribution:
 			log.Infof(ctx, "rebalancing ranges using balanced simple distribution")
 			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
@@ -452,6 +455,9 @@ func makePlan(
 			checkpointSpanGroup.Add(checkpoint.Spans...)
 			aggregatorCheckpoint.Spans = checkpoint.Spans
 			aggregatorCheckpoint.Timestamp = checkpoint.Timestamp
+		}
+		if log.V(2) {
+			log.Infof(ctx, "aggregator checkpoint: %s", aggregatorCheckpoint)
 		}
 
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))

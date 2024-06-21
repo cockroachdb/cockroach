@@ -294,11 +294,20 @@ func splitTxnStickyUpdateAttempt(
 	newDesc := *desc
 	newDesc.StickyBit = expiration
 
-	b := txn.NewBatch()
-	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
-		return err
+	{
+		b := txn.NewBatch()
+		descKey := keys.RangeDescriptorKey(desc.StartKey)
+		if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
+			return err
+		}
+		// Run this batch first to ensure that the transaction record is created in
+		// the right place. The sticky bit trigger relies on this.
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
 	}
+
+	b := txn.NewBatch()
 	if err := updateRangeAddressing(b, &newDesc); err != nil {
 		return err
 	}
@@ -611,10 +620,20 @@ func (r *Replica) adminUnsplitWithDescriptor(
 		newDesc.StickyBit = hlc.Timestamp{}
 		descKey := keys.RangeDescriptorKey(newDesc.StartKey)
 
-		b := txn.NewBatch()
-		if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
-			return err
+		{
+			b := txn.NewBatch()
+			if err := updateRangeDescriptor(b, descKey, dbDescValue, &newDesc); err != nil {
+				return err
+			}
+			// Run this batch first to ensure that the transaction record is
+			// created in the right place. The sticky bit trigger relies on
+			// this.
+			if err := txn.Run(ctx, b); err != nil {
+				return err
+			}
 		}
+
+		b := txn.NewBatch()
 		if err := updateRangeAddressing(b, &newDesc); err != nil {
 			return err
 		}
@@ -931,11 +950,15 @@ func (r *Replica) AdminMerge(
 	// is finicky and only allows disabling pipelining before any operations have
 	// been sent, even in prior epochs. Calling DisablePipelining() on a restarted
 	// transaction yields an error.
-	for {
+	for attempt := 1; ; attempt++ {
 		txn := kv.NewTxn(ctx, r.store.DB(), r.NodeID())
 		err := runMergeTxn(txn)
 		if err != nil {
-			log.VEventf(ctx, 2, "merge txn failed: %s", err)
+			if attempt < 3 {
+				log.VEventf(ctx, 2, "merge txn failed: %s", err)
+			} else {
+				log.Warningf(ctx, "merge txn failed (attempt %d): %s", attempt, err)
+			}
 			if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
 				log.VEventf(ctx, 2, "merge txn rollback failed: %s", rollbackErr)
 			}

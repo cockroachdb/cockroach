@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -129,7 +130,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/service"
@@ -164,14 +164,11 @@ type SQLServer struct {
 	tenantConnect     kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
-	sessionRegistry        *sql.SessionRegistry
-	closedSessionCache     *sql.ClosedSessionCache
-	jobRegistry            *jobs.Registry
-	statsRefresher         *stats.Refresher
-	temporaryObjectCleaner *sql.TemporaryObjectCleaner
-	internalMemMetrics     sql.MemoryMetrics
-	// sqlMemMetrics are used to track memory usage of sql sessions.
-	sqlMemMetrics                  sql.MemoryMetrics
+	sessionRegistry                *sql.SessionRegistry
+	closedSessionCache             *sql.ClosedSessionCache
+	jobRegistry                    *jobs.Registry
+	statsRefresher                 *stats.Refresher
+	temporaryObjectCleaner         *sql.TemporaryObjectCleaner
 	stmtDiagnosticsRegistry        *stmtdiagnostics.Registry
 	sqlLivenessSessionID           sqlliveness.SessionID
 	sqlLivenessProvider            sqlliveness.Provider
@@ -193,12 +190,12 @@ type SQLServer struct {
 	// When false, the node is unhealthy or "not ready", with load balancers and
 	// connection management tools learning this status from health checks.
 	// This is set to true when the server has started accepting client conns.
-	isReady syncutil.AtomicBool
+	isReady atomic.Bool
 
 	// gracefulDrainComplete indicates when a graceful drain has
 	// completed successfully. We use this to document cases where a
 	// graceful drain did _not_ occur.
-	gracefulDrainComplete syncutil.AtomicBool
+	gracefulDrainComplete atomic.Bool
 
 	// internalDBMemMonitor is the memory monitor corresponding to the
 	// InternalDB singleton. It only gets closed when
@@ -696,17 +693,26 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	bulkMetrics := bulk.MakeBulkMetrics(cfg.HistogramWindowInterval())
 	cfg.registry.AddMetricStruct(bulkMetrics)
 	bulkMemoryMonitor.SetMetrics(bulkMetrics.CurBytesCount, bulkMetrics.MaxBytesHist)
-	bulkMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
+	bulkMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
 
 	backfillMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backfill-mon")
 	backfillMemoryMonitor.MarkLongLiving()
 	backupMemoryMonitor := execinfra.NewMonitor(ctx, bulkMemoryMonitor, "backup-mon")
 	backupMemoryMonitor.MarkLongLiving()
 
+	changefeedMemoryMonitor := mon.NewMonitorInheritWithLimit(
+		"changefeed-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
+	)
+	if jobs.MakeChangefeedMemoryMetricsHook != nil {
+		changefeedCurCount, changefeedMaxHist := jobs.MakeChangefeedMemoryMetricsHook(cfg.HistogramWindowInterval())
+		changefeedMemoryMonitor.SetMetrics(changefeedCurCount, changefeedMaxHist)
+	}
+	changefeedMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
+
 	serverCacheMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"server-cache-mon", 0 /* limit */, rootSQLMemoryMonitor, true, /* longLiving */
 	)
-	serverCacheMemoryMonitor.StartNoReserved(context.Background(), rootSQLMemoryMonitor)
+	serverCacheMemoryMonitor.StartNoReserved(ctx, rootSQLMemoryMonitor)
 
 	// Set up the DistSQL temp engine.
 
@@ -821,6 +827,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ParentDiskMonitor: cfg.TempStorageConfig.Mon,
 		BackfillerMonitor: backfillMemoryMonitor,
 		BackupMonitor:     backupMemoryMonitor,
+		ChangefeedMonitor: changefeedMemoryMonitor,
 		BulkSenderLimiter: bulkSenderLimiter,
 
 		ParentMemoryMonitor: rootSQLMemoryMonitor,
@@ -1024,6 +1031,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.TableStatCacheSize,
 			cfg.Settings,
 			cfg.internalDB,
+			cfg.stopper,
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
@@ -1397,8 +1405,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlInstanceDialer:              cfg.sqlInstanceDialer,
 		statsRefresher:                 statsRefresher,
 		temporaryObjectCleaner:         temporaryObjectCleaner,
-		internalMemMetrics:             internalMemMetrics,
-		sqlMemMetrics:                  sqlMemMetrics,
 		stmtDiagnosticsRegistry:        stmtDiagnosticsRegistry,
 		sqlLivenessProvider:            cfg.sqlLivenessProvider,
 		sqlInstanceStorage:             cfg.sqlInstanceStorage,
@@ -1719,7 +1725,7 @@ func (s *SQLServer) preStart(
 			sk, _ = knobs.Server.(*TestingKnobs)
 		}
 
-		if !s.gracefulDrainComplete.Get() {
+		if !s.gracefulDrainComplete.Load() {
 			warnCtx := s.AnnotateCtx(context.Background())
 
 			if sk != nil && sk.RequireGracefulDrain {

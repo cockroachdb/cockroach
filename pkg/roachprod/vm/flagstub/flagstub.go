@@ -128,6 +128,10 @@ func (p *provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 	return errors.Newf("%s", p.unimplemented)
 }
 
+func (p *provider) Shrink(*logger.Logger, vm.List, string) error {
+	return errors.Newf("%s", p.unimplemented)
+}
+
 // Delete implements vm.Provider and returns Unimplemented.
 func (p *provider) Delete(l *logger.Logger, vms vm.List) error {
 	return errors.Newf("%s", p.unimplemented)

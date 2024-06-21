@@ -13,9 +13,9 @@ import { withRouter } from "react-router-dom";
 import {
   TransactionDetailsStateProps,
   TransactionDetailsDispatchProps,
-  TransactionDetailsProps,
   TransactionDetails,
 } from "@cockroachlabs/cluster-ui";
+import { RouteComponentProps } from "react-router";
 
 import {
   refreshNodes,
@@ -39,10 +39,10 @@ import { getMatchParamByName } from "src/util/query";
 import { txnFingerprintIdAttr } from "src/util/constants";
 
 export default withRouter(
-  connect<TransactionDetailsStateProps, TransactionDetailsDispatchProps>(
+  connect<TransactionDetailsStateProps, TransactionDetailsDispatchProps, RouteComponentProps, AdminUIState>(
     (
       state: AdminUIState,
-      props: TransactionDetailsProps,
+      props: RouteComponentProps,
     ): TransactionDetailsStateProps => {
       return {
         timeScale: selectTimeScale(state),

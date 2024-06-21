@@ -85,9 +85,10 @@ export const ConnectedStatementsPage = withRouter(
     StateProps,
     DispatchProps,
     RouteComponentProps,
-    StatementsPageRootProps
+    StatementsPageRootProps,
+    AppState
   >(
-    (state: AppState, props: RouteComponentProps) => ({
+    (state: AppState, props: RouteComponentProps): StateProps => ({
       fingerprintsPageProps: {
         ...props,
         columns: selectColumns(state),
@@ -193,7 +194,7 @@ export const ConnectedStatementsPage = withRouter(
             }),
           );
         },
-        onFilterChange: value => {
+        onFilterChange: (value: any) => {
           dispatch(
             analyticsActions.track({
               name: "Filter Clicked",
@@ -273,7 +274,7 @@ export const ConnectedStatementsPage = withRouter(
       },
       activePageProps: mapDispatchToActiveStatementsPageProps(dispatch),
     }),
-    (stateProps, dispatchProps) => ({
+    (stateProps, dispatchProps): StatementsPageRootProps => ({
       fingerprintsPageProps: {
         ...stateProps.fingerprintsPageProps,
         ...dispatchProps.fingerprintsPageProps,

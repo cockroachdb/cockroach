@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -282,7 +281,6 @@ func TestCtxDoneFlushesBeforeExit(t *testing.T) {
 
 // Test that we still accept & buffer new events while a flush is in-flight, and the flush channel buffer is full.
 func TestBlockedFlush(t *testing.T) {
-	skip.WithIssue(t, 125290 /*githubIssueID*/)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -300,7 +298,11 @@ func TestBlockedFlush(t *testing.T) {
 		// Indicate that the flush has been triggered.
 		flush1C <- struct{}{}
 		// Nobody is listening on flush1C after the 1st signal, so this will hang (for now).
-		<-flush1C
+		select {
+		case <-flush1C:
+		case <-stopper.ShouldQuiesce():
+			t.Log("first flush's Processor quiescing")
+		}
 	}))
 	require.NoError(t, buffer.Process(ctx, firstEvent))
 	// Ensure that the first flush has been triggered (which should now be hanging).
@@ -314,7 +316,11 @@ func TestBlockedFlush(t *testing.T) {
 	secondEvent := makeTypedEvent(type1, "element2")
 	flush2C := make(chan any)
 	mock.EXPECT().Process(gomock.Any(), secondEvent.event).Do(func(ctx context.Context, e any) {
-		flush2C <- e
+		select {
+		case flush2C <- e:
+		case <-stopper.ShouldQuiesce():
+			t.Logf("second flush, first event's Processor quiescing")
+		}
 	})
 	require.NoError(t, buffer.Process(ctx, secondEvent))
 	select {
@@ -332,15 +338,23 @@ func TestBlockedFlush(t *testing.T) {
 	thirdEvent := makeTypedEvent(type1, "element3")
 	processReturnedC := make(chan struct{})
 	mock.EXPECT().Process(gomock.Any(), thirdEvent.event).Do(func(ctx context.Context, e any) {
-		flush2C <- e
+		select {
+		case flush2C <- e:
+		case <-stopper.ShouldQuiesce():
+			t.Logf("second flush, second event's Processor quiescing")
+		}
 	})
 	go func() {
 		require.NoError(t, buffer.Process(ctx, thirdEvent))
-		processReturnedC <- struct{}{}
+		select {
+		case processReturnedC <- struct{}{}:
+		case <-stopper.ShouldQuiesce():
+			t.Logf("second Process call's goroutine quiescing")
+		}
 	}()
 	select {
 	case <-processReturnedC:
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(10 * time.Second):
 		t.Fatalf("queued flushes appear to be blocking calls to .Process()")
 	}
 

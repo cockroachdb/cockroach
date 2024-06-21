@@ -22,7 +22,7 @@ type ByteSizeSetting struct {
 	IntSetting
 }
 
-var _ numericSetting = &ByteSizeSetting{}
+var _ internalSetting = &ByteSizeSetting{}
 
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*ByteSizeSetting) Typ() string {
@@ -33,18 +33,18 @@ func (b *ByteSizeSetting) String(sv *Values) string {
 	return string(humanizeutil.IBytes(b.Get(sv)))
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (b *ByteSizeSetting) DefaultString() string {
+	return string(humanizeutil.IBytes(b.defaultValue))
+}
+
 // DecodeToString decodes and renders an encoded value.
 func (b *ByteSizeSetting) DecodeToString(encoded string) (string, error) {
-	iv, err := b.DecodeValue(encoded)
+	iv, err := b.DecodeNumericValue(encoded)
 	if err != nil {
 		return "", err
 	}
 	return string(humanizeutil.IBytes(iv)), nil
-}
-
-// DefaultString returns the default value for the setting as a string.
-func (b *ByteSizeSetting) DefaultString() (string, error) {
-	return b.DecodeToString(b.EncodedDefault())
 }
 
 // RegisterByteSizeSetting defines a new setting with type bytesize and any

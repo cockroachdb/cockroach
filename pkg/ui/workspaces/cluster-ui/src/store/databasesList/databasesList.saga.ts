@@ -13,6 +13,8 @@ import moment from "moment-timezone";
 
 import { getDatabasesList } from "src/api";
 
+import { maybeError } from "../../util";
+
 import { actions } from "./databasesList.reducers";
 
 export function* refreshDatabasesListSaga() {
@@ -24,7 +26,7 @@ export function* requestDatabasesListSaga(): any {
     const result = yield call(getDatabasesList, moment.duration(10, "m"));
     yield put(actions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(actions.failed(maybeError(e)));
   }
 }
 

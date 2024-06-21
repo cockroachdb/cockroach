@@ -243,7 +243,7 @@
 /pkg/ccl/jobsccl/            @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 
-/pkg/ccl/streamingccl/       @cockroachdb/disaster-recovery
+/pkg/ccl/crosscluster/       @cockroachdb/disaster-recovery
 /pkg/ccl/backupccl/          @cockroachdb/disaster-recovery
 /pkg/ccl/backupccl/*_job.go  @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
 /pkg/ccl/revertccl/          @cockroachdb/disaster-recovery
@@ -313,6 +313,7 @@
 /pkg/kv/kvserver/kvserverbase/          @cockroachdb/kv-prs
 /pkg/kv/kvserver/kvserverpb/            @cockroachdb/kv-prs
 /pkg/kv/kvserver/kvstorage/             @cockroachdb/repl-prs
+/pkg/kv/kvserver/leases/                @cockroachdb/kv-prs
 /pkg/kv/kvserver/liveness/              @cockroachdb/kv-prs
 /pkg/kv/kvserver/load/                  @cockroachdb/kv-prs
 /pkg/kv/kvserver/lockspanset/           @cockroachdb/kv-prs

@@ -15,11 +15,11 @@ import { fetchData } from "src/api";
 const STATUS_PREFIX = "_status";
 
 export type CancelSessionRequestMessage =
-  cockroach.server.serverpb.CancelSessionRequest;
+  cockroach.server.serverpb.ICancelSessionRequest;
 export type CancelSessionResponseMessage =
   cockroach.server.serverpb.CancelSessionResponse;
 export type CancelQueryRequestMessage =
-  cockroach.server.serverpb.CancelQueryRequest;
+  cockroach.server.serverpb.ICancelQueryRequest;
 export type CancelQueryResponseMessage =
   cockroach.server.serverpb.CancelQueryResponse;
 

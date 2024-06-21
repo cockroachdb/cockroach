@@ -247,7 +247,7 @@ func verifyInMemoryStmtFingerprints(
 	foundTxns := make(map[string]struct{})
 	stmtFingerprintIDToQueries := make(map[appstatspb.StmtFingerprintID]string)
 	require.NoError(t,
-		sqlStats.GetApplicationStats(appName, false).IterateStatementStats(
+		sqlStats.GetApplicationStats(appName).IterateStatementStats(
 			context.Background(),
 			sqlstats.IteratorOptions{},
 			func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {

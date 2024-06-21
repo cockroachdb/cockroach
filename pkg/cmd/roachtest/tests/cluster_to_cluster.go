@@ -23,7 +23,7 @@ import (
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -1074,7 +1074,7 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		additionalDuration:        0 * time.Minute,
 		cutover:                   30 * time.Second,
 		skipNodeDistributionCheck: true,
-		clouds:                    registry.AllExceptAWS,
+		clouds:                    registry.OnlyGCE,
 		suites:                    registry.Suites(registry.Nightly),
 	}
 	rd := makeReplicationDriver(t, c, sp)
@@ -1093,25 +1093,6 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 func registerClusterToCluster(r registry.Registry) {
 	for _, sp := range []replicationSpec{
 		{
-			// Cutover TO LATEST:
-			name:      "c2c/tpcc/warehouses=500/duration=10/cutover=0",
-			benchmark: true,
-			srcNodes:  4,
-			dstNodes:  4,
-			cpus:      8,
-			pdSize:    1000,
-			// 500 warehouses adds 30 GB to source
-			//
-			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
-			// job speeds up.
-			workload:           replicateTPCC{warehouses: 500},
-			timeout:            1 * time.Hour,
-			additionalDuration: 10 * time.Minute,
-			cutover:            0,
-			clouds:             registry.AllExceptAWS,
-			suites:             registry.Suites(registry.Nightly),
-		},
-		{
 			name:      "c2c/tpcc/warehouses=1000/duration=60/cutover=30",
 			benchmark: true,
 			srcNodes:  4,
@@ -1126,7 +1107,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            3 * time.Hour,
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
-			clouds:             registry.AllExceptAWS,
+			clouds:             registry.AllExceptAzure,
 			suites:             registry.Suites(registry.Nightly),
 		},
 		{
@@ -1145,7 +1126,7 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration:                   10 * time.Minute,
 			cutover:                              5 * time.Minute,
 			sometimesTestFingerprintMismatchCode: true,
-			clouds:                               registry.AllClouds,
+			clouds:                               registry.OnlyGCE,
 			suites:                               registry.Suites(registry.Nightly),
 		},
 		{
@@ -1163,7 +1144,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            1 * time.Hour,
 			additionalDuration: 5 * time.Minute,
 			cutover:            0,
-			clouds:             registry.AllExceptAWS,
+			clouds:             registry.AllExceptAzure,
 			suites:             registry.Suites(registry.Nightly),
 		},
 		{
@@ -1190,7 +1171,7 @@ func registerClusterToCluster(r registry.Registry) {
 			overrideTenantTTL:  12 * time.Hour,
 			additionalDuration: 2 * time.Hour,
 			cutover:            0,
-			clouds:             registry.AllClouds,
+			clouds:             registry.OnlyGCE,
 			suites:             registry.Suites(registry.Weekly),
 		},
 		{
@@ -1235,7 +1216,7 @@ func registerClusterToCluster(r registry.Registry) {
 			cutover:                   30 * time.Second,
 			skipNodeDistributionCheck: true,
 			skip:                      "for local ad hoc testing",
-			clouds:                    registry.AllExceptAWS,
+			clouds:                    registry.AllClouds,
 			suites:                    registry.Suites(registry.Nightly),
 		},
 		{
@@ -1260,7 +1241,7 @@ func registerClusterToCluster(r registry.Registry) {
 			// Skipping node distribution check because there is little data on the
 			// source when the replication stream begins.
 			skipNodeDistributionCheck: true,
-			clouds:                    registry.AllExceptAWS,
+			clouds:                    registry.OnlyGCE,
 			suites:                    registry.Suites(registry.Nightly),
 		},
 		{
@@ -1279,7 +1260,7 @@ func registerClusterToCluster(r registry.Registry) {
 			// skipNodeDistributionCheck is set to true because the roachtest
 			// completes before the automatic replanner can run.
 			skipNodeDistributionCheck: true,
-			clouds:                    registry.AllExceptAWS,
+			clouds:                    registry.OnlyGCE,
 			suites:                    registry.Suites(registry.Nightly),
 			skip:                      "used for debugging when the full test fails",
 		},
@@ -1439,7 +1420,7 @@ func (rrd *replShutdownDriver) getTargetAndWatcherNodes(ctx context.Context) {
 
 func getPhase(rd *replicationDriver, dstJobID jobspb.JobID) c2cPhase {
 	var jobStatus string
-	rd.setup.dst.sysSQL.QueryRow(rd.t, `SELECT status FROM [SHOW JOBS] WHERE job_id=$1`,
+	rd.setup.dst.sysSQL.QueryRow(rd.t, `SELECT status FROM [SHOW JOB $1]`,
 		dstJobID).Scan(&jobStatus)
 	require.Equal(rd.t, jobs.StatusRunning, jobs.Status(jobStatus))
 
@@ -1534,7 +1515,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			cutover:                              3 * time.Minute,
 			expectedNodeDeaths:                   1,
 			sometimesTestFingerprintMismatchCode: true,
-			clouds:                               registry.AllExceptAWS,
+			clouds:                               registry.OnlyGCE,
 			suites:                               registry.Suites(registry.Nightly),
 		}
 
@@ -1649,7 +1630,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		additionalDuration: 10 * time.Minute,
 		cutover:            2 * time.Minute,
 		maxAcceptedLatency: 12 * time.Minute,
-		clouds:             registry.AllExceptAWS,
+		clouds:             registry.OnlyGCE,
 		suites:             registry.Suites(registry.Nightly),
 	}
 	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1759,12 +1740,15 @@ func getStreamIngestionJobInfo(db *gosql.DB, jobID int) (jobInfo, error) {
 }
 
 func srcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
-	db.ExecMultiple(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true;`)
+	db.ExecMultiple(t,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
+		`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true;`)
 }
 
 func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration time.Duration) {
 	db.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
+		`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true;`,
 		`SET CLUSTER SETTING stream_replication.replan_flow_threshold = 0.1;`,
 		`SET CLUSTER SETTING physical_replication.consumer.node_lag_replanning_threshold = '5m';`)
 

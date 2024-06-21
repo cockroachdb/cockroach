@@ -395,8 +395,6 @@ func (ih *instrumentationHelper) finalizeSetup(ctx context.Context, cfg *Executo
 		// helper setup.
 		ih.traceMetadata = make(execNodeTraceMetadata)
 	}
-	// Make sure that the builtins use the correct context.
-	ih.evalCtx.SetDeprecatedContext(ctx)
 	if ih.collectBundle {
 		if pollInterval := inFlightTraceCollectorPollInterval.Get(cfg.SV()); pollInterval > 0 {
 			ih.startInFlightTraceCollector(ctx, cfg.InternalDB.Executor(), pollInterval)
@@ -830,6 +828,9 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		if len(queryStats.Regions) > 0 {
 			ob.AddRegionsStats(queryStats.Regions)
 		}
+		if queryStats.UsedFollowerRead {
+			ob.AddTopLevelField("used follower read", "")
+		}
 
 		if !ih.containsMutation && ih.vectorized && grunning.Supported() {
 			// Currently we cannot separate SQL CPU time from local KV CPU time for
@@ -853,11 +854,13 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 
 	qos := sessiondatapb.Normal
 	iso := isolation.Serializable
+	var asOfSystemTime *eval.AsOfSystemTime
 	if ih.evalCtx != nil {
 		qos = ih.evalCtx.QualityOfService()
 		iso = ih.evalCtx.TxnIsoLevel
+		asOfSystemTime = ih.evalCtx.AsOfSystemTime
 	}
-	ob.AddTxnInfo(iso, ih.txnPriority, qos)
+	ob.AddTxnInfo(iso, ih.txnPriority, qos, asOfSystemTime)
 
 	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		ob.AddField("error emitting plan", fmt.Sprint(err))
@@ -1017,6 +1020,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 					// component_stats.go.
 					nodeStats.SQLCPUTime.MaybeAdd(stats.Exec.CPUTime)
 				}
+				nodeStats.UsedFollowerRead = nodeStats.UsedFollowerRead || stats.KV.UsedFollowerRead
 			}
 			// If we didn't get statistics for all processors, we don't show the
 			// incomplete results. In the future, we may consider an incomplete flag

@@ -146,7 +146,10 @@ message ElementProto {
     FunctionNullInputBehavior function_null_input_behavior = 163 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionBody function_body = 164 [(gogoproto.moretags) = "parent:\"Function\""];
 
-    // Next element group start id: 180
+    // Type elements.
+    TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType\""];
+
+    // Next element group start id: 200
   }
 }
 
@@ -534,6 +537,11 @@ message ConstraintWithoutIndexName {
 
 message TableComment {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string comment = 2;
+}
+
+message TypeComment {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string comment = 2;
 }
 

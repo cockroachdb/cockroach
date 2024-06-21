@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/pprof"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -250,17 +250,33 @@ func (f *RangeFeed) start(
 		defer pprof.SetGoroutineLabels(ctx)
 		ctx = pprof.WithLabels(ctx, pprof.Labels(append(f.extraPProfLabels, "rangefeed", f.name)...))
 		pprof.SetGoroutineLabels(ctx)
+		if f.invoker != nil {
+			_ = f.invoker(func() error {
+				f.run(ctx, frontier, resumeFromFrontier)
+				return nil
+			})
+			return
+		}
 		f.run(ctx, frontier, resumeFromFrontier)
 	}
 
-	f.spansDebugStr = func() string {
-		n := len(f.spans)
-		if n == 1 {
-			return f.spans[0].String()
-		}
-
-		return fmt.Sprintf("{%s}", frontier.String())
-	}()
+	if l := frontier.Len(); l == 1 {
+		f.spansDebugStr = frontier.PeekFrontierSpan().String()
+	} else {
+		var buf strings.Builder
+		frontier.Entries(func(sp roachpb.Span, _ hlc.Timestamp) span.OpResult {
+			if buf.Len() > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(sp.String())
+			if buf.Len() >= 400 {
+				fmt.Fprintf(&buf, "… [%d spans]", l)
+				return span.StopMatch
+			}
+			return span.ContinueMatch
+		})
+		f.spansDebugStr = buf.String()
+	}
 
 	ctx = logtags.AddTag(ctx, "rangefeed", f.name)
 	ctx, f.cancel = f.stopper.WithCancelOnQuiesce(ctx)
@@ -288,8 +304,6 @@ func (f *RangeFeed) Close() {
 // This is the threshold of successful running after which the backoff state
 // will be reset.
 const resetThreshold = 30 * time.Second
-
-var useMuxRangeFeed = metamorphic.ConstantWithTestBool("use-mux-rangefeed", true)
 
 // run will run the RangeFeed until the context is canceled or if the client
 // indicates that an initial scan error is non-recoverable. The
@@ -328,9 +342,6 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 	if f.scanConfig.overSystemTable {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithSystemTablePriority())
 	}
-	if !useMuxRangeFeed {
-		rangefeedOpts = append(rangefeedOpts, kvcoord.WithoutMuxRangeFeed())
-	}
 	if f.withDiff {
 		rangefeedOpts = append(rangefeedOpts, kvcoord.WithDiff())
 	}
@@ -350,14 +361,30 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 		start := timeutil.Now()
 
 		rangeFeedTask := func(ctx context.Context) error {
-			return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
+			if f.invoker == nil {
+				return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
+			}
+			return f.invoker(func() error {
+				return f.client.RangeFeed(ctx, f.spans, ts, eventCh, rangefeedOpts...)
+			})
 		}
+
 		if resumeWithFrontier {
 			rangeFeedTask = func(ctx context.Context) error {
-				return f.client.RangeFeedFromFrontier(ctx, frontier, eventCh, rangefeedOpts...)
+				if f.invoker == nil {
+					return f.client.RangeFeedFromFrontier(ctx, frontier, eventCh, rangefeedOpts...)
+				}
+				return f.invoker(func() error {
+					return f.client.RangeFeedFromFrontier(ctx, frontier, eventCh, rangefeedOpts...)
+				})
 			}
 		}
 		processEventsTask := func(ctx context.Context) error {
+			if f.invoker != nil {
+				return f.invoker(func() error {
+					return f.processEvents(ctx, frontier, eventCh)
+				})
+			}
 			return f.processEvents(ctx, frontier, eventCh)
 		}
 

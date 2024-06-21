@@ -86,7 +86,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		kvserver.LoadBasedRebalancingMode.Override(ctx, &st.SV, int64(kvserver.LBRebalancingOff))
+		kvserver.LoadBasedRebalancingMode.Override(ctx, &st.SV, kvserver.LBRebalancingOff)
 	}
 
 	const newRanges = 10
@@ -249,6 +249,11 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 				st := server.ClusterSettings()
 				st.Manual.Store(true)
 				allocatorimpl.LeaseRebalanceThreshold.Override(ctx, &st.SV, leaseRebalanceThreshold)
+				// We speed up replicate queue processing (scan min/max idle) time,
+				// this causes actions to occur more frequently than in practice and
+				// ultimately this test will fail unless we correspondingly increase
+				// the max store gossip frequency.
+				kvserver.MaxStoreGossipFrequency.Override(ctx, &st.SV, 0)
 			}
 
 			// Add a few ranges per store.

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -41,7 +40,7 @@ type config struct {
 	// flushWrites can be set asynchronously to force all file output to
 	// be flushed to disk immediately. This is set via SetAlwaysFlush()
 	// and used e.g. in start.go upon encountering errors.
-	flushWrites syncutil.AtomicBool
+	flushWrites atomic.Bool
 }
 
 type FileSinkMetrics struct {
@@ -73,7 +72,7 @@ func init() {
 	// using TestLogScope.
 	cfg := getTestConfig(nil /* output to files disabled */, true /* mostly inline */)
 
-	if _, err := ApplyConfig(cfg, FileSinkMetrics{}); err != nil {
+	if _, err := ApplyConfig(cfg, FileSinkMetrics{}, nil /* fatalOnLogStall */); err != nil {
 		panic(err)
 	}
 
@@ -98,7 +97,7 @@ func IsActive() (active bool, firstUse string) {
 //
 // The returned logShutdownFn can be used to gracefully shut down logging facilities.
 func ApplyConfig(
-	config logconfig.Config, metrics FileSinkMetrics,
+	config logconfig.Config, metrics FileSinkMetrics, fatalOnLogStall func() bool,
 ) (logShutdownFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
@@ -255,7 +254,7 @@ func ApplyConfig(
 	}
 
 	// Apply the stderr sink configuration.
-	logging.stderrSink.noColor.Set(config.Sinks.Stderr.NoColor)
+	logging.stderrSink.noColor.Store(config.Sinks.Stderr.NoColor)
 	if err := logging.stderrSinkInfoTemplate.applyConfig(config.Sinks.Stderr.CommonSinkConfig); err != nil {
 		return nil, err
 	}
@@ -320,6 +319,7 @@ func ApplyConfig(
 		if err != nil {
 			return nil, err
 		}
+		fileSink.fatalOnLogStall = fatalOnLogStall
 		attachBufferWrapper(fileSinkInfo, fc.CommonSinkConfig.Buffering, closer)
 		attachSinkInfo(fileSinkInfo, &fc.Channels)
 
@@ -526,7 +526,7 @@ func DescribeAppliedConfig() string {
 	}
 
 	// Describe the stderr sink.
-	config.Sinks.Stderr.NoColor = logging.stderrSink.noColor.Get()
+	config.Sinks.Stderr.NoColor = logging.stderrSink.noColor.Load()
 	config.Sinks.Stderr.CommonSinkConfig = logging.stderrSinkInfoTemplate.describeAppliedConfig()
 
 	describeConnections := func(l *loggerT, ch Channel,

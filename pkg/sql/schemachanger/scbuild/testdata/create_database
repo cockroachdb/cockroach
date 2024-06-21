@@ -26,7 +26,7 @@ CREATE DATABASE db OWNER roacher;
 - [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, PUBLIC], ABSENT]
   {parentDatabaseId: 104, schemaId: 105}
 - [[Owner:{DescID: 105}, PUBLIC], ABSENT]
-  {descriptorId: 105, owner: admin}
+  {descriptorId: 105, owner: roacher}
 - [[UserPrivileges:{DescID: 105, Name: admin}, PUBLIC], ABSENT]
   {descriptorId: 105, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 105, Name: public}, PUBLIC], ABSENT]

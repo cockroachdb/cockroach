@@ -170,6 +170,26 @@ across the zones of the cluster).
 	}),
 }
 
+var shrinkCmd = &cobra.Command{
+	Use:   `shrink <cluster> <num-nodes>`,
+	Short: `shrink a cluster by removing nodes`,
+	Long: `shrink a cluster by removing the specified number of nodes.
+
+The cluster has to be a managed cluster (i.e., a cluster created with the
+gce-managed flag). Only Google Cloud clusters currently support removing nodes.
+Nodes are removed from the tail end of the cluster. Removing nodes from the
+middle of the cluster is not supported yet.
+`,
+	Args: cobra.ExactArgs(2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		count, err := strconv.ParseInt(args[1], 10, 8)
+		if err != nil || count < 1 {
+			return errors.Wrapf(err, "invalid num-nodes argument")
+		}
+		return roachprod.Shrink(context.Background(), config.Logger, args[0], int(count))
+	}),
+}
+
 var setupSSHCmd = &cobra.Command{
 	Use:   "setup-ssh <cluster>",
 	Short: "set up ssh for a cluster",
@@ -522,6 +542,7 @@ var loadBalancerPGUrl = &cobra.Command{
 			return err
 		}
 		url, err := roachprod.LoadBalancerPgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
+			Database:           database,
 			External:           external,
 			Secure:             isSecure,
 			VirtualClusterName: virtualClusterName,
@@ -609,8 +630,8 @@ var updateTargetsCmd = &cobra.Command{
 	Short: "update prometheus target configurations for a cluster",
 	Long: `Update prometheus target configurations of each node of a cluster.
 
-The "start" command updates the prometheus target configuration every time. But, in case of any  
-failure, this command can be used to update the configurations. 
+The "start" command updates the prometheus target configuration every time. But, in case of any
+failure, this command can be used to update the configurations.
 
 The default prometheus url is https://grafana.testeng.crdb.io/. This can be overwritten by using the
 environment variable COCKROACH_PROM_HOST_URL
@@ -784,7 +805,7 @@ Currently available application options are:
 			versionArg = args[2]
 		}
 		return roachprod.Deploy(context.Background(), config.Logger, args[0], args[1],
-			versionArg, pause, sig, waitFlag, maxWait, secure)
+			versionArg, pause, deploySig, deployWaitFlag, deployMaxWait, secure)
 	}),
 }
 
@@ -1124,7 +1145,7 @@ var sqlCmd = &cobra.Command{
 			return errors.Newf("unsupported auth-mode %s, valid auth-modes: %v", authMode, maps.Keys(pgAuthModes))
 		}
 
-		return roachprod.SQL(context.Background(), config.Logger, args[0], isSecure, virtualClusterName, sqlInstance, auth, args[1:])
+		return roachprod.SQL(context.Background(), config.Logger, args[0], isSecure, virtualClusterName, sqlInstance, auth, database, args[1:])
 	}),
 }
 
@@ -1142,6 +1163,7 @@ var pgurlCmd = &cobra.Command{
 			return err
 		}
 		urls, err := roachprod.PgURL(context.Background(), config.Logger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
+			Database:           database,
 			External:           external,
 			Secure:             isSecure,
 			VirtualClusterName: virtualClusterName,
@@ -1872,6 +1894,7 @@ func main() {
 	rootCmd.AddCommand(
 		createCmd,
 		growCmd,
+		shrinkCmd,
 		resetCmd,
 		destroyCmd,
 		extendCmd,

@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -58,7 +59,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -398,7 +398,7 @@ type Node struct {
 
 	// Turns `Node.writeNodeStatus` into a no-op. This is a hack to enable the
 	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
-	suppressNodeStatus syncutil.AtomicBool
+	suppressNodeStatus atomic.Bool
 
 	diskStatsMap diskStatsMap
 
@@ -1289,7 +1289,7 @@ func (n *Node) startWriteNodeStatus(frequency time.Duration) error {
 // If mustExist is true the status key must already exist and must
 // not change during writing -- if false, the status is always written.
 func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, mustExist bool) error {
-	if n.suppressNodeStatus.Get() {
+	if n.suppressNodeStatus.Load() {
 		return nil
 	}
 	var err error
@@ -1834,35 +1834,6 @@ func (n *Node) RangeLookup(
 		resp.PrefetchedDescriptors = filterRangeLookupResponseForTenant(ctx, preRs)
 	}
 	return resp, nil
-}
-
-// RangeFeed implements the roachpb.InternalServer interface.
-func (n *Node) RangeFeed(args *kvpb.RangeFeedRequest, stream kvpb.Internal_RangeFeedServer) error {
-	if args.StreamID > 0 || args.CloseStream {
-		return errors.AssertionFailedf("unexpected mux rangefeed arguments set when calling RangeFeed")
-	}
-
-	ctx := n.AnnotateCtx(stream.Context())
-	ctx = logtags.AddTag(ctx, "r", args.RangeID)
-	ctx = logtags.AddTag(ctx, "s", args.Replica.StoreID)
-	_, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
-	defer restore()
-
-	n.metrics.NumRangeFeed.Inc(1)
-	n.metrics.ActiveRangeFeed.Inc(1)
-	defer n.metrics.ActiveRangeFeed.Inc(-1)
-
-	if err := errors.CombineErrors(future.Wait(ctx, n.stores.RangeFeed(args, stream))); err != nil {
-		// Got stream context error, probably won't be able to propagate it to the stream,
-		// but give it a try anyway.
-		var event kvpb.RangeFeedEvent
-		event.SetValue(&kvpb.RangeFeedError{
-			Error: *kvpb.NewError(err),
-		})
-		return stream.Send(&event)
-	}
-
-	return nil
 }
 
 // setRangeIDEventSink annotates each response with range and stream IDs.

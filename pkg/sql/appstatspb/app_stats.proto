@@ -136,6 +136,10 @@ message StatementStatistics {
   // failure_count is the count of failed executions for a given statement fingerprint.
   optional int64 failure_count = 33 [(gogoproto.nullable) = false];
 
+  // UsedFollowerRead indicates whether at least some reads were served by the
+  // follower replicas.
+  optional bool used_follower_read = 35 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;

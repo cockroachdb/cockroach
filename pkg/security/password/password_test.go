@@ -117,7 +117,7 @@ func TestSCRAMToBCryptConversion(t *testing.T) {
 	const cleartext = "hello"
 
 	ourDefault := int(security.BcryptCost.Get(&s.SV))
-	security.PasswordHashMethod.Override(ctx, &s.SV, int64(password.HashBCrypt))
+	security.PasswordHashMethod.Override(ctx, &s.SV, password.HashBCrypt)
 
 	// Start at MinCost+3, since the first 3 bcrypt costs all map to 4096.
 	// Don't iterate all the way to the max cost: the larger values

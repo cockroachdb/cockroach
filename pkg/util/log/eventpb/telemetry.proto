@@ -295,6 +295,10 @@ message SampledQuery {
   // Statement fingerprint ID of the query.
   string statement_fingerprint_id = 79 [(gogoproto.customname) = "StatementFingerprintID", (gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
+  // UsedFollowerRead indicates whether at least some reads were served by the
+  // follower replicas.
+  bool used_follower_read = 80 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
   reserved 12;
 
   // Previously used for statement_fingerprint_id. Originally this was typed as a uint64
@@ -302,7 +306,7 @@ message SampledQuery {
   // more details see: https://github.com/cockroachdb/cockroach/issues/123665
   reserved 13;
 
-  // Next available ID: 80.
+  // Next available ID: 81.
 }
 
 // SampledExecStats contains execution statistics that apply to both statements

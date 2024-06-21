@@ -4601,6 +4601,49 @@ exec-ddl
 DROP INDEX i_partial
 ----
 
+# Regression test for #125422. An equality between with two variables implies
+# that either variable is not null, allowing a lookup join into a partial index
+# with an IS NOT NULL predicate.
+exec-ddl
+CREATE TABLE t125422 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  INDEX idx125422 (a, b) WHERE a IS NOT NULL
+)
+----
+
+opt
+SELECT * FROM t125422 AS t1
+LEFT LOOKUP JOIN t125422@idx125422 AS t2
+ON t1.a = t2.a AND t1.b = t2.b AND t2.c = 10
+----
+left-join (lookup t125422 [as=t2])
+ ├── columns: k:1!null a:2 b:3 c:4 k:7 a:8 b:9 c:10
+ ├── key columns: [13] = [7]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── key: (1,7)
+ ├── fd: (1)-->(2-4), (7)-->(8,9), (1,7)-->(10)
+ ├── left-join (lookup t125422@idx125422,partial [as=t2])
+ │    ├── columns: t1.k:1!null t1.a:2 t1.b:3 t1.c:4 t2.k:13 t2.a:14 t2.b:15 continuation:19
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [2 3] = [14 15]
+ │    ├── first join in paired joiner; continuation column: continuation:19
+ │    ├── key: (1,13)
+ │    ├── fd: (1)-->(2-4), (13)-->(14,15,19)
+ │    ├── scan t125422 [as=t1]
+ │    │    ├── columns: t1.k:1!null t1.a:2 t1.b:3 t1.c:4
+ │    │    ├── partial index predicates
+ │    │    │    └── idx125422: filters
+ │    │    │         └── t1.a:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    └── filters (true)
+ └── filters
+      └── t2.c:10 = 10 [outer=(10), constraints=(/10: [/10 - /10]; tight), fd=()-->(10)]
+
 # Regression test for #63735. Ensure that the constant filter which maximally
 # constrains the lookup table is chosen when there is more than one option.
 # Here, the CHECK constraint establishes an implicit filter that constrains the

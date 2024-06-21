@@ -89,7 +89,7 @@ func TestLoadBasedRebalancingObjective(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 
 		gossipStoreDescProvider := testMakeProviderNotifier(allPositiveCPUMap)
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingQueries))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingQueries)
 		require.Equal(t,
 			LBRebalancingQueries,
 			ResolveLBRebalancingObjective(ctx, st, gossipStoreDescProvider.GetStores()),
@@ -97,7 +97,7 @@ func TestLoadBasedRebalancingObjective(t *testing.T) {
 
 		// Despite setting to CPU, only QPS should be returned since this aarch
 		// doesn't support grunning.
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingCPU))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingCPU)
 		require.Equal(t,
 			LBRebalancingQueries,
 			ResolveLBRebalancingObjective(ctx, st, gossipStoreDescProvider.GetStores()),
@@ -108,19 +108,19 @@ func TestLoadBasedRebalancingObjective(t *testing.T) {
 	t.Run("latest version supports all rebalance objectives", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		gossipStoreDescProvider := testMakeProviderNotifier(allPositiveCPUMap)
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingQueries))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingQueries)
 		require.Equal(t,
 			LBRebalancingQueries,
 			ResolveLBRebalancingObjective(ctx, st, gossipStoreDescProvider.GetStores()),
 		)
 
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingCPU))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingCPU)
 		require.Equal(t,
 			LBRebalancingCPU,
 			ResolveLBRebalancingObjective(ctx, st, gossipStoreDescProvider.GetStores()),
 		)
 
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingQueries))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingQueries)
 		require.Equal(t,
 			LBRebalancingQueries,
 			ResolveLBRebalancingObjective(ctx, st, gossipStoreDescProvider.GetStores()),
@@ -134,19 +134,19 @@ func TestLoadBasedRebalancingObjective(t *testing.T) {
 		// LBRebalancingQueries if the cluster setting is set to
 		// LBRebalancingCPU.
 		gossipStoreDescProvider := testMakeProviderNotifier(oneNegativeCPUMap)
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingQueries))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingQueries)
 		require.Equal(t,
 			LBRebalancingQueries,
 			ResolveLBRebalancingObjective(ctx, st, gossipStoreDescProvider.GetStores()),
 		)
 
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingCPU))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingCPU)
 		require.Equal(t,
 			LBRebalancingQueries,
 			ResolveLBRebalancingObjective(ctx, st, gossipStoreDescProvider.GetStores()),
 		)
 
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingQueries))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingQueries)
 		require.Equal(t,
 			LBRebalancingQueries,
 			ResolveLBRebalancingObjective(ctx, st, gossipStoreDescProvider.GetStores()),
@@ -179,7 +179,7 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 	// one of these unsupported aarch, test this behavior only.
 	if !grunning.Supported() {
 		st := cluster.MakeTestingClusterSettings()
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingQueries))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingQueries)
 		providerNotifier := testMakeProviderNotifier(allPositiveCPUMap)
 		manager, callbacks := makeTestManager(st, providerNotifier)
 
@@ -187,7 +187,7 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 
 		// Changing the objective to CPU should not work since it isn't
 		// supported on this aarch.
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingCPU))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingCPU)
 		require.Equal(t, LBRebalancingQueries, manager.Objective())
 		require.Len(t, *callbacks, 0)
 
@@ -196,7 +196,7 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 
 	t.Run("latest version", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingCPU))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingCPU)
 		providerNotifier := testMakeProviderNotifier(allPositiveCPUMap)
 		manager, callbacks := makeTestManager(st, providerNotifier)
 
@@ -206,14 +206,14 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 		require.Len(t, *callbacks, 0)
 
 		// Override the setting to be QPS, which will trigger a callback.
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingQueries))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingQueries)
 		require.Equal(t, LBRebalancingQueries, manager.Objective())
 		require.Len(t, *callbacks, 1)
 		require.Equal(t, LBRebalancingQueries, (*callbacks)[0])
 
 		// Override the setting again back to CPU, which will trigger a
 		// callback.
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingCPU))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingCPU)
 		require.Equal(t, LBRebalancingCPU, manager.Objective())
 		require.Len(t, *callbacks, 2)
 		require.Equal(t, LBRebalancingCPU, (*callbacks)[1])
@@ -221,7 +221,7 @@ func TestRebalanceObjectiveManager(t *testing.T) {
 
 	t.Run("latest version, remote node no cpu support", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
-		LoadBasedRebalancingObjective.Override(ctx, &st.SV, int64(LBRebalancingCPU))
+		LoadBasedRebalancingObjective.Override(ctx, &st.SV, LBRebalancingCPU)
 		providerNotifier := testMakeProviderNotifier(allPositiveCPUMap)
 		manager, callbacks := makeTestManager(st, providerNotifier)
 

@@ -42,24 +42,10 @@ function setup_disks() {
 	{{ end }}
 	
 	use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
-	
-	disks=()
+
 	mount_prefix="/mnt/data"
-	
-	{{ if .Zfs }}
-	apt-get update -q
-	apt-get install -yq zfsutils-linux
-	
-	# For zfs, we use the device names under /dev instead of the device
-	# links under /dev/disk/by-id/google-local* for local ssds, because
-	# there is an issue where the links for the zfs partitions which are
-	# created under /dev/disk/by-id/ when we run "zpool create ..." are
-	# inaccurate.
-	for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
-		zpool list -v -P | grep ${d} > /dev/null
-		if [ $? -ne 0 ]; then
-	{{ else }}
-	# if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
+
+  # if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
 	# then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
 	# RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
 	# Scenarios:
@@ -68,24 +54,40 @@ function setup_disks() {
 	#   (local SSD >= 1, Persistent Disk = 1) - no RAID'ing and Persistent Disk mounted
 	#   (local SSD > 1, Persistent Disk = 0) - local SSDs selected for RAID'ing
 	#   (local SSD >= 0, Persistent Disk > 1) - network disks selected for RAID'ing
-	disk_list=()
-	if [ "$(ls /dev/disk/by-id/google-persistent-disk-[1-9]|wc -l)" -eq "0" ]; then
-		disk_list=$(ls /dev/disk/by-id/google-local-*)
+  local_or_persistent=()
+	disks=()
+
+	{{ if .Zfs }}
+	apt-get update -q
+	apt-get install -yq zfsutils-linux
+  {{ end }}
+
+  # N.B. we assume 0th disk is the boot disk.
+  if [ "$(ls /dev/disk/by-id/google-persistent-disk-[1-9]|wc -l)" -gt "0" ]; then
+    local_or_persistent=$(ls /dev/disk/by-id/google-persistent-disk-[1-9])
+    echo "Using only persistent disks: ${local_or_persistent[@]}"
 	else
-		echo "Only persistent disks are selected."
-		disk_list=$(ls /dev/disk/by-id/google-persistent-disk-[1-9])
+    local_or_persistent=$(ls /dev/disk/by-id/google-local-*)
+    echo "Using only local disks: ${local_or_persistent[@]}"
 	fi
-	for d in ${disk_list}; do
-		if ! mount | grep ${d}; then
-	{{ end }}
+
+	for l in ${local_or_persistent}; do
+  d=$(readlink -f $l)
+  {{ if .Zfs }}
+    # Check if the disk is already part of a zpool or mounted; skip if so.
+    (zpool list -v -P | grep ${d} > /dev/null) || (mount | grep ${d} > /dev/null)
+  {{ else }}
+    # Skip already mounted disks.
+    mount | grep ${d} > /dev/null
+  {{ end }}
+		if [ $? -ne 0 ]; then
 			disks+=("${d}")
 			echo "Disk ${d} not mounted, need to mount..."
 		else
 			echo "Disk ${d} already mounted, skipping..."
 		fi
 	done
-	
-	
+
 	if [ "${#disks[@]}" -eq "0" ]; then
 		mountpoint="${mount_prefix}1"
 		echo "No disks mounted, creating ${mountpoint}"

@@ -578,9 +578,7 @@ func (z *zigzagJoiner) matchBase(curRow rowenc.EncDatumRow, side int) (bool, err
 	ordering := z.infos[side].eqColOrdering
 
 	// Compare the equality columns of the baseRow to that of the curRow.
-	cmp, err := prevEqDatums.CompareEx(
-		prevEqColTypes, &z.infos[side].alloc, ordering, z.FlowCtx.EvalCtx, curEqDatums, curEqColTypes,
-	)
+	cmp, err := prevEqDatums.CompareEx(z.Ctx(), prevEqColTypes, &z.infos[side].alloc, ordering, z.FlowCtx.EvalCtx, curEqDatums, curEqColTypes)
 	if err != nil {
 		return false, err
 	}
@@ -723,10 +721,7 @@ func (z *zigzagJoiner) nextRow(ctx context.Context) (rowenc.EncDatumRow, error) 
 			prevEqColTypes := z.infos[prevSide].eqColTypes
 			curEqColTypes := z.infos[z.side].eqColTypes
 			ordering := curInfo.eqColOrdering
-			cmp, err := prevEqCols.CompareEx(
-				prevEqColTypes, &z.infos[z.side].alloc, ordering,
-				z.FlowCtx.EvalCtx, currentEqCols, curEqColTypes,
-			)
+			cmp, err := prevEqCols.CompareEx(ctx, prevEqColTypes, &z.infos[z.side].alloc, ordering, z.FlowCtx.EvalCtx, currentEqCols, curEqColTypes)
 			if err != nil {
 				return nil, err
 			}

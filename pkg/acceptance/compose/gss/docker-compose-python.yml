@@ -17,11 +17,17 @@ services:
       - ${CERTS_DIR:-../../.localcluster.certs}:/certs
       - keytab:/keytab
       - ${COCKROACH_BINARY:-../../../../cockroach-linux-2.6.32-gnu-amd64}:/cockroach/cockroach
+    healthcheck:
+      test: "bash -c 'echo -n > /dev/tcp/cockroach/26257'"
+      interval: 0.5s
+      timeout: 10s
+      retries: 25
   python:
     image: us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance-gss-python:20221214-141947
     user: "${UID}:${GID}"
     depends_on:
-      - cockroach
+      cockroach:
+        condition: service_healthy
     environment:
       - PGHOST=cockroach
       - PGPORT=26257

@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -481,7 +482,7 @@ func TestCanSendToFollower(t *testing.T) {
 				closedts.TargetDuration.Override(ctx, &st.SV, 0)
 			}
 
-			can := canSendToFollower(st, clock, c.ctPolicy, c.ba)
+			can := canSendToFollower(ctx, st, clock, c.ctPolicy, c.ba)
 			require.Equal(t, c.exp, can)
 		})
 	}
@@ -537,9 +538,9 @@ func TestOracle(t *testing.T) {
 		{NodeID: 3, Address: util.MakeUnresolvedAddr("tcp", "3"), Locality: region("c")},
 	}
 	replicas := []roachpb.ReplicaDescriptor{
-		{NodeID: 1, StoreID: 1},
-		{NodeID: 2, StoreID: 2},
-		{NodeID: 3, StoreID: 3},
+		{NodeID: 1, StoreID: 1, ReplicaID: 1},
+		{NodeID: 2, StoreID: 2, ReplicaID: 2},
+		{NodeID: 3, StoreID: 3, ReplicaID: 3},
 	}
 	desc := &roachpb.RangeDescriptor{
 		InternalReplicas: replicas,
@@ -1018,6 +1019,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 	skip.UnderRace(t, "times out")
 	skip.UnderDeadlock(t)
 
+	rng, _ := randutil.NewTestRand()
 	for _, testCase := range []struct {
 		name             string
 		sharedProcess    bool
@@ -1078,6 +1080,10 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
 
 			historicalQuery := `SELECT * FROM t.test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
+			useExplainAnalyze := rng.Float64() < 0.5
+			if useExplainAnalyze {
+				historicalQuery = "EXPLAIN ANALYZE " + historicalQuery
+			}
 			recCh := make(chan tracingpb.Recording, 1)
 
 			var tenants [numNodes]serverutils.ApplicationLayerInterface
@@ -1211,7 +1217,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 				{NodeID: 3, StoreID: 3, ReplicaID: 3},
 			}, entry.Desc.Replicas().Descriptors())
 
-			tenantSQL.Exec(t, historicalQuery)
+			rows := tenantSQL.QueryStr(t, historicalQuery)
 			rec := <-recCh
 
 			// Look at the trace and check that the follower read was served by
@@ -1229,6 +1235,20 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			}
 			require.Equal(t, numFRs, 1, "query wasn't served through follower reads: %s", rec)
 			require.Equal(t, numN2FRs, 1, "follower read wasn't served by n2: %s", rec)
+
+			if useExplainAnalyze {
+				frMessage, historicalMessage := "used follower read", "historical"
+				var foundFRMessage, foundHistoricalMessage bool
+				for _, row := range rows {
+					if strings.TrimSpace(row[0]) == frMessage {
+						foundFRMessage = true
+					} else if strings.HasPrefix(strings.TrimSpace(row[0]), historicalMessage) {
+						foundHistoricalMessage = true
+					}
+				}
+				require.True(t, foundFRMessage, "didn't see %q message in EXPLAIN ANALYZE: %v", frMessage, rows)
+				require.True(t, foundHistoricalMessage, "didn't see %q message in EXPLAIN ANALYZE: %v", historicalMessage, rows)
+			}
 		})
 	}
 }

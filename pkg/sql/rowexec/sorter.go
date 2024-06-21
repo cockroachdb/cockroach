@@ -359,7 +359,7 @@ func (s *sortTopKProcessor) Start(ctx context.Context) {
 		} else {
 			if !heapCreated {
 				// Arrange the k values into a max-heap.
-				s.rows.InitTopK()
+				s.rows.InitTopK(ctx)
 				heapCreated = true
 			}
 			// Replace the max value if the new row is smaller, maintaining the
@@ -433,7 +433,7 @@ func (s *sortChunksProcessor) chunkCompleted(
 	types := s.input.OutputTypes()
 	for _, ord := range s.ordering[:s.matchLen] {
 		col := ord.ColIdx
-		cmp, err := nextChunkRow[col].Compare(types[col], &s.alloc, s.EvalCtx, &prefix[col])
+		cmp, err := nextChunkRow[col].Compare(s.Ctx(), types[col], &s.alloc, s.EvalCtx, &prefix[col])
 		if cmp != 0 || err != nil {
 			return true, err
 		}

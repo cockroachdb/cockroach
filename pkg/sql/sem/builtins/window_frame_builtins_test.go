@@ -77,8 +77,9 @@ func testMin(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 		wfr.StartBoundOffset = tree.NewDInt(tree.DInt(offset))
 		wfr.EndBoundOffset = tree.NewDInt(tree.DInt(offset))
 		min := &slidingWindowFunc{}
-		min.sw = makeSlidingWindow(evalCtx, func(evalCtx *eval.Context, a, b tree.Datum) int {
-			return -a.Compare(evalCtx, b)
+		min.sw = makeSlidingWindow(evalCtx, func(ctx context.Context, evalCtx *eval.Context, a, b tree.Datum) (int, error) {
+			cmp, err := a.Compare(ctx, evalCtx, b)
+			return -cmp, err
 		})
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
 			res, err := min.Compute(context.Background(), evalCtx, wfr)
@@ -120,8 +121,8 @@ func testMax(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 		wfr.StartBoundOffset = tree.NewDInt(tree.DInt(offset))
 		wfr.EndBoundOffset = tree.NewDInt(tree.DInt(offset))
 		max := &slidingWindowFunc{}
-		max.sw = makeSlidingWindow(evalCtx, func(evalCtx *eval.Context, a, b tree.Datum) int {
-			return a.Compare(evalCtx, b)
+		max.sw = makeSlidingWindow(evalCtx, func(ctx context.Context, evalCtx *eval.Context, a, b tree.Datum) (int, error) {
+			return a.Compare(ctx, evalCtx, b)
 		})
 		for wfr.RowIdx = 0; wfr.RowIdx < wfr.PartitionSize(); wfr.RowIdx++ {
 			res, err := max.Compute(context.Background(), evalCtx, wfr)

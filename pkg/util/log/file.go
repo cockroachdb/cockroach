@@ -42,7 +42,7 @@ import (
 // https://github.com/cockroachdb/cockroach/issues/36861#issuecomment-483589446
 func TemporarilyDisableFileGCForMainLogger() (cleanup func()) {
 	fileSink := debugLog.getFileSink()
-	if fileSink == nil || !fileSink.enabled.Get() {
+	if fileSink == nil || !fileSink.enabled.Load() {
 		return func() {}
 	}
 	oldLogLimit := atomic.LoadInt64(&fileSink.logFilesCombinedMaxSize)
@@ -58,7 +58,7 @@ type fileSink struct {
 	// This should only be written while mu is held, but can
 	// be read anytime. We maintain the invariant that
 	// enabled = true implies logDir != "".
-	enabled syncutil.AtomicBool
+	enabled atomic.Bool
 
 	// groupName is the config-specified file group name - do not use to
 	// generate file names! Use fileNamePrefix instead.
@@ -89,6 +89,8 @@ type fileSink struct {
 	// getStartLines retrieves a list of log entries to
 	// include at the start of a log file.
 	getStartLines func(time.Time) []*buffer
+
+	fatalOnLogStall func() bool
 
 	filePermissions fs.FileMode
 
@@ -153,13 +155,13 @@ func newFileSink(
 		logBytesWritten:         logBytesWritten,
 	}
 	f.mu.logDir = dir
-	f.enabled.Set(dir != "")
+	f.enabled.Store(dir != "")
 	return f
 }
 
 // activeAtSeverity implements the logSink interface.
 func (l *fileSink) active() bool {
-	return l.enabled.Get()
+	return l.enabled.Load()
 }
 
 // attachHints implements the logSink interface.
@@ -181,7 +183,7 @@ func (l *fileSink) output(b []byte, opts sinkOutputOptions) error {
 		l.emergencyOutput(b)
 		return nil
 	}
-	if !l.enabled.Get() {
+	if !l.enabled.Load() {
 		// NB: we need to check filesink.enabled a second time here in
 		// case a test Scope() has disabled it asynchronously while
 		// (*loggerT).outputLogEntry() was not holding outputMu.
@@ -199,7 +201,7 @@ func (l *fileSink) output(b []byte, opts sinkOutputOptions) error {
 		return err
 	}
 
-	if opts.extraFlush || !l.bufferedWrites || logging.flushWrites.Get() {
+	if opts.extraFlush || !l.bufferedWrites || logging.flushWrites.Load() {
 		l.flushAndMaybeSyncLocked(false /*doSync*/)
 	}
 	return nil
@@ -259,14 +261,18 @@ func (l *fileSink) flushAndMaybeSyncLocked(doSync bool) {
 		// recursive back-and-forth between the copy of FATAL events to
 		// OPS and disk slowness detection here. (See the implementation
 		// of logfDepth for details.)
+		sev := severity.ERROR
+		// We default to assuming a fatal on log stall.
+		if l.fatalOnLogStall == nil || l.fatalOnLogStall() {
+			sev = severity.FATAL
+			// The write stall may prevent the process from exiting. If the process
+			// won't exit, we can at least terminate all our RPC connections first.
+			//
+			// See pkg/cli.runStart for where this function is hooked up.
+			MakeProcessUnavailable()
+		}
 
-		// The write stall may prevent the process from exiting. If the process
-		// won't exit, we can at least terminate all our RPC connections first.
-		//
-		// See pkg/cli.runStart for where this function is hooked up.
-		MakeProcessUnavailable()
-
-		Ops.Shoutf(context.Background(), severity.FATAL,
+		Ops.Shoutf(context.Background(), sev,
 			"disk stall detected: unable to sync log files within %s", maxSyncDuration,
 		)
 	})

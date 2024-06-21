@@ -780,7 +780,7 @@ func (b *Builder) buildScan(
 
 	b.addCheckConstraintsForTable(tabMeta)
 	b.addComputedColsForTable(tabMeta, virtualMutationColOrds)
-	tabMeta.CacheIndexPartitionLocalities(b.evalCtx)
+	tabMeta.CacheIndexPartitionLocalities(b.ctx, b.evalCtx)
 
 	outScope.expr = b.factory.ConstructScan(&private)
 
