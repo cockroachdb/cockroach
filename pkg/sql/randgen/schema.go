@@ -129,21 +129,37 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	isMultiRegion bool,
 	allowPartiallyVisibleIndex bool,
 	generateColumnIndexSuffix func() string,
+	opts ...TableGenerationOption,
 ) *tree.CreateTable {
 	g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
 	name := g.GenerateOne(strconv.Itoa(tableIdx))
 	return randCreateTableWithColumnIndexNumberGeneratorAndName(
-		ctx, rng, name, tableIdx, isMultiRegion, allowPartiallyVisibleIndex, generateColumnIndexSuffix,
+		ctx, rng, name, tableIdx, isMultiRegion, allowPartiallyVisibleIndex, generateColumnIndexSuffix, opts...,
 	)
 }
 
 func RandCreateTableWithName(
-	ctx context.Context, rng *rand.Rand, tableName string, tableIdx int, isMultiRegion bool,
+	ctx context.Context,
+	rng *rand.Rand,
+	tableName string,
+	tableIdx int,
+	isMultiRegion bool,
+	opts ...TableGenerationOption,
 ) *tree.CreateTable {
 	return randCreateTableWithColumnIndexNumberGeneratorAndName(
 		ctx, rng, tableName, tableIdx, isMultiRegion,
-		true /* allowPartiallyVisibleIndex */, nil, /* generateColumnIndexSuffix */
+		true /* allowPartiallyVisibleIndex */, nil /* generateColumnIndexSuffix */, opts...,
 	)
+}
+
+type tableGenerationOptions struct {
+	skipColumnFamilyMutations bool
+}
+
+type TableGenerationOption func(*tableGenerationOptions)
+
+func SkipColumnFamilyMutation() TableGenerationOption {
+	return func(o *tableGenerationOptions) { o.skipColumnFamilyMutations = true }
 }
 
 func randCreateTableWithColumnIndexNumberGeneratorAndName(
@@ -154,7 +170,13 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	isMultiRegion bool,
 	allowPartiallyVisibleIndex bool,
 	generateColumnIndexSuffix func() string,
+	opts ...TableGenerationOption,
 ) *tree.CreateTable {
+	options := &tableGenerationOptions{}
+	for _, o := range opts {
+		o(options)
+	}
+
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
 	columnDefs := make([]*tree.ColumnTableDef, 0, nColumns)
@@ -267,7 +289,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	}
 
 	// Create some random column families.
-	if rng.Intn(2) == 0 {
+	if (!options.skipColumnFamilyMutations) && rng.Intn(2) == 0 {
 		ColumnFamilyMutator(rng, ret)
 	}
 

@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -289,10 +290,51 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 	index := n.indexes[n.run.rowIdx]
+	sql, err := BuildFingerprintQueryForIndex(n.tableDesc, index, []string{})
+	if err != nil {
+		return false, err
+	}
+	// If we're in an AOST context, propagate it to the inner statement so that
+	// the inner statement gets planned with planner.avoidLeasedDescriptors set,
+	// like the outer one.
+	if params.p.EvalContext().AsOfSystemTime != nil {
+		ts := params.p.txn.ReadTimestamp()
+		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
+	}
 
-	cols := make([]string, 0, len(n.tableDesc.PublicColumns()))
+	fingerprintCols, err := params.p.InternalSQLTxn().QueryRowEx(
+		params.ctx, "hash-fingerprint",
+		params.p.txn,
+		sessiondata.NodeUserSessionDataOverride,
+		sql,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	if len(fingerprintCols) != 1 {
+		return false, errors.AssertionFailedf(
+			"unexpected number of columns returned: 1 vs %d",
+			len(fingerprintCols))
+	}
+	fingerprint := fingerprintCols[0]
+
+	n.run.values[0] = tree.NewDString(index.GetName())
+	n.run.values[1] = fingerprint
+	n.run.rowIdx++
+	return true, nil
+}
+
+func BuildFingerprintQueryForIndex(
+	tableDesc catalog.TableDescriptor, index catalog.Index, ignoredColumns []string,
+) (string, error) {
+	cols := make([]string, 0, len(tableDesc.PublicColumns()))
 	var numBytesCols int
 	addColumn := func(col catalog.Column) {
+		if slices.Contains(ignoredColumns, col.GetName()) {
+			return
+		}
+
 		var colNameOrExpr string
 		if col.IsExpressionIndexColumn() {
 			colNameOrExpr = fmt.Sprintf("(%s)", col.GetComputeExpr())
@@ -315,28 +357,28 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	}
 
 	if index.Primary() {
-		for _, col := range n.tableDesc.PublicColumns() {
+		for _, col := range tableDesc.PublicColumns() {
 			addColumn(col)
 		}
 	} else {
 		for i := 0; i < index.NumKeyColumns(); i++ {
-			col, err := catalog.MustFindColumnByID(n.tableDesc, index.GetKeyColumnID(i))
+			col, err := catalog.MustFindColumnByID(tableDesc, index.GetKeyColumnID(i))
 			if err != nil {
-				return false, err
+				return "", err
 			}
 			addColumn(col)
 		}
 		for i := 0; i < index.NumKeySuffixColumns(); i++ {
-			col, err := catalog.MustFindColumnByID(n.tableDesc, index.GetKeySuffixColumnID(i))
+			col, err := catalog.MustFindColumnByID(tableDesc, index.GetKeySuffixColumnID(i))
 			if err != nil {
-				return false, err
+				return "", err
 			}
 			addColumn(col)
 		}
 		for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
-			col, err := catalog.MustFindColumnByID(n.tableDesc, index.GetStoredColumnID(i))
+			col, err := catalog.MustFindColumnByID(tableDesc, index.GetStoredColumnID(i))
 			if err != nil {
-				return false, err
+				return "", err
 			}
 			addColumn(col)
 		}
@@ -373,39 +415,11 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	sql := fmt.Sprintf(`SELECT
 	  xor_agg(fnv64(%s))::string AS fingerprint
 	  FROM [%d AS t]@{FORCE_INDEX=[%d]}
-	`, strings.Join(cols, `,`), n.tableDesc.GetID(), index.GetID())
+	`, strings.Join(cols, `,`), tableDesc.GetID(), index.GetID())
 	if index.IsPartial() {
 		sql = fmt.Sprintf("%s WHERE %s", sql, index.GetPredicate())
 	}
-	// If we're in an AOST context, propagate it to the inner statement so that
-	// the inner statement gets planned with planner.avoidLeasedDescriptors set,
-	// like the outer one.
-	if params.p.EvalContext().AsOfSystemTime != nil {
-		ts := params.p.txn.ReadTimestamp()
-		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
-	}
-
-	fingerprintCols, err := params.p.InternalSQLTxn().QueryRowEx(
-		params.ctx, "hash-fingerprint",
-		params.p.txn,
-		sessiondata.NodeUserSessionDataOverride,
-		sql,
-	)
-	if err != nil {
-		return false, err
-	}
-
-	if len(fingerprintCols) != 1 {
-		return false, errors.AssertionFailedf(
-			"unexpected number of columns returned: 1 vs %d",
-			len(fingerprintCols))
-	}
-	fingerprint := fingerprintCols[0]
-
-	n.run.values[0] = tree.NewDString(index.GetName())
-	n.run.values[1] = fingerprint
-	n.run.rowIdx++
-	return true, nil
+	return sql, nil
 }
 
 func (n *showFingerprintsNode) Values() tree.Datums     { return n.run.values }
