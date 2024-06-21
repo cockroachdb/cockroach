@@ -30,7 +30,6 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl"
 )
 
-// TODO: why no worky
 func TestKafkaSinkClientV2_Resolved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -183,7 +182,7 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 }
 
 // TODOs:
-// - test opts construction. using client.OptValues() (neat trick!)
+// - consider use https://golang.testcontainers.org/modules/kafka/ for an integration-lite test. how controllable is it?
 
 // These are really tests of the TopicNamer and our configuration of it.
 func TestKafkaSinkClientV2_Naming(t *testing.T) {
@@ -329,6 +328,24 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 	})
 }
 
+func TestKafkaSinkClientV2_ErrorsEventually(t *testing.T) {
+	// This will make a real kafka client but with a bogus address, so it should
+	// fail to produce. There might be cases where we do retry forever, however,
+	// like if some records have already been produced and there's no way to
+	// safely give up without causing ordering issues. If we don't want this to
+	// happen, we would need to disable idempotency and set max inflight to 1.
+	// TODO: should we do this? like... maybe....
+	fx := newKafkaSinkV2Fx(t, withRealClient(), withKOptsClient([]kgo.Opt{kgo.RecordDeliveryTimeout(1 * time.Second)}))
+	defer fx.close()
+
+	buf := fx.sink.MakeBatchBuffer("t")
+	buf.Append([]byte("k1"), []byte("v1"), attributes{})
+	payload, err := buf.Close()
+	require.NoError(t, err)
+
+	require.Error(t, fx.sink.Flush(fx.ctx, payload))
+}
+
 func TestKafkaBuffer(t *testing.T) {
 	t.Skip("TODO: test flushing under various configurations")
 }
@@ -342,12 +359,13 @@ type kafkaSinkV2Fx struct {
 	mockCtrl *gomock.Controller
 
 	// set with fxOpts to modify the created sinks
-	targetNames    []string
-	topicOverride  string
-	topicPrefix    string
-	sinkJSONConfig changefeedbase.SinkSpecificJSONConfig
-	batchConfig    sinkBatchConfig
-	realClient     bool
+	targetNames     []string
+	topicOverride   string
+	topicPrefix     string
+	sinkJSONConfig  changefeedbase.SinkSpecificJSONConfig
+	batchConfig     sinkBatchConfig
+	realClient      bool
+	additionalKOpts []kgo.Opt
 
 	sink *kafkaSinkClient
 	bs   *batchingSink
@@ -397,6 +415,12 @@ func withRealClient() fxOpt {
 	}
 }
 
+func withKOptsClient(kOpts []kgo.Opt) fxOpt {
+	return func(fx *kafkaSinkV2Fx) {
+		fx.additionalKOpts = kOpts
+	}
+}
+
 func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -430,7 +454,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 
 	var err error
-	fx.sink, err = newKafkaSinkClient(ctx, nil, fx.batchConfig, "no addrs", settings, knobs, nilMetricsRecorderBuilder)
+	fx.sink, err = newKafkaSinkClient(ctx, fx.additionalKOpts, fx.batchConfig, "no addrs", settings, knobs, nilMetricsRecorderBuilder)
 	require.NoError(t, err)
 
 	targets := makeChangefeedTargets(fx.targetNames...)
@@ -455,7 +479,9 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 }
 
 func (fx *kafkaSinkV2Fx) close() {
-	fx.kc.EXPECT().Close().AnyTimes()
+	if _, ok := fx.sink.client.(*mocks.MockKafkaClientV2); ok {
+		fx.kc.EXPECT().Close().AnyTimes()
+	}
 	require.NoError(fx.t, fx.sink.Close())
 	require.NoError(fx.t, fx.bs.Close())
 }

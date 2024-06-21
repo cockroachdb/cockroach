@@ -52,9 +52,8 @@ func newKafkaSinkClient(
 		kgo.BrokerMaxWriteBytes(2 << 27),   // have to bump this as well
 		// idempotent production is strictly a win, but does require the IDEMPOTENT_WRITE permission on CLUSTER (pre Kafka 3.0), and not all clients can have that permission.
 		// i think sarama also transparently enables this and we dont disable it there so we shouldnt need to here.. right?
-		// also does this gracefully disable it or error if the permission is missing?
+		// also does this gracefully disable it or error if the permission is missing? TODO can we test this
 		// kgo.DisableIdempotentWrite(),
-
 		// kgo.MaxProduceRequestsInflightPerBroker(1) // default is 1, or 5 if idempotent is enabled (it is by default)
 		// kgo.ManualFlushing() ?
 
