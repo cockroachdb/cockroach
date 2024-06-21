@@ -161,6 +161,14 @@ var (
 	// creating flakes in unsupported versions or rediscovering
 	// already-fixed bugs. This variable should be updated periodically
 	// as releases reach end of life.
+	//
+	// Note that this is different from cockroach's MinSupportedVersion.
+	// The version defined here has to do with our support window (see
+	// [1]) and is branch agnostic, whereas MinSupportedVersion encodes
+	// our backwards compatibility and is specific to each release
+	// branch.
+	//
+	// [1] https://www.cockroachlabs.com/docs/releases/release-support-policy#current-supported-releases
 	OldestSupportedVersion = clusterupgrade.MustParseVersion("v22.2.0")
 
 	// Catch divergences between `stepFunc` and `Run`'s signature in
