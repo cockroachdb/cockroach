@@ -364,10 +364,10 @@ func TestKafkaSinkClientV2_PartitionsSameAsV1(t *testing.T) {
 				// ...And for nil keys and hardcoded partitions.
 				hardcodedPart := int32(i % numParts)
 				kgoPart = int32(kp.Partition(&kgo.Record{Key: nil, Partition: hardcodedPart}, numParts))
-				saramaPart, err = sp.Partition(&sarama.ProducerMessage{Key: nil, Partition: hardcodedPart}, int32(numParts))
-				require.NoError(t, err)
-				assert.Equal(t, saramaPart, kgoPart, "nil key with %d partitions and hardcoded partition %d", numParts, hardcodedPart)
 				assert.Equal(t, kgoPart, hardcodedPart, "nil key with %d partitions and hardcoded partition %d", numParts, hardcodedPart)
+				// However, note that the v1 kafka sink, actually *does not*
+				// send nil-keyed (resolved) messages to the partition it asked
+				// for. See https://github.com/cockroachdb/cockroach/issues/122666. This is a bug and we are fixing it here in the new version.
 			}
 		})
 	}
