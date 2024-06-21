@@ -18,6 +18,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"maps"
 	"testing"
 	"time"
 
@@ -407,6 +408,12 @@ func (r *Replica) NumPendingProposals() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.numPendingProposalsRLocked()
+}
+
+func (r *Replica) LastUpdateTimes() map[roachpb.ReplicaID]time.Time {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return maps.Clone(r.mu.lastUpdateTimes)
 }
 
 func (r *Replica) IsFollowerActiveSince(
