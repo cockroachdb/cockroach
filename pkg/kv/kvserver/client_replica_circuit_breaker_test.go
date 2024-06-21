@@ -446,10 +446,11 @@ func TestReplicaCircuitBreaker_ResolveIntent_QuorumLoss(t *testing.T) {
 }
 
 type dummyStream struct {
-	name string
-	ctx  context.Context
-	done chan *kvpb.Error
-	recv chan *kvpb.RangeFeedEvent
+	name    string
+	cleanUp func()
+	ctx     context.Context
+	done    chan *kvpb.Error
+	recv    chan *kvpb.RangeFeedEvent
 }
 
 func (s *dummyStream) Context() context.Context {
@@ -471,6 +472,11 @@ func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 
 func (s *dummyStream) Disconnect(err *kvpb.Error) {
 	s.done <- err
+	s.cleanUp()
+}
+
+func (s *dummyStream) RegisterCleanUp(f func()) {
+	s.cleanUp = f
 }
 
 func waitReplicaRangeFeed(
@@ -511,7 +517,8 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stream1 := &dummyStream{ctx: ctx, name: "rangefeed1", recv: make(chan *kvpb.RangeFeedEvent), done: make(chan *kvpb.Error, 1)}
+	stream1 := &dummyStream{ctx: ctx, name: "rangefeed1", recv: make(chan *kvpb.RangeFeedEvent),
+		done: make(chan *kvpb.Error, 1), cleanUp: func() {}}
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream1", func(ctx context.Context) {
 		err := waitReplicaRangeFeed(ctx, tc.repls[0].Replica, args, stream1)
 		if ctx.Err() != nil {
@@ -565,7 +572,8 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 
 	// Start another stream during the "outage" to make sure it isn't rejected by
 	// the breaker.
-	stream2 := &dummyStream{ctx: ctx, name: "rangefeed2", recv: make(chan *kvpb.RangeFeedEvent), done: make(chan *kvpb.Error, 1)}
+	stream2 := &dummyStream{ctx: ctx, name: "rangefeed2", recv: make(chan *kvpb.RangeFeedEvent),
+		done: make(chan *kvpb.Error, 1), cleanUp: func() {}}
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream2", func(ctx context.Context) {
 		err := waitReplicaRangeFeed(ctx, tc.repls[0].Replica, args, stream2)
 		if ctx.Err() != nil {

@@ -1654,6 +1654,7 @@ type consumer struct {
 	blockAfter int
 	blocked    chan interface{}
 	resume     chan error
+	cleanUp    func()
 }
 
 func newConsumer(blockAfter int) *consumer {
@@ -1665,6 +1666,7 @@ func newConsumer(blockAfter int) *consumer {
 		blocked:    make(chan interface{}),
 		resume:     make(chan error),
 		done:       make(chan *kvpb.Error, 1),
+		cleanUp:    func() {},
 	}
 }
 
@@ -1688,18 +1690,23 @@ func (c *consumer) Context() context.Context {
 	return c.ctx
 }
 
-func (s *consumer) Disconnect(error *kvpb.Error) {
-	s.done <- error
+func (c *consumer) Disconnect(error *kvpb.Error) {
+	c.done <- error
+	c.cleanUp()
 }
 
-func (s *consumer) Err(t *testing.T) error {
+func (c *consumer) Err(t *testing.T) error {
 	select {
-	case err := <-s.done:
+	case err := <-c.done:
 		return err.GoError()
 	case <-time.After(30 * time.Second):
 		t.Fatalf("time out waiting for rangefeed completion")
 		return nil
 	}
+}
+
+func (c *consumer) RegisterCleanUp(f func()) {
+	c.cleanUp = f
 }
 
 func (c *consumer) Cancel() {

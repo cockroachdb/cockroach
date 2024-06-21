@@ -49,6 +49,8 @@ type streamMuxer struct {
 	// stream.
 	activeStreams sync.Map
 
+	rangefeedCleanUps sync.Map
+
 	// notifyCompletion is a buffered channel of size 1 used to signal the
 	// presence of muxErrors that need to be sent. Additional signals are dropped
 	// if the channel is already full so that it's unblocking.
@@ -90,6 +92,10 @@ func newStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) 
 		metrics:          metrics,
 		notifyCompletion: make(chan struct{}, 1),
 	}
+}
+
+func (s *streamMuxer) registerRangefeedCleanUp(streamID int64, cleanUp func()) {
+	s.rangefeedCleanUps.Store(streamID, cleanUp)
 }
 
 // send annotates the rangefeed event with streamID and rangeID and sends it to
@@ -165,6 +171,12 @@ func (s *streamMuxer) run(ctx context.Context, stopper *stop.Stopper) {
 		case <-s.notifyCompletion:
 			toSend := s.detachMuxErrors()
 			for _, clientErr := range toSend {
+				// have another slice to process disconnect signals can deadlock here in
+				// callback and also disconnected signal
+				if cleanUp, ok := s.rangefeedCleanUps.LoadAndDelete(clientErr.StreamID); ok {
+					f := cleanUp.(func())
+					f()
+				}
 				if err := s.sender.Send(clientErr); err != nil {
 					return
 				}

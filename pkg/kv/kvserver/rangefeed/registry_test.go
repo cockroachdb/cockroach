@@ -46,6 +46,7 @@ type testStream struct {
 	ctx     context.Context
 	ctxDone func()
 	done    chan *kvpb.Error
+	cleanUp func()
 	mu      struct {
 		syncutil.Mutex
 		sendErr error
@@ -55,7 +56,7 @@ type testStream struct {
 
 func newTestStream() *testStream {
 	ctx, done := context.WithCancel(context.Background())
-	return &testStream{ctx: ctx, ctxDone: done, done: make(chan *kvpb.Error, 1)}
+	return &testStream{ctx: ctx, ctxDone: done, done: make(chan *kvpb.Error, 1), cleanUp: func() {}}
 }
 
 func (s *testStream) Context() context.Context {
@@ -78,6 +79,11 @@ func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 
 func (s *testStream) Disconnect(err *kvpb.Error) {
 	s.done <- err
+	s.cleanUp()
+}
+
+func (s *testStream) RegisterCleanUp(f func()) {
+	s.cleanUp = f
 }
 
 func (s *testStream) Err(t *testing.T) error {

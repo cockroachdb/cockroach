@@ -51,10 +51,11 @@ import (
 
 // testStream is a mock implementation of kvpb.RangeFeedEventSink.
 type testStream struct {
-	ctx    context.Context
-	cancel func()
-	done   chan *kvpb.Error
-	mu     struct {
+	ctx     context.Context
+	cancel  func()
+	done    chan *kvpb.Error
+	cleanUp func()
+	mu      struct {
 		syncutil.Mutex
 		events []*kvpb.RangeFeedEvent
 	}
@@ -62,7 +63,7 @@ type testStream struct {
 
 func newTestStream() *testStream {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &testStream{ctx: ctx, cancel: cancel, done: make(chan *kvpb.Error, 1)}
+	return &testStream{ctx: ctx, cancel: cancel, done: make(chan *kvpb.Error, 1), cleanUp: func() {}}
 }
 
 func (s *testStream) SendMsg(m interface{}) error  { panic("unimplemented") }
@@ -88,6 +89,11 @@ func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 
 func (s *testStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
+	s.cleanUp()
+}
+
+func (s *testStream) RegisterCleanUp(f func()) {
+	s.cleanUp = f
 }
 
 func (s *testStream) Err(t *testing.T) error {
