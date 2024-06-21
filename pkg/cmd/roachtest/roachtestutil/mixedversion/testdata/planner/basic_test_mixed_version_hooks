@@ -23,12 +23,12 @@ ok
 
 plan
 ----
-Upgrades:           v22.2.8 → <current>
+Upgrades:           v24.1.8 → <current>
 Deployment mode:    system-only
 Plan:
-├── install fixtures for version "v22.2.8" (1)
-├── start cluster at version "v22.2.8" (2)
-├── wait for system tenant on nodes :1-4 to reach cluster version '22.2' (3)
+├── install fixtures for version "v24.1.8" (1)
+├── start cluster at version "v24.1.8" (2)
+├── wait for system tenant on nodes :1-4 to reach cluster version '24.1' (3)
 ├── run startup hooks concurrently
 │   ├── run "initialize bank workload", after 0s delay (4)
 │   └── run "initialize rand workload", after 30s delay (5)
@@ -36,23 +36,23 @@ Plan:
 │   ├── run "bank workload", after 0s delay (6)
 │   ├── run "rand workload", after 0s delay (7)
 │   └── run "csv server", after 3m0s delay (8)
-└── upgrade cluster from "v22.2.8" to "<current>"
+└── upgrade cluster from "v24.1.8" to "<current>"
    ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (9)
-   ├── upgrade nodes :1-4 from "v22.2.8" to "<current>"
+   ├── upgrade nodes :1-4 from "v24.1.8" to "<current>"
    │   ├── restart node 4 with binary version <current> (10)
    │   ├── run "mixed-version 1" (11)
    │   ├── restart node 3 with binary version <current> (12)
    │   ├── restart node 2 with binary version <current> (13)
    │   ├── run "mixed-version 2" (14)
    │   └── restart node 1 with binary version <current> (15)
-   ├── downgrade nodes :1-4 from "<current>" to "v22.2.8"
-   │   ├── restart node 3 with binary version v22.2.8 (16)
+   ├── downgrade nodes :1-4 from "<current>" to "v24.1.8"
+   │   ├── restart node 3 with binary version v24.1.8 (16)
    │   ├── run "mixed-version 1" (17)
-   │   ├── restart node 2 with binary version v22.2.8 (18)
-   │   ├── restart node 4 with binary version v22.2.8 (19)
+   │   ├── restart node 2 with binary version v24.1.8 (18)
+   │   ├── restart node 4 with binary version v24.1.8 (19)
    │   ├── run "mixed-version 2" (20)
-   │   └── restart node 1 with binary version v22.2.8 (21)
-   ├── upgrade nodes :1-4 from "v22.2.8" to "<current>"
+   │   └── restart node 1 with binary version v24.1.8 (21)
+   ├── upgrade nodes :1-4 from "v24.1.8" to "<current>"
    │   ├── restart node 1 with binary version <current> (22)
    │   ├── restart node 2 with binary version <current> (23)
    │   ├── restart node 4 with binary version <current> (24)
