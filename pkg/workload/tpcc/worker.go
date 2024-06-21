@@ -36,7 +36,7 @@ const (
 // tpccTX is an interface for running a TPCC transaction.
 type tpccTx interface {
 	// run executes the TPCC transaction against the given warehouse ID.
-	run(ctx context.Context, wID int) (interface{}, error)
+	run(ctx context.Context, wID int) (txnData interface{}, onTxnStartDuration time.Duration, err error)
 }
 
 type createTxFn func(ctx context.Context, config *tpcc, mcp *workload.MultiConnPool) (tpccTx, error)
@@ -228,7 +228,8 @@ func (w *worker) run(ctx context.Context) error {
 	// cancel them when the context expires. Instead, let them finish normally
 	// but don't account for them in the histogram.
 	start := timeutil.Now()
-	if _, err := tx.run(context.Background(), warehouseID); err != nil {
+	_, onTxnStartDuration, err := tx.run(context.Background(), warehouseID)
+	if err != nil {
 		w.counters[txInfo.name].error.Inc()
 		return errors.Wrapf(err, "error in %s", txInfo.name)
 	}
@@ -237,7 +238,7 @@ func (w *worker) run(ctx context.Context) error {
 		// NB: this histogram *should* be named along the lines of
 		// `txInfo.name+"_success"` but we already rely on the names and shouldn't
 		// change them now.
-		w.hists.Get(txInfo.name).Record(elapsed)
+		w.hists.Get(txInfo.name).Record(elapsed - onTxnStartDuration)
 	}
 	w.counters[txInfo.name].success.Inc()
 
