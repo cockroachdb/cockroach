@@ -1659,6 +1659,9 @@ func (c *channelSink) Disconnect(err *kvpb.Error) {
 	c.done <- err
 }
 
+func (c *channelSink) RegisterCleanUp(func()) {
+}
+
 // TestRangeFeedMetadataManualSplit tests that a spawned rangefeed emits a
 // metadata event which indicates if it spawned to due a manual split. The
 // test specifically conducts the following:

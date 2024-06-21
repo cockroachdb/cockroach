@@ -106,7 +106,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		// withFiltering does not matter for these benchmarks because doesn't fetch
 		// extra data.
 		const withFiltering = false
-		streams[i] = &noopStream{ctx: ctx, done: make(chan *kvpb.Error, 1)}
+		streams[i] = &noopStream{ctx: ctx, done: make(chan *kvpb.Error, 1), cleanUp: func() {}}
 		ok, _ := p.Register(span, hlc.MinTimestamp, nil,
 			withDiff, withFiltering, streams[i], nil)
 		require.True(b, ok)
@@ -189,9 +189,10 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 
 // noopStream is a stream that does nothing, except count events.
 type noopStream struct {
-	ctx    context.Context
-	events int
-	done   chan *kvpb.Error
+	ctx     context.Context
+	cleanUp func()
+	events  int
+	done    chan *kvpb.Error
 }
 
 func (s *noopStream) Context() context.Context {
@@ -203,8 +204,13 @@ func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
 	return nil
 }
 
+func (s *noopStream) RegisterCleanUp(f func()) {
+	s.cleanUp = f
+}
+
 func (s *noopStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
+	s.cleanUp()
 }
 
 func (s *noopStream) Err(b *testing.B) error {

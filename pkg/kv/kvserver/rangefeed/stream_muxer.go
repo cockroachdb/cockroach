@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package rangefeed
 
 import (
 	"context"
@@ -20,22 +20,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// Implemented by nodeMetrics.
 type rangefeedMetricsRecorder interface {
-	incrementRangefeedCounter()
-	decrementRangefeedCounter()
+	IncrementRangefeedCounter()
+	DecrementRangefeedCounter()
 }
 
-var _ rangefeedMetricsRecorder = (*nodeMetrics)(nil)
-
 // severStreamSender is a wrapper around a grpc stream. Note that it should be
-// safe for concurrent Sends.
+// safe for concurrent Sends. Implemented by lockedMuxStream.
 type severStreamSender interface {
 	Send(*kvpb.MuxRangeFeedEvent) error
 }
 
-var _ severStreamSender = (*lockedMuxStream)(nil)
-
-type streamMuxer struct {
+type StreamMuxer struct {
 	// stream is the server stream to which the muxer sends events. Note that the
 	// stream is a locked mux stream, so it is safe for concurrent Sends.
 	sender severStreamSender
@@ -49,6 +46,9 @@ type streamMuxer struct {
 	// stream.
 	activeStreams sync.Map
 
+	rangefeedCleanUps sync.Map
+	notifyCleanUp     chan struct{}
+
 	// notifyCompletion is a buffered channel of size 1 used to signal the
 	// presence of muxErrors that need to be sent. Additional signals are dropped
 	// if the channel is already full so that it's unblocking.
@@ -59,13 +59,14 @@ type streamMuxer struct {
 
 		// muxErrors is a list of errors that need to be sent to the client to
 		// signal rangefeed completion.
-		muxErrors []*kvpb.MuxRangeFeedEvent
+		muxErrors  []*kvpb.MuxRangeFeedEvent
+		cleanUpIDs []int64
 	}
 }
 
-func (s *streamMuxer) newStream(streamID int64, cancel context.CancelFunc) {
-	s.metrics.incrementRangefeedCounter()
+func (s *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
 	s.activeStreams.Store(streamID, cancel)
+	s.metrics.IncrementRangefeedCounter()
 }
 
 // transformToClientErr transforms a rangefeed completion error to a client side
@@ -84,17 +85,22 @@ func transformToClientErr(err *kvpb.Error) *kvpb.Error {
 	return err
 }
 
-func newStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) *streamMuxer {
-	return &streamMuxer{
+func NewStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) *StreamMuxer {
+	return &StreamMuxer{
 		sender:           sender,
 		metrics:          metrics,
 		notifyCompletion: make(chan struct{}, 1),
+		notifyCleanUp:    make(chan struct{}, 1),
 	}
+}
+
+func (s *StreamMuxer) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
+	s.rangefeedCleanUps.Store(streamID, cleanUp)
 }
 
 // send annotates the rangefeed event with streamID and rangeID and sends it to
 // the grpc stream.
-func (s *streamMuxer) send(
+func (s *StreamMuxer) Send(
 	streamID int64, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent,
 ) error {
 	response := &kvpb.MuxRangeFeedEvent{
@@ -108,7 +114,7 @@ func (s *streamMuxer) send(
 // appendMuxError appends the mux error to the muxer's error slice. This slice
 // is processed by streamMuxer.run and sent to the client. We want to avoid
 // blocking here.
-func (s *streamMuxer) appendMuxError(ev *kvpb.MuxRangeFeedEvent) {
+func (s *StreamMuxer) appendMuxError(ev *kvpb.MuxRangeFeedEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.muxErrors = append(s.mu.muxErrors, ev)
@@ -121,16 +127,28 @@ func (s *streamMuxer) appendMuxError(ev *kvpb.MuxRangeFeedEvent) {
 	}
 }
 
+func (s *StreamMuxer) appendCleanUp(streamID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.cleanUpIDs = append(s.mu.cleanUpIDs, streamID)
+
+	select {
+	case s.notifyCleanUp <- struct{}{}:
+	default:
+	}
+}
+
 // disconnectRangefeedWithError disconnects the rangefeed stream with the given
 // streamID and sends the error to the client.
-func (s *streamMuxer) disconnectRangefeedWithError(
+func (s *StreamMuxer) DisconnectRangefeedWithError(
 	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
 ) {
 	if cancelFunc, ok := s.activeStreams.LoadAndDelete(streamID); ok {
-		f := cancelFunc.(context.CancelFunc)
 		// Canceling the context will cause the registration to disconnect unless
 		// registration is not set up yet in which case it will be a no-op.
-		f()
+		if f, ok := cancelFunc.(context.CancelFunc); ok {
+			f()
+		}
 
 		clientErrorEvent := transformToClientErr(err)
 		ev := &kvpb.MuxRangeFeedEvent{
@@ -142,13 +160,17 @@ func (s *streamMuxer) disconnectRangefeedWithError(
 		})
 
 		s.appendMuxError(ev)
-		s.metrics.decrementRangefeedCounter()
+		s.metrics.DecrementRangefeedCounter()
+	}
+
+	if _, ok := s.rangefeedCleanUps.Load(streamID); ok {
+		s.appendCleanUp(streamID)
 	}
 }
 
 // detachMuxErrors returns mux errors that need to be sent to the client. The
 // caller should make sure to send these errors to the client.
-func (s *streamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
+func (s *StreamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	toSend := s.mu.muxErrors
@@ -156,17 +178,36 @@ func (s *streamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	return toSend
 }
 
+func (s *StreamMuxer) detachCleanUpIDs() []int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	toCleanUp := s.mu.cleanUpIDs
+	s.mu.cleanUpIDs = nil
+	return toCleanUp
+}
+
 // If run returns (due to context cancellation, broken stream, or quiescing),
 // there is nothing we could do. We expect registrations to receive the same
 // error and shut streams down.
-func (s *streamMuxer) run(ctx context.Context, stopper *stop.Stopper) {
+func (s *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 	for {
 		select {
 		case <-s.notifyCompletion:
 			toSend := s.detachMuxErrors()
 			for _, clientErr := range toSend {
+				// have another slice to process disconnect signals can deadlock here in
+				// callback and also disconnected signal
 				if err := s.sender.Send(clientErr); err != nil {
 					return
+				}
+			}
+		case <-s.notifyCleanUp:
+			toCleanUp := s.detachCleanUpIDs()
+			for _, streamID := range toCleanUp {
+				if cleanUp, ok := s.rangefeedCleanUps.LoadAndDelete(streamID); ok {
+					if f, ok := cleanUp.(func()); ok {
+						f()
+					}
 				}
 			}
 		case <-ctx.Done():

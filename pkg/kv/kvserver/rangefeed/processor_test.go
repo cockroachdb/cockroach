@@ -27,442 +27,39 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zeebo/assert"
 )
-
-func makeLogicalOp(val interface{}) enginepb.MVCCLogicalOp {
-	var op enginepb.MVCCLogicalOp
-	op.MustSetValue(val)
-	return op
-}
-
-func writeValueOpWithKV(key roachpb.Key, ts hlc.Timestamp, val []byte) enginepb.MVCCLogicalOp {
-	return makeLogicalOp(&enginepb.MVCCWriteValueOp{
-		Key:       key,
-		Timestamp: ts,
-		Value:     val,
-	})
-}
-
-func writeValueOpWithPrevValue(
-	key roachpb.Key, ts hlc.Timestamp, val, prevValue []byte,
-) enginepb.MVCCLogicalOp {
-	return makeLogicalOp(&enginepb.MVCCWriteValueOp{
-		Key:       key,
-		Timestamp: ts,
-		Value:     val,
-		PrevValue: prevValue,
-	})
-}
-
-func writeValueOp(ts hlc.Timestamp) enginepb.MVCCLogicalOp {
-	return writeValueOpWithKV(roachpb.Key("a"), ts, []byte("val"))
-}
-
-func writeIntentOpWithDetails(
-	txnID uuid.UUID, key []byte, iso isolation.Level, minTS, ts hlc.Timestamp,
-) enginepb.MVCCLogicalOp {
-	return makeLogicalOp(&enginepb.MVCCWriteIntentOp{
-		TxnID:           txnID,
-		TxnKey:          key,
-		TxnIsoLevel:     iso,
-		TxnMinTimestamp: minTS,
-		Timestamp:       ts,
-	})
-}
-
-func writeIntentOpFromMeta(txn enginepb.TxnMeta) enginepb.MVCCLogicalOp {
-	return writeIntentOpWithDetails(
-		txn.ID, txn.Key, txn.IsoLevel, txn.MinTimestamp, txn.WriteTimestamp)
-}
-
-func writeIntentOpWithKey(
-	txnID uuid.UUID, key []byte, iso isolation.Level, ts hlc.Timestamp,
-) enginepb.MVCCLogicalOp {
-	return writeIntentOpWithDetails(txnID, key, iso, ts /* minTS */, ts)
-}
-
-func writeIntentOp(txnID uuid.UUID, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
-	return writeIntentOpWithKey(txnID, nil /* key */, 0, ts)
-}
-
-func updateIntentOp(txnID uuid.UUID, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
-	return makeLogicalOp(&enginepb.MVCCUpdateIntentOp{
-		TxnID:     txnID,
-		Timestamp: ts,
-	})
-}
-
-func commitIntentOpWithKV(
-	txnID uuid.UUID, key roachpb.Key, ts hlc.Timestamp, val []byte, omitInRangefeeds bool,
-) enginepb.MVCCLogicalOp {
-	return makeLogicalOp(&enginepb.MVCCCommitIntentOp{
-		TxnID:            txnID,
-		Key:              key,
-		Timestamp:        ts,
-		Value:            val,
-		OmitInRangefeeds: omitInRangefeeds,
-	})
-}
-
-func commitIntentOpWithPrevValue(
-	txnID uuid.UUID, key roachpb.Key, ts hlc.Timestamp, val, prevValue []byte, omitInRangefeeds bool,
-) enginepb.MVCCLogicalOp {
-	return makeLogicalOp(&enginepb.MVCCCommitIntentOp{
-		TxnID:            txnID,
-		Key:              key,
-		Timestamp:        ts,
-		Value:            val,
-		PrevValue:        prevValue,
-		OmitInRangefeeds: omitInRangefeeds,
-	})
-}
-
-func commitIntentOp(txnID uuid.UUID, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
-	return commitIntentOpWithKV(txnID, roachpb.Key("a"), ts, nil /* val */, false /* omitInRangefeeds */)
-}
-
-func abortIntentOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
-	return makeLogicalOp(&enginepb.MVCCAbortIntentOp{
-		TxnID: txnID,
-	})
-}
-
-func abortTxnOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
-	return makeLogicalOp(&enginepb.MVCCAbortTxnOp{
-		TxnID: txnID,
-	})
-}
-
-func deleteRangeOp(startKey, endKey roachpb.Key, timestamp hlc.Timestamp) enginepb.MVCCLogicalOp {
-	return makeLogicalOp(&enginepb.MVCCDeleteRangeOp{
-		StartKey:  startKey,
-		EndKey:    endKey,
-		Timestamp: timestamp,
-	})
-}
-
-func makeRangeFeedEvent(val interface{}) *kvpb.RangeFeedEvent {
-	var event kvpb.RangeFeedEvent
-	event.MustSetValue(val)
-	return &event
-}
-
-func rangeFeedValueWithPrev(key roachpb.Key, val, prev roachpb.Value) *kvpb.RangeFeedEvent {
-	return makeRangeFeedEvent(&kvpb.RangeFeedValue{
-		Key:       key,
-		Value:     val,
-		PrevValue: prev,
-	})
-}
-
-func rangeFeedValue(key roachpb.Key, val roachpb.Value) *kvpb.RangeFeedEvent {
-	return rangeFeedValueWithPrev(key, val, roachpb.Value{})
-}
-
-func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *kvpb.RangeFeedEvent {
-	return makeRangeFeedEvent(&kvpb.RangeFeedCheckpoint{
-		Span:       span,
-		ResolvedTS: ts,
-	})
-}
-
-type storeOp struct {
-	kv  storage.MVCCKeyValue
-	txn *roachpb.Transaction
-}
-
-func makeTestEngineWithData(ops []storeOp) (storage.Engine, error) {
-	ctx := context.Background()
-	engine := storage.NewDefaultInMemForTesting()
-	for _, op := range ops {
-		kv := op.kv
-		_, err := storage.MVCCPut(ctx, engine, kv.Key.Key, kv.Key.Timestamp, roachpb.Value{RawBytes: kv.Value}, storage.MVCCWriteOptions{Txn: op.txn})
-		if err != nil {
-			engine.Close()
-			return nil, err
-		}
-	}
-	return engine, nil
-}
-
-const testProcessorEventCCap = 16
-const testProcessorEventCTimeout = 10 * time.Millisecond
-
-type processorTestHelper struct {
-	span         roachpb.RSpan
-	rts          *resolvedTimestamp
-	syncEventC   func()
-	sendSpanSync func(*roachpb.Span)
-	scheduler    *ClientScheduler
-}
-
-// syncEventAndRegistrations waits for all previously sent events to be
-// processed *and* for all registration output loops to fully process their own
-// internal buffers.
-func (h *processorTestHelper) syncEventAndRegistrations() {
-	h.sendSpanSync(&all)
-}
-
-// syncEventAndRegistrations waits for all previously sent events to be
-// processed *and* for matching registration output loops to fully process their
-// own internal buffers.
-func (h *processorTestHelper) syncEventAndRegistrationsSpan(span roachpb.Span) {
-	h.sendSpanSync(&span)
-}
-
-// triggerTxnPushUntilPushed will schedule PushTxnQueued events until pushedC
-// indicates that a transaction push attempt has started by posting an event.
-// If a push does not happen in 10 seconds, the attempt fails.
-func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-chan struct{}) {
-	timeoutC := time.After(10 * time.Second)
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		if h.scheduler != nil {
-			h.scheduler.Enqueue(PushTxnQueued)
-		}
-		select {
-		case <-pushedC:
-			return
-		case <-ticker.C:
-			// We keep sending events to avoid the situation where event arrives
-			// but flag indicating that push is still running is not reset.
-		case <-timeoutC:
-			t.Fatal("failed to get txn push notification")
-		}
-	}
-}
-
-type procType bool
-
-const (
-	legacyProcessor    procType = false
-	schedulerProcessor          = true
-)
-
-var testTypes = []procType{legacyProcessor, schedulerProcessor}
-
-func (t procType) String() string {
-	if t {
-		return "scheduler"
-	}
-	return "legacy"
-}
-
-type testConfig struct {
-	Config
-	useScheduler bool
-	isc          IntentScannerConstructor
-}
-
-type option func(*testConfig)
-
-func withPusher(txnPusher TxnPusher) option {
-	return func(config *testConfig) {
-		config.PushTxnsInterval = 10 * time.Millisecond
-		config.PushTxnsAge = 50 * time.Millisecond
-		config.TxnPusher = txnPusher
-	}
-}
-
-func withProcType(t procType) option {
-	return func(config *testConfig) {
-		config.useScheduler = bool(t)
-	}
-}
-
-func withBudget(b *FeedBudget) option {
-	return func(config *testConfig) {
-		config.MemBudget = b
-	}
-}
-
-func withMetrics(m *Metrics) option {
-	return func(config *testConfig) {
-		config.Metrics = m
-	}
-}
-
-func withRtsScanner(scanner IntentScanner) option {
-	return func(config *testConfig) {
-		if scanner != nil {
-			config.isc = func() IntentScanner {
-				return scanner
-			}
-		}
-	}
-}
-
-func withChanTimeout(d time.Duration) option {
-	return func(config *testConfig) {
-		config.EventChanTimeout = d
-	}
-}
-
-func withChanCap(cap int) option {
-	return func(config *testConfig) {
-		config.EventChanCap = cap
-	}
-}
-
-func withEventTimeout(timeout time.Duration) option {
-	return func(config *testConfig) {
-		config.EventChanTimeout = timeout
-	}
-}
-
-func withSpan(span roachpb.RSpan) option {
-	return func(config *testConfig) {
-		config.Span = span
-	}
-}
-
-func withSettings(st *cluster.Settings) option {
-	return func(config *testConfig) {
-		config.Settings = st
-	}
-}
-
-func withPushTxnsIntervalAge(interval, age time.Duration) option {
-	return func(config *testConfig) {
-		config.PushTxnsInterval = interval
-		config.PushTxnsAge = age
-	}
-}
-
-// blockingScanner is a test intent scanner that allows test to track lifecycle
-// of tasks.
-//  1. it will always block on startup and will wait for block to be closed to
-//     proceed
-//  2. when closed it will close done channel to signal completion
-type blockingScanner struct {
-	wrapped IntentScanner
-
-	block chan interface{}
-	done  chan interface{}
-}
-
-func (s *blockingScanner) ConsumeIntents(
-	ctx context.Context, startKey roachpb.Key, endKey roachpb.Key, consumer eventConsumer,
-) error {
-	if s.block != nil {
-		select {
-		case <-s.block:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	return s.wrapped.ConsumeIntents(ctx, startKey, endKey, consumer)
-}
-
-func (s *blockingScanner) Close() {
-	s.wrapped.Close()
-	close(s.done)
-}
-
-func makeIntentScanner(data []storeOp, span roachpb.RSpan) (*blockingScanner, func(), error) {
-	engine, err := makeTestEngineWithData(data)
-	if err != nil {
-		return nil, nil, err
-	}
-	scanner, err := NewSeparatedIntentScanner(context.Background(), engine, span)
-	if err != nil {
-		return nil, nil, err
-	}
-	return &blockingScanner{
-			wrapped: scanner,
-			block:   make(chan interface{}),
-			done:    make(chan interface{}),
-		}, func() {
-			engine.Close()
-		}, nil
-}
-
-func newTestProcessor(
-	t testing.TB, opts ...option,
-) (Processor, *processorTestHelper, *stop.Stopper) {
-	t.Helper()
-	stopper := stop.NewStopper()
-	st := cluster.MakeTestingClusterSettings()
-
-	cfg := testConfig{
-		Config: Config{
-			RangeID:          2,
-			Stopper:          stopper,
-			Settings:         st,
-			AmbientContext:   log.MakeTestingAmbientCtxWithNewTracer(),
-			Clock:            hlc.NewClockForTesting(nil),
-			Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
-			EventChanTimeout: testProcessorEventCTimeout,
-			EventChanCap:     testProcessorEventCCap,
-			Metrics:          NewMetrics(),
-		},
-	}
-	for _, o := range opts {
-		o(&cfg)
-	}
-	if cfg.useScheduler {
-		sch := NewScheduler(SchedulerConfig{
-			Workers:         1,
-			PriorityWorkers: 1,
-			Metrics:         NewSchedulerMetrics(time.Second),
-		})
-		require.NoError(t, sch.Start(context.Background(), stopper))
-		cfg.Scheduler = sch
-		// Also create a dummy priority processor to populate priorityIDs for
-		// BenchmarkRangefeed. It should never be called.
-		noop := func(e processorEventType) processorEventType {
-			if e != Stopped {
-				t.Errorf("unexpected event %s for noop priority processor", e)
-			}
-			return 0
-		}
-		require.NoError(t, sch.register(9, noop, true /* priority */))
-	}
-	s := NewProcessor(cfg.Config)
-	h := processorTestHelper{}
-	switch p := s.(type) {
-	case *LegacyProcessor:
-		h.rts = &p.rts
-		h.span = p.Span
-		h.syncEventC = p.syncEventC
-		h.sendSpanSync = func(span *roachpb.Span) {
-			p.syncEventCWithEvent(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
-		}
-	case *ScheduledProcessor:
-		h.rts = &p.rts
-		h.span = p.Span
-		h.syncEventC = p.syncEventC
-		h.sendSpanSync = func(span *roachpb.Span) {
-			p.syncSendAndWait(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
-		}
-		h.scheduler = &p.scheduler
-	default:
-		panic("unknown processor type")
-	}
-	require.NoError(t, s.Start(stopper, cfg.isc))
-	return s, &h, stopper
-}
 
 func TestProcessorBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt procType) {
 		p, h, stopper := newTestProcessor(t, withProcType(pt))
 		ctx := context.Background()
-		defer stopper.Stop(ctx)
 
+		serverStream := newTestServerStream()
+		streamMuxer := NewStreamMuxer(serverStream, newTestRangefeedCounter())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		defer wg.Wait()
+		// Make sure to shut down the muxer before wg.Wait().
+		defer stopper.Stop(ctx)
+		if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+			defer wg.Done()
+			streamMuxer.Run(ctx, stopper)
+		}); err != nil {
+			wg.Done()
+		}
+
+		fmt.Println("HERE1")
 		// Test processor without registrations.
 		require.Equal(t, 0, p.Len())
 		require.NotPanics(t, func() { p.ConsumeLogicalOps(ctx) })
@@ -482,8 +79,11 @@ func TestProcessorBasic(t *testing.T) {
 		require.NotPanics(t, func() { p.ForwardClosedTS(ctx, hlc.Timestamp{}) })
 		require.NotPanics(t, func() { p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 1}) })
 
+		fmt.Println("HERE2")
+
 		// Add a registration.
-		r1Stream := newTestStream()
+		const r1StreamId, r2StreamId, r3StreamID = int64(1), int64(2), int64(3)
+		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId, serverStream)
 		r1OK, r1Filter := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
@@ -503,8 +103,10 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 1},
 				),
 			},
-			r1Stream.Events(),
+			serverStream.rangefeedEventsSentById(r1StreamId),
 		)
+
+		fmt.Println("HERE3")
 
 		// Test the processor's operation filter.
 		require.True(t, r1Filter.NeedVal(roachpb.Span{Key: roachpb.Key("a")}))
@@ -525,7 +127,7 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 5},
 				),
 			},
-			r1Stream.Events(),
+			serverStream.rangefeedEventsSentById(r1StreamId),
 		)
 
 		// Test value with one registration.
@@ -542,25 +144,25 @@ func TestProcessorBasic(t *testing.T) {
 					},
 				),
 			},
-			r1Stream.Events(),
+			serverStream.rangefeedEventsSentById(r1StreamId),
 		)
 
 		// Test value to non-overlapping key with one registration.
 		p.ConsumeLogicalOps(ctx,
 			writeValueOpWithKV(roachpb.Key("s"), hlc.Timestamp{WallTime: 6}, []byte("val")))
 		h.syncEventAndRegistrations()
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), serverStream.rangefeedEventsSentById(r1StreamId))
 
 		// Test intent that is aborted with one registration.
 		txn1 := uuid.MakeV4()
 		// Write intent.
 		p.ConsumeLogicalOps(ctx, writeIntentOp(txn1, hlc.Timestamp{WallTime: 6}))
 		h.syncEventAndRegistrations()
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), serverStream.rangefeedEventsSentById(r1StreamId))
 		// Abort.
 		p.ConsumeLogicalOps(ctx, abortIntentOp(txn1))
 		h.syncEventC()
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), serverStream.rangefeedEventsSentById(r1StreamId))
 		require.Equal(t, 0, h.rts.intentQ.Len())
 
 		// Test intent that is committed with one registration.
@@ -568,7 +170,7 @@ func TestProcessorBasic(t *testing.T) {
 		// Write intent.
 		p.ConsumeLogicalOps(ctx, writeIntentOp(txn2, hlc.Timestamp{WallTime: 10}))
 		h.syncEventAndRegistrations()
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), serverStream.rangefeedEventsSentById(r1StreamId))
 		// Forward closed timestamp. Should now be stuck on intent.
 		p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 15})
 		h.syncEventAndRegistrations()
@@ -579,7 +181,7 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 9},
 				),
 			},
-			r1Stream.Events(),
+			serverStream.rangefeedEventsSentById(r1StreamId),
 		)
 		// Update the intent. Should forward resolved timestamp.
 		p.ConsumeLogicalOps(ctx, updateIntentOp(txn2, hlc.Timestamp{WallTime: 12}))
@@ -591,7 +193,7 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 11},
 				),
 			},
-			r1Stream.Events(),
+			serverStream.rangefeedEventsSentById(r1StreamId),
 		)
 		// Commit intent. Should forward resolved timestamp to closed timestamp.
 		p.ConsumeLogicalOps(ctx,
@@ -612,11 +214,11 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 15},
 				),
 			},
-			r1Stream.Events(),
+			serverStream.rangefeedEventsSentById(r1StreamId),
 		)
 
 		// Add another registration with withDiff = true and withFiltering = true.
-		r2Stream := newTestStream()
+		r2Stream := newTestSingleFeedStream(streamMuxer, r2StreamId, serverStream)
 		r2OK, r1And2Filter := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
@@ -636,7 +238,7 @@ func TestProcessorBasic(t *testing.T) {
 					hlc.Timestamp{WallTime: 15},
 				),
 			},
-			r2Stream.Events(),
+			serverStream.rangefeedEventsSentById(r2StreamId),
 		)
 
 		// Test the processor's new operation filter.
@@ -660,14 +262,14 @@ func TestProcessorBasic(t *testing.T) {
 				hlc.Timestamp{WallTime: 20},
 			),
 		}
-		require.Equal(t, chEventAM, r1Stream.Events())
+		require.Equal(t, chEventAM, serverStream.rangefeedEventsSentById(r1StreamId))
 		chEventCZ := []*kvpb.RangeFeedEvent{
 			rangeFeedCheckpoint(
 				roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("z")},
 				hlc.Timestamp{WallTime: 20},
 			),
 		}
-		require.Equal(t, chEventCZ, r2Stream.Events())
+		require.Equal(t, chEventCZ, serverStream.rangefeedEventsSentById(r2StreamId))
 
 		// Test value with two registration that overlaps both.
 		p.ConsumeLogicalOps(ctx,
@@ -682,8 +284,8 @@ func TestProcessorBasic(t *testing.T) {
 				},
 			),
 		}
-		require.Equal(t, valEvent, r1Stream.Events())
-		require.Equal(t, valEvent, r2Stream.Events())
+		require.Equal(t, valEvent, serverStream.rangefeedEventsSentById(r1StreamId))
+		require.Equal(t, valEvent, serverStream.rangefeedEventsSentById(r2StreamId))
 
 		// Test value that only overlaps the second registration.
 		p.ConsumeLogicalOps(ctx,
@@ -698,8 +300,8 @@ func TestProcessorBasic(t *testing.T) {
 				},
 			),
 		}
-		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r1Stream.Events())
-		require.Equal(t, valEvent2, r2Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), serverStream.rangefeedEventsSentById(r1StreamId))
+		require.Equal(t, valEvent2, serverStream.rangefeedEventsSentById(r2StreamId))
 
 		// Test committing intent with OmitInRangefeeds that overlaps two
 		// registration (one withFiltering = true and one withFiltering = false).
@@ -716,11 +318,13 @@ func TestProcessorBasic(t *testing.T) {
 				},
 			),
 		}
-		require.Equal(t, valEvent3, r1Stream.Events())
+		require.Equal(t, valEvent3, serverStream.rangefeedEventsSentById(r1StreamId))
 		// r2Stream should not see the event.
 
+		fmt.Println("HERE5")
+
 		// Cancel the first registration.
-		r1Stream.Cancel()
+		r1Stream.Disconnect(kvpb.NewError(context.Canceled))
 		require.NotNil(t, r1Stream.Err(t))
 
 		// Stop the processor with an error.
@@ -728,8 +332,10 @@ func TestProcessorBasic(t *testing.T) {
 		p.StopWithErr(pErr)
 		require.NotNil(t, r2Stream.Err(t))
 
+		fmt.Println("HERE6")
+
 		// Adding another registration should fail.
-		r3Stream := newTestStream()
+		r3Stream := newTestSingleFeedStream(streamMuxer, r3StreamID, serverStream)
 		r3OK, _ := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
@@ -748,10 +354,24 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt procType) {
 		p, h, stopper := newTestProcessor(t, withProcType(pt))
 		ctx := context.Background()
+
+		serverStream := newTestServerStream()
+		streamMuxer := NewStreamMuxer(serverStream, newTestRangefeedCounter())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		defer wg.Wait()
+		// Make sure to shut down the muxer before wg.Wait().
 		defer stopper.Stop(ctx)
+		if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+			defer wg.Done()
+			streamMuxer.Run(ctx, stopper)
+		}); err != nil {
+			wg.Done()
+		}
 
 		// Add a registration.
-		r1Stream := newTestStream()
+		const r1StreamId, r2StreamId = int64(1), int64(2)
+		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId, serverStream)
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
@@ -761,7 +381,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 			r1Stream,
 			func() {},
 		)
-		r2Stream := newTestStream()
+		r2Stream := newTestSingleFeedStream(streamMuxer, r2StreamId, serverStream)
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
@@ -780,7 +400,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 					hlc.Timestamp{WallTime: 0},
 				),
 			},
-			r1Stream.Events(),
+			serverStream.rangefeedEventsSentById(r1StreamId),
 		)
 		require.Equal(t,
 			[]*kvpb.RangeFeedEvent{
@@ -789,11 +409,11 @@ func TestProcessorSlowConsumer(t *testing.T) {
 					hlc.Timestamp{WallTime: 0},
 				),
 			},
-			r2Stream.Events(),
+			serverStream.rangefeedEventsSentById(r2StreamId),
 		)
 
 		// Block its Send method and fill up the registration's input channel.
-		unblock := r1Stream.BlockSend()
+		unblock := r1Stream.blockSend()
 		defer func() {
 			if unblock != nil {
 				unblock()
@@ -819,7 +439,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 
 		// Wait for just the unblocked registration to catch up.
 		h.syncEventAndRegistrationsSpan(spXY)
-		require.Equal(t, toFill+1, len(r2Stream.Events()))
+		require.Equal(t, toFill+1, len(serverStream.rangefeedEventsSentById(r2StreamId)))
 		require.Equal(t, 2, p.Len())
 
 		// Unblock the send channel. The events should quickly be consumed.
@@ -830,7 +450,10 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		// exactly one event to be dropped, but it is possible that multiple events
 		// were dropped due to rapid event consumption before the r1's outputLoop
 		// began consuming from its event buffer.
-		require.LessOrEqual(t, len(r1Stream.Events()), toFill)
+		normalEventsSentById := serverStream.filterEventsSentById(r1StreamId, func(e *kvpb.MuxRangeFeedEvent) bool {
+			return e.Error != nil
+		})
+		require.LessOrEqual(t, len(normalEventsSentById), toFill)
 		require.Equal(t, newErrBufferCapacityExceeded().GoError(), r1Stream.Err(t))
 		testutils.SucceedsSoon(t, func() error {
 			if act, exp := p.Len(), 1; exp != act {
@@ -853,23 +476,38 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanTimeout(time.Millisecond),
 			withMetrics(m), withProcType(pt))
 		ctx := context.Background()
+
+		serverStream := newTestServerStream()
+		streamMuxer := NewStreamMuxer(serverStream, newTestRangefeedCounter())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		defer wg.Wait()
+		// Make sure to shut down the muxer before wg.Wait().
 		defer stopper.Stop(ctx)
 
+		if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+			defer wg.Done()
+			streamMuxer.Run(ctx, stopper)
+		}); err != nil {
+			wg.Done()
+		}
+
 		// Add a registration.
-		r1Stream := newTestStream()
+		const streamId = int64(1)
+		stream := newTestSingleFeedStream(streamMuxer, streamId, serverStream)
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
-			r1Stream,
+			stream,
 			func() {},
 		)
 		h.syncEventAndRegistrations()
 
 		// Block it.
-		unblock := r1Stream.BlockSend()
+		unblock := stream.blockSend()
 		defer func() {
 			if unblock != nil {
 				unblock()
@@ -893,7 +531,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		unblock = nil
 		h.syncEventAndRegistrations()
 
-		require.Equal(t, newErrBufferCapacityExceeded().GoError(), r1Stream.Err(t))
+		require.Equal(t, newErrBufferCapacityExceeded().GoError(), stream.Err(t))
 		require.Equal(t, 0, p.Len(), "registration was not removed")
 		require.Equal(t, int64(1), m.RangeFeedBudgetExhausted.Count())
 	})
@@ -907,17 +545,31 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanTimeout(15*time.Minute),
 			withProcType(pt))
 		ctx := context.Background()
+
+		serverStream := newTestServerStream()
+		streamMuxer := NewStreamMuxer(serverStream, newTestRangefeedCounter())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		defer wg.Wait()
+		// Make sure to shut down the muxer before wg.Wait().
 		defer stopper.Stop(ctx)
+		if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+			defer wg.Done()
+			streamMuxer.Run(ctx, stopper)
+		}); err != nil {
+			wg.Done()
+		}
 
 		// Add a registration.
-		r1Stream := newTestStream()
+		const streamId = int64(1)
+		stream := newTestSingleFeedStream(streamMuxer, streamId, serverStream)
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
-			r1Stream,
+			stream,
 			func() {},
 		)
 		h.syncEventAndRegistrations()
@@ -935,7 +587,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 
 		// Count consumed values
 		consumedOps := 0
-		for _, e := range r1Stream.Events() {
+		for _, e := range serverStream.rangefeedEventsSentById(streamId) {
 			if e.Val != nil {
 				consumedOps++
 			}
@@ -983,14 +635,28 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 
 		p, h, stopper := newTestProcessor(t, withRtsScanner(scanner), withProcType(pt))
 		ctx := context.Background()
+
+		serverStream := newTestServerStream()
+		streamMuxer := NewStreamMuxer(serverStream, newTestRangefeedCounter())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		defer wg.Wait()
+		// Make sure to shut down the muxer before wg.Wait().
 		defer stopper.Stop(ctx)
+		if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+			defer wg.Done()
+			streamMuxer.Run(ctx, stopper)
+		}); err != nil {
+			wg.Done()
+		}
 
 		// The resolved timestamp should not be initialized.
 		require.False(t, h.rts.IsInit())
 		require.Equal(t, hlc.Timestamp{}, h.rts.Get())
 
 		// Add a registration.
-		r1Stream := newTestStream()
+		const r1StreamId = int64(1)
+		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId, serverStream)
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
@@ -1011,7 +677,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 				hlc.Timestamp{},
 			),
 		}
-		require.Equal(t, chEvent, r1Stream.Events())
+		require.Equal(t, chEvent, serverStream.rangefeedEventsSentById(r1StreamId))
 
 		// The resolved timestamp should still not be initialized.
 		require.False(t, h.rts.IsInit())
@@ -1043,7 +709,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 				hlc.Timestamp{WallTime: 18},
 			),
 		}
-		require.Equal(t, chEvent, r1Stream.Events())
+		require.Equal(t, chEvent, serverStream.rangefeedEventsSentById(r1StreamId))
 	})
 }
 
@@ -1292,21 +958,38 @@ func TestProcessorTxnPushDisabled(t *testing.T) {
 func TestProcessorConcurrentStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt procType) {
-
+		nodeStopper := stop.NewStopper()
 		ctx := context.Background()
+
+		serverStream := newTestServerStream()
+		streamMuxer := NewStreamMuxer(serverStream, newTestRangefeedCounter())
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		defer wg.Wait()
+		// Make sure to shut down the muxer before wg.Wait().
+		defer nodeStopper.Stop(ctx)
+
+		if err := nodeStopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+			defer wg.Done()
+			streamMuxer.Run(ctx, nodeStopper)
+		}); err != nil {
+			wg.Done()
+		}
+
 		const trials = 10
 		for i := 0; i < trials; i++ {
 			p, h, stopper := newTestProcessor(t, withProcType(pt))
 
 			var wg sync.WaitGroup
 			wg.Add(6)
-			go func() {
+			go func(id int) {
 				defer wg.Done()
 				runtime.Gosched()
-				s := newTestStream()
+				s := newTestSingleFeedStream(streamMuxer, int64(id), serverStream)
 				p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, s, func() {})
-			}()
+			}(i)
 			go func() {
 				defer wg.Done()
 				runtime.Gosched()
@@ -1346,11 +1029,25 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 
 		p, h, stopper := newTestProcessor(t, withProcType(pt))
 		ctx := context.Background()
+
+		serverStream := newTestServerStream()
+		streamMuxer := NewStreamMuxer(serverStream, newTestRangefeedCounter())
+
+		var nodeWg sync.WaitGroup
+		nodeWg.Add(1)
+		defer nodeWg.Wait()
+		// Make sure to shut down the muxer before wg.Wait().
 		defer stopper.Stop(ctx)
+		if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+			defer nodeWg.Done()
+			streamMuxer.Run(ctx, stopper)
+		}); err != nil {
+			nodeWg.Done()
+		}
 
 		firstC := make(chan int64)
 		regDone := make(chan struct{})
-		regs := make(map[*testStream]int64)
+		regs := make(map[int64]int64)
 
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -1369,16 +1066,18 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 			h.syncEventC()
 			close(firstC)
 		}()
+		id := int64(0)
 		go func() {
 			defer wg.Done()
 			for firstIdx := range firstC {
 				// For each index, create a new registration. The first
 				// operation is should see is firstIdx.
-				s := newTestStream()
-				regs[s] = firstIdx
+				s := newTestSingleFeedStream(streamMuxer, id, serverStream)
+				regs[id] = firstIdx
 				p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, s, func() {})
 				regDone <- struct{}{}
+				id++
 			}
 		}()
 		wg.Wait()
@@ -1386,8 +1085,8 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 
 		// Verify that no registrations were given operations
 		// from before they registered.
-		for s, expFirstIdx := range regs {
-			events := s.Events()
+		for id, expFirstIdx := range regs {
+			events := serverStream.rangefeedEventsSentById(id)
 			require.IsType(t, &kvpb.RangeFeedCheckpoint{}, events[0].GetValue())
 			require.IsType(t, &kvpb.RangeFeedValue{}, events[1].GetValue())
 
@@ -1424,10 +1123,14 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
 			withEventTimeout(100*time.Millisecond), withProcType(pt))
 		ctx := context.Background()
+
+		muxer, cleanUp := NewTestStremMuxer(stopper)
+		defer cleanUp()
 		defer stopper.Stop(ctx)
 
 		// Add a registration.
-		rStream := newConsumer(50)
+		const r1streamID = int64(1)
+		rStream := newConsumer(r1streamID, 50, muxer)
 		defer func() { rStream.Resume() }()
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
@@ -1503,10 +1206,14 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
 			withEventTimeout(time.Millisecond), withProcType(pt))
 		ctx := context.Background()
+
+		muxer, cleanUp := NewTestStremMuxer(stopper)
+		defer cleanUp()
 		defer stopper.Stop(ctx)
 
 		// Add a registration.
-		rStream := newConsumer(90)
+		const r1streamID = int64(1)
+		rStream := newConsumer(r1streamID, 90, muxer)
 		defer func() { rStream.Resume() }()
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
@@ -1572,10 +1279,14 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
 			withEventTimeout(100*time.Millisecond), withProcType(pt))
 		ctx := context.Background()
+
+		muxer, cleanUp := NewTestStremMuxer(stopper)
+		defer cleanUp()
 		defer stopper.Stop(ctx)
 
 		// Add a registration.
-		r1Stream := newConsumer(50)
+		const r1streamID, r2streamID = int64(1), int64(2)
+		r1Stream := newConsumer(r1streamID, 50, muxer)
 		defer func() { r1Stream.Resume() }()
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
@@ -1588,7 +1299,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		)
 
 		// Non-blocking registration that would consume all events.
-		r2Stream := newConsumer(0)
+		r2Stream := newConsumer(r2streamID, 0, muxer)
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
@@ -1650,13 +1361,15 @@ type consumer struct {
 	ctxDone    func()
 	sentValues int32
 	done       chan *kvpb.Error
+	streamID   int64
 
 	blockAfter int
 	blocked    chan interface{}
 	resume     chan error
+	muxer      *TestStreamMuxer
 }
 
-func newConsumer(blockAfter int) *consumer {
+func newConsumer(streamID int64, blockAfter int, muxer *TestStreamMuxer) *consumer {
 	ctx, done := context.WithCancel(context.Background())
 	return &consumer{
 		ctx:        ctx,
@@ -1665,6 +1378,8 @@ func newConsumer(blockAfter int) *consumer {
 		blocked:    make(chan interface{}),
 		resume:     make(chan error),
 		done:       make(chan *kvpb.Error, 1),
+		muxer:      muxer,
+		streamID:   streamID,
 	}
 }
 
@@ -1688,18 +1403,23 @@ func (c *consumer) Context() context.Context {
 	return c.ctx
 }
 
-func (s *consumer) Disconnect(error *kvpb.Error) {
-	s.done <- error
+func (c *consumer) Disconnect(error *kvpb.Error) {
+	c.done <- error
+	c.muxer.DisconnectRangefeedWithError(c.streamID)
 }
 
-func (s *consumer) Err(t *testing.T) error {
+func (c *consumer) Err(t *testing.T) error {
 	select {
-	case err := <-s.done:
+	case err := <-c.done:
 		return err.GoError()
 	case <-time.After(30 * time.Second):
 		t.Fatalf("time out waiting for rangefeed completion")
 		return nil
 	}
+}
+
+func (c *consumer) RegisterCleanUp(f func()) {
+	c.muxer.RegisterRangefeedCleanUp(c.streamID, f)
 }
 
 func (c *consumer) Cancel() {
@@ -1754,24 +1474,38 @@ func TestProcessorBackpressure(t *testing.T) {
 
 	p, h, stopper := newTestProcessor(t, withSpan(span), withBudget(newTestBudget(math.MaxInt64)),
 		withChanCap(1), withEventTimeout(0), withProcType(legacyProcessor))
-	defer stopper.Stop(ctx)
 	defer p.Stop()
 
+	serverStream := newTestServerStream()
+	streamMuxer := NewStreamMuxer(serverStream, newTestRangefeedCounter())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	defer wg.Wait()
+	// Make sure to shut down the muxer before wg.Wait().
+	defer stopper.Stop(ctx)
+	if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+		defer wg.Done()
+		streamMuxer.Run(ctx, stopper)
+	}); err != nil {
+		wg.Done()
+	}
+
 	// Add a registration.
-	stream := newTestStream()
+	const streamId = int64(1)
+	stream := newTestSingleFeedStream(streamMuxer, streamId, serverStream)
 	ok, _ := p.Register(span, hlc.MinTimestamp, nil, /* catchUpIter */
 		false /* withDiff */, false /* withFiltering */, stream, nil)
 	require.True(t, ok)
 
 	// Wait for the initial checkpoint.
 	h.syncEventAndRegistrations()
-	require.Len(t, stream.Events(), 1)
+	require.Len(t, serverStream.rangefeedEventsSentById(streamId), 1)
 
 	// Block the registration consumer, and spawn a goroutine to post events to
 	// the stream, which should block. The rangefeed pipeline buffers a few
 	// additional events in intermediate goroutines between channels, so post 10
 	// events to be sure.
-	unblock := stream.BlockSend()
+	unblock := stream.blockSend()
 	defer unblock()
 
 	const numEvents = 10
@@ -1801,7 +1535,7 @@ func TestProcessorBackpressure(t *testing.T) {
 
 	// Wait for the final checkpoint event.
 	h.syncEventAndRegistrations()
-	events := stream.Events()
+	events := serverStream.rangefeedEventsSentById(streamId)
 	require.Equal(t, &kvpb.RangeFeedEvent{
 		Checkpoint: &kvpb.RangeFeedCheckpoint{
 			Span:       span.AsRawSpanWithNoLocals(),
