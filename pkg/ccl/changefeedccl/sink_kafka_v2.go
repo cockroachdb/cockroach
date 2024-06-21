@@ -310,7 +310,11 @@ func makeKafkaSinkV2(ctx context.Context,
 			Frequency: jsonDuration(1 * time.Millisecond),
 			Messages:  1000,
 		},
-		// Retry: {} ? TODO
+		// These are sarama's defaults.
+		Retry: sinkRetryConfig{
+			Max:     3,
+			Backoff: jsonDuration(100 * time.Millisecond),
+		},
 	})
 	if err != nil {
 		return nil, err

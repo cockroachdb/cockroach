@@ -346,10 +346,6 @@ func TestKafkaSinkClientV2_ErrorsEventually(t *testing.T) {
 	require.Error(t, fx.sink.Flush(fx.ctx, payload))
 }
 
-func TestKafkaBuffer(t *testing.T) {
-	t.Skip("TODO: test flushing under various configurations")
-}
-
 type kafkaSinkV2Fx struct {
 	t        *testing.T
 	settings *cluster.Settings
