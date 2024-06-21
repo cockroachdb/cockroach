@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -77,7 +78,7 @@ func createDelivery(
 	return del, nil
 }
 
-func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
+func (del *delivery) run(ctx context.Context, wID int) (interface{}, time.Duration, error) {
 	del.config.auditor.deliveryTransactions.Add(1)
 
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
@@ -85,7 +86,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 	oCarrierID := rng.Intn(10) + 1
 	olDeliveryD := timeutil.Now()
 
-	err := del.config.executeTx(
+	onTxnStartTime, err := del.config.executeTx(
 		ctx, del.mcp.Get(),
 		func(tx pgx.Tx) error {
 			// 2.7.4.2. For each district:
@@ -187,7 +188,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 
 			return nil
 		})
-	return nil, err
+	return nil, onTxnStartTime, err
 }
 
 func makeInTuples(pairs map[int]int) string {

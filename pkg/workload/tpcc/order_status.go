@@ -114,7 +114,7 @@ func createOrderStatus(
 	return o, nil
 }
 
-func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
+func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, time.Duration, error) {
 	o.config.auditor.orderStatusTransactions.Add(1)
 
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
@@ -132,7 +132,7 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 		d.cID = o.config.randCustomerID(rng)
 	}
 
-	if err := o.config.executeTx(
+	onTxnStartTime, err := o.config.executeTx(
 		ctx, o.mcp.Get(),
 		func(tx pgx.Tx) error {
 			// 2.6.2.2 explains this entire transaction.
@@ -207,8 +207,9 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 			}
 
 			return nil
-		}); err != nil {
-		return nil, err
+		})
+	if err != nil {
+		return nil, 0, err
 	}
-	return d, nil
+	return d, onTxnStartTime, nil
 }
