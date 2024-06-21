@@ -133,10 +133,11 @@ func (s *streamMuxer) disconnectRangefeedWithError(
 	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
 ) {
 	if cancelFunc, ok := s.activeStreams.LoadAndDelete(streamID); ok {
-		f := cancelFunc.(context.CancelFunc)
 		// Canceling the context will cause the registration to disconnect unless
 		// registration is not set up yet in which case it will be a no-op.
-		f()
+		if f, ok := cancelFunc.(context.CancelFunc); ok {
+			f()
+		}
 
 		clientErrorEvent := transformToClientErr(err)
 		ev := &kvpb.MuxRangeFeedEvent{
@@ -174,8 +175,9 @@ func (s *streamMuxer) run(ctx context.Context, stopper *stop.Stopper) {
 				// have another slice to process disconnect signals can deadlock here in
 				// callback and also disconnected signal
 				if cleanUp, ok := s.rangefeedCleanUps.LoadAndDelete(clientErr.StreamID); ok {
-					f := cleanUp.(func())
-					f()
+					if f, ok := cleanUp.(func()); ok {
+						f()
+					}
 				}
 				if err := s.sender.Send(clientErr); err != nil {
 					return

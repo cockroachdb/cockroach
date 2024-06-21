@@ -720,7 +720,7 @@ func TestProcessorBasic(t *testing.T) {
 		// r2Stream should not see the event.
 
 		// Cancel the first registration.
-		r1Stream.Cancel()
+		r1Stream.Disconnect(kvpb.NewError(context.Canceled))
 		require.NotNil(t, r1Stream.Err(t))
 
 		// Stop the processor with an error.

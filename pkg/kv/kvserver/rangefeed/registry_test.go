@@ -63,10 +63,6 @@ func (s *testStream) Context() context.Context {
 	return s.ctx
 }
 
-func (s *testStream) Cancel() {
-	s.ctxDone()
-}
-
 func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -78,6 +74,7 @@ func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 }
 
 func (s *testStream) Disconnect(err *kvpb.Error) {
+	s.ctxDone()
 	s.done <- err
 	s.cleanUp()
 }
@@ -263,7 +260,7 @@ func TestRegistrationBasic(t *testing.T) {
 	// Stream Context Canceled.
 	streamCancelReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
 		false /* withDiff */, false /* withFiltering */)
-	streamCancelReg.stream.Cancel()
+	streamCancelReg.stream.Disconnect(kvpb.NewError(context.Canceled))
 	go streamCancelReg.runOutputLoop(ctx, 0)
 	require.NoError(t, streamCancelReg.waitForCaughtUp(ctx))
 	require.Equal(t, streamCancelReg.stream.Context().Err(), streamCancelReg.Err())
