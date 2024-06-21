@@ -57,8 +57,7 @@ var generativeSplitAndScatterOutputTypes = []*types.T{
 type generativeSplitAndScatterProcessor struct {
 	execinfra.ProcessorBase
 
-	flowCtx *execinfra.FlowCtx
-	spec    execinfrapb.GenerativeSplitAndScatterSpec
+	spec execinfrapb.GenerativeSplitAndScatterSpec
 
 	// chunkSplitAndScatterers contain the splitAndScatterers for the group of
 	// split and scatter workers that's responsible for splitting and scattering
@@ -291,7 +290,6 @@ func newGenerativeSplitAndScatterProcessor(
 	}
 
 	ssp := &generativeSplitAndScatterProcessor{
-		flowCtx:                      flowCtx,
 		spec:                         spec,
 		chunkSplitAndScatterers:      chunkSplitAndScatterers,
 		chunkEntrySplitAndScatterers: chunkEntrySplitAndScatterers,
@@ -328,11 +326,11 @@ func (gssp *generativeSplitAndScatterProcessor) Start(ctx context.Context) {
 		cancel()
 		<-workerDone
 	}
-	if err := gssp.flowCtx.Stopper().RunAsyncTaskEx(scatterCtx, stop.TaskOpts{
+	if err := gssp.FlowCtx.Stopper().RunAsyncTaskEx(scatterCtx, stop.TaskOpts{
 		TaskName: "generativeSplitAndScatter-worker",
 		SpanOpt:  stop.ChildSpan,
 	}, func(ctx context.Context) {
-		gssp.scatterErr = runGenerativeSplitAndScatter(scatterCtx, gssp.flowCtx, &gssp.spec, gssp.chunkSplitAndScatterers, gssp.chunkEntrySplitAndScatterers, gssp.doneScatterCh,
+		gssp.scatterErr = runGenerativeSplitAndScatter(scatterCtx, gssp.FlowCtx, &gssp.spec, gssp.chunkSplitAndScatterers, gssp.chunkEntrySplitAndScatterers, gssp.doneScatterCh,
 			&gssp.routingDatumCache)
 		cancel()
 		close(gssp.doneScatterCh)
