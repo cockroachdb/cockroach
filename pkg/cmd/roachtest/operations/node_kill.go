@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -69,18 +69,21 @@ func runNodeKill(
 
 	if drain {
 		o.Status(fmt.Sprintf("draining node %s", node.NodeIDsString()))
-
-		url, err := c.ExternalPGUrl(ctx, o.L(), node, roachprod.PGURLOptions{
-			External: false,
-			Secure:   c.IsSecure(),
-		})
+		addr, err := c.ExternalAddr(ctx, o.L(), node)
 		if err != nil {
 			o.Fatal(err)
 		}
-		err = c.RunE(ctx, option.WithNodes(node),
-			o.ClusterCockroach(), "node", "drain", "--logtostderr=INFO",
-			fmt.Sprintf("--url=%s", url[0]), "--self",
-		)
+		args := []string{
+			fmt.Sprintf("./%s", o.ClusterCockroach()),
+			"node", "drain", "--logtostderr=INFO", "--self",
+			fmt.Sprintf("--host=%s", addr[0]),
+		}
+		if c.IsSecure() {
+			args = append(args, "--certs-dir", install.CockroachNodeCertsDir)
+		} else {
+			args = append(args, "--insecure")
+		}
+		err = c.RunE(ctx, option.WithNodes(node), args...)
 		if err != nil {
 			o.Fatal(err)
 		}
