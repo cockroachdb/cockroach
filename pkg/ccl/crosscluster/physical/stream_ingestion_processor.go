@@ -401,20 +401,20 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 	sip.metrics = sip.FlowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
 
-	evalCtx := sip.FlowCtx.EvalCtx
+	st := sip.FlowCtx.Cfg.Settings
 	db := sip.FlowCtx.Cfg.DB
 	rc := sip.FlowCtx.Cfg.RangeCache
 
 	var err error
 	sip.batcher, err = bulk.MakeStreamSSTBatcher(
-		ctx, db.KV(), rc, evalCtx.Settings, sip.FlowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
+		ctx, db.KV(), rc, st, sip.FlowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
 		sip.FlowCtx.Cfg.BulkSenderLimiter, sip.onFlushUpdateMetricUpdate)
 	if err != nil {
 		sip.MoveToDrainingAndLogError(errors.Wrap(err, "creating stream sst batcher"))
 		return
 	}
 
-	sip.rangeBatcher = newRangeKeyBatcher(ctx, evalCtx.Settings, db.KV(), sip.onFlushUpdateMetricUpdate)
+	sip.rangeBatcher = newRangeKeyBatcher(ctx, st, db.KV(), sip.onFlushUpdateMetricUpdate)
 
 	var subscriptionCtx context.Context
 	subscriptionCtx, sip.subscriptionCancel = context.WithCancel(sip.Ctx())
@@ -441,7 +441,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		} else {
 			streamClient, err = streamclient.NewStreamClient(ctx, crosscluster.StreamAddress(addr), db,
 				streamclient.WithStreamID(streampb.StreamID(sip.spec.StreamID)),
-				streamclient.WithCompression(compress.Get(&evalCtx.Settings.SV)))
+				streamclient.WithCompression(compress.Get(&st.SV)))
 			if err != nil {
 
 				sip.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, redactedAddr))
@@ -862,7 +862,7 @@ func (sip *streamIngestionProcessor) bufferRangeKeyVal(
 func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	ctx, sp := tracing.ChildSpan(sip.Ctx(), "replicated-split")
 	defer sp.Finish()
-	if !ingestSplitEvent.Get(&sip.EvalCtx.Settings.SV) {
+	if !ingestSplitEvent.Get(&sip.FlowCtx.Cfg.Settings.SV) {
 		return nil
 	}
 	kvDB := sip.FlowCtx.Cfg.DB.KV()
@@ -929,7 +929,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) erro
 
 	lowestTimestamp := hlc.MaxTimestamp
 	highestTimestamp := hlc.MinTimestamp
-	d := quantize.Get(&sip.EvalCtx.Settings.SV)
+	d := quantize.Get(&sip.FlowCtx.Cfg.Settings.SV)
 	for _, resolvedSpan := range resolvedSpans {
 		// If quantizing is enabled, round the timestamp down to an even multiple of
 		// the quantization amount, to maximize the number of spans that share the

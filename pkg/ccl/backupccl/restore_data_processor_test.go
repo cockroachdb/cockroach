@@ -259,7 +259,6 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 
 	init(s.ClusterSettings())
 
-	evalCtx := eval.Context{Settings: s.ClusterSettings(), Tracer: s.AmbientCtx().Tracer}
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			DB: s.InternalDB().(descs.DB),
@@ -409,11 +408,10 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				ProcessorBase: execinfra.ProcessorBase{
 					ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
 						FlowCtx: &flowCtx,
-						EvalCtx: &evalCtx,
 					},
 				},
 				spec: mockRestoreDataSpec,
-				qp:   backuputils.NewMemoryBackedQuotaPool(ctx, nil, "restore-mon", 0),
+				qp:   backuputils.NewMemoryBackedQuotaPool(ctx, nil /* m */, "restore-mon", 0 /* limit */),
 			}
 			sst, res, err := mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, nil)
 			require.NoError(t, err)

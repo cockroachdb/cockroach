@@ -555,7 +555,7 @@ func newJoinReader(
 			flowCtx.Cfg.DistSender,
 			flowCtx.Stopper(),
 			jr.txn,
-			flowCtx.EvalCtx.Settings,
+			flowCtx.Cfg.Settings,
 			flowCtx.EvalCtx.SessionData(),
 			spec.LockingWaitPolicy,
 			spec.LockingStrength,
@@ -857,7 +857,7 @@ func (jr *joinReader) getBatchBytesLimit() rowinfra.BytesLimit {
 	}
 	bytesLimit := jr.lookupBatchBytesLimit
 	if bytesLimit == 0 {
-		bytesLimit = rowinfra.GetDefaultBatchBytesLimit(jr.EvalCtx.TestingKnobs.ForceProductionValues)
+		bytesLimit = rowinfra.GetDefaultBatchBytesLimit(jr.FlowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
 	}
 	return bytesLimit
 }

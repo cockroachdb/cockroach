@@ -124,7 +124,7 @@ func newStreamIngestionFrontierProcessor(
 		metrics:               flowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics),
 		client:                streamClient,
 		heartbeatSender: streamclient.NewHeartbeatSender(ctx, streamClient, streamID, func() time.Duration {
-			return crosscluster.StreamReplicationConsumerHeartbeatFrequency.Get(&flowCtx.EvalCtx.Settings.SV)
+			return crosscluster.StreamReplicationConsumerHeartbeatFrequency.Get(&flowCtx.Cfg.Settings.SV)
 		}),
 		persistedReplicatedTime: spec.ReplicatedTimeAtStart,
 	}

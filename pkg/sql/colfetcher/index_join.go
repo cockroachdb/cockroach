@@ -551,7 +551,7 @@ func NewColIndexJoin(
 			flowCtx.Cfg.DistSender,
 			flowCtx.Stopper(),
 			txn,
-			flowCtx.EvalCtx.Settings,
+			flowCtx.Cfg.Settings,
 			flowCtx.EvalCtx.SessionData(),
 			spec.LockingWaitPolicy,
 			spec.LockingStrength,

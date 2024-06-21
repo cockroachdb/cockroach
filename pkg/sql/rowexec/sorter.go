@@ -433,7 +433,7 @@ func (s *sortChunksProcessor) chunkCompleted(
 	types := s.input.OutputTypes()
 	for _, ord := range s.ordering[:s.matchLen] {
 		col := ord.ColIdx
-		cmp, err := nextChunkRow[col].Compare(s.Ctx(), types[col], &s.alloc, s.EvalCtx, &prefix[col])
+		cmp, err := nextChunkRow[col].Compare(s.Ctx(), types[col], &s.alloc, s.FlowCtx.EvalCtx, &prefix[col])
 		if cmp != 0 || err != nil {
 			return true, err
 		}
