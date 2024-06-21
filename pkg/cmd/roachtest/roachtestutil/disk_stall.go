@@ -190,7 +190,8 @@ func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
 	// reload, so uninstall snapd.
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo apt-get purge -y snapd`)
-	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo umount -f /mnt/data1 || true`)
+	// NB: We suppress errors in case the directory isn't mounted already.
+	_ = s.c.RunE(ctx, option.WithNodes(s.c.All()), `sudo umount -f /mnt/data1`)
 	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup remove_all`)
 	err := s.c.RunE(ctx, option.WithNodes(s.c.All()), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
 		`sudo dmsetup create data1`)
