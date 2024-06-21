@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
-	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
@@ -80,7 +79,7 @@ func TestComposeCompare(t *testing.T) {
 		// start up docker-compose, but the files themselves will be
 		// Bazel-built symlinks. We want to copy these files to a
 		// different temporary location.
-		compareDir, err = os.MkdirTemp(datapathutils.DebuggableTempDir(), "TestComposeCompare")
+		compareDir, err = os.MkdirTemp("", "TestComposeCompare")
 		if err != nil {
 			t.Fatal(err)
 		}
