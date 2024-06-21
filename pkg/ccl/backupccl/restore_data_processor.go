@@ -446,7 +446,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	ctx context.Context, kr *KeyRewriter, sst mergedSST,
 ) (kvpb.BulkOpSummary, error) {
 	db := rd.FlowCtx.Cfg.DB
-	evalCtx := rd.EvalCtx
 	var summary kvpb.BulkOpSummary
 
 	entry := sst.entry
@@ -492,7 +491,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		batcher, err = bulk.MakeSSTBatcher(ctx,
 			"restore",
 			db.KV(),
-			evalCtx.Settings,
+			rd.FlowCtx.Cfg.Settings,
 			disallowShadowingBelow,
 			writeAtBatchTS,
 			false, /* scatterSplitRanges */
