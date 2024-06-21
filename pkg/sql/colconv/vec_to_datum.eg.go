@@ -166,10 +166,10 @@ func (c *VecToDatumConverter) ConvertBatchAndDeselect(batch coldata.Batch) {
 			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:batchLength]
 		}
 	}
-	if c.da.AllocSize < batchLength {
+	if c.da.DefaultAllocSize < batchLength {
 		// Adjust the datum alloc according to the length of the batch since
 		// this batch is the longest we've seen so far.
-		c.da.AllocSize = batchLength
+		c.da.DefaultAllocSize = batchLength
 	}
 	sel := batch.Selection()
 	vecs := batch.ColVecs()
@@ -225,10 +225,10 @@ func (c *VecToDatumConverter) ConvertVecs(vecs []*coldata.Vec, inputLen int, sel
 			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:requiredLength]
 		}
 	}
-	if c.da.AllocSize < requiredLength {
+	if c.da.DefaultAllocSize < requiredLength {
 		// Adjust the datum alloc according to the length of the batch since
 		// this batch is the longest we've seen so far.
-		c.da.AllocSize = requiredLength
+		c.da.DefaultAllocSize = requiredLength
 	}
 	for _, vecIdx := range c.vecIdxsToConvert {
 		ColVecToDatum(
