@@ -1437,6 +1437,7 @@ func (m lockValueFormatter) Format(f fmt.State, c rune) {
 var pebbleToolFS = &autoDecryptFS{}
 
 func init() {
+	debugZipCmd.AddCommand(debugZipUploadCmd)
 	DebugCmd.AddCommand(debugCmds...)
 
 	// Note: we hook up FormatValue here in order to avoid a circular dependency
@@ -1575,6 +1576,21 @@ func init() {
 		"force use of TTY escape codes to colorize the output")
 	f.StringSliceVar(&debugMergeLogsOpts.tenantIDsFilter, "tenant-ids", nil,
 		"tenant IDs to filter logs by")
+
+	f = debugZipUploadCmd.Flags()
+	f.Var(flagutil.Time(&debugZipUploadOpts.from), "from",
+		"time before which messages should be filtered")
+	f.Var(flagutil.Time(&debugZipUploadOpts.to), "to",
+		"time after which messages should be filtered")
+	f.StringVar(&debugZipUploadOpts.format, "format", "",
+		"log format of the input files")
+	f.StringVar(&debugZipUploadOpts.ddAPIKey, "dd-api-key", "",
+		"Datadog API key to use to send debug.zip artifacts to datadog")
+	f.StringSliceVar(&debugZipUploadOpts.include, "include", nil,
+		"The debug zip artifacts to include. Possible values: "+strings.Join(zipArtifactTypes, ", "))
+	f.StringSliceVar(&debugZipUploadOpts.tags, "tags", nil,
+		"Tags to attach to the debug zip artifacts. This can be used to annotate the artifacts with details about the customer."+
+			"\nExample: --tags \"customer:ABC,cluster:XYZ\"")
 
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")

@@ -1,0 +1,66 @@
+upload-profiles "single-node - both profiles"
+{
+    "1": [
+        { "type": "cpu", "timestamp": 1718972610, "duration": 20 },
+        { "type": "heap", "timestamp": 1718974401, "duration": 20 }
+    ]
+}
+----
+Upload ID: 123
+Uploaded profiles of node 1 to datadog (debugDir/nodes/1/cpu.pprof, debugDir/nodes/1/heap.pprof)
+debug zip upload debugDir --dd-api-key=dd-api-key
+{"start":"","end":"","attachments":["cpu.pprof","heap.pprof"],"tags_profiler":"service:CRDB-SH,env:debug,nodeID:1,uuid:123","family":"go","version":"4"}
+
+
+upload-profiles "multi-node - both profiles" tags=foo:bar
+{
+    "1": [
+        { "type": "cpu", "timestamp": 1718972610, "duration": 20 },
+        { "type": "heap", "timestamp": 1718974401, "duration": 20 }
+    ],
+    "2": [
+        { "type": "cpu", "timestamp": 1718974543, "duration": 20 },
+        { "type": "heap", "timestamp": 1718974535, "duration": 20 }
+    ]
+}
+----
+Upload ID: 123
+Uploaded profiles of node 1 to datadog (debugDir/nodes/1/cpu.pprof, debugDir/nodes/1/heap.pprof)
+Uploaded profiles of node 2 to datadog (debugDir/nodes/2/cpu.pprof, debugDir/nodes/2/heap.pprof)
+debug zip upload debugDir --dd-api-key=dd-api-key --tags=foo:bar
+{"start":"","end":"","attachments":["cpu.pprof","heap.pprof"],"tags_profiler":"service:CRDB-SH,env:debug,nodeID:1,uuid:123,foo:bar","family":"go","version":"4"}
+{"start":"","end":"","attachments":["cpu.pprof","heap.pprof"],"tags_profiler":"service:CRDB-SH,env:debug,nodeID:2,uuid:123,foo:bar","family":"go","version":"4"}
+
+
+upload-profiles "single-node - only CPU profile" tags=customer:ABC,cluster:XYZ
+{
+    "1": [
+        { "type": "cpu", "timestamp": 1718972610, "duration": 20 }
+    ]
+}
+----
+Upload ID: 123
+Uploaded profiles of node 1 to datadog (debugDir/nodes/1/cpu.pprof)
+debug zip upload debugDir --dd-api-key=dd-api-key --tags=customer:ABC,cluster:XYZ
+{"start":"","end":"","attachments":["cpu.pprof"],"tags_profiler":"service:CRDB-SH,env:debug,nodeID:1,uuid:123,foo:bar,customer:ABC,cluster:XYZ","family":"go","version":"4"}
+
+
+upload-profiles "single-node - no profiles found"
+{
+    "1": []
+}
+----
+Upload ID: 123
+debug zip upload debugDir --dd-api-key=dd-api-key
+
+
+upload-profiles "single-node - both profiles" tags=ERR
+{
+    "1": [
+        { "type": "cpu", "timestamp": 1718972610, "duration": 20 },
+        { "type": "heap", "timestamp": 1718974401, "duration": 20 }
+    ]
+}
+----
+ERROR: Failed to upload profiles of node 1 to datadog (debugDir/nodes/1/cpu.pprof, debugDir/nodes/1/heap.pprof): 'runtime' is a required field
+debug zip upload debugDir --dd-api-key=dd-api-key --tags=ERR
