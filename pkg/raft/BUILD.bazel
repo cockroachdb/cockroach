@@ -22,6 +22,7 @@ go_library(
         "//pkg/raft/confchange",
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
+        "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",
     ],
 )
