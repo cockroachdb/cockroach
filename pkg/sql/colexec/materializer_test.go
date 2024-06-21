@@ -106,67 +106,100 @@ func BenchmarkMaterializer(b *testing.B) {
 		Mon:     evalCtx.TestingMon,
 	}
 
+	type testCase struct {
+		name string
+		typs []*types.T
+	}
+	testCases := []testCase{
+		{"int", []*types.T{types.Int}},
+		{"float", []*types.T{types.Float}},
+		{"bytes", []*types.T{types.Bytes}},
+		{"int6", []*types.T{types.Int, types.Int, types.Int, types.Int, types.Int, types.Int}},
+		{"string4", []*types.T{types.String, types.String, types.String, types.String}},
+		{"multi80", []*types.T{
+			types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int,
+			types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int,
+			types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int,
+			types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int,
+			types.String, types.String, types.String, types.String, types.String, types.String,
+			types.String, types.String, types.String, types.String, types.String, types.String,
+			types.String, types.String, types.String, types.String, types.String, types.String,
+			types.String, types.String, types.String, types.String, types.String, types.String,
+			types.Float, types.Float, types.Float, types.Float, types.Float, types.Float,
+			types.Float, types.Float, types.Float, types.Float, types.Float, types.Float,
+			types.Float, types.Float, types.Float, types.Float, types.Float, types.Float,
+			types.Float, types.Float, types.Float, types.Float, types.Float, types.Float,
+		}},
+	}
+
 	rng, _ := randutil.NewTestRand()
 	nBatches := 10
-	nRows := nBatches * coldata.BatchSize()
-	for _, typ := range []*types.T{types.Int, types.Float, types.Bytes} {
-		typs := []*types.T{typ}
-		nCols := len(typs)
+	for _, tc := range testCases {
+		nCols := len(tc.typs)
 		for _, hasNulls := range []bool{false, true} {
 			for _, useSelectionVector := range []bool{false, true} {
-				b.Run(fmt.Sprintf("%s/hasNulls=%t/useSel=%t", typ, hasNulls, useSelectionVector), func(b *testing.B) {
-					nullProb := 0.0
-					if hasNulls {
-						nullProb = 0.1
+				for _, singleRowBatch := range []bool{false, true} {
+					batchSize := coldata.BatchSize()
+					batchSizeStr := ""
+					if singleRowBatch {
+						batchSize = 1
+						batchSizeStr = "/batchSize=1"
 					}
-					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
-					for _, colVec := range batch.ColVecs() {
-						coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
-							Rand:             rng,
-							Vec:              colVec,
-							N:                coldata.BatchSize(),
-							NullProbability:  nullProb,
-							BytesFixedLength: 8,
-						})
-					}
-					batch.SetLength(coldata.BatchSize())
-					if useSelectionVector {
-						batch.SetSelection(true)
-						sel := batch.Selection()
-						for i := 0; i < coldata.BatchSize(); i++ {
-							sel[i] = i
+					nRows := nBatches * batchSize
+					b.Run(fmt.Sprintf("%s/hasNulls=%t/useSel=%t%s", tc.name, hasNulls, useSelectionVector, batchSizeStr), func(b *testing.B) {
+						nullProb := 0.0
+						if hasNulls {
+							nullProb = 0.1
 						}
-					}
-					input := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
-
-					b.SetBytes(int64(nRows * nCols * int(memsize.Int64)))
-					for i := 0; i < b.N; i++ {
-						m := NewMaterializer(
-							nil, /* allocator */
-							flowCtx,
-							0, /* processorID */
-							colexecargs.OpWithMetaInfo{Root: input},
-							typs,
-						)
-						m.Start(ctx)
-
-						foundRows := 0
-						for {
-							row, meta := m.Next()
-							if meta != nil {
-								b.Fatalf("unexpected metadata %v", meta)
+						batch := testAllocator.NewMemBatchWithMaxCapacity(tc.typs)
+						for _, colVec := range batch.ColVecs() {
+							coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
+								Rand:             rng,
+								Vec:              colVec,
+								N:                coldata.BatchSize(),
+								NullProbability:  nullProb,
+								BytesFixedLength: 8,
+							})
+						}
+						batch.SetLength(batchSize)
+						if useSelectionVector {
+							batch.SetSelection(true)
+							sel := batch.Selection()
+							for i := 0; i < batchSize; i++ {
+								sel[i] = i
 							}
-							if row == nil {
-								break
+						}
+						input := colexectestutils.NewFiniteBatchSource(testAllocator, batch, tc.typs, nBatches)
+
+						b.SetBytes(int64(nRows * nCols * int(memsize.Int64)))
+						for i := 0; i < b.N; i++ {
+							m := NewMaterializer(
+								nil, /* allocator */
+								flowCtx,
+								0, /* processorID */
+								colexecargs.OpWithMetaInfo{Root: input},
+								tc.typs,
+							)
+							m.Start(ctx)
+
+							foundRows := 0
+							for {
+								row, meta := m.Next()
+								if meta != nil {
+									b.Fatalf("unexpected metadata %v", meta)
+								}
+								if row == nil {
+									break
+								}
+								foundRows++
 							}
-							foundRows++
+							if foundRows != nRows {
+								b.Fatalf("expected %d rows, found %d", nRows, foundRows)
+							}
+							input.Reset(nBatches)
 						}
-						if foundRows != nRows {
-							b.Fatalf("expected %d rows, found %d", nRows, foundRows)
-						}
-						input.Reset(nBatches)
-					}
-				})
+					})
+				}
 			}
 		}
 	}
