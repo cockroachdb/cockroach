@@ -78,9 +78,11 @@ func (jb *joinerBase) init(
 	onCondTypes = append(onCondTypes, leftTypes...)
 	onCondTypes = append(onCondTypes, rightTypes...)
 
-	outputTypes := jType.MakeOutputTypes(leftTypes, rightTypes)
+	var outputTypes []*types.T
 	if outputContinuationColumn {
-		outputTypes = append(outputTypes, types.Bool)
+		outputTypes = jType.MakeOutputTypesWithContinuationColumn(leftTypes, rightTypes)
+	} else {
+		outputTypes = jType.MakeOutputTypes(leftTypes, rightTypes)
 	}
 
 	if err := jb.ProcessorBase.Init(
