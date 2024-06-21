@@ -737,10 +737,11 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		var ts hlc.Timestamp
 		var valPtr *[]byte
 		var omitInRangefeedsPtr *bool
+		var originIDPtr *uint32
 		valueInBatch := false
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:
-			key, ts, valPtr, omitInRangefeedsPtr = t.Key, t.Timestamp, &t.Value, &t.OmitInRangefeeds
+			key, ts, valPtr, omitInRangefeedsPtr, originIDPtr = t.Key, t.Timestamp, &t.Value, &t.OmitInRangefeeds, &t.OriginID
 			if !ts.IsEmpty() {
 				// 1PC transaction commit, and no intent was written, so the value
 				// must be in the batch.
@@ -809,6 +810,9 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		}
 		*valPtr = val.RawBytes
 		*omitInRangefeedsPtr = vh.OmitInRangefeeds
+		if originIDPtr != nil {
+			*originIDPtr = vh.OriginID
+		}
 	}
 
 	// Pass the ops to the rangefeed processor.

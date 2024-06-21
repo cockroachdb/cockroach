@@ -387,7 +387,7 @@ func TestRegistryBasic(t *testing.T) {
 
 	reg := makeRegistry(NewMetrics())
 	require.Equal(t, 0, reg.Len())
-	reg.PublishToOverlapping(ctx, spAB, ev1, false /* omitInRangefeeds */, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spAB, ev1, valueMetadata{}, nil /* alloc */)
 	reg.Disconnect(ctx, spAB)
 	reg.DisconnectWithErr(ctx, spAB, err1)
 
@@ -420,11 +420,11 @@ func TestRegistryBasic(t *testing.T) {
 	require.Equal(t, 5, reg.Len())
 
 	// Publish to different spans.
-	reg.PublishToOverlapping(ctx, spAB, ev1, false /* omitInRangefeeds */, nil /* alloc */)
-	reg.PublishToOverlapping(ctx, spBC, ev2, false /* omitInRangefeeds */, nil /* alloc */)
-	reg.PublishToOverlapping(ctx, spCD, ev3, false /* omitInRangefeeds */, nil /* alloc */)
-	reg.PublishToOverlapping(ctx, spAC, ev4, false /* omitInRangefeeds */, nil /* alloc */)
-	reg.PublishToOverlapping(ctx, spAC, ev5, true /* omitInRangefeeds */, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spAB, ev1, valueMetadata{}, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spBC, ev2, valueMetadata{}, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spCD, ev3, valueMetadata{}, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spAC, ev4, valueMetadata{}, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spAC, ev5, valueMetadata{omitFromRangefeeds: true}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
 	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev4), noPrev(ev5)}, rAB.Events())
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev2, ev4, ev5}, rBC.Events())
@@ -468,10 +468,10 @@ func TestRegistryBasic(t *testing.T) {
 	require.Equal(t, err1.GoError(), rCD.Err())
 
 	// Can still publish to rAB.
-	reg.PublishToOverlapping(ctx, spAB, ev4, false /* omitInRangefeeds */, nil /* alloc */)
-	reg.PublishToOverlapping(ctx, spBC, ev3, false /* omitInRangefeeds */, nil /* alloc */)
-	reg.PublishToOverlapping(ctx, spCD, ev2, false /* omitInRangefeeds */, nil /* alloc */)
-	reg.PublishToOverlapping(ctx, spAC, ev1, false /* omitInRangefeeds */, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spAB, ev4, valueMetadata{}, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spBC, ev3, valueMetadata{}, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spCD, ev2, valueMetadata{}, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spAC, ev1, valueMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
 	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev4), noPrev(ev1)}, rAB.Events())
 
@@ -525,7 +525,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	ev.MustSetValue(&kvpb.RangeFeedValue{
 		Value: roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 5}},
 	})
-	reg.PublishToOverlapping(ctx, spAB, ev, false /* omitInRangefeeds */, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spAB, ev, valueMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
 	require.Nil(t, r.Events())
 
@@ -534,7 +534,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	ev.MustSetValue(&kvpb.RangeFeedValue{
 		Value: roachpb.Value{Timestamp: hlc.Timestamp{WallTime: 10}},
 	})
-	reg.PublishToOverlapping(ctx, spAB, ev, false /* omitInRangefeeds */, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spAB, ev, valueMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
 	require.Nil(t, r.Events())
 
@@ -543,7 +543,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	ev.MustSetValue(&kvpb.RangeFeedCheckpoint{
 		Span: spAB, ResolvedTS: hlc.Timestamp{WallTime: 5},
 	})
-	reg.PublishToOverlapping(ctx, spAB, ev, false /* omitInRangefeeds */, nil /* alloc */)
+	reg.PublishToOverlapping(ctx, spAB, ev, valueMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev}, r.Events())
 
