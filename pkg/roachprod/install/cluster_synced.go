@@ -445,7 +445,7 @@ func (c *SyncedCluster) Stop(
 		return c.kill(ctx, l, "stop", display, sig, wait, maxWait, virtualClusterLabel)
 	} else {
 		cmd := fmt.Sprintf("ALTER TENANT '%s' STOP SERVICE", virtualClusterName)
-		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, DefaultAuthMode, "", /* database */
+		res, err := c.ExecSQL(ctx, l, c.Nodes[:1], "", 0, DefaultAuthMode(), "", /* database */
 			[]string{"-e", cmd})
 		if err != nil || res[0].Err != nil {
 			if len(res) > 0 {
@@ -2563,7 +2563,7 @@ func (c *SyncedCluster) pgurls(
 		if err != nil {
 			return nil, err
 		}
-		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, AuthUserCert, "" /* database */)
+		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, DefaultAuthMode(), "" /* database */)
 	}
 	return m, nil
 }
