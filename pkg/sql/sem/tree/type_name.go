@@ -150,11 +150,11 @@ func ResolveType(
 
 // We need to inject the logic for formatting types into the types package.
 func init() {
-	types.FormatTypeName = func(name types.UserDefinedTypeName) string {
+	types.FormatTypeName = func(name types.UserDefinedTypeName, explicitCatalog bool) string {
 		n := MakeTypeNameWithPrefix(ObjectNamePrefix{
 			CatalogName:     Name(name.Catalog),
 			SchemaName:      Name(name.Schema),
-			ExplicitCatalog: name.Catalog != "",
+			ExplicitCatalog: explicitCatalog && name.Catalog != "",
 			ExplicitSchema:  name.ExplicitSchema,
 		}, name.Name)
 		return AsString(&n)
@@ -175,7 +175,13 @@ func (ctx *FmtCtx) FormatTypeReference(ref ResolvableTypeReference) {
 				return
 			}
 		}
-		ctx.WriteString(t.SQLString())
+		// If needed, get the full name of the type for use as a type reference.
+		// We may need the three-part name to properly detect cross-database access.
+		if ctx.HasFlags(FmtFullyQualifyUserDefinedTypeNames) {
+			ctx.WriteString(t.SQLStringFullyQualified())
+		} else {
+			ctx.WriteString(t.SQLString())
+		}
 
 	case *OIDTypeReference:
 		if ctx.indexedTypeFormatter != nil {

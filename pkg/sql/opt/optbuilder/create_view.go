@@ -109,9 +109,11 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	outScope = b.allocScope()
 	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
-			Syntax:    cv,
-			Schema:    schID,
-			ViewQuery: tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
+			Syntax: cv,
+			Schema: schID,
+			// We need the view query to include user-defined types as a 3-part name to
+			// properly detect cross-database type access.
+			ViewQuery: tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable|tree.FmtFullyQualifyUserDefinedTypeNames),
 			Columns:   p,
 			Deps:      b.schemaDeps,
 			TypeDeps:  b.schemaTypeDeps,

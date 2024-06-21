@@ -185,6 +185,10 @@ const (
 	// e.g.
 	//   SELECT 1, 'a', $1 => SELECT _, _, _
 	FmtConstantsAsUnderscores
+
+	// FmtFullyQualifyUserDefinedTypeNames instructs the pretty-printer to include
+	// the name of user-defined types as a three-part name.
+	FmtFullyQualifyUserDefinedTypeNames
 )
 
 const genericArityIndicator = "__more__"
