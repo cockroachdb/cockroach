@@ -1642,6 +1642,9 @@ func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes in
 	if err != nil {
 		return err
 	}
+	if c.IsLocal() {
+		return LoadClusters()
+	}
 	return SetupSSH(ctx, l, clusterName)
 }
 
@@ -1654,6 +1657,9 @@ func Shrink(ctx context.Context, l *logger.Logger, clusterName string, numNodes 
 	err = cloud.ShrinkCluster(l, &c.Cluster, numNodes)
 	if err != nil {
 		return err
+	}
+	if c.IsLocal() {
+		return LoadClusters()
 	}
 	_, err = Sync(l, vm.ListOptions{})
 	return err
