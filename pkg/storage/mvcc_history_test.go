@@ -303,7 +303,7 @@ func TestMVCCHistories(t *testing.T) {
 			if rdIter, err := r.NewRawRangeDelIter(sstable.NoTransforms); err != nil {
 				return err
 			} else if rdIter != nil {
-				defer func() { _ = rdIter.Close() }()
+				defer rdIter.Close()
 				s, err := rdIter.First()
 				for ; s != nil; s, err = rdIter.Next() {
 					start, err := storage.DecodeMVCCKey(s.Start)
@@ -328,7 +328,7 @@ func TestMVCCHistories(t *testing.T) {
 			if rkIter, err := r.NewRawRangeKeyIter(sstable.NoTransforms); err != nil {
 				return err
 			} else if rkIter != nil {
-				defer func() { _ = rkIter.Close() }()
+				defer rkIter.Close()
 				s, err := rkIter.First()
 				for ; s != nil; s, err = rkIter.Next() {
 					start, err := storage.DecodeMVCCKey(s.Start)
