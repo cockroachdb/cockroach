@@ -31,10 +31,10 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-// newKafkaSinkClient creates a new kafka sink client. It is a thin wrapper
+// newKafkaSinkClientV2 creates a new kafka sink client. It is a thin wrapper
 // around the kgo client for use by the batching sink. It's not meant to be
 // invoked on its own, but rather through makeKafkaSinkV2.
-func newKafkaSinkClient(
+func newKafkaSinkClientV2(
 	ctx context.Context,
 	clientOpts []kgo.Opt,
 	batchCfg sinkBatchConfig,
@@ -42,7 +42,7 @@ func newKafkaSinkClient(
 	settings *cluster.Settings,
 	knobs kafkaSinkV2Knobs,
 	mb metricsRecorderBuilder,
-) (*kafkaSinkClient, error) {
+) (*kafkaSinkClientV2, error) {
 
 	baseOpts := []kgo.Opt{
 		kgo.SeedBrokers(bootstrapAddrs),
@@ -64,7 +64,6 @@ func newKafkaSinkClient(
 		// in a request to Kafka, or if it was requested and received a
 		// response.
 		// kgo.RecordRetries(5),
-		// TODO: test that produce will indeed fail eventually if it keeps getting errors
 
 		// This detects unavoidable data loss due to kafka cluster issues, and we may as well log about it.
 		kgo.ProducerOnDataLossDetected(func(topic string, part int32) {
@@ -91,7 +90,7 @@ func newKafkaSinkClient(
 		adminClient = kadm.NewClient(client.(*kgo.Client))
 	}
 
-	c := &kafkaSinkClient{
+	c := &kafkaSinkClientV2{
 		client:         client,
 		adminClient:    adminClient,
 		knobs:          knobs,
@@ -103,8 +102,7 @@ func newKafkaSinkClient(
 	return c, nil
 }
 
-// TODO: rename, with v2 in there somewhere
-type kafkaSinkClient struct {
+type kafkaSinkClientV2 struct {
 	batchCfg    sinkBatchConfig
 	client      KafkaClientV2
 	adminClient KafkaAdminClientV2
@@ -118,20 +116,17 @@ type kafkaSinkClient struct {
 		allTopicPartitions  map[string][]int32
 		lastMetadataRefresh time.Time
 	}
-
-	debuggingId int64
 }
 
 // Close implements SinkClient.
-func (k *kafkaSinkClient) Close() error {
+func (k *kafkaSinkClientV2) Close() error {
 	k.client.Close()
 	return nil
 }
 
 // Flush implements SinkClient. Does not retry -- retries will be handled either by kafka or ParallelIO.
-func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
+func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (retErr error) {
 	msgs := payload.([]*kgo.Record)
-	defer log.Infof(ctx, `flushed %d messages to kafka (id=%d, err=%v)`, len(msgs), k.debuggingId, retErr)
 
 	// TODO: make this better. possibly moving the resizing up into the batch worker would help a bit
 	var flushMsgs func(msgs []*kgo.Record) error
@@ -159,7 +154,7 @@ func (k *kafkaSinkClient) Flush(ctx context.Context, payload SinkPayload) (retEr
 }
 
 // FlushResolvedPayload implements SinkClient.
-func (k *kafkaSinkClient) FlushResolvedPayload(
+func (k *kafkaSinkClientV2) FlushResolvedPayload(
 	ctx context.Context,
 	body []byte,
 	forEachTopic func(func(topic string) error) error,
@@ -191,7 +186,7 @@ func (k *kafkaSinkClient) FlushResolvedPayload(
 }
 
 // update metadata ourselves since kgo doesnt expose it to us :/
-func (k *kafkaSinkClient) maybeUpdateTopicPartitionsLocked(ctx context.Context, forEachTopic func(func(topic string) error) error) error {
+func (k *kafkaSinkClientV2) maybeUpdateTopicPartitionsLocked(ctx context.Context, forEachTopic func(func(topic string) error) error) error {
 	k.metadataMu.AssertHeld()
 	log.Infof(ctx, `updating topic partitions for kafka sink`)
 
@@ -221,11 +216,11 @@ func (k *kafkaSinkClient) maybeUpdateTopicPartitionsLocked(ctx context.Context, 
 }
 
 // MakeBatchBuffer implements SinkClient.
-func (k *kafkaSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
+func (k *kafkaSinkClientV2) MakeBatchBuffer(topic string) BatchBuffer {
 	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg}
 }
 
-func (k *kafkaSinkClient) shouldTryResizing(err error, msgs []*kgo.Record) bool {
+func (k *kafkaSinkClientV2) shouldTryResizing(err error, msgs []*kgo.Record) bool {
 	if !k.canTryResizing || err == nil || len(msgs) < 2 {
 		return false
 	}
@@ -250,7 +245,7 @@ type kafkaSinkV2Knobs struct {
 	OverrideClient func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2)
 }
 
-var _ SinkClient = (*kafkaSinkClient)(nil)
+var _ SinkClient = (*kafkaSinkClientV2)(nil)
 var _ SinkPayload = ([]*kgo.Record)(nil) // NOTE: This doesn't actually assert anything, but it's good documentation.
 
 type keyPlusPayload struct {
@@ -344,7 +339,7 @@ func makeKafkaSinkV2(ctx context.Context,
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
-	client, err := newKafkaSinkClient(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb)
+	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb)
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +532,7 @@ type kgoChangefeedTopicPartitioner struct {
 
 func (p *kgoChangefeedTopicPartitioner) RequiresConsistency(*kgo.Record) bool { return true }
 func (p *kgoChangefeedTopicPartitioner) Partition(r *kgo.Record, n int) int {
-	if r.Key == nil {
+	if r.Key == nil { // Let messages without keys specify where they want to go (for resolved messages).
 		return int(r.Partition)
 	}
 	return p.inner.Partition(r, n)

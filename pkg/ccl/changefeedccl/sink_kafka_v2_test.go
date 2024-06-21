@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IBM/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -282,14 +283,14 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 			{"SASL", ([]sasl.Mechanism)(nil)},
 		}
 
-		client := fx.bs.client.(*kafkaSinkClient).client.(*kgo.Client)
+		client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
 		for _, o := range opts {
 			val := client.OptValue(o.opt)
 			assert.Equal(t, o.expected, val, "opt %q has value %+#v, expected %+#v", o.opt, val, o.expected)
 		}
-		assert.Equal(t, 1000, fx.bs.client.(*kafkaSinkClient).batchCfg.Messages)
-		assert.Equal(t, 0, fx.bs.client.(*kafkaSinkClient).batchCfg.Bytes)
-		assert.Equal(t, jsonDuration(1*time.Millisecond), fx.bs.client.(*kafkaSinkClient).batchCfg.Frequency)
+		assert.Equal(t, 1000, fx.bs.client.(*kafkaSinkClientV2).batchCfg.Messages)
+		assert.Equal(t, 0, fx.bs.client.(*kafkaSinkClientV2).batchCfg.Bytes)
+		assert.Equal(t, jsonDuration(1*time.Millisecond), fx.bs.client.(*kafkaSinkClientV2).batchCfg.Frequency)
 	})
 
 	t.Run("custom", func(t *testing.T) {
@@ -317,14 +318,14 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 			{"MaxVersions", kversion.V3_6_0()},
 		}
 
-		client := fx.bs.client.(*kafkaSinkClient).client.(*kgo.Client)
+		client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
 		for _, o := range opts {
 			val := client.OptValue(o.opt)
 			assert.Equal(t, o.expected, val, "opt %q has value %+#v, expected %+#v", o.opt, val, o.expected)
 		}
-		assert.Equal(t, 100, fx.bs.client.(*kafkaSinkClient).batchCfg.Messages) // Takes the minimum of the two, for backwards compatibility.
-		assert.Equal(t, 1000, fx.bs.client.(*kafkaSinkClient).batchCfg.Bytes)
-		assert.Equal(t, jsonDuration(1*time.Second), fx.bs.client.(*kafkaSinkClient).batchCfg.Frequency)
+		assert.Equal(t, 100, fx.bs.client.(*kafkaSinkClientV2).batchCfg.Messages) // Takes the minimum of the two, for backwards compatibility.
+		assert.Equal(t, 1000, fx.bs.client.(*kafkaSinkClientV2).batchCfg.Bytes)
+		assert.Equal(t, jsonDuration(1*time.Second), fx.bs.client.(*kafkaSinkClientV2).batchCfg.Frequency)
 	})
 }
 
@@ -346,6 +347,32 @@ func TestKafkaSinkClientV2_ErrorsEventually(t *testing.T) {
 	require.Error(t, fx.sink.Flush(fx.ctx, payload))
 }
 
+func TestKafkaSinkClientV2_PartitionsSameAsV1(t *testing.T) {
+	kp := newKgoChangefeedPartitioner().ForTopic("t")
+	sp := newChangefeedPartitioner("t")
+
+	for numParts := 1; numParts <= 100; numParts++ {
+		t.Run(strconv.Itoa(numParts), func(t *testing.T) {
+			for i := 0; i < 100; i++ {
+				// Test that the partitioners give the same results for arbitrary keys.
+				key := []byte(strconv.Itoa(i))
+				kgoPart := int32(kp.Partition(&kgo.Record{Key: key}, numParts))
+				saramaPart, err := sp.Partition(&sarama.ProducerMessage{Key: sarama.ByteEncoder(key)}, int32(numParts))
+				require.NoError(t, err)
+				assert.Equal(t, saramaPart, kgoPart, "key %s with %d partitions", key, numParts)
+
+				// ...And for nil keys and hardcoded partitions.
+				hardcodedPart := int32(i % numParts)
+				kgoPart = int32(kp.Partition(&kgo.Record{Key: nil, Partition: hardcodedPart}, numParts))
+				saramaPart, err = sp.Partition(&sarama.ProducerMessage{Key: nil}, int32(numParts))
+				require.NoError(t, err)
+				assert.Equal(t, saramaPart, kgoPart, "nil key with %d partitions and hardcoded partition %d", numParts, hardcodedPart)
+				assert.Equal(t, kgoPart, hardcodedPart, "nil key with %d partitions and hardcoded partition %d", numParts, hardcodedPart)
+			}
+		})
+	}
+}
+
 type kafkaSinkV2Fx struct {
 	t        *testing.T
 	settings *cluster.Settings
@@ -363,7 +390,7 @@ type kafkaSinkV2Fx struct {
 	realClient      bool
 	additionalKOpts []kgo.Opt
 
-	sink *kafkaSinkClient
+	sink *kafkaSinkClientV2
 	bs   *batchingSink
 }
 
@@ -450,7 +477,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 
 	var err error
-	fx.sink, err = newKafkaSinkClient(ctx, fx.additionalKOpts, fx.batchConfig, "no addrs", settings, knobs, nilMetricsRecorderBuilder)
+	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts, fx.batchConfig, "no addrs", settings, knobs, nilMetricsRecorderBuilder)
 	require.NoError(t, err)
 
 	targets := makeChangefeedTargets(fx.targetNames...)
