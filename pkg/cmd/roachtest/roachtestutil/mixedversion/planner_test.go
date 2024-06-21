@@ -47,10 +47,11 @@ var (
 	ctx   = context.Background()
 	nodes = option.NodeListOption{1, 2, 3, 4}
 
-	// Hardcode build and previous versions so that the test won't fail
-	// when new versions are released.
-	buildVersion       = version.MustParse("v23.1.0")
-	predecessorVersion = "v22.2.8"
+	// Hardcode build, previous, and minimu supported versions so that
+	// the test won't fail when new versions are released.
+	buildVersion       = version.MustParse("v24.2.0")
+	predecessorVersion = "v24.1.8"
+	minimumSupported   = clusterupgrade.MustParseVersion("v22.2.0")
 )
 
 const seed = 12345 // expectations are based on this seed
@@ -74,9 +75,7 @@ func TestTestPlanner(t *testing.T) {
 	// isolation.
 	originalMutators := planMutators
 	resetMutators := func() { planMutators = nil }
-	resetBuildVersion := setBuildVersion()
 	defer func() {
-		resetBuildVersion()
 		planMutators = originalMutators
 	}()
 
@@ -303,11 +302,21 @@ func Test_upgradeTimeout(t *testing.T) {
 	assertTimeout(30*time.Minute, UpgradeTimeout(30*time.Minute)) // custom timeout applies.
 }
 
-func setBuildVersion() func() {
-	previousV := clusterupgrade.TestBuildVersion
+// setDefaultVersions overrides the test's view of the current build
+// as well as the oldest supported version. This allows the test
+// output to remain stable as new versions are released and/or we bump
+// the oldest supported version. Called by TestMain.
+func setDefaultVersions() func() {
+	previousBuildV := clusterupgrade.TestBuildVersion
 	clusterupgrade.TestBuildVersion = buildVersion
 
-	return func() { clusterupgrade.TestBuildVersion = previousV }
+	previousOldestV := OldestSupportedVersion
+	OldestSupportedVersion = minimumSupported
+
+	return func() {
+		clusterupgrade.TestBuildVersion = previousBuildV
+		OldestSupportedVersion = previousOldestV
+	}
 }
 
 func newRand() *rand.Rand {
