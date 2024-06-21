@@ -121,3 +121,26 @@ func (j JoinType) MakeOutputTypes(left, right []*types.T) []*types.T {
 	}
 	return outputTypes
 }
+
+// MakeOutputTypesWithContinuationColumn computes the output types for this join
+// type and includes a continuation column that is used for paired joiners.
+func (j JoinType) MakeOutputTypesWithContinuationColumn(left, right []*types.T) []*types.T {
+	// Start at 1 to account for the continuation column.
+	numOutputTypes := 1
+	if j.ShouldIncludeLeftColsInOutput() {
+		numOutputTypes += len(left)
+	}
+	if j.ShouldIncludeRightColsInOutput() {
+		numOutputTypes += len(right)
+	}
+	outputTypes := make([]*types.T, 0, numOutputTypes)
+	if j.ShouldIncludeLeftColsInOutput() {
+		outputTypes = append(outputTypes, left...)
+	}
+	if j.ShouldIncludeRightColsInOutput() {
+		outputTypes = append(outputTypes, right...)
+	}
+	// The continuation column is always the last column.
+	outputTypes = append(outputTypes, types.Bool)
+	return outputTypes
+}
