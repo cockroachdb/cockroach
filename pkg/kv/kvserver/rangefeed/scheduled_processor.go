@@ -340,9 +340,11 @@ func (p *ScheduledProcessor) Register(
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
-		// Run an output loop for the registry.
-		runOutputLoop := func(ctx context.Context) {
-			r.runOutputLoop(ctx, p.RangeID)
+		r.stream.RegisterCleanUp(func() {
+			//p.reg.Unregister(ctx, &r)
+			//if r.unreg != nil {
+			//	r.unreg()
+			//}
 			if p.unregisterClient(&r) {
 				// unreg callback is set by replica to tear down processors that have
 				// zero registrations left and to update event filters.
@@ -350,6 +352,11 @@ func (p *ScheduledProcessor) Register(
 					r.unreg()
 				}
 			}
+		})
+
+		// Run an output loop for the registry.
+		runOutputLoop := func(ctx context.Context) {
+			r.runOutputLoop(ctx, p.RangeID)
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
@@ -357,7 +364,6 @@ func (p *ScheduledProcessor) Register(
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
 			r.disconnect(kvpb.NewError(err))
-			p.reg.Unregister(ctx, &r)
 		}
 		return f
 	})

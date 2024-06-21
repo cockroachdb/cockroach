@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
@@ -343,12 +344,12 @@ func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
 	}
 }
 
-func (nm nodeMetrics) incrementRangefeedCounter() {
+func (nm nodeMetrics) IncrementRangefeedCounter() {
 	nm.NumMuxRangeFeed.Inc(1)
 	nm.ActiveMuxRangeFeed.Inc(1)
 }
 
-func (nm nodeMetrics) decrementRangefeedCounter() {
+func (nm nodeMetrics) DecrementRangefeedCounter() {
 	nm.ActiveMuxRangeFeed.Dec(1)
 }
 
@@ -1830,11 +1831,12 @@ func (n *Node) RangeLookup(
 }
 
 type eventSender interface {
-	send(streamID int64, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent) error
-	disconnectRangefeedWithError(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error)
+	Send(streamID int64, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent) error
+	DisconnectRangefeedWithError(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error)
+	RegisterRangefeedCleanUp(streamID int64, cleanUp func())
 }
 
-var _ eventSender = (*streamMuxer)(nil)
+var _ eventSender = (*rangefeed.StreamMuxer)(nil)
 
 // setRangeIDEventSink is an implementation of rangefeed.Stream which annotates
 // each response with rangeID and streamID. It is used by MuxRangeFeed. Note
@@ -1852,11 +1854,15 @@ func (s *setRangeIDEventSink) Context() context.Context {
 }
 
 func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
-	return s.wrapped.send(s.streamID, s.rangeID, event)
+	return s.wrapped.Send(s.streamID, s.rangeID, event)
 }
 
 func (s *setRangeIDEventSink) Disconnect(err *kvpb.Error) {
-	s.wrapped.disconnectRangefeedWithError(s.streamID, s.rangeID, err)
+	s.wrapped.DisconnectRangefeedWithError(s.streamID, s.rangeID, err)
+}
+
+func (s *setRangeIDEventSink) RegisterCleanUp(rangefeedCleanUp func()) {
+	s.wrapped.RegisterRangefeedCleanUp(s.streamID, rangefeedCleanUp)
 }
 
 var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
@@ -1884,14 +1890,14 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
 
-	streamMuxer := newStreamMuxer(muxStream, rangefeedMetricsRecorder(n.metrics))
+	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	defer wg.Wait()
 	if err := n.stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
 		defer wg.Done()
-		streamMuxer.run(ctx, n.stopper)
+		streamMuxer.Run(ctx, n.stopper)
 	}); err != nil {
 		wg.Done()
 		return err
@@ -1904,7 +1910,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		}
 
 		if req.CloseStream {
-			streamMuxer.disconnectRangefeedWithError(
+			streamMuxer.DisconnectRangefeedWithError(
 				req.StreamID, req.RangeID,
 				kvpb.NewError(
 					kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
@@ -1923,10 +1929,10 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			wrapped:  streamMuxer,
 		}
 
-		streamMuxer.newStream(req.StreamID, cancel)
+		streamMuxer.AddStream(req.StreamID, cancel)
 
 		if err := n.stores.RangeFeed(req, streamSink); err != nil {
-			streamMuxer.disconnectRangefeedWithError(
+			streamMuxer.DisconnectRangefeedWithError(
 				req.StreamID, req.RangeID, kvpb.NewError(err))
 		}
 	}
