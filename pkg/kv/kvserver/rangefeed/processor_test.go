@@ -106,7 +106,12 @@ func updateIntentOp(txnID uuid.UUID, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
 }
 
 func commitIntentOpWithKV(
-	txnID uuid.UUID, key roachpb.Key, ts hlc.Timestamp, val []byte, omitInRangefeeds bool,
+	txnID uuid.UUID,
+	key roachpb.Key,
+	ts hlc.Timestamp,
+	val []byte,
+	omitInRangefeeds bool,
+	originID uint32,
 ) enginepb.MVCCLogicalOp {
 	return makeLogicalOp(&enginepb.MVCCCommitIntentOp{
 		TxnID:            txnID,
@@ -114,6 +119,7 @@ func commitIntentOpWithKV(
 		Timestamp:        ts,
 		Value:            val,
 		OmitInRangefeeds: omitInRangefeeds,
+		OriginID:         originID,
 	})
 }
 
@@ -131,7 +137,7 @@ func commitIntentOpWithPrevValue(
 }
 
 func commitIntentOp(txnID uuid.UUID, ts hlc.Timestamp) enginepb.MVCCLogicalOp {
-	return commitIntentOpWithKV(txnID, roachpb.Key("a"), ts, nil /* val */, false /* omitInRangefeeds */)
+	return commitIntentOpWithKV(txnID, roachpb.Key("a"), ts, nil /* val */, false /* omitInRangefeeds */, 0 /* originID */)
 }
 
 func abortIntentOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
@@ -497,6 +503,7 @@ func TestProcessorBasic(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			r1Stream,
 			func() {},
 			&r1Done,
@@ -604,7 +611,7 @@ func TestProcessorBasic(t *testing.T) {
 		// Commit intent. Should forward resolved timestamp to closed timestamp.
 		p.ConsumeLogicalOps(ctx,
 			commitIntentOpWithKV(txn2, roachpb.Key("e"), hlc.Timestamp{WallTime: 13},
-				[]byte("ival"), false /* omitInRangefeeds */))
+				[]byte("ival"), false /* omitInRangefeeds */, 0 /* originID */))
 		h.syncEventAndRegistrations()
 		require.Equal(t,
 			[]*kvpb.RangeFeedEvent{
@@ -629,9 +636,10 @@ func TestProcessorBasic(t *testing.T) {
 		r2OK, r1And2Filter := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
-			nil,  /* catchUpIter */
-			true, /* withDiff */
-			true, /* withFiltering */
+			nil,   /* catchUpIter */
+			true,  /* withDiff */
+			true,  /* withFiltering */
+			false, /* withOmitRemote */
 			r2Stream,
 			func() {},
 			&r2Done,
@@ -715,7 +723,7 @@ func TestProcessorBasic(t *testing.T) {
 		// registration (one withFiltering = true and one withFiltering = false).
 		p.ConsumeLogicalOps(ctx,
 			commitIntentOpWithKV(txn2, roachpb.Key("k"), hlc.Timestamp{WallTime: 22},
-				[]byte("val3"), true /* omitInRangefeeds */))
+				[]byte("val3"), true /* omitInRangefeeds */, 0 /* originID */))
 		h.syncEventAndRegistrations()
 		valEvent3 := []*kvpb.RangeFeedEvent{
 			rangeFeedValue(
@@ -747,11 +755,96 @@ func TestProcessorBasic(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			r3Stream,
 			func() {},
 			&r3Done,
 		)
 		require.False(t, r3OK)
+	})
+}
+
+func TestProcessorOmitRemote(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt procType) {
+		p, h, stopper := newTestProcessor(t, withProcType(pt))
+		ctx := context.Background()
+		defer stopper.Stop(ctx)
+
+		require.NotPanics(t, func() { p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 1}) })
+
+		// Add a registration.
+		r1Stream := newTestStream()
+		var r1Done future.ErrorFuture
+		r1OK, _ := p.Register(
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			false, /* withOmitRemote */
+			r1Stream,
+			func() {},
+			&r1Done,
+		)
+		require.True(t, r1OK)
+		h.syncEventAndRegistrations()
+		require.Equal(t, 1, p.Len())
+		require.Equal(t,
+			[]*kvpb.RangeFeedEvent{
+				rangeFeedCheckpoint(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+					hlc.Timestamp{WallTime: 1},
+				),
+			},
+			r1Stream.Events(),
+		)
+
+		// Add another registration with withOmitRemote = true.
+		r2Stream := newTestStream()
+		var r2Done future.ErrorFuture
+		r2OK, _ := p.Register(
+			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+			hlc.Timestamp{WallTime: 1},
+			nil,   /* catchUpIter */
+			false, /* withDiff */
+			false, /* withFiltering */
+			true,  /* withOmitRemote */
+			r2Stream,
+			func() {},
+			&r2Done,
+		)
+		require.True(t, r2OK)
+		h.syncEventAndRegistrations()
+
+		require.Equal(t,
+			[]*kvpb.RangeFeedEvent{
+				rangeFeedCheckpoint(
+					roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")},
+					hlc.Timestamp{WallTime: 1},
+				),
+			},
+			r2Stream.Events(),
+		)
+
+		txn2 := uuid.MakeV4()
+		p.ConsumeLogicalOps(ctx,
+			commitIntentOpWithKV(txn2, roachpb.Key("k"), hlc.Timestamp{WallTime: 22},
+				[]byte("val3"), false /* omitInRangefeeds */, 1))
+		h.syncEventAndRegistrations()
+
+		valEvent3 := []*kvpb.RangeFeedEvent{
+			rangeFeedValue(
+				roachpb.Key("k"),
+				roachpb.Value{
+					RawBytes:  []byte("val3"),
+					Timestamp: hlc.Timestamp{WallTime: 22},
+				},
+			),
+		}
+
+		require.Equal(t, valEvent3, r1Stream.Events())
+		require.Equal(t, []*kvpb.RangeFeedEvent(nil), r2Stream.Events())
 	})
 }
 
@@ -771,6 +864,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			r1Stream,
 			func() {},
 			&r1Done,
@@ -783,6 +877,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			r2Stream,
 			func() {},
 			&r2Done,
@@ -880,6 +975,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			r1Stream,
 			func() {},
 			&r1Done,
@@ -936,6 +1032,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			r1Stream,
 			func() {},
 			&r1Done,
@@ -1018,6 +1115,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			r1Stream,
 			func() {},
 			&r1Done,
@@ -1328,7 +1426,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 				s := newTestStream()
 				var done future.ErrorFuture
 				p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-					false /* withDiff */, false /* withFiltering */, s, func() {}, &done)
+					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, s, func() {}, &done)
 			}()
 			go func() {
 				defer wg.Done()
@@ -1401,7 +1499,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 				regs[s] = firstIdx
 				var done future.ErrorFuture
 				p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-					false /* withDiff */, false /* withFiltering */, s, func() {}, &done)
+					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, s, func() {}, &done)
 				regDone <- struct{}{}
 			}
 		}()
@@ -1468,6 +1566,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			rStream,
 			func() {},
 			&done,
@@ -1550,6 +1649,7 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			rStream,
 			func() {},
 			&done,
@@ -1622,6 +1722,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			r1Stream,
 			func() {},
 			&r1Done,
@@ -1637,6 +1738,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
+			false, /* withOmitRemote */
 			r2Stream,
 			func() {},
 			&r2Done,
@@ -1788,7 +1890,7 @@ func TestProcessorBackpressure(t *testing.T) {
 	stream := newTestStream()
 	done := &future.ErrorFuture{}
 	ok, _ := p.Register(span, hlc.MinTimestamp, nil, /* catchUpIter */
-		false /* withDiff */, false /* withFiltering */, stream, nil, done)
+		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, stream, nil, done)
 	require.True(t, ok)
 
 	// Wait for the initial checkpoint.

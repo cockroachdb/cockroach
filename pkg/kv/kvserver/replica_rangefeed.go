@@ -462,7 +462,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p := r.rangefeedMu.proc
 
 	if p != nil {
-		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, withFiltering,
+		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, withFiltering, false, /* withOmitRemote */
 			stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 		if reg {
 			// Registered successfully with an existing processor.
@@ -551,7 +551,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
 	reg, filter := p.Register(span, startTS, catchUpIter, withDiff,
-		withFiltering, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
+		withFiltering, false /* withOmitRemote */, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
@@ -737,10 +737,11 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		var ts hlc.Timestamp
 		var valPtr *[]byte
 		var omitInRangefeedsPtr *bool
+		var originIDPtr *uint32
 		valueInBatch := false
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:
-			key, ts, valPtr, omitInRangefeedsPtr = t.Key, t.Timestamp, &t.Value, &t.OmitInRangefeeds
+			key, ts, valPtr, omitInRangefeedsPtr, originIDPtr = t.Key, t.Timestamp, &t.Value, &t.OmitInRangefeeds, &t.OriginID
 			if !ts.IsEmpty() {
 				// 1PC transaction commit, and no intent was written, so the value
 				// must be in the batch.
@@ -752,7 +753,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			// involve merging with state in the engine. So, valueInBatch remains
 			// false.
 		case *enginepb.MVCCCommitIntentOp:
-			key, ts, valPtr, omitInRangefeedsPtr = t.Key, t.Timestamp, &t.Value, &t.OmitInRangefeeds
+			key, ts, valPtr, omitInRangefeedsPtr, originIDPtr = t.Key, t.Timestamp, &t.Value, &t.OmitInRangefeeds, &t.OriginID
 			// Intent was committed. The now committed provisional value may be in
 			// the engine, so valueInBatch remains false.
 		case *enginepb.MVCCWriteIntentOp,
@@ -809,6 +810,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		}
 		*valPtr = val.RawBytes
 		*omitInRangefeedsPtr = vh.OmitInRangefeeds
+		*originIDPtr = vh.OriginID
 	}
 
 	// Pass the ops to the rangefeed processor.
