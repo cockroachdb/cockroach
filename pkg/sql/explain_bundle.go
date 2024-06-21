@@ -555,7 +555,10 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	if err := c.PrintClusterSettings(&buf, false /* all */); err != nil {
 		b.printError(fmt.Sprintf("-- error getting cluster settings: %v", err), &buf)
 	}
-
+	// Note: ensure that cluster settings are added last to 'env.sql' - 'debug
+	// statement-bundle recreate' relies on SET CLUSTER SETTING stmts being
+	// last. In other words, any new additions to 'env.sql' should go above the
+	// PrintClusterSettings call.
 	b.z.AddFile("env.sql", buf.String())
 
 	mem := b.plan.mem

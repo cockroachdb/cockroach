@@ -18,6 +18,16 @@ spawn $argv sql --no-line-editor
 set client_spawn_id $spawn_id
 eexpect root@
 
+# Set a couple of cluster settings to ensure recreation of the bundle with them
+# succeeds.
+send "SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';\r"
+eexpect "SET CLUSTER SETTING"
+eexpect root@
+
+send "SET CLUSTER SETTING sql.distsql.use_streamer.enabled = false;\r"
+eexpect "SET CLUSTER SETTING"
+eexpect root@
+
 # Note: we need to use SELECT 1 (i.e. do not select a table)
 # so that the "recreate" test below is a proper regression test
 # for issue https://github.com/cockroachdb/cockroach/issues/86472.
