@@ -370,13 +370,13 @@ func GrowCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 	}
 
 	providers := c.Clouds()
-	if len(providers) != 1 || providers[0] != gce.ProviderName {
+	provider := c.VMs[0].Provider
+	// Only GCE supports expanding a cluster.
+	if len(providers) != 1 || provider != gce.ProviderName {
 		return errors.Errorf("cannot grow cluster %s, growing a cluster is currently only supported on %s",
 			c.Name, gce.ProviderName)
 	}
-
-	// Only GCE supports expanding a cluster.
-	return vm.ForProvider(gce.ProviderName, func(p vm.Provider) error {
+	return vm.ForProvider(provider, func(p vm.Provider) error {
 		return p.Grow(l, c.VMs, c.Name, names)
 	})
 }
@@ -384,7 +384,9 @@ func GrowCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 // ShrinkCluster removes tail nodes from an existing cluster.
 func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 	providers := c.Clouds()
-	if len(providers) != 1 || providers[0] != gce.ProviderName {
+	provider := c.VMs[0].Provider
+	// Only GCE supports shrinking a cluster.
+	if len(providers) != 1 || provider != gce.ProviderName {
 		return errors.Errorf("cannot shrink cluster %s, shrinking a cluster is currently only supported on %s",
 			c.Name, gce.ProviderName)
 	}
@@ -395,9 +397,7 @@ func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 	}
 	// Always delete from the tail.
 	vmsToDelete := c.VMs[len(c.VMs)-numNodes:]
-
-	// Only GCE supports shrinking a cluster.
-	return vm.ForProvider(gce.ProviderName, func(p vm.Provider) error {
+	return vm.ForProvider(provider, func(p vm.Provider) error {
 		return p.Shrink(l, vmsToDelete, c.Name)
 	})
 }
