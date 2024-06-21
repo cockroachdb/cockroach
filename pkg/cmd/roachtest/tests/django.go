@@ -57,9 +57,7 @@ func registerDjango(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "update apt-get",
-			`
-				sudo add-apt-repository ppa:deadsnakes/ppa &&
-				sudo apt-get -qq update`,
+			`sudo apt-get -qq update`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -70,15 +68,14 @@ func registerDjango(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3.8 libpq-dev python3.8-dev gcc python3-virtualenv python3-setuptools python-setuptools build-essential python3.8-distutils python3-apt libmemcached-dev`,
+			`sudo apt-get -qq install make python3.10 libpq-dev python3.10-dev gcc python3-virtualenv python3-setuptools python-setuptools build-essential python3.10-distutils python3-apt libmemcached-dev`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "set python3.8 as default", `
-    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.5 1
-    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 2
+			ctx, t, c, node, "set python3.10 as default", `
+    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
     		sudo update-alternatives --config python3`,
 		); err != nil {
 			t.Fatal(err)
@@ -86,7 +83,7 @@ func registerDjango(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "install pip",
-			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.8`,
+			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.10`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -241,7 +238,7 @@ DATABASES = {
         'USER': '%[1]s',
         'PASSWORD': '%[2]s',
         'HOST': 'localhost',
-        'PORT': 26257,
+        'PORT': {pgport:1},
     },
     'other': {
         'ENGINE': 'django_cockroachdb',
@@ -249,7 +246,7 @@ DATABASES = {
         'USER': '%[1]s',
         'PASSWORD': '%[2]s',
         'HOST': 'localhost',
-        'PORT': 26257,
+        'PORT': {pgport:1},
     },
 }
 SECRET_KEY = 'django_tests_secret_key'
