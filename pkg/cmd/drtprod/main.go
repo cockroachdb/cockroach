@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -11,14 +11,12 @@
 package main
 
 import (
-	"os"
+	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/commands"
+	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/cli"
 )
 
 func main() {
-	if err := commands.GetRoachprodCmd().Execute(); err != nil {
-		// Cobra has already printed the error message.
-		os.Exit(1)
-	}
+	// Initialize and register all commands
+	cli.Initialize(context.Background())
 }
