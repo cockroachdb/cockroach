@@ -564,7 +564,7 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 					a STRING,
 					b STRING,
 					c STRING,
-					d STRING AS (concat(e, c)) VIRTUAL,
+					d STRING AS (concat(e, '.')) VIRTUAL,
 					e STRING,
 					PRIMARY KEY(j,i),
 					FAMILY main (i,j,a,b),
