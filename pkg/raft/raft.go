@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
 
@@ -259,6 +260,9 @@ type Config struct {
 	// This behavior will become unconditional in the future. See:
 	// https://github.com/etcd-io/raft/issues/83
 	StepDownOnRemoval bool
+
+	// StoreLiveness is a reference to the store liveness fabric.
+	StoreLiveness raftstoreliveness.StoreLiveness
 }
 
 func (c *Config) validate() error {
@@ -404,7 +408,8 @@ type raft struct {
 	tick func()
 	step stepFunc
 
-	logger Logger
+	logger        Logger
+	storeLiveness raftstoreliveness.StoreLiveness
 }
 
 func newRaft(c *Config) *raft {
@@ -433,6 +438,7 @@ func newRaft(c *Config) *raft {
 		disableProposalForwarding:   c.DisableProposalForwarding,
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		stepDownOnRemoval:           c.StepDownOnRemoval,
+		storeLiveness:               c.StoreLiveness,
 	}
 	lastID := r.raftLog.lastEntryID()
 
