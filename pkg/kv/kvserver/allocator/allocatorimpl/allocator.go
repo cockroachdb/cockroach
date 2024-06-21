@@ -3033,13 +3033,14 @@ func excludeReplicasInNeedOfSnapshots(
 ) []roachpb.ReplicaDescriptor {
 	filled := 0
 	for _, repl := range replicas {
-		if raftutil.ReplicaMayNeedSnapshot(st, firstIndex, repl.ReplicaID) != raftutil.NoSnapshotNeeded {
+		snapStatus := raftutil.ReplicaMayNeedSnapshot(st, firstIndex, repl.ReplicaID)
+		if snapStatus != raftutil.NoSnapshotNeeded {
 			log.KvDistribution.VEventf(
 				ctx,
 				5,
-				"not considering [n%d, s%d] as a potential candidate for a lease transfer"+
-					" because the replica may be waiting for a snapshot",
-				repl.NodeID, repl.StoreID,
+				"not considering %s as a potential candidate for a lease transfer"+
+					" because the replica may be waiting for a snapshot: %s",
+				repl, snapStatus,
 			)
 			continue
 		}
