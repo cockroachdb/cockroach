@@ -59,8 +59,7 @@ var flushBatchSize = settings.RegisterIntSetting(
 type logicalReplicationWriterProcessor struct {
 	execinfra.ProcessorBase
 
-	flowCtx *execinfra.FlowCtx
-	spec    execinfrapb.LogicalReplicationWriterSpec
+	spec execinfrapb.LogicalReplicationWriterSpec
 
 	bh []BatchHandler
 
@@ -136,7 +135,6 @@ func newLogicalReplicationWriterProcessor(
 	}
 
 	lrw := &logicalReplicationWriterProcessor{
-		flowCtx:        flowCtx,
 		spec:           spec,
 		bh:             bhPool,
 		frontier:       frontier,
@@ -185,7 +183,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 
 	ctx = lrw.StartInternal(ctx, logicalReplicationWriterProcessorName)
 
-	lrw.metrics = lrw.flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
+	lrw.metrics = lrw.FlowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
 	for _, bh := range lrw.bh {
 		bh.SetMetrics(lrw.metrics)
 	}
@@ -219,7 +217,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	}
 	sub, err := streamClient.Subscribe(ctx,
 		streampb.StreamID(lrw.spec.StreamID),
-		int32(lrw.flowCtx.NodeID.SQLInstanceID()), lrw.ProcessorID,
+		int32(lrw.FlowCtx.NodeID.SQLInstanceID()), lrw.ProcessorID,
 		token,
 		lrw.spec.InitialScanTimestamp, lrw.frontier,
 		streamclient.WithFiltering(true),

@@ -405,8 +405,16 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			}
 			expectedKVs := slurpSSTablesLatestKey(t, filepath.Join(dir, "foo"), slurp, srcPrefix, newPrefix)
 
-			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(ctx, &evalCtx, &flowCtx, mockRestoreDataSpec)
-			require.NoError(t, err)
+			mockRestoreDataProcessor := &restoreDataProcessor{
+				ProcessorBase: execinfra.ProcessorBase{
+					ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
+						FlowCtx: &flowCtx,
+						EvalCtx: &evalCtx,
+					},
+				},
+				spec: mockRestoreDataSpec,
+				qp:   backuputils.NewMemoryBackedQuotaPool(ctx, nil, "restore-mon", 0),
+			}
 			sst, res, err := mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, nil)
 			require.NoError(t, err)
 			require.Equal(t, resumeEntry{done: true, idx: len(restoreSpanEntry.Files)}, *res)
@@ -444,23 +452,4 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			}
 		})
 	}
-}
-
-func newTestingRestoreDataProcessor(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	flowCtx *execinfra.FlowCtx,
-	spec execinfrapb.RestoreDataSpec,
-) (*restoreDataProcessor, error) {
-	rd := &restoreDataProcessor{
-		ProcessorBase: execinfra.ProcessorBase{
-			ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
-				EvalCtx: evalCtx,
-			},
-		},
-		flowCtx: flowCtx,
-		spec:    spec,
-		qp:      backuputils.NewMemoryBackedQuotaPool(ctx, nil, "restore-mon", 0),
-	}
-	return rd, nil
 }
