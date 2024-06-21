@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,12 +54,6 @@ func makePerNodeZipRequests(prefix, id string, status serverpb.StatusClient) []z
 				return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: zipCtx.redact})
 			},
 			pathName: prefix + "/gossip",
-		},
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return status.EngineStats(ctx, &serverpb.EngineStatsRequest{NodeId: id})
-			},
-			pathName: prefix + "/enginestats",
 		},
 	}
 }
@@ -375,6 +370,21 @@ func (zc *debugZipContext) collectPerNodeData(
 			return err
 		})
 	if err := zc.z.createRawOrError(s, prefix+"/heap.pprof", heapData, requestErr); err != nil {
+		return err
+	}
+
+	// Collect storage engine metrics using the same format as the /debug/lsm route.
+	var lsmStats string
+	s = nodePrinter.start("requesting engine stats")
+	requestErr = zc.runZipFn(ctx, s,
+		func(ctx context.Context) error {
+			resp, err := zc.status.EngineStats(ctx, &serverpb.EngineStatsRequest{NodeId: id})
+			if err == nil {
+				lsmStats = debug.FormatLSMStats(resp.StatsByStoreId)
+			}
+			return err
+		})
+	if err := zc.z.createRawOrError(s, prefix+"/lsm.txt", []byte(lsmStats), requestErr); err != nil {
 		return err
 	}
 
