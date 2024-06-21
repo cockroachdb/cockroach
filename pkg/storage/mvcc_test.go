@@ -390,13 +390,15 @@ func TestMVCCGetWithValueHeader(t *testing.T) {
 	}
 }
 
-func TestMVCCOmitInRangefeeds(t *testing.T) {
+// TestMVCCValueHeadersForRangefeeds tests that the value headers used by
+// rangefeeds are set correctly.
+func TestMVCCValueHeadersForRangefeeds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	for _, omitPut := range []bool{false, true} {
-		for _, omitDel := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%t/%t", omitPut, omitDel), func(t *testing.T) {
+	for _, omitInRangefeeds := range []bool{false, true} {
+		for _, originID := range []uint32{0, 1} {
+			t.Run(fmt.Sprintf("omitInRangefeeds=%t/originID=%d", omitInRangefeeds, originID), func(t *testing.T) {
 				ctx := context.Background()
 				engine := NewDefaultInMemForTesting()
 				defer engine.Close()
@@ -404,7 +406,7 @@ func TestMVCCOmitInRangefeeds(t *testing.T) {
 				// Transactional put
 				txn := *txn1
 				_, err := MVCCPut(ctx, engine, testKey1, txn.WriteTimestamp, value1,
-					MVCCWriteOptions{Txn: &txn, OmitInRangefeeds: omitPut})
+					MVCCWriteOptions{Txn: &txn, OmitInRangefeeds: omitInRangefeeds, OriginID: originID})
 				require.NoError(t, err)
 
 				txnCommit := txn
@@ -418,12 +420,13 @@ func TestMVCCOmitInRangefeeds(t *testing.T) {
 				valueRes, vh, err := MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 4}, MVCCGetOptions{})
 				require.NoError(t, err)
 				require.NotNil(t, valueRes.Value)
-				require.Equal(t, omitPut, vh.OmitInRangefeeds)
+				require.Equal(t, omitInRangefeeds, vh.OmitInRangefeeds)
+				require.Equal(t, originID, vh.OriginID)
 
 				txn = *txn2
 				// Transactional delete
 				_, _, err = MVCCDelete(ctx, engine, testKey1, txn.WriteTimestamp,
-					MVCCWriteOptions{Txn: &txn, OmitInRangefeeds: omitDel})
+					MVCCWriteOptions{Txn: &txn, OmitInRangefeeds: omitInRangefeeds, OriginID: originID})
 				require.NoError(t, err)
 
 				txnCommit = txn
@@ -440,21 +443,23 @@ func TestMVCCOmitInRangefeeds(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, valueRes.Value)
 				require.Zero(t, len(valueRes.Value.RawBytes))
-				require.Equal(t, omitDel, vh.OmitInRangefeeds)
+				require.Equal(t, omitInRangefeeds, vh.OmitInRangefeeds)
+				require.Equal(t, originID, vh.OriginID)
 
 				// Non-transactional put (e.g. 1PC put)
 				writeTs := hlc.Timestamp{Logical: 3}
-				_, err = MVCCPut(ctx, engine, testKey1, writeTs, value2, MVCCWriteOptions{OmitInRangefeeds: omitPut})
+				_, err = MVCCPut(ctx, engine, testKey1, writeTs, value2, MVCCWriteOptions{OmitInRangefeeds: omitInRangefeeds, OriginID: originID})
 				require.NoError(t, err)
 
 				valueRes, vh, err = MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 4}, MVCCGetOptions{})
 				require.NoError(t, err)
 				require.NotNil(t, valueRes.Value)
-				require.Equal(t, omitPut, vh.OmitInRangefeeds)
+				require.Equal(t, omitInRangefeeds, vh.OmitInRangefeeds)
+				require.Equal(t, originID, vh.OriginID)
 
 				// Non-transactional delete (e.g. 1PC delete)
 				writeTs = hlc.Timestamp{Logical: 4}
-				_, _, err = MVCCDelete(ctx, engine, testKey1, writeTs, MVCCWriteOptions{OmitInRangefeeds: omitDel})
+				_, _, err = MVCCDelete(ctx, engine, testKey1, writeTs, MVCCWriteOptions{OmitInRangefeeds: omitInRangefeeds, OriginID: originID})
 				require.NoError(t, err)
 
 				// Read the latest version with tombstone.
@@ -463,7 +468,8 @@ func TestMVCCOmitInRangefeeds(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, valueRes.Value)
 				require.Zero(t, len(valueRes.Value.RawBytes))
-				require.Equal(t, omitDel, vh.OmitInRangefeeds)
+				require.Equal(t, omitInRangefeeds, vh.OmitInRangefeeds)
+				require.Equal(t, originID, vh.OriginID)
 			})
 		}
 	}

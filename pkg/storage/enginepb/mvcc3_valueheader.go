@@ -23,6 +23,7 @@ func (h *MVCCValueHeader) pure() MVCCValueHeaderPure {
 		LocalTimestamp:   h.LocalTimestamp,
 		OmitInRangefeeds: h.OmitInRangefeeds,
 		ImportEpoch:      h.ImportEpoch,
+		OriginID:         h.OriginID,
 	}
 }
 
