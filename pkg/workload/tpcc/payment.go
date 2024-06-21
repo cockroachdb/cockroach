@@ -147,7 +147,7 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 	return p, nil
 }
 
-func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
+func (p *payment) run(ctx context.Context, wID int) (interface{}, time.Duration, error) {
 	p.config.auditor.paymentTransactions.Add(1)
 
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
@@ -188,7 +188,7 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 		d.cID = p.config.randCustomerID(rng)
 	}
 
-	if err := p.config.executeTx(
+	onTxnStartDuration, err := p.config.executeTx(
 		ctx, p.mcp.Get(),
 		func(tx pgx.Tx) error {
 			var wName, dName string
@@ -257,8 +257,9 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 			}
 
 			return nil
-		}); err != nil {
-		return nil, err
+		})
+	if err != nil {
+		return nil, 0, err
 	}
-	return d, nil
+	return d, onTxnStartDuration, nil
 }
