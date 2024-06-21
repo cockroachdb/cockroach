@@ -290,10 +290,11 @@ func (ie *InternalExecutor) initConnEx(
 	var ex *connExecutor
 	var err error
 	if txn == nil {
-		postSetupFn := func(ex *connExecutor) {
-			// Inject any synthetic descriptors into the internal
-			// executor after its created
-			if ie.syntheticDescriptors != nil {
+		var postSetupFn func(*connExecutor)
+		// Inject any synthetic descriptors into the internal executor after
+		// it's created.
+		if ie.syntheticDescriptors != nil {
+			postSetupFn = func(ex *connExecutor) {
 				ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
 				ex.extraTxnState.shouldResetSyntheticDescriptors = true
 			}
@@ -318,7 +319,8 @@ func (ie *InternalExecutor) initConnEx(
 			applicationStats,
 			ie.s.cfg.GenerateID(),
 			false, /* fromOuterTxn */
-			postSetupFn)
+			postSetupFn,
+		)
 	} else {
 		ex, err = ie.newConnExecutorWithTxn(
 			ctx,
@@ -373,16 +375,16 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	// here.
 	shouldResetSyntheticDescriptors := len(ie.syntheticDescriptors) > 0
 
+	var postSetupFn func(*connExecutor)
 	// If an internal executor is run with a not-nil txn, we may want to
 	// let it inherit the descriptor collection, schema change job records
 	// and job collections from the caller.
-	postSetupFn := func(ex *connExecutor) {
-		if ie.extraTxnState != nil {
+	if ie.extraTxnState != nil {
+		postSetupFn = func(ex *connExecutor) {
 			ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
 			ex.extraTxnState.jobs = ie.extraTxnState.jobs
 			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
-			ex.initPlanner(ctx, &ex.planner)
 		}
 	}
 
@@ -405,7 +407,8 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		applicationStats,
 		ie.s.cfg.GenerateID(),
 		ie.extraTxnState != nil, /* fromOuterTxn */
-		postSetupFn)
+		postSetupFn,
+	)
 
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
