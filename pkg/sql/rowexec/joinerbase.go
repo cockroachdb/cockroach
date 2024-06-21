@@ -57,21 +57,22 @@ func (jb *joinerBase) init(
 		}
 	}
 
-	jb.emptyLeft = make(rowenc.EncDatumRow, len(leftTypes))
-	for i := range jb.emptyLeft {
-		jb.emptyLeft[i] = rowenc.NullEncDatum()
-	}
-	jb.emptyRight = make(rowenc.EncDatumRow, len(rightTypes))
-	for i := range jb.emptyRight {
-		jb.emptyRight[i] = rowenc.NullEncDatum()
-	}
-
 	rowSize := len(leftTypes) + len(rightTypes)
 	if outputContinuationColumn {
 		// NB: Can only be true for inner joins and left outer joins.
 		rowSize++
 	}
-	jb.combinedRow = make(rowenc.EncDatumRow, rowSize)
+	// Allocate the left, right, and output row all at once.
+	rowBuf := make(rowenc.EncDatumRow, len(leftTypes)+len(rightTypes)+rowSize)
+	jb.emptyLeft, rowBuf = rowBuf[:len(leftTypes):len(leftTypes)], rowBuf[len(leftTypes):]
+	jb.emptyRight, rowBuf = rowBuf[:len(rightTypes):len(rightTypes)], rowBuf[len(rightTypes):]
+	jb.combinedRow = rowBuf[:rowSize:rowSize]
+	for i := range jb.emptyLeft {
+		jb.emptyLeft[i] = rowenc.NullEncDatum()
+	}
+	for i := range jb.emptyRight {
+		jb.emptyRight[i] = rowenc.NullEncDatum()
+	}
 
 	onCondTypes := make([]*types.T, 0, len(leftTypes)+len(rightTypes))
 	onCondTypes = append(onCondTypes, leftTypes...)
