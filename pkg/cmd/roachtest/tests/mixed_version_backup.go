@@ -96,6 +96,8 @@ var (
 
 	v231CV = "23.1"
 
+	v231 = clusterupgrade.MustParseVersion("v23.1.0")
+
 	// systemTablesInFullClusterBackup includes all system tables that
 	// are included as part of a full cluster backup. It should include
 	// every table that opts-in to cluster backup (see `system_schema.go`).
@@ -190,6 +192,13 @@ var (
 // backup destination.
 func sanitizeVersionForBackup(v *clusterupgrade.Version) string {
 	return invalidVersionRE.ReplaceAllString(v.String(), "")
+}
+
+// isEOL returns whether the version passed has reached end of
+// life. Any version older than 23.1.0 (i.e., any 22.2 release or
+// older) is considered EOL.
+func isEOL(v *clusterupgrade.Version) bool {
+	return v.Version.Compare(&v231.Version) < 0
 }
 
 // hasInternalSystemJobs returns true if the cluster is expected to
@@ -2387,7 +2396,7 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 		}
 	}
 
-	if h.Context().FromVersion.AtLeast(mixedversion.OldestSupportedVersion) {
+	if !isEOL(h.Context().FromVersion) {
 		verify(h.Context().FromVersion)
 	}
 	verify(h.Context().ToVersion)

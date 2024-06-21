@@ -169,7 +169,7 @@ var (
 	// branch.
 	//
 	// [1] https://www.cockroachlabs.com/docs/releases/release-support-policy#current-supported-releases
-	OldestSupportedVersion = clusterupgrade.MustParseVersion("v23.1.0")
+	OldestSupportedVersion = clusterupgrade.MustParseVersion("v22.2.0")
 
 	// Catch divergences between `stepFunc` and `Run`'s signature in
 	// `singleStepProtocol` at compile time.
