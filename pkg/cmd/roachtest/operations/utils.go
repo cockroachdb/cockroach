@@ -15,7 +15,9 @@ import (
 	gosql "database/sql"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -92,4 +94,58 @@ func pickRandomTable(
 		return ""
 	}
 	return tableNames[rng.Intn(len(tableNames))]
+}
+
+func drainNode(
+	ctx context.Context,
+	o operation.Operation,
+	c cluster.Cluster,
+	execNode option.NodeListOption,
+	targetNode option.NodeListOption,
+) {
+	o.Status(fmt.Sprintf("draining node %s", targetNode.NodeIDsString()))
+
+	addr, err := c.InternalAddr(ctx, o.L(), execNode)
+	if err != nil {
+		o.Fatal(err)
+	}
+	args := []string{"./" + o.ClusterCockroach(), "node", "drain", targetNode.NodeIDsString(),
+		"--logtostderr=INFO", fmt.Sprintf("--host=%s", addr[0])}
+	if c.IsSecure() {
+		args = append(args, "--certs-dir", "certs")
+	} else {
+		args = append(args, "--insecure")
+	}
+
+	err = c.RunE(ctx, option.WithNodes(execNode), args...)
+	if err != nil {
+		o.Fatal(err)
+	}
+}
+
+func decommissionNode(
+	ctx context.Context,
+	o operation.Operation,
+	c cluster.Cluster,
+	execNode option.NodeListOption,
+	targetNode option.NodeListOption,
+) {
+	o.Status(fmt.Sprintf("decommissioning node %s", targetNode.NodeIDsString()))
+
+	addr, err := c.InternalAddr(ctx, o.L(), execNode)
+	if err != nil {
+		o.Fatal(err)
+	}
+	args := []string{"./" + o.ClusterCockroach(), "node", "decommission", targetNode.NodeIDsString(),
+		"--logtostderr=INFO", fmt.Sprintf("--host=%s", addr[0])}
+	if c.IsSecure() {
+		args = append(args, "--certs-dir", "certs")
+	} else {
+		args = append(args, "--insecure")
+	}
+
+	err = c.RunE(ctx, option.WithNodes(execNode), args...)
+	if err != nil {
+		o.Fatal(err)
+	}
 }
