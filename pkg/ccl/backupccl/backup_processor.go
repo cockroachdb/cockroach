@@ -331,7 +331,7 @@ func runBackupProcessor(
 
 	totalSpans := len(spec.Spans) + len(spec.IntroducedSpans)
 	requestSpans := make([]spanAndTime, 0, totalSpans)
-	rangeSizedSpans := preSplitExports.Get(&flowCtx.EvalCtx.Settings.SV)
+	rangeSizedSpans := preSplitExports.Get(&flowCtx.Cfg.Settings.SV)
 
 	splitSpans := func(spans []roachpb.Span, start, end hlc.Timestamp) error {
 		for _, fullSpan := range spans {

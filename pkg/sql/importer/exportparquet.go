@@ -170,7 +170,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 					// Make a best-effort attempt to capture the memory used by the parquet writer
 					// when encoding datums to write to files. In many cases, the datum will be
 					// encoded to bytes and these bytes will be buffered until the file is closed.
-					datumAllocSize := int64(float64(ed.Size()) * eventMemoryMultipier.Get(&sp.flowCtx.EvalCtx.Settings.SV))
+					datumAllocSize := int64(float64(ed.Size()) * eventMemoryMultipier.Get(&sp.flowCtx.Cfg.Settings.SV))
 					cummulativeAllocSize += datumAllocSize
 					if err := memAcc.Grow(ctx, datumAllocSize); err != nil {
 						return err

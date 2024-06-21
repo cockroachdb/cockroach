@@ -187,9 +187,9 @@ func (s *joinReaderNoOrderingStrategy) generateRemoteSpans() (roachpb.Spans, []i
 		return nil, nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
 	}
 
-	if s.EvalCtx.Planner.EnforceHomeRegion() {
+	if s.FlowCtx.EvalCtx.Planner.EnforceHomeRegion() {
 		err := noHomeRegionError
-		if s.EvalCtx.SessionData().EnforceHomeRegionFollowerReadsEnabled {
+		if s.FlowCtx.EvalCtx.SessionData().EnforceHomeRegionFollowerReadsEnabled {
 			err = execinfra.NewDynamicQueryHasNoHomeRegionError(err)
 		}
 		return nil, nil, err
@@ -599,9 +599,9 @@ func (s *joinReaderOrderingStrategy) generateRemoteSpans() (roachpb.Spans, []int
 	if !ok {
 		return nil, nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
 	}
-	if s.EvalCtx.Planner.EnforceHomeRegion() {
+	if s.FlowCtx.EvalCtx.Planner.EnforceHomeRegion() {
 		err := noHomeRegionError
-		if s.EvalCtx.SessionData().EnforceHomeRegionFollowerReadsEnabled {
+		if s.FlowCtx.EvalCtx.SessionData().EnforceHomeRegionFollowerReadsEnabled {
 			err = execinfra.NewDynamicQueryHasNoHomeRegionError(err)
 		}
 		return nil, nil, err
