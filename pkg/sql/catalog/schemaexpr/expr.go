@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -476,21 +477,35 @@ func ValidateTTLExpressionDoesNotDependOnColumn(
 		return nil
 	}
 	expirationExpr := rowLevelTTL.ExpirationExpr
-	expr, err := parser.ParseExpr(string(expirationExpr))
-	if err != nil {
-		// At this point, we should be able to parse the expiration expression.
-		return errors.WithAssertionFailure(err)
-	}
-	referencedCols, err := ExtractColumnIDs(tableDesc, expr)
-	if err != nil {
+	if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, string(expirationExpr), col.GetID()); err != nil {
 		return err
-	}
-	if referencedCols.Contains(col.GetID()) {
+	} else if hasRef {
 		return pgerror.Newf(
 			pgcode.InvalidColumnReference,
 			"column %q is referenced by row-level TTL expiration expression %q",
 			col.ColName(), expirationExpr,
 		)
+	}
+	return nil
+}
+
+// ValidateComputedColumnExpressionDoesNotDependOnColumn verifies that the
+// expression of a computed column does not depend on the given column.
+func ValidateComputedColumnExpressionDoesNotDependOnColumn(
+	tableDesc catalog.TableDescriptor, dependentCol catalog.Column,
+) error {
+	for _, col := range tableDesc.AllColumns() {
+		if dependentCol.GetID() == col.GetID() {
+			continue
+		}
+		if col.GetComputeExpr() != "" {
+			if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, col.GetComputeExpr(), dependentCol.GetID()); err != nil {
+				return err
+			} else if hasRef {
+				return sqlerrors.NewDependentBlocksOpError("alter", "column",
+					string(dependentCol.ColName()), "computed column", string(col.ColName()))
+			}
+		}
 	}
 	return nil
 }
@@ -610,4 +625,22 @@ func GetUDFIDsFromExprStr(exprStr string) (catalog.DescriptorIDSet, error) {
 		return catalog.DescriptorIDSet{}, err
 	}
 	return GetUDFIDs(expr)
+}
+
+func validateExpressionDoesNotDependOnColumn(
+	tableDesc catalog.TableDescriptor, expirationExpr string, dependentColID descpb.ColumnID,
+) (bool, error) {
+	expr, err := parser.ParseExpr(expirationExpr)
+	if err != nil {
+		// At this point, we should be able to parse the expression.
+		return false, errors.WithAssertionFailure(err)
+	}
+	referencedCols, err := ExtractColumnIDs(tableDesc, expr)
+	if err != nil {
+		return false, err
+	}
+	if referencedCols.Contains(dependentColID) {
+		return true, nil
+	}
+	return false, nil
 }
