@@ -92,12 +92,9 @@ func TestKafkaSinkClientV2_Basic(t *testing.T) {
 	fx := newKafkaSinkV2Fx(t)
 	defer fx.close()
 
-	// construct a batch of messages
-
 	buf := fx.sink.MakeBatchBuffer("t")
 	keys := []string{"k1", "k2", "k3"}
 	for i, key := range keys {
-		// TODO: do we do anything with those attributes in v1? tablename
 		buf.Append([]byte(key), []byte(strconv.Itoa(i)), attributes{})
 	}
 	payload, err := buf.Close()
@@ -423,12 +420,6 @@ func withTopicPrefix(prefix string) fxOpt {
 func withJSONConfig(cfg string) fxOpt {
 	return func(fx *kafkaSinkV2Fx) {
 		fx.sinkJSONConfig = changefeedbase.SinkSpecificJSONConfig(cfg)
-	}
-}
-
-func withBatchConfig(cfg sinkBatchConfig) fxOpt {
-	return func(fx *kafkaSinkV2Fx) {
-		fx.batchConfig = cfg
 	}
 }
 
