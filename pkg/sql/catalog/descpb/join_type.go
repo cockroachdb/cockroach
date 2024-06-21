@@ -105,7 +105,21 @@ func (j JoinType) IsLeftAntiOrExceptAll() bool {
 
 // MakeOutputTypes computes the output types for this join type.
 func (j JoinType) MakeOutputTypes(left, right []*types.T) []*types.T {
+	return j.makeOutputTypes(left, right, false /* continuationCol */)
+}
+
+// MakeOutputTypesWithContinuationColumn computes the output types for this join
+// type and includes a continuation column that is used for paired joiners.
+func (j JoinType) MakeOutputTypesWithContinuationColumn(left, right []*types.T) []*types.T {
+	return j.makeOutputTypes(left, right, true /* continuationCol */)
+}
+
+func (j JoinType) makeOutputTypes(left, right []*types.T, continuationCol bool) []*types.T {
 	numOutputTypes := 0
+	if continuationCol {
+		// Add 1 to account for the continuation column.
+		numOutputTypes++
+	}
 	if j.ShouldIncludeLeftColsInOutput() {
 		numOutputTypes += len(left)
 	}
@@ -118,6 +132,10 @@ func (j JoinType) MakeOutputTypes(left, right []*types.T) []*types.T {
 	}
 	if j.ShouldIncludeRightColsInOutput() {
 		outputTypes = append(outputTypes, right...)
+	}
+	if continuationCol {
+		// The continuation column is always the last column.
+		outputTypes = append(outputTypes, types.Bool)
 	}
 	return outputTypes
 }
