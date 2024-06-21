@@ -1646,6 +1646,11 @@ func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes in
 	if err != nil {
 		return err
 	}
+	if c.IsLocal() {
+		// If this is used externally with roachtest then we need to reload the
+		// clusters before returning.
+		return LoadClusters()
+	}
 	return SetupSSH(ctx, l, clusterName)
 }
 
@@ -1658,6 +1663,11 @@ func Shrink(ctx context.Context, l *logger.Logger, clusterName string, numNodes 
 	err = cloud.ShrinkCluster(l, &c.Cluster, numNodes)
 	if err != nil {
 		return err
+	}
+	if c.IsLocal() {
+		// If this is used externally with roachtest then we need to reload the
+		// clusters before returning.
+		return LoadClusters()
 	}
 	_, err = Sync(l, vm.ListOptions{})
 	return err
