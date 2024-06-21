@@ -97,8 +97,8 @@ func (v *valuesOp) Next() coldata.Batch {
 	if len(v.data) < willBuffer {
 		willBuffer = len(v.data)
 	}
-	if v.dalloc.AllocSize < willBuffer {
-		v.dalloc.AllocSize = willBuffer
+	if v.dalloc.DefaultAllocSize < willBuffer {
+		v.dalloc.DefaultAllocSize = willBuffer
 	}
 
 	nRows := 0
