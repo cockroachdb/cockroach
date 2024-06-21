@@ -620,6 +620,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, `[node ?] ? goroutine dumps found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ cpu profiles found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? cpu profiles found`)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving cpuprof.*$` + "\n")
+	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ log files found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? log files found`)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving (memprof|memstats|memmonitoring).*$` + "\n")
