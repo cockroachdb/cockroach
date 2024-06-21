@@ -821,7 +821,7 @@ func (p *LegacyProcessor) consumeLogicalOps(
 		// MVCCWriteValueOp (could be the result of a 1PC write).
 		case *enginepb.MVCCWriteValueOp:
 			// Publish the new value directly.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, t.OmitInRangefeeds, alloc)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, valueMetadata{omitFromRangefeeds: t.OmitInRangefeeds, originID: t.OriginID}, alloc)
 
 		case *enginepb.MVCCDeleteRangeOp:
 			// Publish the range deletion directly.
@@ -835,7 +835,7 @@ func (p *LegacyProcessor) consumeLogicalOps(
 
 		case *enginepb.MVCCCommitIntentOp:
 			// Publish the newly committed value.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, t.OmitInRangefeeds, alloc)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, valueMetadata{omitFromRangefeeds: t.OmitInRangefeeds}, alloc)
 
 		case *enginepb.MVCCAbortIntentOp:
 			// No updates to publish.
@@ -882,7 +882,7 @@ func (p *LegacyProcessor) publishValue(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value, prevValue []byte,
-	omitInRangefeeds bool,
+	valueMetadata valueMetadata,
 	alloc *SharedBudgetAllocation,
 ) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
@@ -902,7 +902,7 @@ func (p *LegacyProcessor) publishValue(
 		},
 		PrevValue: prevVal,
 	})
-	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, omitInRangefeeds, alloc)
+	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, valueMetadata, alloc)
 }
 
 func (p *LegacyProcessor) publishDeleteRange(
@@ -921,7 +921,7 @@ func (p *LegacyProcessor) publishDeleteRange(
 		Span:      span,
 		Timestamp: timestamp,
 	})
-	p.reg.PublishToOverlapping(ctx, span, &event, false /* omitInRangefeeds */, alloc)
+	p.reg.PublishToOverlapping(ctx, span, &event, valueMetadata{}, alloc)
 }
 
 func (p *LegacyProcessor) publishSSTable(
@@ -943,7 +943,7 @@ func (p *LegacyProcessor) publishSSTable(
 			Span:    sstSpan,
 			WriteTS: sstWTS,
 		},
-	}, false /* omitInRangefeeds */, alloc)
+	}, valueMetadata{}, alloc)
 }
 
 func (p *LegacyProcessor) publishCheckpoint(ctx context.Context) {
@@ -951,7 +951,7 @@ func (p *LegacyProcessor) publishCheckpoint(ctx context.Context) {
 	// TODO(nvanbenschoten): rate limit these? send them periodically?
 
 	event := p.newCheckpointEvent()
-	p.reg.PublishToOverlapping(ctx, all, event, false /* omitInRangefeeds */, nil)
+	p.reg.PublishToOverlapping(ctx, all, event, valueMetadata{}, nil)
 }
 
 func (p *LegacyProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {

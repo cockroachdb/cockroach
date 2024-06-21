@@ -208,9 +208,10 @@ message MVCCValueHeader {
   // INTO on the table this key belongs to when the table was not empty.
   uint32 import_epoch = 4;
   
-  // OriginID identifes the original cluster that wrote this key in Logical Data
-  // Replication. 0 identifies a local write, 1 identifies a remote write, and
-  // 2+ are reserved to identify remote clusters.
+  // OriginID identifes the original cluster that wrote this key during Logical
+  // Data Replication. 0 identifies a local write and the default value in non
+  // LDR context, 1 identifies a remote write, and 2+ are reserved to identify
+  // remote clusters.
   uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
 }
 

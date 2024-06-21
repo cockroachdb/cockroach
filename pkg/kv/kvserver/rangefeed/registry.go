@@ -80,6 +80,7 @@ type registration struct {
 	catchUpTimestamp hlc.Timestamp // exclusive
 	withDiff         bool
 	withFiltering    bool
+	withEmitRemote   bool
 	metrics          *Metrics
 
 	// Output.
@@ -405,7 +406,7 @@ func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff, r.withFiltering)
+	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff, r.withFiltering, r.withEmitRemote)
 }
 
 // ID implements interval.Interface.
@@ -469,7 +470,7 @@ func (reg *registry) PublishToOverlapping(
 	ctx context.Context,
 	span roachpb.Span,
 	event *kvpb.RangeFeedEvent,
-	omitInRangefeeds bool,
+	valueMetadata valueMetadata,
 	alloc *SharedBudgetAllocation,
 ) {
 	// Determine the earliest starting timestamp that a registration
@@ -497,7 +498,8 @@ func (reg *registry) PublishToOverlapping(
 		// Don't publish events if they:
 		// 1. are equal to or less than the registration's starting timestamp, or
 		// 2. have OmitInRangefeeds = true and this registration has opted into filtering.
-		if r.catchUpTimestamp.Less(minTS) && !(r.withFiltering && omitInRangefeeds) {
+		// 3. have EmitRemote = false and this value is from a remote cluster.
+		if r.catchUpTimestamp.Less(minTS) && !(r.withFiltering && valueMetadata.omitFromRangefeeds) && (r.withEmitRemote || valueMetadata.originID == 0) {
 			r.publish(ctx, event, alloc)
 		}
 		return false, nil

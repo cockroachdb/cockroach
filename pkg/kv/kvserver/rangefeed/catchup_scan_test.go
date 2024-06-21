@@ -164,7 +164,7 @@ func TestCatchupScan(t *testing.T) {
 				require.NoError(t, iter.CatchUpScan(ctx, func(e *kvpb.RangeFeedEvent) error {
 					events = append(events, *e.Val)
 					return nil
-				}, withDiff, withFiltering))
+				}, withDiff, withFiltering, false /* withEmitRemote */))
 				if !(withFiltering && omitInRangefeeds) {
 					require.Equal(t, 7, len(events))
 				} else {
@@ -218,7 +218,7 @@ func TestCatchupScanInlineError(t *testing.T) {
 	require.NoError(t, err)
 	defer iter.Close()
 
-	err = iter.CatchUpScan(ctx, nil, false /* withDiff */, false /* withFiltering */)
+	err = iter.CatchUpScan(ctx, nil, false /* withDiff */, false /* withFiltering */, false /* withEmitRemote */)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unexpected inline value")
 }
@@ -266,7 +266,7 @@ func TestCatchupScanSeesOldIntent(t *testing.T) {
 	require.NoError(t, iter.CatchUpScan(ctx, func(e *kvpb.RangeFeedEvent) error {
 		keys[string(e.Val.Key)] = struct{}{}
 		return nil
-	}, true /* withDiff */, false /* withFiltering */))
+	}, true /* withDiff */, false /* withFiltering */, false /* withEmitRemote */))
 	require.Equal(t, map[string]struct{}{
 		"b": {},
 		"e": {},

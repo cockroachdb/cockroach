@@ -668,10 +668,10 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 		// OmitInRangefeeds is relevant only for transactional writes, so it's
 		// propagated only in the case of a MVCCCommitIntentOp and
 		// MVCCWriteValueOp (could be the result of a 1PC write).
+
 		case *enginepb.MVCCWriteValueOp:
 			// Publish the new value directly.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, t.OmitInRangefeeds, alloc)
-
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, valueMetadata{omitFromRangefeeds: t.OmitInRangefeeds, originID: t.OriginID}, alloc)
 		case *enginepb.MVCCDeleteRangeOp:
 			// Publish the range deletion directly.
 			p.publishDeleteRange(ctx, t.StartKey, t.EndKey, t.Timestamp, alloc)
@@ -684,7 +684,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 
 		case *enginepb.MVCCCommitIntentOp:
 			// Publish the newly committed value.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, t.OmitInRangefeeds, alloc)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, valueMetadata{omitFromRangefeeds: t.OmitInRangefeeds}, alloc)
 
 		case *enginepb.MVCCAbortIntentOp:
 			// No updates to publish.
@@ -728,12 +728,18 @@ func (p *ScheduledProcessor) initResolvedTS(ctx context.Context, alloc *SharedBu
 	}
 }
 
+// TODO(msbutler): define this in api.proto as the kv api may use this.
+type valueMetadata struct {
+	omitFromRangefeeds bool
+	originID           uint32
+}
+
 func (p *ScheduledProcessor) publishValue(
 	ctx context.Context,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value, prevValue []byte,
-	omitInRangefeeds bool,
+	valueMetadata valueMetadata,
 	alloc *SharedBudgetAllocation,
 ) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
@@ -753,7 +759,7 @@ func (p *ScheduledProcessor) publishValue(
 		},
 		PrevValue: prevVal,
 	})
-	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, omitInRangefeeds, alloc)
+	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, valueMetadata, alloc)
 }
 
 func (p *ScheduledProcessor) publishDeleteRange(
@@ -772,7 +778,7 @@ func (p *ScheduledProcessor) publishDeleteRange(
 		Span:      span,
 		Timestamp: timestamp,
 	})
-	p.reg.PublishToOverlapping(ctx, span, &event, false /* omitInRangefeeds */, alloc)
+	p.reg.PublishToOverlapping(ctx, span, &event, valueMetadata{}, alloc)
 }
 
 func (p *ScheduledProcessor) publishSSTable(
@@ -794,7 +800,7 @@ func (p *ScheduledProcessor) publishSSTable(
 			Span:    sstSpan,
 			WriteTS: sstWTS,
 		},
-	}, false /* omitInRangefeeds */, alloc)
+	}, valueMetadata{}, alloc)
 }
 
 func (p *ScheduledProcessor) publishCheckpoint(ctx context.Context, alloc *SharedBudgetAllocation) {
@@ -802,7 +808,7 @@ func (p *ScheduledProcessor) publishCheckpoint(ctx context.Context, alloc *Share
 	// TODO(nvanbenschoten): rate limit these? send them periodically?
 
 	event := p.newCheckpointEvent()
-	p.reg.PublishToOverlapping(ctx, all, event, false /* omitInRangefeeds */, alloc)
+	p.reg.PublishToOverlapping(ctx, all, event, valueMetadata{}, alloc)
 }
 
 func (p *ScheduledProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {
