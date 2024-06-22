@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
@@ -220,6 +222,25 @@ func (d *txnDeps) AddName(ctx context.Context, nameInfo descpb.NameInfo, id desc
 // DeleteDescriptor implements the scexec.Catalog interface.
 func (d *txnDeps) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 	return d.descsCollection.DeleteDescToBatch(ctx, d.kvTrace, id, d.getOrCreateBatch())
+}
+
+// UpdateZoneConfig implements the scexec.Catalog interface.
+func (d *txnDeps) UpdateZoneConfig(ctx context.Context, id descpb.ID, zc zonepb.ZoneConfig) error {
+	var newZc catalog.ZoneConfig
+	oldZc, err := d.descsCollection.GetZoneConfig(ctx, d.txn.KV(), id)
+	if err != nil {
+		return err
+	}
+
+	var rawBytes []byte
+	// If the zone config already exists, we need to preserve the raw bytes as the
+	// expected value that we will be updating. Otherwise, this will be a clean
+	// insert with no expected raw bytes.
+	if oldZc != nil {
+		rawBytes = oldZc.GetRawBytesInStorage()
+	}
+	newZc = zone.NewZoneConfigWithRawBytes(&zc, rawBytes)
+	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id, newZc)
 }
 
 // DeleteZoneConfig implements the scexec.Catalog interface.
