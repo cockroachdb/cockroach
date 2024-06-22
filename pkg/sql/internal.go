@@ -376,9 +376,10 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	shouldResetSyntheticDescriptors := len(ie.syntheticDescriptors) > 0
 
 	var postSetupFn func(*connExecutor)
-	// If an internal executor is run with a not-nil txn, we may want to
-	// let it inherit the descriptor collection, schema change job records
-	// and job collections from the caller.
+	// If an internal executor is run with a not-nil txn and has some extra txn
+	// state already set up, we may want to let it inherit the descriptor
+	// collection, schema change job records and job collections from the
+	// caller.
 	if ie.extraTxnState != nil {
 		postSetupFn = func(ex *connExecutor) {
 			ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
@@ -406,7 +407,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		srvMetrics,
 		applicationStats,
 		ie.s.cfg.GenerateID(),
-		ie.extraTxnState != nil, /* fromOuterTxn */
+		true, /* fromOuterTxn */
 		postSetupFn,
 	)
 
@@ -1388,6 +1389,9 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	rw := newAsyncIEResultChannel()
 	stmtBuf := NewStmtBuf()
 
+	// Create a fresh conn executor simply for the purpose of committing the
+	// txn.
+	// TODO(#124935): this probably will need to change.
 	ex, err := ie.initConnEx(
 		ctx, ie.extraTxnState.txn, rw, defaultIEExecutionMode, sd, stmtBuf,
 		nil /* syncCallback */, false, /* attributeToUser */
@@ -1397,6 +1401,8 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	}
 	// TODO(janexing): is this correct?
 	ex.planner.txn = ie.extraTxnState.txn
+	// TODO(#124935): might need to set ex.extraTxnState.shouldExecuteOnTxnFinish
+	// to true.
 
 	defer ex.close(ctx, externalTxnClose)
 	if ie.extraTxnState.txn.IsCommitted() {

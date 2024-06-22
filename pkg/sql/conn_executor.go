@@ -1008,10 +1008,9 @@ func populateMinimalSessionData(sd *sessiondata.SessionData) {
 
 // newConnExecutor creates a new connExecutor.
 //
-// sd is expected to be fully initialized with the values of all the session
-// vars.
-// sdDefaults controls what the session vars will be reset to through
-// RESET statements.
+// - fromOuterTxn indicates whether the conn executor is constructed when there
+// is already an outstanding "outer" txn. This is the case with an internal
+// executor with non-nil txn.
 func (s *Server) newConnExecutor(
 	ctx context.Context,
 	sdMutIterator *sessionDataMutatorIterator,
@@ -1022,9 +1021,6 @@ func (s *Server) newConnExecutor(
 	applicationStats sqlstats.ApplicationStats,
 	sessionID clusterunique.ID,
 	fromOuterTxn bool,
-	// postSetupFn is to override certain field of a conn executor.
-	// It is set when conn executor is init under an internal executor
-	// with a not-nil txn.
 	postSetupFn func(ex *connExecutor),
 ) *connExecutor {
 	// Create the various monitors.

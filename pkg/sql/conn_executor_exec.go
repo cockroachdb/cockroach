@@ -3285,6 +3285,8 @@ func (ex *connExecutor) recordTransactionFinish(
 		// means there is no statements that's being executed within this
 		// transaction. Hence, recording stats for this transaction is not
 		// meaningful.
+		// TODO(#124935): Yahor thinks that this is wrong for internal executors
+		// with outer txns.
 		return nil
 	}
 

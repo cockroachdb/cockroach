@@ -1872,7 +1872,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 		// seen this query in the "with-txn" application from the previous
 		// test. We should see that the execution counts increase but not
 		// the sampling count.
-		appName := "with-txn"
+		appName := "with-txn-multiple"
 		err := ts.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			for i := 0; i < 10; i++ {
 				if _, err := txn.Exec(ctx, appName, txn.KV(), "SELECT 1"); err != nil {
@@ -1886,7 +1886,34 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 		// Verify that the internal statement is captured.
 		query, cnt, sampledCnt := getStmtRow(appName, false /* attributedToUser */)
 		require.Equal(t, "SELECT _", query)
-		require.Equal(t, 20, cnt)
+		require.Equal(t, 10, cnt)
 		require.Equal(t, 1, sampledCnt)
+	})
+
+	// This test case differs from "internal statement with a transaction" since
+	// we use the internal executor without any extra txn state set up.
+	t.Run("internal statement with a transaction through executor", func(t *testing.T) {
+		appName := "with-txn-through-executor"
+		testutils.RunTrueAndFalse(t, "attributed to user", func(t *testing.T, attributedToUser bool) {
+			for i := 0; i < 10; i++ {
+				err := ts.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					_, err := ts.InternalExecutor().(isql.Executor).ExecEx(
+						ctx,
+						appName,
+						txn.KV(),
+						sessiondata.InternalExecutorOverride{AttributeToUser: attributedToUser},
+						"SELECT 1",
+					)
+					return err
+				})
+				require.NoError(t, err)
+			}
+
+			// Verify that the internal statement is captured.
+			query, cnt, sampledCnt := getStmtRow(appName, attributedToUser)
+			require.Equal(t, "SELECT _", query)
+			require.Equal(t, 10, cnt)
+			require.Equal(t, 1, sampledCnt)
+		})
 	})
 }
