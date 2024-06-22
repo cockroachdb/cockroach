@@ -81,10 +81,10 @@ func NewStatsCollector(
 	insights insights.Writer,
 	phaseTime *sessionphase.Times,
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters,
-	fromOuterTxn bool,
+	underOuterTxn bool,
 	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
-	// See #124935 for more details. If fromOuterTxn is true, the
+	// See #124935 for more details. If underOuterTxn is true, the
 	// executor owning the stats collector is not responsible for
 	// starting or committing the transaction. Since the statements
 	// are merged into flushTarget on EndTransaction, in this case the
@@ -92,7 +92,7 @@ func NewStatsCollector(
 	// we'll write directly to the flushTarget when we're collecting
 	// stats for a conn exec belonging to an outer transaction.
 	currentTransactionStatementStats := appStats
-	if !fromOuterTxn {
+	if !underOuterTxn {
 		currentTransactionStatementStats = appStats.NewApplicationStatsWithInheritedOptions()
 	}
 	return &StatsCollector{
