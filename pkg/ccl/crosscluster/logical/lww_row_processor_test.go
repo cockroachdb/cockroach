@@ -57,15 +57,22 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 					if !discardWrite.Load() || !ba.IsWrite() || len(ba.Requests) != 1 {
 						return nil
 					}
-					req, ok := ba.GetArg(kvpb.ConditionalPut)
-					if !ok {
+					switch req := ba.Requests[0].GetInner().(type) {
+					case *kvpb.PutRequest:
+						if !req.Key.Equal(key) {
+							return nil
+						}
+						numInjectedErrors.Add(1)
+						return injectedErr
+					case *kvpb.ConditionalPutRequest:
+						if !req.Key.Equal(key) {
+							return nil
+						}
+						numInjectedErrors.Add(1)
+						return injectedErr
+					default:
 						return nil
 					}
-					if !req.(*kvpb.ConditionalPutRequest).Key.Equal(key) {
-						return nil
-					}
-					numInjectedErrors.Add(1)
-					return injectedErr
 				},
 			},
 		},
@@ -89,23 +96,33 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 	keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	key = keyValue.Key
 
-	defer discardWrite.Store(false)
-	discardWrite.Store(true)
-	b.ResetTimer()
-	b.ReportAllocs()
-	var lastTxnErr, lastRowErr error
-	var i int
-	for i = 0; i < b.N; i++ {
-		// We need to start a fresh Txn since we're injecting an error.
-		lastTxnErr = s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			// The error is expected here due to injected error.
-			lastRowErr = rp.ProcessRow(ctx, txn, keyValue)
-			keyValue.Value.Timestamp.WallTime += 1
-			return nil
+	for _, tc := range []struct {
+		name      string
+		prevValue roachpb.Value
+	}{
+		{name: "noPrevValue"},
+		{name: "withPrevValue", prevValue: keyValue.Value},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			numInjectedErrors.Store(0)
+			defer discardWrite.Store(false)
+			discardWrite.Store(true)
+			var lastTxnErr, lastRowErr error
+			var i int
+			for i = 0; i < b.N; i++ {
+				// We need to start a fresh Txn since we're injecting an error.
+				lastTxnErr = s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					// The error is expected here due to injected error.
+					lastRowErr = rp.ProcessRow(ctx, txn, keyValue, tc.prevValue)
+					keyValue.Value.Timestamp.WallTime += 1
+					return nil
+				})
+			}
+			require.Error(b, lastTxnErr)
+			require.Error(b, lastRowErr)
+			// Sanity check that an error was injected on each iteration.
+			require.Equal(b, numInjectedErrors.Load(), int64(i))
 		})
 	}
-	require.Error(b, lastTxnErr)
-	require.Error(b, lastRowErr)
-	// Sanity check that an error was injected on each iteration.
-	require.Equal(b, numInjectedErrors.Load(), int64(i))
 }
