@@ -20,6 +20,7 @@ ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA sc1 GRANT SELECT,UPDATE ON TABL
 ALTER DEFAULT PRIVILEGES FOR ROLE u1 IN SCHEMA sc1 GRANT SELECT,UPDATE ON TABLES TO u2;
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT DELETE ON TABLES TO u2;
 ALTER DEFAULT PRIVILEGES FOR ROLE u1 GRANT DELETE ON TABLES TO u2;
+ALTER DATABASE db1 CONFIGURE ZONE USING num_replicas = 7;
 USE defaultdb;
 ----
 
@@ -129,6 +130,25 @@ ElementState:
 - DatabaseRoleSetting:
     databaseId: 104
     roleName: __placeholder_role_name__
+  Status: PUBLIC
+- DatabaseZoneConfig:
+    databaseId: 104
+    seqNum: 0
+    zoneConfig:
+      constraints: []
+      gc: null
+      globalReads: null
+      inheritedConstraints: true
+      inheritedLeasePreferences: true
+      leasePreferences: []
+      nullVoterConstraintsIsEmpty: false
+      numReplicas: 7
+      numVoters: null
+      rangeMaxBytes: null
+      rangeMinBytes: null
+      subzoneSpans: []
+      subzones: []
+      voterConstraints: []
   Status: PUBLIC
 - Namespace:
     databaseId: 0

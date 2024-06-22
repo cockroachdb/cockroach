@@ -113,7 +113,9 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 		NewSchemaChangerBuildEventLogger(p.InternalSQLTxn(), p.ExecCfg()),
 		NewReferenceProviderFactory(p),
 		p.EvalContext().DescIDGenerator,
-		p,
+		p, /* temporarySchemaProvider */
+		p, /* nodesStatusInfo */
+		p, /* regionProvider */
 	)
 }
 

@@ -13,6 +13,7 @@ package scexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -70,6 +71,9 @@ type Catalog interface {
 
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
+
+	// UpdateZoneConfig upserts a zone config for a descriptor.
+	UpdateZoneConfig(ctx context.Context, id descpb.ID, zc zonepb.ZoneConfig) error
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error

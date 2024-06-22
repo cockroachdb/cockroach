@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -92,6 +93,7 @@ type catalogChanges struct {
 	namesToAdd          map[descpb.NameInfo]descpb.ID
 	descriptorsToDelete catalog.DescriptorIDSet
 	zoneConfigsToDelete catalog.DescriptorIDSet
+	zoneConfigsToUpdate map[descpb.ID]*zonepb.ZoneConfig
 	commentsToUpdate    map[catalogkeys.CommentKey]string
 }
 
@@ -104,6 +106,8 @@ func NewTestDependencies(options ...Option) *TestState {
 	for _, o := range options {
 		o.apply(&s)
 	}
+	zc := zonepb.DefaultSystemZoneConfigRef()
+	s.committed.UpsertZoneConfig(0, zc, nil)
 	s.uncommittedInMemory = catalogDeepCopy(s.committed.Catalog)
 	s.uncommittedInStorage = catalogDeepCopy(s.committed.Catalog)
 	return &s
