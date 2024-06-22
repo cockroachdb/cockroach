@@ -2417,7 +2417,10 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 	defer l.Close()
 
 	cmd := strings.Join(args, " ")
-	c.f.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
+	c.f.L().Printf("running cmd `%s` on nodes [%v]", roachprod.TruncateString(cmd, 30), nodes)
+	if c.l.File != nil {
+		c.f.L().Printf("details in %s.log", logFile)
+	}
 	l.Printf("> %s", cmd)
 	if err := roachprod.Run(
 		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
@@ -2434,7 +2437,11 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 			logFileName = l.File.Name()
 		}
 		createFailedFile(logFileName)
-		return errors.Wrapf(err, "full command output in %s.log", logFile)
+		if c.l.File != nil {
+			return errors.Wrapf(err, "full command output in %s.log", logFile)
+		} else {
+			return err
+		}
 	}
 	l.Printf("> result: <ok>")
 	return nil
