@@ -75,7 +75,7 @@ type AppendTracker struct {
 	// Normally, there is 0 or 1 fork. A higher number of forks is possible only
 	// if leader changes spin rapidly, or acknowledgements are slow. The slice of
 	// forks is optimized for being short, to avoid allocations in most cases.
-	forks []LogMark
+	forks shortSlice[LogMark]
 }
 
 // NewAppendTracker returns a tracker initialized to the given log state.
@@ -106,19 +106,19 @@ func (a *AppendTracker) Append(from LogMark, to uint64) bool {
 	//	from.Term > f.write.Term && from.Index < f.write.Index.
 	//
 	// Truncate all the obsolete forks, and append a new one.
-	pop := len(a.forks)
+	pop := len(a.forks.slice)
 	for ; pop > 0; pop-- {
-		if from.Index >= a.forks[pop-1].Index {
+		if from.Index >= a.forks.slice[pop-1].Index {
 			break
 		}
 	}
-	a.forks = a.forks[:pop]
+	a.forks.slice = a.forks.slice[:pop]
 
 	a.write = write
 	if from.Index <= a.ack.Index {
 		a.ack = from
 	} else {
-		a.forks = append(a.forks[:pop], from)
+		a.forks.slice = append(a.forks.slice, from)
 	}
 	return true
 }
@@ -132,12 +132,12 @@ func (a *AppendTracker) Ack(to LogMark) bool {
 
 	// Remove all forks that are now in the past.
 	skip := 0
-	for ln := len(a.forks); skip < ln; skip++ {
-		if a.forks[skip].Term > to.Term {
+	for ln := len(a.forks.slice); skip < ln; skip++ {
+		if a.forks.slice[skip].Term > to.Term {
 			break
 		}
 	}
-	a.forks = a.forks[skip:]
+	a.forks.skip(skip)
 
 	return true
 }
@@ -146,8 +146,25 @@ func (a *AppendTracker) Ack(to LogMark) bool {
 // the (Released, write.Index] interval. All entries with lower indices have
 // been acknowledged.
 func (a *AppendTracker) Released() uint64 {
-	if len(a.forks) == 0 {
+	if len(a.forks.slice) == 0 {
 		return a.ack.Index
 	}
-	return min(a.ack.Index, a.forks[0].Index)
+	return min(a.ack.Index, a.forks.slice[0].Index)
+}
+
+const shortSliceLen = 2
+
+type shortSlice[T any] struct {
+	short [shortSliceLen]T
+	slice []T
+}
+
+func (s *shortSlice[T]) skip(count int) {
+	if count == 0 {
+		return
+	}
+	s.slice = s.slice[count:]
+	if ln := len(s.slice); ln <= shortSliceLen {
+		s.slice = s.short[:copy(s.short[:ln], s.slice)]
+	}
 }

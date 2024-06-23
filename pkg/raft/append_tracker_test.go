@@ -18,15 +18,15 @@ import (
 
 func (a *AppendTracker) checkInvariants(t require.TestingT) {
 	require.True(t, a.ack == a.write || a.ack.Less(a.write))
-	if len(a.forks) == 0 {
+	if len(a.forks.slice) == 0 {
 		return
 	}
-	require.Less(t, a.ack.Term, a.forks[0].Term)
-	for i, next := range a.forks[1:] {
-		require.Less(t, a.forks[i].Term, next.Term)
-		require.Less(t, a.forks[i].Index, next.Index)
+	require.Less(t, a.ack.Term, a.forks.slice[0].Term)
+	for i, next := range a.forks.slice[1:] {
+		require.Less(t, a.forks.slice[i].Term, next.Term)
+		require.Less(t, a.forks.slice[i].Index, next.Index)
 	}
-	last := a.forks[len(a.forks)-1]
+	last := a.forks.slice[len(a.forks.slice)-1]
 	require.True(t, last == a.write || last.Less(a.write))
 }
 
