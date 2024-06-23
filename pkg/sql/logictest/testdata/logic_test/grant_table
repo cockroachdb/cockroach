@@ -995,6 +995,10 @@ system         public        statement_execution_insights     table        admin
 system         public        statement_execution_insights     table        admin    INSERT          true
 system         public        statement_execution_insights     table        admin    SELECT          true
 system         public        statement_execution_insights     table        admin    UPDATE          true
+system         public        job_events                       table        admin    DELETE          true
+system         public        job_events                       table        admin    INSERT          true
+system         public        job_events                       table        admin    SELECT          true
+system         public        job_events                       table        admin    UPDATE          true
 a              public        NULL                             schema       admin    ALL             true
 defaultdb      public        NULL                             schema       admin    ALL             true
 postgres       public        NULL                             schema       admin    ALL             true
@@ -1206,6 +1210,10 @@ system         public        statement_execution_insights     table        root 
 system         public        statement_execution_insights     table        root     INSERT          true
 system         public        statement_execution_insights     table        root     SELECT          true
 system         public        statement_execution_insights     table        root     UPDATE          true
+system         public        job_events                       table        root     DELETE          true
+system         public        job_events                       table        root     INSERT          true
+system         public        job_events                       table        root     SELECT          true
+system         public        job_events                       table        root     UPDATE          true
 a              pg_extension  NULL                             schema       public   USAGE           false
 a              public        NULL                             schema       public   CREATE          false
 a              public        NULL                             schema       public   USAGE           false
@@ -1971,6 +1979,14 @@ system         public       external_connections             table        root  
 system         public       external_connections             table        root     INSERT          true
 system         public       external_connections             table        root     SELECT          true
 system         public       external_connections             table        root     UPDATE          true
+system         public       job_events                       table        admin    DELETE          true
+system         public       job_events                       table        admin    INSERT          true
+system         public       job_events                       table        admin    SELECT          true
+system         public       job_events                       table        admin    UPDATE          true
+system         public       job_events                       table        root     DELETE          true
+system         public       job_events                       table        root     INSERT          true
+system         public       job_events                       table        root     SELECT          true
+system         public       job_events                       table        root     UPDATE          true
 system         public       job_info                         table        admin    DELETE          true
 system         public       job_info                         table        admin    INSERT          true
 system         public       job_info                         table        admin    SELECT          true

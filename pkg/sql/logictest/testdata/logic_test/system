@@ -19,6 +19,7 @@ public  descriptor                       table     node  NULL
 public  descriptor_id_seq                sequence  node  NULL
 public  eventlog                         table     node  NULL
 public  external_connections             table     node  NULL
+public  job_events                       table     node  NULL
 public  job_info                         table     node  NULL
 public  jobs                             table     node  NULL
 public  join_tokens                      table     node  NULL
@@ -80,6 +81,7 @@ public  descriptor                       table     node  NULL
 public  descriptor_id_seq                sequence  node  NULL
 public  eventlog                         table     node  NULL
 public  external_connections             table     node  NULL
+public  job_events                       table     node  NULL
 public  job_info                         table     node  NULL
 public  jobs                             table     node  NULL
 public  join_tokens                      table     node  NULL
@@ -196,6 +198,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 64
 65
 66
+67
 100
 101
 102
@@ -264,6 +267,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 64
 65
 66
+67
 100
 101
 102
@@ -444,6 +448,14 @@ system  public  external_connections             root    DELETE  true
 system  public  external_connections             root    INSERT  true
 system  public  external_connections             root    SELECT  true
 system  public  external_connections             root    UPDATE  true
+system  public  job_events                       admin   DELETE  true
+system  public  job_events                       admin   INSERT  true
+system  public  job_events                       admin   SELECT  true
+system  public  job_events                       admin   UPDATE  true
+system  public  job_events                       root    DELETE  true
+system  public  job_events                       root    INSERT  true
+system  public  job_events                       root    SELECT  true
+system  public  job_events                       root    UPDATE  true
 system  public  job_info                         admin   DELETE  true
 system  public  job_info                         admin   INSERT  true
 system  public  job_info                         admin   SELECT  true
@@ -830,6 +842,14 @@ system  public  external_connections             root    DELETE  true
 system  public  external_connections             root    INSERT  true
 system  public  external_connections             root    SELECT  true
 system  public  external_connections             root    UPDATE  true
+system  public  job_events                       admin   DELETE  true
+system  public  job_events                       admin   INSERT  true
+system  public  job_events                       admin   SELECT  true
+system  public  job_events                       admin   UPDATE  true
+system  public  job_events                       root    DELETE  true
+system  public  job_events                       root    INSERT  true
+system  public  job_events                       root    SELECT  true
+system  public  job_events                       root    UPDATE  true
 system  public  job_info                         admin   DELETE  true
 system  public  job_info                         admin   INSERT  true
 system  public  job_info                         admin   SELECT  true

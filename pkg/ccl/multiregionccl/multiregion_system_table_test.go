@@ -274,6 +274,7 @@ func TestMrSystemDatabase(t *testing.T) {
 			tDB.CheckQueryResults(t, query, [][]string{
 				{"TABLE system.public.eventlog"},
 				{"TABLE system.public.external_connections"},
+				{"TABLE system.public.job_events"},
 				{"TABLE system.public.job_info"},
 				{"TABLE system.public.jobs"},
 				{"TABLE system.public.join_tokens"},
@@ -314,6 +315,7 @@ func TestMrSystemDatabase(t *testing.T) {
 			sDB.CheckQueryResults(t, query, [][]string{
 				{"TABLE system.public.eventlog"},
 				{"TABLE system.public.external_connections"},
+				{"TABLE system.public.job_events"},
 				{"TABLE system.public.job_info"},
 				{"TABLE system.public.jobs"},
 				{"TABLE system.public.join_tokens"},
