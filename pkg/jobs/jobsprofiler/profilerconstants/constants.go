@@ -21,6 +21,9 @@ import (
 
 const DSPDiagramInfoKeyPrefix = "~dsp-diag-url-"
 
+// DSPDiagramInfoKeyMax sorts after any diagram info key, because `:“ > [0-9].
+const DSPDiagramInfoKeyMax = DSPDiagramInfoKeyPrefix + ":"
+
 // MakeDSPDiagramInfoKey constructs an ephemeral DSP diagram info key.
 func MakeDSPDiagramInfoKey(timestampInNanos int64) string {
 	return fmt.Sprintf("%s%d", DSPDiagramInfoKeyPrefix, timestampInNanos)
