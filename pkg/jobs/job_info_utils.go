@@ -41,7 +41,7 @@ func WriteChunkedFileToJobInfo(
 	// We clear all rows that with info keys in [filename, filename#_final~). The
 	// trailing "~" makes the exclusive end-key inclusive of all possible chunks
 	// as "~" sorts after all digit.
-	if err := jobInfo.DeleteRange(ctx, filename, finalChunkName+"~"); err != nil {
+	if err := jobInfo.DeleteRange(ctx, filename, finalChunkName+"~", 0); err != nil {
 		return err
 	}
 
