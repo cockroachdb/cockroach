@@ -2279,6 +2279,13 @@ func TestTenantLogic_udf_options(
 	runLogicTest(t, "udf_options")
 }
 
+func TestTenantLogic_udf_override_built_in(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_override_built_in")
+}
+
 func TestTenantLogic_udf_params(
 	t *testing.T,
 ) {

@@ -3598,6 +3598,7 @@ func getMostSignificantOverload(
 				}
 				found = true
 				ret = r
+				break
 			}
 		}
 		if found {

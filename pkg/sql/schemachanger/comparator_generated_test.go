@@ -1908,6 +1908,11 @@ func TestSchemaChangeComparator_udf_options(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_options"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_udf_override_built_in(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_override_built_in"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_udf_params(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_params"
