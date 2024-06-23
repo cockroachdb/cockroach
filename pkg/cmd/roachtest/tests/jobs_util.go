@@ -191,6 +191,45 @@ func WaitForRunning(
 	}, maxWait)
 }
 
+type jobRecord struct {
+	status   string
+	payload  jobspb.Payload
+	progress jobspb.Progress
+}
+
+func (jr *jobRecord) GetHighWater() time.Time {
+	var highwaterTime time.Time
+	highwater := jr.progress.GetHighWater()
+	if highwater != nil {
+		highwaterTime = highwater.GoTime()
+	}
+	return highwaterTime
+}
+func (jr *jobRecord) GetFinishedTime() time.Time { return time.UnixMicro(jr.payload.FinishedMicros) }
+func (jr *jobRecord) GetStatus() string          { return jr.status }
+func (jr *jobRecord) GetError() string           { return jr.payload.Error }
+
+func getJobRecord(db *gosql.DB, jobID int) (*jobRecord, error) {
+	var (
+		jr            jobRecord
+		payloadBytes  []byte
+		progressBytes []byte
+	)
+	if err := db.QueryRow(
+		`SELECT status, payload, progress FROM crdb_internal.system_jobs WHERE id = $1`, jobID,
+	).Scan(&jr.status, &payloadBytes, &progressBytes); err != nil {
+		return nil, err
+	}
+
+	if err := protoutil.Unmarshal(payloadBytes, &jr.payload); err != nil {
+		return nil, err
+	}
+	if err := protoutil.Unmarshal(progressBytes, &jr.progress); err != nil {
+		return nil, err
+	}
+	return &jr, nil
+}
+
 func getJobProgress(t test.Test, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Progress {
 	ret := &jobspb.Progress{}
 	var buf []byte

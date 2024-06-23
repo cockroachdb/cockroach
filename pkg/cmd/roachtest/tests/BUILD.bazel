@@ -104,6 +104,7 @@ go_library(
         "limit_capacity.go",
         "liquibase.go",
         "liquibase_blocklist.go",
+        "logical_data_replication.go",
         "loss_of_quorum_recovery.go",
         "many_splits.go",
         "mismatched_locality.go",
