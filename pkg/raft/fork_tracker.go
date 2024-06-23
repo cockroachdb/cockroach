@@ -64,7 +64,7 @@ type ForkTracker struct {
 	// Invariant (if forks is not empty):
 	//	ack < forks[0] < forks[1] < ... < forks[len-1] <= write
 	// The inequality is both by term and by index.
-	forks []logMark
+	forks shortSlice[logMark]
 }
 
 func NewForkTracker(term uint64, index uint64) ForkTracker {
@@ -86,17 +86,18 @@ func (f *ForkTracker) Append(term uint64, from, to uint64) bool {
 	}
 	// term > write.term && from < write.index
 
-	pop := len(f.forks)
+	pop := len(f.forks.slice)
 	for ; pop > 0; pop-- {
-		if from >= f.forks[pop-1].index {
+		if from >= f.forks.slice[pop-1].index {
 			break
 		}
 	}
 
 	if pop != 0 {
-		f.forks = f.forks[:pop]
+		f.forks.slice = f.forks.slice[:pop]
+		f.forks.compress()
 	}
-	f.forks = append(f.forks, logMark{term: term, index: from})
+	f.forks.slice = append(f.forks.slice, logMark{term: term, index: from})
 	f.write = logMark{term: term, index: to}
 	if f.ack.index > from {
 		f.ack = logMark{term: term, index: from}
@@ -110,16 +111,32 @@ func (f *ForkTracker) Ack(term uint64, index uint64) {
 		return
 	}
 	skip := 0
-	for ln := len(f.forks); skip < ln; skip++ {
-		if f.forks[skip].term > term {
+	for ln := len(f.forks.slice); skip < ln; skip++ {
+		if f.forks.slice[skip].term > term {
 			break
 		}
 	}
-	f.forks = f.forks[skip:]
+	if skip != 0 {
+		f.forks.slice = f.forks.slice[skip:]
+		f.forks.compress()
+	}
 
-	if len(f.forks) == 0 {
+	if len(f.forks.slice) == 0 {
 		f.ack = logMark{term: term, index: index}
 	} else {
-		f.ack = logMark{term: term, index: min(index, f.forks[0].index)}
+		f.ack = logMark{term: term, index: min(index, f.forks.slice[0].index)}
+	}
+}
+
+const shortSliceLen = 2
+
+type shortSlice[T any] struct {
+	short [shortSliceLen]T
+	slice []T
+}
+
+func (s *shortSlice[T]) compress() {
+	if ln := len(s.slice); ln <= shortSliceLen {
+		s.slice = s.short[:copy(s.short[:ln], s.slice)]
 	}
 }
