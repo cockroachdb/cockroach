@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "bootstrap.go",
         "doc.go",
+        "fork_tracker.go",
         "log.go",
         "log_unstable.go",
         "logger.go",
@@ -31,6 +32,7 @@ go_test(
     srcs = [
         "diff_test.go",
         "example_test.go",
+        "fork_tracker_test.go",
         "interaction_test.go",
         "log_test.go",
         "log_unstable_test.go",
