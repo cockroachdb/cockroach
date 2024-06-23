@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+const MaxRetainedDSPDiagrams = 5
+
 // StorePlanDiagram stores the DistSQL diagram generated from p in the job info
 // table. The generation of the plan diagram and persistence to the info table
 // are done asynchronously and this method does not block on their completion.
@@ -46,6 +48,22 @@ func StorePlanDiagram(
 
 			dspKey := profilerconstants.MakeDSPDiagramInfoKey(timeutil.Now().UnixNano())
 			infoStorage := jobs.InfoStorageForJob(txn, jobID)
+
+			// Limit total retained diagrams by culling older ones as needed.
+			count, err := infoStorage.Count(ctx, profilerconstants.DSPDiagramInfoKeyPrefix, profilerconstants.DSPDiagramInfoKeyMax)
+			if err != nil {
+				return err
+			}
+			const keep = MaxRetainedDSPDiagrams - 1
+			if toCull := count - keep; toCull > 0 {
+				if err := infoStorage.DeleteRange(
+					ctx, profilerconstants.DSPDiagramInfoKeyPrefix, profilerconstants.DSPDiagramInfoKeyMax, toCull,
+				); err != nil {
+					return err
+				}
+			}
+
+			// Write the new diagram.
 			return infoStorage.Write(ctx, dspKey, []byte(diagURL.String()))
 		})
 		// Don't log the error if the context has been canceled. This will likely be

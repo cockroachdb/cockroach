@@ -20,6 +20,7 @@ import (
 )
 
 const DSPDiagramInfoKeyPrefix = "~dsp-diag-url-"
+const DSPDiagramInfoKeyMax = DSPDiagramInfoKeyPrefix + ":"
 
 // MakeDSPDiagramInfoKey constructs an ephemeral DSP diagram info key.
 func MakeDSPDiagramInfoKey(timestampInNanos int64) string {
