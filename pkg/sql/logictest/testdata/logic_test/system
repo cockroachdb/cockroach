@@ -81,6 +81,7 @@ public  descriptor_id_seq                sequence  node  NULL
 public  eventlog                         table     node  NULL
 public  external_connections             table     node  NULL
 public  job_info                         table     node  NULL
+public  job_state_history                table     node  NULL
 public  jobs                             table     node  NULL
 public  join_tokens                      table     node  NULL
 public  lease                            table     node  NULL
@@ -264,6 +265,7 @@ SELECT id FROM system.descriptor ORDER BY 1
 64
 65
 66
+67
 100
 101
 102
@@ -838,6 +840,14 @@ system  public  job_info                         root    DELETE  true
 system  public  job_info                         root    INSERT  true
 system  public  job_info                         root    SELECT  true
 system  public  job_info                         root    UPDATE  true
+system  public  job_state_history                admin   DELETE  true
+system  public  job_state_history                admin   INSERT  true
+system  public  job_state_history                admin   SELECT  true
+system  public  job_state_history                admin   UPDATE  true
+system  public  job_state_history                root    DELETE  true
+system  public  job_state_history                root    INSERT  true
+system  public  job_state_history                root    SELECT  true
+system  public  job_state_history                root    UPDATE  true
 system  public  jobs                             admin   DELETE  true
 system  public  jobs                             admin   INSERT  true
 system  public  jobs                             admin   SELECT  true

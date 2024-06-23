@@ -814,6 +814,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.TransactionExecInsightsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.JobEvents.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 func rekeySystemTable(

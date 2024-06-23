@@ -914,6 +914,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return nil
 	}
 
+	InitJobStateLogProcessor(ctx, stopper, r)
 	// Since the job polling system is outside user control, exclude it from cost
 	// accounting and control. Individual jobs are not part of this exclusion.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
@@ -1591,6 +1592,7 @@ func (r *Registry) stepThroughStateMachine(
 			log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), status)
 		}
 	}
+	maybeLogStateChangeStructured(ctx, job, status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
 	onExecutionFailed := func(cause error) error {
 		log.ErrorfDepth(

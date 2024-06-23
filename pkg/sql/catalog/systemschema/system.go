@@ -1160,6 +1160,17 @@ CREATE TABLE system.mvcc_statistics (
 			created
 		)
 	);`
+
+	JobEventsTableSchema = `
+	CREATE TABLE system.job_events (
+	  job_id INT8,
+	  event_type STRING NOT NULL,
+	  event_time TIMESTAMPTZ NOT NULL,
+	  event_summary STRING NOT NULL,
+	  event_details JSONB,
+	  event_id INT8 DEFAULT unique_rowid(),
+		CONSTRAINT "primary" PRIMARY KEY (job_id, event_type, event_time, event_id)
+	);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1403,6 +1414,7 @@ func MakeSystemTables() []SystemTable {
 		SystemMVCCStatisticsTable,
 		StatementExecInsightsTable,
 		TransactionExecInsightsTable,
+		JobEvents,
 	}
 }
 
@@ -4718,6 +4730,53 @@ var (
 				ConstraintID:          tbl.NextConstraintID,
 			}}
 			tbl.NextConstraintID++
+		},
+	)
+
+	JobEvents = makeSystemTable(
+		JobEventsTableSchema,
+		systemTable(catconstants.JobEvents,
+			descpb.InvalidID, // dynamically assigned table ID
+			[]descpb.ColumnDescriptor{
+				{Name: "job_id", ID: 1, Type: types.Int},
+				{Name: "event_type", ID: 2, Type: types.String},
+				{Name: "event_time", ID: 3, Type: types.Timestamp},
+				{Name: "event_summary", ID: 4, Type: types.String},
+				{Name: "event_details", ID: 5, Type: types.Jsonb, Nullable: true},
+				{Name: "event_id", ID: 6, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name: "primary",
+					ID:   0,
+					ColumnNames: []string{
+						"job_id",
+						"event_type",
+						"event_time",
+						"event_summary",
+						"event_details",
+						"event_id",
+					},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6},
+					DefaultColumnID: 0,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				Version:        descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames: []string{"job_id", "event_type", "event_time", "event_id"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2, 3, 6},
+			},
+		), func(tbl *descpb.TableDescriptor) {
+
 		},
 	)
 )

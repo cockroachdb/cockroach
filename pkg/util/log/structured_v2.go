@@ -28,6 +28,10 @@ var (
 		EventType: "stmt_stats",
 		Version:   "0.1",
 	}
+	JOB_EVENT = StructuredLogMeta{
+		EventType: "job_event",
+		Version:   "0.1",
+	}
 )
 
 // StructuredLogMeta is a metadata object that accompanies each event emitted via Structured.

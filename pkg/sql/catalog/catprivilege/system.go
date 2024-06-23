@@ -78,6 +78,7 @@ var (
 		catconstants.MVCCStatistics,
 		catconstants.TxnExecInsightsTableName,
 		catconstants.StmtExecInsightsTableName,
+		catconstants.JobEvents,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{
