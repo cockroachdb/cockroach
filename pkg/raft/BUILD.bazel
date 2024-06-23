@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "raft",
     srcs = [
+        "append_tracker.go",
         "bootstrap.go",
         "doc.go",
         "log.go",
@@ -29,6 +30,7 @@ go_library(
 go_test(
     name = "raft_test",
     srcs = [
+        "append_tracker_test.go",
         "diff_test.go",
         "example_test.go",
         "interaction_test.go",
