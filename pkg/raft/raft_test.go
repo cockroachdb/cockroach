@@ -1974,8 +1974,8 @@ func TestBcastBeat(t *testing.T) {
 	require.Len(t, msgs, 2)
 
 	wantCommitMap := map[uint64]uint64{
-		2: min(sm.raftLog.committed, sm.trk.Progress[2].Match),
-		3: min(sm.raftLog.committed, sm.trk.Progress[3].Match),
+		2: sm.raftLog.committed,
+		3: sm.raftLog.committed,
 	}
 	for i, m := range msgs {
 		require.Equal(t, pb.MsgHeartbeat, m.Type, "#%d", i)

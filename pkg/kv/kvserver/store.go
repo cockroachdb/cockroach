@@ -410,6 +410,7 @@ func newRaftConfig(
 
 		PreVote:     true,
 		CheckQuorum: storeCfg.RaftEnableCheckQuorum,
+		CRDBVersion: storeCfg.Settings.Version,
 	}
 }
 
