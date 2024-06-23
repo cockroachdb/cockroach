@@ -267,6 +267,34 @@ func (i InfoStorage) DeleteRange(ctx context.Context, startInfoKey, endInfoKey s
 	})
 }
 
+// Count counts the info records in the range [start, end).
+func (i InfoStorage) Count(ctx context.Context, startInfoKey, endInfoKey string) (int, error) {
+	if i.txn == nil {
+		return 0, errors.New("cannot access the job info table without an associated txn")
+	}
+
+	ctx, sp := tracing.ChildSpan(ctx, "count-job-info")
+	defer sp.Finish()
+
+	row, err := i.txn.QueryRowEx(
+		ctx, "job-info-count", i.txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		"SELECT count(*) FROM system.job_info WHERE job_id = $1 AND info_key >= $2 AND info_key < $3",
+		i.j.ID(), startInfoKey, endInfoKey,
+	)
+
+	if err != nil || row == nil {
+		return 0, err
+	}
+
+	value, ok := row[0].(*tree.DInt)
+	if !ok {
+		return 0, errors.AssertionFailedf("job info: expected value to be DInt (was %T)", row[0])
+	}
+
+	return int(*value), nil
+}
+
 // Iterate iterates though the info records for a given job and info key prefix.
 func (i InfoStorage) Iterate(
 	ctx context.Context, infoPrefix string, fn func(infoKey string, value []byte) error,

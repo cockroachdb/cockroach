@@ -58,7 +58,7 @@ func TestJobInfoAccessors(t *testing.T) {
 	job1 := createJob(1)
 	job2 := createJob(2)
 	job3 := createJob(3)
-	kPrefix, kA, kB, kC, kD := "🔑", "🔑A", "🔑B", "🔑C", "🔑D"
+	kPrefix, kA, kB, kC, kD, kZ := "🔑", "🔑A", "🔑B", "🔑C", "🔑D", "🔑Z"
 	v1, v2, v3 := []byte("val1"), []byte("val2"), []byte("val3")
 
 	// Key doesn't exist yet.
@@ -156,6 +156,13 @@ func TestJobInfoAccessors(t *testing.T) {
 	}))
 	require.Equal(t, 3, i)
 
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		count, err := infoStorage.Count(ctx, kPrefix, kZ)
+		require.Equal(t, 3, count)
+		return err
+	}))
+
 	// Add a new revision to kC.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job2.InfoStorage(txn)
@@ -202,6 +209,12 @@ func TestJobInfoAccessors(t *testing.T) {
 		})
 	}))
 	require.Equal(t, 1, i)
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		count, err := infoStorage.Count(ctx, kPrefix, kZ)
+		require.Equal(t, 1, count)
+		return err
+	}))
 
 	// Iterate a different job.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
