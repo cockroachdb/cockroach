@@ -121,6 +121,8 @@ const baseStmt: Partial<Stmt> = {
     plan_gists: ["AgFUBAAgAAAABgI="],
     indexes: ["123@456"],
     index_recommendations: [],
+    regions: ["gcp-us-east1", "gcp-us-west1"],
+    nodes: [Long.fromNumber(1)],
   },
 };
 
