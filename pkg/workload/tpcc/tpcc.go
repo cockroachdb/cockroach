@@ -39,6 +39,17 @@ import (
 
 var RandomSeed = workload.NewUint64RandomSeed()
 
+const (
+	// A threshold that defines which duration is considered a long workload which is not meant for a benchmark result
+	longDurationWorkloadThreshold = 4 * 24 * time.Hour
+
+	// The reset time period in case we are running a long duration workload.
+	warehouseWytdResetPeriod = 24 * time.Hour
+
+	// Max rows that can be updated in a single txn, used while resetting the w_ytd values
+	maxRowsToUpdateTxn = 10_000
+)
+
 type tpcc struct {
 	flags        workload.Flags
 	connFlags    *workload.ConnFlags
@@ -115,6 +126,13 @@ type tpcc struct {
 		values [][]int
 	}
 	localsPool *sync.Pool
+
+	// Set to true if duration >= longDurationWorkloadThreshold.
+	// In that case, we reset w_ytd & d_ytd periodically and skip 3.3.2.1 and 3.3.2.8 consistency checks.
+	isLongDurationWorkload bool
+
+	// wait group for any background reset table operation to avoid goroutine leaks during long duration workloads
+	resetTableWg sync.WaitGroup
 }
 
 type waitSetter struct {
@@ -584,6 +602,11 @@ func (w *tpcc) Hooks() workload.Hooks {
 					// TODO(nvanbenschoten): support load-only checks.
 					continue
 				}
+
+				if w.isLongDurationWorkload && check.SkipForLongDuration {
+					continue
+				}
+
 				start := timeutil.Now()
 				err := check.Fn(db, "" /* asOfSystemTime */)
 				log.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
@@ -812,6 +835,19 @@ func (w *tpcc) Ops(
 		}
 	}
 
+	if duration, err := w.flags.GetDuration("duration"); err == nil {
+		if duration == 0 || duration >= longDurationWorkloadThreshold {
+			log.Warningf(ctx,
+				"Warning: this workload is being used with a long or indefinite duration."+
+					" This could cause it to deviate from the TPCC spec in subtle ways and is not meant for benchmarking. "+
+					"Consistency checks might be disabled",
+			)
+			w.isLongDurationWorkload = true
+		}
+	} else {
+		log.Warningf(ctx, "Couldn't get duration of the tpcc workload run for disabling consistency checks %v", err)
+	}
+
 	// Need idempotency - Ops might be invoked multiple times with the same
 	// Registry.
 	if w.reg == nil {
@@ -1004,6 +1040,9 @@ func (w *tpcc) Ops(
 				log.Warningf(ctx, "%v", err)
 			}
 		}
+
+		w.resetTableWg.Wait()
+
 		return nil
 	}
 	return ql, nil
