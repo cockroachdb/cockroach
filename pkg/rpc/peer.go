@@ -18,6 +18,7 @@ import (
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -154,7 +155,7 @@ func (p *peer) snap() PeerSnap {
 // map, the next attempt to dial the node will start from a blank slate. In
 // other words, even with this theoretical race, the situation will sort itself
 // out quickly.
-func (rpcCtx *Context) newPeer(k peerKey) *peer {
+func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 	// Initialization here is a bit circular. The peer holds the breaker. The
 	// breaker probe references the peer because it needs to replace the one-shot
 	// Connection when it makes a new connection in the probe. And (all but the

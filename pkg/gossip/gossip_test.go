@@ -192,7 +192,7 @@ func TestGossipLocalityResolver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nodeAddress, err := g.GetNodeIDAddress(node1.NodeID)
+	nodeAddress, _, err := g.GetNodeIDAddress(node1.NodeID)
 	if err != nil {
 		t.Error(err)
 	}
@@ -200,7 +200,7 @@ func TestGossipLocalityResolver(t *testing.T) {
 		t.Fatalf("expected: %s but got: %s address", node1PrivateAddress, *nodeAddress)
 	}
 
-	nodeAddress, err = g.GetNodeIDAddress(node2.NodeID)
+	nodeAddress, _, err = g.GetNodeIDAddress(node2.NodeID)
 	if err != nil {
 		t.Error(err)
 	}
@@ -209,7 +209,7 @@ func TestGossipLocalityResolver(t *testing.T) {
 		t.Fatalf("expected: %s but got: %s address", node2PublicAddressRPC, *nodeAddress)
 	}
 
-	nodeAddressSQL, err := g.GetNodeIDSQLAddress(node2.NodeID)
+	nodeAddressSQL, _, err := g.GetNodeIDSQLAddress(node2.NodeID)
 	if err != nil {
 		t.Error(err)
 	}

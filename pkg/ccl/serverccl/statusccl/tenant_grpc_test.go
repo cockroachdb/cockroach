@@ -121,7 +121,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		rpcCtx := tenant2.RPCContext()
 
 		nodeID := roachpb.NodeID(tenant.SQLInstanceID())
-		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, rpc.DefaultClass).Connect(ctx)
+		conn, err := rpcCtx.GRPCDialNode(grpcAddr, nodeID, roachpb.Locality{}, rpc.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
 
 		client := serverpb.NewStatusClient(conn)
@@ -135,7 +135,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		grpcAddr := server.RPCAddr()
 		rpcCtx := tenant.RPCContext()
 
-		conn, err := rpcCtx.GRPCDialNode(grpcAddr, server.NodeID(), rpc.DefaultClass).Connect(ctx)
+		conn, err := rpcCtx.GRPCDialNode(grpcAddr, server.NodeID(), roachpb.Locality{}, rpc.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
 
 		client := serverpb.NewStatusClient(conn)
