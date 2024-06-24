@@ -2291,7 +2291,7 @@ type aggregatorPlanningInfo struct {
 	aggregations             []execinfrapb.AggregatorSpec_Aggregation
 	argumentsColumnTypes     [][]*types.T
 	isScalar                 bool
-	groupCols                []int
+	groupCols                []exec.NodeColumnOrdinal
 	groupColOrdering         colinfo.ColumnOrdering
 	inputMergeOrdering       execinfrapb.Ordering
 	reqOrdering              ReqOrdering
@@ -2757,7 +2757,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 				intermediateTypes = append(intermediateTypes, inputTypes[groupColIdx])
 			}
 			finalGroupCols[i] = uint32(idx)
-			if orderedGroupColSet.Contains(info.groupCols[i]) {
+			if orderedGroupColSet.Contains(int(info.groupCols[i])) {
 				finalOrderedGroupCols = append(finalOrderedGroupCols, uint32(idx))
 			}
 		}
@@ -2769,7 +2769,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 			// Find the group column.
 			found := false
 			for j, col := range info.groupCols {
-				if col == o.ColIdx {
+				if int(col) == o.ColIdx {
 					ordCols[i].ColIdx = finalGroupCols[j]
 					found = true
 					break

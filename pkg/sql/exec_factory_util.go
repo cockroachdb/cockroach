@@ -233,16 +233,6 @@ func getResultColumnsForGroupBy(
 	return columns
 }
 
-// convertNodeOrdinalsToInts converts a slice of exec.NodeColumnOrdinals to a slice
-// of ints.
-func convertNodeOrdinalsToInts(ordinals []exec.NodeColumnOrdinal) []int {
-	ints := make([]int, len(ordinals))
-	for i := range ordinals {
-		ints[i] = int(ordinals[i])
-	}
-	return ints
-}
-
 func constructVirtualScan(
 	ef exec.Factory,
 	p *planner,
