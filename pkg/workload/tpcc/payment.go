@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
@@ -80,6 +81,8 @@ type payment struct {
 	selectByLastName  workload.StmtHandle
 	updateWithPayment workload.StmtHandle
 	insertHistory     workload.StmtHandle
+	resetWorkhouse    workload.StmtHandle
+	resetDistrict     workload.StmtHandle
 
 	a bufalloc.ByteAllocator
 }
@@ -140,11 +143,69 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 	)
 
+	if p.config.isLongDurationWorkload {
+		p.resetWorkhouse = p.sr.Define(`
+		UPDATE warehouse
+		SET w_ytd = $1
+		WHERE w_id >= $2 AND w_id < $3`,
+		)
+
+		p.resetDistrict = p.sr.Define(`
+		UPDATE district
+		SET d_ytd = $1
+		WHERE d_w_id >= $2 AND d_w_id < $3`,
+		)
+
+		// Starting the background goroutine which will reset the w_ytd values periodically in warehouseWytdResetPeriod
+		go p.startResetValueWorker(ctx)
+	}
+
 	if err := p.sr.Init(ctx, "payment", mcp); err != nil {
 		return nil, err
 	}
 
 	return p, nil
+}
+
+func (p *payment) startResetValueWorker(ctx context.Context) {
+	ticker := time.NewTicker(warehouseWytdResetPeriod)
+	defer ticker.Stop()
+
+	p.config.resetTableWg.Add(1)
+	defer p.config.resetTableWg.Done()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+
+			// Creating batches of maxRowsToUpdateTxn to avoid long-running txns
+			for startRange := 0; startRange <= p.config.warehouses; startRange += maxRowsToUpdateTxn {
+				endRange := min(p.config.warehouses, startRange+maxRowsToUpdateTxn)
+
+				if _, err := p.config.executeTx(
+					ctx, p.mcp.Get(),
+					func(tx pgx.Tx) error {
+						if _, err := p.resetWorkhouse.ExecTx(
+							ctx, tx, wYtd, startRange, endRange,
+						); err != nil {
+							return errors.Wrap(err, "reset warehouse failed")
+						}
+
+						if _, err := p.resetDistrict.ExecTx(
+							ctx, tx, ytd, startRange, endRange,
+						); err != nil {
+							return errors.Wrap(err, "reset district failed")
+						}
+
+						return nil
+					}); err != nil {
+					log.Errorf(ctx, "%v", err)
+				}
+			}
+		}
+	}
 }
 
 func (p *payment) run(ctx context.Context, wID int) (interface{}, time.Duration, error) {
@@ -192,6 +253,7 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, time.Duration,
 		ctx, p.mcp.Get(),
 		func(tx pgx.Tx) error {
 			var wName, dName string
+
 			// Update warehouse with payment
 			if err := p.updateWarehouse.QueryRowTx(
 				ctx, tx, d.hAmount, wID,
