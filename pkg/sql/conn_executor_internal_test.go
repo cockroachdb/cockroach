@@ -348,7 +348,7 @@ func startConnExecutor(
 	}
 
 	s := NewServer(cfg, pool)
-	buf := NewStmtBuf()
+	buf := NewStmtBuf(0 /* toReserve */)
 	syncResults := make(chan []*streamingCommandResult, 1)
 	resultChannel := newAsyncIEResultChannel()
 	var cc ClientComm = &internalClientComm{
@@ -401,7 +401,7 @@ func TestSessionCloseWithPendingTempTableInTxn(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	srv := s.SQLServer().(*Server)
-	stmtBuf := NewStmtBuf()
+	stmtBuf := NewStmtBuf(0 /* toReserve */)
 	flushed := make(chan []*streamingCommandResult)
 	clientComm := &internalClientComm{
 		sync: func(res []*streamingCommandResult) {
