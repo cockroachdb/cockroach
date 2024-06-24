@@ -17,6 +17,9 @@ with builds as (
          count(case when status='SUCCESS' then test_name end) as total_successful_runs, -- all successful runs
          -- count the number of failed tests. tests failed due to preempted VMs are ignored.
          count(case when status='FAILURE' and details not like '%VMs preempted during the test run%' then test_name end) as failure_count,
+         -- record the latest details of the test. this is useful for identifying if the latest failure of
+         -- the test is due to infra failure
+         MAX_BY(details, b.last_run) as recent_details,
          -- get the first_run and last_run only if the status is not UNKNOWN. This returns nil for runs that have never run
          min(case when status!='UNKNOWN' then b.first_run end) as first_run,
          max(case when status!='UNKNOWN' then b.last_run end) as last_run,
@@ -40,5 +43,7 @@ select
   -- average duration - this is set to 0 if the test is never run (total_successful_runs=0)
   case when total_successful_runs > 0 then total_duration/total_successful_runs else 0 end as avg_duration,
   total_successful_runs,
+  -- indicates the last failure was due to infra flake
+  case when recent_details like '%VMs preempted during the test run%' then 'yes' else 'no' end as last_failure_is_preeempt,
 from test_stats
 order by selected desc, total_successful_runs

@@ -46,10 +46,11 @@ var suites = map[string]string{
 
 // TestDetails has the details of the test as fetched from snowflake
 type TestDetails struct {
-	Name                string // test name
-	Selected            bool   // whether a test is Selected or not
-	AvgDurationInMillis int64  // average duration of the test
-	TotalRuns           int    // total number of times the test has run successfully
+	Name                 string // test name
+	Selected             bool   // whether a test is Selected or not
+	AvgDurationInMillis  int64  // average duration of the test
+	TotalRuns            int    // total number of times the test has run successfully
+	LastFailureIsPreempt bool   // last failure is due to a VM preemption
 }
 
 // SelectTestsReq is the request for CategoriseTests
@@ -131,11 +132,13 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 		// 1. whether a test is Selected or not
 		// 2. average duration of the test
 		// 3. total number of times the test has run successfully
+		// 4. last failure is due to an infra flake
 		testDetails := &TestDetails{
-			Name:                testInfos[0],
-			Selected:            testInfos[1] != "no",
-			AvgDurationInMillis: getDuration(testInfos[2]),
-			TotalRuns:           getTotalRuns(testInfos[3]),
+			Name:                 testInfos[0],
+			Selected:             testInfos[1] != "no",
+			AvgDurationInMillis:  getDuration(testInfos[2]),
+			TotalRuns:            getTotalRuns(testInfos[3]),
+			LastFailureIsPreempt: testInfos[4] == "yes",
 		}
 		if testDetails.Selected {
 			// selected for running

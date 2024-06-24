@@ -319,6 +319,10 @@ func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec)
 			specs[i].SkipDetails = "test skipped because it is stable and selective-tests is set."
 		} else {
 			selectedTestsCount++
+			if td, ok := tdMap[specs[i].Name]; ok {
+				// populate the stats as obtained from the test selector
+				specs[i].SetStats(td.AvgDurationInMillis, td.LastFailureIsPreempt)
+			}
 		}
 	}
 	fmt.Printf("%d out of %d tests selected for the run!\n", selectedTestsCount, len(specs))
