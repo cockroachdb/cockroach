@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -172,46 +173,201 @@ func (r *logicalReplicationResumer) ingest(
 		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
 	}
 
-	plan, err := client.PlanLogicalReplication(ctx, req)
+	planner := makeLogicalReplicationPlanner(
+		req,
+		jobExecCtx,
+		client,
+		progress,
+		payload,
+		jobID,
+		replicatedTimeAtStart)
+
+	initialPlan, initialPlanCtx, frontier, err := planner.generatePlanWithFrontier(ctx, distSQLPlanner)
 	if err != nil {
 		return err
+	}
+
+	replanOracle := sql.ReplanOnCustomFunc(
+		getNodes,
+		func() float64 {
+			return crosscluster.LogicalReplanThreshold.Get(jobExecCtx.ExecCfg().SV())
+		},
+	)
+
+	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
+		initialPlan,
+		planner.generatePlan,
+		jobExecCtx,
+		replanOracle,
+		func() time.Duration { return crosscluster.LogicalReplanFrequency.Get(jobExecCtx.ExecCfg().SV()) },
+	)
+	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
+
+	// Store only the original plan diagram
+	jobsprofiler.StorePlanDiagram(ctx,
+		execCfg.DistSQLSrv.Stopper,
+		initialPlan,
+		execCfg.InternalDB,
+		jobID)
+
+	execPlan := func(ctx context.Context) error {
+		heartbeatSender := streamclient.NewHeartbeatSender(ctx, client, streampb.StreamID(streamID),
+			func() time.Duration {
+				return heartbeatFrequency.Get(&execCfg.Settings.SV)
+			})
+		defer func() {
+			_ = heartbeatSender.Stop()
+			stopReplanner()
+		}()
+
+		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+			log.Warningf(ctx, "received unexpected producer meta: %v", meta)
+			return nil
+		}
+		rh := rowHandler{
+			replicatedTimeAtStart: replicatedTimeAtStart,
+			frontier:              frontier,
+			metrics:               metrics,
+			settings:              &execCfg.Settings.SV,
+			job:                   r.job,
+			frontierUpdates:       heartbeatSender.FrontierUpdates,
+		}
+		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
+		distSQLReceiver := sql.MakeDistSQLReceiver(
+			ctx,
+			sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+			tree.Rows,
+			execCfg.RangeDescriptorCache,
+			nil, /* txn */
+			nil, /* clockUpdater */
+			evalCtx.Tracing,
+		)
+		defer distSQLReceiver.Release()
+		// Copy the evalCtx, as dsp.Run() might change it.
+		evalCtxCopy := *evalCtx
+		distSQLPlanner.Run(
+			ctx,
+			initialPlanCtx,
+			nil, /* txn */
+			initialPlan,
+			distSQLReceiver,
+			&evalCtxCopy,
+			nil, /* finishedSetupFn */
+		)
+
+		return rowResultWriter.Err()
+	}
+	err = ctxgroup.GoAndWait(ctx, execPlan, replanner)
+	if errors.Is(err, sql.ErrPlanChanged) {
+		metrics.ReplanCount.Inc(1)
+	}
+	return err
+}
+
+func getNodes(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount int) {
+	dst = make(map[string]struct{})
+	src = make(map[string]struct{})
+	count := 0
+	for _, proc := range plan.Processors {
+		if proc.Spec.Core.LogicalReplicationWriter == nil {
+			// Skip other processors in the plan (like the Frontier processor).
+			continue
+		}
+		dst[proc.SQLInstanceID.String()] = struct{}{}
+		count += 1
+		src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.PartitionID] = struct{}{}
+		count += 1
+	}
+	return src, dst, count
+}
+
+// logicalReplicationPlanner generates a physical plan for logical replication.
+// An initial plan is generated during job startup and the replanner will
+// periodically call generatePlan to recalculate the best plan. If the newly
+// generated plan differs significantly from the initial plan, the entire
+// distSQL flow is shut down and a new initial plan will be created.
+type logicalReplicationPlanner struct {
+	req                   streampb.LogicalReplicationPlanRequest
+	jobExecCtx            sql.JobExecContext
+	client                streamclient.Client
+	progress              *jobspb.LogicalReplicationProgress
+	payload               jobspb.LogicalReplicationDetails
+	jobID                 jobspb.JobID
+	replicatedTimeAtStart hlc.Timestamp
+}
+
+func makeLogicalReplicationPlanner(
+	req streampb.LogicalReplicationPlanRequest,
+	jobExecCtx sql.JobExecContext,
+	client streamclient.Client,
+	progress *jobspb.LogicalReplicationProgress,
+	payload jobspb.LogicalReplicationDetails,
+	jobID jobspb.JobID,
+	replicatedTimeAtStart hlc.Timestamp,
+) logicalReplicationPlanner {
+
+	return logicalReplicationPlanner{
+		req:                   req,
+		jobExecCtx:            jobExecCtx,
+		client:                client,
+		progress:              progress,
+		payload:               payload,
+		jobID:                 jobID,
+		replicatedTimeAtStart: replicatedTimeAtStart,
+	}
+}
+
+// The initial plan setup requires a frontier, which we return
+func (p *logicalReplicationPlanner) generatePlanWithFrontier(
+	ctx context.Context, dsp *sql.DistSQLPlanner,
+) (*sql.PhysicalPlan, *sql.PlanningCtx, span.Frontier, error) {
+	var (
+		execCfg = p.jobExecCtx.ExecCfg()
+		evalCtx = p.jobExecCtx.ExtendedEvalContext()
+	)
+
+	plan, err := p.client.PlanLogicalReplication(ctx, p.req)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	dstToSrcDescMap := make(map[int32]descpb.TableDescriptor)
-	for _, pair := range payload.ReplicationPairs {
+	for _, pair := range p.payload.ReplicationPairs {
 		dstToSrcDescMap[pair.DstDescriptorID] = plan.DescriptorMap[pair.SrcDescriptorID]
 	}
 
-	frontier, err := span.MakeFrontierAt(replicatedTimeAtStart, plan.SourceSpans...)
+	frontier, err := span.MakeFrontierAt(p.replicatedTimeAtStart, plan.SourceSpans...)
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
-	for _, resolvedSpan := range progress.Checkpoint.ResolvedSpans {
+
+	for _, resolvedSpan := range p.progress.Checkpoint.ResolvedSpans {
 		if _, err := frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp); err != nil {
-			return err
+			return nil, nil, nil, err
 		}
 	}
-	planCtx, nodes, err := distSQLPlanner.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
+
+	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
-	destNodeLocalities, err := physical.GetDestNodeLocalities(ctx, distSQLPlanner, nodes)
+	destNodeLocalities, err := physical.GetDestNodeLocalities(ctx, dsp, nodes)
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
 
 	specs, err := constructLogicalReplicationWriterSpecs(ctx,
-		crosscluster.StreamAddress(payload.TargetClusterConnStr),
+		crosscluster.StreamAddress(p.payload.TargetClusterConnStr),
 		plan.Topology,
 		destNodeLocalities,
-		payload.ReplicationStartTime,
-		progress.ReplicatedTime,
-		progress.Checkpoint,
+		p.payload.ReplicationStartTime,
+		p.progress.ReplicatedTime,
+		p.progress.Checkpoint,
 		dstToSrcDescMap,
-		jobID,
-		streampb.StreamID(streamID))
+		p.jobID,
+		streampb.StreamID(p.payload.StreamID))
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
 
 	// Setup a one-stage plan with one proc per input spec.
@@ -247,55 +403,14 @@ func (r *logicalReplicationResumer) ingest(
 	physicalPlan.PlanToStreamColMap = []int{0}
 	sql.FinalizePlan(ctx, planCtx, physicalPlan)
 
-	jobsprofiler.StorePlanDiagram(ctx,
-		execCfg.DistSQLSrv.Stopper,
-		physicalPlan,
-		execCfg.InternalDB,
-		jobID)
+	return physicalPlan, planCtx, frontier, nil
+}
 
-	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
-	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
-		log.Warningf(ctx, "received unexpected producer meta: %v", meta)
-		return nil
-	}
-	// TODO(ssd): Replan
-	heartbeatSender := streamclient.NewHeartbeatSender(ctx, client, streampb.StreamID(streamID),
-		func() time.Duration {
-			return heartbeatFrequency.Get(&execCfg.Settings.SV)
-		})
-	defer func() { _ = heartbeatSender.Stop() }()
-	rh := rowHandler{
-		replicatedTimeAtStart: replicatedTimeAtStart,
-		frontier:              frontier,
-		metrics:               metrics,
-		settings:              &execCfg.Settings.SV,
-		job:                   r.job,
-		frontierUpdates:       heartbeatSender.FrontierUpdates,
-	}
-	rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
-	distSQLReceiver := sql.MakeDistSQLReceiver(
-		ctx,
-		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
-		tree.Rows,
-		execCfg.RangeDescriptorCache,
-		nil, /* txn */
-		nil, /* clockUpdater */
-		evalCtx.Tracing,
-	)
-	defer distSQLReceiver.Release()
-	// Copy the evalCtx, as dsp.Run() might change it.
-	evalCtxCopy := *evalCtx
-	distSQLPlanner.Run(
-		ctx,
-		planCtx,
-		nil, /* txn */
-		physicalPlan,
-		distSQLReceiver,
-		&evalCtxCopy,
-		nil, /* finishedSetupFn */
-	)
-
-	return rowResultWriter.Err()
+func (p *logicalReplicationPlanner) generatePlan(
+	ctx context.Context, dsp *sql.DistSQLPlanner,
+) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
+	plan, planCtx, _, err := p.generatePlanWithFrontier(ctx, dsp)
+	return plan, planCtx, err
 }
 
 // rowHandler is responsible for handling checkpoints sent by logical

@@ -55,6 +55,23 @@ func TestMeasurePlanChange(t *testing.T) {
 		return plan
 	}
 
+	getNodes := func(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount int) {
+		dst = make(map[string]struct{})
+		src = make(map[string]struct{})
+		count := 0
+		for _, proc := range plan.Processors {
+			if proc.Spec.Core.LogicalReplicationWriter == nil {
+				// Skip other processors in the plan (like the Frontier processor).
+				continue
+			}
+			dst[proc.SQLInstanceID.String()] = struct{}{}
+			count += 1
+			src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.PartitionID] = struct{}{}
+			count += 1
+		}
+		return src, dst, count
+	}
+
 	for _, tc := range []struct {
 		name   string
 		before sql.PhysicalPlan
@@ -129,7 +146,7 @@ func TestMeasurePlanChange(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			frac := measurePlanChange(&tc.before, &tc.after)
+			frac := sql.MeasurePlanChange(&tc.before, &tc.after, getNodes)
 			require.Equal(t, tc.frac, frac)
 		})
 	}
