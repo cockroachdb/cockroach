@@ -346,7 +346,7 @@ func (cf *cFetcher) resetBatch() {
 		}
 		// Change the allocation size to be the same as the capacity of the
 		// batch we allocated above.
-		cf.table.da.AllocSize = cf.machine.batch.Capacity()
+		cf.table.da.DefaultAllocSize = cf.machine.batch.Capacity()
 	}
 }
 
