@@ -19,6 +19,7 @@ inspect tenant=5
 ----
 Bucket state: token-burst-limit=5000  token-refill-rate=100  token-current=1000  token-current-avg=0
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
+Rates: write-batches=0,0
 Last update: 00:00:00.000
 First active instance: 0
 
@@ -41,9 +42,10 @@ inspect tenant=5
 ----
 Bucket state: token-burst-limit=5000  token-refill-rate=100  token-current=1000  token-current-avg=250
 Consumption: ru=10 kvru=10  reads=20 in 2 batches (30 bytes)  writes=40 in 2 batches (50 bytes)  pod-cpu-usage: 60 secs  pgwire-egress=70 bytes  external-egress=0 bytes  external-ingress=0 bytes
+Rates: write-batches=0,0.2
 Last update: 00:00:00.000
 First active instance: 1
-  Instance 1:  lease="foo"  seq=1  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 1:  lease="foo"  seq=1  next-instance=0  last-update=00:00:00.000
 
 advance
 1m
@@ -59,6 +61,7 @@ inspect tenant=5
 ----
 Bucket state: token-burst-limit=0  token-refill-rate=100  token-current=2000  token-current-avg=250
 Consumption: ru=10 kvru=10  reads=20 in 2 batches (30 bytes)  writes=40 in 2 batches (50 bytes)  pod-cpu-usage: 60 secs  pgwire-egress=70 bytes  external-egress=0 bytes  external-ingress=0 bytes
+Rates: write-batches=0,0.2
 Last update: 00:01:00.000
 First active instance: 1
-  Instance 1:  lease="foo"  seq=1  shares=0.0  next-instance=0  last-update=00:00:00.000
+  Instance 1:  lease="foo"  seq=1  next-instance=0  last-update=00:00:00.000

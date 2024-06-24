@@ -44,6 +44,10 @@ type tenantState struct {
 
 	// Current consumption information.
 	Consumption kvpb.TenantConsumption
+
+	// Rates calculates rate of consumption for tenant metrics that are used
+	// by the cost model.
+	Rates metricRates
 }
 
 // defaultRefillRate is the default refill rate if it is never configured (via
@@ -94,10 +98,9 @@ type instanceState struct {
 	// Lease uniquely identifies the instance; used to disambiguate different
 	// incarnations of the same ID.
 	Lease tree.DBytes
+
 	// Seq is a sequence number used to detect duplicate client requests.
 	Seq int64
-	// Shares term for this instance; see tenanttokenbucket.State.
-	Shares float64
 }
 
 // sysTableHelper implements the interactions with the system.tenant_usage
@@ -105,12 +108,20 @@ type instanceState struct {
 type sysTableHelper struct {
 	ctx      context.Context
 	tenantID roachpb.TenantID
+
+	// ratesAvailable is true if the current_rates and next_rates columns have
+	// been added to the tenant_usage table by the migration.
+	// TODO(andyk): Remove this after 24.3.
+	ratesAvailable bool
 }
 
-func makeSysTableHelper(ctx context.Context, tenantID roachpb.TenantID) sysTableHelper {
+func makeSysTableHelper(
+	ctx context.Context, tenantID roachpb.TenantID, ratesAvailable bool,
+) sysTableHelper {
 	return sysTableHelper{
-		ctx:      ctx,
-		tenantID: tenantID,
+		ctx:            ctx,
+		tenantID:       tenantID,
+		ratesAvailable: ratesAvailable,
 	}
 }
 
@@ -137,25 +148,41 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 	txn isql.Txn, instanceID base.SQLInstanceID,
 ) (tenant tenantState, instance instanceState, _ error) {
 	instance.ID = instanceID
+
 	// Read the two rows for the per-tenant state (instance_id = 0) and the
 	// per-instance state.
+	// The rates columns are only available once migration is complete.
+	rateCols := "NULL, NULL"
+	if h.ratesAvailable {
+		rateCols = "current_rates, next_rates"
+	}
+	query := fmt.Sprintf(`SELECT
+		instance_id,               /* 0 */
+		next_instance_id,          /* 1 */
+		last_update,               /* 2 */
+		ru_burst_limit,            /* 3 */
+		ru_refill_rate,            /* 4 */
+		ru_current,                /* 5 */
+		current_share_sum,         /* 6 */
+		total_consumption,         /* 7 */
+		%s,                        /* 8, 9 */
+		instance_lease,            /* 10 */
+		instance_seq               /* 11 */
+	 FROM system.tenant_usage
+	 WHERE tenant_id = $1 AND instance_id IN (0, $2)`, rateCols)
+
+	unmarshal := func(datum tree.Datum, pb protoutil.Message) error {
+		// Column can be null because of a tenant_usage table migration.
+		if datum == tree.DNull {
+			return nil
+		}
+		return protoutil.Unmarshal([]byte(tree.MustBeDBytes(datum)), pb)
+	}
+
 	rows, err := txn.QueryBufferedEx(
 		h.ctx, "tenant-usage-select", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		`SELECT
-		  instance_id,               /* 0 */
-			next_instance_id,          /* 1 */
-			last_update,               /* 2 */
-			ru_burst_limit,            /* 3 */
-			ru_refill_rate,            /* 4 */
-			ru_current,                /* 5 */
-			current_share_sum,         /* 6 */
-			total_consumption,         /* 7 */
-			instance_lease,            /* 8 */
-			instance_seq,              /* 9 */
-			instance_shares            /* 10 */
-		 FROM system.tenant_usage
-		 WHERE tenant_id = $1 AND instance_id IN (0, $2)`,
+		query,
 		h.tenantID.ToUint64(),
 		int64(instanceID),
 	)
@@ -177,77 +204,102 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 				TokenCurrent:    float64(tree.MustBeDFloat(r[5])),
 				TokenCurrentAvg: float64(tree.MustBeDFloat(r[6])),
 			}
-			if consumption := r[7]; consumption != tree.DNull {
-				// total_consumption can be NULL because of an upgrade of the
-				// tenant_usage table.
-				if err := protoutil.Unmarshal(
-					[]byte(tree.MustBeDBytes(consumption)), &tenant.Consumption,
-				); err != nil {
-					return tenantState{}, instanceState{}, err
-				}
+			if err = unmarshal(r[7], &tenant.Consumption); err != nil {
+				return tenantState{}, instanceState{}, err
+			}
+			if err = unmarshal(r[8], &tenant.Rates.current); err != nil {
+				return tenantState{}, instanceState{}, err
+			}
+			if err = unmarshal(r[9], &tenant.Rates.next); err != nil {
+				return tenantState{}, instanceState{}, err
 			}
 		} else {
 			// Instance state.
 			instance.Present = true
 			instance.LastUpdate = tree.MustBeDTimestamp(r[2])
 			instance.NextInstance = base.SQLInstanceID(tree.MustBeDInt(r[1]))
-			instance.Lease = tree.MustBeDBytes(r[8])
-			instance.Seq = int64(tree.MustBeDInt(r[9]))
-			instance.Shares = float64(tree.MustBeDFloat(r[10]))
+			instance.Lease = tree.MustBeDBytes(r[10])
+			instance.Seq = int64(tree.MustBeDInt(r[11]))
 		}
 	}
 
 	return tenant, instance, nil
 }
 
-// updateTenantState writes out an updated tenant state.
-func (h *sysTableHelper) updateTenantState(txn isql.Txn, tenant tenantState) error {
-	consumption, err := protoutil.Marshal(&tenant.Consumption)
-	if err != nil {
-		return err
-	}
-	// Note: it is important that this UPSERT specifies all columns of the
-	// table, to allow it to perform "blind" writes.
-	// Note: The TokenCurrentAvg field is mapped to the current_share_sum column
-	// and the other Token fields are mapped to RU columns.
-	_, err = txn.ExecEx(
-		h.ctx, "tenant-usage-upsert", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		`UPSERT INTO system.tenant_usage(
-		  tenant_id,
-		  instance_id,
-			next_instance_id,
-			last_update,
-			ru_burst_limit,
-			ru_refill_rate,
-			ru_current,
-			current_share_sum,
-			total_consumption,
-			instance_lease,
-			instance_seq,
-			instance_shares
-		 ) VALUES ($1, 0, $2, $3, $4, $5, $6, $7, $8, NULL, NULL, NULL)
-		 `,
-		h.tenantID.ToUint64(),                    // $1
-		int64(tenant.FirstInstance),              // $2
-		&tenant.LastUpdate,                       // $3
-		tenant.Bucket.TokenBurstLimit,            // $4
-		tenant.Bucket.TokenRefillRate,            // $5
-		tenant.Bucket.TokenCurrent,               // $6
-		tenant.Bucket.TokenCurrentAvg,            // $7
-		tree.NewDBytes(tree.DBytes(consumption)), // $8
-	)
-	return err
-}
-
 // updateTenantState writes out updated tenant and instance states.
 func (h *sysTableHelper) updateTenantAndInstanceState(
-	txn isql.Txn, tenant tenantState, instance instanceState,
+	txn isql.Txn, tenant *tenantState, instance *instanceState,
 ) error {
 	consumption, err := protoutil.Marshal(&tenant.Consumption)
 	if err != nil {
 		return err
 	}
+
+	currentRates, err := protoutil.Marshal(&tenant.Rates.current)
+	if err != nil {
+		return err
+	}
+
+	nextRates, err := protoutil.Marshal(&tenant.Rates.next)
+	if err != nil {
+		return err
+	}
+
+	// The rates columns are only available once migration is complete.
+	ratesCols := ""
+	ratesPlaceholders := ""
+	nullVals := ""
+	if h.ratesAvailable {
+		ratesCols = "current_rates, next_rates,"
+		ratesPlaceholders = "$9, $10,"
+		nullVals = "NULL, NULL,"
+	}
+
+	query := fmt.Sprintf(`UPSERT INTO system.tenant_usage(
+		tenant_id,
+		instance_id,
+		next_instance_id,
+		last_update,
+		ru_burst_limit,
+		ru_refill_rate,
+		ru_current,
+		current_share_sum,
+		total_consumption,
+		%s
+		instance_lease,
+		instance_seq,
+		instance_shares
+	) VALUES ($1, 0, $2, $3, $4, $5, $6, $7, $8, %s NULL, NULL, NULL)
+	`, ratesCols, ratesPlaceholders)
+
+	args := []interface{}{
+		h.tenantID.ToUint64(),                     // $1
+		int64(tenant.FirstInstance),               // $2
+		&tenant.LastUpdate,                        // $3
+		tenant.Bucket.TokenBurstLimit,             // $4
+		tenant.Bucket.TokenRefillRate,             // $5
+		tenant.Bucket.TokenCurrent,                // $6
+		tenant.Bucket.TokenCurrentAvg,             // $7
+		tree.NewDBytes(tree.DBytes(consumption)),  // $8
+		tree.NewDBytes(tree.DBytes(currentRates)), // $9
+		tree.NewDBytes(tree.DBytes(nextRates)),    // $10
+	}
+
+	if instance != nil {
+		// Insert an extra row for the instance.
+		query += fmt.Sprintf(
+			`, ($1, $11, $12, $13, NULL, NULL, NULL, NULL, NULL, %s $14, $15, 0.0)`,
+			nullVals)
+
+		args = append(args,
+			int64(instance.ID),           // $11
+			int64(instance.NextInstance), // $12
+			&instance.LastUpdate,         // $13
+			&instance.Lease,              // $14
+			instance.Seq,                 // $15
+		)
+	}
+
 	// Note: it is important that this UPSERT specifies all columns of the
 	// table, to allow it to perform "blind" writes.
 	// Note: The TokenCurrentAvg field is mapped to the current_share_sum column
@@ -255,49 +307,20 @@ func (h *sysTableHelper) updateTenantAndInstanceState(
 	_, err = txn.ExecEx(
 		h.ctx, "tenant-usage-insert", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		`UPSERT INTO system.tenant_usage(
-		  tenant_id,
-		  instance_id,
-			next_instance_id,
-			last_update,
-			ru_burst_limit,
-			ru_refill_rate,
-			ru_current,
-			current_share_sum,
-			total_consumption,
-			instance_lease,
-			instance_seq,
-			instance_shares
-		 ) VALUES
-		   ($1, 0,  $2,  $3,  $4,   $5,   $6,   $7,   $8,   NULL, NULL, NULL),
-			 ($1, $9, $10, $11, NULL, NULL, NULL, NULL, NULL, $12,  $13,  $14)
-		 `,
-		h.tenantID.ToUint64(),                    // $1
-		int64(tenant.FirstInstance),              // $2
-		&tenant.LastUpdate,                       // $3
-		tenant.Bucket.TokenBurstLimit,            // $4
-		tenant.Bucket.TokenRefillRate,            // $5
-		tenant.Bucket.TokenCurrent,               // $6
-		tenant.Bucket.TokenCurrentAvg,            // $7
-		tree.NewDBytes(tree.DBytes(consumption)), // $8
-		int64(instance.ID),                       // $9
-		int64(instance.NextInstance),             // $10
-		&instance.LastUpdate,                     // $11
-		&instance.Lease,                          // $12
-		instance.Seq,                             // $13
-		instance.Shares,                          // $14
+		query,
+		args...,
 	)
 	return err
 }
 
-// accomodateNewInstance is used when we are about to insert a new instance. It
+// accommodateNewInstance is used when we are about to insert a new instance. It
 // sets instance.NextInstance and updates the previous instance's
 // next_instance_id in the table (or updates tenant.FirstInstance).
 //
 // Note that this should only happen after a SQL pod starts up (which is
 // infrequent). In addition, the SQL pod start-up process is not blocked on
 // tenant bucket requests (which happen in the background).
-func (h *sysTableHelper) accomodateNewInstance(
+func (h *sysTableHelper) accommodateNewInstance(
 	txn isql.Txn, tenant *tenantState, instance *instanceState,
 ) error {
 	if tenant.FirstInstance == 0 || tenant.FirstInstance > instance.ID {
@@ -311,12 +334,11 @@ func (h *sysTableHelper) accomodateNewInstance(
 		h.ctx, "find-prev-id", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT
-		  instance_id,               /* 0 */
+			instance_id,               /* 0 */
 			next_instance_id,          /* 1 */
 			last_update,               /* 2 */
 			instance_lease,            /* 3 */
-			instance_seq,              /* 4 */
-			instance_shares            /* 5 */
+			instance_seq               /* 4 */
 		 FROM system.tenant_usage
 		 WHERE tenant_id = $1 AND instance_id > 0 AND instance_id < $2
 		 ORDER BY instance_id DESC
@@ -335,7 +357,6 @@ func (h *sysTableHelper) accomodateNewInstance(
 	prevInstanceLastUpdate := row[2]
 	prevInstanceLease := row[3]
 	prevInstanceSeq := row[4]
-	prevInstanceShares := row[5]
 
 	// Update the previous instance: its next_instance_id is the new instance.
 	// TODO(radu): consider coalescing this with updateTenantAndInstanceState to
@@ -345,8 +366,8 @@ func (h *sysTableHelper) accomodateNewInstance(
 		sessiondata.NodeUserSessionDataOverride,
 		// Update the previous instance's next_instance_id.
 		`UPSERT INTO system.tenant_usage(
-		  tenant_id,
-		  instance_id,
+			tenant_id,
+			instance_id,
 			next_instance_id,
 			last_update,
 			ru_burst_limit,
@@ -357,7 +378,7 @@ func (h *sysTableHelper) accomodateNewInstance(
 			instance_lease,
 			instance_seq,
 			instance_shares
-		 ) VALUES ($1, $2, $3, $4, NULL, NULL, NULL, NULL, NULL, $5, $6, $7)
+		 ) VALUES ($1, $2, $3, $4, NULL, NULL, NULL, NULL, NULL, $5, $6, 0.0)
 		`,
 		h.tenantID.ToUint64(),  // $1
 		int64(prevInstanceID),  // $2
@@ -365,7 +386,6 @@ func (h *sysTableHelper) accomodateNewInstance(
 		prevInstanceLastUpdate, // $4
 		prevInstanceLease,      // $5
 		prevInstanceSeq,        // $6
-		prevInstanceShares,     // $7
 	)
 	return err
 }
@@ -451,7 +471,7 @@ func (h *sysTableHelper) checkInvariants(txn isql.Txn) error {
 		h.ctx, "tenant-usage-select", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT
-		  instance_id,               /* 0 */
+			instance_id,               /* 0 */
 			next_instance_id,          /* 1 */
 			last_update,               /* 2 */
 			ru_burst_limit,            /* 3 */
@@ -460,8 +480,7 @@ func (h *sysTableHelper) checkInvariants(txn isql.Txn) error {
 			current_share_sum,         /* 6 */
 			total_consumption,         /* 7 */
 			instance_lease,            /* 8 */
-			instance_seq,              /* 9 */
-			instance_shares            /* 10 */
+			instance_seq               /* 9 */
 		 FROM system.tenant_usage
 		 WHERE tenant_id = $1
 		 ORDER BY instance_id`,
@@ -496,7 +515,7 @@ func (h *sysTableHelper) checkInvariants(txn isql.Txn) error {
 		var nullFirst, nullLast int
 		if i == 0 {
 			// Row 0 should have NULL per-instance values.
-			nullFirst, nullLast = 8, 10
+			nullFirst, nullLast = 8, 9
 		} else {
 			// Other rows should have NULL per-tenant values.
 			nullFirst, nullLast = 3, 7
@@ -538,7 +557,7 @@ func (h *sysTableHelper) checkInvariants(txn isql.Txn) error {
 func InspectTenantMetadata(
 	ctx context.Context, txn isql.Txn, tenantID roachpb.TenantID, timeFormat string,
 ) (string, error) {
-	h := makeSysTableHelper(ctx, tenantID)
+	h := makeSysTableHelper(ctx, tenantID, true /* ratesAvailable */)
 	tenant, err := h.readTenantState(txn)
 	if err != nil {
 		return "", err
@@ -568,6 +587,7 @@ func InspectTenantMetadata(
 		tenant.Consumption.ExternalIOEgressBytes,
 		tenant.Consumption.ExternalIOIngressBytes,
 	)
+	fmt.Fprintf(&buf, "Rates: write-batches=%.12g,%.12g\n", tenant.Rates.current.WriteBatchRate, tenant.Rates.next.WriteBatchRate)
 	fmt.Fprintf(&buf, "Last update: %s\n", tenant.LastUpdate.Time.Format(timeFormat))
 	fmt.Fprintf(&buf, "First active instance: %d\n", tenant.FirstInstance)
 
@@ -575,12 +595,11 @@ func InspectTenantMetadata(
 		ctx, "inspect-tenant-state", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT
-		  instance_id,               /* 0 */
+			instance_id,               /* 0 */
 			next_instance_id,          /* 1 */
 			last_update,               /* 2 */
 			instance_lease,            /* 3 */
-			instance_seq,              /* 4 */
-			instance_shares            /* 5 */
+			instance_seq               /* 4 */
 		 FROM system.tenant_usage
 		 WHERE tenant_id = $1 AND instance_id > 0
 		 ORDER BY instance_id`,
@@ -591,8 +610,8 @@ func InspectTenantMetadata(
 	}
 	for _, r := range rows {
 		fmt.Fprintf(
-			&buf, "  Instance %s:  lease=%q  seq=%s  shares=%s  next-instance=%s  last-update=%s\n",
-			r[0], tree.MustBeDBytes(r[3]), r[4], r[5], r[1], tree.MustBeDTimestamp(r[2]).Time.Format(timeFormat),
+			&buf, "  Instance %s:  lease=%q  seq=%s  next-instance=%s  last-update=%s\n",
+			r[0], tree.MustBeDBytes(r[3]), r[4], r[1], tree.MustBeDTimestamp(r[2]).Time.Format(timeFormat),
 		)
 	}
 	return buf.String(), nil

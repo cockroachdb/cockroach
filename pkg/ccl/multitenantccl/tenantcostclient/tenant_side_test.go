@@ -709,6 +709,8 @@ type testProviderConfig struct {
 	ProviderBlock bool `yaml:"block"`
 
 	FallbackRate float64 `yaml:"fallback_rate"`
+
+	WriteBatchRate float64 `yaml:"write_batch_rate"`
 }
 
 var _ kvtenant.TokenBucketProvider = (*testProvider)(nil)
@@ -811,6 +813,7 @@ func (tp *testProvider) TokenBucket(
 		}
 	}
 	res.FallbackRate = tp.mu.cfg.FallbackRate
+	res.ConsumptionRates.WriteBatchRate = tp.mu.cfg.WriteBatchRate
 	return res, nil
 }
 
