@@ -42,11 +42,7 @@ func TestRepartition(t *testing.T) {
 			var expectedParts int
 			var expectedSpans, gotSpans roachpb.Spans
 			for _, part := range input {
-				if len(part.Spans) >= parts {
-					expectedParts += parts
-				} else {
-					expectedParts += 1
-				}
+				expectedParts += min(parts, len(part.Spans))
 				expectedSpans = append(expectedSpans, part.Spans...)
 			}
 			for _, part := range got {
