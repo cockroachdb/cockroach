@@ -221,5 +221,13 @@ SELECT * FROM t44797_2 WHERE EXISTS (SELECT * FROM t44797_2 AS l, t44797_3 AS r 
 statement ok
 CREATE TABLE table57696(col_table TIME NOT NULL)
 
+# Prevent the next query from spilling to disk which might error out in the
+# row-by-row engine (#125607).
+statement ok
+SET distsql_workmem = '64MiB';
+
 statement ok
 WITH cte (col_cte) AS ( SELECT * FROM ( VALUES ( ( 'false':::JSONB, '1970-01-05 16:57:40.000665+00:00':::TIMESTAMPTZ ) ) ) EXCEPT ALL SELECT * FROM ( VALUES ( ( ' [ [[true], [], {}, "b", {}], {"a": []}, {"c": 2.05750813403415} ] ':::JSONB, '1970-01-10 05:23:26.000428+00:00':::TIMESTAMPTZ ) ) ) ) SELECT * FROM cte, table57696
+
+statement ok
+RESET distsql_workmem;
