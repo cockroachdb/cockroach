@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 var asyncpgRunTestCmd = fmt.Sprintf(`
@@ -170,12 +169,9 @@ func registerAsyncpg(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:  "asyncpg",
-		Owner: registry.OwnerSQLFoundations,
-		// TODO(DarrylWong): This test currently fails on Ubuntu 22.04 so we run it on 20.04.
-		// See https://github.com/cockroachdb/cockroach/issues/112108.
-		// Once this issue is fixed we should remove this Ubuntu Version override.
-		Cluster:          r.MakeClusterSpec(1, spec.CPU(16), spec.UbuntuVersion(vm.FocalFossa)),
+		Name:             "asyncpg",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1, spec.CPU(16)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Leases:           registry.MetamorphicLeases,
