@@ -67,7 +67,7 @@ build/teamcity-roachtest-invoke.sh \
   --cloud="${CLOUD}" \
   --count="${COUNT-1}" \
   --clear-cluster-cache="${CLEAR_CLUSTER_CACHE:-true}" \
-  --auto-kill-threshold="${AUTO_KILL_THRESHOLD:-0.05}" \
+  --auto-kill-threshold="${AUTO_KILL_THRESHOLD:-0.10}" \
   --parallelism="${PARALLELISM}" \
   --cpu-quota="${CPUQUOTA}" \
   --cluster-id="${TC_BUILD_ID}" \
@@ -75,5 +75,5 @@ build/teamcity-roachtest-invoke.sh \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --slack-token="${SLACK_TOKEN}" \
   --suite nightly \
-  --selective-tests="${SELECTIVE_TESTS:-false}" \
+  --selective-tests="${SELECTIVE_TESTS:-true}" \
   "${TESTS}"
