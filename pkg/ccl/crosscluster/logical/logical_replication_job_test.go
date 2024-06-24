@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -28,18 +29,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -450,6 +454,133 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	}
 }
 
+// TestLogicalAutoReplan asserts that if a new node can participate in the
+// logical replication job, it will trigger distSQL replanning.
+func TestLogicalAutoReplan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
+
+	ctx := context.Background()
+
+	// Double the number of nodes
+	retryErrorChan := make(chan error, 4)
+	turnOffReplanning := make(chan struct{})
+	var alreadyReplanned atomic.Bool
+
+	// Track the number of unique addresses that we're connected to.
+	clientAddresses := make(map[string]struct{})
+	var addressesMu syncutil.Mutex
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					StreamingTestingKnobs: &sql.StreamingTestingKnobs{
+						BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
+							addressesMu.Lock()
+							defer addressesMu.Unlock()
+							clientAddresses[addr] = struct{}{}
+						},
+						AfterRetryIteration: func(err error) {
+							if err != nil && !alreadyReplanned.Load() {
+								retryErrorChan <- err
+								<-turnOffReplanning
+								alreadyReplanned.Swap(true)
+							}
+						},
+					},
+				},
+				Streaming: &sql.StreamingTestingKnobs{
+					BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
+						addressesMu.Lock()
+						defer addressesMu.Unlock()
+						clientAddresses[addr] = struct{}{}
+					},
+					AfterRetryIteration: func(err error) {
+						if err != nil && !alreadyReplanned.Load() {
+							retryErrorChan <- err
+							<-turnOffReplanning
+							alreadyReplanned.Swap(true)
+						}
+					},
+				},
+			},
+		},
+	}
+
+	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	defer server.Stopper().Stop(ctx)
+	s := server.Server(0).ApplicationLayer()
+
+	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE a")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE B")
+	require.NoError(t, err)
+
+	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
+	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
+
+	for _, s := range testClusterSettings {
+		dbA.Exec(t, s)
+	}
+
+	// Don't allow for replanning until the new nodes and scattered table have been created.
+	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_threshold", 0)
+	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_frequency", time.Millisecond*500)
+
+	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
+	dbA.Exec(t, createStmt)
+	dbB.Exec(t, createStmt)
+	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	server.AddAndStartServer(t, clusterArgs.ServerArgs)
+	server.AddAndStartServer(t, clusterArgs.ServerArgs)
+
+	// Only need at least two nodes as leaseholders for test.
+	CreateScatteredTable(t, dbA, 2)
+
+	// Configure the ingestion job to replan eagerly.
+	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_threshold", 0.1)
+
+	// The ingestion job should eventually retry because it detects new nodes to add to the plan.
+	require.ErrorContains(t, <-retryErrorChan, sql.ErrPlanChanged.Error())
+
+	// Prevent continuous replanning to reduce test runtime. dsp.PartitionSpans()
+	// on the src cluster may return a different set of src nodes that can
+	// participate in the replication job (especially under stress), so if we
+	// repeatedly replan the job, we will repeatedly restart the job, preventing
+	// job progress.
+	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_threshold", 0)
+	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_frequency", time.Minute*10)
+	close(turnOffReplanning)
+
+	require.Greater(t, len(clientAddresses), 1)
+}
+
 func compareReplicatedTables(
 	t *testing.T,
 	s serverutils.ApplicationLayerInterface,
@@ -475,6 +606,35 @@ func compareReplicatedTables(
 		t.Logf("fingerprinting index %s", indexA.GetName())
 		runnerB.CheckQueryResults(t, bFingerprintQuery, runnerA.QueryStr(t, aFingerprintQuery))
 	}
+}
+
+func CreateScatteredTable(t *testing.T, db *sqlutils.SQLRunner, numNodes int) {
+	// Create a source table with multiple ranges spread across multiple nodes. We
+	// need around 50 or more ranges because there are already over 50 system
+	// ranges, so if we write just a few ranges those might all be on a single
+	// server, which will cause the test to flake.
+	numRanges := 50
+	rowsPerRange := 20
+	db.Exec(t, "INSERT INTO tab (pk) SELECT * FROM generate_series(1, $1)",
+		numRanges*rowsPerRange)
+	db.Exec(t, "ALTER TABLE tab SPLIT AT (SELECT * FROM generate_series($1::INT, $2::INT, $3::INT))",
+		rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange)
+	db.Exec(t, "ALTER TABLE tab SCATTER")
+	timeout := 45 * time.Second
+	if skip.Duress() {
+		timeout *= 5
+	}
+	testutils.SucceedsWithin(t, func() error {
+		var leaseHolderCount int
+		db.QueryRow(t,
+			`SELECT count(DISTINCT lease_holder) FROM [SHOW RANGES FROM DATABASE A WITH DETAILS]`).
+			Scan(&leaseHolderCount)
+		require.Greater(t, leaseHolderCount, 0)
+		if leaseHolderCount < numNodes {
+			return errors.New("leaseholders not scattered yet")
+		}
+		return nil
+	}, timeout)
 }
 
 func WaitUntilReplicatedTime(
