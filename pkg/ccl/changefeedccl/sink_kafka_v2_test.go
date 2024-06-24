@@ -5,10 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/url"
-	"reflect"
-	"runtime"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -511,16 +508,3 @@ func (f fnMatcher) String() string {
 }
 
 var _ gomock.Matcher = fnMatcher(nil)
-
-func namefn(fn any) string {
-	v := reflect.ValueOf(fn)
-	if v.Type().Kind() != reflect.Func {
-		return ""
-	}
-	name := runtime.FuncForPC(v.Pointer()).Name()
-	dot := strings.LastIndexByte(name, '.')
-	if dot >= 0 {
-		return name[dot+1:]
-	}
-	return name
-}
