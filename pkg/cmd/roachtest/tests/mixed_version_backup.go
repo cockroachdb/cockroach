@@ -1852,6 +1852,19 @@ func (d *BackupRestoreTestDriver) runBackup(
 				continue
 			}
 
+			if err := testutils.SucceedsSoonError(func() error {
+				var status string
+				if err := pauseResumeDB.QueryRow(`SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status); err != nil {
+					return err
+				}
+				if status != "paused" {
+					return errors.Newf("expected status `paused` but found %s", status)
+				}
+				return nil
+			}); err != nil {
+				return backupCollection{}, "", err
+			}
+
 			time.Sleep(pauseDur)
 
 			l.Printf("resuming job %d", jobID)
