@@ -1294,6 +1294,10 @@ func (p *Provider) computeInstanceArgs(
 	image := providerOpts.Image
 	imageProject := defaultImageProject
 
+	if opts.Arch == string(vm.ArchARM64) && !providerOpts.useArmAMI() {
+		l.Printf("WARNING: --arch=arm64 will be ignored since --gce-machine-type is not specified")
+	}
+
 	if providerOpts.useArmAMI() && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
 		return nil, cleanUpFn, errors.Errorf("machine type %s is arm64, but requested arch is %s", providerOpts.MachineType, opts.Arch)
 	}
