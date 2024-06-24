@@ -117,3 +117,20 @@ var ReplicateSpanConfigsEnabled = settings.RegisterBoolSetting(
 		"destination system tenant",
 	true,
 )
+
+var LogicalReplanThreshold = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"logical_replication.replan_flow_threshold",
+	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
+		" physical execution plan. If set to 0, the physical plan will not automatically refresh.",
+	0.1,
+	settings.NonNegativeFloatWithMaximum(1),
+)
+
+var LogicalReplanFrequency = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"logical_replication.replan_flow_frequency",
+	"frequency at which the consumer job checks to refresh its physical execution plan",
+	10*time.Minute,
+	settings.PositiveDuration,
+)
