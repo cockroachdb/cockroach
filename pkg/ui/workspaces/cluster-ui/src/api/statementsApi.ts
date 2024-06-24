@@ -177,6 +177,7 @@ type Statistics = {
   rowsWritten: NumericStat;
   runLat: NumericStat;
   svcLat: NumericStat;
+  regions: string[];
 };
 
 type ExecStats = {
@@ -262,6 +263,7 @@ export function convertStatementRawFormatToAggregatedStatistics(
       run_lat: s.statistics.statistics.runLat,
       service_lat: s.statistics.statistics.svcLat,
       sql_type: s.metadata.stmtType,
+      regions: s.statistics.statistics.regions,
     },
   };
 }
