@@ -163,15 +163,16 @@ func TestDiagnosticsRequest(t *testing.T) {
 		require.NoError(t, err)
 		checkNotCompleted(reqID)
 
-		// Set the statement timeout (as well as clean it up in a defer).
+		// Set the statement timeout.
 		runner.Exec(t, "SET statement_timeout = '100ms';")
-		defer func() {
-			runner.Exec(t, "RESET statement_timeout;")
-		}()
 
 		// Run the query that times out.
 		_, err = db.Exec("SELECT pg_sleep(999999)")
 		require.True(t, strings.Contains(err.Error(), sqlerrors.QueryTimeoutError.Error()))
+
+		// Reset the stmt timeout so that it doesn't affect the query in
+		// checkCompleted.
+		runner.Exec(t, "RESET statement_timeout;")
 		checkCompleted(reqID)
 	})
 
