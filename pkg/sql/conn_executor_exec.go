@@ -1042,7 +1042,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// gets enabled once for all SQL statements executed "underneath".
 	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
-	delegatedFromOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.fromOuterTxn
+	delegatedUnderOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.underOuterTxn
 	var origTs hlc.Timestamp
 	defer func() {
 		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
@@ -1050,7 +1050,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// If this is an internal executor that is running on behalf of an outer
 		// txn, then we need to step back the txn so that the outer executor uses
 		// the proper sequence number.
-		if delegatedFromOuterTxn {
+		if delegatedUnderOuterTxn {
 			if err := ex.state.mu.txn.SetReadSeqNum(prevSeqNum); err != nil {
 				retEv, retPayload, retErr = makeErrEvent(err)
 			}
@@ -1071,7 +1071,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// external read timestamp does not change if it shouldn't, and that we use
 	// the correct isolation level for internal operations.
 	if buildutil.CrdbTestBuild {
-		if delegatedFromOuterTxn {
+		if delegatedUnderOuterTxn {
 			origTs = ex.state.mu.txn.ReadTimestamp()
 		} else if ex.executorType == executorTypeInternal {
 			if level := ex.state.mu.txn.IsoLevel(); level != isolation.Serializable {
@@ -1082,10 +1082,10 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 		}
 	}
-	if err := ex.state.mu.txn.Step(ctx, !delegatedFromOuterTxn /* allowReadTimestampStep */); err != nil {
+	if err := ex.state.mu.txn.Step(ctx, !delegatedUnderOuterTxn /* allowReadTimestampStep */); err != nil {
 		return makeErrEvent(err)
 	}
-	if buildutil.CrdbTestBuild && delegatedFromOuterTxn {
+	if buildutil.CrdbTestBuild && delegatedUnderOuterTxn {
 		newTs := ex.state.mu.txn.ReadTimestamp()
 		if newTs != origTs {
 			// This should never happen. If it does, it means that the internal
@@ -3285,6 +3285,8 @@ func (ex *connExecutor) recordTransactionFinish(
 		// means there is no statements that's being executed within this
 		// transaction. Hence, recording stats for this transaction is not
 		// meaningful.
+		// TODO(#124935): Yahor thinks that this is wrong for internal executors
+		// with outer txns.
 		return nil
 	}
 

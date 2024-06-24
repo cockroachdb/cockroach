@@ -834,7 +834,7 @@ func (s *Server) SetupConn(
 		&s.Metrics,
 		s.sqlStats.GetApplicationStats(sd.ApplicationName),
 		sessionID,
-		false, /* fromOuterTxn */
+		false, /* underOuterTxn */
 		nil,   /* postSetupFn */
 	)
 	return ConnectionHandler{ex}, nil
@@ -1008,10 +1008,9 @@ func populateMinimalSessionData(sd *sessiondata.SessionData) {
 
 // newConnExecutor creates a new connExecutor.
 //
-// sd is expected to be fully initialized with the values of all the session
-// vars.
-// sdDefaults controls what the session vars will be reset to through
-// RESET statements.
+// - underOuterTxn indicates whether the conn executor is constructed when there
+// is already an outstanding "outer" txn. This is the case with an internal
+// executor with non-nil txn.
 func (s *Server) newConnExecutor(
 	ctx context.Context,
 	sdMutIterator *sessionDataMutatorIterator,
@@ -1021,10 +1020,7 @@ func (s *Server) newConnExecutor(
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
 	sessionID clusterunique.ID,
-	fromOuterTxn bool,
-	// postSetupFn is to override certain field of a conn executor.
-	// It is set when conn executor is init under an internal executor
-	// with a not-nil txn.
+	underOuterTxn bool,
 	postSetupFn func(ex *connExecutor),
 ) *connExecutor {
 	// Create the various monitors.
@@ -1145,7 +1141,7 @@ func (s *Server) newConnExecutor(
 		ex.server.insights.Writer(ex.sessionData().Internal),
 		ex.phaseTimes,
 		s.sqlStats.GetCounters(),
-		fromOuterTxn,
+		underOuterTxn,
 		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
@@ -1155,7 +1151,7 @@ func (s *Server) newConnExecutor(
 
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
 
-	ex.extraTxnState.fromOuterTxn = fromOuterTxn
+	ex.extraTxnState.underOuterTxn = underOuterTxn
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts:    make(map[string]*PreparedStatement),
 		prepStmtsLRU: make(map[string]struct{ prev, next string }),
@@ -1419,20 +1415,23 @@ type connExecutor struct {
 	// the field is accessed in connExecutor's serialize function, it should be
 	// added to txnState behind the mutex.
 	extraTxnState struct {
-		// fromOuterTxn should be set true if the conn executor is run under an
-		// internal executor with an outer txn, which means when the conn executor
-		// closes, it should not release the leases of descriptor collections or
-		// delete schema change job records. Instead, we leave the caller of the
-		// internal executor to release them.
-		fromOuterTxn bool
+		// underOuterTxn indicates whether the conn executor is used by an
+		// internal executor with an outer txn.
+		underOuterTxn bool
+		// skipResettingSchemaObjects should be set true when underOuterTxn is
+		// set AND the conn executor should **not** release the leases of
+		// descriptor collections or delete schema change job records upon
+		// closing (the caller of the internal executor is responsible for
+		// that).
+		skipResettingSchemaObjects bool
 
 		// shouldResetSyntheticDescriptors should be set to true only if
-		// fromOuterTxn is set to true, and, upon finishing the statement, the
-		// synthetic descriptors should be reset. This exists to support injecting
-		// synthetic descriptors via the InternalExecutor methods like
-		// WithSyntheticDescriptors. Note that we'll never use those methods when
-		// injecting synthetic descriptors during execution by the declarative
-		// schema changer.
+		// skipResettingSchemaObjects is set to true, and, upon finishing the
+		// statement, the synthetic descriptors should be reset. This exists to
+		// support injecting synthetic descriptors via the InternalExecutor
+		// methods like WithSyntheticDescriptors. Note that we'll never use
+		// those methods when injecting synthetic descriptors during execution
+		// by the declarative schema changer.
 		shouldResetSyntheticDescriptors bool
 
 		// descCollection collects descriptors used by the current transaction.
@@ -2062,7 +2061,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.createdSequences = nil
 
-	if ex.extraTxnState.fromOuterTxn {
+	if ex.extraTxnState.skipResettingSchemaObjects {
 		if ex.extraTxnState.shouldResetSyntheticDescriptors {
 			ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
 		}
