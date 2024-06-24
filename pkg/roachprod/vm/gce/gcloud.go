@@ -1294,6 +1294,10 @@ func (p *Provider) computeInstanceArgs(
 	image := providerOpts.Image
 	imageProject := defaultImageProject
 
+	if opts.Arch == string(vm.ArchARM64) && !providerOpts.useArmAMI() {
+		return nil, cleanUpFn, errors.Errorf("Requested arch is arm64, but machine type is %s. Do specify a t2a VM", providerOpts.MachineType)
+	}
+
 	if providerOpts.useArmAMI() && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
 		return nil, cleanUpFn, errors.Errorf("machine type %s is arm64, but requested arch is %s", providerOpts.MachineType, opts.Arch)
 	}
