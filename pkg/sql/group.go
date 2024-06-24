@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -27,7 +28,7 @@ type groupNode struct {
 	plan planNode
 
 	// Indices of the group by columns in the source plan.
-	groupCols []int
+	groupCols []exec.NodeColumnOrdinal
 
 	// Set when we have an input ordering on (a subset of) grouping columns. Only
 	// column indices in groupCols can appear in this ordering.
@@ -68,7 +69,7 @@ type aggregateFuncHolder struct {
 	funcName string
 	// The argument of the function is a single value produced by the renderNode
 	// underneath. If the function has no argument (COUNT_ROWS), it is empty.
-	argRenderIdxs []int
+	argRenderIdxs []exec.NodeColumnOrdinal
 	// If there is a filter, the result is a single value produced by the
 	// renderNode underneath. If there is no filter, it is set to
 	// tree.NoColumnIdx.
@@ -92,7 +93,7 @@ type aggregateFuncHolder struct {
 // argRenderIdx is noRenderIdx.
 func newAggregateFuncHolder(
 	funcName string,
-	argRenderIdxs []int,
+	argRenderIdxs []exec.NodeColumnOrdinal,
 	arguments tree.Datums,
 	isDistinct bool,
 	distsqlBlocklist bool,
