@@ -1178,12 +1178,16 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
 	logCtx = logtags.AddTag(logCtx, "pebble", nil)
 
-	cfg.opts.Local.ReadaheadConfigFn = func() pebble.ReadaheadConfig {
-		return pebble.ReadaheadConfig{
-			Informed:    objstorageprovider.ReadaheadMode(readaheadModeInformed.Get(&cfg.settings.SV)),
-			Speculative: objstorageprovider.ReadaheadMode(readaheadModeSpeculative.Get(&cfg.settings.SV)),
-		}
+	cfg.opts.Local.ReadaheadConfig = objstorageprovider.NewReadaheadConfig()
+	updateReadaheadFn := func(ctx context.Context) {
+		cfg.opts.Local.ReadaheadConfig.Set(
+			objstorageprovider.ReadaheadMode(readaheadModeInformed.Get(&cfg.settings.SV)),
+			objstorageprovider.ReadaheadMode(readaheadModeSpeculative.Get(&cfg.settings.SV)),
+		)
 	}
+	updateReadaheadFn(context.Background())
+	readaheadModeInformed.SetOnChange(&cfg.settings.SV, updateReadaheadFn)
+	readaheadModeSpeculative.SetOnChange(&cfg.settings.SV, updateReadaheadFn)
 
 	cfg.opts.WALMinSyncInterval = func() time.Duration {
 		return minWALSyncInterval.Get(&cfg.settings.SV)
