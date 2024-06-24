@@ -12,8 +12,6 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import { Col, Row } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import classNames from "classnames/bind";
 import moment from "moment-timezone";

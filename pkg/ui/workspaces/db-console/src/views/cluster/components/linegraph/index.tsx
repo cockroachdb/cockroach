@@ -28,7 +28,6 @@ import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import Long from "long";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import flatMap from "lodash/flatMap";
 import filter from "lodash/filter";
 

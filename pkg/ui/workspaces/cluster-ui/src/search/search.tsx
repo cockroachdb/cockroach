@@ -9,16 +9,15 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Button, Form, Input } from "antd";
-import "antd/lib/button/style";
-import "antd/lib/form/style";
-import "antd/lib/input/style";
+import { Button, Input, ConfigProvider } from "antd";
 import classNames from "classnames/bind";
 import noop from "lodash/noop";
 import {
   Cancel as CancelIcon,
   Search as SearchIcon,
 } from "@cockroachlabs/icons";
+
+import { crlTheme } from "../antdTheme";
 
 import styles from "./search.module.scss";
 
@@ -58,7 +57,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
   };
 
   onSubmit = (e: React.SyntheticEvent): void => {
-    e && e.preventDefault();
+    e?.preventDefault && e.preventDefault();
     const { value } = this.state;
     const { onSubmit } = this.props;
     onSubmit(value);
@@ -74,10 +73,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     const value: string = event.target.value;
     const submitted = value.length === 0;
     this.props.onChange(value);
-    this.setState(
-      { value, submitted },
-      () => submitted && this.onSubmit(event),
-    );
+    this.setState({ value, submitted });
   };
 
   onClear = (): void => {
@@ -96,8 +92,9 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
         return (
           <Button
             onClick={this.onClear}
-            type="default"
+            type="text"
             className={cx("clear-search")}
+            size="small"
           >
             <CancelIcon className={cx("suffix-icon")} />
           </Button>
@@ -105,9 +102,10 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
       }
       return (
         <Button
-          type="default"
-          htmlType="submit"
+          type="text"
+          onClick={this.onSubmit}
           className={cx("submit-search")}
+          size="small"
         >
           Enter
         </Button>
@@ -117,26 +115,25 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
   };
 
   render(): React.ReactElement {
-    const { value, submitted } = this.state;
+    const { value } = this.state;
     // We pull out onSubmit and onClear so that they will not be passed
     // to the Input component as part of inputProps.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { onSubmit, onClear, onChange, ...inputProps } = this.props;
-    const className = submitted ? cx("submitted") : "";
 
     return (
-      <Form onSubmit={this.onSubmit} className={cx("search-form")}>
-        <Form.Item>
-          <Input
-            className={className}
-            onChange={this.onChange}
-            prefix={<SearchIcon className={cx("prefix-icon")} />}
-            suffix={this.renderSuffix()}
-            value={value}
-            {...inputProps}
-          />
-        </Form.Item>
-      </Form>
+      <ConfigProvider theme={crlTheme}>
+        <Input
+          className={cx("root")}
+          onChange={this.onChange}
+          onPressEnter={this.onSubmit}
+          prefix={<SearchIcon className={cx("prefix-icon")} />}
+          suffix={this.renderSuffix()}
+          value={value}
+          size={"small"}
+          {...inputProps}
+        />
+      </ConfigProvider>
     );
   }
 }

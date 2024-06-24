@@ -113,6 +113,14 @@ $spacing-xx-large: 48px;
   font-weight: $font-weight--light;
 }
 
+@mixin text--caption {
+  font-family: $font-family--base;
+  font-size: $font-size--small;
+  line-height: $line-height--small;
+  font-weight: $font-weight--light;
+  letter-spacing: $letter-spacing--medium;
+}
+
 @mixin text--body-strong {
   font-family: $font-family--semi-bold;
   font-size: $font-size--medium;

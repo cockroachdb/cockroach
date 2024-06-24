@@ -11,15 +11,14 @@
 import React, { useContext } from "react";
 import { Moment } from "moment-timezone";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
 import { Link } from "react-router-dom";
 import { Search as IndexIcon } from "@cockroachlabs/icons";
 
+import { Anchor } from "../anchor";
 import * as format from "../util/format";
 import IdxRecAction from "../insights/indexActionBtn";
 import { QuoteIdentifier } from "../api/safesql";
-import { Anchor } from "../anchor";
 import { CircleFilled } from "../icon";
 import { Breadcrumbs } from "../breadcrumbs";
 import { CaretRight } from "../icon/caretRight";

@@ -56,3 +56,9 @@ export * from "./selectors";
 export * from "./contexts";
 export * from "./timestamp";
 export * from "./databases";
+export * from "./antdTheme";
+// Reexport ConfigProvider instance from cluster-ui as exact instance
+// required in Db Console to apply Antd theme in Db Console.
+// TODO (koorosh): is it possible to define antd pacakge as peerDependency
+// to make sure that the same instance used in Db Console and Cluster UI?
+export { ConfigProvider } from "antd";

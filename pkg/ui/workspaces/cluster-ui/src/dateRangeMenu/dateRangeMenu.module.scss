@@ -25,21 +25,8 @@
     height: 12px;
   }
 
-  :global(.ant-calendar-picker) {
-    width: 290px;
+  :global(.ant-picker) {
     margin-right: 14px;
-    input {
-      padding-left: 34px;
-    }
-  }
-
-  :global(.ant-time-picker-icon),
-  :global(.ant-calendar-picker-icon) {
-    left: 12px;
-  }
-
-  :global(.ant-time-picker) {
-    width: 150px;
   }
 }
 
@@ -49,4 +36,18 @@
   button {
     margin-left: 8px;
   }
+}
+
+.date-picker {
+  height: $spacing-x-large;
+  width: 290px;
+}
+
+.time-picker {
+  height: $spacing-x-large;
+  width: 150px;
+}
+
+.alert {
+  margin-top: $spacing-smaller;
 }

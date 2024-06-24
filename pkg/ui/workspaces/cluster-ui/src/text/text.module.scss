@@ -32,6 +32,10 @@
   @include text--code;
 }
 
+.text--caption {
+  @include text--caption;
+}
+
 .text--disabled {
   color: $colors--disabled;
 }

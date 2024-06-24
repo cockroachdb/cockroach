@@ -11,8 +11,7 @@
 import * as React from "react";
 import { connect } from "react-redux";
 import cn from "classnames";
-import { Icon } from "antd";
-import "antd/lib/icon/style";
+import { CaretLeftOutlined, CaretDownOutlined } from "@ant-design/icons";
 import { Action, Dispatch } from "redux";
 
 import { LocalSetting, setLocalSetting } from "src/redux/localsettings";
@@ -82,10 +81,11 @@ class TableSection extends React.Component<
     return (
       <div className="collapse-toggle" onClick={this.onExpandSectionToggle}>
         <span>{isCollapsed ? "Show" : "Hide"}</span>
-        <Icon
-          className="collapse-toggle__icon"
-          type={isCollapsed ? "caret-left" : "caret-down"}
-        />
+        {isCollapsed ? (
+          <CaretLeftOutlined className="collapse-toggle__icon" />
+        ) : (
+          <CaretDownOutlined className="collapse-toggle__icon" />
+        )}
       </div>
     );
   };

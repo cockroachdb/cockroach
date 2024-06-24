@@ -13,7 +13,6 @@ import classNames from "classnames/bind";
 import { CaretUp, CaretDown } from "@cockroachlabs/icons";
 import { Radio } from "antd";
 
-import "antd/lib/radio/style";
 import { Button } from "../button";
 import styles from "../statementsPage/statementTypeSelect.module.scss";
 

@@ -15,9 +15,6 @@ import { Caution, Search as IndexIcon } from "@cockroachlabs/icons";
 import moment, { Moment } from "moment-timezone";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Col, Row, Tooltip } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
-import "antd/lib/tooltip/style";
 
 import { Loading } from "src/loading";
 import { Timestamp } from "src/timestamp";

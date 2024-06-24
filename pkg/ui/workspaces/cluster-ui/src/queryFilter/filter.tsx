@@ -13,7 +13,6 @@ import Select from "react-select";
 import { History } from "history";
 import { CaretDown, Cancel } from "@cockroachlabs/icons";
 import { Input } from "antd";
-import "antd/lib/input/style";
 import isEqual from "lodash/isEqual";
 
 import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox";
@@ -779,7 +778,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
                     <section className={timePair.wrapper}>
                       <Input
                         value={filters.timeNumber}
-                        onChange={e => this.handleChange(e, "timeNumber")}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          this.handleChange(e, "timeNumber")
+                        }
                         onFocus={this.clearInput}
                         className={timePair.timeNumber}
                       />

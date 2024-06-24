@@ -17,7 +17,6 @@ import { CircleFilled } from "src/icon";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 
 import styles from "./summaryCard.module.scss";
-import "antd/lib/tooltip/style";
 
 interface ISummaryCardProps {
   children: React.ReactNode;

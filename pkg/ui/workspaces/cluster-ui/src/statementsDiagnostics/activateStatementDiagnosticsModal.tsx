@@ -8,28 +8,32 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Button, Checkbox, Divider, Input, Radio, Select } from "antd";
-import "antd/lib/radio/style";
-import "antd/lib/button/style";
-import "antd/lib/input/style";
-import "antd/lib/checkbox/style";
-import "antd/lib/divider/style";
-import "antd/lib/select/style";
+import {
+  Checkbox,
+  Divider,
+  Input,
+  Radio,
+  Select,
+  Space,
+  ConfigProvider,
+  Row,
+  Col,
+} from "antd";
 import React, { useCallback, useImperativeHandle, useState } from "react";
 import classNames from "classnames/bind";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 
 import { Modal } from "src/modal";
 import { Anchor } from "src/anchor";
-import { Text } from "src/text";
+import { Text, TextTypes } from "src/text";
 import { statementDiagnostics, statementsSql } from "src/util";
 
 import { InsertStmtDiagnosticRequest } from "../api";
+import { crlTheme } from "../antdTheme";
 
-import styles from "./activateStatementDiagnosticsModal.scss";
+import styles from "./activateStatementDiagnosticsModal.module.scss";
 
 const cx = classNames.bind(styles);
-const { Option } = Select;
 
 export interface ActivateDiagnosticsModalProps {
   activate: (insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest) => void;
@@ -138,171 +142,184 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef<
       title="Activate statement diagnostics"
       className={cx("modal-body")}
     >
-      <Text>
-        Diagnostics will be collected for the next execution that matches this{" "}
-        <Anchor href={statementsSql}>statement fingerprint</Anchor>, or
-        according to the trace and latency thresholds set below. The request is
-        cancelled when a single diagnostics bundle is captured.{" "}
-        <Anchor href={statementDiagnostics}>Learn more</Anchor>
-      </Text>
-      <div className={cx("diagnostic__options-container")}>
-        <Text className={cx("diagnostic__heading")}>Collect diagnostics:</Text>
-        <Radio.Group value={conditional}>
-          <Button.Group className={cx("diagnostic__btn-group")}>
-            <Radio
-              value={true}
-              className={cx("diagnostic__radio-btn")}
-              onChange={() => setConditional(true)}
-            >
-              Trace and collect diagnostics
-              <div className={cx("diagnostic__conditional-container")}>
-                <div className={cx("diagnostic__select-text")}>
-                  At a sampled rate of:
-                </div>
-                <div className={cx("diagnostic__trace-container")}>
-                  <Select<number>
-                    disabled={!conditional}
-                    defaultValue={0.01}
-                    onChange={setTraceSampleRate}
-                    className={cx("diagnostic__select__trace")}
-                    size="large"
-                  >
-                    <Option value={0.01}>1% (recommended)</Option>
-                    <Option value={0.02}>2%</Option>
-                    <Option value={0.03}>3%</Option>
-                    <Option value={0.04}>4%</Option>
-                    <Option value={0.05}>5%</Option>
-                    <Option value={1}>100% (not recommended)</Option>
-                  </Select>
-                  <span className={cx("diagnostic__trace-warning")}>
-                    We recommend starting at 1% to minimize the impact on
-                    performance.
-                  </span>
-                </div>
-                {getTraceSampleRate(conditional, traceSampleRate) === 1 && (
-                  <div className={cx("diagnostic__warning")}>
-                    <InlineAlert
-                      intent="warning"
-                      title="Tracing will be turned on at a 100% sampled rate until
-                      diagnostics are collected based on the specified latency threshold
-                      setting. This may have a significant impact on performance."
+      <ConfigProvider theme={crlTheme}>
+        <Space direction="vertical" className={cx("root")}>
+          <Space className={cx("space-bottom")}>
+            <Text>
+              Diagnostics will be collected for the next execution that matches
+              this <Anchor href={statementsSql}>statement fingerprint</Anchor>,
+              or according to the trace and latency thresholds set below. The
+              request is cancelled when a single diagnostics bundle is captured.{" "}
+              <Anchor href={statementDiagnostics}>Learn more</Anchor>
+            </Text>
+          </Space>
+          <Space className={cx("space-bottom")}>
+            <Text textType={TextTypes.BodyStrong}>Collect diagnostics:</Text>
+          </Space>
+          <Radio.Group value={conditional}>
+            <Space direction="vertical" size="middle">
+              <Radio
+                value={true}
+                onChange={() => setConditional(true)}
+                className={cx("radio")}
+              >
+                <Text>Trace and collect diagnostics</Text>
+              </Radio>
+              <Space direction="vertical" className={cx("radio-offset")}>
+                <Text>At a sampled rate of:</Text>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Select<number>
+                      disabled={!conditional}
+                      defaultValue={0.01}
+                      onChange={setTraceSampleRate}
+                      options={[
+                        { value: 0.01, label: "1% (recommended)" },
+                        { value: 0.02, label: "2%" },
+                        { value: 0.03, label: "3%" },
+                        { value: 0.04, label: "4%" },
+                        { value: 0.05, label: "5%" },
+                        { value: 1, label: "100% (not recommended)" },
+                      ]}
+                      rootClassName={cx("full-width")}
                     />
-                  </div>
-                )}
-                <div className={cx("diagnostic__select-text")}>
-                  When the statement execution latency exceeds:
-                </div>
-                <div className={cx("diagnostic__min-latency-container")}>
-                  <Input
-                    type="number"
-                    className={cx("diagnostic__input__min-latency-time")}
-                    disabled={!conditional}
-                    value={minExecLatency}
-                    onChange={e => {
-                      if (parseInt(e.target.value) > 0) {
-                        setMinExecLatency(parseInt(e.target.value));
-                      }
-                    }}
-                    size="large"
+                  </Col>
+                  <Col span={12}>
+                    <Text textType={TextTypes.Caption}>
+                      We recommend starting at 1% to minimize the impact on
+                      performance.
+                    </Text>
+                  </Col>
+                </Row>
+                {getTraceSampleRate(conditional, traceSampleRate) === 1 && (
+                  <InlineAlert
+                    intent="warning"
+                    title={
+                      <Text>
+                        Tracing will be turned on at a 100% sampled rate until
+                        diagnostics are collected based on the specified latency
+                        threshold setting. This may have a significant impact on
+                        performance.
+                      </Text>
+                    }
                   />
-                  <Select<string>
-                    disabled={!conditional}
-                    defaultValue="milliseconds"
-                    onChange={handleSelectChange}
-                    className={cx("diagnostic__select__min-latency-unit")}
-                    size="large"
-                  >
-                    <Option value="seconds">seconds</Option>
-                    <Option value="milliseconds">milliseconds</Option>
-                  </Select>
-                </div>
-              </div>
-            </Radio>
-            <Radio
-              value={false}
-              className={cx("diagnostic__radio-btn")}
-              onChange={() => setConditional(false)}
-            >
-              Trace and collect diagnostics on the next statement execution
-            </Radio>
-          </Button.Group>
-        </Radio.Group>
-        <Divider type="horizontal" />
+                )}
+                <Text>When the statement execution latency exceeds:</Text>
+                <Row gutter={16}>
+                  <Col flex={"100px"}>
+                    <Input
+                      type="number"
+                      disabled={!conditional}
+                      value={minExecLatency}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        if (parseInt(e.target.value) > 0) {
+                          setMinExecLatency(parseInt(e.target.value));
+                        }
+                      }}
+                    />
+                  </Col>
+                  <Col flex={"140px"}>
+                    <Select
+                      disabled={!conditional}
+                      defaultValue="milliseconds"
+                      onChange={handleSelectChange}
+                      options={[
+                        { value: "seconds", label: "seconds" },
+                        { value: "milliseconds", milliseconds: "seconds" },
+                      ]}
+                    />
+                  </Col>
+                </Row>
+              </Space>
+              <Radio
+                value={false}
+                onChange={() => setConditional(false)}
+                className={cx("radio")}
+              >
+                <Text>
+                  Trace and collect diagnostics on the next statement execution
+                </Text>
+              </Radio>
+            </Space>
+          </Radio.Group>
+          <Divider type="horizontal" />
 
-        <Radio.Group
-          value={filterPerPlanGist}
-          className={cx("diagnostic__plan-gist-group")}
-        >
-          <Button.Group className={cx("diagnostic__btn-group")}>
-            <Radio
-              value={false}
-              className={cx("diagnostic__radio-btn", "margin-bottom")}
-              onChange={() => setFilterPerPlanGist(false)}
-            >
-              For all plan gists
-            </Radio>
-            <br />
-            <Radio
-              value={true}
-              className={cx("diagnostic__radio-btn")}
-              onChange={() => setFilterPerPlanGist(true)}
-            >
-              For the following plan gist:
-              <div className={cx("diagnostic__plan-gist-container")}>
-                <Select<string>
-                  disabled={!filterPerPlanGist}
-                  value={selectedPlanGist}
-                  defaultValue={planGists ? planGists[0] : ""}
-                  onChange={setSelectedPlanGist}
-                  className={cx("diagnostic__select__plan-gist")}
-                  size="large"
-                  showSearch={true}
+          <Radio.Group
+            value={filterPerPlanGist}
+            rootClassName={cx("full-width")}
+          >
+            <Space direction="vertical" size="middle">
+              <Radio
+                value={false}
+                onChange={() => setFilterPerPlanGist(false)}
+                className={cx("radio")}
+              >
+                <Text>For all plan gists</Text>
+              </Radio>
+              <Space direction="vertical">
+                <Radio
+                  value={true}
+                  onChange={() => setFilterPerPlanGist(true)}
+                  className={cx("radio")}
                 >
-                  {planGists?.map((gist: string) => {
-                    return (
-                      <Option value={gist} key={gist}>
-                        {gist}
-                      </Option>
-                    );
-                  })}
-                </Select>
-              </div>
-            </Radio>
-          </Button.Group>
-        </Radio.Group>
-        <Divider type="horizontal" />
-        <Checkbox checked={expires} onChange={() => setExpires(!expires)}>
-          <div className={cx("diagnostic__checkbox-text")}>
-            Diagnostics request expires after:
-          </div>
-          <div className={cx("diagnostic__expires-after-container")}>
+                  <Text>For the following plan gist:</Text>
+                </Radio>
+                <Row className={cx("radio-offset")}>
+                  <Col span={12}>
+                    <Select
+                      disabled={!filterPerPlanGist}
+                      value={selectedPlanGist}
+                      defaultValue={planGists ? planGists[0] : ""}
+                      onChange={(selected: string) =>
+                        setSelectedPlanGist(selected)
+                      }
+                      showSearch={true}
+                      options={planGists?.map((gist: string) => ({
+                        value: gist,
+                        label: gist,
+                      }))}
+                      rootClassName={cx("trim-text")}
+                    />
+                  </Col>
+                </Row>
+              </Space>
+            </Space>
+          </Radio.Group>
+          <Divider type="horizontal" />
+          <Checkbox checked={expires} onChange={() => setExpires(!expires)}>
+            <Text>Diagnostics request expires after:</Text>
+          </Checkbox>
+          <Space className={cx("radio-offset")}>
             <Input
               type="number"
-              size="large"
-              className={cx("diagnostic__input__expires-after-time")}
               disabled={!expires}
               value={expiresAfter}
-              onChange={e => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 if (parseInt(e.target.value) > 0) {
                   setExpiresAfter(parseInt(e.target.value));
                 }
               }}
+              rootClassName={cx("compact")}
             />
-            <div className={cx("diagnostic__checkbox-text")}>minutes</div>
-          </div>
+            <Text>minutes</Text>
+          </Space>
           {conditional && !expires && (
-            <div className={cx("diagnostic__alert")}>
+            <div className={cx("radio-offset")}>
               <InlineAlert
                 intent="info"
-                title="Executions of the same statement fingerprint will run
-                      slower while diagnostics are activated, so it is
-                      recommended to set an expiration time if collecting
-                      according to a latency threshold."
+                title={
+                  <Text>
+                    Executions of the same statement fingerprint will run slower
+                    while diagnostics are activated, so it is recommended to set
+                    an expiration time if collecting according to a latency
+                    threshold.
+                  </Text>
+                }
               />
             </div>
           )}
-        </Checkbox>
-      </div>
+        </Space>
+      </ConfigProvider>
     </Modal>
   );
 });

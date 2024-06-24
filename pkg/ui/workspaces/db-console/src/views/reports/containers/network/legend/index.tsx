@@ -9,8 +9,6 @@
 // licenses/APL.txt.
 
 import { Tooltip } from "antd";
-import "antd/lib/divider/style";
-import "antd/lib/tooltip/style";
 import React from "react";
 
 import { Chip } from "src/views/app/components/chip";

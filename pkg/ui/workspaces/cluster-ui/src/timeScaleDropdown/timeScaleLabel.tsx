@@ -14,7 +14,6 @@ import classNames from "classnames/bind";
 import { Icon } from "@cockroachlabs/ui-components";
 import { Tooltip } from "antd";
 
-import "antd/lib/tooltip/style";
 import { Timezone } from "src/timestamp";
 import { TimezoneContext } from "src/contexts/timezoneContext";
 

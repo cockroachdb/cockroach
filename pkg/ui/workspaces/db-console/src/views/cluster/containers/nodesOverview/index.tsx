@@ -403,7 +403,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     },
     {
       key: "logs",
-      title: "",
+      title: <span/>,
       render: (_text: string, record: NodeStatusRow) =>
         record.nodeId && (
           <div className="cell--show-on-hover ">

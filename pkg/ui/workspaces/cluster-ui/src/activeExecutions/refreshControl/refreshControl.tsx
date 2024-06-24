@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { Switch } from "antd";
-import "antd/lib/switch/style";
 import React from "react";
 import classNames from "classnames/bind";
 import { Moment } from "moment-timezone";

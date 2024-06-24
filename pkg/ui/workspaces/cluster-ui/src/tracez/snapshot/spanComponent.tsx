@@ -14,7 +14,6 @@ import { Helmet } from "react-helmet";
 import classNames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Switch } from "antd";
-import "antd/lib/switch/style";
 import Long from "long";
 import { useHistory } from "react-router-dom";
 
