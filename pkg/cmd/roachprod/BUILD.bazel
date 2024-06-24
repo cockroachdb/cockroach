@@ -19,6 +19,7 @@ go_library(
         "//pkg/roachprod/fluentbit",
         "//pkg/roachprod/install",
         "//pkg/roachprod/opentelemetry",
+        "//pkg/roachprod/roachprodutil",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",

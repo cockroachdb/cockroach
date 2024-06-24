@@ -3786,7 +3786,10 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.FlushableIngestTableCount.Update(int64(m.Flush.AsIngestTableCount))
 	sm.FlushableIngestTableSize.Update(int64(m.Flush.AsIngestBytes))
 	sm.IngestCount.Update(int64(m.Ingest.Count))
-	sm.WALBytesWritten.Update(int64(m.WAL.BytesWritten))
+	// NB: `UpdateIfHigher` is used here since there is a race in pebble where
+	// sometimes the WAL is rotated but metrics are retrieved prior to the update
+	// to BytesIn to account for the previous WAL.
+	sm.WALBytesWritten.UpdateIfHigher(int64(m.WAL.BytesWritten))
 	sm.WALBytesIn.Update(int64(m.WAL.BytesIn))
 	sm.WALFailoverSwitchCount.Update(m.WAL.Failover.DirSwitchCount)
 	sm.WALFailoverPrimaryDuration.Update(m.WAL.Failover.PrimaryWriteDuration.Nanoseconds())

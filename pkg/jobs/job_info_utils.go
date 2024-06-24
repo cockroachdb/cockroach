@@ -38,8 +38,10 @@ func WriteChunkedFileToJobInfo(
 	jobInfo := InfoStorageForJob(txn, jobID)
 
 	// Clear any existing chunks with the same filename before writing new chunks.
-	// We clear all rows that with info keys in [filename, filename#_final~).
-	if err := jobInfo.DeleteRange(ctx, filename, finalChunkName+"~"); err != nil {
+	// We clear all rows that with info keys in [filename, filename#_final~). The
+	// trailing "~" makes the exclusive end-key inclusive of all possible chunks
+	// as "~" sorts after all digit.
+	if err := jobInfo.DeleteRange(ctx, filename, finalChunkName+"~", 0); err != nil {
 		return err
 	}
 
