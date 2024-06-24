@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -130,6 +131,7 @@ func newLogicalReplicationWriterProcessor(
 			db:       flowCtx.Cfg.DB,
 			rp:       rp,
 			settings: flowCtx.Cfg.Settings,
+			sd:       flowCtx.EvalCtx.SessionData().Clone(),
 		}
 	}
 
@@ -548,6 +550,7 @@ type txnBatch struct {
 	db       descs.DB
 	rp       RowProcessor
 	settings *cluster.Settings
+	sd       *sessiondata.SessionData
 }
 
 func (t *txnBatch) SetMetrics(metrics *Metrics) {
@@ -597,7 +600,7 @@ func (t *txnBatch) HandleBatch(
 
 			}
 			return nil
-		})
+		}, isql.WithSessionData(t.sd))
 	}
 	return stats, err
 }
