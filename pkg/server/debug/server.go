@@ -11,19 +11,18 @@
 package debug
 
 import (
-	"context"
 	"expvar"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/pprof"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
@@ -221,6 +220,30 @@ func (ds *Server) RegisterWorkloadCollector(stores *kvserver.Stores) error {
 	return nil
 }
 
+// GetLSMStats creates a mapping between store IDs and LSM stats for all of the
+// provided storage engines.
+func GetLSMStats(engines []storage.Engine) (map[roachpb.StoreID]string, error) {
+	stats := make(map[roachpb.StoreID]string)
+	for _, eng := range engines {
+		storeID, err := eng.GetStoreID()
+		if err != nil {
+			return nil, err
+		}
+		stats[roachpb.StoreID(storeID)] = eng.GetMetrics().String()
+	}
+
+	return stats, nil
+}
+
+// FormatLSMStats combines LSM stats from multiple stores into a single string.
+func FormatLSMStats(stats map[roachpb.StoreID]string) string {
+	var sb strings.Builder
+	for storeID, stat := range stats {
+		sb.WriteString(fmt.Sprintf("Store %d:\n%s\n\n", storeID, stat))
+	}
+	return sb.String()
+}
+
 // RegisterEngines setups up debug engine endpoints for the known storage engines.
 func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engine) error {
 	if len(specs) != len(engines) {
@@ -228,21 +251,12 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 		return errors.New("number of store specs must match number of engines")
 	}
 
-	storeIDs := make([]roachpb.StoreIdent, len(engines))
-	for i := range engines {
-		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
-		if err != nil {
-			return err
-		}
-		storeIDs[i] = id
-	}
-
 	ds.mux.HandleFunc("/debug/lsm", func(w http.ResponseWriter, req *http.Request) {
-		for i := range engines {
-			fmt.Fprintf(w, "Store %d:\n", storeIDs[i].StoreID)
-			_, _ = io.WriteString(w, engines[i].GetMetrics().String())
-			fmt.Fprintln(w)
+		stats, err := GetLSMStats(engines)
+		if err != nil {
+			fmt.Fprintf(w, "error retrieving LSM stats: %v", err)
 		}
+		fmt.Fprint(w, FormatLSMStats(stats))
 	})
 
 	for i := 0; i < len(specs); i++ {
@@ -251,8 +265,13 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 			continue
 		}
 
+		storeID, err := engines[i].GetStoreID()
+		if err != nil {
+			return err
+		}
+
 		dir := specs[i].Path
-		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm-viz/%d", storeIDs[i].StoreID),
+		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm-viz/%d", storeID),
 			func(w http.ResponseWriter, req *http.Request) {
 				if err := analyzeLSM(dir, w); err != nil {
 					fmt.Fprintf(w, "error analyzing LSM at %s: %v", dir, err)

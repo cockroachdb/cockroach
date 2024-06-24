@@ -1971,23 +1971,22 @@ Support status: [reserved](#support-status)
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| stats | [EngineStatsInfo](#cockroach.server.serverpb.EngineStatsResponse-cockroach.server.serverpb.EngineStatsInfo) | repeated |  | [reserved](#support-status) |
+| stats_by_store_id | [EngineStatsResponse.StatsByStoreIdEntry](#cockroach.server.serverpb.EngineStatsResponse-cockroach.server.serverpb.EngineStatsResponse.StatsByStoreIdEntry) | repeated | maps store IDs to pretty-printed stats about the store's LSM. | [reserved](#support-status) |
 
 
 
 
 
 
-<a name="cockroach.server.serverpb.EngineStatsResponse-cockroach.server.serverpb.EngineStatsInfo"></a>
-#### EngineStatsInfo
+<a name="cockroach.server.serverpb.EngineStatsResponse-cockroach.server.serverpb.EngineStatsResponse.StatsByStoreIdEntry"></a>
+#### EngineStatsResponse.StatsByStoreIdEntry
 
 
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| store_id | [int32](#cockroach.server.serverpb.EngineStatsResponse-int32) |  |  | [reserved](#support-status) |
-| tickers_and_histograms | [cockroach.storage.enginepb.TickersAndHistograms](#cockroach.server.serverpb.EngineStatsResponse-cockroach.storage.enginepb.TickersAndHistograms) |  |  | [reserved](#support-status) |
-| engine_type | [cockroach.storage.enginepb.EngineType](#cockroach.server.serverpb.EngineStatsResponse-cockroach.storage.enginepb.EngineType) |  |  | [reserved](#support-status) |
+| key | [int32](#cockroach.server.serverpb.EngineStatsResponse-int32) |  |  |  |
+| value | [string](#cockroach.server.serverpb.EngineStatsResponse-string) |  |  |  |
 
 
 

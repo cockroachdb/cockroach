@@ -142,6 +142,7 @@ go_library(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/authserver",
+        "//pkg/server/debug",
         "//pkg/server/pgurl",
         "//pkg/server/profiler",
         "//pkg/server/serverctl",
