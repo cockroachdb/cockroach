@@ -1349,6 +1349,7 @@ func (ds *DistSender) sendProxyRequest(
 	// We construct a replica slice containing only the leaseholder, since we're
 	// only going to contact this replica and try once.
 	transport := ds.transportFactory(opts, ReplicaSlice{{ReplicaDescriptor: ba.ProxyRangeInfo.Lease.Replica}})
+	defer transport.Release()
 
 	requestToSend := ba.ShallowCopy()
 	requestToSend.ProxyRangeInfo = nil
