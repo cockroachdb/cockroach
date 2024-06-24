@@ -1455,6 +1455,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	defer stopFeeds(db)
 
 	tdb := sqlutils.MakeSQLRunner(db)
+	tdb.Exec(t, `set cluster setting changefeed.new_kafka_sink.enabled = true;`)
 	tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
 
 	caCert := testCerts.CACertBase64()
@@ -1866,6 +1867,7 @@ func registerCDC(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// t.Skip("for now..")
 			ct := newCDCTester(ctx, t, c, withNumSinkNodes(2))
 			defer ct.Close()
 
@@ -2281,6 +2283,7 @@ func registerCDC(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// updated. TODO: make the setting metamorphic. but for now manual testing this way.
 			runCDCKafkaAuth(ctx, t, c)
 		},
 	})
@@ -2295,6 +2298,7 @@ func registerCDC(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// this one
 			if c.Cloud() == spec.Local && runtime.GOARCH == "arm64" {
 				// N.B. We have to skip locally since amd64 emulation may not be available everywhere.
 				t.L().PrintfCtx(ctx, "Skipping test under ARM64")
@@ -2303,6 +2307,11 @@ func registerCDC(r registry.Registry) {
 
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
+
+			_, err := ct.DB().ExecContext(ctx, `set cluster setting changefeed.new_kafka_sink.enabled = true;`)
+			if err != nil {
+				t.Fatal("failed to set cluster setting")
+			}
 
 			// Run tpcc workload for tiny bit.  Roachtest monitor does not
 			// like when there are no tasks that were started with the monitor
@@ -2344,6 +2353,11 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
+
+			_, err := ct.DB().ExecContext(ctx, `set cluster setting changefeed.new_kafka_sink.enabled = true;`)
+			if err != nil {
+				t.Fatal("failed to set cluster setting")
+			}
 
 			// cdc/kafka-topics tests that sarama clients only fetches metadata for
 			// topics that changefeeds need but not for all topics on the kafka
@@ -2466,6 +2480,12 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
+
+			_, err := ct.DB().ExecContext(ctx, `set cluster setting changefeed.new_kafka_sink.enabled = true;`)
+			if err != nil {
+				t.Fatal("failed to set cluster setting")
+			}
+
 			// Just use 1 warehouse and no initial scan since this would involve
 			// cross-cloud traffic which is far more expensive.  The throughput also
 			// can't be too high to not hit the Throughput Unit (TU) limit of 1MBps/TU
