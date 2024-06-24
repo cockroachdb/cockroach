@@ -140,8 +140,8 @@ func TestSendToOneClient(t *testing.T) {
 	kvpb.RegisterInternalServer(s, Node(0))
 	ln, err := netutil.ListenAndServeGRPC(rpcContext.Stopper, s, util.TestAddr)
 	require.NoError(t, err)
-	nodeDialer := nodedialer.New(rpcContext, func(roachpb.NodeID) (net.Addr, error) {
-		return ln.Addr(), nil
+	nodeDialer := nodedialer.New(rpcContext, func(roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+		return ln.Addr(), roachpb.Locality{}, nil
 	})
 
 	reply, err := sendBatch(ctx, t, nil, []net.Addr{ln.Addr()}, rpcContext, nodeDialer)
