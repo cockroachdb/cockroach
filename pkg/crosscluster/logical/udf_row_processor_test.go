@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -80,6 +81,14 @@ func TestUDFWithRandomTables(t *testing.T) {
 	runnerA.Exec(t, "SET plan_cache_mode=force_generic_plan")
 
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
+
+	// Use a smither as a type resolver for PopulateTableWithRandData.
+	var typeResolver tree.TypeReferenceResolver
+	smither, err := sqlsmith.NewSmither(sqlA, rng)
+	require.NoError(t, err)
+	defer smither.Close()
+	typeResolver = smither
+
 	numInserts := 20
 	_, err := randgen.PopulateTableWithRandData(rng,
 		sqlA, tableName, numInserts, nil)

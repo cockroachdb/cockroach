@@ -122,6 +122,7 @@ go_test(
         "//pkg/crosscluster/replicationutils",
         "//pkg/crosscluster/streamclient",
         "//pkg/crosscluster/streamclient/randclient",
+        "//pkg/internal/sqlsmith",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv",

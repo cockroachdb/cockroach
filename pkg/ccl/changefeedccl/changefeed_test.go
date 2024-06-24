@@ -1090,40 +1090,6 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 		setup := sqlsmith.Setups[tblName](rng)
 		sqlDB.ExecMultiple(t, setup...)
 
-		// TODO: PopulateTableWithRandData doesn't work with enums
-		dropEnumQry := "ALTER TABLE seed DROP COLUMN _enum;"
-		sqlDB.Exec(t, dropEnumQry)
-
-		// Attempt to insert a few more than our target 100 values, since there's a
-		// small chance we may not succeed that many inserts.
-		numInserts := 110
-		inserts := make([]string, 0, numInserts)
-		for rows := 0; rows < 100; {
-			var err error
-			var newRows int
-			if newRows, err = randgen.PopulateTableWithRandData(rng, s.DB, tblName, numInserts, &inserts); err != nil {
-				t.Fatal(err)
-			}
-			rows += newRows
-		}
-
-		limitQry := "DELETE FROM seed WHERE rowid NOT IN (SELECT rowid FROM seed ORDER BY rowid LIMIT 100);"
-		sqlDB.Exec(t, limitQry)
-
-		// Put the enums back. enum_range('hi'::greeting)[rowid%7] will give nulls when rowid%7=0 or 6.
-		addEnumQry := "ALTER TABLE seed ADD COLUMN _enum greeting;"
-		sqlDB.Exec(t, addEnumQry)
-		populateEnumQry := "UPDATE seed SET _enum = enum_range('hi'::greeting)[rowid%7];"
-		sqlDB.Exec(t, populateEnumQry)
-		// Get values to log setup.
-		t.Logf("setup:\n%s\n%s\n%s\n%s\n%s\n%s",
-			strings.Join(setup, "\n"),
-			dropEnumQry,
-			strings.Join(inserts, "\n"),
-			limitQry,
-			addEnumQry,
-			populateEnumQry)
-
 		queryGen, err := sqlsmith.NewSmither(s.DB, rng,
 			sqlsmith.DisableWith(),
 			sqlsmith.DisableMutations(),
@@ -1138,6 +1104,32 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 		)
 		require.NoError(t, err)
 		defer queryGen.Close()
+
+		// Attempt to insert a few more than our target 100 values, since there's a
+		// small chance we may not succeed that many inserts.
+		var typeResolver tree.TypeReferenceResolver = queryGen
+		numInserts := 110
+		inserts := make([]string, 0, numInserts)
+		for rows := 0; rows < 100; {
+			var err error
+			var newRows int
+			if newRows, err = randgen.PopulateTableWithRandData(
+				rng, s.DB, tblName, numInserts, &inserts, typeResolver,
+			); err != nil {
+				t.Fatal(err)
+			}
+			rows += newRows
+		}
+
+		limitQry := "DELETE FROM seed WHERE rowid NOT IN (SELECT rowid FROM seed ORDER BY rowid LIMIT 100);"
+		sqlDB.Exec(t, limitQry)
+
+		// Get values to log setup.
+		t.Logf("setup:\n%s\n%s\n%s",
+			strings.Join(setup, "\n"),
+			strings.Join(inserts, "\n"),
+			limitQry)
+
 		numNonTrivialTestRuns := 0
 		n := 100
 		whereClausesChecked := make(map[string]struct{}, n)

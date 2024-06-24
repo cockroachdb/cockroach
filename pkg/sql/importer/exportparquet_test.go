@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -210,9 +211,17 @@ func TestRandomParquetExports(t *testing.T) {
 		}
 		sqlDB.Exec(t, sb.String())
 
+		// Use a smither as a type resolver for PopulateTableWithRandData.
+		var typeResolver tree.TypeReferenceResolver
+		var err error
+		smither, err = sqlsmith.NewSmither(db, rng)
+		require.NoError(t, err)
+		defer smither.Close()
+		typeResolver = smither
+
 		for i = 0; i < numTables; i++ {
 			tableName = string(stmts[i].(*tree.CreateTable).Table.ObjectName)
-			numRows, err := randgen.PopulateTableWithRandData(rng, db, tableName, 20, nil)
+			numRows, err := randgen.PopulateTableWithRandData(rng, db, tableName, 20, nil, typeResolver)
 			require.NoError(t, err)
 			if numRows > 5 {
 				// Ensure the table only contains columns supported by EXPORT Parquet. If an
