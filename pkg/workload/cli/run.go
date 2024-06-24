@@ -140,6 +140,7 @@ func init() {
 			var genFlags *pflag.FlagSet
 			if f, ok := gen.(workload.Flagser); ok {
 				genFlags = f.Flags().FlagSet
+				gen.(workload.Flagser).Flags().AddFlag(runFlags.Lookup("duration"))
 			}
 
 			genRunCmd := SetCmdDefaults(&cobra.Command{
