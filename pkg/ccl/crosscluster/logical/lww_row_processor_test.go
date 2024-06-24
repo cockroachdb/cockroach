@@ -219,7 +219,7 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 							lastRowErr = rp.ProcessRow(ctx, txn, keyValue, tc.prevValue)
 							keyValue.Value.Timestamp.WallTime += 1
 							return nil
-						})
+						}, isql.WithSessionData(sd))
 					}
 					require.Error(b, lastTxnErr)
 				}
