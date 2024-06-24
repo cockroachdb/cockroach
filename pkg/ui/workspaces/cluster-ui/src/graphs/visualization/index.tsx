@@ -13,7 +13,6 @@ import classNames from "classnames/bind";
 import { Tooltip } from "antd";
 
 import spinner from "src/assets/spinner.gif";
-import "antd/lib/tooltip/style";
 
 import styles from "./visualizations.module.scss";
 const cx = classNames.bind(styles);

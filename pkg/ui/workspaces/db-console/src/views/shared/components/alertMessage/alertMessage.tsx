@@ -9,9 +9,13 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Alert, Icon } from "antd";
-import "antd/lib/alert/style";
-import "antd/lib/icon/style";
+import { Alert } from "antd";
+import {
+  CheckCircleFilled,
+  CloseCircleFilled,
+  InfoCircleFilled,
+  WarningFilled,
+} from "@ant-design/icons";
 import { Link } from "react-router-dom";
 
 import { AlertInfo, AlertLevel } from "src/redux/alerts";
@@ -41,18 +45,18 @@ const mapAlertLevelToType = (alertLevel: AlertLevel): AlertType => {
   }
 };
 
-const getIconType = (alertLevel: AlertLevel): string => {
+const getIcon = (alertLevel: AlertLevel): React.ReactNode => {
   switch (alertLevel) {
     case AlertLevel.SUCCESS:
-      return "check-circle";
+      return <CheckCircleFilled className="alert-massage__icon" />;
     case AlertLevel.NOTIFICATION:
-      return "info-circle";
+      return <InfoCircleFilled className="alert-massage__icon" />;
     case AlertLevel.WARNING:
-      return "warning";
+      return <WarningFilled className="alert-massage__icon" />;
     case AlertLevel.CRITICAL:
-      return "close-circle";
+      return <CloseCircleFilled className="alert-massage__icon" />;
     default:
-      return "info-circle";
+      return <InfoCircleFilled className="alert-massage__icon" />;
   }
 };
 
@@ -89,26 +93,17 @@ export class AlertMessage extends React.Component<AlertMessageProps> {
     }
 
     const type = mapAlertLevelToType(level);
-    const iconType = getIconType(level);
     return (
       <Alert
         className="alert-massage"
         message={title}
         description={description}
         showIcon
-        icon={
-          <Icon
-            type={iconType}
-            theme="filled"
-            className="alert-massage__icon"
-          />
-        }
+        icon={getIcon(level)}
         closable={closable}
         onClose={dismiss}
-        closeText={
-          closable && <div className="alert-massage__close-text">&times;</div>
-        }
         type={type}
+        banner
       />
     );
   }

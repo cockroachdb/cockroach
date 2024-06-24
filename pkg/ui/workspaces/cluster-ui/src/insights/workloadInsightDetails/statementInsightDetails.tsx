@@ -12,9 +12,6 @@ import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Row, Col, Tabs } from "antd";
-import "antd/lib/tabs/style";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import classNames from "classnames/bind";
 
 import { Button } from "src/button";

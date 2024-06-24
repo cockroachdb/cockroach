@@ -11,7 +11,6 @@
 import React from "react";
 import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 

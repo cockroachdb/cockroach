@@ -11,10 +11,8 @@
 import React from "react";
 import classNames from "classnames/bind";
 import { Menu, Dropdown } from "antd";
-import "antd/lib/menu/style";
-import "antd/lib/dropdown/style";
 import { CaretDown } from "@cockroachlabs/icons";
-import { ClickParam } from "antd/lib/menu";
+import { MenuClickEventHandler } from "rc-menu/es/interface";
 
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { Button } from "src/button";
@@ -80,13 +78,13 @@ export function SearchCriteria(props: SearchCriteriaProps): React.ReactElement {
     </span>
   );
 
-  const changeTop = (event: ClickParam): void => {
+  const changeTop: MenuClickEventHandler = event => {
     const top = Number(event.key);
     if (top !== topValue) {
       onChangeTop(top);
     }
   };
-  const changeBy = (event: ClickParam): void => {
+  const changeBy: MenuClickEventHandler = event => {
     const by = Object.values(SqlStatsSortOptions).find(
       s => s === Number(event.key),
     );

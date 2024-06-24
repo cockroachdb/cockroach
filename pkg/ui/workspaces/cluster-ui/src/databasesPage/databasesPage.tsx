@@ -11,7 +11,6 @@
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
-import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
 import merge from "lodash/merge";
 import { InlineAlert } from "@cockroachlabs/ui-components";
@@ -700,7 +699,7 @@ export class DatabasesPage extends React.Component<
           )}
         </div>
         <section className={sortableTableCx("cl-table-container")}>
-          <PageConfig>
+          <PageConfig className={cx("page-config")}>
             <PageConfigItem>
               <Search
                 onSubmit={this.onSubmitSearchField}

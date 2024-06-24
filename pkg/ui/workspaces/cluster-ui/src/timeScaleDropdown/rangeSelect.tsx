@@ -10,8 +10,6 @@
 
 import React, { useState, useRef } from "react";
 import { Button, Dropdown } from "antd";
-import "antd/lib/button/style";
-import "antd/lib/dropdown/style";
 import moment, { Moment } from "moment-timezone";
 import classNames from "classnames/bind";
 
@@ -202,13 +200,17 @@ const RangeSelect = ({
     <div ref={rangeContainer} className={cx("Range")}>
       <div className={cx("trigger-wrapper")}>
         <Dropdown
-          visible={isVisible}
-          onVisibleChange={onVisibleChange}
+          open={isVisible}
+          onOpenChange={onVisibleChange}
           placement="bottomLeft"
           trigger={["click"]}
           overlay={menu}
+          destroyPopupOnHide
         >
-          <Button className={cx("trigger-button")}>
+          <Button
+            className={cx("trigger-button")}
+            data-testid="dropdown-button"
+          >
             <div className={cx("trigger", "Select")}>
               <div>
                 <TimeLabel>{selected.timeLabel}</TimeLabel>

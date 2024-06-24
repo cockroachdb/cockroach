@@ -10,8 +10,6 @@
 
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Col, Row } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
 import classNames from "classnames/bind";
 import React, { useEffect } from "react";
 import Helmet from "react-helmet";
@@ -115,7 +113,7 @@ export const ActiveTransactionDetails: React.FC<
           </Col>
         </Row>
         {transaction && (
-          <Row gutter={24} type="flex">
+          <Row gutter={24}>
             <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
                 <SummaryCardItem
