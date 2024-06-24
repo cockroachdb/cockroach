@@ -120,6 +120,10 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":rpc"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
