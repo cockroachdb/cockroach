@@ -1188,7 +1188,11 @@ func (ie *InternalExecutor) execInternal(
 	// the span to the iterator. This is necessary so that the connExecutor
 	// exits before the span is finished.
 	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
-	stmtBuf := NewStmtBuf()
+	numCommands := 2 // ExecStmt -> Sync
+	if len(qargs) > 0 {
+		numCommands = 4 // PrepareStmt -> BindStmt -> ExecPortal -> Sync
+	}
+	stmtBuf := NewStmtBuf(numCommands)
 	var wg sync.WaitGroup
 
 	defer func() {
@@ -1267,10 +1271,6 @@ func (ie *InternalExecutor) execInternal(
 	if parsed.NumPlaceholders > numParams {
 		numParams = parsed.NumPlaceholders
 	}
-	typeHints := make(tree.PlaceholderTypes, numParams)
-	for i, d := range datums {
-		typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()
-	}
 	if len(qargs) == 0 {
 		if err := stmtBuf.Push(
 			ctx,
@@ -1292,6 +1292,10 @@ func (ie *InternalExecutor) execInternal(
 			return nil, err
 		}
 	} else {
+		typeHints := make(tree.PlaceholderTypes, numParams)
+		for i, d := range datums {
+			typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()
+		}
 		if err := stmtBuf.Push(
 			ctx,
 			PrepareStmt{
@@ -1393,7 +1397,7 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	}
 
 	rw := newAsyncIEResultChannel()
-	stmtBuf := NewStmtBuf()
+	stmtBuf := NewStmtBuf(0 /* toReserve */)
 
 	// Create a fresh conn executor simply for the purpose of committing the
 	// txn.
