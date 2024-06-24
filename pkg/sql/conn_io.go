@@ -473,9 +473,14 @@ func (s SendError) String() string {
 var _ Command = SendError{}
 
 // NewStmtBuf creates a StmtBuf.
-func NewStmtBuf() *StmtBuf {
+// - toReserve, if positive, indicates the initial capacity of the command
+// buffer.
+func NewStmtBuf(toReserve int) *StmtBuf {
 	var buf StmtBuf
 	buf.Init()
+	if toReserve > 0 {
+		buf.mu.data.Reserve(toReserve)
+	}
 	return &buf
 }
 

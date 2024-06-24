@@ -71,7 +71,7 @@ func TestStmtBuf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	buf := NewStmtBuf()
+	buf := NewStmtBuf(0 /* toReserve */)
 	mustPush(ctx, t, buf, ExecStmt{Statement: s1})
 	mustPush(ctx, t, buf, ExecStmt{Statement: s2})
 	mustPush(ctx, t, buf, ExecStmt{Statement: s3})
@@ -144,7 +144,7 @@ func TestStmtBufSignal(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	buf := NewStmtBuf()
+	buf := NewStmtBuf(0 /* toReserve */)
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {
 		t.Fatal(err)
@@ -169,7 +169,7 @@ func TestStmtBufLtrim(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	buf := NewStmtBuf()
+	buf := NewStmtBuf(0 /* toReserve */)
 	for i := 0; i < 5; i++ {
 		stmt, err := parser.ParseOne(
 			fmt.Sprintf("SELECT %d", i))
@@ -198,7 +198,7 @@ func TestStmtBufClose(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	buf := NewStmtBuf()
+	buf := NewStmtBuf(0 /* toReserve */)
 	stmt, err := parser.ParseOne("SELECT 1")
 	if err != nil {
 		t.Fatal(err)
@@ -217,7 +217,7 @@ func TestStmtBufCloseUnblocksReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	buf := NewStmtBuf()
+	buf := NewStmtBuf(0 /* toReserve */)
 
 	go func() {
 		buf.Close()
@@ -235,7 +235,7 @@ func TestStmtBufPreparedStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	buf := NewStmtBuf()
+	buf := NewStmtBuf(0 /* toReserve */)
 	ctx := context.Background()
 
 	s1, err := parser.ParseOne("SELECT 1")
@@ -279,7 +279,7 @@ func TestStmtBufBatching(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	buf := NewStmtBuf()
+	buf := NewStmtBuf(0 /* toReserve */)
 	ctx := context.Background()
 
 	s1, err := parser.ParseOne("SELECT 1")
