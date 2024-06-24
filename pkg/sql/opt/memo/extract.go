@@ -144,6 +144,33 @@ func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 	return res
 }
 
+// AddAggInputColumns adds the set of columns the aggregate depands on to the
+// given set. The modified set is returned.
+//
+// NOTE: The original set may be mutated.
+func AddAggInputColumns(cols opt.ColSet, e opt.ScalarExpr) opt.ColSet {
+	if filter, ok := e.(*AggFilterExpr); ok {
+		cols.Add(filter.Filter.(*VariableExpr).Col)
+		e = filter.Input
+	}
+
+	if distinct, ok := e.(*AggDistinctExpr); ok {
+		e = distinct.Input
+	}
+
+	if !opt.IsAggregateOp(e) {
+		panic(errors.AssertionFailedf("not an Aggregate"))
+	}
+
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		if variable, ok := e.Child(i).(*VariableExpr); ok {
+			cols.Add(variable.Col)
+		}
+	}
+
+	return cols
+}
+
 // ExtractAggFirstVar is given an aggregate expression and returns the Variable
 // expression for the first argument, skipping past modifiers like AggDistinct.
 func ExtractAggFirstVar(e opt.ScalarExpr) *VariableExpr {

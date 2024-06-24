@@ -1802,7 +1802,7 @@ func (b *Builder) buildGroupByInput(
 	neededCols := private.GroupingCols.Copy()
 	aggs := *groupBy.Child(1).(*memo.AggregationsExpr)
 	for i := range aggs {
-		neededCols.UnionWith(memo.ExtractAggInputColumns(aggs[i].Agg))
+		neededCols = memo.AddAggInputColumns(neededCols, aggs[i].Agg)
 	}
 
 	// In rare cases, we might need a column only for its ordering, for example:
