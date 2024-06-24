@@ -80,6 +80,9 @@ type payment struct {
 	selectByLastName  workload.StmtHandle
 	updateWithPayment workload.StmtHandle
 	insertHistory     workload.StmtHandle
+	resetWarehouse    workload.StmtHandle
+
+	previousResetTime []time.Time
 
 	a bufalloc.ByteAllocator
 }
@@ -140,6 +143,19 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 	)
 
+	if p.config.isLongDurationWorkload {
+		p.resetWarehouse = p.sr.Define(`
+		UPDATE warehouse
+		SET w_ytd = $1
+		WHERE w_id = $2`,
+		)
+
+		p.previousResetTime = make([]time.Time, p.config.warehouses)
+		for warehouse := range p.previousResetTime {
+			p.previousResetTime[warehouse] = timeutil.Now()
+		}
+	}
+
 	if err := p.sr.Init(ctx, "payment", mcp); err != nil {
 		return nil, err
 	}
@@ -192,11 +208,24 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 		ctx, p.mcp.Get(),
 		func(tx pgx.Tx) error {
 			var wName, dName string
-			// Update warehouse with payment
-			if err := p.updateWarehouse.QueryRowTx(
-				ctx, tx, d.hAmount, wID,
-			).Scan(&wName, &d.wStreet1, &d.wStreet2, &d.wCity, &d.wState, &d.wZip); err != nil {
-				return errors.Wrap(err, "update warehouse failed")
+
+			// When isLongDurationWorkload is true, we want to reset w_ytd
+			if p.config.isLongDurationWorkload && timeutil.Since(p.previousResetTime[wID]) >= warehouseWytdResetPeriod {
+
+				// Reset w_ytd to the initial value.
+				if _, err := p.resetWarehouse.ExecTx(
+					ctx, tx, wYtd, wID,
+				); err != nil {
+					return errors.Wrap(err, "reset warehouse failed")
+				}
+				p.previousResetTime[wID] = timeutil.Now()
+			} else {
+				// Update warehouse with payment
+				if err := p.updateWarehouse.QueryRowTx(
+					ctx, tx, d.hAmount, wID,
+				).Scan(&wName, &d.wStreet1, &d.wStreet2, &d.wCity, &d.wState, &d.wZip); err != nil {
+					return errors.Wrap(err, "update warehouse failed")
+				}
 			}
 
 			// Update district with payment
