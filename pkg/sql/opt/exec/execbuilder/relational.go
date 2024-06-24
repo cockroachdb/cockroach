@@ -1628,6 +1628,9 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (_ execPlan, outputCols col
 
 	aggregations := *groupBy.Child(1).(*memo.AggregationsExpr)
 	aggInfos := make([]exec.AggInfo, len(aggregations))
+	// There will be roughly one column per aggregation.
+	argCols := make([]exec.NodeColumnOrdinal, 0, len(aggregations))
+	var constArgs tree.Datums
 	for i := range aggregations {
 		item := &aggregations[i]
 		agg := item.Agg
@@ -1655,8 +1658,6 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (_ execPlan, outputCols col
 
 		// Accumulate variable arguments in argCols and constant arguments in
 		// constArgs. Constant arguments must follow variable arguments.
-		var argCols []exec.NodeColumnOrdinal
-		var constArgs tree.Datums
 		for j, n := 0, agg.ChildCount(); j < n; j++ {
 			child := agg.Child(j)
 			if variable, ok := child.(*memo.VariableExpr); ok {
@@ -1672,6 +1673,10 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (_ execPlan, outputCols col
 				if len(argCols) == 0 {
 					return execPlan{}, colOrdMap{}, errors.Errorf("a constant arg requires at least one variable arg")
 				}
+				if constArgs == nil {
+					// Lazily allocate constArgs.
+					constArgs = make(tree.Datums, 0, len(aggregations)-i)
+				}
 				constArgs = append(constArgs, memo.ExtractConstDatum(child))
 			}
 		}
@@ -1680,12 +1685,16 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (_ execPlan, outputCols col
 			FuncName:         name,
 			Distinct:         distinct,
 			ResultType:       item.Agg.DataType(),
-			ArgCols:          argCols,
-			ConstArgs:        constArgs,
+			ArgCols:          argCols[:len(argCols):len(argCols)],
+			ConstArgs:        constArgs[:len(constArgs):len(constArgs)],
 			Filter:           filterOrd,
 			DistsqlBlocklist: overload.DistsqlBlocklist,
 		}
 		outputCols.Set(item.Col, len(groupingColIdx)+i)
+		// Slice argCols and constArgs so the rest of their capacity can be
+		// reused.
+		argCols = argCols[len(argCols):]
+		constArgs = constArgs[len(constArgs):]
 	}
 
 	var ep execPlan
