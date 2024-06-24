@@ -61,11 +61,11 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 
 	var addr net.Addr
 
-	resolver := func(roachpb.NodeID) (net.Addr, error) {
+	resolver := func(roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 		if addr == nil {
-			return nil, errors.New("no addr yet") // should not happen in this test
+			return nil, roachpb.Locality{}, errors.New("no addr yet") // should not happen in this test
 		}
-		return addr, nil
+		return addr, roachpb.Locality{}, nil
 	}
 
 	tp := NewRaftTransport(
