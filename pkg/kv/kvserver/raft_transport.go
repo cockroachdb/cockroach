@@ -286,8 +286,8 @@ type raftSendQueue struct {
 func NewDummyRaftTransport(
 	ambient log.AmbientContext, st *cluster.Settings, clock *hlc.Clock,
 ) *RaftTransport {
-	resolver := func(roachpb.NodeID) (net.Addr, error) {
-		return nil, errors.New("dummy resolver")
+	resolver := func(roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+		return nil, roachpb.Locality{}, errors.New("dummy resolver")
 	}
 	return NewRaftTransport(ambient, st, nil, clock, nodedialer.New(nil, resolver), nil,
 		kvflowdispatch.NewDummyDispatch(), NoopStoresFlowControlIntegration{},

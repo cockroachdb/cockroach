@@ -75,7 +75,7 @@ func TestDialNoBreaker(t *testing.T) {
 	require.NoError(t, rpcCtx.ConnHealth(ln.Addr().String(), staticNodeID, rpc.DefaultClass))
 
 	// Test that DialNoBreaker is successful normally.
-	conn := rpcCtx.GRPCDialNode(ln.Addr().String(), staticNodeID, rpc.DefaultClass)
+	conn := rpcCtx.GRPCDialNode(ln.Addr().String(), staticNodeID, roachpb.Locality{}, rpc.DefaultClass)
 	require.NoError(t, conn.Signal().Err())
 	_, err = nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
 	require.NoError(t, err)
@@ -340,11 +340,11 @@ type interceptingListener struct {
 
 // newSingleNodeResolver returns a Resolver that resolve a single node id
 func newSingleNodeResolver(id roachpb.NodeID, addr net.Addr) AddressResolver {
-	return func(toResolve roachpb.NodeID) (net.Addr, error) {
+	return func(toResolve roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 		if id == toResolve {
-			return addr, nil
+			return addr, roachpb.Locality{}, nil
 		}
-		return nil, fmt.Errorf("unknown node id %d", toResolve)
+		return nil, roachpb.Locality{}, fmt.Errorf("unknown node id %d", toResolve)
 	}
 }
 
