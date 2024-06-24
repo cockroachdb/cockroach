@@ -1885,30 +1885,31 @@ project
  │    ├── has-placeholder
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2-4,16)
- │    ├── right-join (hash)
- │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:10 true:15
+ │    ├── project
+ │    │    ├── columns: true:15 bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:10
  │    │    ├── has-placeholder
  │    │    ├── fd: ()-->(4), (1)-->(2,3)
- │    │    ├── project
- │    │    │    ├── columns: true:15!null successfulbid:10
- │    │    │    ├── fd: ()-->(15)
+ │    │    ├── right-join (hash)
+ │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null successfulbid:10
+ │    │    │    ├── has-placeholder
+ │    │    │    ├── fd: ()-->(4), (1)-->(2,3)
  │    │    │    ├── scan tauction2 [as=a]
  │    │    │    │    └── columns: successfulbid:10
- │    │    │    └── projections
- │    │    │         └── true [as=true:15]
- │    │    ├── select
- │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null
- │    │    │    ├── has-placeholder
- │    │    │    ├── key: (1)
- │    │    │    ├── fd: ()-->(4), (1)-->(2,3)
- │    │    │    ├── scan tbid2 [as=bids0_]
- │    │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4!null
+ │    │    │    │    ├── has-placeholder
  │    │    │    │    ├── key: (1)
- │    │    │    │    └── fd: (1)-->(2-4)
+ │    │    │    │    ├── fd: ()-->(4), (1)-->(2,3)
+ │    │    │    │    ├── scan tbid2 [as=bids0_]
+ │    │    │    │    │    ├── columns: bids0_.id:1!null amount:2 createddatetime:3 auctionid:4
+ │    │    │    │    │    ├── key: (1)
+ │    │    │    │    │    └── fd: (1)-->(2-4)
+ │    │    │    │    └── filters
+ │    │    │    │         └── auctionid:4 = $1 [outer=(4), constraints=(/4: (/NULL - ]), fd=()-->(4)]
  │    │    │    └── filters
- │    │    │         └── auctionid:4 = $1 [outer=(4), constraints=(/4: (/NULL - ]), fd=()-->(4)]
- │    │    └── filters
- │    │         └── successfulbid:10 = bids0_.id:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │    │    │         └── successfulbid:10 = bids0_.id:1 [outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │    │    └── projections
+ │    │         └── CASE successfulbid:10 IS NULL WHEN true THEN CAST(NULL AS BOOL) ELSE true END [as=true:15, outer=(10)]
  │    └── aggregations
  │         ├── const-not-null-agg [as=true_agg:16, outer=(15)]
  │         │    └── true:15
