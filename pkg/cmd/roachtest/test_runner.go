@@ -338,7 +338,8 @@ func (r *testRunner) Run(
 			if roachtestflags.Cloud == spec.GCE &&
 				tests[i].Benchmark &&
 				!tests[i].Suites.Contains(registry.Weekly) &&
-				rand.Float64() <= 0.5 {
+				!tests[i].IsLastFailurePreempt() &&
+				rand.Float64() <= 0.8 {
 				lopt.l.PrintfCtx(ctx, "using spot VMs to run test %s", tests[i].Name)
 				tests[i].Cluster.UseSpotVMs = true
 			}
