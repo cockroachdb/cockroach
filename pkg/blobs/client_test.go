@@ -76,13 +76,13 @@ func setUpService(
 	require.NoError(t, err)
 
 	localDialer := nodedialer.New(rpcContext,
-		func(nodeID roachpb.NodeID) (net.Addr, error) {
+		func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 			if nodeID == remoteNodeID {
-				return ln.Addr(), nil
+				return ln.Addr(), roachpb.Locality{}, nil
 			} else if nodeID == localNodeID {
-				return ln2.Addr(), nil
+				return ln2.Addr(), roachpb.Locality{}, nil
 			}
-			return nil, errors.Errorf("node %d not found", nodeID)
+			return nil, roachpb.Locality{}, errors.Errorf("node %d not found", nodeID)
 		},
 	)
 	localNodeIDContainer := &base.NodeIDContainer{}

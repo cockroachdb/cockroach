@@ -5053,11 +5053,11 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			listenAddrRPC := d.Address
 			listenAddrSQL := d.CheckedSQLAddress()
 
-			advAddrRPC, err := g.GetNodeIDAddress(d.NodeID)
+			advAddrRPC, _, err := g.GetNodeIDAddress(d.NodeID)
 			if err != nil {
 				return err
 			}
-			advAddrSQL, err := g.GetNodeIDSQLAddress(d.NodeID)
+			advAddrSQL, _, err := g.GetNodeIDSQLAddress(d.NodeID)
 			if err != nil {
 				return err
 			}
