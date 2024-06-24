@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -96,22 +97,30 @@ var _ DeDupingRowContainer = &DiskRowContainer{}
 //   - ordering is the output ordering; the order in which rows should be sorted.
 //   - e is the underlying store that rows are stored on.
 func MakeDiskRowContainer(
+	ctx context.Context,
 	diskMonitor *mon.BytesMonitor,
-	types []*types.T,
+	typs []*types.T,
 	ordering colinfo.ColumnOrdering,
 	e diskmap.Factory,
-) DiskRowContainer {
+) (_ DiskRowContainer, retErr error) {
 	diskMap := e.NewSortedDiskMap()
 	d := DiskRowContainer{
-		diskMap:     diskMap,
-		diskAcc:     diskMonitor.MakeBoundAccount(),
-		types:       types,
-		ordering:    ordering,
-		diskMonitor: diskMonitor,
-		engine:      e,
-		datumAlloc:  &tree.DatumAlloc{},
+		diskMap:      diskMap,
+		diskAcc:      diskMonitor.MakeBoundAccount(),
+		bufferedRows: diskMap.NewBatchWriter(),
+		types:        typs,
+		ordering:     ordering,
+		diskMonitor:  diskMonitor,
+		engine:       e,
+		datumAlloc:   &tree.DatumAlloc{},
 	}
-	d.bufferedRows = d.diskMap.NewBatchWriter()
+	defer func() {
+		if retErr != nil {
+			// Ensure to close the container since we're not returning it to the
+			// caller.
+			d.Close(ctx)
+		}
+	}()
 
 	// The ordering is specified for a subset of the columns. These will be
 	// encoded as a key in the given order according to the given direction so
@@ -140,9 +149,19 @@ func MakeDiskRowContainer(
 	d.encodings = make([]catenumpb.DatumEncoding, len(d.ordering))
 	for i, orderInfo := range ordering {
 		d.encodings[i] = rowenc.EncodingDirToDatumEncoding(orderInfo.Direction)
+		switch t := typs[orderInfo.ColIdx]; t.Family() {
+		case types.TSQueryFamily, types.TSVectorFamily:
+			return DiskRowContainer{}, unimplemented.NewWithIssueDetailf(
+				92165, "", "can't order by column type %s", t.SQLStringForError(),
+			)
+		case types.TupleFamily:
+			return DiskRowContainer{}, unimplemented.NewWithIssueDetailf(
+				49975, "", "can't spill column type %s to disk", t.SQLStringForError(),
+			)
+		}
 	}
 
-	return d
+	return d, nil
 }
 
 // DoDeDuplicate causes DiskRowContainer to behave as an implementation of
@@ -326,7 +345,10 @@ func (d *DiskRowContainer) Sort(context.Context) {}
 func (d *DiskRowContainer) Reorder(ctx context.Context, ordering colinfo.ColumnOrdering) error {
 	// We need to create a new DiskRowContainer since its ordering can only be
 	// changed at initialization.
-	newContainer := MakeDiskRowContainer(d.diskMonitor, d.types, ordering, d.engine)
+	newContainer, err := MakeDiskRowContainer(ctx, d.diskMonitor, d.types, ordering, d.engine)
+	if err != nil {
+		return err
+	}
 	i := d.NewFinalIterator(ctx)
 	defer i.Close()
 	for i.Rewind(); ; i.Next() {
@@ -385,11 +407,15 @@ func (d *DiskRowContainer) UnsafeReset(ctx context.Context) error {
 
 // Close is part of the SortableRowContainer interface.
 func (d *DiskRowContainer) Close(ctx context.Context) {
-	// We can ignore the error here because the flushed data is immediately cleared
-	// in the following Close.
-	_ = d.bufferedRows.Close(ctx)
-	d.diskMap.Close(ctx)
-	d.diskAcc.Close(ctx)
+	if d.diskMap != nil {
+		// diskMap and bufferedRows could be nil in some error paths.
+
+		// We can ignore the error here because the flushed data is immediately
+		// cleared in the following Close.
+		_ = d.bufferedRows.Close(ctx)
+		d.diskMap.Close(ctx)
+	}
+	d.diskAcc.Close(ctx) // diskAcc is never nil
 }
 
 // diskRowIterator iterates over the rows in a DiskRowContainer.

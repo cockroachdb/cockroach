@@ -457,3 +457,36 @@ SELECT * FROM cte1 GROUP BY cte1.col1;
 ----
 ("",1)
 ("",2)
+
+# Regression test for incorrectly using key-encoding on TSQuery type in the
+# row container infrastructure (we use the row-based windower because json_agg
+# is unsupported as vectorized aggregate function).
+query T rowsort
+WITH
+    cte (col1) AS (VALUES ('foo':::TSQUERY), ('bar':::TSQUERY)),
+    seed AS (SELECT g::INT8 AS _int8, g::STRING::JSONB AS _jsonb FROM generate_series(1, 3) AS g)
+SELECT
+    json_agg(seed._jsonb) OVER (PARTITION BY cte.col1)
+FROM
+    cte, seed;
+----
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+
+# Regression test for hitting a nil pointer in the row-by-row engine when
+# attempting to close uninitialized disk row container (#123141).
+statement ok
+SET distsql_workmem = '2B';
+SET vectorize = off;
+
+statement error pgcode 0A000 unimplemented: can't order by column type TSQUERY
+WITH cte (col) AS (VALUES ('foo':::TSQUERY), ('bar':::TSQUERY))
+SELECT count(*) FROM cte AS cte1 JOIN cte AS cte2 ON cte1.col = cte2.col;
+
+statement ok
+RESET vectorize;
+RESET distsql_workmem;

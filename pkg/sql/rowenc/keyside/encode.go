@@ -144,6 +144,12 @@ func Encode(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 		}
 		return encoding.EncodeBytesDescending(b, data), nil
 	case *tree.DTuple:
+		// TODO(49975): due to the fact that we're not adding any "tuple
+		// marker", this encoding is faulty since it can lead to incorrect
+		// decoding: e.g. tuple (NULL, NULL) is encoded as [0, 0], but when
+		// decoding it, encoding.PeekLength will return 1 leaving the second
+		// zero in the buffer which could later result in corruption of the
+		// datum for the next column.
 		for _, datum := range t.D {
 			var err error
 			b, err = Encode(b, datum, dir)

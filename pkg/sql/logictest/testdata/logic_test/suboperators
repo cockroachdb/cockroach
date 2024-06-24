@@ -495,8 +495,16 @@ SELECT a, b FROM abc WHERE (a, b) = ANY(ARRAY(SELECT ROW(a, b) FROM abc LIMIT 1)
 ----
 1  10
 
+# The next query might error out when spilling to disk in the row-by-row engine,
+# so we only use vectorized engine for it.
+statement ok
+SET vectorize = on;
+
 query T rowsort
 SELECT * FROM comp WHERE v IN (SELECT v FROM comp);
 ----
 (1,2)
 (3,4)
+
+statement ok
+RESET vectorize;

@@ -66,12 +66,17 @@ func (b *kvStreamerResultDiskBuffer) Serialize(
 	ctx context.Context, r *kvstreamer.Result,
 ) (resultID int, _ error) {
 	if !b.initialized {
-		b.container = MakeDiskRowContainer(
+		var err error
+		b.container, err = MakeDiskRowContainer(
+			ctx,
 			b.monitor,
 			inOrderResultsBufferSpillTypeSchema,
 			colinfo.ColumnOrdering{},
 			b.engine,
 		)
+		if err != nil {
+			return 0, err
+		}
 		b.initialized = true
 		b.rowScratch = make(rowenc.EncDatumRow, len(inOrderResultsBufferSpillTypeSchema))
 	}
