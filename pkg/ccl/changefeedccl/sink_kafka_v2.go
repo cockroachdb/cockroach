@@ -57,6 +57,9 @@ func newKafkaSinkClientV2(
 		// kgo.MaxProduceRequestsInflightPerBroker(1) // default is 1, or 5 if idempotent is enabled (it is by default)
 		// kgo.ManualFlushing() ?
 
+		// I think this is the default in v1.
+		kgo.AllowAutoTopicCreation(),
+
 		// we do need to fail eventually.. right?
 		// NOTE: If idempotency is enabled (as it is by default), this option is
 		// only enforced if it is safe to do so without creating invalid
