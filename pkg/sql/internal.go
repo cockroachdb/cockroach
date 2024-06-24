@@ -46,8 +46,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -212,6 +212,7 @@ var ieRowsAffectedRetryLimit = settings.RegisterIntSetting(
 
 func (ie *InternalExecutor) runWithEx(
 	ctx context.Context,
+	opName string,
 	txn *kv.Txn,
 	w ieResultWriter,
 	mode ieExecutionMode,
@@ -227,24 +228,36 @@ func (ie *InternalExecutor) runWithEx(
 		return err
 	}
 	wg.Add(1)
-	go func() {
-		if err := ex.run(
-			ctx,
-			ie.mon,
-			&mon.BoundAccount{}, /*reserved*/
-			nil,                 /* cancel */
-		); err != nil {
-			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
-			errCallback(err)
-		}
-		w.finish()
-		closeMode := normalClose
-		if txn != nil {
-			closeMode = externalTxnClose
-		}
-		ex.close(ctx, closeMode)
+	if err = ie.s.cfg.Stopper.RunAsyncTaskEx(
+		ctx,
+		stop.TaskOpts{
+			TaskName: opName,
+			SpanOpt:  stop.ChildSpan,
+		},
+		func(ctx context.Context) {
+			if err := ex.run(
+				ctx,
+				ie.mon,
+				&mon.BoundAccount{}, /*reserved*/
+				nil,                 /* cancel */
+			); err != nil {
+				sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
+				errCallback(err)
+			}
+			w.finish()
+			closeMode := normalClose
+			if txn != nil {
+				closeMode = externalTxnClose
+			}
+			ex.close(ctx, closeMode)
+			wg.Done()
+		},
+	); err != nil {
+		// The goroutine wasn't started, so we need to decrement the wait group
+		// ourselves.
 		wg.Done()
-	}()
+		return err
+	}
 	return nil
 }
 
@@ -507,9 +520,6 @@ type rowsIterator struct {
 
 	// wg can be used to wait for the connExecutor's goroutine to exit.
 	wg *sync.WaitGroup
-
-	// sp will finished on Close().
-	sp *tracing.Span
 }
 
 var _ isql.Rows = &rowsIterator{}
@@ -614,18 +624,11 @@ func (r *rowsIterator) RowsAffected() int {
 }
 
 func (r *rowsIterator) Close() error {
+	// Ensure that we wait for the connExecutor goroutine to exit.
+	defer r.wg.Wait()
 	// Closing the stmtBuf will tell the connExecutor to stop executing commands
 	// (if it hasn't exited yet).
 	r.stmtBuf.Close()
-	// We need to finish the span but only after the connExecutor goroutine is
-	// done.
-	defer func() {
-		if r.sp != nil {
-			r.wg.Wait()
-			r.sp.Finish()
-			r.sp = nil
-		}
-	}()
 	// Close the ieResultReader to tell the writer that we're done.
 	if err := r.r.close(); err != nil && r.lastErr == nil {
 		r.lastErr = err
@@ -1183,11 +1186,6 @@ func (ie *InternalExecutor) execInternal(
 		ie.extraTxnState.descCollection.SetDescriptorSessionDataProvider(p)
 	}
 
-	// The returned span is finished by this function in all error paths, but if
-	// an iterator is returned, then we transfer the responsibility of closing
-	// the span to the iterator. This is necessary so that the connExecutor
-	// exits before the span is finished.
-	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
 	stmtBuf := NewStmtBuf()
 	var wg sync.WaitGroup
 
@@ -1205,7 +1203,6 @@ func (ie *InternalExecutor) execInternal(
 			}
 			stmtBuf.Close()
 			wg.Wait()
-			sp.Finish()
 		} else {
 			r.errCallback = func(err error) error {
 				if err != nil && !errIsRetriable(err) {
@@ -1213,7 +1210,6 @@ func (ie *InternalExecutor) execInternal(
 				}
 				return err
 			}
-			r.sp = sp
 		}
 	}()
 
@@ -1257,7 +1253,7 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	err = ie.runWithEx(ctx, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser)
+	err = ie.runWithEx(ctx, opName, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser)
 	if err != nil {
 		return nil, err
 	}

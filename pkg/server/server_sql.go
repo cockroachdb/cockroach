@@ -956,7 +956,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.kvNodeDialer)
 	*execCfg = sql.ExecutorConfig{
-		Settings:                cfg.Settings,
+		Settings: cfg.Settings,
+		// TODO(yuzefovich): I think cfg.stopper doesn't use the Tracer option.
+		// Investigate whether it's important (it's probably created in
+		// setupAndInitializeLoggingAndProfiling).
+		Stopper:                 cfg.stopper,
 		NodeInfo:                nodeInfo,
 		Codec:                   codec,
 		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
