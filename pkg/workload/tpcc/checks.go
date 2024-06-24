@@ -28,29 +28,31 @@ type Check struct {
 	// If true, the check is only valid immediately after loading the dataset.
 	// The check may fail if run after the workload.
 	LoadOnly bool
+	// If true, the check can be skipped for long duration workloads.
+	SkipForLongDuration bool
 }
 
 // AllChecks returns a slice of all of the checks.
 func AllChecks() []Check {
 	return []Check{
-		{"3.3.2.1", check3321, false, false},
-		{"3.3.2.2", check3322, false, false},
-		{"3.3.2.3", check3323, false, false},
-		{"3.3.2.4", check3324, false, false},
-		{"3.3.2.5", check3325, false, false},
-		{"3.3.2.6", check3326, true, false},
-		{"3.3.2.7", check3327, false, false},
-		{"3.3.2.8", check3328, false, false},
-		{"3.3.2.9", check3329, false, false},
-		{"3.3.2.10", check33210, true, false},
+		{Name: "3.3.2.1", Fn: check3321, SkipForLongDuration: true},
+		{Name: "3.3.2.2", Fn: check3322},
+		{Name: "3.3.2.3", Fn: check3323},
+		{Name: "3.3.2.4", Fn: check3324},
+		{Name: "3.3.2.5", Fn: check3325},
+		{Name: "3.3.2.6", Fn: check3326, Expensive: true},
+		{Name: "3.3.2.7", Fn: check3327},
+		{Name: "3.3.2.8", Fn: check3328, SkipForLongDuration: true},
+		{Name: "3.3.2.9", Fn: check3329},
+		{Name: "3.3.2.10", Fn: check33210, Expensive: true},
 		// 3.3.2.11 is LoadOnly. It asserts a relationship between the number of
 		// rows in the "order" table and rows in the "new_order" table. Rows are
 		// inserted into these tables transactional by the NewOrder transaction.
 		// However, only rows in the "new_order" table are deleted by the Delivery
 		// transaction. Consequently, the consistency condition will fail after the
 		// first Delivery transaction is run by the workload.
-		{"3.3.2.11", check33211, false, true},
-		{"3.3.2.12", check33212, true, false},
+		{Name: "3.3.2.11", Fn: check33211, LoadOnly: true},
+		{Name: "3.3.2.12", Fn: check33212, Expensive: true},
 	}
 }
 
