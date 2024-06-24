@@ -16,7 +16,6 @@ go_library(
         "//pkg/base/serverident",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/sidetransport",
-        "//pkg/kv/kvserver/kvstorage",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/server/debug/goroutineui",
