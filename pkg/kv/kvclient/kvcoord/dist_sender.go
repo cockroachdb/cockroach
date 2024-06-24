@@ -2408,13 +2408,16 @@ func maybeSetResumeSpan(
 	}
 }
 
-// noMoreReplicasErr produces the error to be returned from sendToReplicas when
+// selectBestError produces the error to be returned from sendToReplicas when
 // the transport is exhausted.
 //
 // ambiguousErr, if not nil, is the error we got from the first attempt when the
 // success of the request cannot be ruled out by the error. lastAttemptErr is
 // the error that the last attempt to execute the request returned.
-func noMoreReplicasErr(ambiguousErr, replicaUnavailableErr, lastAttemptErr error) error {
+// TODO(baptist): Clean up error handling by tracking errors in a struct and
+// choosing the error in a more principled approach.  (for example, a
+// NotLeaseHolderError conveys more information than a RangeNotFound).
+func selectBestError(ambiguousErr, replicaUnavailableErr, lastAttemptErr error) error {
 	if ambiguousErr != nil {
 		return kvpb.NewAmbiguousResultErrorf("error=%v [exhausted] (last error: %v)",
 			ambiguousErr, lastAttemptErr)
@@ -2423,17 +2426,7 @@ func noMoreReplicasErr(ambiguousErr, replicaUnavailableErr, lastAttemptErr error
 		return replicaUnavailableErr
 	}
 
-	// Authentication and authorization errors should be propagated up rather than
-	// wrapped in a sendError and retried as they are likely to be fatal if they
-	// are returned from multiple servers.
-	if grpcutil.IsAuthError(lastAttemptErr) {
-		return lastAttemptErr
-	}
-	// TODO(bdarnell): The error from the last attempt is not necessarily the best
-	// one to return; we may want to remember the "best" error we've seen (for
-	// example, a NotLeaseHolderError conveys more information than a
-	// RangeNotFound).
-	return newSendError(errors.Wrap(lastAttemptErr, "sending to all replicas failed; last error"))
+	return lastAttemptErr
 }
 
 // slowDistSenderRangeThreshold is a latency threshold for logging slow
@@ -2478,6 +2471,42 @@ const defaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
 // latter because aborting is idempotent). If withCommit is true, any errors
 // that do not definitively rule out the possibility that the batch could have
 // succeeded are transformed into AmbiguousResultErrors.
+//
+// sendToReplicas is intended to return in two specific cases:
+// 1) It has a response to return to the client (success or failure).
+// 2) Retrying internally will fail unless routing information is updated.
+// TODO(baptist): This error handling is messy and easy to get wrong.
+//
+// There are five exits from this method:
+// 1) A non-error BatchResponse (BatchResponse.Error == nil).
+// 2) A BatchResponse with a retriable BatchResponse.Error.
+// 3) A BatchResponse with a non-retriable BatchResponse.Error.
+// 4) A nil BatchResponse with a retriable error (SendError).
+// 5) A nil BatchResponse with a non-retriable error (any other).
+//
+// Case 1 is the success case, and the response is returned to the caller and
+// treated as a success.
+//
+// Case 2 only happens if the server returns a RangeKeyMismatchError. This
+// occurs after a split or merge changed the range boundaries. Handling this
+// error requires updating the range cache and possibly splitting the request up
+// differently before retries and can't be handled within sendToReplicas.
+//
+// Case 3 occurs when the request was processed and retries would also fail.
+// This is passed all the way back to the caller. However callers don't looking
+// into the BatchResponse.Error, so sendPartialBatch moves this error out of the
+// BatchRequest and return it as a kvpb.Error to match the method contract. An
+// example of this type of error is a TransactionRetryError.
+//
+// Case 4 occurs when we failed when attempting to execute the request, but we
+// know that it didn't hasn't modified any state. while attempting and may
+// indicate bad routing information, but we're not sure. The caller should Evict
+// stale routing information and retry this request.
+//
+// Case 5 signifies that sending this request failed, but the caller can not
+// retry. Some common cases are a broken network connection between sending and
+// receiving a response, a tripped circuit breakers, authentication errors on
+// all replicas or a cancelled context.
 func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba *kvpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*kvpb.BatchResponse, error) {
@@ -2495,119 +2524,11 @@ func (ds *DistSender) sendToReplicas(
 		ba = ba.ShallowCopy()
 		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
 	}
-	// Filter the replicas to only those that are relevant to the routing policy.
-	// NB: When changing leaseholder policy constraint_status_report should be
-	// updated appropriately.
-	var replicaFilter ReplicaSliceFilter
-	switch ba.RoutingPolicy {
-	case kvpb.RoutingPolicy_LEASEHOLDER:
-		replicaFilter = OnlyPotentialLeaseholders
-	case kvpb.RoutingPolicy_NEAREST:
-		replicaFilter = AllExtantReplicas
-	default:
-		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
-	}
 	desc := routing.Desc()
-	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, routing.Leaseholder(), replicaFilter)
+	transport, err := ds.createTransport(ctx, ba, routing)
 	if err != nil {
 		return nil, err
 	}
-
-	// This client requested we proxy this request. Only proxy if we can
-	// determine the leaseholder and it agrees with the ProxyRangeInfo from
-	// the client. We don't support a proxy request to a non-leaseholder
-	// replica. If we decide to proxy this request, we will reduce our replica
-	// list to only the requested replica. If we fail on that request we fail back
-	// to the caller so they can try something else.
-	if ba.ProxyRangeInfo != nil {
-		log.VEventf(ctx, 3, "processing a proxy request to %v", ba.ProxyRangeInfo)
-		ds.metrics.ProxyForwardSentCount.Inc(1)
-		// We don't know who the leaseholder is, and it is likely that the
-		// client had stale information. Return our information to them through
-		// a NLHE and let them retry.
-		if routing.Lease().Empty() {
-			log.VEventf(ctx, 2, "proxy failed, unknown leaseholder %v", routing)
-			br := kvpb.BatchResponse{}
-			br.Error = kvpb.NewError(
-				kvpb.NewNotLeaseHolderError(roachpb.Lease{},
-					0, /* proposerStoreID */
-					routing.Desc(),
-					"client requested a proxy but we can't figure out the leaseholder"),
-			)
-			ds.metrics.ProxyForwardErrCount.Inc(1)
-			return &br, nil
-		}
-		if ba.ProxyRangeInfo.Lease.Sequence != routing.Lease().Sequence ||
-			ba.ProxyRangeInfo.Desc.Generation != routing.Desc().Generation {
-			log.VEventf(ctx, 2, "proxy failed, update client information %v != %v", ba.ProxyRangeInfo, routing)
-			br := kvpb.BatchResponse{}
-			br.Error = kvpb.NewError(
-				kvpb.NewNotLeaseHolderError(
-					*routing.Lease(),
-					0, /* proposerStoreID */
-					routing.Desc(),
-					fmt.Sprintf("proxy failed, update client information %v != %v", ba.ProxyRangeInfo, routing)),
-			)
-			ds.metrics.ProxyForwardErrCount.Inc(1)
-			return &br, nil
-		}
-
-		// On a proxy request, we only send the request to the leaseholder. If we
-		// are here then the client and server agree on the routing information, so
-		// use the leaseholder as our only replica to send to.
-		idx := replicas.Find(routing.Leaseholder().ReplicaID)
-		// This should never happen. We validated the routing above and the token
-		// is still valid.
-		if idx == -1 {
-			return nil, errors.AssertionFailedf("inconsistent routing %v %v", desc, *routing.Leaseholder())
-		}
-		replicas = replicas[idx : idx+1]
-		log.VEventf(ctx, 2, "sender requested proxy to leaseholder %v", replicas)
-	}
-	// Rearrange the replicas so that they're ordered according to the routing
-	// policy.
-	var routeToLeaseholder bool
-	switch ba.RoutingPolicy {
-	case kvpb.RoutingPolicy_LEASEHOLDER:
-		// First order by latency, then move the leaseholder to the front of the
-		// list, if it is known.
-		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
-		}
-
-		idx := -1
-		if routing.Leaseholder() != nil {
-			idx = replicas.Find(routing.Leaseholder().ReplicaID)
-		}
-		if idx != -1 {
-			if ds.routeToLeaseholderFirst {
-				replicas.MoveToFront(idx)
-			}
-			routeToLeaseholder = true
-		} else {
-			// The leaseholder node's info must have been missing from gossip when we
-			// created replicas.
-			log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not known")
-		}
-
-	case kvpb.RoutingPolicy_NEAREST:
-		// Order by latency.
-		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
-
-	default:
-		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
-	}
-
-	// NB: upgrade the connection class to SYSTEM, for critical ranges. Set it to
-	// DEFAULT if the class is unknown, to handle mixed-version states gracefully.
-	// Other kinds of overrides are possible, see rpc.ConnectionClassForKey().
-	opts := SendOptions{
-		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, ba.ConnectionClass),
-		metrics:                &ds.metrics,
-		dontConsiderConnHealth: ds.dontConsiderConnHealth,
-	}
-	transport := ds.transportFactory(opts, replicas)
 	defer transport.Release()
 
 	// inTransferRetry is used to slow down retries in cases where an ongoing
@@ -2733,7 +2654,7 @@ func (ds *DistSender) sendToReplicas(
 			// of routing loops.
 			requestToSend = ba.ShallowCopy()
 			requestToSend.ProxyRangeInfo = nil
-		} else if !routeToLeaseholder {
+		} else if ba.RoutingPolicy != kvpb.RoutingPolicy_LEASEHOLDER {
 			// This request isn't intended for the leaseholder so we don't proxy it.
 		} else if routing.Leaseholder() == nil {
 			// NB: Normally we don't have both routeToLeaseholder and a nil
@@ -3041,8 +2962,13 @@ func (ds *DistSender) sendToReplicas(
 					// prevents accidentally returning a replica unavailable
 					// error too aggressively.
 					if updatedLeaseholder {
+						// After a NLHE we update our policy to attempt to route
+						// to the leaseholder first rather than trying the other
+						// followers. This will prioritize proxying a request
+						// rather than hitting additional NLHE errors on other
+						// stores.
+						ba.RoutingPolicy = kvpb.RoutingPolicy_LEASEHOLDER
 						leaseholderUnavailable = false
-						routeToLeaseholder = true
 						// If we changed the leaseholder, reset the transport to try all the
 						// replicas in order again. After a leaseholder change, requests to
 						// followers will be marked as potential proxy requests and point to
@@ -3064,7 +2990,14 @@ func (ds *DistSender) sendToReplicas(
 					// get out of possibly infinite loops.
 					if (!lh.IsSame(curReplica) || sameReplicaRetries < sameReplicaRetryLimit) && !leaseholderUnavailable {
 						moved := transport.MoveToFront(*lh)
+						// If our transport doesn't support this leaseholder, then our transport is stale and needs to be refreshed.
 						if !moved {
+							// The previous transport was no longer valid but we
+							// know we could create a new transport with the
+							// updated information we just received that would
+							// be valid.  Recreate a new transport based on the
+							// updated routing information and keep retrying.
+							//
 							// The transport always includes the client's view of the
 							// leaseholder when it's constructed. If the leaseholder can't
 							// be found on the transport then it must be the case that the
@@ -3075,12 +3008,19 @@ func (ds *DistSender) sendToReplicas(
 							// regress. As such, advancing through each replica on the
 							// transport until it's exhausted is unlikely to achieve much.
 							//
-							// We bail early by returning a sendError. The expectation is
-							// for the client to retry with a fresher eviction token.
-							log.VEventf(
-								ctx, 2, "transport incompatible with updated routing; bailing early",
-							)
-							return nil, newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error"))
+							transport, err = ds.createTransport(ctx, ba, routing)
+							// If we can no longer construct a transport, we
+							// need to bail out and evict our descriptor.
+							if err != nil {
+								log.VErrEventf(ctx, 2, "unable to transport after descriptor change: %v", err)
+								return nil, selectBestError(
+									ambiguousError,
+									replicaUnavailableError,
+									newSendError(errors.Wrap(tErr, "leaseholder not found in transport; last error")),
+								)
+							}
+
+							log.VEventf(ctx, 2, "reset transport after descriptor change to %v", routing)
 						}
 					}
 					// Check whether the request was intentionally sent to a follower
@@ -3089,7 +3029,7 @@ func (ds *DistSender) sendToReplicas(
 					// have a sufficient closed timestamp. In response, we should
 					// immediately redirect to the leaseholder, without a backoff
 					// period.
-					intentionallySentToFollower := first && !routeToLeaseholder
+					intentionallySentToFollower := first && ba.RoutingPolicy != kvpb.RoutingPolicy_LEASEHOLDER
 					// See if we want to backoff a little before the next attempt. If
 					// the lease info we got is stale and we were intending to send to
 					// the leaseholder, we backoff because it might be the case that
@@ -3149,6 +3089,120 @@ func (ds *DistSender) sendToReplicas(
 			return nil, err
 		}
 	}
+}
+
+func (ds *DistSender) createTransport(
+	ctx context.Context, ba *kvpb.BatchRequest, routing rangecache.EvictionToken,
+) (Transport, error) {
+	desc := routing.Desc()
+	// Filter the replicas to only those that are relevant to the routing policy.
+	// NB: When changing leaseholder policy constraint_status_report should be
+	// updated appropriately.
+	var replicaFilter ReplicaSliceFilter
+	switch ba.RoutingPolicy {
+	case kvpb.RoutingPolicy_LEASEHOLDER:
+		replicaFilter = OnlyPotentialLeaseholders
+	case kvpb.RoutingPolicy_NEAREST:
+		replicaFilter = AllExtantReplicas
+	default:
+		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
+	}
+	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, routing.Leaseholder(), replicaFilter)
+	if err != nil {
+		return nil, err
+	}
+
+	// This client requested we proxy this request. Only proxy if we can
+	// determine the leaseholder and it agrees with the ProxyRangeInfo from
+	// the client. We don't support a proxy request to a non-leaseholder
+	// replica. If we decide to proxy this request, we will reduce our replica
+	// list to only the requested replica. If we fail on that request we fail back
+	// to the caller so they can try something else.
+	if ba.ProxyRangeInfo != nil {
+		log.VEventf(ctx, 3, "processing a proxy request to %v", ba.ProxyRangeInfo)
+		ds.metrics.ProxyForwardSentCount.Inc(1)
+		// We don't know who the leaseholder is, and it is likely that the
+		// client had stale information. Return our information to them through
+		// a NLHE and let them retry.
+		if routing.Lease().Empty() {
+			log.VEventf(ctx, 2, "proxy failed, unknown leaseholder %v", routing)
+			ds.metrics.ProxyForwardErrCount.Inc(1)
+			ds.metrics.ProxyForwardErrCount.Inc(1)
+			return nil, newSendError(kvpb.NewNotLeaseHolderError(
+				roachpb.Lease{},
+				0, /* proposerStoreID */
+				routing.Desc(),
+				"client requested a proxy but we don't know the leaseholder"))
+		}
+		leaseCompatible := ba.ProxyRangeInfo.Lease.Sequence >= routing.LeaseSeq()
+		descCompatible := ba.ProxyRangeInfo.Desc.Generation >= desc.Generation
+		if !leaseCompatible || !descCompatible {
+			log.VEventf(ctx, 2, "proxy failed, update client information %v != %v", ba.ProxyRangeInfo, routing)
+			ds.metrics.ProxyForwardErrCount.Inc(1)
+			ds.metrics.ProxyForwardErrCount.Inc(1)
+			return nil, newSendError(kvpb.NewNotLeaseHolderError(
+				*routing.Lease(),
+				0, /* proposerStoreID */
+				routing.Desc(),
+				fmt.Sprintf("proxy failed, update client information %v != %v", ba.ProxyRangeInfo, routing)))
+		}
+
+		// On a proxy request, we only send the request to the leaseholder. If we
+		// are here then the client and server agree on the routing information, so
+		// use the leaseholder as our only replica to send to.
+		idx := replicas.Find(routing.Leaseholder().ReplicaID)
+		// This should never happen. We validated the routing above and the token
+		// is still valid.
+		if idx == -1 {
+			return nil, errors.AssertionFailedf("inconsistent routing %v %v", desc, *routing.Leaseholder())
+		}
+		replicas = replicas[idx : idx+1]
+		log.VEventf(ctx, 2, "sender requested proxy to leaseholder %v", replicas)
+	}
+	// Rearrange the replicas so that they're ordered according to the routing
+	// policy.
+	switch ba.RoutingPolicy {
+	case kvpb.RoutingPolicy_LEASEHOLDER:
+		// First order by latency, then move the leaseholder to the front of the
+		// list, if it is known.
+		if !ds.dontReorderReplicas {
+			replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
+		}
+
+		idx := -1
+		if routing.Leaseholder() != nil {
+			idx = replicas.Find(routing.Leaseholder().ReplicaID)
+		}
+		if idx != -1 {
+			log.VEventf(ctx, 2, "routing to leaseholder %v", routing.Leaseholder())
+			if ds.routeToLeaseholderFirst {
+				replicas.MoveToFront(idx)
+			}
+		} else {
+			// The leaseholder node's info must have been missing from gossip when we
+			// created replicas.
+			log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not known")
+		}
+
+	case kvpb.RoutingPolicy_NEAREST:
+		// Order by latency.
+		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
+		replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
+
+	default:
+		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
+	}
+
+	// NB: upgrade the connection class to SYSTEM, for critical ranges. Set it to
+	// DEFAULT if the class is unknown, to handle mixed-version states gracefully.
+	// Other kinds of overrides are possible, see rpc.ConnectionClassForKey().
+	opts := SendOptions{
+		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, ba.ConnectionClass),
+		metrics:                &ds.metrics,
+		dontConsiderConnHealth: ds.dontConsiderConnHealth,
+	}
+	transport := ds.transportFactory(opts, replicas)
+	return transport, nil
 }
 
 // getLocalityComparison takes two nodeIDs as input and returns the locality
@@ -3351,15 +3405,21 @@ func skipStaleReplicas(
 	// RangeKeyMismatchError if there's even a replica. We'll bubble up an
 	// error and try with a new descriptor.
 	if !routing.Valid() {
-		return noMoreReplicasErr(
+		return selectBestError(
 			ambiguousError,
 			nil, // ignore the replicaUnavailableError, retry with new routing info
-			errors.Wrap(lastErr, "routing information detected to be stale"))
+			newSendError(errors.Wrap(lastErr, "routing information detected to be stale")))
 	}
 
 	for {
 		if transport.IsExhausted() {
-			return noMoreReplicasErr(ambiguousError, replicaUnavailableError, lastErr)
+			// Authentication and authorization errors should be propagated up rather than
+			// wrapped in a sendError and retried as they are likely to be fatal if they
+			// are returned from multiple servers.
+			if !grpcutil.IsAuthError(lastErr) {
+				lastErr = newSendError(errors.Wrap(lastErr, "sending to all replicas failed; last error"))
+			}
+			return selectBestError(ambiguousError, replicaUnavailableError, lastErr)
 		}
 
 		if _, ok := routing.Desc().GetReplicaDescriptorByID(transport.NextReplica().ReplicaID); ok {
