@@ -1565,7 +1565,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		nodeHealth: distSQLNodeHealth{
 			gossip: gw,
 			connHealth: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
-				_, err := mockGossip.GetNodeIDAddress(node)
+				_, _, err := mockGossip.GetNodeIDAddress(node)
 				return err
 			},
 			isAvailable: func(base.SQLInstanceID) bool {

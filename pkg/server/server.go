@@ -956,7 +956,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
 		return parseNodeID(g, s)
 	}
-	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, error) {
+	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, roachpb.Locality, error) {
 		return g.GetNodeIDHTTPAddress(id)
 	}
 	sHTTP := newHTTPServer(cfg.BaseConfig, rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)

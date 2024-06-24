@@ -2105,7 +2105,7 @@ func (rpcCtx *Context) grpcDialRaw(
 // used with the gossip client and CLI commands which can talk to any
 // node. This method implies a SystemClass.
 func (rpcCtx *Context) GRPCUnvalidatedDial(target string) *Connection {
-	return rpcCtx.grpcDialNodeInternal(target, 0, SystemClass)
+	return rpcCtx.grpcDialNodeInternal(target, 0, roachpb.Locality{}, SystemClass)
 }
 
 // GRPCDialNode calls grpc.Dial with options appropriate for the
@@ -2116,14 +2116,17 @@ func (rpcCtx *Context) GRPCUnvalidatedDial(target string) *Connection {
 // responsible for ensuring the remote node ID is known prior to using
 // this function.
 func (rpcCtx *Context) GRPCDialNode(
-	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+	target string,
+	remoteNodeID roachpb.NodeID,
+	remoteLocality roachpb.Locality,
+	class ConnectionClass,
 ) *Connection {
 	if remoteNodeID == 0 && !rpcCtx.TestingAllowNamedRPCToAnonymousServer {
 		log.Fatalf(
 			rpcCtx.makeDialCtx(target, remoteNodeID, class),
 			"%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
-	return rpcCtx.grpcDialNodeInternal(target, remoteNodeID, class)
+	return rpcCtx.grpcDialNodeInternal(target, remoteNodeID, remoteLocality, class)
 }
 
 // GRPCDialPod wraps GRPCDialNode and treats the `remoteInstanceID`
@@ -2134,15 +2137,21 @@ func (rpcCtx *Context) GRPCDialNode(
 // Since GRPCDialNode accepts a separate `target` and `NodeID` it
 // requires no further modification to work between pods.
 func (rpcCtx *Context) GRPCDialPod(
-	target string, remoteInstanceID base.SQLInstanceID, class ConnectionClass,
+	target string,
+	remoteInstanceID base.SQLInstanceID,
+	remoteLocality roachpb.Locality,
+	class ConnectionClass,
 ) *Connection {
-	return rpcCtx.GRPCDialNode(target, roachpb.NodeID(remoteInstanceID), class)
+	return rpcCtx.GRPCDialNode(target, roachpb.NodeID(remoteInstanceID), remoteLocality, class)
 }
 
 // grpcDialNodeInternal connects to the remote node and sets up the async heartbeater.
 // This intentionally takes no `context.Context`; it uses one derived from rpcCtx.masterCtx.
 func (rpcCtx *Context) grpcDialNodeInternal(
-	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
+	target string,
+	remoteNodeID roachpb.NodeID,
+	remoteLocality roachpb.Locality,
+	class ConnectionClass,
 ) *Connection {
 	k := peerKey{TargetAddr: target, NodeID: remoteNodeID, Class: class}
 	if p, ok := rpcCtx.peers.get(k); ok {
@@ -2166,7 +2175,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		conns.mu.m = map[peerKey]*peer{}
 	}
 
-	p := rpcCtx.newPeer(k)
+	p := rpcCtx.newPeer(k, remoteLocality)
 	// (Asynchronously) Start the probe (= heartbeat loop). The breaker is healthy
 	// right now (it was just created) but the call to `.Probe` will launch the
 	// probe[1] regardless.
@@ -2205,7 +2214,7 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 
 type Dialbacker interface {
 	GRPCUnvalidatedDial(string) *Connection
-	GRPCDialNode(string, roachpb.NodeID, ConnectionClass) *Connection
+	GRPCDialNode(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *Connection
 	grpcDialRaw(
 		context.Context, string, ConnectionClass, ...grpc.DialOption,
 	) (*grpc.ClientConn, error)
@@ -2257,7 +2266,7 @@ func VerifyDialback(
 		// inform the fast path as well.
 		connHealthErr = rpcCtx.GRPCUnvalidatedDial(target).Health() // NB: dials SystemClass
 	} else {
-		connHealthErr = rpcCtx.GRPCDialNode(target, request.OriginNodeID, SystemClass).Health()
+		connHealthErr = rpcCtx.GRPCDialNode(target, request.OriginNodeID, roachpb.Locality{}, SystemClass).Health()
 	}
 
 	// We have a successful connection so report success. Any ongoing attempts no

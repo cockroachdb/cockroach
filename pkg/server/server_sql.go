@@ -618,12 +618,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	} else {
 		// In a multi-tenant environment, use the sqlInstanceReader to resolve
 		// SQL pod addresses.
-		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, error) {
+		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 			info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
 			if err != nil {
-				return nil, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
+				return nil, roachpb.Locality{}, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
 			}
-			return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, nil
+			return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, info.Locality, nil
 		}
 		cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 	}

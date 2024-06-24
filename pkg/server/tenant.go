@@ -334,8 +334,8 @@ func newTenantServer(
 	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
 		return roachpb.NodeID(0), false, errors.New("tenants cannot proxy to KV Nodes")
 	}
-	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, error) {
-		return nil, errors.New("tenants cannot proxy to KV Nodes")
+	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, roachpb.Locality, error) {
+		return nil, roachpb.Locality{}, errors.New("tenants cannot proxy to KV Nodes")
 	}
 	sHTTP := newHTTPServer(baseCfg, args.rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
 

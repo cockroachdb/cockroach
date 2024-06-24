@@ -1161,10 +1161,10 @@ func (s *statusServer) Details(
 		BuildInfo:  build.GetInfo(),
 		SystemInfo: s.si.systemInfo(ctx),
 	}
-	if addr, err := s.serverIterator.getServerIDAddress(ctx, serverID(remoteNodeID)); err == nil {
+	if addr, _, err := s.serverIterator.getServerIDAddress(ctx, serverID(remoteNodeID)); err == nil {
 		resp.Address = *addr
 	}
-	if addr, err := s.serverIterator.getServerIDSQLAddress(ctx, serverID(remoteNodeID)); err == nil {
+	if addr, _, err := s.serverIterator.getServerIDSQLAddress(ctx, serverID(remoteNodeID)); err == nil {
 		resp.SQLAddress = *addr
 	}
 
@@ -2038,7 +2038,7 @@ func (s *systemStatusServer) NetworkConnectivity(
 				peer.Error = errors.UnwrapAll(err).Error()
 				continue
 			}
-			addr, err := s.gossip.GetNodeIDAddress(targetNodeId)
+			addr, _, err := s.gossip.GetNodeIDAddress(targetNodeId)
 			if err != nil {
 				peer.Status = serverpb.NetworkConnectivityResponse_UNKNOWN
 				peer.Error = errors.UnwrapAll(err).Error()
