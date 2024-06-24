@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -116,13 +118,20 @@ func newLogicalReplicationWriterProcessor(
 
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
-		rp, err := makeSQLLastWriteWinsHandler(ctx, flowCtx.Cfg.Settings, spec.TableDescriptors)
+		rp, err := makeSQLLastWriteWinsHandler(
+			ctx, flowCtx.Cfg.Settings, spec.TableDescriptors,
+			// Initialize the executor with the copy of the current session's
+			// variables in order to avoid creating a fresh copy on each usage.
+			flowCtx.Cfg.DB.Executor(isql.WithSessionData(flowCtx.EvalCtx.SessionData().Clone())),
+		)
 		if err != nil {
 			return nil, err
 		}
 		bhPool[i] = &txnBatch{
-			db: flowCtx.Cfg.DB,
-			rp: rp,
+			db:       flowCtx.Cfg.DB,
+			rp:       rp,
+			settings: flowCtx.Cfg.Settings,
+			sd:       flowCtx.EvalCtx.SessionData().Clone(),
 		}
 	}
 
@@ -531,17 +540,29 @@ type BatchHandler interface {
 // RowProcessor knows how to process a single row from an event stream.
 type RowProcessor interface {
 	SetMetrics(metrics *Metrics)
+	// ProcessRow processes a single KV update by inserting or deleting a row.
+	// Txn argument can be nil. The provided value is the "previous value",
+	// before the change was applied on the source.
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) error
 }
 
 type txnBatch struct {
-	db descs.DB
-	rp RowProcessor
+	db       descs.DB
+	rp       RowProcessor
+	settings *cluster.Settings
+	sd       *sessiondata.SessionData
 }
 
 func (t *txnBatch) SetMetrics(metrics *Metrics) {
 	t.rp.SetMetrics(metrics)
 }
+
+var useImplicitTxns = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.use_implicit_txns.enabled",
+	"determines whether the consumer processes each row in a separate implicit txn",
+	true,
+)
 
 func (t *txnBatch) HandleBatch(
 	ctx context.Context, batch []streampb.StreamEvent_KV,
@@ -550,24 +571,29 @@ func (t *txnBatch) HandleBatch(
 	defer sp.Finish()
 
 	stats := batchStats{}
-	err := t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		// TODO(ssd): For now, we SetOmitInRangefeeds to
-		// prevent the data from being emitted back to the source.
-		// However, I don't think we want to do this in the long run.
-		// Rather, we want to store the inbound cluster ID and store that
-		// in a way that allows us to choose to filter it out from or not.
-		// Doing it this way means that you can't choose to run CDC just from
-		// one side and not the other.
-		txn.KV().SetOmitInRangefeeds()
+	var err error
+	// TODO(yuzefovich): we should have a better heuristic for when to use the
+	// implicit vs explicit txns (for example, depending on the presence of the
+	// secondary indexes).
+	if useImplicitTxns.Get(&t.settings.SV) {
 		for _, kv := range batch {
 			stats.byteSize += kv.Size()
-			if err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue); err != nil {
-				return err
+			if err = t.rp.ProcessRow(ctx, nil /* txn */, kv.KeyValue, kv.PrevValue); err != nil {
+				return stats, err
 			}
-
 		}
-		return nil
-	})
+	} else {
+		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			for _, kv := range batch {
+				stats.byteSize += kv.Size()
+				if err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue); err != nil {
+					return err
+				}
+
+			}
+			return nil
+		}, isql.WithSessionData(t.sd))
+	}
 	return stats, err
 }
 
