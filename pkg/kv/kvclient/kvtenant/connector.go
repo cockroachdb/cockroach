@@ -1062,12 +1062,12 @@ func (c *connector) Query(
 // be used as a nodedialer.AddressResolver. Addresses are resolved to a node's
 // address.
 func AddressResolver(s kvclient.NodeDescStore) nodedialer.AddressResolver {
-	return func(nodeID roachpb.NodeID) (net.Addr, error) {
+	return func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 		nd, err := s.GetNodeDescriptor(nodeID)
 		if err != nil {
-			return nil, err
+			return nil, roachpb.Locality{}, err
 		}
-		return &nd.Address, nil
+		return &nd.Address, nd.Locality, nil
 	}
 }
 

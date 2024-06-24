@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -60,7 +61,7 @@ func TestConnectingToDownNode(t *testing.T) {
 		const n = 100
 		for i := 0; i < n; i++ {
 			tBegin := timeutil.Now()
-			_, err = rpcCtx.GRPCDialNode(ln.Addr().String(), 1, DefaultClass).
+			_, err = rpcCtx.GRPCDialNode(ln.Addr().String(), 1, roachpb.Locality{}, DefaultClass).
 				Connect(ctx)
 			require.True(t, errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)), "%+v", err)
 			dur += timeutil.Since(tBegin)
