@@ -414,8 +414,8 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 	outputNulls := outputVec.Nulls()
 	toType := outputVec.Type()
 	c.allocator.PerformOperation([]*coldata.Vec{outputVec}, func() {
-		if n > c.da.AllocSize {
-			c.da.AllocSize = n
+		if n > c.da.DefaultAllocSize {
+			c.da.DefaultAllocSize = n
 		}
 		if cap(c.scratch) < n {
 			c.scratch = make([]tree.Datum, n)

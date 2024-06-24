@@ -12,6 +12,7 @@ package tree
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -21,11 +22,15 @@ import (
 type DatumAlloc struct {
 	_ util.NoCopy
 
-	// AllocSize determines the number of objects allocated whenever we've used
+	// DefaultAllocSize determines the number of objects allocated whenever we've used
 	// up previously allocated ones. This field is exported so that the caller
 	// could adjust it dynamically. If it is left unchanged by the caller, then
 	// it will be set to defaultDatumAllocSize automatically.
-	AllocSize int
+	DefaultAllocSize int
+
+	// typeAllocSizes stores type-specific allocation sizes. See ResetAllocSizes
+	// and AddAllocSize.
+	typeAllocSizes typeSizes
 
 	datumAlloc        []Datum
 	dintAlloc         []DInt
@@ -60,19 +65,73 @@ type DatumAlloc struct {
 	lastEWKBBeyondAllocSize bool
 }
 
+// typeSizes stores allocation sizes for each type of buffer in DatumAlloc.
+//
+// NOTE: It currently only supports the types allocated by ColVecToDatum
+// function (except for Bools which are not allocated with DatumAlloc).
+type typeSizes struct {
+	ints         int
+	floats       int
+	decimals     int
+	dates        int
+	enums        int
+	timestamps   int
+	timestamptzs int
+	intervals    int
+	uuids        int
+	jsons        int
+	strings      int
+}
+
 const defaultDatumAllocSize = 16  // Arbitrary, could be tuned.
 const datumAllocMultiplier = 4    // Arbitrary, could be tuned.
 const defaultEWKBAllocSize = 4096 // Arbitrary, could be tuned.
 const maxEWKBAllocSize = 16384    // Arbitrary, could be tuned.
 
+// ResetTypeAllocSizes resets the type-specific allocation sizes.
+func (a *DatumAlloc) ResetTypeAllocSizes() {
+	a.typeAllocSizes = typeSizes{}
+}
+
+// AddTypeAllocSize adds the given size to the allocation size for the given
+// type family.
+func (a *DatumAlloc) AddTypeAllocSize(size int, t types.Family) {
+	switch t {
+	case types.IntFamily:
+		a.typeAllocSizes.ints += size
+	case types.FloatFamily:
+		a.typeAllocSizes.floats += size
+	case types.DecimalFamily:
+		a.typeAllocSizes.decimals += size
+	case types.DateFamily:
+		a.typeAllocSizes.dates += size
+	case types.EnumFamily:
+		a.typeAllocSizes.enums += size
+	case types.TimestampFamily:
+		a.typeAllocSizes.timestamps += size
+	case types.TimestampTZFamily:
+		a.typeAllocSizes.timestamptzs += size
+	case types.IntervalFamily:
+		a.typeAllocSizes.intervals += size
+	case types.UuidFamily:
+		a.typeAllocSizes.uuids += size
+	case types.JsonFamily:
+		a.typeAllocSizes.jsons += size
+	case types.StringFamily, types.BytesFamily, types.EncodedKeyFamily:
+		a.typeAllocSizes.strings += size
+	default:
+		// No-op for other types.
+	}
+}
+
 // NewDatums allocates Datums of the specified size.
 func (a *DatumAlloc) NewDatums(num int) Datums {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.datumAlloc
 	if len(*buf) < num {
-		extensionSize := a.AllocSize
+		extensionSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			extensionSize = a.DefaultAllocSize
+		}
 		if extTupleLen := num * datumAllocMultiplier; extensionSize < extTupleLen {
 			extensionSize = extTupleLen
 		}
@@ -85,12 +144,15 @@ func (a *DatumAlloc) NewDatums(num int) Datums {
 
 // NewDInt allocates a DInt.
 func (a *DatumAlloc) NewDInt(v DInt) *DInt {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dintAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DInt, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.ints != 0 {
+			allocSize = a.typeAllocSizes.ints
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DInt, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -100,12 +162,13 @@ func (a *DatumAlloc) NewDInt(v DInt) *DInt {
 
 // NewDPGLSN allocates a DPGLSN.
 func (a *DatumAlloc) NewDPGLSN(v DPGLSN) *DPGLSN {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dpglsnAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DPGLSN, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DPGLSN, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -115,12 +178,15 @@ func (a *DatumAlloc) NewDPGLSN(v DPGLSN) *DPGLSN {
 
 // NewDFloat allocates a DFloat.
 func (a *DatumAlloc) NewDFloat(v DFloat) *DFloat {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dfloatAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DFloat, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.floats != 0 {
+			allocSize = a.typeAllocSizes.floats
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DFloat, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -129,12 +195,15 @@ func (a *DatumAlloc) NewDFloat(v DFloat) *DFloat {
 }
 
 func (a *DatumAlloc) newString() *string {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.stringAlloc
 	if len(*buf) == 0 {
-		*buf = make([]string, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.strings != 0 {
+			allocSize = a.typeAllocSizes.strings
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]string, allocSize)
 	}
 	r := &(*buf)[0]
 	*buf = (*buf)[1:]
@@ -179,12 +248,13 @@ func (a *DatumAlloc) NewDEncodedKey(v DEncodedKey) *DEncodedKey {
 
 // NewDBitArray allocates a DBitArray.
 func (a *DatumAlloc) NewDBitArray(v DBitArray) *DBitArray {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dbitArrayAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DBitArray, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DBitArray, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -194,12 +264,15 @@ func (a *DatumAlloc) NewDBitArray(v DBitArray) *DBitArray {
 
 // NewDDecimal allocates a DDecimal.
 func (a *DatumAlloc) NewDDecimal(v DDecimal) *DDecimal {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.ddecimalAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DDecimal, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.decimals != 0 {
+			allocSize = a.typeAllocSizes.decimals
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DDecimal, allocSize)
 	}
 	r := &(*buf)[0]
 	r.Set(&v.Decimal)
@@ -209,12 +282,15 @@ func (a *DatumAlloc) NewDDecimal(v DDecimal) *DDecimal {
 
 // NewDDate allocates a DDate.
 func (a *DatumAlloc) NewDDate(v DDate) *DDate {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.ddateAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DDate, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.dates != 0 {
+			allocSize = a.typeAllocSizes.dates
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DDate, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -224,12 +300,15 @@ func (a *DatumAlloc) NewDDate(v DDate) *DDate {
 
 // NewDEnum allocates a DEnum.
 func (a *DatumAlloc) NewDEnum(v DEnum) *DEnum {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.denumAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DEnum, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.enums != 0 {
+			allocSize = a.typeAllocSizes.enums
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DEnum, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -239,12 +318,13 @@ func (a *DatumAlloc) NewDEnum(v DEnum) *DEnum {
 
 // NewDBox2D allocates a DBox2D.
 func (a *DatumAlloc) NewDBox2D(v DBox2D) *DBox2D {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dbox2dAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DBox2D, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DBox2D, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -254,12 +334,13 @@ func (a *DatumAlloc) NewDBox2D(v DBox2D) *DBox2D {
 
 // NewDGeography allocates a DGeography.
 func (a *DatumAlloc) NewDGeography(v DGeography) *DGeography {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dgeographyAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DGeography, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DGeography, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -269,12 +350,13 @@ func (a *DatumAlloc) NewDGeography(v DGeography) *DGeography {
 
 // NewDVoid allocates a new DVoid.
 func (a *DatumAlloc) NewDVoid() *DVoid {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dvoidAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DVoid, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DVoid, allocSize)
 	}
 	r := &(*buf)[0]
 	*buf = (*buf)[1:]
@@ -307,12 +389,13 @@ func (a *DatumAlloc) DoneInitNewDGeo(so *geopb.SpatialObject) {
 
 // NewDGeometry allocates a DGeometry.
 func (a *DatumAlloc) NewDGeometry(v DGeometry) *DGeometry {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dgeometryAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DGeometry, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DGeometry, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -345,12 +428,13 @@ func (a *DatumAlloc) giveBytesToEWKB(so *geopb.SpatialObject) {
 
 // NewDTime allocates a DTime.
 func (a *DatumAlloc) NewDTime(v DTime) *DTime {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dtimeAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DTime, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DTime, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -360,12 +444,13 @@ func (a *DatumAlloc) NewDTime(v DTime) *DTime {
 
 // NewDTimeTZ allocates a DTimeTZ.
 func (a *DatumAlloc) NewDTimeTZ(v DTimeTZ) *DTimeTZ {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dtimetzAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DTimeTZ, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DTimeTZ, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -375,12 +460,15 @@ func (a *DatumAlloc) NewDTimeTZ(v DTimeTZ) *DTimeTZ {
 
 // NewDTimestamp allocates a DTimestamp.
 func (a *DatumAlloc) NewDTimestamp(v DTimestamp) *DTimestamp {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dtimestampAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DTimestamp, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.timestamps != 0 {
+			allocSize = a.typeAllocSizes.timestamps
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DTimestamp, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -390,12 +478,15 @@ func (a *DatumAlloc) NewDTimestamp(v DTimestamp) *DTimestamp {
 
 // NewDTimestampTZ allocates a DTimestampTZ.
 func (a *DatumAlloc) NewDTimestampTZ(v DTimestampTZ) *DTimestampTZ {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dtimestampTzAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DTimestampTZ, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.timestamptzs != 0 {
+			allocSize = a.typeAllocSizes.timestamptzs
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DTimestampTZ, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -405,12 +496,15 @@ func (a *DatumAlloc) NewDTimestampTZ(v DTimestampTZ) *DTimestampTZ {
 
 // NewDInterval allocates a DInterval.
 func (a *DatumAlloc) NewDInterval(v DInterval) *DInterval {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dintervalAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DInterval, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.intervals != 0 {
+			allocSize = a.typeAllocSizes.intervals
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DInterval, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -420,12 +514,15 @@ func (a *DatumAlloc) NewDInterval(v DInterval) *DInterval {
 
 // NewDUuid allocates a DUuid.
 func (a *DatumAlloc) NewDUuid(v DUuid) *DUuid {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.duuidAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DUuid, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.uuids != 0 {
+			allocSize = a.typeAllocSizes.uuids
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DUuid, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -435,12 +532,13 @@ func (a *DatumAlloc) NewDUuid(v DUuid) *DUuid {
 
 // NewDIPAddr allocates a DIPAddr.
 func (a *DatumAlloc) NewDIPAddr(v DIPAddr) *DIPAddr {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dipnetAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DIPAddr, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DIPAddr, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -450,12 +548,15 @@ func (a *DatumAlloc) NewDIPAddr(v DIPAddr) *DIPAddr {
 
 // NewDJSON allocates a DJSON.
 func (a *DatumAlloc) NewDJSON(v DJSON) *DJSON {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.djsonAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DJSON, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.typeAllocSizes.jsons != 0 {
+			allocSize = a.typeAllocSizes.jsons
+		} else if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DJSON, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -465,12 +566,13 @@ func (a *DatumAlloc) NewDJSON(v DJSON) *DJSON {
 
 // NewDTuple allocates a DTuple.
 func (a *DatumAlloc) NewDTuple(v DTuple) *DTuple {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.dtupleAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DTuple, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DTuple, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -480,12 +582,13 @@ func (a *DatumAlloc) NewDTuple(v DTuple) *DTuple {
 
 // NewDOid allocates a DOid.
 func (a *DatumAlloc) NewDOid(v DOid) Datum {
-	if a.AllocSize == 0 {
-		a.AllocSize = defaultDatumAllocSize
-	}
 	buf := &a.doidAlloc
 	if len(*buf) == 0 {
-		*buf = make([]DOid, a.AllocSize)
+		allocSize := defaultDatumAllocSize
+		if a.DefaultAllocSize != 0 {
+			allocSize = a.DefaultAllocSize
+		}
+		*buf = make([]DOid, allocSize)
 	}
 	r := &(*buf)[0]
 	*r = v

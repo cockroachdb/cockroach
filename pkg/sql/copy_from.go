@@ -369,6 +369,11 @@ func newCopyMachine(
 	// each input row. We want to pick the fraction to be in [0.1, 0.33] range
 	// so that 0.33 is used with no secondary indexes and 0.1 is used with 16 or
 	// more secondary indexes.
+	// TODO(yuzefovich): the choice of 1/3 as the upper bound with no secondary
+	// indexes was made in #98605 via empirical testing. However, it's possible
+	// that the testing was missing the realization that each secondary index
+	// results in a separate KV and was done on TPCH lineitem table (which has 8
+	// secondary indexes), so 1/3 might be actually too conservative.
 	maxCommandFraction := copyMaxCommandSizeFraction.Get(c.p.execCfg.SV())
 	if maxCommandFraction == 0 {
 		maxCommandFraction = 1.0 / 3.0
@@ -398,7 +403,7 @@ func newCopyMachine(
 
 var copyMaxCommandSizeFraction = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
-	"sql.copy.max_command_size_fraction",
+	"sql.copy.fraction_of_max_command_size",
 	"determines the fraction of kv.raft.command.max_size that is used when "+
 		"sizing batches of rows when processing COPY commands. Use 0 for default "+
 		"adaptive strategy that considers number of secondary indexes",

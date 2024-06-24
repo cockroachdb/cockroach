@@ -769,10 +769,10 @@ func (ht *HashTable) ComputeBuckets(buckets []uint32, keys []*coldata.Vec, nKeys
 
 	// Check if we received more tuples than the current allocation size and
 	// increase it if so (limiting it by coldata.BatchSize()).
-	if nKeys > ht.datumAlloc.AllocSize && ht.datumAlloc.AllocSize < coldata.BatchSize() {
-		ht.datumAlloc.AllocSize = nKeys
-		if ht.datumAlloc.AllocSize > coldata.BatchSize() {
-			ht.datumAlloc.AllocSize = coldata.BatchSize()
+	if nKeys > ht.datumAlloc.DefaultAllocSize && ht.datumAlloc.DefaultAllocSize < coldata.BatchSize() {
+		ht.datumAlloc.DefaultAllocSize = nKeys
+		if ht.datumAlloc.DefaultAllocSize > coldata.BatchSize() {
+			ht.datumAlloc.DefaultAllocSize = coldata.BatchSize()
 		}
 	}
 
