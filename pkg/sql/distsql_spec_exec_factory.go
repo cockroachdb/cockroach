@@ -546,7 +546,7 @@ func (e *distSQLSpecExecFactory) constructAggregators(
 			aggregations:         aggregationSpecs,
 			argumentsColumnTypes: argumentsColumnTypes,
 			isScalar:             isScalar,
-			groupCols:            convertNodeOrdinalsToInts(groupCols),
+			groupCols:            groupCols,
 			groupColOrdering:     groupColOrdering,
 			inputMergeOrdering:   physPlan.MergeOrdering,
 			reqOrdering:          ReqOrdering(reqOrdering),
