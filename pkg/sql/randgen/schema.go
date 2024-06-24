@@ -373,11 +373,33 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 // If a non-nil inserts is provided, it will be populated with the successful
 // insert statements.
 //
+// If the table could use user-defined types, a type resolver must be
+// provided. Often it's convenient to use a smither as a type resolver, for
+// example:
+//
+//	// Create tables that could contain user-defined types.
+//	...
+//
+//	// Use a smither as a type resolver for PopulateTableWithRandData.
+//	var typeResolver tree.TypeReferenceResolver
+//	smither, err := sqlsmith.NewSmither(conn, rng)
+//	require.NoError(t, err)
+//	defer smither.Close()
+//	typeResolver = smither
+//
+//	// Populate those tables with random data.
+//	rows, err := randgen.PopulateTableWithRandData(rng, conn, ..., typeResolver)
+//
 // If numRowsInserted == 0, PopulateTableWithRandomData or RandDatum couldn't
 // handle this table's schema. Consider increasing numInserts or filing a bug.
 // TODO(harding): Populate data in partitions.
 func PopulateTableWithRandData(
-	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int, inserts *[]string,
+	rng *rand.Rand,
+	db *gosql.DB,
+	tableName string,
+	numInserts int,
+	inserts *[]string,
+	typeResolver tree.TypeReferenceResolver,
 ) (numRowsInserted int, err error) {
 	var createStmtSQL string
 	res := db.QueryRow(fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tree.NameString(tableName)))
@@ -388,6 +410,19 @@ func PopulateTableWithRandData(
 	createStmt, err := parseCreateStatement(createStmtSQL)
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed to determine table schema")
+	}
+
+	// Resolve user-defined types.
+	if typeResolver != nil {
+		for _, def := range createStmt.Defs {
+			if col, ok := def.(*tree.ColumnTableDef); ok {
+				typ, err := tree.ResolveType(context.Background(), col.Type, typeResolver)
+				if err != nil {
+					return 0, err
+				}
+				col.Type = typ
+			}
+		}
 	}
 
 	// Find columns subject to a foreign key constraint
@@ -429,8 +464,9 @@ func PopulateTableWithRandData(
 				// them to the list of columns to insert data into.
 				continue
 			}
+			// Skip columns with unresolved types.
 			if _, ok := col.Type.(*types.T); !ok {
-				return 0, errors.Newf("No type for %v", col)
+				continue
 			}
 			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type))
 			nullable = append(nullable, col.Nullable.Nullability == tree.Null)

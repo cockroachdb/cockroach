@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient/randclient"
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -866,9 +867,17 @@ func TestRandomTables(t *testing.T) {
 	// optimization decisions to our replication process.
 	runnerA.Exec(t, "SET plan_cache_mode=force_generic_plan")
 
+	// Use a smither as a type resolver for PopulateTableWithRandData.
+	var typeResolver tree.TypeReferenceResolver
+	smither, err := sqlsmith.NewSmither(sqlA, rng)
+	require.NoError(t, err)
+	defer smither.Close()
+	typeResolver = smither
+
 	numInserts := 20
-	_, err := randgen.PopulateTableWithRandData(rng,
-		sqlA, tableName, numInserts, nil)
+	_, err = randgen.PopulateTableWithRandData(
+		rng, sqlA, tableName, numInserts, nil, typeResolver,
+	)
 	require.NoError(t, err)
 
 	var jobBID jobspb.JobID
@@ -989,7 +998,7 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 				runnerB.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBase, tableName))
 			}
 			_, err := randgen.PopulateTableWithRandData(rng,
-				sqlA, tableName, numInserts, nil)
+				sqlA, tableName, numInserts, nil /* inserts */, nil /* typeResolver */)
 			require.NoError(t, err)
 
 			var streamStartStmt string
