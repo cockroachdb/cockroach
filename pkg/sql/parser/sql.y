@@ -889,6 +889,12 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
     return u.val.(*tree.ShowFingerprintOptions)
 }
+func (u *sqlSymUnion) logicalReplicationResources() tree.LogicalReplicationResources {
+    return u.val.(tree.LogicalReplicationResources)
+}
+func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOptions {
+  return u.val.(*tree.LogicalReplicationOptions)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -964,9 +970,9 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %token <str> LABEL LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEAKPROOF LEFT LESS LEVEL LIKE LIMIT
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
-%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
+%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGICAL LOGIN LOOKUP LOW LSHIFT
 
-%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MODIFYSQLCLUSTERSETTING MONTH MOVE
+%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MODIFYSQLCLUSTERSETTING MODE MONTH MOVE
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
@@ -1203,12 +1209,15 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_virtual_cluster_stmt
+%type <tree.Statement> create_logical_replication_stream_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> create_func_stmt
 %type <tree.Statement> create_proc_stmt
 
 %type <*tree.LikeTenantSpec> opt_like_virtual_cluster
+%type <tree.LogicalReplicationResources> logical_replication_resources
+%type <*tree.LogicalReplicationOptions> opt_logical_replication_options logical_replication_options logical_replication_options_list
 
 %type <tree.Statement> create_stats_stmt
 %type <*tree.CreateStatsOptions> opt_create_stats_options
@@ -4574,9 +4583,105 @@ create_stmt:
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
 | create_external_connection_stmt // EXTEND WITH HELP: CREATE EXTERNAL CONNECTION
 | create_virtual_cluster_stmt     // EXTEND WITH HELP: CREATE VIRTUAL CLUSTER
+| create_logical_replication_stream_stmt     // EXTEND WITH HELP: CREATE LOGICAL REPLICATION STREAM
 | create_schedule_stmt   // help texts in sub-rule
 | create_unsupported     {}
 | CREATE error           // SHOW HELP: CREATE
+
+// %Help: CREATE LOGICAL REPLICATION STREAM - create a new logical replication stream
+// %Category: Experimental
+// %Text:
+// CREATE LOGICAL REPLICATION STREAM 
+//  FROM 'stream_uri' 
+//  ON <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
+//  INTO <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
+//  [WITH
+//  < MODE= immediate | transactional > |
+//  < CURSOR = start_time > |
+//  < FUNCTION 'udf' FOR TABLE local_name  , ... >
+// ]
+create_logical_replication_stream_stmt:
+  CREATE LOGICAL REPLICATION STREAM FROM d_expr ON logical_replication_resources INTO logical_replication_resources opt_logical_replication_options
+  {
+    /* SKIP DOC */
+    $$.val = &tree.CreateLogicalReplicationStream{
+      PGURL: $6.expr(),
+      On: $8.logicalReplicationResources(),
+      Into: $10.logicalReplicationResources(),
+      Options: *$11.logicalReplicationOptions(),
+    }
+  }
+| CREATE LOGICAL REPLICATION STREAM error // SHOW HELP: CREATE LOGICAL REPLICATION STREAM
+
+logical_replication_resources:
+  TABLE db_object_name
+  {
+    $$.val = tree.LogicalReplicationResources{
+      Tables: tree.TablePatterns{
+        $2.unresolvedObjectName().ToUnresolvedName(),
+      },
+    }
+  }
+| logical_replication_resources ',' db_object_name
+  {
+    $$.val = tree.LogicalReplicationResources{
+      Tables: append($1.logicalReplicationResources().Tables, $3.unresolvedObjectName().ToUnresolvedName()),
+    } 
+  }
+| DATABASE database_name
+  {
+    $$.val = tree.LogicalReplicationResources{
+      Database: tree.Name($2),
+    }
+  }
+
+// Optional logical replication options.
+opt_logical_replication_options:
+  WITH logical_replication_options_list
+  {
+    $$.val = $2.logicalReplicationOptions()
+  }
+| WITH OPTIONS '(' logical_replication_options_list ')'
+  {
+    $$.val = $4.logicalReplicationOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.LogicalReplicationOptions{}
+  }
+
+logical_replication_options_list:
+  // Require at least one option
+  logical_replication_options
+  {
+    $$.val = $1.logicalReplicationOptions()
+  }
+| logical_replication_options_list ',' logical_replication_options
+  {
+    if err := $1.logicalReplicationOptions().CombineWith($3.logicalReplicationOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+// List of valid logical replication options.
+logical_replication_options:
+  CURSOR '=' d_expr
+  {
+    $$.val = &tree.LogicalReplicationOptions{Cursor: $3.expr()}
+  }
+|
+  MODE '=' d_expr
+  {
+    $$.val = &tree.LogicalReplicationOptions{Mode: $3.expr()}
+  }
+| DEFAULT FUNCTION '=' d_expr
+  {
+    $$.val = &tree.LogicalReplicationOptions{DefaultFunction: $4.expr()}
+  } 
+| FUNCTION d_expr FOR TABLE db_object_name
+  {
+     $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[tree.TablePattern]tree.Expr{$5.unresolvedObjectName().ToUnresolvedName():$2.expr()}}
+  }
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
 // %Category: Experimental
@@ -17240,6 +17345,7 @@ unreserved_keyword:
 | LIST
 | LOCAL
 | LOCKED
+| LOGICAL
 | LOGIN
 | LOCALITY
 | LOOKUP
@@ -17265,6 +17371,7 @@ unreserved_keyword:
 | MULTIPOLYGONM
 | MULTIPOLYGONZ
 | MULTIPOLYGONZM
+| MODE
 | MONTH
 | MOVE
 | NAMES
@@ -17789,6 +17896,7 @@ bare_label_keywords:
 | LOCALTIME
 | LOCALTIMESTAMP
 | LOCKED
+| LOGICAL
 | LOGIN
 | LOOKUP
 | LOW
@@ -17798,6 +17906,7 @@ bare_label_keywords:
 | MERGE
 | METHOD
 | MINVALUE
+| MODE
 | MODIFYCLUSTERSETTING
 | MODIFYSQLCLUSTERSETTING
 | MOVE
