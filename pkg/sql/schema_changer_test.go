@@ -4314,8 +4314,8 @@ SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20s'
 	// A large enough value that the backfills run as part of the
 	// schema change run in many chunks.
 	var maxValue = 4001
-	if util.RaceEnabled {
-		// Race builds are a lot slower, so use a smaller number of rows.
+	if util.RaceEnabled || syncutil.DeadlockEnabled {
+		// Race and deadlock builds are a lot slower, so use a smaller number of rows.
 		maxValue = 200
 	}
 
