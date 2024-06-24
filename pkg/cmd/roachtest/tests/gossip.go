@@ -120,14 +120,17 @@ SELECT node_id
 		}
 
 		waitForGossip := func(deadNode int) {
-			t.Status("waiting for gossip to exclude dead node %d", deadNode)
+			t.Status(fmt.Sprintf("waiting for gossip to exclude dead node %d", deadNode))
 			start := timeutil.Now()
 			for {
-				t.L().Printf("checking if gossip excludes dead node %d\n", deadNode)
+				t.L().Printf("checking if gossip excludes dead node %d (%.0fs)\n",
+					deadNode, timeutil.Since(start).Seconds())
 				if gossipOK(start, deadNode) {
 					return
 				}
-				time.Sleep(time.Second)
+				const sleepDur = 1 * time.Second
+				t.L().Printf("sleeping for %s (%.0fs)\n", sleepDur, timeutil.Since(start).Seconds())
+				time.Sleep(sleepDur)
 			}
 		}
 
