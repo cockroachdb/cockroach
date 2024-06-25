@@ -134,9 +134,9 @@ over this connection.
 	}
 )
 
-func makeMetrics() Metrics {
+func newMetrics() *Metrics {
 	childLabels := []string{"remote_node_id", "remote_addr", "class"}
-	return Metrics{
+	return &Metrics{
 		ConnectionHealthy:             aggmetric.NewGauge(metaConnectionHealthy, childLabels...),
 		ConnectionUnhealthy:           aggmetric.NewGauge(metaConnectionUnhealthy, childLabels...),
 		ConnectionInactive:            aggmetric.NewGauge(metaConnectionInactive, childLabels...),
