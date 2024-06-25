@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -525,18 +526,6 @@ func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.T
 
 const defaultBatchSize = 1 << 20
 
-func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
-	const defaultMinCheckpointFrequency = 10 * time.Second
-
-	if cfg.MinCheckpointFrequency <= 0 {
-		cfg.MinCheckpointFrequency = defaultMinCheckpointFrequency
-	}
-
-	if cfg.BatchByteSize <= 0 {
-		cfg.BatchByteSize = defaultBatchSize
-	}
-}
-
 func streamPartition(
 	evalCtx *eval.Context, streamID streampb.StreamID, opaqueSpec []byte,
 ) (eval.ValueGenerator, error) {
@@ -550,7 +539,8 @@ func streamPartition(
 	if len(spec.Spans) == 0 {
 		return nil, errors.AssertionFailedf("expected at least one span, got none")
 	}
-	setConfigDefaults(&spec.Config)
+	spec.Config.BatchByteSize = defaultBatchSize
+	spec.Config.MinCheckpointFrequency = crosscluster.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV)
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
