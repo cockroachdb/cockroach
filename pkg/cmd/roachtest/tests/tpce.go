@@ -33,7 +33,7 @@ import (
 )
 
 type tpceSpec struct {
-	loadNode         int
+	loadNode         option.NodeListOption
 	roachNodes       option.NodeListOption
 	roachNodeIPFlags []string
 	portFlag         string
@@ -81,18 +81,12 @@ func (to tpceCmdOptions) AddCommandOptions(cmd *roachtestutil.Command) {
 	cmd.MaybeFlag(to.connectionOpts.password != "", "pg-password", to.connectionOpts.password)
 }
 
-func initTPCESpec(
-	ctx context.Context,
-	l *logger.Logger,
-	c cluster.Cluster,
-	loadNode int,
-	roachNodes option.NodeListOption,
-) (*tpceSpec, error) {
+func initTPCESpec(ctx context.Context, l *logger.Logger, c cluster.Cluster) (*tpceSpec, error) {
 	l.Printf("Installing docker")
-	if err := c.Install(ctx, l, c.Nodes(loadNode), "docker"); err != nil {
+	if err := c.Install(ctx, l, c.WorkloadNode(), "docker"); err != nil {
 		return nil, err
 	}
-	roachNodeIPs, err := c.InternalIP(ctx, l, roachNodes)
+	roachNodeIPs, err := c.InternalIP(ctx, l, c.CRDBNodes())
 	if err != nil {
 		return nil, err
 	}
@@ -100,14 +94,14 @@ func initTPCESpec(
 	for i, ip := range roachNodeIPs {
 		roachNodeIPFlags[i] = fmt.Sprintf("--hosts=%s", ip)
 	}
-	ports, err := c.SQLPorts(ctx, l, roachNodes, "" /* tenant */, 0 /* sqlInstance */)
+	ports, err := c.SQLPorts(ctx, l, c.CRDBNodes(), "" /* tenant */, 0 /* sqlInstance */)
 	if err != nil {
 		return nil, err
 	}
 	port := fmt.Sprintf("--pg-port=%d", ports[0])
 	return &tpceSpec{
-		loadNode:         loadNode,
-		roachNodes:       roachNodes,
+		loadNode:         c.WorkloadNode(),
+		roachNodes:       c.CRDBNodes(),
 		roachNodeIPFlags: roachNodeIPFlags,
 		portFlag:         port,
 	}, nil
@@ -123,7 +117,7 @@ func (ts *tpceSpec) newCmd(o tpceCmdOptions) *roachtestutil.Command {
 // import of the data and schema creation.
 func (ts *tpceSpec) init(ctx context.Context, t test.Test, c cluster.Cluster, o tpceCmdOptions) {
 	cmd := ts.newCmd(o).Option("init")
-	c.Run(ctx, option.WithNodes(c.Node(ts.loadNode)), fmt.Sprintf("%s %s %s", cmd, ts.portFlag, ts.roachNodeIPFlags[0]))
+	c.Run(ctx, option.WithNodes(ts.loadNode), fmt.Sprintf("%s %s %s", cmd, ts.portFlag, ts.roachNodeIPFlags[0]))
 }
 
 // run runs the tpce workload on cluster that has been initialized with the tpce schema.
@@ -131,7 +125,7 @@ func (ts *tpceSpec) run(
 	ctx context.Context, t test.Test, c cluster.Cluster, o tpceCmdOptions,
 ) (install.RunResultDetails, error) {
 	cmd := fmt.Sprintf("%s %s %s", ts.newCmd(o), ts.portFlag, strings.Join(ts.roachNodeIPFlags, " "))
-	return c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(ts.loadNode)), cmd)
+	return c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(ts.loadNode), cmd)
 }
 
 type tpceOptions struct {
@@ -173,8 +167,6 @@ const (
 )
 
 func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptions) {
-	crdbNodes := c.Range(1, opts.nodes)
-	loadNode := opts.nodes + 1
 	racks := opts.nodes
 
 	if opts.start == nil {
@@ -183,12 +175,12 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.StoreCount = opts.ssds
 			settings := install.MakeClusterSettings(install.NumRacksOption(racks))
-			c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
+			c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 		}
 	}
 	opts.start(ctx, t, c)
 
-	tpceSpec, err := initTPCESpec(ctx, t.L(), c, loadNode, crdbNodes)
+	tpceSpec, err := initTPCESpec(ctx, t.L(), c)
 	require.NoError(t, err)
 
 	// Configure to increase the speed of the import.
@@ -212,7 +204,7 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 	}
 
 	if opts.setupType == usingTPCEInit && !t.SkipInit() {
-		m := c.NewMonitor(ctx, crdbNodes)
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			estimatedSetupTimeStr := ""
 			if opts.estimatedSetupTime != 0 {
@@ -234,7 +226,7 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		return
 	}
 
-	m := c.NewMonitor(ctx, crdbNodes)
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		t.Status("running workload")
 		workloadDuration := opts.workloadDuration
@@ -291,7 +283,7 @@ func registerTPCE(r registry.Registry) {
 		Owner:            registry.OwnerTestEng,
 		Benchmark:        true,
 		Timeout:          4 * time.Hour,
-		Cluster:          r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.SSD(smallNightly.ssds)),
+		Cluster:          r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(smallNightly.cpus), spec.SSD(smallNightly.ssds)),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		// Never run with runtime assertions as this makes this test take
@@ -317,7 +309,7 @@ func registerTPCE(r registry.Registry) {
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          8 * time.Hour,
-		Cluster:          r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.SSD(largeWeekly.ssds)),
+		Cluster:          r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(largeWeekly.cpus), spec.SSD(largeWeekly.ssds)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCE(ctx, t, c, largeWeekly)
 		},

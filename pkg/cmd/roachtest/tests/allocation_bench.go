@@ -136,9 +136,8 @@ func (r kvAllocBenchEventRunner) addname(add string) kvAllocBenchEventRunner {
 }
 
 func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t test.Test) error {
-	workloadNode := c.Spec().NodeCount
 	name := r.name
-	setupCmd := fmt.Sprintf("./workload init kv --db=%s", name)
+	setupCmd := fmt.Sprintf("./cockroach workload init kv --db=%s", name)
 	if r.insertCount > 0 {
 		setupCmd += fmt.Sprintf(" --insert-count=%d --min-block-bytes=%d --max-block-bytes=%d", r.insertCount, r.blockSize, r.blockSize)
 		if r.skew {
@@ -146,7 +145,7 @@ func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t t
 		}
 	}
 	setupCmd += " {pgurl:1}"
-	err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), setupCmd)
+	err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), setupCmd)
 	if err != nil {
 		return err
 	}
@@ -155,7 +154,7 @@ func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t t
 	defer db.Close()
 
 	runCmd := fmt.Sprintf(
-		"./workload run kv --db=%s --read-percent=%d --min-block-bytes=%d --max-block-bytes=%d --max-rate=%d",
+		"./cockroach workload run kv --db=%s --read-percent=%d --min-block-bytes=%d --max-block-bytes=%d --max-rate=%d",
 		name, r.readPercent, r.blockSize, r.blockSize, r.rate)
 	if r.skew {
 		runCmd += " --zipfian"
@@ -169,11 +168,11 @@ func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t t
 	}
 
 	runCmd = fmt.Sprintf(
-		"%s --tolerate-errors --concurrency=%d --duration=%s {pgurl:1-%d}",
-		runCmd, defaultAllocBenchConcurrency, defaultAllocBenchDuration.String(), workloadNode-1)
+		"%s --tolerate-errors --concurrency=%d --duration=%s {pgurl%s}",
+		runCmd, defaultAllocBenchConcurrency, defaultAllocBenchDuration.String(), c.CRDBNodes())
 
 	t.Status("running kv workload", runCmd)
-	return c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), runCmd)
+	return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), runCmd)
 }
 func registerAllocationBench(r registry.Registry) {
 	for _, spec := range []allocationBenchSpec{
@@ -252,7 +251,7 @@ func registerAllocationBench(r registry.Registry) {
 }
 
 func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchSpec) {
-	specOptions := []spec.Option{spec.CPU(allocSpec.cpus)}
+	specOptions := []spec.Option{spec.CPU(allocSpec.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(allocSpec.cpus)}
 	r.Add(registry.TestSpec{
 		Name:      fmt.Sprintf("allocbench/nodes=%d/cpu=%d/%s", allocSpec.nodes, allocSpec.cpus, allocSpec.load.desc),
 		Owner:     registry.OwnerKV,
@@ -274,8 +273,6 @@ func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchS
 func setupAllocationBench(
 	ctx context.Context, t test.Test, c cluster.Cluster, spec allocationBenchSpec,
 ) (clusterstats.StatCollector, func(context.Context)) {
-	workloadNode := c.Spec().NodeCount
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	t.Status("starting cluster")
 	for i := 1; i <= spec.nodes; i++ {
 		// Don't start a backup schedule as this test reports to roachperf.
@@ -294,11 +291,9 @@ func setupStatCollector(
 	t.Status("setting up prometheus and grafana")
 
 	// Setup the prometheus instance and client.
-	clusNodes := c.Range(1, spec.nodes)
-	promNode := c.Node(c.Spec().NodeCount)
 	cfg := (&prometheus.Config{}).
-		WithCluster(clusNodes.InstallNodes()).
-		WithPrometheusNode(promNode.InstallNodes()[0])
+		WithCluster(c.CRDBNodes().InstallNodes()).
+		WithPrometheusNode(c.WorkloadNode().InstallNodes()[0])
 
 	err := c.StartGrafana(ctx, t.L(), cfg)
 	require.NoError(t, err)

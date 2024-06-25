@@ -24,6 +24,8 @@ import (
 
 func registerRoachmart(r registry.Registry) {
 	runRoachmart := func(ctx context.Context, t test.Test, c cluster.Cluster, partition bool) {
+		// The roachmart workload is not available in the cockroach binary,
+		// so we must use the deprecated workload.
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 

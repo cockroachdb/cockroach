@@ -41,28 +41,25 @@ func registerIndexOverload(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			crdbNodes := c.Spec().NodeCount - 1
-			workloadNode := c.Spec().NodeCount
-
 			c.Start(
 				ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule),
-				install.MakeClusterSettings(), c.Range(1, crdbNodes),
+				install.MakeClusterSettings(), c.CRDBNodes(),
 			)
 
 			{
 				promCfg := &prometheus.Config{}
-				promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0])
+				promCfg.WithPrometheusNode(c.WorkloadNode().InstallNodes()[0])
 				promCfg.WithNodeExporter(c.All().InstallNodes())
-				promCfg.WithCluster(c.Range(1, crdbNodes).InstallNodes())
+				promCfg.WithCluster(c.CRDBNodes().InstallNodes())
 				promCfg.WithGrafanaDashboardJSON(grafana.SnapshotAdmissionControlGrafanaJSON)
 				promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig("workload",
-					"/", makeWorkloadScrapeNodes(c.Node(workloadNode).InstallNodes()[0], []workloadInstance{
-						{nodes: c.Node(workloadNode)},
+					"/", makeWorkloadScrapeNodes(c.WorkloadNode().InstallNodes()[0], []workloadInstance{
+						{nodes: c.WorkloadNode()},
 					})))
-				_, cleanupFunc := setupPrometheusForRoachtest(ctx, t, c, promCfg, []workloadInstance{{nodes: c.Node(workloadNode)}})
+				_, cleanupFunc := setupPrometheusForRoachtest(ctx, t, c, promCfg, []workloadInstance{{nodes: c.WorkloadNode()}})
 				defer cleanupFunc()
 			}
 
@@ -70,18 +67,18 @@ func registerIndexOverload(r registry.Registry) {
 			assert.NoError(t, err)
 			testDuration := 3 * duration
 
-			db := c.Conn(ctx, t.L(), crdbNodes)
+			db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 			defer db.Close()
 
 			if !t.SkipInit() {
 				t.Status("initializing kv dataset ", time.Minute)
 				splits := ifLocal(c, " --splits=3", " --splits=100")
-				c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload init kv "+splits+" {pgurl:1}")
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload init kv "+splits+" {pgurl:1}")
 
 				// We need a big enough size so index creation will take enough time.
 				t.Status("initializing tpcc dataset ", duration)
 				warehouses := ifLocal(c, " --warehouses=1", " --warehouses=2000")
-				c.Run(ctx, option.WithNodes(c.Node(workloadNode)), "./cockroach workload fixtures import tpcc --checks=false"+warehouses+" {pgurl:1}")
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload fixtures import tpcc --checks=false"+warehouses+" {pgurl:1}")
 
 				// Setting this low allows us to hit overload. In a larger cluster with
 				// more nodes and larger tables, it will hit the unmodified 1000 limit.
@@ -95,13 +92,13 @@ func registerIndexOverload(r registry.Registry) {
 			}
 
 			t.Status("starting kv workload thread to run for ", testDuration)
-			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				testDurationStr := " --duration=" + testDuration.String()
 				concurrency := ifLocal(c, "  --concurrency=8", " --concurrency=2048")
-				c.Run(ctx, option.WithNodes(c.Node(crdbNodes+1)),
+				c.Run(ctx, option.WithNodes(c.CRDBNodes()),
 					"./cockroach workload run kv --read-percent=50 --max-rate=1000 --max-block-bytes=4096"+
-						testDurationStr+concurrency+fmt.Sprintf(" {pgurl:1-%d}", crdbNodes),
+						testDurationStr+concurrency+fmt.Sprintf(" {pgurl%s}", c.CRDBNodes()),
 				)
 				return nil
 			})

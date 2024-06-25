@@ -46,7 +46,7 @@ func registerFollowerOverload(r registry.Registry) {
 			// bandwidth limits on AWS, see:
 			// https://github.com/cockroachdb/cockroach/issues/82109#issuecomment-1154049976
 			Cluster: func() spec.ClusterSpec {
-				c := r.MakeClusterSpec(4, spec.CPU(4), spec.ReuseNone(), spec.DisableLocalSSD())
+				c := r.MakeClusterSpec(4, spec.CPU(4), spec.WorkloadNode(), spec.ReuseNone(), spec.DisableLocalSSD())
 				c.AWS.MachineType = cfg.cloudConfig.AWSInstanceType
 				c.AWS.Zones = cfg.cloudConfig.AWSRegion
 				c.GCE.MachineType = cfg.cloudConfig.GCEInstanceType
@@ -156,15 +156,13 @@ func runAdmissionControlFollowerOverload(
 
 	// Set up prometheus.
 	{
-		clusNodes := c.Range(1, c.Spec().NodeCount-1)
-		workloadNode := c.Node(c.Spec().NodeCount)
 		cfg := (&prometheus.Config{}).
-			WithPrometheusNode(workloadNode.InstallNodes()[0]).
+			WithPrometheusNode(c.WorkloadNode().InstallNodes()[0]).
 			WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana").
-			WithCluster(clusNodes.InstallNodes()).
-			WithNodeExporter(clusNodes.InstallNodes()).
-			WithWorkload("kv-n12", workloadNode.InstallNodes()[0], 2112). // kv-n12
-			WithWorkload("kv-n3", workloadNode.InstallNodes()[0], 2113)   // kv-n3 (if present)
+			WithCluster(c.CRDBNodes().InstallNodes()).
+			WithNodeExporter(c.CRDBNodes().InstallNodes()).
+			WithWorkload("kv-n12", c.WorkloadNode().InstallNodes()[0], 2112). // kv-n12
+			WithWorkload("kv-n3", c.WorkloadNode().InstallNodes()[0], 2113)   // kv-n3 (if present)
 
 		require.NoError(t, c.StartGrafana(ctx, t.L(), cfg))
 		cleanupFunc := func() {
@@ -177,8 +175,7 @@ func runAdmissionControlFollowerOverload(
 
 	phaseDuration := 3 * time.Hour
 
-	nodes := c.Range(1, 3)
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 	db := c.Conn(ctx, t.L(), 1)
 	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), db))
 
@@ -190,11 +187,11 @@ func runAdmissionControlFollowerOverload(
 	if cfg.kv0N12 {
 		args := strings.Fields("./cockroach workload init kv {pgurl:1}")
 		args = append(args, strings.Fields(cfg.kvN12ExtraArgs)...)
-		c.Run(ctx, option.WithNodes(c.Node(1)), args...)
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), args...)
 	}
 	if cfg.kv50N3 {
 		args := strings.Fields("./cockroach workload init kv --db kvn3 {pgurl:1}")
-		c.Run(ctx, option.WithNodes(c.Node(1)), args...)
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), args...)
 	}
 
 	// Node 3 should not have any leases (excepting kvn3, if present).
@@ -276,7 +273,7 @@ func runAdmissionControlFollowerOverload(
 			maxRate, maxBytes, maxBytes,
 		)
 
-		c.Run(ctx, option.WithNodes(c.Node(4)), deployWorkload)
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), deployWorkload)
 	}
 	if cfg.kv50N3 {
 		// On n3, we run a "trickle" workload that does not add much work to the
@@ -290,11 +287,11 @@ sudo systemd-run --property=Type=exec \
 --remain-after-exit --unit kv-n3 -- ./cockroach workload run kv --db kvn3 \
 --read-percent 50 --max-rate 100 --concurrency 1000 --min-block-bytes 100 --max-block-bytes 100 \
 --prometheus-port 2113 --tolerate-errors {pgurl:3}`
-		c.Run(ctx, option.WithNodes(c.Node(4)), deployWorkload)
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), deployWorkload)
 	}
 	t.L().Printf("deployed workload")
 
-	wait(c.NewMonitor(ctx, nodes), phaseDuration)
+	wait(c.NewMonitor(ctx, c.CRDBNodes()), phaseDuration)
 
 	if cfg.ioNemesis {
 		// Limit write throughput on s3 to 20mb/s. This is not enough to keep up
@@ -315,7 +312,7 @@ sudo systemd-run --property=Type=exec \
 		t.L().Printf("installed write throughput limit on n3")
 	}
 
-	wait(c.NewMonitor(ctx, nodes), phaseDuration)
+	wait(c.NewMonitor(ctx, c.CRDBNodes()), phaseDuration)
 
 	// TODO(aaditya,irfansharif): collect, assert on, and export metrics, using:
 	// https://github.com/cockroachdb/cockroach/pull/80724.
