@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -50,29 +51,23 @@ type tpchBenchSpec struct {
 // This benchmark runs with a single load generator node running a single
 // worker.
 func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBenchSpec) {
-	roachNodes := c.Range(1, c.Spec().NodeCount-1)
-	loadNode := c.Node(c.Spec().NodeCount)
-
-	t.Status("copying binaries")
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
-
 	filename := b.benchType
 	t.Status(fmt.Sprintf("downloading %s query file from %s", filename, b.url))
-	if err := c.RunE(ctx, option.WithNodes(loadNode), fmt.Sprintf("curl %s > %s", b.url, filename)); err != nil {
+	if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf("curl %s > %s", b.url, filename)); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Status("starting nodes")
-	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), roachNodes)
+	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
 
-	m := c.NewMonitor(ctx, roachNodes)
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		conn := c.Conn(ctx, t.L(), 1)
 		defer conn.Close()
 
 		t.Status("setting up dataset")
 		err := loadTPCHDataset(
-			ctx, t, c, conn, b.ScaleFactor, m, roachNodes, true, /* disableMergeQueue */
+			ctx, t, c, conn, b.ScaleFactor, m, c.CRDBNodes(), true, /* disableMergeQueue */
 		)
 		if err != nil {
 			return err
@@ -90,16 +85,16 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 
 		// Run with only one worker to get best-case single-query performance.
 		cmd := fmt.Sprintf(
-			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
+			"./cockroach workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
 				"--num-runs=%d --max-ops=%d {pgurl%s} "+
 				"--histograms="+t.PerfArtifactsDir()+"/stats.json --histograms-max-latency=%s",
 			filename,
 			b.numRunsPerQuery,
 			maxOps,
-			roachNodes,
+			c.CRDBNodes(),
 			b.maxLatency.String(),
 		)
-		if err := c.RunE(ctx, option.WithNodes(loadNode), cmd); err != nil {
+		if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
 			t.Fatal(err)
 		}
 		return nil
@@ -167,7 +162,7 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 		Name:             strings.Join(nameParts, "/"),
 		Owner:            registry.OwnerSQLQueries,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(numNodes),
+		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode()),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

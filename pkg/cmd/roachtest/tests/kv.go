@@ -362,20 +362,18 @@ func registerKVContention(r registry.Registry) {
 		Name:             fmt.Sprintf("kv/contention/nodes=%d", nodes),
 		Owner:            registry.OwnerKV,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(nodes + 1),
+		Cluster:          r.MakeClusterSpec(nodes+1, spec.WorkloadNode()),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-
 			// Start the cluster with an extremely high txn liveness threshold.
 			// If requests ever get stuck on a transaction that was abandoned
 			// then it will take 10m for them to get unstuck, at which point the
 			// QPS threshold check in the test is guaranteed to fail.
 			settings := install.MakeClusterSettings()
 			settings.Env = append(settings.Env, "COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, nodes))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.CRDBNodes())
 
 			conn := c.Conn(ctx, t.L(), 1)
 			// Enable request tracing, which is a good tool for understanding
@@ -394,7 +392,7 @@ func registerKVContention(r registry.Registry) {
 			}
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				// Write to a small number of keys to generate a large amount of
 				// contention. Use a relatively high amount of concurrency and
@@ -410,11 +408,11 @@ func registerKVContention(r registry.Registry) {
 				// Run the workload for an hour. Add a secondary index to avoid
 				// UPSERTs performing blind writes.
 				const duration = 1 * time.Hour
-				cmd := fmt.Sprintf("./workload run kv --init --secondary-index --duration=%s "+
-					"--cycle-length=%d --concurrency=%d --batch=%d --splits=%d {pgurl:1-%d}",
-					duration, cycleLength, concurrency, batchSize, splits, nodes)
+				cmd := fmt.Sprintf("./cockroach workload run kv --init --secondary-index --duration=%s "+
+					"--cycle-length=%d --concurrency=%d --batch=%d --splits=%d {pgurl%s}",
+					duration, cycleLength, concurrency, batchSize, splits, c.CRDBNodes())
 				start := timeutil.Now()
-				c.Run(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				end := timeutil.Now()
 
 				// Assert that the average throughput stayed above a certain
@@ -433,18 +431,17 @@ func registerKVQuiescenceDead(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:                "kv/quiescence/nodes=3",
 		Owner:               registry.OwnerReplication,
-		Cluster:             r.MakeClusterSpec(4),
+		Cluster:             r.MakeClusterSpec(4, spec.WorkloadNode()),
 		CompatibleClouds:    registry.AllExceptAWS,
 		Suites:              registry.Suites(registry.Nightly),
 		Leases:              registry.EpochLeases,
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 			settings := install.MakeClusterSettings(install.ClusterSettingsOption{
 				"sql.stats.automatic_collection.enabled": "false",
 			})
-			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, c.Range(1, nodes))
+			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, c.CRDBNodes())
 			m := c.NewMonitor(ctx, c.Range(1, nodes))
 
 			db := c.Conn(ctx, t.L(), 1)
@@ -472,15 +469,15 @@ func registerKVQuiescenceDead(r registry.Registry) {
 				return (after - before) / timeutil.Since(tBegin).Seconds()
 			}
 
-			const kv = "./workload run kv --duration=10m --read-percent=0"
+			const kv = "./cockroach workload run kv --duration=10m --read-percent=0"
 
 			// Initialize the database with ~10k ranges so that the absence of
 			// quiescence hits hard once a node goes down.
-			c.Run(ctx, option.WithNodes(c.Node(nodes+1)), "./workload run kv --init --max-ops=1 --splits 10000 --concurrency 100 {pgurl:1}")
-			c.Run(ctx, option.WithNodes(c.Node(nodes+1)), kv+" --seed 0 {pgurl:1}")
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload run kv --init --max-ops=1 --splits 10000 --concurrency 100 {pgurl:1}")
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), kv+" --seed 0 {pgurl:1}")
 			// Measure qps with all nodes up (i.e. with quiescence).
 			qpsAllUp := qps(func() {
-				c.Run(ctx, option.WithNodes(c.Node(nodes+1)), kv+" --seed 1 {pgurl:1}")
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), kv+" --seed 1 {pgurl:1}")
 			})
 			// Graceful shut down third node.
 			m.ExpectDeath()
@@ -495,7 +492,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			qpsOneDown := qps(func() {
 				// Use a different seed to make sure it's not just stepping into the
 				// other earlier kv invocation's footsteps.
-				c.Run(ctx, option.WithNodes(c.Node(nodes+1)), kv+" --seed 2 {pgurl:1}")
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), kv+" --seed 2 {pgurl:1}")
 			})
 
 			if minFrac, actFrac := 0.8, qpsOneDown/qpsAllUp; actFrac < minFrac {
@@ -513,20 +510,18 @@ func registerKVGracefulDraining(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "kv/gracefuldraining",
 		Owner:            registry.OwnerKV,
-		Cluster:          r.MakeClusterSpec(7),
+		Cluster:          r.MakeClusterSpec(7, spec.WorkloadNode()),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
-
 			t.Status("starting cluster")
 			// If the test ever fails, the person who investigates the
 			// failure will likely be thankful for this additional logging.
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store=2,store_rebalancer=2")
-			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
+			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
 
 			// Don't connect to the node we are going to shut down.
 			dbs := make([]*gosql.DB, nodes-1)
@@ -544,7 +539,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// before it starts draining.
 			c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach workload init kv --splits 100 {pgurl:1}")
 
-			m := c.NewMonitor(ctx, c.Nodes(1, nodes))
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.ExpectDeath()
 
 			// specifiedQPS is going to be the --max-rate for the kv workload.
@@ -564,14 +559,14 @@ func registerKVGracefulDraining(r registry.Registry) {
 			desiredRunDuration := 10 * time.Minute
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
-					"./cockroach workload run kv --duration=%s --read-percent=50 --follower-read-percent=50 --concurrency=200 --max-rate=%d {pgurl:1-%d}",
-					desiredRunDuration, specifiedQPS, nodes-1)
+					"./cockroach workload run kv --duration=%s --read-percent=50 --follower-read-percent=50 --concurrency=200 --max-rate=%d {pgurl%s}",
+					desiredRunDuration, specifiedQPS, c.CRDBNodes())
 				t.WorkerStatus(cmd)
 				defer func() {
 					t.WorkerStatus("workload command completed")
 					t.WorkerStatus()
 				}()
-				return c.RunE(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
+				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 			})
 
 			verifyQPS := func(ctx context.Context) error {
@@ -692,33 +687,32 @@ func registerKVSplits(r registry.Registry) {
 			Name:             fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases),
 			Owner:            registry.OwnerKV,
 			Timeout:          item.timeout,
-			Cluster:          r.MakeClusterSpec(4),
+			Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           item.leases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				nodes := c.Spec().NodeCount - 1
-				c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
 
 				settings := install.MakeClusterSettings()
 				settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=1m", "COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce))
 				startOpts := option.NewStartOpts(option.NoBackupSchedule)
 				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--cache=256MiB")
-				c.Start(ctx, t.L(), startOpts, settings, c.Range(1, nodes))
+				c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
 				t.Status("running workload")
 				workloadCtx, workloadCancel := context.WithCancel(ctx)
-				m := c.NewMonitor(workloadCtx, c.Range(1, nodes))
+				m := c.NewMonitor(workloadCtx, c.CRDBNodes())
 				m.Go(func(ctx context.Context) error {
 					defer workloadCancel()
 					concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
 					splits := " --splits=" + ifLocal(c, "2000", fmt.Sprint(item.splits))
 					cmd := fmt.Sprintf(
-						"./workload run kv --init --max-ops=1"+
+						"./cockroach workload run kv --init --max-ops=1"+
 							concurrency+splits+
-							" {pgurl:1-%d}",
-						nodes)
-					c.Run(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
+							" {pgurl%s}",
+						c.CRDBNodes())
+					c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 					return nil
 				})
 				m.Wait()
@@ -731,22 +725,20 @@ func registerKVScalability(r registry.Registry) {
 	runScalability := func(ctx context.Context, t test.Test, c cluster.Cluster, percent int) {
 		nodes := c.Spec().NodeCount - 1
 
-		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
 			c.Wipe(ctx, c.Range(1, nodes))
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
-				cmd := fmt.Sprintf("./workload run kv --init --read-percent=%d "+
+				cmd := fmt.Sprintf("./cockroach workload run kv --init --read-percent=%d "+
 					"--splits=1000 --duration=1m "+fmt.Sprintf("--concurrency=%d", i)+
-					" {pgurl:1-%d}",
-					percent, nodes)
+					" {pgurl%s}",
+					percent, c.CRDBNodes())
 
-				return c.RunE(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
+				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 			})
 			m.Wait()
 		}
@@ -759,7 +751,7 @@ func registerKVScalability(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:             fmt.Sprintf("kv%d/scale/nodes=6", p),
 				Owner:            registry.OwnerKV,
-				Cluster:          r.MakeClusterSpec(7, spec.CPU(8)),
+				Cluster:          r.MakeClusterSpec(7, spec.CPU(8), spec.WorkloadNode(), spec.WorkloadNodeCPU(8)),
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Nightly),
 				Leases:           registry.MetamorphicLeases,
@@ -787,8 +779,7 @@ func registerKVRangeLookups(r registry.Registry) {
 		nodes := c.Spec().NodeCount - 1
 		doneInit := make(chan struct{})
 		doneWorkload := make(chan struct{})
-		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 		t.Status("running workload")
 
@@ -808,8 +799,8 @@ func registerKVRangeLookups(r registry.Registry) {
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
 			defer close(doneInit)
-			cmd := "./workload init kv --splits=1000 {pgurl:1}"
-			if err = c.RunE(ctx, option.WithNodes(c.Node(nodes+1)), cmd); err != nil {
+			cmd := "./cockroach workload init kv --splits=1000 {pgurl:1}"
+			if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
 				return err
 			}
 			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
@@ -817,11 +808,11 @@ func registerKVRangeLookups(r registry.Registry) {
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is
 			// expected to create `result is ambiguous (replica removed)` errors.
-			cmd = fmt.Sprintf("./workload run kv --tolerate-errors"+
+			cmd = fmt.Sprintf("./cockroach workload run kv --tolerate-errors"+
 				concurrency+duration+readPercent+
-				" {pgurl:1-%d}", nodes)
+				" {pgurl%s}", c.CRDBNodes())
 			start := timeutil.Now()
-			if err = c.RunE(ctx, option.WithNodes(c.Node(nodes+1)), cmd); err != nil {
+			if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
 				return err
 			}
 			end := timeutil.Now()
@@ -896,7 +887,7 @@ func registerKVRangeLookups(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:             fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
 			Owner:            registry.OwnerKV,
-			Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
+			Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus)),
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
@@ -964,7 +955,7 @@ func registerKVRestartImpact(r registry.Registry) {
 		Suites:           registry.Suites(registry.Weekly),
 		Owner:            registry.OwnerAdmissionControl,
 		Timeout:          4 * time.Hour,
-		Cluster:          r.MakeClusterSpec(13, spec.CPU(8), spec.DisableLocalSSD()),
+		Cluster:          r.MakeClusterSpec(13, spec.CPU(8), spec.WorkloadNode(), spec.WorkloadNodeCPU(8), spec.DisableLocalSSD()),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1

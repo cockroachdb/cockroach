@@ -49,7 +49,6 @@ func registerImportCancellation(r registry.Registry) {
 }
 
 func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
 	startOpts := maybeUseMemoryBudget(t, 50)
 	startOpts.RoachprodOpts.ScheduleBackups = true
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings())
@@ -163,7 +162,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		// were run 2 times.
 		maxOps := 2 * numQueries
 		cmd := fmt.Sprintf(
-			"./workload run tpch --db=csv --concurrency=1 --queries=%s --max-ops=%d {pgurl%s} "+
+			"./cockroach workload run tpch --db=csv --concurrency=1 --queries=%s --max-ops=%d {pgurl%s} "+
 				"--enable-checks=true", queries, maxOps, c.All())
 		if err := c.RunE(ctx, option.WithNodes(c.Node(1)), cmd); err != nil {
 			t.Fatal(err)

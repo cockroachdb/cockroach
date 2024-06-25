@@ -518,14 +518,12 @@ func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int, sharedProcessMT bool) 
 	// Note that we use --default-vectorize flag which tells tpch workload to
 	// use the current cluster setting sql.defaults.vectorize which must have
 	// been set correctly in preQueryRunHook.
-	return fmt.Sprintf("./workload run tpch --concurrency=1 --db=tpch "+
+	return fmt.Sprintf("./cockroach workload run tpch --concurrency=1 --db=tpch "+
 		"--default-vectorize --max-ops=%d --queries=%d %s --enable-checks=true",
 		numRunsPerQuery, queryNum, url)
 }
 
 func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tpchVecTestCase) {
-	firstNode := c.Node(1)
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", firstNode)
 	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
 
 	var conn *gosql.DB

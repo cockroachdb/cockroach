@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -34,6 +33,8 @@ func registerSchemaChangeBenchmarkLargeSchema(r registry.Registry, numTables int
 			// runner.
 			10,
 			spec.CPU(8),
+			spec.WorkloadNode(),
+			spec.WorkloadNodeCPU(8),
 			spec.VolumeSize(800),
 			spec.GCEVolumeType("pd-ssd"),
 			spec.GCEMachineType("n2-standard-8"),
@@ -89,7 +90,6 @@ func registerSchemaChangeBenchmarkLargeSchema(r registry.Registry, numTables int
 			// Create all the databases based on our lists of active vs inactive
 			// ones.
 			const inactiveDbListType = 1
-			var workloadNode option.NodeListOption
 			for dbListType, dbList := range [][]string{activeDBList, inactiveDBList} {
 				populateFileName := fmt.Sprintf("populate_%d", dbListType)
 				options := tpccOptions{
@@ -103,12 +103,11 @@ func registerSchemaChangeBenchmarkLargeSchema(r registry.Registry, numTables int
 					options.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					}
 				}
-				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.Node(c.Spec().NodeCount))
+				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.WorkloadNode())
 				require.NoError(t, err)
-				_, workloadNode = setupTPCC(ctx, t, t.L(), c, options)
 			}
 			// Upload a file containing the ORM queries.
-			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, workloadNode))
+			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, c.WorkloadNode()))
 			mon := c.NewMonitor(ctx, c.All())
 			// Next startup the workload for our list of databases from earlier.
 			for dbListType, dbList := range [][]string{activeDBList, inactiveDBList} {
@@ -130,7 +129,7 @@ func registerSchemaChangeBenchmarkLargeSchema(r registry.Registry, numTables int
 						wlInstance = append(
 							wlInstance,
 							workloadInstance{
-								nodes:          c.Range(1, c.Spec().NodeCount-1),
+								nodes:          c.CRDBNodes(),
 								prometheusPort: 5050,
 							},
 						)
