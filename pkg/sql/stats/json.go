@@ -64,7 +64,10 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 	if typ == nil {
 		return fmt.Errorf("histogram type is unset")
 	}
-	js.HistogramColumnType = typ.SQLString()
+	// Use the fully qualified type name in case this is part of injected stats
+	// done across databases. If it is a user-defined type, we need the type name
+	// resolution to be for the correct database.
+	js.HistogramColumnType = typ.SQLStringFullyQualified()
 	js.HistogramBuckets = make([]JSONHistoBucket, len(h.Buckets))
 	js.HistogramVersion = h.Version
 	var a tree.DatumAlloc

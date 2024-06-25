@@ -1387,14 +1387,14 @@ SHOW CREATE VIEW v10
 ----
 v10  CREATE VIEW public.v10 (
        view_typ
-     ) AS SELECT 'a':::db2.public.view_typ_new
+     ) AS SELECT 'a':::public.view_typ_new
 
 query TT
 SHOW CREATE VIEW v10 WITH REDACT
 ----
 v10  CREATE VIEW public.v10 (
        view_typ
-     ) AS SELECT ‹×›:::db2.public.view_typ_new
+     ) AS SELECT ‹×›:::public.view_typ_new
 
 query T
 SELECT * FROM v10
@@ -1412,14 +1412,14 @@ SHOW CREATE VIEW v11
 ----
 v11  CREATE VIEW public.v11 (
        k
-     ) AS (SELECT 'a':::db2.public.view_typ < 'a':::db2.public.view_typ AS k)
+     ) AS (SELECT 'a':::public.view_typ < 'a':::public.view_typ AS k)
 
 query TT
 SHOW CREATE VIEW v11 WITH REDACT
 ----
 v11  CREATE VIEW public.v11 (
        k
-     ) AS (SELECT ‹×›:::db2.public.view_typ < ‹×›:::db2.public.view_typ AS k)
+     ) AS (SELECT ‹×›:::public.view_typ < ‹×›:::public.view_typ AS k)
 
 query B
 SELECT * FROM v11
@@ -1437,14 +1437,14 @@ SHOW CREATE VIEW v12
 ----
 v12  CREATE VIEW public.v12 (
        k
-     ) AS (SELECT k FROM (SELECT 'a':::db2.public.view_type_new AS k) AS "?subquery1?")
+     ) AS (SELECT k FROM (SELECT 'a':::public.view_type_new AS k) AS "?subquery1?")
 
 query TT
 SHOW CREATE VIEW v12 WITH REDACT
 ----
 v12  CREATE VIEW public.v12 (
        k
-     ) AS (SELECT k FROM (SELECT ‹×›:::db2.public.view_type_new AS k) AS "?subquery1?")
+     ) AS (SELECT k FROM (SELECT ‹×›:::public.view_type_new AS k) AS "?subquery1?")
 
 query T
 SELECT * FROM v12
@@ -1462,14 +1462,14 @@ SHOW CREATE VIEW v13
 ----
 v13  CREATE VIEW public.v13 (
        k
-     ) AS (SELECT 'a':::db2.public.view_type AS k UNION SELECT 'b':::db2.public.view_type)
+     ) AS (SELECT 'a':::public.view_type AS k UNION SELECT 'b':::public.view_type)
 
 query TT
 SHOW CREATE VIEW v13 WITH REDACT
 ----
 v13  CREATE VIEW public.v13 (
        k
-     ) AS (SELECT ‹×›:::db2.public.view_type AS k UNION SELECT ‹×›:::db2.public.view_type)
+     ) AS (SELECT ‹×›:::public.view_type AS k UNION SELECT ‹×›:::public.view_type)
 
 query T
 SELECT * FROM v13 ORDER BY k
@@ -1488,10 +1488,7 @@ SHOW CREATE VIEW v14
 ----
 v14  CREATE VIEW public.v14 (
        "array"
-     ) AS (
-         SELECT
-           ARRAY['a':::db2.public.view_type_new, 'b':::db2.public.view_type_new]:::db2.public.view_type_new[]
-       )
+     ) AS (SELECT ARRAY['a':::public.view_type_new, 'b':::public.view_type_new]:::public.view_type_new[])
 
 query TT
 SHOW CREATE VIEW v14 WITH REDACT
@@ -1500,7 +1497,7 @@ v14  CREATE VIEW public.v14 (
        "array"
      ) AS (
          SELECT
-           ARRAY[‹×›:::db2.public.view_type_new, ‹×›:::db2.public.view_type_new]:::db2.public.view_type_new[]
+           ARRAY[‹×›:::public.view_type_new, ‹×›:::public.view_type_new]:::public.view_type_new[]
        )
 
 query T
@@ -1519,10 +1516,7 @@ SHOW CREATE VIEW v15
 ----
 v15  CREATE VIEW public.v15 (
        view_type_new
-     ) AS (
-         SELECT
-           ARRAY['a':::db2.public.view_type, 'b':::db2.public.view_type][2:::INT8] AS view_type_new
-       )
+     ) AS (SELECT ARRAY['a':::public.view_type, 'b':::public.view_type][2:::INT8] AS view_type_new)
 
 query TT
 SHOW CREATE VIEW v15 WITH REDACT
@@ -1531,7 +1525,7 @@ v15  CREATE VIEW public.v15 (
        view_type_new
      ) AS (
          SELECT
-           ARRAY[‹×›:::db2.public.view_type, ‹×›:::db2.public.view_type][‹×›:::INT8]
+           ARRAY[‹×›:::public.view_type, ‹×›:::public.view_type][‹×›:::INT8]
              AS view_type_new
        )
 

@@ -109,7 +109,7 @@ db1 sc2 f2 function false
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(a sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -118,10 +118,10 @@ CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8 := 0;
-	foobar db1.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
-	SELECT 'Good':::db1.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	RETURN nextval('sc1.sq1'::REGCLASS);
 	END;
 $$
@@ -145,8 +145,8 @@ CREATE FUNCTION sc2.f2()
 	x INT8;
 	BEGIN
 	SELECT a FROM db1.sc2.tbl2 LIMIT 1 INTO x;
-	SELECT sc1.f1('Good':::db1.sc1.enum1);
-	CALL public.p_nested('Good':::db1.sc1.enum1);
+	SELECT sc1.f1('Good':::sc1.enum1);
+	CALL public.p_nested('Good':::sc1.enum1);
 	RETURN x;
 	END;
 $$
@@ -170,7 +170,7 @@ USE db1_new
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(a db1_new.sc1.enum1)
+CREATE FUNCTION sc1.f1(a sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -179,10 +179,10 @@ CREATE FUNCTION sc1.f1(a db1_new.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8 := 0;
-	foobar db1_new.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1_new.sc1.tbl1;
-	SELECT 'Good':::db1_new.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	RETURN nextval('sc1.sq1'::REGCLASS);
 	END;
 $$
@@ -201,8 +201,8 @@ CREATE FUNCTION sc2.f2()
 	x INT8;
 	BEGIN
 	SELECT a FROM db1_new.sc2.tbl2 LIMIT 1 INTO x;
-	SELECT sc1.f1('Good':::db1_new.sc1.enum1);
-	CALL public.p_nested('Good':::db1_new.sc1.enum1);
+	SELECT sc1.f1('Good':::sc1.enum1);
+	CALL public.p_nested('Good':::sc1.enum1);
 	RETURN x;
 	END;
 $$
@@ -360,7 +360,7 @@ db1 sc2 f2 function true
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(a sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -369,10 +369,10 @@ CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8;
-	foobar db1.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
-	SELECT 'Good':::db1.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS) INTO x;
 	RETURN x;
 	END;
@@ -403,7 +403,7 @@ USE db1
 query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
-CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(a sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -412,10 +412,10 @@ CREATE FUNCTION sc1.f1(a db1.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8;
-	foobar db1.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
-	SELECT 'Good':::db1.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS) INTO x;
 	RETURN x;
 	END;

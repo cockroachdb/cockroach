@@ -329,13 +329,13 @@ query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f_udt_rewrite];
 ----
 CREATE FUNCTION public.f_udt_rewrite()
-  RETURNS test.public.notmyworkday
+  RETURNS public.notmyworkday
   VOLATILE
   NOT LEAKPROOF
   CALLED ON NULL INPUT
   LANGUAGE SQL
   AS $$
-  SELECT 'Monday':::test.public.notmyworkday;
+  SELECT 'Monday':::public.notmyworkday;
 $$
 
 query T

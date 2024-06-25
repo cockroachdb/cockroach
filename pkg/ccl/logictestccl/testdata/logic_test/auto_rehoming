@@ -19,12 +19,12 @@ CREATE TABLE db.rbr (
 query TT
 SHOW CREATE TABLE db.rbr
 ----
-db.public.rbr               CREATE TABLE public.rbr (
-                            p INT8 NOT NULL,
-                            s STRING NULL,
-                            crdb_region db.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::db.public.crdb_internal_region ON UPDATE rehome_row()::db.public.crdb_internal_region,
-                            CONSTRAINT rbr_pkey PRIMARY KEY (p ASC)
-) LOCALITY REGIONAL BY ROW
+db.public.rbr  CREATE TABLE public.rbr (
+                 p INT8 NOT NULL,
+                 s STRING NULL,
+                 crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region ON UPDATE rehome_row()::public.crdb_internal_region,
+                 CONSTRAINT rbr_pkey PRIMARY KEY (p ASC)
+               ) LOCALITY REGIONAL BY ROW
 
 
 statement ok
@@ -36,8 +36,8 @@ ALTER TABLE db.rbr_altered SET LOCALITY REGIONAL BY ROW
 query TT
 SHOW CREATE TABLE db.rbr_altered
 ----
-db.public.rbr_altered       CREATE TABLE public.rbr_altered (
-                            p INT8 NOT NULL,
-                            crdb_region db.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::db.public.crdb_internal_region ON UPDATE rehome_row()::db.public.crdb_internal_region,
-                            CONSTRAINT rbr_altered_pkey PRIMARY KEY (p ASC)
-) LOCALITY REGIONAL BY ROW
+db.public.rbr_altered  CREATE TABLE public.rbr_altered (
+                         p INT8 NOT NULL,
+                         crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region ON UPDATE rehome_row()::public.crdb_internal_region,
+                         CONSTRAINT rbr_altered_pkey PRIMARY KEY (p ASC)
+                       ) LOCALITY REGIONAL BY ROW

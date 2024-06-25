@@ -410,7 +410,7 @@ SHOW CREATE ALL TABLES
 ----
 create_statement
 CREATE TABLE public.t (
-  x type_test.public.test NULL,
+  x public.test NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
