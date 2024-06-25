@@ -375,7 +375,7 @@ func runCDCBenchWorkload(
 	readPercent int,
 	server cdcBenchServer,
 	format string,
-	withKafka bool,f // TODO: should be sinktype probably
+	withKafka bool, // TODO: should be sinktype probably
 ) {
 	var (
 		sinkURI   = "null://"

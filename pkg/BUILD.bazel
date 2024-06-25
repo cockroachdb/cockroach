@@ -849,7 +849,6 @@ GO_TARGETS = [
     "//pkg/ccl/changefeedccl/changefeedbase:changefeedbase_test",
     "//pkg/ccl/changefeedccl/changefeedpb:changefeedpb",
     "//pkg/ccl/changefeedccl/changefeedvalidators:changefeedvalidators",
-    "//pkg/ccl/changefeedccl/kgometrics:kgometrics",
     "//pkg/ccl/changefeedccl/kvevent:kvevent",
     "//pkg/ccl/changefeedccl/kvevent:kvevent_test",
     "//pkg/ccl/changefeedccl/kvfeed:kvfeed",
