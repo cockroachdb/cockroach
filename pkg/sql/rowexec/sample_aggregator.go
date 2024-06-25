@@ -413,7 +413,7 @@ func (s *sampleAggregator) sampleRow(
 	ctx context.Context, sr *stats.SampleReservoir, sampleRow rowenc.EncDatumRow, rank uint64,
 ) error {
 	prevCapacity := sr.Cap()
-	if err := sr.SampleRow(ctx, s.EvalCtx, sampleRow, rank); err != nil {
+	if err := sr.SampleRow(ctx, s.FlowCtx.EvalCtx, sampleRow, rank); err != nil {
 		if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
 			return err
 		}
@@ -462,7 +462,9 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 					if err != nil {
 						return err
 					}
-					lowerBound, err = eval.Expr(ctx, s.EvalCtx, lbTypedExpr)
+					// Lower bounds are serialized datums, so evaluating the
+					// expression shouldn't modify the eval context.
+					lowerBound, err = eval.Expr(ctx, s.FlowCtx.EvalCtx, lbTypedExpr)
 					if err != nil {
 						return err
 					}
@@ -470,7 +472,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 
 				h, err := s.generateHistogram(
 					ctx,
-					s.EvalCtx,
+					s.FlowCtx.EvalCtx,
 					&s.sr,
 					colIdx,
 					typ,
@@ -501,7 +503,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				// inverted keys.
 				h, err := s.generateHistogram(
 					ctx,
-					s.EvalCtx,
+					s.FlowCtx.EvalCtx,
 					invSr,
 					0, /* colIdx */
 					types.Bytes,

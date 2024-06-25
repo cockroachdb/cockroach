@@ -123,12 +123,16 @@ func (h *ProcOutputHelper) Reset() {
 // omitted if there is no filtering expression.
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
+//
+// If the provided evalCtx is the same as flowCtx.EvalCtx, then a copy will be
+// made internally when there are render expressions.
 func (h *ProcOutputHelper) Init(
 	ctx context.Context,
 	post *execinfrapb.PostProcessSpec,
 	coreOutputTypes []*types.T,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	flowCtx *FlowCtx,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
@@ -157,6 +161,12 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes[i] = coreOutputTypes[c]
 		}
 	} else if nRenders := len(post.RenderExprs); nRenders > 0 {
+		if evalCtx == flowCtx.EvalCtx {
+			// We haven't created a copy of the eval context, and we have some
+			// renders, then we'll need to create a copy ourselves since we're
+			// going to use the ExprHelper which might mutate the eval context.
+			evalCtx = flowCtx.NewEvalCtx()
+		}
 		if cap(h.OutputTypes) >= nRenders {
 			h.OutputTypes = h.OutputTypes[:nRenders]
 		} else {
@@ -345,9 +355,6 @@ type ProcessorBaseNoHelper struct {
 	ProcessorID int32
 
 	FlowCtx *FlowCtx
-
-	// EvalCtx is used for expression evaluation. It overrides the one in flowCtx.
-	EvalCtx *eval.Context
 
 	// Closed is set by InternalClose(). Once set, the processor's tracing span
 	// has been closed.
@@ -745,6 +752,8 @@ type ProcStateOpts struct {
 // - coreOutputTypes are the type schema of the rows output by the processor
 // core (i.e. the "internal schema" of the processor, see
 // execinfrapb.ProcessorSpec for more details).
+//
+// NB: it is assumed that the caller will not modify the eval context.
 func (pb *ProcessorBase) Init(
 	ctx context.Context,
 	self RowSource,
@@ -756,7 +765,7 @@ func (pb *ProcessorBase) Init(
 	opts ProcStateOpts,
 ) error {
 	return pb.InitWithEvalCtx(
-		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.NewEvalCtx(), processorID, memMonitor, opts,
+		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor, opts,
 	)
 }
 
@@ -775,7 +784,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	memMonitor *mon.BytesMonitor,
 	opts ProcStateOpts,
 ) error {
-	pb.ProcessorBaseNoHelper.Init(self, flowCtx, evalCtx, processorID, opts)
+	pb.ProcessorBaseNoHelper.Init(self, flowCtx, processorID, opts)
 	pb.MemMonitor = memMonitor
 
 	// Hydrate all types used in the processor.
@@ -783,18 +792,17 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	if err := resolver.HydrateTypeSlice(ctx, coreOutputTypes); err != nil {
 		return err
 	}
-	pb.SemaCtx = tree.MakeSemaContext(&resolver)
 
-	return pb.OutputHelper.Init(ctx, post, coreOutputTypes, &pb.SemaCtx, pb.EvalCtx)
+	pb.SemaCtx = tree.MakeSemaContext(&resolver)
+	return pb.OutputHelper.Init(ctx, post, coreOutputTypes, &pb.SemaCtx, evalCtx, flowCtx)
 }
 
 // Init initializes the ProcessorBaseNoHelper.
 func (pb *ProcessorBaseNoHelper) Init(
-	self RowSource, flowCtx *FlowCtx, evalCtx *eval.Context, processorID int32, opts ProcStateOpts,
+	self RowSource, flowCtx *FlowCtx, processorID int32, opts ProcStateOpts,
 ) {
 	pb.self = self
 	pb.FlowCtx = flowCtx
-	pb.EvalCtx = evalCtx
 	pb.ProcessorID = processorID
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
 	if opts.InputsToDrain != nil {

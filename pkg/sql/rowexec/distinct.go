@@ -159,7 +159,7 @@ func (d *distinct) matchLastGroupKey(row rowenc.EncDatumRow) (bool, error) {
 		return false, nil
 	}
 	for _, colIdx := range d.distinctCols.ordered {
-		res, err := d.lastGroupKey[colIdx].Compare(d.Ctx(), d.types[colIdx], &d.datumAlloc, d.EvalCtx, &row[colIdx])
+		res, err := d.lastGroupKey[colIdx].Compare(d.Ctx(), d.types[colIdx], &d.datumAlloc, d.FlowCtx.EvalCtx, &row[colIdx])
 		if res != 0 || err != nil {
 			return false, err
 		}

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,8 +26,9 @@ import (
 // boolean expression.
 type filtererProcessor struct {
 	execinfra.ProcessorBase
-	input  execinfra.RowSource
-	filter execinfrapb.ExprHelper
+	evalCtx *eval.Context
+	input   execinfra.RowSource
+	filter  execinfrapb.ExprHelper
 }
 
 var _ execinfra.Processor = &filtererProcessor{}
@@ -43,14 +45,20 @@ func newFiltererProcessor(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 ) (*filtererProcessor, error) {
-	f := &filtererProcessor{input: input}
+	f := &filtererProcessor{
+		// Make a copy of the eval context since we're going to pass it to the
+		// ExprHelper later (which might modify it).
+		evalCtx: flowCtx.NewEvalCtx(),
+		input:   input,
+	}
 	types := input.OutputTypes()
-	if err := f.Init(
+	if err := f.InitWithEvalCtx(
 		ctx,
 		f,
 		post,
 		types,
 		flowCtx,
+		f.evalCtx,
 		processorID,
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{f.input}},
@@ -58,7 +66,7 @@ func newFiltererProcessor(
 		return nil, err
 	}
 
-	if err := f.filter.Init(ctx, spec.Filter, types, &f.SemaCtx, f.EvalCtx); err != nil {
+	if err := f.filter.Init(ctx, spec.Filter, types, &f.SemaCtx, f.evalCtx); err != nil {
 		return nil, err
 	}
 

@@ -293,7 +293,9 @@ func (rb *routerBase) init(
 		rb.outputs[i].mu.rowContainer.Init(
 			nil, /* ordering */
 			types,
-			flowCtx.NewEvalCtx(),
+			// Eval context will not be mutated, so it's ok to use the shared
+			// one.
+			flowCtx.EvalCtx,
 			flowCtx.Cfg.TempStorage,
 			rb.outputs[i].memoryMonitor,
 			rb.outputs[i].diskMonitor,

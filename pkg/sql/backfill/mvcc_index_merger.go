@@ -27,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -75,17 +73,10 @@ var indexBackfillMergeNumWorkers = settings.RegisterIntSetting(
 // IndexBackfillMerger is a processor that merges entries from the corresponding
 // temporary index to a new index.
 type IndexBackfillMerger struct {
-	processorID int32
-	spec        execinfrapb.IndexBackfillMergerSpec
-
-	desc catalog.TableDescriptor
-
-	out execinfra.ProcOutputHelper
-
-	flowCtx *execinfra.FlowCtx
-
-	evalCtx *eval.Context
-
+	processorID    int32
+	spec           execinfrapb.IndexBackfillMergerSpec
+	desc           catalog.TableDescriptor
+	flowCtx        *execinfra.FlowCtx
 	muBoundAccount muBoundAccount
 }
 
@@ -159,20 +150,14 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 		output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
 	}
 
-	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	if err := ibm.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, ibm.flowCtx.NewEvalCtx()); err != nil {
-		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
-		return
-	}
-
-	numWorkers := int(indexBackfillMergeNumWorkers.Get(&ibm.evalCtx.Settings.SV))
+	numWorkers := int(indexBackfillMergeNumWorkers.Get(&ibm.flowCtx.Cfg.Settings.SV))
 	mergeCh := make(chan mergeChunk)
 	mergeTimestamp := ibm.spec.MergeTimestamp
 
 	g := ctxgroup.WithContext(ctx)
 	runWorker := func(ctx context.Context) error {
 		for mergeChunk := range mergeCh {
-			err := ibm.merge(ctx, ibm.evalCtx.Codec, ibm.desc, ibm.spec.TemporaryIndexes[mergeChunk.spanIdx],
+			err := ibm.merge(ctx, ibm.flowCtx.Codec(), ibm.desc, ibm.spec.TemporaryIndexes[mergeChunk.spanIdx],
 				ibm.spec.AddedIndexes[mergeChunk.spanIdx], mergeChunk.keys, mergeChunk.completedSpan)
 			if err != nil {
 				return err
@@ -275,8 +260,8 @@ func (ibm *IndexBackfillMerger) scan(
 			}
 		}
 	}
-	chunkSize := indexBackfillMergeBatchSize.Get(&ibm.evalCtx.Settings.SV)
-	chunkBytes := indexBackfillMergeBatchBytes.Get(&ibm.evalCtx.Settings.SV)
+	chunkSize := indexBackfillMergeBatchSize.Get(&ibm.flowCtx.Cfg.Settings.SV)
+	chunkBytes := indexBackfillMergeBatchBytes.Get(&ibm.flowCtx.Cfg.Settings.SV)
 
 	var br *kvpb.BatchResponse
 	if err := ibm.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -527,7 +512,6 @@ func NewIndexBackfillMerger(
 		spec:        spec,
 		desc:        tabledesc.NewUnsafeImmutable(&spec.Table),
 		flowCtx:     flowCtx,
-		evalCtx:     flowCtx.NewEvalCtx(),
 	}
 }
 

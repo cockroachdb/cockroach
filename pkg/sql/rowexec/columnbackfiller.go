@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,7 +46,6 @@ type columnBackfiller struct {
 	filter backfill.MutationFilter
 
 	spec        execinfrapb.BackfillerSpec
-	out         execinfra.ProcOutputHelper
 	flowCtx     *execinfra.FlowCtx
 	processorID int32
 
@@ -103,9 +101,8 @@ func (cb *columnBackfiller) Run(ctx context.Context, output execinfra.RowReceive
 	defer span.Finish()
 	meta := cb.doRun(ctx)
 	execinfra.SendTraceData(ctx, cb.flowCtx, output)
-	if emitHelper(ctx, output, &cb.out, nil /* row */, meta, func(context.Context, execinfra.RowReceiver) {}) {
-		output.ProducerDone()
-	}
+	output.Push(nil /* row */, meta)
+	output.ProducerDone()
 }
 
 // Resume is part of the execinfra.Processor interface.
@@ -114,10 +111,6 @@ func (*columnBackfiller) Resume(output execinfra.RowReceiver) {
 }
 
 func (cb *columnBackfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
-	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	if err := cb.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, cb.flowCtx.NewEvalCtx()); err != nil {
-		return &execinfrapb.ProducerMetadata{Err: err}
-	}
 	finishedSpans, err := cb.mainLoop(ctx)
 	if err != nil {
 		return &execinfrapb.ProducerMetadata{Err: err}

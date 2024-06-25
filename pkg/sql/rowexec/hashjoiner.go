@@ -127,7 +127,7 @@ func newHashJoiner(
 		h.leftEqColTypes[i] = leftTypes[eqCol]
 	}
 
-	if err := h.joinerBase.init(
+	if _, err := h.joinerBase.init(
 		ctx,
 		h,
 		flowCtx,
@@ -154,7 +154,7 @@ func newHashJoiner(
 	h.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "hashjoiner-limited")
 	h.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "hashjoiner-disk")
 	h.hashTable = rowcontainer.NewHashDiskBackedRowContainer(
-		h.EvalCtx, h.MemMonitor, h.diskMonitor, h.FlowCtx.Cfg.TempStorage,
+		h.FlowCtx.EvalCtx, h.MemMonitor, h.diskMonitor, h.FlowCtx.Cfg.TempStorage,
 	)
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.

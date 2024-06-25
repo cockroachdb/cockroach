@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -46,8 +45,6 @@ type indexBackfiller struct {
 	desc catalog.TableDescriptor
 
 	spec execinfrapb.BackfillerSpec
-
-	out execinfra.ProcOutputHelper
 
 	flowCtx     *execinfra.FlowCtx
 	processorID int32
@@ -348,13 +345,6 @@ func (ib *indexBackfiller) Run(ctx context.Context, output execinfra.RowReceiver
 	defer ib.Close(ctx)
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-
-	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	if err := ib.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, ib.flowCtx.NewEvalCtx()); err != nil {
-		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
-		return
-	}
-
 	var err error
 	// We don't have to worry about this go routine leaking because next we loop
 	// over progCh which is closed only after the go routine returns.

@@ -245,7 +245,7 @@ func (f *vectorizedFlow) Setup(
 	}
 	flowCtx := f.GetFlowCtx()
 	f.countingSemaphore = newFDCountingSemaphore(
-		f.Cfg.VecFDSemaphore, f.Cfg.Metrics.VecOpenFDs, &flowCtx.EvalCtx.Settings.SV,
+		f.Cfg.VecFDSemaphore, f.Cfg.Metrics.VecOpenFDs, &flowCtx.Cfg.Settings.SV,
 	)
 	f.creator = newVectorizedFlowCreator(
 		f.FlowBase,
