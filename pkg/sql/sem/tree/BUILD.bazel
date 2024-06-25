@@ -40,6 +40,7 @@ go_library(
         "constraint.go",
         "copy.go",
         "create.go",
+        "create_logical_replication.go",
         "create_routine.go",
         "cursor.go",
         "data_placement.go",
