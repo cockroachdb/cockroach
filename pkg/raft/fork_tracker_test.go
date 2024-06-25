@@ -16,6 +16,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func (f *ForkTracker) checkInvariants(t require.TestingT) {
+	require.True(t, f.ack == f.write || f.ack.Less(f.write))
+	if len(f.forks.slice) == 0 {
+		return
+	}
+	require.Less(t, f.ack.Term, f.forks.slice[0].Term)
+	for i, next := range f.forks.slice[1:] {
+		require.Less(t, f.forks.slice[i].Term, next.Term)
+		require.Less(t, f.forks.slice[i].Index, next.Index)
+	}
+	last := f.forks.slice[len(f.forks.slice)-1]
+	require.True(t, last == f.write || last.Less(f.write))
+}
+
+func TestForkTrackerErrors(t *testing.T) {
+	m := func(term, index uint64) LogMark {
+		return LogMark{Term: term, Index: index}
+	}
+	ft := NewForkTracker(m(10, 100))
+	require.True(t, ft.Append(m(10, 100), 200))
+	require.True(t, ft.Append(m(10, 200), 200)) // no-op
+	require.True(t, ft.Ack(m(10, 100)))         // no-op
+
+	require.False(t, ft.Append(m(10, 100), 50))  // incorrect interval
+	require.False(t, ft.Append(m(9, 100), 200))  // out of order term
+	require.False(t, ft.Append(m(10, 50), 100))  // out of order index
+	require.False(t, ft.Append(m(10, 120), 200)) // gap in the log
+
+	require.False(t, ft.Ack(m(9, 100))) // out of order term
+	require.False(t, ft.Ack(m(10, 50))) // out of order index
+	require.True(t, ft.Ack(m(10, 200)))
+}
+
 func TestForkTracker(t *testing.T) {
 	m := func(term, index uint64) LogMark {
 		return LogMark{Term: term, Index: index}
@@ -23,6 +56,7 @@ func TestForkTracker(t *testing.T) {
 
 	ft := NewForkTracker(m(2, 10))
 	check := func(ack, write LogMark, released uint64) {
+		ft.checkInvariants(t)
 		require.Equal(t, ack, ft.ack)
 		require.Equal(t, write, ft.write)
 		require.Equal(t, released, ft.Released())

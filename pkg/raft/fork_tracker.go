@@ -112,11 +112,13 @@ func (f *ForkTracker) Append(from LogMark, to uint64) bool {
 			break
 		}
 	}
-	f.forks.slice = append(f.forks.slice[:pop], from)
+	f.forks.slice = f.forks.slice[:pop]
 
 	f.write = write
-	if f.ack.Index > from.Index {
+	if from.Index <= f.ack.Index {
 		f.ack = from
+	} else {
+		f.forks.slice = append(f.forks.slice[:pop], from)
 	}
 	return true
 }
