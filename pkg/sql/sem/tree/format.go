@@ -34,7 +34,7 @@ func (f FmtFlags) HasFlags(subset FmtFlags) bool {
 	return f&subset == subset
 }
 
-// HasAnyFlags tests whether any of the given flags are all set.
+// HasAnyFlags tests whether any of the given flags are set.
 func (f FmtFlags) HasAnyFlags(subset FmtFlags) bool {
 	return f&subset != 0
 }
@@ -420,9 +420,16 @@ func (ctx *FmtCtx) WithFlags(flags FmtFlags, fn func()) {
 	fn()
 }
 
-// HasFlags returns true iff the given flags are set in the formatter context.
+// HasFlags returns true iff all of the given flags are set in the formatter
+// context.
 func (ctx *FmtCtx) HasFlags(f FmtFlags) bool {
 	return ctx.flags.HasFlags(f)
+}
+
+// HasAnyFlags returns true if any of the given flags are set in the formatter
+// context.
+func (ctx *FmtCtx) HasAnyFlags(f FmtFlags) bool {
+	return ctx.flags.HasAnyFlags(f)
 }
 
 // Printf calls fmt.Fprintf on the linked bytes.Buffer. It is provided
