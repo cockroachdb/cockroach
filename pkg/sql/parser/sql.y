@@ -757,12 +757,6 @@ func (u *sqlSymUnion) resolvableFuncRef() tree.ResolvableFunctionReference {
 func (u *sqlSymUnion) rowsFromExpr() *tree.RowsFromExpr {
     return u.val.(*tree.RowsFromExpr)
 }
-func (u *sqlSymUnion) stringOrPlaceholderOptList() tree.StringOrPlaceholderOptList {
-    return u.val.(tree.StringOrPlaceholderOptList)
-}
-func (u *sqlSymUnion) listOfStringOrPlaceholderOptList() []tree.StringOrPlaceholderOptList {
-    return u.val.([]tree.StringOrPlaceholderOptList)
-}
 func (u *sqlSymUnion) URI() tree.URI {
     return u.val.(tree.URI)
 }
@@ -1278,8 +1272,6 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %type <tree.Statement> restore_stmt
 %type <tree.URIs> opt_uris opt_kms_uris
 %type <[]tree.URIs> list_of_opt_uris list_of_opt_kms_uris
-%type <tree.StringOrPlaceholderOptList> string_or_placeholder_opt_list
-%type <[]tree.StringOrPlaceholderOptList> list_of_string_or_placeholder_opt_list
 %type <tree.Statement> revoke_stmt
 %type <tree.Statement> refresh_stmt
 %type <*tree.Select> select_stmt
@@ -1636,7 +1628,6 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %type <tree.URI> uri kms_uri
 %type <tree.URIs> uris kms_uris
 %type <tree.Expr> string_or_placeholder
-%type <tree.Expr> string_or_placeholder_list
 %type <str> region_or_regions
 
 %type <str> unreserved_keyword type_func_name_keyword type_func_name_no_crdb_extra_keyword type_func_name_crdb_extra_keyword
@@ -3898,26 +3889,6 @@ list_of_opt_kms_uris:
     $$.val = append($1.listOfURIs(), $3.URIs())
   }
 
-string_or_placeholder_opt_list:
-  string_or_placeholder
-  {
-    $$.val = tree.StringOrPlaceholderOptList{$1.expr()}
-  }
-| '(' string_or_placeholder_list ')'
-  {
-    $$.val = tree.StringOrPlaceholderOptList($2.exprs())
-  }
-
-list_of_string_or_placeholder_opt_list:
-  string_or_placeholder_opt_list
-  {
-    $$.val = []tree.StringOrPlaceholderOptList{$1.stringOrPlaceholderOptList()}
-  }
-| list_of_string_or_placeholder_opt_list ',' string_or_placeholder_opt_list
-  {
-    $$.val = append($1.listOfStringOrPlaceholderOptList(), $3.stringOrPlaceholderOptList())
-  }
-
 // Optional restore options.
 opt_with_restore_options:
   WITH restore_options_list
@@ -4169,16 +4140,6 @@ string_or_placeholder:
     p := $1.placeholder()
     sqllex.(*lexer).UpdateNumPlaceholders(p)
     $$.val = p
-  }
-
-string_or_placeholder_list:
-  string_or_placeholder
-  {
-    $$.val = tree.Exprs{$1.expr()}
-  }
-| string_or_placeholder_list ',' string_or_placeholder
-  {
-    $$.val = append($1.exprs(), $3.expr())
   }
 
 opt_incremental:
