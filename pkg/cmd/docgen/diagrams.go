@@ -1104,15 +1104,15 @@ var specs = []stmtSpec{
 	{
 		name:   "import_csv",
 		stmt:   "import_stmt",
-		inline: []string{"string_or_placeholder_list", "opt_with_options"},
+		inline: []string{"uris", "opt_with_options"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'IMPORT' import_format"),
 			regexp.MustCompile("'FROM' import_format"),
 			regexp.MustCompile("'WITH' 'OPTIONS'"),
 		},
 		replace: map[string]string{
-			"string_or_placeholder": "file_location",
-			"import_format":         "'CSV'",
+			"uri":           "file_location",
+			"import_format": "'CSV'",
 		},
 		unlink: []string{"file_location"},
 	},
@@ -1120,13 +1120,13 @@ var specs = []stmtSpec{
 		name:   "import_into",
 		stmt:   "import_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("INTO")},
-		inline: []string{"insert_column_list", "string_or_placeholder_list", "opt_with_options", "kv_option_list"},
+		inline: []string{"insert_column_list", "uris", "opt_with_options", "kv_option_list"},
 		replace: map[string]string{
-			"table_option":          "table_name",
-			"insert_column_item":    "column_name",
-			"import_format":         "( 'CSV' | 'AVRO' | 'DELIMITED' )",
-			"string_or_placeholder": "file_location",
-			"kv_option":             "option '=' value"},
+			"table_option":       "table_name",
+			"insert_column_item": "column_name",
+			"import_format":      "( 'CSV' | 'AVRO' | 'DELIMITED' )",
+			"uri":                "file_location",
+			"kv_option":          "option '=' value"},
 		unlink: []string{"table_name", "column_name", "file_location", "option", "value"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'WITH' 'OPTIONS'"),
@@ -1135,14 +1135,14 @@ var specs = []stmtSpec{
 	{
 		name:   "import_dump",
 		stmt:   "import_stmt",
-		inline: []string{"string_or_placeholder_list", "opt_with_options"},
+		inline: []string{"uris", "opt_with_options"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("CREATE' 'USING'"),
 			regexp.MustCompile("table_elem_list"),
 			regexp.MustCompile("'WITH' 'OPTIONS'"),
 		},
 		replace: map[string]string{
-			"string_or_placeholder": "file_location",
+			"uri": "file_location",
 		},
 		unlink: []string{"file_location"},
 	},

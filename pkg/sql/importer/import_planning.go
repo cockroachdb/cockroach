@@ -241,7 +241,7 @@ func importJobDescription(
 			return "", err
 		}
 		logSanitizedImportDestination(ctx, clean)
-		stmt.Files = append(stmt.Files, tree.NewDString(clean))
+		stmt.Files = append(stmt.Files, tree.NewSanitizedURI(clean))
 	}
 	stmt.Options = nil
 	for k, v := range opts {
@@ -341,7 +341,7 @@ func importTypeCheck(
 			KVOptions: importStmt.Options, Validation: importOptionExpectValues,
 		},
 		exprutil.StringArrays{
-			importStmt.Files,
+			importStmt.Files.Exprs(),
 		},
 	); err != nil {
 		return false, nil, err
@@ -399,7 +399,7 @@ func importPlanHook(
 		isDetached = true
 	}
 
-	filenamePatterns, err := exprEval.StringArray(ctx, importStmt.Files)
+	filenamePatterns, err := exprEval.StringArray(ctx, importStmt.Files.Exprs())
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
