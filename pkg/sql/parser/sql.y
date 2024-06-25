@@ -8038,79 +8038,79 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder_opt_list
+  SHOW BACKUPS IN opt_uris
  {
     $$.val = &tree.ShowBackup{
-      InCollection:    $4.stringOrPlaceholderOptList(),
+      InCollection:    $4.URIs(),
     }
   }
-| SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
+| SHOW BACKUP show_backup_details FROM uri IN opt_uris opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 			From:    true,
 			Details:    $3.showBackupDetails(),
-			Path:    $5.expr(),
-			InCollection: $7.stringOrPlaceholderOptList(),
+			Path:    $5.URI(),
+			InCollection: $7.URIs(),
 			Options: *$8.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
+| SHOW BACKUP uri IN opt_uris opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 			Details:  tree.BackupDefaultDetails,
-			Path:    $3.expr(),
-			InCollection: $5.stringOrPlaceholderOptList(),
+			Path:    $3.URI(),
+			InCollection: $5.URIs(),
 			Options: *$6.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP uri opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 		  Details:  tree.BackupDefaultDetails,
-			Path:    $3.expr(),
+			Path:    $3.URI(),
 			Options: *$4.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP SCHEMAS string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP SCHEMAS uri opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 		  Details:  tree.BackupSchemaDetails,
-			Path:    $4.expr(),
+			Path:    $4.URI(),
 			Options: *$5.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP FILES string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP FILES uri opt_with_show_backup_options
 	{
     /* SKIP DOC */
 		$$.val = &tree.ShowBackup{
 		  Details:  tree.BackupFileDetails,
-			Path:    $4.expr(),
+			Path:    $4.URI(),
 			Options: *$5.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP RANGES string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP RANGES uri opt_with_show_backup_options
 	{
     /* SKIP DOC */
 		$$.val = &tree.ShowBackup{
 		  Details:  tree.BackupRangeDetails,
-			Path:    $4.expr(),
+			Path:    $4.URI(),
 			Options: *$5.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP VALIDATE string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP VALIDATE uri opt_with_show_backup_options
   	{
       /* SKIP DOC */
   		$$.val = &tree.ShowBackup{
   		  Details:  tree.BackupValidateDetails,
-  			Path:    $4.expr(),
+  			Path:    $4.URI(),
   			Options: *$5.showBackupOptions(),
   		}
   	}
-| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_connection_options_list
+| SHOW BACKUP CONNECTION uri opt_with_show_backup_connection_options_list
   	{
   		$$.val = &tree.ShowBackup{
   		  Details:  tree.BackupConnectionTest,
-  			Path:    $4.expr(),
+  			Path:    $4.URI(),
   			Options: *$5.showBackupOptions(),
   		}
   	}
@@ -8190,13 +8190,13 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{DebugIDs: true}
  }
- | INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
+ | INCREMENTAL_LOCATION '=' opt_uris
  {
- $$.val = &tree.ShowBackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
+ $$.val = &tree.ShowBackupOptions{IncrementalStorage: $3.URIs()}
  }
- | KMS '=' string_or_placeholder_opt_list
+ | KMS '=' opt_kms_uris
  {
- $$.val = &tree.ShowBackupOptions{DecryptionKMSURI: $3.stringOrPlaceholderOptList()}
+ $$.val = &tree.ShowBackupOptions{DecryptionKMSURI: $3.URIs()}
  }
  | ENCRYPTION_PASSPHRASE '=' string_or_placeholder
  {

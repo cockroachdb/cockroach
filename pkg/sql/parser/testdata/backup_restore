@@ -130,10 +130,11 @@ SHOW BACKUP FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz', s
 parse
 SHOW BACKUP FROM LATEST IN ('bar','bar1') WITH KMS = ('foo', 'bar'), incremental_location=('hi','hello')
 ----
-SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- normalized!
-SHOW BACKUP FROM ('latest') IN (('bar'), ('bar1')) WITH OPTIONS (incremental_location = (('hi'), ('hello')), kms = (('foo'), ('bar'))) -- fully parenthesized
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('*****', '*****')) -- normalized!
+SHOW BACKUP FROM ('latest') IN (('bar'), ('bar1')) WITH OPTIONS (incremental_location = (('hi'), ('hello')), kms = ('*****', '*****')) -- fully parenthesized
 SHOW BACKUP FROM '_' IN ('_', '_') WITH OPTIONS (incremental_location = ('_', '_'), kms = ('_', '_')) -- literals removed
-SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- identifiers removed
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('*****', '*****')) -- identifiers removed
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- passwords exposed
 
 
 parse
@@ -1124,3 +1125,93 @@ RESTORE FROM ('https://burke:redacted@seattle.bikes') WITH OPTIONS (kms = ('http
 RESTORE FROM '_' WITH OPTIONS (kms = '_', incremental_location = '_') -- literals removed
 RESTORE FROM 'https://burke:redacted@seattle.bikes' WITH OPTIONS (kms = 'https://foo:redacted@baz.com/redacted', incremental_location = 'https://dot:redacted@dot.com/com') -- identifiers removed
 RESTORE FROM 'https://burke:gilman@seattle.bikes' WITH OPTIONS (kms = 'https://foo:bar@baz.com/zing', incremental_location = 'https://dot:com@dot.com/com') -- passwords exposed
+
+parse
+SHOW BACKUPS IN 'https://foo:bar@baz.com'
+----
+SHOW BACKUPS IN 'https://foo:redacted@baz.com' -- normalized!
+SHOW BACKUPS IN ('https://foo:redacted@baz.com') -- fully parenthesized
+SHOW BACKUPS IN '_' -- literals removed
+SHOW BACKUPS IN 'https://foo:redacted@baz.com' -- identifiers removed
+SHOW BACKUPS IN 'https://foo:bar@baz.com' -- passwords exposed
+
+parse
+SHOW BACKUP SCHEMAS FROM 'subdir' IN 'https://user:pass@example.com/foo'
+----
+SHOW BACKUP SCHEMAS FROM 'subdir' IN 'https://user:redacted@example.com/foo' -- normalized!
+SHOW BACKUP SCHEMAS FROM ('subdir') IN ('https://user:redacted@example.com/foo') -- fully parenthesized
+SHOW BACKUP SCHEMAS FROM '_' IN '_' -- literals removed
+SHOW BACKUP SCHEMAS FROM 'subdir' IN 'https://user:redacted@example.com/foo' -- identifiers removed
+SHOW BACKUP SCHEMAS FROM 'subdir' IN 'https://user:pass@example.com/foo' -- passwords exposed
+
+parse
+SHOW BACKUP 'path/bar/baz' IN ('https://foo:bar@baz.com/zing', 'https://user:pass@localhost:8000/bar')
+----
+SHOW BACKUP 'path/bar/baz' IN ('https://foo:redacted@baz.com/zing', 'https://user:redacted@localhost:8000/bar') -- normalized!
+SHOW BACKUP ('path/bar/baz') IN (('https://foo:redacted@baz.com/zing'), ('https://user:redacted@localhost:8000/bar')) -- fully parenthesized
+SHOW BACKUP '_' IN ('_', '_') -- literals removed
+SHOW BACKUP 'path/bar/baz' IN ('https://foo:redacted@baz.com/zing', 'https://user:redacted@localhost:8000/bar') -- identifiers removed
+SHOW BACKUP 'path/bar/baz' IN ('https://foo:bar@baz.com/zing', 'https://user:pass@localhost:8000/bar') -- passwords exposed
+
+parse
+SHOW BACKUP 'foo' IN 'https://user:pass@foo.com' WITH KMS = 'https://foo:bar@baz.com/secret'
+----
+SHOW BACKUP 'foo' IN 'https://user:redacted@foo.com' WITH OPTIONS (kms = 'https://foo:redacted@baz.com/redacted') -- normalized!
+SHOW BACKUP ('foo') IN ('https://user:redacted@foo.com') WITH OPTIONS (kms = ('https://foo:redacted@baz.com/redacted')) -- fully parenthesized
+SHOW BACKUP '_' IN '_' WITH OPTIONS (kms = '_') -- literals removed
+SHOW BACKUP 'foo' IN 'https://user:redacted@foo.com' WITH OPTIONS (kms = 'https://foo:redacted@baz.com/redacted') -- identifiers removed
+SHOW BACKUP 'foo' IN 'https://user:pass@foo.com' WITH OPTIONS (kms = 'https://foo:bar@baz.com/secret') -- passwords exposed
+
+parse
+SHOW BACKUP 'https://my:secret@example.com/foo'
+----
+SHOW BACKUP 'https://my:redacted@example.com/foo' -- normalized!
+SHOW BACKUP ('https://my:redacted@example.com/foo') -- fully parenthesized
+SHOW BACKUP '_' -- literals removed
+SHOW BACKUP 'https://my:redacted@example.com/foo' -- identifiers removed
+SHOW BACKUP 'https://my:secret@example.com/foo' -- passwords exposed
+
+parse
+SHOW BACKUP SCHEMAS 'https://bert:ernie@sesamie.com'
+----
+SHOW BACKUP SCHEMAS 'https://bert:redacted@sesamie.com' -- normalized!
+SHOW BACKUP SCHEMAS ('https://bert:redacted@sesamie.com') -- fully parenthesized
+SHOW BACKUP SCHEMAS '_' -- literals removed
+SHOW BACKUP SCHEMAS 'https://bert:redacted@sesamie.com' -- identifiers removed
+SHOW BACKUP SCHEMAS 'https://bert:ernie@sesamie.com' -- passwords exposed
+
+parse
+SHOW BACKUP FILES 'https://u:p@foo.com/bar'
+----
+SHOW BACKUP FILES 'https://u:redacted@foo.com/bar' -- normalized!
+SHOW BACKUP FILES ('https://u:redacted@foo.com/bar') -- fully parenthesized
+SHOW BACKUP FILES '_' -- literals removed
+SHOW BACKUP FILES 'https://u:redacted@foo.com/bar' -- identifiers removed
+SHOW BACKUP FILES 'https://u:p@foo.com/bar' -- passwords exposed
+
+parse
+SHOW BACKUP RANGES 'https://a:b@c.com/d'
+----
+SHOW BACKUP RANGES 'https://a:redacted@c.com/d' -- normalized!
+SHOW BACKUP RANGES ('https://a:redacted@c.com/d') -- fully parenthesized
+SHOW BACKUP RANGES '_' -- literals removed
+SHOW BACKUP RANGES 'https://a:redacted@c.com/d' -- identifiers removed
+SHOW BACKUP RANGES 'https://a:b@c.com/d' -- passwords exposed
+
+parse
+SHOW BACKUP VALIDATE 'https://user:123@localhost:12345/j'
+----
+SHOW BACKUP 'https://user:redacted@localhost:12345/j' -- normalized!
+SHOW BACKUP ('https://user:redacted@localhost:12345/j') -- fully parenthesized
+SHOW BACKUP '_' -- literals removed
+SHOW BACKUP 'https://user:redacted@localhost:12345/j' -- identifiers removed
+SHOW BACKUP 'https://user:123@localhost:12345/j' -- passwords exposed
+
+parse
+SHOW BACKUP CONNECTION 'https://user:pass@foo.com'
+----
+SHOW BACKUP CONNECTION 'https://user:redacted@foo.com' -- normalized!
+SHOW BACKUP CONNECTION ('https://user:redacted@foo.com') -- fully parenthesized
+SHOW BACKUP CONNECTION '_' -- literals removed
+SHOW BACKUP CONNECTION 'https://user:redacted@foo.com' -- identifiers removed
+SHOW BACKUP CONNECTION 'https://user:pass@foo.com' -- passwords exposed

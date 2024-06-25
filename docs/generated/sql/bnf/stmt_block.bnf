@@ -799,12 +799,12 @@ use_stmt ::=
 	'USE' var_value
 
 show_backup_stmt ::=
-	'SHOW' 'BACKUPS' 'IN' string_or_placeholder_opt_list
-	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder opt_with_show_backup_connection_options_list
+	'SHOW' 'BACKUPS' 'IN' opt_uris
+	| 'SHOW' 'BACKUP' show_backup_details 'FROM' uri 'IN' opt_uris opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' uri 'IN' opt_uris opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' uri opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'SCHEMAS' uri opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'CONNECTION' uri opt_with_show_backup_connection_options_list
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
@@ -1992,10 +1992,6 @@ to_or_eq ::=
 var_value ::=
 	a_expr
 	| extra_var_value
-
-string_or_placeholder_opt_list ::=
-	string_or_placeholder
-	| '(' string_or_placeholder_list ')'
 
 show_backup_details ::=
 	'SCHEMAS'
@@ -3362,8 +3358,8 @@ show_backup_options ::=
 	| 'CHECK_FILES'
 	| 'SKIP' 'SIZE'
 	| 'DEBUG_IDS'
-	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
-	| 'KMS' '=' string_or_placeholder_opt_list
+	| 'INCREMENTAL_LOCATION' '=' opt_uris
+	| 'KMS' '=' opt_kms_uris
 	| 'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
 	| 'PRIVILEGES'
 	| 'ENCRYPTION_INFO_DIR' '=' string_or_placeholder
