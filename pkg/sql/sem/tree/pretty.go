@@ -2177,7 +2177,11 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 		items = append(items, node.AsOf.docRow(p))
 	}
 	if node.IncrementalFrom != nil {
-		items = append(items, p.row("INCREMENTAL FROM", p.Doc(&node.IncrementalFrom)))
+		exprs := make(Exprs, len(node.IncrementalFrom))
+		for i, from := range node.IncrementalFrom {
+			exprs[i] = from.Expr
+		}
+		items = append(items, p.row("INCREMENTAL FROM", p.Doc(&exprs)))
 	}
 	if !node.Options.IsDefault() {
 		items = append(items, p.row("WITH", p.Doc(&node.Options)))

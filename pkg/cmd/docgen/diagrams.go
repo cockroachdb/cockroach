@@ -616,12 +616,12 @@ var specs = []stmtSpec{
 		inline: []string{"opt_backup_targets", "opt_with_backup_options", "opt_as_of_clause", "as_of_clause", "backup_options_list"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' backup_targets 'INTO'")},
 		replace: map[string]string{
-			"grant_targets":                  "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"backup_targets":                 "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"string_or_placeholder_opt_list": "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
-			"'INTO'":                         "'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN')",
-			"sconst_or_placeholder":          "subdirectory",
-			"a_expr":                         "timestamp",
+			"grant_targets":         "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"backup_targets":        "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"opt_uris":              "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
+			"'INTO'":                "'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN')",
+			"sconst_or_placeholder": "subdirectory",
+			"a_expr":                "timestamp",
 		},
 		unlink:  []string{"backup_targets", "collectionURI", "destination", "timestamp", "localityURI", "subdirectory"},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
@@ -783,9 +783,9 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_schedule_for_backup_stmt",
-		inline: []string{"string_or_placeholder_opt_list", "string_or_placeholder_list", "opt_with_backup_options", "cron_expr", "opt_full_backup_clause", "opt_with_schedule_options", "opt_backup_targets"},
+		inline: []string{"opt_uris", "uris", "opt_with_backup_options", "cron_expr", "opt_full_backup_clause", "opt_with_schedule_options", "opt_backup_targets"},
 		replace: map[string]string{
-			"string_or_placeholder": "collectionURI",
+			"uri":                   "collectionURI",
 			"sconst_or_placeholder": "crontab",
 			"schedule_label_spec":   "( 'IF NOT EXISTS' | )  schedule_label",
 			"backup_targets":        "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
@@ -1259,9 +1259,9 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
-			"backup_targets":                         "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"string_or_placeholder":                  "( ( subdirectory | 'LATEST' ) )",
-			"list_of_string_or_placeholder_opt_list": "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
+			"backup_targets":        "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"string_or_placeholder": "( ( subdirectory | 'LATEST' ) )",
+			"list_of_opt_uris":      "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
 		},
 		unlink: []string{"subdirectory", "timestamp", "collectionURI", "localityURI"},
 		exclude: []*regexp.Regexp{

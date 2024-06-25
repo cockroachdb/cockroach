@@ -1,10 +1,11 @@
 parse
-BACKUP TABLE foo TO 'bar'
+BACKUP TABLE foo TO ('bar', 'baz', 'http:// ?')
 ----
-BACKUP TABLE foo TO 'bar'
-BACKUP TABLE (foo) TO ('bar') -- fully parenthesized
-BACKUP TABLE foo TO '_' -- literals removed
-BACKUP TABLE _ TO 'bar' -- identifiers removed
+BACKUP TABLE foo TO ('bar', 'baz', '*****') -- normalized!
+BACKUP TABLE (foo) TO (('bar'), ('baz'), '*****') -- fully parenthesized
+BACKUP TABLE foo TO ('_', '_', '_') -- literals removed
+BACKUP TABLE _ TO ('bar', 'baz', '*****') -- identifiers removed
+BACKUP TABLE foo TO ('bar', 'baz', 'http:// ?') -- passwords exposed
 
 parse
 BACKUP foo TO 'bar'
@@ -367,10 +368,11 @@ BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, encryption_pass
 parse
 BACKUP foo TO 'bar' WITH KMS = ('foo', 'bar'), revision_history
 ----
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, kms = ('foo', 'bar')) -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH OPTIONS (revision_history = (true), kms = (('foo'), ('bar'))) -- fully parenthesized
+BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, kms = ('*****', '*****')) -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH OPTIONS (revision_history = (true), kms = ('*****', '*****')) -- fully parenthesized
 BACKUP TABLE foo TO '_' WITH OPTIONS (revision_history = _, kms = ('_', '_')) -- literals removed
-BACKUP TABLE _ TO 'bar' WITH OPTIONS (revision_history = true, kms = ('foo', 'bar')) -- identifiers removed
+BACKUP TABLE _ TO 'bar' WITH OPTIONS (revision_history = true, kms = ('*****', '*****')) -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, kms = ('foo', 'bar')) -- passwords exposed
 
 parse
 BACKUP foo TO 'bar' WITH OPTIONS (detached, ENCRYPTION_PASSPHRASE = 'secret', revision_history)
@@ -384,10 +386,11 @@ BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, encryption_pass
 parse
 BACKUP foo TO 'bar' WITH OPTIONS (detached, KMS = ('foo', 'bar'), revision_history)
 ----
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('foo', 'bar')) -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH OPTIONS (revision_history = (true), detached, kms = (('foo'), ('bar'))) -- fully parenthesized
+BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('*****', '*****')) -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH OPTIONS (revision_history = (true), detached, kms = ('*****', '*****')) -- fully parenthesized
 BACKUP TABLE foo TO '_' WITH OPTIONS (revision_history = _, detached, kms = ('_', '_')) -- literals removed
-BACKUP TABLE _ TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('foo', 'bar')) -- identifiers removed
+BACKUP TABLE _ TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('*****', '*****')) -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('foo', 'bar')) -- passwords exposed
 
 
 # Regression test for #95235.

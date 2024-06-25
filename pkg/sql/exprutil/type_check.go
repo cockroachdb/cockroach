@@ -70,11 +70,11 @@ var (
 	_ ToTypeCheck = TenantSpec{}
 )
 
-// MakeStringArraysFromOptList makes a StringArrays by casting the members of in.
-func MakeStringArraysFromOptList(in []tree.StringOrPlaceholderOptList) StringArrays {
+// MakeStringArraysFromURIsList makes a StringArrays by casting the members of in.
+func MakeStringArraysFromURIsList(in []tree.URIs) StringArrays {
 	ret := make([]tree.Exprs, len(in))
-	for i, exprs := range in {
-		ret[i] = tree.Exprs(exprs)
+	for i, uris := range in {
+		ret[i] = uris.Exprs()
 	}
 	return ret
 }

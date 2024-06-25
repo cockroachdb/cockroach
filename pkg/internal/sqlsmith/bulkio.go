@@ -117,7 +117,7 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 
 	return &tree.Backup{
 		Targets: &targets,
-		To:      tree.StringOrPlaceholderOptList{tree.NewStrVal(name)},
+		To:      tree.URIs{tree.NewURI(tree.NewStrVal(name))},
 		AsOf:    makeAsOf(s),
 		Options: tree.BackupOptions{CaptureRevisionHistory: coinD},
 	}, true
@@ -153,7 +153,7 @@ func makeRestore(s *Smither) (tree.Statement, bool) {
 
 	return &tree.Restore{
 		Targets: targets,
-		From:    []tree.StringOrPlaceholderOptList{{tree.NewStrVal(name)}},
+		From:    []tree.URIs{{tree.NewURI(tree.NewStrVal(name))}},
 		AsOf:    makeAsOf(s),
 		Options: tree.RestoreOptions{
 			IntoDB: tree.NewStrVal("into_db"),

@@ -185,10 +185,10 @@ alter_stmt ::=
 	| alter_role_stmt
 
 backup_stmt ::=
-	'BACKUP' opt_backup_targets 'INTO' sconst_or_placeholder 'IN' string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
-	| 'BACKUP' opt_backup_targets 'INTO' string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
-	| 'BACKUP' opt_backup_targets 'INTO' 'LATEST' 'IN' string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
-	| 'BACKUP' opt_backup_targets 'TO' string_or_placeholder_opt_list opt_as_of_clause opt_incremental opt_with_backup_options
+	'BACKUP' opt_backup_targets 'INTO' sconst_or_placeholder 'IN' opt_uris opt_as_of_clause opt_with_backup_options
+	| 'BACKUP' opt_backup_targets 'INTO' opt_uris opt_as_of_clause opt_with_backup_options
+	| 'BACKUP' opt_backup_targets 'INTO' 'LATEST' 'IN' opt_uris opt_as_of_clause opt_with_backup_options
+	| 'BACKUP' opt_backup_targets 'TO' opt_uris opt_as_of_clause opt_incremental opt_with_backup_options
 
 cancel_stmt ::=
 	cancel_jobs_stmt
@@ -242,12 +242,12 @@ reset_stmt ::=
 	| reset_csetting_stmt
 
 restore_stmt ::=
-	'RESTORE' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' backup_targets 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' backup_targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	'RESTORE' 'FROM' list_of_opt_uris opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' 'FROM' string_or_placeholder 'IN' list_of_opt_uris opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' backup_targets 'FROM' list_of_opt_uris opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' backup_targets 'FROM' string_or_placeholder 'IN' list_of_opt_uris opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' list_of_opt_uris opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' string_or_placeholder 'IN' list_of_opt_uris opt_as_of_clause opt_with_restore_options
 
 resume_stmt ::=
 	resume_jobs_stmt
@@ -546,9 +546,9 @@ sconst_or_placeholder ::=
 	'SCONST'
 	| 'PLACEHOLDER'
 
-string_or_placeholder_opt_list ::=
-	string_or_placeholder
-	| '(' string_or_placeholder_list ')'
+opt_uris ::=
+	uri
+	| '(' uris ')'
 
 opt_as_of_clause ::=
 	as_of_clause
@@ -560,7 +560,7 @@ opt_with_backup_options ::=
 	| 
 
 opt_incremental ::=
-	'INCREMENTAL' 'FROM' string_or_placeholder_list
+	'INCREMENTAL' 'FROM' uris
 	| 
 
 cancel_jobs_stmt ::=
@@ -735,8 +735,8 @@ reset_session_stmt ::=
 reset_csetting_stmt ::=
 	'RESET' 'CLUSTER' 'SETTING' var_name
 
-list_of_string_or_placeholder_opt_list ::=
-	( string_or_placeholder_opt_list ) ( ( ',' string_or_placeholder_opt_list ) )*
+list_of_opt_uris ::=
+	( opt_uris ) ( ( ',' opt_uris ) )*
 
 opt_with_restore_options ::=
 	'WITH' restore_options_list
@@ -1748,6 +1748,12 @@ set_or_reset_clause ::=
 	| 'RESET_ALL' 'ALL'
 	| 'RESET' session_var
 
+uri ::=
+	string_or_placeholder
+
+uris ::=
+	( uri ) ( ( ',' uri ) )*
+
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
 
@@ -1845,7 +1851,7 @@ create_schedule_for_changefeed_stmt ::=
 	| 'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_sink opt_with_options 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause cron_expr opt_with_schedule_options
 
 create_schedule_for_backup_stmt ::=
-	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'BACKUP' opt_backup_targets 'INTO' string_or_placeholder_opt_list opt_with_backup_options cron_expr opt_full_backup_clause opt_with_schedule_options
+	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'BACKUP' opt_backup_targets 'INTO' opt_uris opt_with_backup_options cron_expr opt_full_backup_clause opt_with_schedule_options
 
 with_clause ::=
 	'WITH' cte_list
@@ -1985,6 +1991,10 @@ to_or_eq ::=
 var_value ::=
 	a_expr
 	| extra_var_value
+
+string_or_placeholder_opt_list ::=
+	string_or_placeholder
+	| '(' string_or_placeholder_list ')'
 
 show_backup_details ::=
 	'SCHEMAS'
@@ -2379,8 +2389,8 @@ backup_options ::=
 	| 'DETACHED'
 	| 'DETACHED' '=' 'TRUE'
 	| 'DETACHED' '=' 'FALSE'
-	| 'KMS' '=' string_or_placeholder_opt_list
-	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
+	| 'KMS' '=' opt_kms_uris
+	| 'INCREMENTAL_LOCATION' '=' opt_uris
 	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
 	| include_all_clusters '=' a_expr
 	| 'UPDATES_CLUSTER_MONITORING_METRICS'
@@ -2711,7 +2721,7 @@ attrs ::=
 
 restore_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
-	| 'KMS' '=' string_or_placeholder_opt_list
+	| 'KMS' '=' opt_kms_uris
 	| 'INTO_DB' '=' string_or_placeholder
 	| 'SKIP_MISSING_FOREIGN_KEYS'
 	| 'SKIP_MISSING_SEQUENCES'
@@ -2721,7 +2731,7 @@ restore_options ::=
 	| 'DETACHED'
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'NEW_DB_NAME' '=' string_or_placeholder
-	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
+	| 'INCREMENTAL_LOCATION' '=' opt_uris
 	| virtual_cluster_name '=' string_or_placeholder
 	| virtual_cluster_opt '=' string_or_placeholder
 	| 'SCHEMA_ONLY'
@@ -3016,7 +3026,7 @@ opt_no ::=
 
 alter_backup_schedule_cmd ::=
 	'SET' 'LABEL' string_or_placeholder
-	| 'SET' 'INTO' string_or_placeholder_opt_list
+	| 'SET' 'INTO' opt_uris
 	| 'SET' 'WITH' backup_options
 	| 'SET' cron_expr
 	| 'SET' 'FULL' 'BACKUP' 'ALWAYS'
@@ -3055,6 +3065,10 @@ role_option ::=
 	| subject_clause
 	| 'REPLICATION'
 	| 'NOREPLICATION'
+
+opt_kms_uris ::=
+	kms_uri
+	| '(' kms_uris ')'
 
 include_all_clusters ::=
 	'INCLUDE_ALL_VIRTUAL_CLUSTERS'
@@ -3494,6 +3508,12 @@ valid_until_clause ::=
 subject_clause ::=
 	'SUBJECT' string_or_placeholder
 	| 'SUBJECT' 'NULL'
+
+kms_uri ::=
+	string_or_placeholder
+
+kms_uris ::=
+	( kms_uri ) ( ( ',' kms_uri ) )*
 
 typed_literal ::=
 	func_name_no_crdb_extra 'SCONST'
