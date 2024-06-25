@@ -1,0 +1,137 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.storeliveness.storelivenesspb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "util/hlc/timestamp.proto";
+
+// StoreIdent includes all necessary info for a store to identify and
+// communicate with another store for the purposes of Store Liveness.
+message StoreIdent {
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int32 store_id = 2 [(gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+}
+
+// MessageType lists the possible types of Store Liveness messages. This allows
+// for a single Message proto to be used for all types of communication,
+// similarly to Raft.
+enum MessageType {
+  option (gogoproto.goproto_enum_prefix) = false;
+  MsgHeartbeat     = 0;
+  MsgHeartbeatResp = 1;
+}
+
+// Message is the single message proto used for Store Liveness communication.
+message Message {
+  MessageType type = 1;
+  // from is the identity of the store providing support.
+  StoreIdent  from = 2 [(gogoproto.nullable) = false];
+  // to is the identity of the store requesting support.
+  StoreIdent  to   = 3 [(gogoproto.nullable) = false];
+  // epoch is the epoch for which support is requested/provided.
+  int64 epoch = 4 [(gogoproto.casttype) = "Epoch"];
+  // expiration is the timestamp of the requested/provided support for the
+  // given epoch; it is drawn from the support requester's clock.
+  util.hlc.Timestamp expiration = 5 [(gogoproto.nullable) = false];
+}
+
+// MessageBatch is a collection of Messages and a timestamp. It is used in the
+// streaming Store Liveness RPC service.
+// The timestamp is used to update the HLC clock of the message recipient; this
+// is not necessary for the correctness of the Store Liveness algorithm but it
+// helps keep the stores' clocks more tightly synchronized, which allows them to
+// provide/withdraw support promptly.
+message MessageBatch {
+  repeated Message messages = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp now    = 2 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+}
+
+message Empty {}
+
+// StoreLiveness is a unidirectional streaming RPC service.
+service StoreLiveness {
+  rpc Stream (stream MessageBatch) returns (Empty) {}
+}
+
+
+// RequesterMeta includes all metadata pertaining to a support requester that
+// needs to be persisted to disk to ensure the Store Liveness algorithm remains
+// correct across restarts.
+message RequesterMeta {
+  // current_epoch is the local store's current epoch. By incrementing its epoch
+  // a store promises to stop using support for the previous epoch. To
+  // successfully keep this promise across restarts, the store's current epoch
+  // needs to be persisted.
+  int64 current_epoch              = 1 [(gogoproto.casttype) = "Epoch"];
+  // max_requested is the maximum timestamp at which support was requested by
+  // another store is persisted to achieve two goals:
+  // 1. Ensures that the store's disk is not stalled before requesting support.
+  // Receiving support for a store with a stalled disk is not desirable because
+  // currently a leader/leaseholder depends on its own disk for availability.
+  // 2. Ensures that supported epochs do not overlap in time, and consequently,
+  // the lease protocol implemented on top of Store Liveness maintains the Lease
+  // Disjointness Invariant.
+  // Example: If a store restarts before its supported epoch expires, it could
+  // get support for a higher epoch after restarting. This could be an issue if
+  // the leaseholder serves a future-time read under the old epoch and a write
+  // under the new epoch that invalidates the read.
+  // For 2, upon restart, a store waits until its clock exceeds max_requested.
+  util.hlc.Timestamp max_requested = 2 [(gogoproto.nullable) = false];
+}
+
+// SupporterMeta includes all metadata pertaining to a support provider that
+// needs to be persisted to disk to ensure the Store Liveness algorithm remains
+// correct across restarts.
+message SupporterMeta {
+  // max_withdrawn is the maximum timestamp at which support was withdrawn from
+  // another store. It needs to be persisted to avoid providing support for that
+  // store again after restarting and potentially regressing the HLC. HLCs are
+  // usually assumed to be monotonically increasing even across restarts but
+  // Store Liveness remains correct without this assumption.
+  // Upon restart, a store forwards its clock to max_withdrawn.
+  util.hlc.Timestamp max_withdrawn = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // TODO(mira): add a max_expiration field, which is the maximum of all
+  // expirations for all remote stores that the local store is providing support
+  // for. This will allow to write the SupportState proto corresponding to
+  // "support for" less often: only when the supported epoch changes.
+
+  // When max_expiration is loaded from disk, the local store will set the
+  // expiration of all remote stores to this maximum. Supporting a remote store
+  // for longer than promised is ok; it's indistinguishable from the local
+  // store's clock being slow/behind.
+}
+
+// SupportState includes all metadata (epoch, expiration) pertaining to either a
+// provider of support or requester of support. Each local store maintains two
+// SupportState structs for a given remote store: one as a provider of support
+// for the remote store, and one as a requester of support from the remote
+// store. Only the former is persisted to disk to ensure that the local store
+// continues to support the remote store as promised even across restarts. The
+// latter is lost across restarts because a store loses all support from other
+// stores upon restart.
+message SupportState {
+  // Target is the identify of the store that is being supported by the local
+  // store ("support for") or the store that is providing support to the local
+  // store ("support from"), depending on the context.
+  // For efficiency, target is unset when writing the proto to disk, and then
+  // populated back when the proto is read into memory.
+  StoreIdent         target     = 1 [(gogoproto.nullable) = false];
+  int64              epoch      = 2 [(gogoproto.casttype) = "Epoch"];
+  util.hlc.Timestamp expiration = 3 [(gogoproto.nullable) = false];
+}
