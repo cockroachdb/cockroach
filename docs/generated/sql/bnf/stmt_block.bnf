@@ -2094,7 +2094,7 @@ complex_db_object_name ::=
 	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
 
 copy_options ::=
-	'DESTINATION' '=' string_or_placeholder
+	'DESTINATION' '=' uri
 	| 'BINARY'
 	| 'CSV'
 	| 'DELIMITER' string_or_placeholder
@@ -2105,7 +2105,7 @@ copy_options ::=
 	| 'ENCODING' 'SCONST'
 
 copy_generic_options ::=
-	'DESTINATION' string_or_placeholder
+	'DESTINATION' uri
 	| 'FORMAT' 'BINARY'
 	| 'FORMAT' 'CSV'
 	| 'FORMAT' 'TEXT'
