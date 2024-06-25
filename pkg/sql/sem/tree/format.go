@@ -172,6 +172,10 @@ const (
 	// FmtTagDollarQuotes instructs tags to be kept intact in tagged dollar
 	// quotes. It also applies tags when formatting UDFs.
 	FmtTagDollarQuotes
+
+	// FmtAlwaysQualifyUserDefinedTypeNames instructs the pretty-printer to include
+	// the name of user-defined types as a three-part name.
+	FmtAlwaysQualifyUserDefinedTypeNames
 )
 
 // PasswordSubstitution is the string that replaces
@@ -241,6 +245,9 @@ const (
 	// with PostgreSQL, whereas EXPORT may evolve over time to support
 	// other things (eg. fixing #33429).
 	FmtExport = FmtBareStrings | fmtRawStrings
+
+	// fmtAlwaysQualifyNames will fully qualify various types of names.
+	fmtAlwaysQualifyNames = FmtAlwaysQualifyTableNames | FmtAlwaysQualifyUserDefinedTypeNames
 )
 
 const flagsRequiringAnnotations = FmtAlwaysQualifyTableNames
@@ -619,7 +626,7 @@ func AsStringWithFlags(n NodeFormatter, fl FmtFlags, opts ...FmtCtxOption) strin
 // AsStringWithFQNames pretty prints a node to a string with the
 // FmtAlwaysQualifyTableNames flag (which requires annotations).
 func AsStringWithFQNames(n NodeFormatter, ann *Annotations) string {
-	ctx := NewFmtCtx(FmtAlwaysQualifyTableNames, FmtAnnotations(ann))
+	ctx := NewFmtCtx(fmtAlwaysQualifyNames, FmtAnnotations(ann))
 	ctx.FormatNode(n)
 	return ctx.CloseAndGetString()
 }

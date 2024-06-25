@@ -71,7 +71,7 @@ query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 ----
-CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(IN a sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -80,10 +80,10 @@ CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8 := 0;
-	foobar db1.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
-	SELECT 'Good':::db1.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	RETURN nextval('sc1.sq1'::REGCLASS);
 	END
 
@@ -116,7 +116,7 @@ query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 ----
-CREATE FUNCTION sc1.f1(IN a db1_new.sc1.enum1)
+CREATE FUNCTION sc1.f1(IN a sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -125,10 +125,10 @@ CREATE FUNCTION sc1.f1(IN a db1_new.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8 := 0;
-	foobar db1_new.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1_new.sc1.tbl1;
-	SELECT 'Good':::db1_new.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	RETURN nextval('sc1.sq1'::REGCLASS);
 	END
 
@@ -256,7 +256,7 @@ query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 ----
-CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(IN a sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -265,10 +265,10 @@ CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8;
-	foobar db1.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
-	SELECT 'Good':::db1.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS) INTO x;
 	RETURN x;
 	END
@@ -303,7 +303,7 @@ query-sql
 SELECT create_statement FROM [SHOW CREATE FUNCTION sc1.f1]
 ----
 ----
-CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+CREATE FUNCTION sc1.f1(IN a sc1.enum1)
 	RETURNS INT8
 	VOLATILE
 	NOT LEAKPROOF
@@ -312,10 +312,10 @@ CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8;
-	foobar db1.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
-	SELECT 'Good':::db1.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS) INTO x;
 	RETURN x;
 	END

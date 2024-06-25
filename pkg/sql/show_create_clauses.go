@@ -405,9 +405,11 @@ func formatFunctionQueryTypesForDisplay(
 		}
 		name := t.TypeMeta.Name
 		typname := tree.MakeTypeNameWithPrefix(tree.ObjectNamePrefix{
-			CatalogName:     tree.Name(name.Catalog),
-			SchemaName:      tree.Name(name.Schema),
-			ExplicitCatalog: name.Catalog != "",
+			CatalogName: tree.Name(name.Catalog),
+			SchemaName:  tree.Name(name.Schema),
+			// Do not include database name, as it makes the type definition less
+			// portable when displayed in SHOW CREATE output.
+			ExplicitCatalog: false,
 			ExplicitSchema:  name.ExplicitSchema,
 		}, name.Name)
 		ref := typname.ToUnresolvedObjectName()

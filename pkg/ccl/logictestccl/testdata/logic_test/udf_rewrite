@@ -233,44 +233,44 @@ query TT
 SHOW CREATE FUNCTION f_rewrite;
 ----
 f_rewrite  CREATE FUNCTION public.f_rewrite()
-             RETURNS test.public.weekday
+             RETURNS public.weekday
              VOLATILE
              NOT LEAKPROOF
              CALLED ON NULL INPUT
              LANGUAGE plpgsql
              AS $$
              DECLARE
-             day test.public.weekday := 'wednesday':::test.public.weekday;
-             today test.public.weekday := 'thursday':::test.public.weekday;
-             curs REFCURSOR := 'monday':::test.public.weekday::STRING;
-             curs2 CURSOR FOR SELECT 'tuesday':::test.public.weekday;
+             day public.weekday := 'wednesday':::public.weekday;
+             today public.weekday := 'thursday':::public.weekday;
+             curs REFCURSOR := 'monday':::public.weekday::STRING;
+             curs2 CURSOR FOR SELECT 'tuesday':::public.weekday;
              BEGIN
              RAISE notice
-             USING MESSAGE = format('val: %d':::STRING, 'wednesday':::test.public.weekday);
-             RAISE notice 'val1: %, val2: %', 'wednesday':::test.public.weekday, 'thursday':::test.public.weekday;
-             WHILE day != 'wednesday':::test.public.weekday LOOP
-             day := 'friday':::test.public.weekday;
-             SELECT 'wednesday':::test.public.weekday;
-             IF day = 'wednesday':::test.public.weekday THEN
-               day := 'thursday':::test.public.weekday;
-               SELECT 'tuesday':::test.public.weekday;
+             USING MESSAGE = format('val: %d':::STRING, 'wednesday':::public.weekday);
+             RAISE notice 'val1: %, val2: %', 'wednesday':::public.weekday, 'thursday':::public.weekday;
+             WHILE day != 'wednesday':::public.weekday LOOP
+             day := 'friday':::public.weekday;
+             SELECT 'wednesday':::public.weekday;
+             IF day = 'wednesday':::public.weekday THEN
+               day := 'thursday':::public.weekday;
+               SELECT 'tuesday':::public.weekday;
                CONTINUE;
-             ELSIF day = 'monday':::test.public.weekday THEN
-               SELECT 'tuesday':::test.public.weekday INTO day;
-             ELSIF day = 'tuesday':::test.public.weekday THEN
-               SELECT 'wednesday':::test.public.weekday INTO day;
-               SELECT 'wednesday':::test.public.weekday;
+             ELSIF day = 'monday':::public.weekday THEN
+               SELECT 'tuesday':::public.weekday INTO day;
+             ELSIF day = 'tuesday':::public.weekday THEN
+               SELECT 'wednesday':::public.weekday INTO day;
+               SELECT 'wednesday':::public.weekday;
              END IF;
              END LOOP;
-             OPEN curs FOR SELECT 'wednesday':::test.public.weekday;
-             RETURN 'wednesday':::test.public.weekday;
+             OPEN curs FOR SELECT 'wednesday':::public.weekday;
+             RETURN 'wednesday':::public.weekday;
              EXCEPTION
              WHEN division_by_zero THEN
              RAISE notice
-             USING MESSAGE = format('val: %d':::STRING, 'wednesday':::test.public.weekday);
+             USING MESSAGE = format('val: %d':::STRING, 'wednesday':::public.weekday);
              WHEN not_null_violation THEN
-             SELECT 'wednesday':::test.public.weekday;
-             RAISE notice 'val: %', 'wednesday':::test.public.weekday;
+             SELECT 'wednesday':::public.weekday;
+             RAISE notice 'val: %', 'wednesday':::public.weekday;
              END
            $$
 
@@ -289,44 +289,44 @@ query TT
 SHOW CREATE FUNCTION f_rewrite;
 ----
 f_rewrite  CREATE FUNCTION public.f_rewrite()
-             RETURNS test.public.workday
+             RETURNS public.workday
              VOLATILE
              NOT LEAKPROOF
              CALLED ON NULL INPUT
              LANGUAGE plpgsql
              AS $$
              DECLARE
-             day test.public.workday := 'humpday':::test.public.workday;
-             today test.public.workday := 'thursday':::test.public.workday;
-             curs REFCURSOR := 'monday':::test.public.workday::STRING;
-             curs2 CURSOR FOR SELECT 'tuesday':::test.public.workday;
+             day public.workday := 'humpday':::public.workday;
+             today public.workday := 'thursday':::public.workday;
+             curs REFCURSOR := 'monday':::public.workday::STRING;
+             curs2 CURSOR FOR SELECT 'tuesday':::public.workday;
              BEGIN
              RAISE notice
-             USING MESSAGE = format('val: %d':::STRING, 'humpday':::test.public.workday);
-             RAISE notice 'val1: %, val2: %', 'humpday':::test.public.workday, 'thursday':::test.public.workday;
-             WHILE day != 'humpday':::test.public.workday LOOP
-             day := 'friday':::test.public.workday;
-             SELECT 'humpday':::test.public.workday;
-             IF day = 'humpday':::test.public.workday THEN
-               day := 'thursday':::test.public.workday;
-               SELECT 'tuesday':::test.public.workday;
+             USING MESSAGE = format('val: %d':::STRING, 'humpday':::public.workday);
+             RAISE notice 'val1: %, val2: %', 'humpday':::public.workday, 'thursday':::public.workday;
+             WHILE day != 'humpday':::public.workday LOOP
+             day := 'friday':::public.workday;
+             SELECT 'humpday':::public.workday;
+             IF day = 'humpday':::public.workday THEN
+               day := 'thursday':::public.workday;
+               SELECT 'tuesday':::public.workday;
                CONTINUE;
-             ELSIF day = 'monday':::test.public.workday THEN
-               SELECT 'tuesday':::test.public.workday INTO day;
-             ELSIF day = 'tuesday':::test.public.workday THEN
-               SELECT 'humpday':::test.public.workday INTO day;
-               SELECT 'humpday':::test.public.workday;
+             ELSIF day = 'monday':::public.workday THEN
+               SELECT 'tuesday':::public.workday INTO day;
+             ELSIF day = 'tuesday':::public.workday THEN
+               SELECT 'humpday':::public.workday INTO day;
+               SELECT 'humpday':::public.workday;
              END IF;
              END LOOP;
-             OPEN curs FOR SELECT 'humpday':::test.public.workday;
-             RETURN 'humpday':::test.public.workday;
+             OPEN curs FOR SELECT 'humpday':::public.workday;
+             RETURN 'humpday':::public.workday;
              EXCEPTION
              WHEN division_by_zero THEN
              RAISE notice
-             USING MESSAGE = format('val: %d':::STRING, 'humpday':::test.public.workday);
+             USING MESSAGE = format('val: %d':::STRING, 'humpday':::public.workday);
              WHEN not_null_violation THEN
-             SELECT 'humpday':::test.public.workday;
-             RAISE notice 'val: %', 'humpday':::test.public.workday;
+             SELECT 'humpday':::public.workday;
+             RAISE notice 'val: %', 'humpday':::public.workday;
              END
            $$
 

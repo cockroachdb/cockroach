@@ -52,7 +52,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   a INT8 NOT NULL,
   b INT8 NULL,
   crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
-  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b, crdb_region)
@@ -94,7 +94,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   a INT8 NOT NULL,
   b INT8 NULL,
   crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
-  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b, crdb_region)
@@ -122,7 +122,7 @@ CREATE TABLE public.t_test_hsi_change_locality (
   a INT8 NOT NULL,
   b INT8 NULL,
   crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
-  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT t_test_hsi_change_locality_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_b (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0 (a, b, crdb_region)
@@ -187,7 +187,7 @@ CREATE TABLE public.t_parent (
   id INT8 NOT NULL,
   id2 INT8 NOT NULL,
   crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id2))), 16:::INT8)) VIRTUAL,
-  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2, crdb_region)
@@ -229,7 +229,7 @@ CREATE TABLE public.t_parent (
   id INT8 NOT NULL,
   id2 INT8 NOT NULL,
   crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id2))), 16:::INT8)) VIRTUAL,
-  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2, crdb_region)
@@ -257,7 +257,7 @@ CREATE TABLE public.t_parent (
   id INT8 NOT NULL,
   id2 INT8 NOT NULL,
   crdb_internal_id2_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(id2))), 16:::INT8)) VIRTUAL,
-  crdb_region testdb.public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::testdb.public.crdb_internal_region,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT t_parent_pkey PRIMARY KEY (id ASC) USING HASH WITH (bucket_count=16),
   UNIQUE INDEX uniq_id2 (id2 ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_id_id2 (id, id2, crdb_region)

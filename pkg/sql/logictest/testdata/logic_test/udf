@@ -101,7 +101,7 @@ $$
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f];
 ----
-CREATE FUNCTION public.f(IN a test.public.notmyworkday)
+CREATE FUNCTION public.f(IN a public.notmyworkday)
   RETURNS INT8
   VOLATILE
   NOT LEAKPROOF

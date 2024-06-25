@@ -94,8 +94,8 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name: "UDTs fully qualified",
 			desc: fooDesc,
 			stmt: "SELECT *, 'inactive':::status FROM foo AS bar WHERE status = 'open':::status",
-			expectStmt: "SELECT *, 'inactive':::defaultdb.public.status " +
-				"FROM foo AS bar WHERE status = 'open':::defaultdb.public.status",
+			expectStmt: "SELECT *, 'inactive':::public.status " +
+				"FROM foo AS bar WHERE status = 'open':::public.status",
 			splitColFams: false,
 		},
 		{

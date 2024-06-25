@@ -535,7 +535,7 @@ CREATE FUNCTION public.func104242_not_null()
   CALLED ON NULL INPUT
   LANGUAGE SQL
   AS $$
-  SELECT 1 FROM test.public.tab104242 WHERE 'foo':::test.public.typ104242 IN ();
+  SELECT 1 FROM test.public.tab104242 WHERE 'foo':::public.typ104242 IN ();
 $$
 
 subtest end
