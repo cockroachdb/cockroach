@@ -61,11 +61,9 @@ func registerAllocator(r registry.Registry) {
 		m.Wait()
 
 		// Setup the prometheus instance and client.
-		clusNodes := c.Range(1, nodes)
-		promNode := c.Node(c.Spec().NodeCount)
 		cfg := (&prometheus.Config{}).
-			WithCluster(clusNodes.InstallNodes()).
-			WithPrometheusNode(promNode.InstallNodes()[0])
+			WithCluster(c.CRDBNodes().InstallNodes()).
+			WithPrometheusNode(c.WorkloadNodes().InstallNodes()[0])
 
 		err := c.StartGrafana(ctx, t.L(), cfg)
 		require.NoError(t, err)
@@ -104,7 +102,7 @@ func registerAllocator(r registry.Registry) {
 		// Wait for 3x replication, we record the time taken to achieve this.
 		var replicateTime time.Time
 		startTime := timeutil.Now()
-		m = c.NewMonitor(ctx, clusNodes)
+		m = c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			err := WaitFor3XReplication(ctx, t, t.L(), db)
 			replicateTime = timeutil.Now()
@@ -114,7 +112,7 @@ func registerAllocator(r registry.Registry) {
 
 		// Wait for replica count balance, this occurs only following
 		// up-replication finishing.
-		m = c.NewMonitor(ctx, clusNodes)
+		m = c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
 			err := waitForRebalance(ctx, t.L(), db, maxStdDev, allocatorStableSeconds)
@@ -149,7 +147,7 @@ func registerAllocator(r registry.Registry) {
 		Name:             `replicate/up/1to3`,
 		Owner:            registry.OwnerKV,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4),
+		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNodes(1)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -161,7 +159,7 @@ func registerAllocator(r registry.Registry) {
 		Name:             `replicate/rebalance/3to5`,
 		Owner:            registry.OwnerKV,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(6),
+		Cluster:          r.MakeClusterSpec(6, spec.WorkloadNodes(1)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -176,7 +174,7 @@ func registerAllocator(r registry.Registry) {
 		// Allow a longer running time to account for runs that use a
 		// cockroach build with runtime assertions enabled.
 		Timeout:          30 * time.Minute,
-		Cluster:          r.MakeClusterSpec(9, spec.CPU(1)),
+		Cluster:          r.MakeClusterSpec(9, spec.CPU(1), spec.WorkloadNodes(1), spec.WorkloadNodeCPU(1)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),

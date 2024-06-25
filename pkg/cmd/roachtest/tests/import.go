@@ -128,10 +128,9 @@ func registerImportNodeShutdown(r registry.Registry) {
 func registerImportTPCC(r registry.Registry) {
 	runImportTPCC := func(ctx context.Context, t test.Test, c cluster.Cluster, testName string,
 		timeout time.Duration, warehouses int) {
-		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-		c.Run(ctx, option.WithNodes(c.All()), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+		c.Run(ctx, option.WithNodes(c.All()), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx)
@@ -359,10 +358,9 @@ func registerImportDecommissioned(r registry.Registry) {
 			warehouses = 10
 		}
 
-		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		t.Status("starting csv servers")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-		c.Run(ctx, option.WithNodes(c.All()), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+		c.Run(ctx, option.WithNodes(c.All()), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		// Decommission a node.
 		nodeToDecommission := 2

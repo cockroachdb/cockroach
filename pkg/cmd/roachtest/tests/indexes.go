@@ -37,6 +37,8 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 		Cluster: r.MakeClusterSpec(
 			nodes+1,
 			spec.CPU(16),
+			spec.WorkloadNodes(1),
+			spec.WorkloadNodeCPU(16),
 			spec.Geo(),
 			spec.GCEZones(strings.Join(gceGeoZones, ",")),
 			spec.AWSZones(strings.Join(awsGeoZones, ",")),
@@ -50,20 +52,20 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			if c.Cloud() == spec.AWS {
 				firstAZ = awsGeoZones[0]
 			}
-			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)
-			loadNode := c.Node(nodes + 1)
 
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+			// The indexes workload is not available in the cockroach binary,
+			// so we must use the deprecated workload.
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNodes())
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 			conn := c.Conn(ctx, t.L(), 1)
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, roachNodes)
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				secondary := " --secondary-indexes=" + strconv.Itoa(secondaryIndexes)
 				initCmd := "./workload init indexes" + secondary + " {pgurl:1}"
-				c.Run(ctx, option.WithNodes(loadNode), initCmd)
+				c.Run(ctx, option.WithNodes(c.WorkloadNodes()), initCmd)
 
 				// Set lease preferences so that all leases for the table are
 				// located in the availability zone with the load generator.
@@ -136,7 +138,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 				duration := " --duration=" + ifLocal(c, "10s", "10m")
 				runCmd := fmt.Sprintf("./workload run indexes --histograms="+t.PerfArtifactsDir()+"/stats.json"+
 					payload+concurrency+duration+" {pgurl%s}", gatewayNodes)
-				c.Run(ctx, option.WithNodes(loadNode), runCmd)
+				c.Run(ctx, option.WithNodes(c.WorkloadNodes()), runCmd)
 				return nil
 			})
 			m.Wait()

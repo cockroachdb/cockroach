@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -31,7 +32,7 @@ func registerQueue(r registry.Registry) {
 		Skip:             "https://github.com/cockroachdb/cockroach/issues/17229",
 		Name:             fmt.Sprintf("queue/nodes=%d", numNodes-1),
 		Owner:            registry.OwnerKV,
-		Cluster:          r.MakeClusterSpec(numNodes),
+		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNodes(1)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
@@ -43,14 +44,14 @@ func registerQueue(r registry.Registry) {
 
 func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	dbNodeCount := c.Spec().NodeCount - 1
-	workloadNode := c.Spec().NodeCount
-
 	// Distribute programs to the correct nodes and start CockroachDB.
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, dbNodeCount))
+	// The queue workload is not available in the cockroach binary,
+	// so we must use the deprecated workload.
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNodes())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 	runQueueWorkload := func(duration time.Duration, initTables bool) {
-		m := c.NewMonitor(ctx, c.Range(1, dbNodeCount))
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(dbNodeCount*64))
 			duration := fmt.Sprintf(" --duration=%s", duration.String())
@@ -65,10 +66,10 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 					concurrency+
 					duration+
 					batch+
-					" {pgurl:1-%d}",
-				dbNodeCount,
+					" {pgurl%s}",
+				c.CRDBNodes(),
 			)
-			c.Run(ctx, option.WithNodes(c.Node(workloadNode)), cmd)
+			c.Run(ctx, option.WithNodes(c.WorkloadNodes()), cmd)
 			return nil
 		})
 		m.Wait()

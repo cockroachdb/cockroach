@@ -47,7 +47,7 @@ func registerSnapshotOverloadExcise(r registry.Registry) {
 		Suites: registry.Suites(registry.Nightly),
 		// The test uses a large volume size to ensure high provisioned bandwidth
 		// from the cloud provider.
-		Cluster: r.MakeClusterSpec(4, spec.CPU(4), spec.VolumeSize(2000)),
+		Cluster: r.MakeClusterSpec(4, spec.CPU(4), spec.WorkloadNodes(1), spec.VolumeSize(2000)),
 		Leases:  registry.MetamorphicLeases,
 		Timeout: 12 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -71,15 +71,13 @@ func registerSnapshotOverloadExcise(r registry.Registry) {
 				"COCKROACH_CONCURRENT_SNAPSHOT_SEND_LIMIT=100",
 			}
 
-			crdbNodes := c.Spec().NodeCount - 1
-			workloadNode := crdbNodes + 1
 			startOpts := option.NewStartOpts(option.NoBackupSchedule)
 			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
 			roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
 			settings := install.MakeClusterSettings(envOptions)
-			c.Start(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes))
+			c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
-			db := c.Conn(ctx, t.L(), crdbNodes)
+			db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 			defer db.Close()
 
 			t.Status(fmt.Sprintf("configuring cluster settings (<%s)", 30*time.Second))
@@ -107,9 +105,9 @@ func registerSnapshotOverloadExcise(r registry.Registry) {
 			t.Status(fmt.Sprintf("setting up prometheus/grafana (<%s)", 2*time.Minute))
 			var statCollector clusterstats.StatCollector
 			promCfg := &prometheus.Config{}
-			promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
-				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
-				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
+			promCfg.WithPrometheusNode(c.WorkloadNodes().InstallNodes()[0]).
+				WithNodeExporter(c.CRDBNodes().InstallNodes()).
+				WithCluster(c.CRDBNodes().InstallNodes()).
 				WithGrafanaDashboardJSON(grafana.SnapshotAdmissionControlGrafanaJSON)
 			err := c.StartGrafana(ctx, t.L(), promCfg)
 			require.NoError(t, err)
@@ -125,14 +123,14 @@ func registerSnapshotOverloadExcise(r registry.Registry) {
 
 			// Initialize the kv database,
 			t.Status(fmt.Sprintf("initializing kv dataset (<%s)", 2*time.Hour))
-			c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
+			c.Run(ctx, option.WithNodes(c.WorkloadNodes()),
 				"./cockroach workload init kv --drop --insert-count=40000000 "+
 					"--max-block-bytes=12288 --min-block-bytes=12288 {pgurl:1-3}")
 
 			t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
-			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, option.WithNodes(c.Node(workloadNode)),
+				c.Run(ctx, option.WithNodes(c.WorkloadNodes()),
 					fmt.Sprintf("./cockroach workload run kv --tolerate-errors "+
 						"--splits=1000 --histograms=%s/stats.json --read-percent=75 "+
 						"--max-rate=600 --max-block-bytes=12288 --min-block-bytes=12288 "+

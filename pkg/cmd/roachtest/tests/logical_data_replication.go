@@ -41,6 +41,8 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 				rightNodes: 3,
 				clusterOpts: []spec.Option{
 					spec.CPU(8),
+					spec.WorkloadNodes(1),
+					spec.WorkloadNodeCPU(8),
 					spec.VolumeSize(100),
 				},
 			},
@@ -289,8 +291,7 @@ func (mc *multiCluster) StartCluster(
 func (mc *multiCluster) Start(ctx context.Context, t test.Test) (multiClusterSetup, func()) {
 	leftCluster := mc.c.Range(1, mc.spec.leftNodes)
 	rightCluster := mc.c.Range(mc.spec.leftNodes+1, mc.spec.leftNodes+mc.spec.rightNodes)
-	workloadNode := mc.c.Node(mc.spec.NodeCount())
-	mc.c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
+	workloadNode := mc.c.WorkloadNodes()
 
 	left, cleanupLeft := mc.StartCluster(ctx, t, "left", leftCluster, mc.spec.LeftClusterStart())
 	right, cleanupRight := mc.StartCluster(ctx, t, "right", rightCluster, mc.spec.RightClusterStart())

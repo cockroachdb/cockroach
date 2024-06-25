@@ -33,7 +33,7 @@ func registerLimitCapacity(r registry.Registry) {
 			Timeout:          1 * time.Hour,
 			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.ManualOnly,
-			Cluster:          r.MakeClusterSpec(5, spec.CPU(8)),
+			Cluster:          r.MakeClusterSpec(5, spec.CPU(8), spec.WorkloadNodes(1)),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runLimitCapacity(ctx, t, c, cfg)
 			},
@@ -75,32 +75,29 @@ func (a limitCapacityOpts) limitWriteCap(bytes int) limitCapacityOpts {
 func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg limitCapacityOpts) {
 	require.False(t, c.IsLocal())
 
-	appNodeID := c.Spec().NodeCount
 	limitedNodeID := c.Spec().NodeCount - 1
-	nodes := c.Range(1, limitedNodeID)
-	appNode := c.Node(appNodeID)
 	limitedNode := c.Node(limitedNodeID)
 
 	initialDuration := 10 * time.Minute
 	limitDuration := 2 * time.Minute
 
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
 
 	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
 	var cancels []func()
 
-	c.Run(ctx, option.WithNodes(appNode), "./cockroach workload init kv --splits=1000 {pgurl:1}")
+	c.Run(ctx, option.WithNodes(c.WorkloadNodes()), "./cockroach workload init kv --splits=1000 {pgurl:1}")
 
-	m := c.NewMonitor(ctx, nodes)
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	cancels = append(cancels, m.GoWithCancel(func(ctx context.Context) error {
 		t.L().Printf("starting load generator\n")
 		// NB: kv50 with 4kb block size at 5k rate will incur approx. 500mb/s write
 		// bandwidth after 10 minutes across the cluster. Spread across 4 CRDB
 		// nodes, expect approx. 125 mb/s write bandwidth each and 30-50% CPU
 		// utilization.
-		err := c.RunE(ctx, option.WithNodes(appNode), fmt.Sprintf(
+		err := c.RunE(ctx, option.WithNodes(c.WorkloadNodes()), fmt.Sprintf(
 			"./cockroach workload run kv --read-percent=50 --tolerate-errors --concurrency=400 "+
 				"--min-block-bytes=4096 --max-block-bytes=4096 --max-rate=5000 "+
 				"--duration=30m {pgurl:1-%d}", c.Spec().NodeCount-2))
@@ -108,7 +105,7 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 	}))
 
 	t.Status(fmt.Sprintf("waiting %s for baseline workload throughput", initialDuration))
-	wait(c.NewMonitor(ctx, nodes), initialDuration)
+	wait(c.NewMonitor(ctx, c.CRDBNodes()), initialDuration)
 	qpsInitial := measureQPS(ctx, t, 10*time.Second, conn)
 	t.Status(fmt.Sprintf("initial (single node) qps: %.0f", qpsInitial))
 
@@ -134,7 +131,7 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 		}))
 	}
 
-	wait(c.NewMonitor(ctx, nodes), limitDuration)
+	wait(c.NewMonitor(ctx, c.CRDBNodes()), limitDuration)
 	qpsFinal := measureQPS(ctx, t, 10*time.Second, conn)
 	qpsRelative := qpsFinal / qpsInitial
 	t.Status(fmt.Sprintf("initial qps=%f final qps=%f (%f%%)", qpsInitial, qpsFinal, 100*qpsRelative))

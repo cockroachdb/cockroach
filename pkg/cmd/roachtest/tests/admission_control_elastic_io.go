@@ -45,7 +45,7 @@ func registerElasticIO(r registry.Registry) {
 		Suites: registry.Suites(registry.Nightly),
 		// Tags:      registry.Tags(`weekly`),
 		// Second node is solely for Prometheus.
-		Cluster:         r.MakeClusterSpec(2, spec.CPU(8)),
+		Cluster:         r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNodes(1)),
 		RequiresLicense: true,
 		Leases:          registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -55,37 +55,34 @@ func registerElasticIO(r registry.Registry) {
 			if c.Spec().NodeCount != 2 {
 				t.Fatalf("expected 2 nodes, found %d", c.Spec().NodeCount)
 			}
-			crdbNodes := c.Spec().NodeCount - 1
-			workAndPromNode := crdbNodes + 1
 
 			promCfg := &prometheus.Config{}
-			promCfg.WithPrometheusNode(c.Node(workAndPromNode).InstallNodes()[0]).
+			promCfg.WithPrometheusNode(c.WorkloadNodes().InstallNodes()[0]).
 				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
 				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
 				WithGrafanaDashboardJSON(grafana.ChangefeedAdmissionControlGrafana)
 			err := c.StartGrafana(ctx, t.L(), promCfg)
 			require.NoError(t, err)
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workAndPromNode))
 			startOpts := option.NewStartOpts(option.NoBackupSchedule)
 			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")
 			settings := install.MakeClusterSettings()
-			c.Start(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes))
+			c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
 			require.NoError(t, err)
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 			setAdmissionControl(ctx, t, c, true)
 			duration := 30 * time.Minute
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				dur := " --duration=" + duration.String()
-				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
-				cmd := "./workload run kv --init --histograms=perf/stats.json --concurrency=512 " +
+				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
+				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=512 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=65536 --max-block-bytes=65536 " +
 					"--txn-qos=background --tolerate-errors --secure" + dur + url
-				c.Run(ctx, option.WithNodes(c.Node(workAndPromNode)), cmd)
+				c.Run(ctx, option.WithNodes(c.WorkloadNodes()), cmd)
 				return nil
 			})
 			m.Go(func(ctx context.Context) error {

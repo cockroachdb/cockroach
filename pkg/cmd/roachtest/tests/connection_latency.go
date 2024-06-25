@@ -34,6 +34,8 @@ const (
 func runConnectionLatencyTest(
 	ctx context.Context, t test.Test, c cluster.Cluster, numNodes int, numZones int, password bool,
 ) {
+	// The connection latency workload is not available in the cockroach binary,
+	// so we must use the deprecated workload.
 	err := c.PutE(ctx, t.L(), t.DeprecatedWorkload(), "./workload")
 	require.NoError(t, err)
 
@@ -107,7 +109,7 @@ func registerConnectionLatencyTest(r registry.Registry) {
 		Owner:     registry.OwnerSQLFoundations,
 		Benchmark: true,
 		// Add one more node for load node.
-		Cluster:          r.MakeClusterSpec(numNodes+1, spec.GCEZones(regionUsCentral)),
+		Cluster:          r.MakeClusterSpec(numNodes+1, spec.WorkloadNodes(1), spec.GCEZones(regionUsCentral)),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

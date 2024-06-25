@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -42,7 +43,7 @@ func registerSqlStatsMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "sql-stats/mixed-version",
 		Owner:            registry.OwnerObservability,
-		Cluster:          r.MakeClusterSpec(5),
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNodes(1)),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
 		Run:              runSQLStatsMixedVersion,
@@ -52,16 +53,14 @@ func registerSqlStatsMixedVersion(r registry.Registry) {
 
 // runSQLStatsMixedVersion tests that accessing sql stats works across mixed version clusters.
 func runSQLStatsMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster) {
-	roachNodes := c.Range(1, c.Spec().NodeCount-1)
-	workloadNode := c.Node(c.Spec().NodeCount)
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c,
-		roachNodes, mixedversion.MinimumSupportedVersion("v23.1.8"))
+		c.CRDBNodes(), mixedversion.MinimumSupportedVersion("v23.1.8"))
 	flushInterval := 2 * time.Minute
 
 	initWorkload := roachtestutil.NewCommand("./cockroach workload init tpcc").
-		Arg("{pgurl%s}", roachNodes)
+		Arg("{pgurl%s}", c.CRDBNodes())
 	runWorkload := roachtestutil.NewCommand("./cockroach workload run tpcc").
-		Arg("{pgurl%s}", roachNodes).
+		Arg("{pgurl%s}", c.CRDBNodes()).
 		Option("tolerate-errors")
 
 	setClusterSettings := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
@@ -71,7 +70,7 @@ func runSQLStatsMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster
 	}
 
 	mvt.OnStartup("set cluster settings", setClusterSettings)
-	stopTpcc := mvt.Workload("tpcc", workloadNode, initWorkload, runWorkload)
+	stopTpcc := mvt.Workload("tpcc", c.WorkloadNodes(), initWorkload, runWorkload)
 	defer stopTpcc()
 
 	requestTypes := map[string]serverpb.CombinedStatementsStatsRequest_StatsType{
@@ -81,7 +80,7 @@ func runSQLStatsMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster
 
 	for name, reqType := range requestTypes {
 		mvt.InMixedVersion("request "+name, func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			return runGetRequests(ctx, c, l, roachNodes, reqType)
+			return runGetRequests(ctx, c, l, c.CRDBNodes(), reqType)
 		})
 	}
 	mvt.Run()

@@ -37,7 +37,7 @@ func registerDiskStalledWALFailover(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:                "disk-stalled/wal-failover/among-stores",
 		Owner:               registry.OwnerStorage,
-		Cluster:             r.MakeClusterSpec(4, spec.CPU(16), spec.ReuseNone(), spec.SSD(2)),
+		Cluster:             r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNodes(1), spec.ReuseNone(), spec.SSD(2)),
 		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
 		Timeout:             3 * time.Hour,
@@ -83,7 +83,7 @@ func runDiskStalledWALFailover(
 		"--log", fmt.Sprintf(`{file-defaults: {dir: "%s", buffered-writes: false, buffering: {max-staleness: 1s, flush-trigger-size: 256KiB, max-buffer-size: 50MiB}}}`, s.LogDir()),
 		"--wal-failover=" + failoverFlag,
 	}
-	c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
+	c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
 
 	// Open a SQL connection to n1, the node that will be stalled.
 	n1Conn := c.Conn(ctx, t.L(), 1)
@@ -94,15 +94,15 @@ func runDiskStalledWALFailover(
 	adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Nodes(2))
 	require.NoError(t, err)
 	adminURL := adminUIAddrs[0]
-	c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+	c.Run(ctx, option.WithNodes(c.WorkloadNodes()), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 	_, err = n1Conn.ExecContext(ctx, `USE kv;`)
 	require.NoError(t, err)
 
 	t.Status("starting workload")
 	workloadStartAt := timeutil.Now()
-	m := c.NewMonitor(ctx, c.Range(1, 3))
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload run kv --read-percent 0 `+
+		c.Run(ctx, option.WithNodes(c.WorkloadNodes()), `./cockroach workload run kv --read-percent 0 `+
 			`--duration 60m --concurrency 4096 --ramp=1m --max-rate 4096 --tolerate-errors `+
 			` --min-block-bytes=2048 --max-block-bytes=2048 --timeout 1s `+
 			`{pgurl:1-3}`)
@@ -184,7 +184,7 @@ func runDiskStalledWALFailover(
 	m.Wait()
 
 	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
-	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 3))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())
 }
 
 // registerDiskStalledDetection registers the disk stall detection tests. These
@@ -210,7 +210,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 			Owner: registry.OwnerStorage,
 			// Use PDs in an attempt to work around flakes encountered when using SSDs.
 			// See #97968.
-			Cluster:             r.MakeClusterSpec(4, spec.ReuseNone(), spec.DisableLocalSSD()),
+			Cluster:             r.MakeClusterSpec(4, spec.WorkloadNodes(1), spec.ReuseNone(), spec.DisableLocalSSD()),
 			CompatibleClouds:    registry.OnlyGCE,
 			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
@@ -250,7 +250,7 @@ func runDiskStalledDetection(
 	defer s.Cleanup(ctx)
 
 	t.Status("starting cluster")
-	c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
+	c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
 
 	// Assert the process monotonic times are as expected.
 	var ok bool
@@ -278,19 +278,19 @@ func runDiskStalledDetection(
 	// Wait for upreplication.
 	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), n2conn))
 
-	c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+	c.Run(ctx, option.WithNodes(c.WorkloadNodes()), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 	_, err = n2conn.ExecContext(ctx, `USE kv;`)
 	require.NoError(t, err)
 
 	t.Status("starting workload")
 	workloadStartAt := timeutil.Now()
-	m := c.NewMonitor(ctx, c.Range(1, 3))
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		// NB: Since we stall node 1, we run the workload only on nodes 2-3 so
 		// the post-stall QPS isn't affected by the fact that 1/3rd of workload
 		// workers just can't connect to a working node.
-		c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload run kv --read-percent 50 `+
+		c.Run(ctx, option.WithNodes(c.WorkloadNodes()), `./cockroach workload run kv --read-percent 50 `+
 			`--duration 10m --concurrency 256 --max-rate 2048 --tolerate-errors `+
 			` --min-block-bytes=512 --max-block-bytes=512 `+
 			`{pgurl:2-3}`)
@@ -397,7 +397,7 @@ func runDiskStalledDetection(
 	m.Wait()
 
 	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
-	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 3))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())
 }
 
 func getProcessStartMonotonic(

@@ -35,6 +35,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Benchmark: true,
 		Cluster: r.MakeClusterSpec(
 			3,
+			spec.WorkloadNodes(1),
 			spec.Geo(),
 			spec.GCEZones("us-east1-b,us-west1-b,europe-west2-b"),
 			spec.AWSZones("us-east-2b,us-west-1a,eu-west-1a"),
@@ -89,16 +90,13 @@ func runSchemaChangeRandomLoad(
 			t.Fatalf("found %d invalid objects", numInvalidObjects)
 		}
 	}
-
-	loadNode := c.Node(1)
-	roachNodes := c.Range(1, c.Spec().NodeCount)
 	t.Status("copying binaries")
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNodes())
 
 	t.Status("starting cockroach nodes")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
-	c.Run(ctx, option.WithNodes(loadNode), "./workload init schemachange {pgurl:1}")
+	c.Run(ctx, option.WithNodes(c.WorkloadNodes()), "./workload init schemachange {pgurl:1}")
 
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.Node(1)), "echo", "-n", "{store-dir}")
 	if err != nil {
@@ -114,10 +112,10 @@ func runSchemaChangeRandomLoad(
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
 		fmt.Sprintf("--txn-log %s", filepath.Join(storeDirectory, txnLogFile)),
-		fmt.Sprintf("{pgurl%s}", loadNode),
+		fmt.Sprintf("{pgurl%s}", c.WorkloadNodes()),
 	}
 	t.Status("running schemachange workload")
-	err = c.RunE(ctx, option.WithNodes(loadNode), runCmd...)
+	err = c.RunE(ctx, option.WithNodes(c.WorkloadNodes()), runCmd...)
 	if err != nil {
 		saveArtifacts(ctx, t, c, storeDirectory)
 		t.Fatal(err)
