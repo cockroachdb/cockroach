@@ -79,6 +79,22 @@ var LeaseJitterFraction = settings.RegisterFloatSetting(
 	base.DefaultDescriptorLeaseJitterFraction,
 	settings.Fraction)
 
+var LeaseMonitorRangeFeedCheckInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"sql.catalog.descriptor_lease_monitor_range_feed.check_interval",
+	"the leasing subsystem will check for checkpoints for the range feed within "+
+		"this interval",
+	time.Minute*5,
+)
+
+var LeaseMonitorRangeFeedResetTime = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"sql.catalog.descriptor_lease_monitor_range_feed.reset_time",
+	"once the range feed has stopped receiving checkpoints for this "+
+		"period of time the range feed will be restarted",
+	time.Minute*25,
+)
+
 //go:generate stringer -type=SessionBasedLeasingMode
 type SessionBasedLeasingMode int64
 
@@ -870,9 +886,16 @@ type Manager struct {
 		// a new version has arrived.
 		leasesToExpire []*descriptorVersionState
 
-		// updatesResolvedTimestamp keeps track of a timestamp before which all
-		// descriptor updates have already been seen.
-		updatesResolvedTimestamp hlc.Timestamp
+		// rangeFeedCheckpoints tracks the health of the range by tracking
+		// the number of observed checkpoints.
+		rangeFeedCheckpoints int
+
+		// rangeFeedIsUnavailableAt tracks when the range feed first became unavailable
+		// or when it was last restarted after unavailability.
+		rangeFeedIsUnavailableAt time.Time
+
+		// rangeFeed current range feed on system.descriptors.
+		rangeFeed *rangefeed.RangeFeed
 	}
 
 	draining atomic.Value
@@ -887,6 +910,11 @@ type Manager struct {
 	stopper          *stop.Stopper
 	sem              *quotapool.IntPool
 	refreshAllLeases chan struct{}
+
+	// descUpdateCh receives updated descriptors from the range feed.
+	descUpdateCh chan catalog.Descriptor
+	// descDelCh receives deleted descriptors from the range feed.
+	descDelCh chan descpb.ID
 }
 
 const leaseConcurrencyLimit = 5
@@ -975,8 +1003,9 @@ func NewLeaseManager(
 	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher, lm)
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
-	lm.mu.updatesResolvedTimestamp = clock.Now()
 	lm.draining.Store(false)
+	lm.descUpdateCh = make(chan catalog.Descriptor)
+	lm.descDelCh = make(chan descpb.ID)
 	return lm
 }
 
@@ -1327,13 +1356,13 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 // rangefeeds. This function must be passed a non-nil gossip if
 // RangefeedLeases is not active.
 func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB) {
-	descUpdateCh := make(chan catalog.Descriptor)
-	descDelCh := make(chan descpb.ID)
-	m.watchForUpdates(ctx, descUpdateCh, descDelCh)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.watchForUpdates(ctx)
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
 		for {
 			select {
-			case id := <-descDelCh:
+			case id := <-m.descDelCh:
 				// Descriptor is marked as deleted, so mark it for deletion or
 				// remove it if it's no longer in use.
 				_ = s.RunAsyncTask(ctx, "purge deleted descriptor", func(ctx context.Context) {
@@ -1345,7 +1374,7 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 						}
 					}
 				})
-			case desc := <-descUpdateCh:
+			case desc := <-m.descUpdateCh:
 				// NB: We allow nil descriptors to be sent to synchronize the updating of
 				// descriptors.
 				if desc == nil {
@@ -1418,9 +1447,7 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 
 // watchForUpdates will watch a rangefeed on the system.descriptor table for
 // updates.
-func (m *Manager) watchForUpdates(
-	ctx context.Context, descUpdateCh chan<- catalog.Descriptor, descDelCh chan<- descpb.ID,
-) {
+func (m *Manager) watchForUpdates(ctx context.Context) {
 	if log.V(1) {
 		log.Infof(ctx, "using rangefeeds for lease manager updates")
 	}
@@ -1440,7 +1467,7 @@ func (m *Manager) watchForUpdates(
 			}
 			select {
 			case <-ctx.Done():
-			case descDelCh <- descpb.ID(id):
+			case m.descDelCh <- descpb.ID(id):
 			}
 			return
 		}
@@ -1459,15 +1486,33 @@ func (m *Manager) watchForUpdates(
 		}
 		select {
 		case <-ctx.Done():
-		case descUpdateCh <- mut:
+		case m.descUpdateCh <- mut:
 		}
+	}
+
+	handleCheckpoint := func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
+		// Track checkpoints that occur from the rangefeed to make sure progress
+		// is always made.
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.testingKnobs.DisableRangeFeedCheckpoint {
+			return
+		}
+		m.mu.rangeFeedCheckpoints += 1
+	}
+
+	// If we already started a range feed terminate it first
+	if m.mu.rangeFeed != nil {
+		m.mu.rangeFeed.Close()
+		m.mu.rangeFeed = nil
 	}
 	// Ignore errors here because they indicate that the server is shutting down.
 	// Also note that the range feed automatically shuts down when the server
 	// shuts down, so we don't need to call Close() ourselves.
-	_, _ = m.rangeFeedFactory.RangeFeed(
+	m.mu.rangeFeed, _ = m.rangeFeedFactory.RangeFeed(
 		ctx, "lease", []roachpb.Span{descriptorTableSpan}, hlc.Timestamp{}, handleEvent,
 		rangefeed.WithSystemTablePriority(),
+		rangefeed.WithOnCheckpoint(handleCheckpoint),
 	)
 }
 
@@ -1480,10 +1525,50 @@ var leaseRefreshLimit = settings.RegisterIntSetting(
 	500,
 )
 
-// PeriodicallyRefreshSomeLeases so that leases are fresh and can serve
-// traffic immediately.
-// TODO(vivek): Remove once epoch based table leases are implemented.
-func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
+// getRangeFeedMonitorSettings determines how long the range feed becomes silent
+// before we started treating it as an availability issue on the cluster.
+func (m *Manager) getRangeFeedMonitorSettings() (timeout time.Duration, monitoringEnabled bool) {
+	timeout = LeaseMonitorRangeFeedCheckInterval.Get(&m.settings.SV)
+	// Even if the monitoring disabled, the timer will be
+	// used to refresh this setting.
+	checkFrequency := timeout
+	if timeout == 0 {
+		timeout = time.Minute
+	}
+	return timeout, checkFrequency > 0
+}
+
+// checkRangeFeedStatus ensures that the range feed is always checkpointing and
+// receiving data. On recovery we will always refresh all descriptors with the
+// assumption we have lost updates (especially if restarts have ocurred).
+func (m *Manager) checkRangeFeedStatus(ctx context.Context) (forceRefresh bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	lastCheckpoints := m.mu.rangeFeedCheckpoints
+	m.mu.rangeFeedCheckpoints = 0
+	// No checkpoints have occurred on the range feed, so we are no longer
+	// getting any updates. At this point there is some type of availability
+	// issue.
+	if lastCheckpoints == 0 &&
+		m.mu.rangeFeedIsUnavailableAt.IsZero() {
+		// Track the first unavailability event.
+		m.mu.rangeFeedIsUnavailableAt = timeutil.Now()
+		log.Warningf(ctx, "lease manager range feed has stopped making progress.")
+	} else if !m.mu.rangeFeedIsUnavailableAt.IsZero() &&
+		lastCheckpoints > 0 {
+		m.mu.rangeFeedIsUnavailableAt = time.Time{}
+		log.Warningf(ctx, "lease manager range feed has recovered.")
+		// Force all descriptors to refresh.
+		forceRefresh = true
+	}
+	return forceRefresh
+}
+
+// RunBackgroundLeasingTask runs background leasing tasks which are
+// responsible for expiring old descriptor versions, monitoring
+// range feed progress / recovery, and supporting legacy expiry
+// based leases.
+func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 	_ = m.stopper.RunAsyncTask(ctx, "lease-refresher", func(ctx context.Context) {
 		refreshTimerDuration := LeaseDuration.Get(&m.storage.settings.SV)
 		renewalsDisabled := false
@@ -1498,6 +1583,11 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 		var refreshTimer timeutil.Timer
 		defer refreshTimer.Stop()
 		refreshTimer.Reset(refreshTimerDuration / 2)
+		// Used to make sure that the system.descriptor lease is active.
+		var rangeFeedProgressWatchDog timeutil.Timer
+		rangeFeedProgressWatchDogTimeout,
+			rangeFeedProgressWatchDogEnabled := m.getRangeFeedMonitorSettings()
+		rangeFeedProgressWatchDog.Reset(rangeFeedProgressWatchDogTimeout)
 		for {
 			select {
 			case <-m.stopper.ShouldQuiesce():
@@ -1505,9 +1595,28 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 
 			case <-m.refreshAllLeases:
 				m.refreshSomeLeases(ctx, true /*refreshAll*/)
+			case <-rangeFeedProgressWatchDog.C:
+				rangeFeedProgressWatchDog.Read = true
+				// Detect if the range feed has stopped making
+				// progress.
+				if rangeFeedProgressWatchDogEnabled {
+					refreshAllDescriptors := m.checkRangeFeedStatus(ctx)
+					// If the range feed recovers after a failure, re-read all
+					// descriptors.
+					if refreshAllDescriptors {
+						m.refreshSomeLeases(ctx, true /*refreshAll*/)
+					}
+				}
+				rangeFeedProgressWatchDogTimeout,
+					rangeFeedProgressWatchDogEnabled = m.getRangeFeedMonitorSettings()
+				rangeFeedProgressWatchDog.Reset(rangeFeedProgressWatchDogTimeout)
 			case <-refreshTimer.C:
 				refreshTimer.Read = true
 				refreshTimer.Reset(m.storage.jitteredLeaseDuration() / 2)
+
+				// Check for any react to any range feed availability problems, and
+				// if needed refresh the full set of descriptors.
+				m.handleRangeFeedAvailability(ctx)
 
 				// Clean up session based leases that have expired.
 				m.cleanupExpiredSessionLeases(ctx)
@@ -1522,6 +1631,36 @@ func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 			}
 		}
 	})
+}
+
+// handleRangeFeedAvailability detects if there is any availability issue
+// with the range feed and attempts restarts.
+func (m *Manager) handleRangeFeedAvailability(ctx context.Context) {
+	// Range feed availability checks can be skipped until session based
+	// leasing is active.
+	if !m.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDrain) {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check to see if the range feed is currently functional, and
+	// did not previously go down.
+	if m.mu.rangeFeedIsUnavailableAt.IsZero() {
+		return
+	}
+
+	// If the range feed is down for too long, force a restart of
+	// the range feed.
+	if timeutil.Since(m.mu.rangeFeedIsUnavailableAt) >=
+		LeaseMonitorRangeFeedResetTime.Get(&m.settings.SV) {
+		log.Warning(ctx, "attempting restart of leasing range feed")
+		// Attempt a range feed restart if it has been down too long.
+		m.watchForUpdates(ctx)
+		// Track when the last restart occurred.
+		m.mu.rangeFeedIsUnavailableAt = timeutil.Now()
+	}
 }
 
 // cleanupExpiredSessionLeases expires session based leases marked for removal,
@@ -1909,4 +2048,13 @@ func (w *waitStatsTracker) end() {
 		w.ws.LastCount = 0
 		w.recSpan.RecordStructured(&w.ws)
 	}
+}
+
+// TestingSetDisableRangeFeedCheckpointFn sets the testing knob used to
+// disable rangefeed checkpoints.
+func (m *Manager) TestingSetDisableRangeFeedCheckpointFn(disable bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.rangeFeedCheckpoints = 0
+	m.testingKnobs.DisableRangeFeedCheckpoint = disable
 }
