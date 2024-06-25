@@ -35,7 +35,7 @@ func alterBackupTypeCheck(
 	if err := exprutil.TypeCheck(
 		ctx, "ALTER BACKUP", p.SemaCtx(),
 		exprutil.Strings{
-			alterBackupStmt.Backup,
+			alterBackupStmt.Backup.Expr,
 			alterBackupStmt.Subdir,
 		},
 	); err != nil {
@@ -62,7 +62,7 @@ func alterBackupPlanHook(
 	}
 
 	exprEval := p.ExprEvaluator("ALTER BACKUP")
-	backup, err := exprEval.String(ctx, alterBackupStmt.Backup)
+	backup, err := exprEval.String(ctx, alterBackupStmt.Backup.Expr)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -81,11 +81,11 @@ func alterBackupPlanHook(
 	for _, cmd := range alterBackupStmt.Cmds {
 		switch v := cmd.(type) {
 		case *tree.AlterBackupKMS:
-			newKms, err = exprEval.StringArray(ctx, tree.Exprs(v.KMSInfo.NewKMSURI))
+			newKms, err = exprEval.StringArray(ctx, v.KMSInfo.NewKMSURI.Exprs())
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
-			oldKms, err = exprEval.StringArray(ctx, tree.Exprs(v.KMSInfo.OldKMSURI))
+			oldKms, err = exprEval.StringArray(ctx, v.KMSInfo.OldKMSURI.Exprs())
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
