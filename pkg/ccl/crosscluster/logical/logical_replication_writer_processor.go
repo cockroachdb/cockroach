@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -89,6 +90,8 @@ type logicalReplicationWriterProcessor struct {
 	logBufferEvery log.EveryN
 
 	debug streampb.DebugLogicalConsumerStatus
+
+	dlqClient DeadLetterQueueClient
 }
 
 var (
@@ -146,6 +149,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
+		dlqClient: &TableDeadLetterQueueClient{},
 	}
 	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -244,6 +248,10 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 		}
 		return nil
 	})
+
+	if err := lrw.dlqClient.Create(); err != nil {
+		lrw.sendError(errors.Wrap(err, "create dead letter queue client"))
+	}
 }
 
 // Next is part of the RowSource interface.
@@ -489,7 +497,13 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 				if err != nil {
 					// TODO(ssd): Handle errors. We should perhaps split the batch and retry a portion of the batch.
 					// If that fails, send the failed application to the dead-letter-queue.
-					return err
+
+					// TODO(azhu): Once we have implemented conflict handling with UDF,
+					// refactor the logic such that we send logs to DLQ if UDF fails
+					// or if UDF doesn't exist.
+					if err = lrw.dlqClient.Log(ctx, lrw.spec.JobID, kvs[batchStart:batchEnd], bh.GetRowProcessor(), err.Error()); err != nil {
+						return err
+					}
 				}
 				batchStart = batchEnd
 				batchTime := timeutil.Since(preBatchTime)
@@ -537,6 +551,7 @@ func (b *batchStats) Add(o batchStats) {
 
 type BatchHandler interface {
 	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
+	GetRowProcessor() RowProcessor
 }
 
 // RowProcessor knows how to process a single row from an event stream.
@@ -545,6 +560,8 @@ type RowProcessor interface {
 	// Txn argument can be nil. The provided value is the "previous value",
 	// before the change was applied on the source.
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
+	GetDecoder() cdcevent.Decoder
+	GetSQLStatement(row cdcevent.Row, isInitialScan bool) string
 }
 
 type txnBatch struct {
@@ -552,6 +569,10 @@ type txnBatch struct {
 	rp       RowProcessor
 	settings *cluster.Settings
 	sd       *sessiondata.SessionData
+}
+
+func (t *txnBatch) GetRowProcessor() RowProcessor {
+	return t.rp
 }
 
 var useImplicitTxns = settings.RegisterBoolSetting(

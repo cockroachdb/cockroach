@@ -150,6 +150,37 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	return stats, err
 }
 
+func (lww *sqlLastWriteWinsRowProcessor) GetDecoder() cdcevent.Decoder {
+	return lww.decoder
+}
+
+func (lww *sqlLastWriteWinsRowProcessor) GetSQLStatement(
+	row cdcevent.Row, isInitialScan bool,
+) string {
+	if row.IsDeleted() {
+		return lww.queryBuffer.deleteQueries[row.TableID].SQL
+	} else {
+		insertQueriesForTable, ok := lww.queryBuffer.insertQueries[row.TableID]
+		if !ok {
+			return ""
+		}
+		insertQueries, ok := insertQueriesForTable[row.FamilyID]
+		if !ok {
+			return ""
+		}
+
+		var insertTypeIndex int
+		// As noted in lww.insertRow(), we attempt optimistic insert if the following condition is true,
+		// hence why it's required to determine whether we attempted optimistic or pessimistic insert.
+		if isInitialScan && tryOptimisticInsertEnabled.Get(&lww.settings.SV) {
+			insertTypeIndex = insertQueriesOptimisticIndex
+		} else {
+			insertTypeIndex = insertQueriesPessimisticIndex
+		}
+		return insertQueries[insertTypeIndex].SQL
+	}
+}
+
 var ieOverrides = sessiondata.InternalExecutorOverride{
 	AttributeToUser: true,
 	// TODO(ssd): we do this for now to prevent the data from being emitted back
