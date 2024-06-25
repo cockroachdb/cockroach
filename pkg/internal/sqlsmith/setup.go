@@ -26,21 +26,28 @@ import (
 // for smithing.
 type Setup func(*rand.Rand) []string
 
+// SeedSetupName is the name of the table setup that creates seed tables with
+// most data types and some sample rows.
+const SeedSetupName = "seed"
+
 // RandTableSetupName is the name of the table setup that creates random tables.
 const RandTableSetupName = "rand-tables"
 
-// SeedMultiRegionSetupName is the name of the table setup that creates
+// SeedMultiRegionSetupName is the name of the table setup that creates seed
 // multi-region tables.
 const SeedMultiRegionSetupName = "seed-multi-region"
 
+// RandMultiRegionSetupName is the name of the table setup that creates random
+// multi-region tables.
+const RandMultiRegionSetupName = "rand-multi-region"
+
 // Setups is a collection of useful initial table states.
 var Setups = map[string]Setup{
-	"empty": wrapCommonSetup(stringSetup("", "")),
-	// seed is a SQL statement that creates a table with most data types
-	// and some sample rows.
-	"seed":                   wrapCommonSetup(stringSetup(seedTable, "seed")),
-	SeedMultiRegionSetupName: wrapCommonSetup(stringSetup(multiregionSeed, "seed_mr_table")),
-	RandTableSetupName:       wrapCommonSetup(randTables),
+	"empty":                  wrapCommonSetup(stringSetup("", "")),
+	SeedSetupName:            wrapCommonSetup(stringSetup(seedTable, "seed")),
+	RandTableSetupName:       wrapCommonSetup(randTablesSetup(false /* isMultiRegion */)),
+	SeedMultiRegionSetupName: wrapCommonSetup(stringSetup(seedTable, "seed")),
+	RandMultiRegionSetupName: wrapCommonSetup(randTablesSetup(true /* isMultiRegion */)),
 }
 
 // wrapCommonSetup wraps setup steps common to all SQLSmith setups around the
@@ -91,12 +98,19 @@ func stringSetup(s, tableName string) Setup {
 // RandTablesPrefixStringConsts is similar to the rand-tables setup but injects
 // a prefix into string constants used in the CREATE TABLE statements.
 func RandTablesPrefixStringConsts(r *rand.Rand, prefix string) []string {
-	return randTablesN(r, r.Intn(5)+1, prefix)
+	return randTablesN(r, r.Intn(5)+1, prefix, false /* isMultiRegion */)
+}
+
+// randTablesSetup returns a Setup function that creates 1-5 random tables.
+func randTablesSetup(isMultiRegion bool) Setup {
+	return func(r *rand.Rand) []string {
+		return randTables(r, isMultiRegion)
+	}
 }
 
 // randTables is a Setup function that creates 1-5 random tables.
-func randTables(r *rand.Rand) []string {
-	return randTablesN(r, r.Intn(5)+1, "")
+func randTables(r *rand.Rand, isMultiRegion bool) []string {
+	return randTablesN(r, r.Intn(5)+1, "", isMultiRegion)
 }
 
 // stringConstRegex is a pattern that matches SQL string literals with type
@@ -109,7 +123,7 @@ func randTables(r *rand.Rand) []string {
 var stringConstRegex = regexp.MustCompile(`[^'\\]'[^']*':::STRING[^:[]`)
 
 // randTablesN is a Setup function that creates n random tables.
-func randTablesN(r *rand.Rand, n int, prefix string) []string {
+func randTablesN(r *rand.Rand, n int, prefix string, isMultiRegion bool) []string {
 	var stmts []string
 	// Since we use the stats mutator, disable auto stats generation.
 	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;`)
@@ -117,8 +131,8 @@ func randTablesN(r *rand.Rand, n int, prefix string) []string {
 
 	// Create the random tables.
 	createTableStatements := randgen.RandCreateTables(
-		context.Background(), r, "table", n, false /* isMultiRegion */, randgen.StatisticsMutator,
-		randgen.PartialIndexMutator, randgen.ForeignKeyMutator, //prefixStringConstsMutator,
+		context.Background(), r, "table", n, isMultiRegion, randgen.StatisticsMutator,
+		randgen.PartialIndexMutator, randgen.ForeignKeyMutator,
 	)
 
 	for _, ast := range createTableStatements {
@@ -172,26 +186,6 @@ COMMIT;
 INSERT INTO seed DEFAULT VALUES;
 CREATE INDEX on seed (_int8, _float8, _date);
 CREATE INVERTED INDEX on seed (_jsonb);
-`
-
-	multiregionSeed = `
-CREATE TABLE IF NOT EXISTS seed_mr_table AS
-	SELECT
-		g::INT2 AS _int2,
-		g::INT4 AS _int4,
-		g::INT8 AS _int8,
-		g::FLOAT8 AS _float8,
-		'2001-01-01'::DATE + g AS _date,
-		'2001-01-01'::TIMESTAMP + g * '1 day'::INTERVAL AS _timestamp,
-		'2001-01-01'::TIMESTAMPTZ + g * '1 day'::INTERVAL AS _timestamptz,
-		g * '1 day'::INTERVAL AS _interval,
-		g % 2 = 1 AS _bool,
-		g::DECIMAL AS _decimal,
-		g::STRING AS _string,
-		g::STRING::BYTES AS _bytes,
-		substring('00000000-0000-0000-0000-' || g::STRING || '00000000000', 1, 36)::UUID AS _uuid
-	FROM
-		generate_series(1, 5) AS g;
 `
 )
 
