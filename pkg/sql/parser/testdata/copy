@@ -420,3 +420,23 @@ at or near "def": syntax error: encoding option specified multiple times
 DETAIL: source SQL:
 COPY "copytab" FROM STDIN (FORMAT     csv, ENCODING 'abc', ENCODING 'def')
                                                                     ^
+
+# Test redaction of secrets in URLs.
+
+parse
+COPY a FROM STDIN WITH DESTINATION = 'https://user:password@example.com'
+----
+COPY a FROM STDIN WITH (DESTINATION 'https://user:redacted@example.com') -- normalized!
+COPY a FROM STDIN WITH (DESTINATION ('https://user:redacted@example.com')) -- fully parenthesized
+COPY a FROM STDIN WITH (DESTINATION '_') -- literals removed
+COPY _ FROM STDIN WITH (DESTINATION 'https://user:redacted@example.com') -- identifiers removed
+COPY a FROM STDIN WITH (DESTINATION 'https://user:password@example.com') -- passwords exposed
+
+parse
+COPY a FROM STDIN WITH (DESTINATION 'https://user:password@example.com')
+----
+COPY a FROM STDIN WITH (DESTINATION 'https://user:redacted@example.com') -- normalized!
+COPY a FROM STDIN WITH (DESTINATION ('https://user:redacted@example.com')) -- fully parenthesized
+COPY a FROM STDIN WITH (DESTINATION '_') -- literals removed
+COPY _ FROM STDIN WITH (DESTINATION 'https://user:redacted@example.com') -- identifiers removed
+COPY a FROM STDIN WITH (DESTINATION 'https://user:password@example.com') -- passwords exposed

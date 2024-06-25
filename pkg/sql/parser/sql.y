@@ -4336,9 +4336,9 @@ copy_generic_options_list:
   }
 
 copy_options:
-  DESTINATION '=' string_or_placeholder
+  DESTINATION '=' uri
   {
-    $$.val = &tree.CopyOptions{Destination: $3.expr()}
+    $$.val = &tree.CopyOptions{Destination: $3.URI()}
   }
 | BINARY
   {
@@ -4394,9 +4394,9 @@ copy_options:
   }
 
 copy_generic_options:
-  DESTINATION string_or_placeholder
+  DESTINATION uri
   {
-    $$.val = &tree.CopyOptions{Destination: $2.expr()}
+    $$.val = &tree.CopyOptions{Destination: $2.URI()}
   }
 | FORMAT BINARY
   {
