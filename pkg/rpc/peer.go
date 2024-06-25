@@ -111,6 +111,7 @@ func (p *peer) releaseMetricsLocked() {
 	}
 	p.mu.peerStatus = peerStatusDeleted
 	p.peerMetrics.release()
+	p.localityMetrics.release()
 }
 
 // A peer is a remote node that we are trying to maintain a healthy RPC
@@ -131,6 +132,7 @@ func (p *peer) releaseMetricsLocked() {
 // See (*peer).launch for details on the probe (heartbeat loop) itself.
 type peer struct {
 	peerMetrics
+	localityMetrics
 	k                 peerKey
 	opts              *ContextOptions
 	heartbeatInterval time.Duration
@@ -243,16 +245,17 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 	// Connect method needs to do the short-circuiting (if a Connection is created
 	// while the breaker is tripped, we want to block in Connect only once we've
 	// seen the first heartbeat succeed).
-	pm := rpcCtx.metrics.acquire(k)
+	pm, lm := rpcCtx.metrics.acquire(k, locality)
 	p := &peer{
 		peerMetrics:        pm,
+		localityMetrics:    lm,
 		logDisconnectEvery: log.Every(time.Minute),
 		k:                  k,
 		remoteClocks:       rpcCtx.RemoteClocks,
 		opts:               &rpcCtx.ContextOptions,
 		peers:              &rpcCtx.peers,
 		dial: func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error) {
-			additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{pm})}
+			additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{lm})}
 			additionalDialOpts = append(additionalDialOpts, rpcCtx.testingDialOpts...)
 			return rpcCtx.grpcDialRaw(ctx, target, class, additionalDialOpts...)
 		},

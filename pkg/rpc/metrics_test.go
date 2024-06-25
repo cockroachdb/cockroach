@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
@@ -55,17 +56,18 @@ func TestMetricsRelease(t *testing.T) {
 	}
 
 	const expectedCount = 11
-	m := newMetrics()
+	m := newMetrics(roachpb.Locality{})
 	// Verify that each metric doesn't have any children at first. Verify the
 	// number of metric fields, as a sanity check (to be modified if fields are
 	// added/deleted).
 	require.Equal(t, expectedCount, verifyAllFields(m, 0))
 	// Verify that a new peer's metrics all get registered.
 	k := peerKey{NodeID: 5, TargetAddr: "192.168.0.1:1234", Class: DefaultClass}
-	pm := m.acquire(k)
+	pm, lm := m.acquire(k, roachpb.Locality{})
 	require.Equal(t, expectedCount, verifyAllFields(m, 1))
 	// Verify that the metrics are not released even if the peer is removed.
 	pm.release()
+	lm.release()
 	require.Equal(t, expectedCount, verifyAllFields(m, 1))
 	require.Equal(t, 0, *pm.registeredCount)
 	// Acquire the same peer twice and release twice.
