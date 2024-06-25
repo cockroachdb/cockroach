@@ -88,13 +88,12 @@ func resolveOptionsForBackupJobDescription(
 	}
 
 	var err error
-	// TODO(msbutler): use uris.RedactKMSURI(uri) here instead?
-	newOpts.EncryptionKMSURI, err = sanitizeURIList(kmsURIs)
+	newOpts.EncryptionKMSURI, err = sanitizeURIList(kmsURIs, true /* kms */)
 	if err != nil {
 		return tree.BackupOptions{}, err
 	}
 
-	newOpts.IncrementalStorage, err = sanitizeURIList(incrementalStorage)
+	newOpts.IncrementalStorage, err = sanitizeURIList(incrementalStorage, false /* kms */)
 	if err != nil {
 		return tree.BackupOptions{}, err
 	}
@@ -133,12 +132,12 @@ func GetRedactedBackupNode(
 	}
 
 	var err error
-	b.To, err = sanitizeURIList(to)
+	b.To, err = sanitizeURIList(to, false /* kms */)
 	if err != nil {
 		return nil, err
 	}
 
-	b.IncrementalFrom, err = sanitizeURIList(incrementalFrom)
+	b.IncrementalFrom, err = sanitizeURIList(incrementalFrom, false /* kms */)
 	if err != nil {
 		return nil, err
 	}
@@ -152,15 +151,25 @@ func GetRedactedBackupNode(
 	return b, nil
 }
 
-// sanitizeURIList sanitizes a list of URIS in order to build an AST
-func sanitizeURIList(uriList []string) ([]tree.Expr, error) {
-	var sanitizedURIs []tree.Expr
-	for _, uri := range uriList {
-		sanitizedURI, err := uris.SanitizeExternalStorageURI(uri, nil /* extraParams */)
-		if err != nil {
-			return nil, err
+// sanitizeURIList sanitizes a list of URIs in order to build an AST.
+func sanitizeURIList(uriList []string, kms bool) (tree.URIs, error) {
+	sanitizedURIs := make(tree.URIs, len(uriList))
+	if kms {
+		for i, uri := range uriList {
+			sanitizedURI, err := uris.RedactKMSURI(uri)
+			if err != nil {
+				return nil, err
+			}
+			sanitizedURIs[i] = tree.NewSanitizedKMSURI(sanitizedURI)
 		}
-		sanitizedURIs = append(sanitizedURIs, tree.NewDString(sanitizedURI))
+	} else {
+		for i, uri := range uriList {
+			sanitizedURI, err := uris.SanitizeExternalStorageURI(uri, nil /* extraParams */)
+			if err != nil {
+				return nil, err
+			}
+			sanitizedURIs[i] = tree.NewSanitizedURI(sanitizedURI)
+		}
 	}
 	return sanitizedURIs, nil
 }
@@ -406,10 +415,10 @@ func backupTypeCheck(
 			backupStmt.Options.ExecutionLocality,
 		},
 		exprutil.StringArrays{
-			tree.Exprs(backupStmt.To),
-			backupStmt.IncrementalFrom,
-			tree.Exprs(backupStmt.Options.IncrementalStorage),
-			tree.Exprs(backupStmt.Options.EncryptionKMSURI),
+			backupStmt.To.Exprs(),
+			backupStmt.IncrementalFrom.Exprs(),
+			backupStmt.Options.IncrementalStorage.Exprs(),
+			backupStmt.Options.EncryptionKMSURI.Exprs(),
 		},
 		exprutil.Bools{
 			backupStmt.Options.CaptureRevisionHistory,
@@ -461,17 +470,17 @@ func backupPlanHook(
 		}
 	}
 
-	to, err := exprEval.StringArray(ctx, tree.Exprs(backupStmt.To))
+	to, err := exprEval.StringArray(ctx, backupStmt.To.Exprs())
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
-	incrementalFrom, err := exprEval.StringArray(ctx, backupStmt.IncrementalFrom)
+	incrementalFrom, err := exprEval.StringArray(ctx, backupStmt.IncrementalFrom.Exprs())
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
 
 	incrementalStorage, err := exprEval.StringArray(
-		ctx, tree.Exprs(backupStmt.Options.IncrementalStorage),
+		ctx, backupStmt.Options.IncrementalStorage.Exprs(),
 	)
 	if err != nil {
 		return nil, nil, nil, false, err
@@ -530,7 +539,7 @@ func backupPlanHook(
 				errors.New("cannot have both encryption_passphrase and kms option set")
 		}
 		kms, err = exprEval.StringArray(
-			ctx, tree.Exprs(backupStmt.Options.EncryptionKMSURI),
+			ctx, backupStmt.Options.EncryptionKMSURI.Exprs(),
 		)
 		if err != nil {
 			return nil, nil, nil, false, err

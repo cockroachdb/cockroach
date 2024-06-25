@@ -35,8 +35,8 @@ func TestBackupResolveOptionsForJobDescription(t *testing.T) {
 		IncludeAllSecondaryTenants:      tree.NewDString("test expr"),
 		EncryptionPassphrase:            tree.NewDString("test expr"),
 		Detached:                        tree.DBoolTrue,
-		EncryptionKMSURI:                []tree.Expr{tree.NewDString("test expr")},
-		IncrementalStorage:              []tree.Expr{tree.NewDString("test expr")},
+		EncryptionKMSURI:                tree.URIs{tree.NewKMSURI(tree.NewDString("test expr"))},
+		IncrementalStorage:              tree.URIs{tree.NewURI(tree.NewDString("test expr"))},
 		ExecutionLocality:               tree.NewDString("test expr"),
 		UpdatesClusterMonitoringMetrics: tree.NewDString("test expr"),
 	}

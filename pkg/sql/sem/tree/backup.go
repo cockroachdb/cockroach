@@ -44,8 +44,8 @@ type BackupOptions struct {
 	IncludeAllSecondaryTenants      Expr
 	EncryptionPassphrase            Expr
 	Detached                        *DBool
-	EncryptionKMSURI                StringOrPlaceholderOptList
-	IncrementalStorage              StringOrPlaceholderOptList
+	EncryptionKMSURI                URIs
+	IncrementalStorage              URIs
 	ExecutionLocality               Expr
 	UpdatesClusterMonitoringMetrics Expr
 }
@@ -58,10 +58,10 @@ type Backup struct {
 
 	// To is set to the root directory of the backup (called the <destination> in
 	// the docs).
-	To StringOrPlaceholderOptList
+	To URIs
 
 	// IncrementalFrom is only set for the old 'BACKUP .... TO ...' syntax.
-	IncrementalFrom Exprs
+	IncrementalFrom URIs
 
 	AsOf    AsOfClause
 	Options BackupOptions
@@ -108,7 +108,12 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	}
 	if node.IncrementalFrom != nil {
 		ctx.WriteString(" INCREMENTAL FROM ")
-		ctx.FormatNode(&node.IncrementalFrom)
+		for i, from := range node.IncrementalFrom {
+			if i > 0 {
+				ctx.WriteString(", ")
+			}
+			ctx.FormatNode(from)
+		}
 	}
 
 	if !node.Options.IsDefault() {
@@ -129,7 +134,7 @@ func (node Backup) Coverage() DescriptorCoverage {
 // RestoreOptions describes options for the RESTORE execution.
 type RestoreOptions struct {
 	EncryptionPassphrase             Expr
-	DecryptionKMSURI                 StringOrPlaceholderOptList
+	DecryptionKMSURI                 URIs
 	IntoDB                           Expr
 	SkipMissingFKs                   bool
 	SkipMissingSequences             bool
@@ -139,7 +144,7 @@ type RestoreOptions struct {
 	Detached                         bool
 	SkipLocalitiesCheck              bool
 	NewDBName                        Expr
-	IncrementalStorage               StringOrPlaceholderOptList
+	IncrementalStorage               URIs
 	AsTenant                         Expr
 	ForceTenantID                    Expr
 	SchemaOnly                       bool
@@ -164,7 +169,7 @@ type Restore struct {
 	//   - len(From)==1 implies we'll have to look for incremental backups in planning
 	//   - len(From[0]) > 1 implies the backups are locality aware
 	//   - From[i][0] must be the default locality.
-	From    []StringOrPlaceholderOptList
+	From    []URIs
 	AsOf    AsOfClause
 	Options RestoreOptions
 

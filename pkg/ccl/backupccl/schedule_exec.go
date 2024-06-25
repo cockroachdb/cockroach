@@ -305,7 +305,7 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 
 	var destinations []string
 	for i := range backupNode.To {
-		dest, ok := backupNode.To[i].(*tree.StrVal)
+		dest, ok := backupNode.To[i].Expr.(*tree.StrVal)
 		if !ok {
 			return "", errors.Errorf("unexpected %T destination in backup statement", dest)
 		}
@@ -314,7 +314,7 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 
 	var kmsURIs []string
 	for i := range backupNode.Options.EncryptionKMSURI {
-		kmsURI, ok := backupNode.Options.EncryptionKMSURI[i].(*tree.StrVal)
+		kmsURI, ok := backupNode.Options.EncryptionKMSURI[i].Expr.(*tree.StrVal)
 		if !ok {
 			return "", errors.Errorf("unexpected %T kmsURI in backup statement", kmsURI)
 		}
