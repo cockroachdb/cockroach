@@ -1099,7 +1099,7 @@ func TestLeaseStringAndSafeFormat(t *testing.T) {
 					ReplicaID: 1,
 				},
 				Start:      makeClockTS(1, 1),
-				Expiration: makeClockTS(2, 1).ToTimestamp().Clone(),
+				Expiration: makeTS(2, 1).Clone(),
 				ProposedTS: makeClockTS(1, 0),
 				Sequence:   3,
 			},
@@ -1113,12 +1113,13 @@ func TestLeaseStringAndSafeFormat(t *testing.T) {
 					StoreID:   1,
 					ReplicaID: 1,
 				},
-				Start:      makeClockTS(1, 1),
-				ProposedTS: makeClockTS(1, 0),
-				Sequence:   3,
-				Epoch:      4,
+				Start:         makeClockTS(1, 1),
+				ProposedTS:    makeClockTS(1, 0),
+				Sequence:      3,
+				Epoch:         4,
+				MinExpiration: makeTS(2, 1),
 			},
-			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 epo=4 pro=0.000000001,0",
+			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 epo=4 min-exp=0.000000002,1 pro=0.000000001,0",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1163,6 +1164,10 @@ func TestLeaseEquivalence(t *testing.T) {
 	epoch1Voter := Lease{Replica: r1Voter, Start: ts1, Epoch: 1}
 	epoch1Learner := Lease{Replica: r1Learner, Start: ts1, Epoch: 1}
 
+	epoch1MinExp2 := Lease{Replica: r1, Start: ts1, Epoch: 1, MinExpiration: ts2.ToTimestamp()}
+	epoch1MinExp3 := Lease{Replica: r1, Start: ts1, Epoch: 1, MinExpiration: ts3.ToTimestamp()}
+	epoch2MinExp2 := Lease{Replica: r1, Start: ts1, Epoch: 2, MinExpiration: ts2.ToTimestamp()}
+
 	testCases := []struct {
 		l, ol      Lease
 		expSuccess bool
@@ -1191,40 +1196,54 @@ func TestLeaseEquivalence(t *testing.T) {
 		{epoch1, epoch1Voter, true},        // same epoch lease, different replica type
 		{epoch1, epoch1Learner, true},      // same epoch lease, different replica type
 		{epoch1Voter, epoch1Learner, true}, // same epoch lease, different replica type
+		// Test minimum expiration.
+		{epoch1, epoch1MinExp2, true},         // different epoch leases, newer min expiration
+		{epoch1, epoch1MinExp3, true},         // different epoch leases, newer min expiration
+		{epoch1MinExp2, epoch1, false},        // different epoch leases, older min expiration
+		{epoch1MinExp2, epoch1MinExp2, true},  // same epoch leases, same min expiration
+		{epoch1MinExp2, epoch1MinExp3, true},  // different epoch leases, newer min expiration
+		{epoch1MinExp3, epoch1, false},        // different epoch leases, older min expiration
+		{epoch1MinExp3, epoch1MinExp2, false}, // different epoch leases, older min expiration
+		{epoch1MinExp3, epoch1MinExp3, true},  // same epoch leases, same min expiration
+		{epoch1MinExp2, epoch2MinExp2, false}, // different epoch leases
 	}
 
 	for i, tc := range testCases {
-		// Test expToEpochEquiv = true.
-		require.Equal(t, tc.expSuccess, tc.l.Equivalent(tc.ol, true /* expToEpochEquiv */), "%d", i)
-		if tc.l == expire1 && tc.ol == epoch1 {
-			// The one case where expToEpochEquiv = false makes a difference.
-			require.Equal(t, !tc.expSuccess, tc.l.Equivalent(tc.ol, false /* expToEpochEquiv */), "%d", i)
-		} else {
-			require.Equal(t, tc.expSuccess, tc.l.Equivalent(tc.ol, false /* expToEpochEquiv */), "%d", i)
+		t.Run("", func(t *testing.T) {
+			// Test expToEpochEquiv = true.
+			require.Equal(t, tc.expSuccess, tc.l.Equivalent(tc.ol, true /* expToEpochEquiv */), "%d", i)
+			if tc.l == expire1 && tc.ol == epoch1 {
+				// The one case where expToEpochEquiv = false makes a difference.
+				require.Equal(t, !tc.expSuccess, tc.l.Equivalent(tc.ol, false /* expToEpochEquiv */), "%d", i)
+			} else {
+				require.Equal(t, tc.expSuccess, tc.l.Equivalent(tc.ol, false /* expToEpochEquiv */), "%d", i)
+			}
+		})
+	}
+
+	t.Run("DeprecatedStartStasis", func(t *testing.T) {
+		// #18689 changed the nullability of the DeprecatedStartStasis, ProposedTS, and Expiration
+		// field. It introduced a bug whose regression is caught below where a zero Expiration and a nil
+		// Expiration in an epoch-based lease led to mistakenly considering leases non-equivalent.
+		prePRLease := Lease{
+			Start: hlc.ClockTimestamp{WallTime: 10},
+			Epoch: 123,
+
+			// The bug-trigger.
+			Expiration: new(hlc.Timestamp),
+
+			// Similar potential bug triggers, but these were actually handled correctly.
+			DeprecatedStartStasis: new(hlc.Timestamp),
+			ProposedTS:            hlc.ClockTimestamp{WallTime: 10},
 		}
-	}
+		postPRLease := prePRLease
+		postPRLease.DeprecatedStartStasis = nil
+		postPRLease.Expiration = nil
 
-	// #18689 changed the nullability of the DeprecatedStartStasis, ProposedTS, and Expiration
-	// field. It introduced a bug whose regression is caught below where a zero Expiration and a nil
-	// Expiration in an epoch-based lease led to mistakenly considering leases non-equivalent.
-	prePRLease := Lease{
-		Start: hlc.ClockTimestamp{WallTime: 10},
-		Epoch: 123,
-
-		// The bug-trigger.
-		Expiration: new(hlc.Timestamp),
-
-		// Similar potential bug triggers, but these were actually handled correctly.
-		DeprecatedStartStasis: new(hlc.Timestamp),
-		ProposedTS:            hlc.ClockTimestamp{WallTime: 10},
-	}
-	postPRLease := prePRLease
-	postPRLease.DeprecatedStartStasis = nil
-	postPRLease.Expiration = nil
-
-	if !postPRLease.Equivalent(prePRLease, true) || !prePRLease.Equivalent(postPRLease, true) {
-		t.Fatalf("leases not equivalent but should be despite diff(pre,post) = %s", pretty.Diff(prePRLease, postPRLease))
-	}
+		if !postPRLease.Equivalent(prePRLease, true) || !prePRLease.Equivalent(postPRLease, true) {
+			t.Fatalf("leases not equivalent but should be despite diff(pre,post) = %s", pretty.Diff(prePRLease, postPRLease))
+		}
+	})
 }
 
 func TestLeaseEqual(t *testing.T) {
@@ -1237,6 +1256,7 @@ func TestLeaseEqual(t *testing.T) {
 		Epoch                 int64
 		Sequence              LeaseSequence
 		AcquisitionType       LeaseAcquisitionType
+		MinExpiration         hlc.Timestamp
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease
@@ -1291,6 +1311,7 @@ func TestLeaseEqual(t *testing.T) {
 		{Epoch: 1},
 		{Sequence: 1},
 		{AcquisitionType: 1},
+		{MinExpiration: ts},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
