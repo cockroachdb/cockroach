@@ -49,7 +49,7 @@ type TestDetails struct {
 	Name                string // test name
 	Selected            bool   // whether a test is Selected or not
 	AvgDurationInMillis int64  // average duration of the test
-	TotalRuns           int    // total number of times the test has run
+	TotalRuns           int    // total number of times the test has run successfully
 }
 
 // SelectTestsReq is the request for CategoriseTests
@@ -91,9 +91,14 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 	if err != nil {
 		return nil, err
 	}
+	// get the current branch from the teamcity environment
+	currentBranch := os.Getenv("TC_BUILD_BRANCH")
+	if currentBranch == "" {
+		currentBranch = "master"
+	}
 	// add the parameters in sequence
-	rows, err := statement.QueryContext(ctx,
-		req.ForPastDays*-1, fmt.Sprintf("%%%s - %s%%", suites[req.Suite], req.Cloud),
+	rows, err := statement.QueryContext(ctx, req.ForPastDays*-1, currentBranch,
+		fmt.Sprintf("%%%s - %s%%", suites[req.Suite], req.Cloud),
 		req.FirstRunOn*-1, req.LastRunOn*-1)
 	if err != nil {
 		return nil, err
@@ -122,10 +127,10 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 		testInfos := make([]string, len(colContainer))
 		copy(testInfos, colContainer)
 		// selected columns:
-		// 0. TEST_NAME
-		// 1. SELECTED (yes/no)
-		// 2. AVG_DURATION
-		// 3. TOTAL_RUNS
+		// 0. test name
+		// 1. whether a test is Selected or not
+		// 2. average duration of the test
+		// 3. total number of times the test has run successfully
 		testDetails := &TestDetails{
 			Name:                testInfos[0],
 			Selected:            testInfos[1] != "no",

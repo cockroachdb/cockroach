@@ -251,7 +251,9 @@ func testsToRun(
 		return nil, errors.Newf("%s", msg)
 	}
 
-	if roachtestflags.SelectiveTests {
+	// selective-tests is considered only if the select-probability is 1.0. This is because select probability already
+	// takes care of running limited tests.
+	if roachtestflags.SelectiveTests && roachtestflags.SelectProbability == 1.0 {
 		fmt.Printf("selective Test enabled\n")
 		// the test categorization must be complete in 30 seconds
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

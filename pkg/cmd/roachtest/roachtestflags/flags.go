@@ -91,7 +91,7 @@ var (
 	SelectiveTests = false
 	_              = registerRunFlag(&SelectiveTests, FlagInfo{
 		Name:  "selective-tests",
-		Usage: `Use selective tests to run based on previous test execution`,
+		Usage: `Use selective tests to run based on previous test execution. this is considered only if the select-probability is 1.0`,
 	})
 
 	Username string = os.Getenv("ROACHPROD_USER")
