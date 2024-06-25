@@ -74,13 +74,24 @@ range_id=1
 	(n2,s2):2: match=3 next=4 admitted=[NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) queue=[4,5) size=+1021 KiB pri=NormalPri
 	(n4,s4):4: match=3 next=4 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) queue=[4,5) size=+1023 KiB pri=NormalPri
 
+# Replace s2 with s5 as a new replica. Set the new replica on s5 and s4 to be
+# in StateSnapshot.
 set_replicas
 range_id=1 tenant_id=1 local_replica_id=1
   store_id=1 replica_id=1 type=VOTER_FULL
-  store_id=4 replica_id=4 type=VOTER_FULL
-  store_id=5 replica_id=5 type=VOTER_FULL
+  store_id=4 replica_id=4 type=VOTER_FULL state=StateSnapshot
+  store_id=5 replica_id=5 type=VOTER_FULL state=StateSnapshot
 ----
 range_id=1
 	(n1,s1):1: match=4 next=5 admitted=[NormalPri=4,AboveNormalPri=4,HighPri=4] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
-	(n4,s4):4: match=3 next=4 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) queue=[4,5) size=+1023 KiB pri=NormalPri
-	(n5,s5):5: match=4 next=5 admitted=[LowPri=4,NormalPri=4,AboveNormalPri=4,HighPri=4] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+	(n4,s4):4: StateSnapshot match=3 next=4 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=-1.0 MiB/+16 MiB ela=-9.0 MiB/+8.0 MiB) send=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) queue=[4,5) size=+1023 KiB pri=NormalPri
+	(n5,s5):5: StateSnapshot match=4 next=5 admitted=[LowPri=4,NormalPri=4,AboveNormalPri=4,HighPri=4] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)
+
+send
+range_id=1 pri=NormalPri size=1MiB
+range_id=1 pri=NormalPri size=1MiB
+----
+range_id=1
+	(n1,s1):1: match=6 next=7 admitted=[NormalPri=4,AboveNormalPri=4,HighPri=4] eval=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB) send=(reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB)
+	(n4,s4):4: StateSnapshot match=3 next=4 admitted=[LowPri=2,NormalPri=2,AboveNormalPri=2,HighPri=2] eval=(reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) queue=[4,7) size=+3.0 MiB pri=NormalPri
+	(n5,s5):5: StateSnapshot match=4 next=5 admitted=[LowPri=4,NormalPri=4,AboveNormalPri=4,HighPri=4] eval=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB) send=(reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB)

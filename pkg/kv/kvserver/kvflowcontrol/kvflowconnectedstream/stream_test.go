@@ -35,10 +35,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func scanReplicaDescriptor(t *testing.T, line string) roachpb.ReplicaDescriptor {
+const invalidTrackerState = tracker.StateSnapshot + 1
+
+func scanReplica(t *testing.T, line string) testingReplica {
 	var storeID, replicaID int
 	var replicaType roachpb.ReplicaType
-	var desc roachpb.ReplicaDescriptor
+	// Default to an invalid state when no state is specified, this will be
+	// converted to the prior state or StateReplicate if the replica doesn't yet
+	// exist.
+	var state tracker.StateType = invalidTrackerState
 	var err error
 
 	parts := strings.Fields(line)
@@ -75,14 +80,34 @@ func scanReplicaDescriptor(t *testing.T, line string) roachpb.ReplicaDescriptor 
 		panic("unknown replica type")
 	}
 
-	desc = roachpb.ReplicaDescriptor{
-		NodeID:    roachpb.NodeID(storeID),
-		StoreID:   roachpb.StoreID(storeID),
-		ReplicaID: roachpb.ReplicaID(replicaID),
-		Type:      replicaType,
+	// The fourth field is optional, if set it contains the tracker state of the
+	// replica on the leader replica (localReplicaID). The valid states are
+	// Probe, Replicate, and Snapshot.
+	if len(parts) > 3 {
+		parts[3] = strings.TrimSpace(parts[3])
+		require.True(t, strings.HasPrefix(parts[3], "state="))
+		parts[3] = strings.TrimPrefix(strings.TrimSpace(parts[3]), "state=")
+		switch parts[3] {
+		case "StateProbe":
+			state = tracker.StateProbe
+		case "StateReplicate":
+			state = tracker.StateReplicate
+		case "StateSnapshot":
+			state = tracker.StateSnapshot
+		default:
+			panic("unknown replica state")
+		}
 	}
 
-	return desc
+	return testingReplica{
+		desc: roachpb.ReplicaDescriptor{
+			NodeID:    roachpb.NodeID(storeID),
+			StoreID:   roachpb.StoreID(storeID),
+			ReplicaID: roachpb.ReplicaID(replicaID),
+			Type:      replicaType,
+		},
+		info: FollowerStateInfo{State: state},
+	}
 }
 
 func scanRanges(t *testing.T, input string) []testingRange {
@@ -118,12 +143,12 @@ func scanRanges(t *testing.T, input string) []testingRange {
 				rangeID:        roachpb.RangeID(rangeID),
 				tenantID:       roachpb.MustMakeTenantID(uint64(tenantID)),
 				localReplicaID: roachpb.ReplicaID(localReplicaID),
-				replicaSet:     map[roachpb.ReplicaID]roachpb.ReplicaDescriptor{},
+				replicaSet:     make(map[roachpb.ReplicaID]testingReplica),
 			})
 		} else {
 			// Otherwise, add the replica to the last replica set created.
-			desc := scanReplicaDescriptor(t, line)
-			replicas[len(replicas)-1].replicaSet[desc.ReplicaID] = desc
+			replica := scanReplica(t, line)
+			replicas[len(replicas)-1].replicaSet[replica.desc.ReplicaID] = replica
 		}
 	}
 
@@ -180,8 +205,6 @@ func scanPriority(t *testing.T, input string) admissionpb.WorkPriority {
 //     These could be set via set_replicas, which would be updated to take a
 //     connection state, in addition to the replica type? A downside of this is
 //     that it would call into set replicas.
-//   - test leaseholder changes
-//   - test multi-tenant
 func TestRangeController(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -233,7 +256,8 @@ func TestRangeController(t *testing.T) {
 					fmt.Fprintf(&buf, "\t%v: %v eval=(%v) send=(%v)",
 						replica.desc, replica.info, controllerRepl.evalTokenCounter, controllerRepl.sendTokenCounter)
 					// Only include the send queue state if non-empty.
-					if controllerRepl.replicaSendStream.queueSize() > 0 {
+					if controllerRepl.replicaSendStream != nil &&
+						controllerRepl.replicaSendStream.queueSize() > 0 {
 						fmt.Fprintf(&buf, " queue=[%v,%v) size=%v pri=%v",
 							controllerRepl.replicaSendStream.sendQueue.indexToSend,
 							controllerRepl.replicaSendStream.sendQueue.nextRaftIndex,
@@ -271,10 +295,10 @@ func TestRangeController(t *testing.T) {
 					}
 
 					raftImpls[r.rangeID].localReplicaID = roachpb.ReplicaID(r.localReplicaID)
-					raftImpls[r.rangeID].setReplicas(r.replicaSet)
+					raftImpls[r.rangeID].setReplicas(r)
 
 					init := RangeControllerInitState{
-						ReplicaSet:  r.replicaSet,
+						ReplicaSet:  r.replicas(),
 						Leaseholder: r.localReplicaID,
 					}
 					controllers[r.rangeID] = NewRangeControllerImpl(options, init)
@@ -282,8 +306,8 @@ func TestRangeController(t *testing.T) {
 				}
 			case "set_replicas":
 				for _, r := range scanRanges(t, d.Input) {
-					raftImpls[r.rangeID].setReplicas(r.replicaSet)
-					controllers[r.rangeID].SetReplicas(r.replicaSet)
+					raftImpls[r.rangeID].setReplicas(r)
+					controllers[r.rangeID].SetReplicas(r.replicas())
 				}
 			case "set_leader":
 				var rangeID, leader int
@@ -382,7 +406,15 @@ type testingRange struct {
 	rangeID        roachpb.RangeID
 	tenantID       roachpb.TenantID
 	localReplicaID roachpb.ReplicaID
-	replicaSet     map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
+	replicaSet     map[roachpb.ReplicaID]testingReplica
+}
+
+func (t testingRange) replicas() ReplicaSet {
+	replicas := make(ReplicaSet, len(t.replicaSet))
+	for i, replica := range t.replicaSet {
+		replicas[i] = replica.desc
+	}
+	return replicas
 }
 
 func (t *testingRaft) prop(pri RaftPriority, size uint64) {
@@ -433,27 +465,37 @@ func (t *testingRaft) admit(storeID roachpb.StoreID, to uint64, pri admissionpb.
 
 // setReplicas updates the replica set tracked by testingRaft. New replicas are
 // assigned match and admitted equal to the last entry index.
-func (t *testingRaft) setReplicas(replicaSet ReplicaSet) {
+func (t *testingRaft) setReplicas(r testingRange) {
 	if t.replicas == nil {
 		t.replicas = make(map[roachpb.ReplicaID]testingReplica)
 	}
 
-	for _, rdesc := range replicaSet {
-		repl := testingReplica{
-			info: FollowerStateInfo{State: tracker.StateReplicate, Next: t.lastEntryIndex + 1, Match: t.lastEntryIndex},
-			desc: rdesc,
-		}
+	for _, repl := range r.replicaSet {
+		repl.info.Next = t.lastEntryIndex + 1
+		repl.info.Match = t.lastEntryIndex
+
 		for admitIdx := RaftPriority(0); admitIdx < NumRaftPriorities; admitIdx++ {
 			repl.info.Admitted[admitIdx] = t.lastEntryIndex
 		}
-		if _, ok := t.replicas[rdesc.ReplicaID]; ok {
-			repl.info = t.replicas[rdesc.ReplicaID].info
+		// If the replica (with ID replicaID) already exists, we are updating the
+		// state and/or type of the replica.
+		if _, ok := t.replicas[repl.desc.ReplicaID]; ok {
+			state := repl.info.State
+			repl.info = t.replicas[repl.desc.ReplicaID].info
+			if state != invalidTrackerState {
+				repl.info.State = state
+			}
+		} else if !ok && repl.info.State == invalidTrackerState {
+			// The replica doesn't yet exist and no tracker state was specified,
+			// default to StateReplicate.
+			repl.info.State = tracker.StateReplicate
+
 		}
-		t.replicas[rdesc.ReplicaID] = repl
+		t.replicas[repl.desc.ReplicaID] = repl
 	}
 
 	for replicaID := range t.replicas {
-		if _, ok := replicaSet[replicaID]; !ok {
+		if _, ok := r.replicaSet[replicaID]; !ok {
 			delete(t.replicas, replicaID)
 		}
 	}
