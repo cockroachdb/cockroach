@@ -576,15 +576,12 @@ func FanOut(list List, action func(Provider, List) error) error {
 
 	var g errgroup.Group
 	for name, vms := range m {
-		// capture loop variables
-		n := name
-		v := vms
 		g.Go(func() error {
-			p, ok := Providers[n]
+			p, ok := Providers[name]
 			if !ok {
-				return errors.Errorf("unknown provider name: %s", n)
+				return errors.Errorf("unknown provider name: %s", name)
 			}
-			return action(p, v)
+			return action(p, vms)
 		})
 	}
 
@@ -644,10 +641,8 @@ func ForProvider(named string, action func(Provider) error) error {
 func ProvidersParallel(named []string, action func(Provider) error) error {
 	var g errgroup.Group
 	for _, name := range named {
-		// capture loop variable
-		n := name
 		g.Go(func() error {
-			return ForProvider(n, action)
+			return ForProvider(name, action)
 		})
 	}
 	return g.Wait()

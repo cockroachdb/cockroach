@@ -479,15 +479,13 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 	// the user's ~/.ssh/id_rsa.pub file or ask them to generate one.
 	var g errgroup.Group
 	for _, r := range regions {
-		// capture loop variable
-		region := r
 		g.Go(func() error {
-			exists, err := p.sshKeyExists(l, keyName, region)
+			exists, err := p.sshKeyExists(l, keyName, r)
 			if err != nil {
 				return err
 			}
 			if !exists {
-				err = p.sshKeyImport(l, keyName, region)
+				err = p.sshKeyImport(l, keyName, r)
 				if err != nil {
 					return err
 				}
@@ -495,7 +493,7 @@ func (p *Provider) ConfigSSH(l *logger.Logger, zones []string) error {
 				if err != nil {
 					return err
 				}
-				l.Printf("imported %s as %s in region %s", sshPublicKeyPath, keyName, region)
+				l.Printf("imported %s as %s in region %s", sshPublicKeyPath, keyName, r)
 			}
 			return nil
 		})
@@ -532,7 +530,6 @@ func (p *Provider) editLabels(
 	}
 	g := errgroup.Group{}
 	for region, list := range byRegion {
-		// Capture loop vars here
 		regionArgs := make([]string, len(args))
 		copy(regionArgs, args)
 
@@ -825,12 +822,10 @@ func (p *Provider) listRegions(
 	var g errgroup.Group
 
 	for _, r := range regions {
-		// capture loop variable
-		region := r
 		g.Go(func() error {
-			vms, err := p.listRegion(l, region, opts, listOpts)
+			vms, err := p.listRegion(l, r, opts, listOpts)
 			if err != nil {
-				l.Printf("Failed to list AWS VMs in region: %s\n%v\n", region, err)
+				l.Printf("Failed to list AWS VMs in region: %s\n%v\n", r, err)
 				return nil
 			}
 			mux.Lock()

@@ -308,7 +308,6 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 
 	for _, shard := range s.shards {
 		s.done.Add(shard.numWorkers)
-		shard := shard // pin loop variable
 		for i := 0; i < shard.numWorkers; i++ {
 			if err := stopper.RunAsyncTaskEx(ctx,
 				stop.TaskOpts{

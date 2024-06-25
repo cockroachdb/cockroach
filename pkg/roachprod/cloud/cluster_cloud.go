@@ -240,12 +240,10 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 	providerVMs := make([]vm.List, len(providerNames))
 	var g errgroup.Group
 	for i, providerName := range providerNames {
-		// Capture loop variable.
-		index := i
 		provider := vm.Providers[providerName]
 		g.Go(func() error {
 			var err error
-			providerVMs[index], err = provider.List(l, options)
+			providerVMs[i], err = provider.List(l, options)
 			return errors.Wrapf(err, "provider %s", provider.Name())
 		})
 	}

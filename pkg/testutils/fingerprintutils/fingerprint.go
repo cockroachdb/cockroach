@@ -100,7 +100,6 @@ func FingerprintTables(
 	result := make([]int64, len(tableIDs))
 	eg, _ := errgroup.WithContext(ctx)
 	for j, id := range tableIDs {
-		j, id := j, id // capture range variables
 		eg.Go(func() error {
 			fingerprint, err := FingerprintTable(ctx, db, id, optFuncs...)
 			if err != nil {

@@ -129,7 +129,6 @@ func (c *Cluster) ForEveryNodeOrServer(
 	grp := ctxgroup.WithContext(ctx)
 
 	for _, node := range live {
-		id := node.ID // copy out of the loop variable
 		alloc, err := qp.Acquire(ctx, 1)
 		if err != nil {
 			return err
@@ -138,7 +137,7 @@ func (c *Cluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			conn, err := c.c.Dialer.Dial(ctx, id, rpc.DefaultClass)
+			conn, err := c.c.Dialer.Dial(ctx, node.ID, rpc.DefaultClass)
 			if err != nil {
 				return err
 			}
