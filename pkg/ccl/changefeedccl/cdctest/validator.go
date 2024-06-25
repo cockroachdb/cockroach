@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest/gapcheck"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -150,19 +149,17 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 	if len(timestampValueTuples) > 0 &&
 		updated.Less(timestampValueTuples[len(timestampValueTuples)-1].ts) {
 		v.failures = append(v.failures, fmt.Sprintf(
-			`topic %s partition %s: saw new row timestamp %s after %s was seen (key %s)`,
+			`topic %s partition %s: saw new row timestamp %s after %s was seen`,
 			v.topic, partition,
 			updated.AsOfSystemTime(),
 			timestampValueTuples[len(timestampValueTuples)-1].ts.AsOfSystemTime(),
-			key,
 		))
 	}
 	latestResolved := v.resolved[partition]
 	if updated.Less(latestResolved) {
 		v.failures = append(v.failures, fmt.Sprintf(
-			`topic %s partition %s: saw new row timestamp %s after %s was resolved (key %s)`,
+			`topic %s partition %s: saw new row timestamp %s after %s was resolved`,
 			v.topic, partition, updated.AsOfSystemTime(), latestResolved.AsOfSystemTime(),
-			key,
 		))
 	}
 
@@ -188,70 +185,6 @@ func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 func (v *orderValidator) Failures() []string {
 	return v.failures
 }
-
-type ConsistencyValidationType string
-
-const (
-	ConsistencyValidationNone              ConsistencyValidationType = ""
-	ConsistencyValidationEachKeySequential ConsistencyValidationType = "each_key_sequential"
-)
-
-func NewConsistencyValidator(ct ConsistencyValidationType, topic string, inner Validator) Validator {
-	switch ct {
-	case ConsistencyValidationNone:
-		return NoOpValidator
-	case ConsistencyValidationEachKeySequential:
-		if inner == nil {
-			inner = NoOpValidator
-		}
-		return &eachKeySequentialConsistencyValidator{ct: ct, topic: topic, inner: inner, gapcheckers: make(map[string]*gapcheck.GapChecker)}
-	default:
-		panic(fmt.Sprintf("unknown consistency validation type: %s", ct))
-	}
-}
-
-type eachKeySequentialConsistencyValidator struct {
-	inner       Validator
-	ct          ConsistencyValidationType
-	topic       string
-	gapcheckers map[string]*gapcheck.GapChecker
-}
-
-func (c *eachKeySequentialConsistencyValidator) Failures() []string {
-	var failures []string
-	for key, gc := range c.gapcheckers {
-		if err := gc.Check(); err != nil { // TODO: this can also be a symptom of row reordering. to test that, ignore these errors until the end.
-			failures = append(failures, fmt.Sprintf("consistency: key=%v: %v", key, err.Error()))
-		}
-	}
-	return append(failures, c.inner.Failures()...)
-}
-
-func (c *eachKeySequentialConsistencyValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
-	return c.inner.NoteResolved(partition, resolved)
-}
-
-func (c *eachKeySequentialConsistencyValidator) NoteRow(partition string, key string, value string, updated hlc.Timestamp) error {
-	type val struct {
-		After struct {
-			ID int `json:"id"`
-			X  int `json:"x"`
-		} `json:"after"`
-		Updated string `json:"updated"`
-	}
-	var v val
-	if err := gojson.Unmarshal([]byte(value), &v); err != nil {
-		return fmt.Errorf("failed to parse value %q: %w", value, err)
-	}
-	x := v.After.X
-	if _, ok := c.gapcheckers[key]; !ok {
-		c.gapcheckers[key] = gapcheck.NewGapChecker()
-	}
-	c.gapcheckers[key].Add(x)
-	return c.inner.NoteRow(partition, key, value, updated)
-}
-
-var _ Validator = &eachKeySequentialConsistencyValidator{}
 
 type beforeAfterValidator struct {
 	sqlDB          *gosql.DB
