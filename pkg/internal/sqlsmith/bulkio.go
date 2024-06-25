@@ -204,7 +204,7 @@ func makeExport(s *Smither) (tree.Statement, bool) {
 	return &tree.Export{
 		Query:      stmt,
 		FileFormat: "CSV",
-		File:       tree.NewStrVal(name),
+		File:       tree.NewURI(tree.NewStrVal(name)),
 	}, true
 }
 

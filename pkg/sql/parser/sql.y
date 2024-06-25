@@ -4119,9 +4119,9 @@ import_stmt:
 //
 // %SeeAlso: SELECT
 export_stmt:
-  EXPORT INTO import_format string_or_placeholder opt_with_options FROM select_stmt
+  EXPORT INTO import_format uri opt_with_options FROM select_stmt
   {
-    $$.val = &tree.Export{Query: $7.slct(), FileFormat: $3, File: $4.expr(), Options: $5.kvOptions()}
+    $$.val = &tree.Export{Query: $7.slct(), FileFormat: $3, File: $4.URI(), Options: $5.kvOptions()}
   }
 | EXPORT error // SHOW HELP: EXPORT
 
