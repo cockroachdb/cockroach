@@ -2749,7 +2749,7 @@ func Deploy(
 	return nil
 }
 
-var sideEyeToken, _ = os.LookupEnv("SIDE_EYE_API_TOKEN")
+var sideEyeEnvToken, _ = os.LookupEnv("SIDE_EYE_API_TOKEN")
 
 // CaptureSideEyeSnapshot asks the Side-Eye service to take a snapshot of the
 // cockroach processes of this cluster. All errors are logged and swallowed, and
@@ -2757,8 +2757,12 @@ var sideEyeToken, _ = os.LookupEnv("SIDE_EYE_API_TOKEN")
 // must previously have been installed and started with the cluster's name as
 // the env name.
 func CaptureSideEyeSnapshot(ctx context.Context, l *logger.Logger, sideEyeEnv string) {
+	sideEyeToken := sideEyeEnvToken
 	if sideEyeToken == "" {
-		l.PrintfCtx(ctx, "Side-Eye token is not configured, skipping snapshot")
+		sideEyeToken = install.GetGcloudSideEyeSecret()
+	}
+	if sideEyeToken == "" {
+		l.PrintfCtx(ctx, "Side-Eye token is not configured via SIDE_EYE_API_TOKEN or gcloud secret, skipping snapshot")
 		return
 	}
 
