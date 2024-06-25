@@ -341,9 +341,6 @@ func buildReplicationStreamSpec(
 			Locality:   nodeInfo.Locality,
 			PartitionSpec: &streampb.StreamPartitionSpec{
 				Spans: sp.Spans,
-				Config: streampb.StreamPartitionSpec_ExecutionConfig{
-					MinCheckpointFrequency: crosscluster.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
-				},
 			},
 		})
 	}
