@@ -2055,6 +2055,9 @@ func (l *Lease) Equal(that interface{}) bool {
 	if l.Sequence != that1.Sequence {
 		return false
 	}
+	if l.AcquisitionType != that1.AcquisitionType {
+		return false
+	}
 	return true
 }
 
