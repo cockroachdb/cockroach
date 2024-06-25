@@ -185,6 +185,10 @@ const (
 	// e.g.
 	//   SELECT 1, 'a', $1 => SELECT _, _, _
 	FmtConstantsAsUnderscores
+
+	// FmtAlwaysQualifyUserDefinedTypeNames instructs the pretty-printer to include
+	// the name of user-defined types as a three-part name.
+	FmtAlwaysQualifyUserDefinedTypeNames
 )
 
 const genericArityIndicator = "__more__"
@@ -259,6 +263,9 @@ const (
 	// with PostgreSQL, whereas EXPORT may evolve over time to support
 	// other things (eg. fixing #33429).
 	FmtExport = FmtBareStrings | fmtRawStrings
+
+	// fmtAlwaysQualifyNames will fully qualify various types of names.
+	fmtAlwaysQualifyNames = FmtAlwaysQualifyTableNames | FmtAlwaysQualifyUserDefinedTypeNames
 )
 
 const flagsRequiringAnnotations = FmtAlwaysQualifyTableNames
@@ -638,7 +645,7 @@ func AsStringWithFlags(n NodeFormatter, fl FmtFlags, opts ...FmtCtxOption) strin
 // AsStringWithFQNames pretty prints a node to a string with the
 // FmtAlwaysQualifyTableNames flag (which requires annotations).
 func AsStringWithFQNames(n NodeFormatter, ann *Annotations) string {
-	ctx := NewFmtCtx(FmtAlwaysQualifyTableNames, FmtAnnotations(ann))
+	ctx := NewFmtCtx(fmtAlwaysQualifyNames, FmtAnnotations(ann))
 	ctx.FormatNode(n)
 	return ctx.CloseAndGetString()
 }
