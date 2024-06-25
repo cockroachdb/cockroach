@@ -4588,22 +4588,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_huandu_go_assert",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/huandu/go-assert",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
-        sum = "h1:fjemmA7sSfYHJD7CUqs9qTwwfdNAx7/j2/ZlHXzNB3c=",
-        version = "v1.1.5",
-    )
-    go_repository(
-        name = "com_github_huandu_skiplist",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/huandu/skiplist",
-        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
-        sum = "h1:gox56QD77HzSC0w+Ws3MH3iie755GBJU1OER3h5VsYw=",
-        version = "v1.2.0",
-    )
-    go_repository(
         name = "com_github_huandu_xstrings",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/huandu/xstrings",
