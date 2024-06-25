@@ -1048,3 +1048,23 @@ statement error pgcode 23505 duplicate key value violates unique constraint \"un
 INSERT INTO t115377 VALUES (2, 1, 1, 'east')
 
 subtest end
+
+# Regression test for hitting a nil pointer in the insert fast path when seeing
+# a bool expression in the VALUES clause (#123103).
+statement ok
+CREATE TABLE t123103 (
+	id STRING DEFAULT gen_random_uuid()::STRING NOT NULL,
+	r  region NOT NULL DEFAULT 'us-east'::region,
+	a  STRING NOT NULL,
+	b  BOOL NOT NULL,
+	CONSTRAINT tab_pkey PRIMARY KEY (r ASC, id ASC),
+	CONSTRAINT tab_id_key UNIQUE WITHOUT INDEX (id ASC),
+	CONSTRAINT tab_r_a_b_key UNIQUE (r ASC, a ASC, b ASC),
+	CONSTRAINT tab_a_b_key UNIQUE WITHOUT INDEX (a ASC, b ASC)
+);
+INSERT INTO t123103 (id, a, b) VALUES ('1234567890', 'foo', true);
+
+query TTB
+SELECT id, a, b FROM t123103;
+----
+1234567890  foo  true
