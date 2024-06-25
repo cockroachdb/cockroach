@@ -700,7 +700,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				stats.AvgColSizes[colOrd] = stat.AvgSize()
 			}
 
-			needHistogram := cols.Len() == 1 && stat.Histogram() != nil &&
+			needHistogram := cols.Len() == 1 && len(stat.Histogram()) > 0 &&
 				sb.evalCtx.SessionData().OptimizerUseHistograms
 			seenInvertedStat := false
 			invertedStatistic := false
