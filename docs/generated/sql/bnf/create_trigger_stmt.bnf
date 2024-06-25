@@ -1,0 +1,2 @@
+create_trigger_stmt ::=
+	'CREATE' 'TRIGGER' name create_trigger_timing create_trigger_event_list 'ON' table_name trigger_for 'EXECUTE' function_or_procedure func_name '(' ')'

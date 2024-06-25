@@ -659,6 +659,8 @@ type TableDescriptor interface {
 	// EnforcedConstraints for this table, in the same order.
 	EnforcedCheckConstraints() []CheckConstraint
 
+	Triggers() []string
+
 	// OutboundForeignKeys returns the subset of foreign key constraints in
 	// AllConstraints for this table, in the same order.
 	OutboundForeignKeys() []ForeignKeyConstraint

@@ -1214,7 +1214,9 @@ message TableDescriptor {
   // ImportStartWallTime is set.
   optional ImportType import_type = 60 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportType"];
 
-  // Next ID: 61
+  repeated string triggers = 61;
+
+  // Next ID: 62
 }
 
 // ImportType indicates the type of IMPORT that is in progress for a

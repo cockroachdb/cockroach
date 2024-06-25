@@ -549,6 +549,14 @@ func (u *unknownTable) Check(i int) cat.CheckConstraint {
 	panic(errors.AssertionFailedf("not implemented"))
 }
 
+func (u *unknownTable) TriggerCount() int {
+	return 0
+}
+
+func (u *unknownTable) Trigger(i int) string {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
 func (u *unknownTable) FamilyCount() int {
 	return 0
 }

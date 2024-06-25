@@ -590,6 +590,7 @@ create_role_stmt ::=
 create_ddl_stmt ::=
 	create_database_stmt
 	| create_index_stmt
+	| create_trigger_stmt
 	| create_schema_stmt
 	| create_table_stmt
 	| create_table_as_stmt
@@ -1147,6 +1148,9 @@ unreserved_keyword ::=
 	| 'EXCLUDE'
 	| 'EXCLUDING'
 	| 'EXECUTE'
+	| 'EACH'
+	| 'INSTEAD'
+	| 'STATEMENT'
 	| 'EXECUTION'
 	| 'EXPERIMENTAL'
 	| 'EXPERIMENTAL_AUDIT'
@@ -1768,6 +1772,9 @@ create_index_stmt ::=
 	| 'CREATE' opt_unique 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'CREATE' opt_unique 'INVERTED' 'INDEX' opt_concurrently 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+
+create_trigger_stmt ::=
+	'CREATE' 'TRIGGER' name create_trigger_timing create_trigger_event_list 'ON' table_name trigger_for 'EXECUTE' function_or_procedure func_name '(' ')'
 
 create_schema_stmt ::=
 	'CREATE' 'SCHEMA' qualifiable_schema_name
@@ -2511,6 +2518,24 @@ opt_index_visible ::=
 	| 'VISIBILITY' 'FCONST'
 	| 
 
+create_trigger_timing ::=
+	'BEFORE'
+	| 'AFTER'
+	| 'INSTEAD' 'OF'
+
+create_trigger_event_list ::=
+	create_trigger_event
+	| create_trigger_event 'OR' create_trigger_event_list
+
+trigger_for ::=
+	'FOR' trigger_opt_each 'ROW'
+	| 'FOR' trigger_opt_each 'STATEMENT'
+	| 
+
+function_or_procedure ::=
+	'FUNCTION'
+	| 'PROCEDURE'
+
 opt_schema_name ::=
 	qualifiable_schema_name
 	| 
@@ -3175,6 +3200,15 @@ partition_by ::=
 storage_parameter_list ::=
 	( storage_parameter ) ( ( ',' storage_parameter ) )*
 
+create_trigger_event ::=
+	'INSERT'
+	| 'UPDATE'
+	| 'DELETE'
+
+trigger_opt_each ::=
+	'EACH'
+	| 
+
 table_elem_list ::=
 	( table_elem ) ( ( ',' table_elem ) )*
 
@@ -3718,6 +3752,9 @@ bare_label_keywords ::=
 	| 'DISCARD'
 	| 'DISTINCT'
 	| 'DO'
+	| 'EACH'
+	| 'INSTEAD'
+	| 'STATEMENT'
 	| 'DOMAIN'
 	| 'DOUBLE'
 	| 'DROP'
