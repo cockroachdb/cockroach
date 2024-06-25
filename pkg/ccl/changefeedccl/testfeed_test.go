@@ -298,19 +298,19 @@ func (e *externalConnectionFeedFactory) Feed(
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI != nil {
+	if createStmt.SinkURI.Expr != nil {
 		return nil, errors.Errorf(
 			`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}
-	createStmt.SinkURI = tree.NewStrVal(`external://` + randomExternalConnectionName)
+	createStmt.SinkURI = tree.NewURI(tree.NewStrVal(`external://` + randomExternalConnectionName))
 
-	return e.TestFeedFactory.Feed(createStmt.String(), args...)
+	return e.TestFeedFactory.Feed(tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...)
 }
 
 func setURI(
 	createStmt *tree.CreateChangefeed, uri string, allowOverride bool, args *[]interface{},
 ) error {
-	if createStmt.SinkURI != nil {
+	if createStmt.SinkURI.Expr != nil {
 		u, err := url.Parse(tree.AsStringWithFlags(createStmt.SinkURI, tree.FmtBareStrings))
 		if err != nil {
 			return err
@@ -328,7 +328,7 @@ func setURI(
 		return errors.Errorf(
 			`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}
-	createStmt.SinkURI = tree.NewStrVal(uri)
+	createStmt.SinkURI = tree.NewURI(tree.NewStrVal(uri))
 	return nil
 }
 
@@ -881,7 +881,9 @@ func (f *tableFeedFactory) Feed(
 		return nil, err
 	}
 
-	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := f.startFeedJob(
+		c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...,
+	); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -1124,7 +1126,9 @@ func (f *cloudFeedFactory) Feed(
 		dir:            feedDir,
 		isBare:         createStmt.Select != nil && !explicitEnvelope,
 	}
-	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := f.startFeedJob(
+		c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...,
+	); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -1822,7 +1826,9 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 		registry:       registry,
 	}
 
-	if err := k.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := k.startFeedJob(
+		c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...,
+	); err != nil {
 		return nil, errors.CombineErrors(err, c.Close())
 	}
 	return c, nil
@@ -2052,7 +2058,9 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 		isBare:         createStmt.Select != nil && !explicitEnvelope,
 		mockSink:       sinkDest,
 	}
-	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := f.startFeedJob(
+		c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...,
+	); err != nil {
 		sinkDest.Close()
 		return nil, err
 	}
@@ -2403,7 +2411,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI == nil {
+	if createStmt.SinkURI.Expr == nil {
 		err = setURI(createStmt, GcpScheme+"://testfeed?region=testfeedRegion", true, &args)
 		if err != nil {
 			return nil, err
@@ -2448,7 +2456,9 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		deprecatedClient: deprecatedClient,
 	}
 
-	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := p.startFeedJob(
+		c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...,
+	); err != nil {
 		_ = mockServer.Close()
 		return nil, err
 	}
@@ -2694,7 +2704,7 @@ func (p *pulsarFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI == nil {
+	if createStmt.SinkURI.Expr == nil {
 		err = setURI(createStmt, changefeedbase.SinkSchemePulsar+"://testfeed?region=testfeedRegion", true, &args)
 		if err != nil {
 			return nil, err
@@ -2723,7 +2733,9 @@ func (p *pulsarFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		pulsarServer:   mockServer,
 	}
 
-	if err := p.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
+	if err := p.startFeedJob(
+		c.jobFeed, tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...,
+	); err != nil {
 		return nil, err
 	}
 	return c, nil

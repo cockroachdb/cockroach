@@ -1835,7 +1835,7 @@ changefeed_targets ::=
 	( changefeed_target ) ( ( ',' changefeed_target ) )*
 
 opt_changefeed_sink ::=
-	'INTO' string_or_placeholder
+	'INTO' uri
 
 target_list ::=
 	( target_elem ) ( ( ',' target_elem ) )*
@@ -2622,7 +2622,7 @@ schedule_label_spec ::=
 	| 
 
 changefeed_sink ::=
-	'INTO' string_or_placeholder
+	'INTO' uri
 
 cron_expr ::=
 	'RECURRING' sconst_or_placeholder

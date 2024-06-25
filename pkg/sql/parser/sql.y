@@ -1596,7 +1596,7 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
-%type <tree.Expr> opt_changefeed_sink changefeed_sink
+%type <tree.URI> opt_changefeed_sink changefeed_sink
 %type <str> opt_changefeed_family
 
 %type <str> explain_option_name
@@ -5609,7 +5609,7 @@ create_changefeed_stmt:
   {
     $$.val = &tree.CreateChangefeed{
       Targets: $4.changefeedTargets(),
-      SinkURI: $5.expr(),
+      SinkURI: $5.URI(),
       Options: $6.kvOptions(),
     }
   }
@@ -5622,7 +5622,7 @@ create_changefeed_stmt:
     }
 
     $$.val = &tree.CreateChangefeed{
-      SinkURI: $3.expr(),
+      SinkURI: $3.URI(),
       Options: $4.kvOptions(),
       Targets: tree.ChangefeedTargets{target},
       Select:  &tree.SelectClause{
@@ -5674,7 +5674,7 @@ create_schedule_for_changefeed_stmt:
      $$.val = &tree.ScheduledChangefeed{
         CreateChangefeed:   &tree.CreateChangefeed{
           Targets:    $6.changefeedTargets(),
-          SinkURI:    $7.expr(),
+          SinkURI:    $7.URI(),
           Options:    $8.kvOptions(),
         },
         ScheduleLabelSpec:  *($3.scheduleLabelSpec()),
@@ -5692,7 +5692,7 @@ create_schedule_for_changefeed_stmt:
     }
 
     createChangefeedNode := &tree.CreateChangefeed{
-      SinkURI: $6.expr(),
+      SinkURI: $6.URI(),
       Options: $7.kvOptions(),
       Targets: tree.ChangefeedTargets{target},
       Select:  &tree.SelectClause{
@@ -5749,20 +5749,20 @@ opt_changefeed_family:
   }
 
 opt_changefeed_sink:
-  INTO string_or_placeholder
+  INTO uri
   {
-    $$.val = $2.expr()
+    $$.val = $2.URI()
   }
 | /* EMPTY */
   {
     /* SKIP DOC */
-    $$.val = nil
+    $$.val = tree.URI{}
   }
 
 changefeed_sink:
-  INTO string_or_placeholder
+  INTO uri
   {
-    $$.val = $2.expr()
+    $$.val = $2.URI()
   }
 // %Help: DELETE - delete rows from a table
 // %Category: DML

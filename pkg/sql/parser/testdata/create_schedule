@@ -93,3 +93,12 @@ CREATE SCHEDULE FOR BACKUP INTO ('foo') WITH kms = ('https://user:redacted@foo.c
 CREATE SCHEDULE FOR BACKUP INTO '_' WITH kms = '_' RECURRING '_' -- literals removed
 CREATE SCHEDULE FOR BACKUP INTO 'foo' WITH kms = 'https://user:redacted@foo.com/redacted' RECURRING 'occasionally' -- identifiers removed
 CREATE SCHEDULE FOR BACKUP INTO 'foo' WITH kms = 'https://user:pass@foo.com/bar' RECURRING 'occasionally' -- passwords exposed
+
+parse
+CREATE SCHEDULE FOR CHANGEFEED foo INTO 'https://user:pass@localhost' WITH initial_scan='only' RECURRING '@hourly'
+----
+CREATE SCHEDULE FOR CHANGEFEED TABLE foo INTO 'https://user:redacted@localhost' WITH OPTIONS (initial_scan = 'only' ) RECURRING '@hourly' -- normalized!
+CREATE SCHEDULE FOR CHANGEFEED TABLE (foo) INTO ('https://user:redacted@localhost') WITH OPTIONS (initial_scan = ('only') ) RECURRING ('@hourly') -- fully parenthesized
+CREATE SCHEDULE FOR CHANGEFEED TABLE foo INTO '_' WITH OPTIONS (initial_scan = '_' ) RECURRING '_' -- literals removed
+CREATE SCHEDULE FOR CHANGEFEED TABLE _ INTO 'https://user:redacted@localhost' WITH OPTIONS (_ = 'only' ) RECURRING '@hourly' -- identifiers removed
+CREATE SCHEDULE FOR CHANGEFEED TABLE foo INTO 'https://user:pass@localhost' WITH OPTIONS (initial_scan = 'only' ) RECURRING '@hourly' -- passwords exposed

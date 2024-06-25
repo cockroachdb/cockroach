@@ -18,7 +18,7 @@ import (
 // CreateChangefeed represents a CREATE CHANGEFEED statement.
 type CreateChangefeed struct {
 	Targets ChangefeedTargets
-	SinkURI Expr
+	SinkURI URI
 	Options KVOptions
 	Select  *SelectClause
 }
@@ -32,7 +32,7 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 		return
 	}
 
-	if node.SinkURI != nil {
+	if node.SinkURI.Expr != nil {
 		ctx.WriteString("CREATE ")
 	} else {
 		// Sinkless feeds don't really CREATE anything, so the syntax omits the
@@ -42,7 +42,7 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 
 	ctx.WriteString("CHANGEFEED FOR ")
 	ctx.FormatNode(&node.Targets)
-	if node.SinkURI != nil {
+	if node.SinkURI.Expr != nil {
 		ctx.WriteString(" INTO ")
 		ctx.FormatNode(node.SinkURI)
 	}
@@ -57,7 +57,7 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 // changefeed with predicates.
 func (node *CreateChangefeed) formatWithPredicates(ctx *FmtCtx) {
 	ctx.WriteString("CREATE CHANGEFEED")
-	if node.SinkURI != nil {
+	if node.SinkURI.Expr != nil {
 		ctx.WriteString(" INTO ")
 		ctx.FormatNode(node.SinkURI)
 	}
