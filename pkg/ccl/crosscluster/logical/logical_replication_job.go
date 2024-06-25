@@ -129,6 +129,11 @@ func (r *logicalReplicationResumer) ingest(
 	}
 	defer func() { _ = client.Close(ctx) }()
 
+	dlqClient := InitDeadLetterQueueClient()
+	if err := dlqClient.Create(); err != nil {
+		return errors.Wrap(err, "failed to create dead letter queue client")
+	}
+
 	asOf := replicatedTimeAtStart
 	if asOf.IsEmpty() {
 		asOf = payload.ReplicationStartTime
