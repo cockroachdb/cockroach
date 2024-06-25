@@ -37,9 +37,12 @@ func TestMetricsRelease(t *testing.T) {
 		return count
 	}
 
-	verifyAllFields := func(m Metrics, wantChildren int) (metricFields int) {
-		r := reflect.ValueOf(m)
+	verifyAllFields := func(m *Metrics, wantChildren int) (metricFields int) {
+		r := reflect.ValueOf(m).Elem()
 		for i, n := 0, r.NumField(); i < n; i++ {
+			if !r.Field(i).CanInterface() {
+				continue
+			}
 			field := r.Field(i).Interface()
 			metric, ok := field.(eacher)
 			if !ok { // skip all non-metric fields
