@@ -3739,11 +3739,11 @@ opt_with_schedule_options:
 // Endpoint:
 //   Endpoint of the resource that the external connection represents.
 create_external_connection_stmt:
-	CREATE EXTERNAL CONNECTION /*$4=*/label_spec AS /*$6=*/string_or_placeholder
+	CREATE EXTERNAL CONNECTION /*$4=*/label_spec AS /*$6=*/uri
 	{
 		$$.val = &tree.CreateExternalConnection{
 				  ConnectionLabelSpec: *($4.labelSpec()),
-		      As: $6.expr(),
+		      As: $6.URI(),
 		}
 	}
  | CREATE EXTERNAL CONNECTION error // SHOW HELP: CREATE EXTERNAL CONNECTION

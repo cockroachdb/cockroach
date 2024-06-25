@@ -58,7 +58,7 @@ func (p *planner) parseExternalConnection(
 	); err != nil {
 		return externalConnection{}, errors.Wrap(err, "failed to resolve External Connection name")
 	}
-	if ec.endpoint, err = exprEval.String(ctx, n.As); err != nil {
+	if ec.endpoint, err = exprEval.String(ctx, n.As.Expr); err != nil {
 		return externalConnection{}, errors.Wrap(err, "failed to resolve External Connection endpoint")
 	}
 	return ec, nil
