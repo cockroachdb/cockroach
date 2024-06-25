@@ -50,27 +50,17 @@ func newKafkaSinkClientV2(
 		kgo.RecordPartitioner(newKgoChangefeedPartitioner()),
 		kgo.ProducerBatchMaxBytes(2 << 27), // nearly parity - this is the max the library allows
 		kgo.BrokerMaxWriteBytes(2 << 27),   // have to bump this as well
-		// idempotent production is strictly a win, but does require the IDEMPOTENT_WRITE permission on CLUSTER (pre Kafka 3.0), and not all clients can have that permission.
-		// i think sarama also transparently enables this and we dont disable it there so we shouldnt need to here.. right?
-		// also does this gracefully disable it or error if the permission is missing? TODO can we test this
-		// kgo.DisableIdempotentWrite(),
-		// kgo.MaxProduceRequestsInflightPerBroker(1) // default is 1, or 5 if idempotent is enabled (it is by default)
-		// kgo.ManualFlushing() ?
-
-		// I think this is the default in v1.
 		kgo.AllowAutoTopicCreation(),
-
-		// we do need to fail eventually.. right?
 		// NOTE: If idempotency is enabled (as it is by default), this option is
 		// only enforced if it is safe to do so without creating invalid
 		// sequence numbers. It is safe to enforce if a record was never issued
 		// in a request to Kafka, or if it was requested and received a
 		// response.
-		// kgo.RecordRetries(5),
+		kgo.RecordRetries(5),
 
-		// This detects unavoidable data loss due to kafka cluster issues, and we may as well log about it.
+		// This detects unavoidable data loss due to kafka cluster issues, and we may as well log it if it happens.
 		kgo.ProducerOnDataLossDetected(func(topic string, part int32) {
-			log.Errorf(ctx, `kafka producer detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
+			log.Errorf(ctx, `kafka sink detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
 		}),
 	}
 
