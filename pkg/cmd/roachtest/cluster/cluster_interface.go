@@ -13,7 +13,6 @@ package cluster
 import (
 	"context"
 	gosql "database/sql"
-	"io"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
@@ -42,7 +41,6 @@ type Cluster interface {
 	// Uploading and downloading from/to nodes.
 
 	Get(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
-	Tail(ctx context.Context, l *logger.Logger, src string, opts ...option.Option) (stdout io.ReadCloser, stderr io.ReadCloser, errChan chan error, err error)
 	Put(ctx context.Context, src, dest string, opts ...option.Option)
 	PutE(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
 	PutLibraries(ctx context.Context, libraryDir string, libraries []string) error
