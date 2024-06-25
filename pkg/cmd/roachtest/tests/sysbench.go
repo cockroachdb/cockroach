@@ -106,15 +106,11 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 }
 
 func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbenchOptions) {
-	allNodes := c.Range(1, c.Spec().NodeCount)
-	roachNodes := c.Range(1, c.Spec().NodeCount-1)
-	loadNode := c.Node(c.Spec().NodeCount)
-
 	if opts.usePostgres {
-		if len(roachNodes) != 1 {
+		if len(c.CRDBNodes()) != 1 {
 			t.Fatal("sysbench with postgres requires exactly one node")
 		}
-		pgNode := roachNodes[:1]
+		pgNode := c.CRDBNodes()[:1]
 
 		t.Status("installing postgres")
 		if err := c.Install(ctx, t.L(), pgNode, "postgresql"); err != nil {
@@ -142,18 +138,18 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 	} else {
 		t.Status("installing cockroach")
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-		if len(roachNodes) >= 3 {
-			err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), allNodes[0]))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
+		if len(c.CRDBNodes()) >= 3 {
+			err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), 1))
 			require.NoError(t, err)
 		}
 		c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach sql --url={pgurl:1} -e "CREATE DATABASE sysbench"`)
 	}
 
-	useHAProxy := len(roachNodes) > 1
+	useHAProxy := len(c.CRDBNodes()) > 1
 	if useHAProxy {
 		t.Status("installing haproxy")
-		if err := c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
+		if err := c.Install(ctx, t.L(), c.WorkloadNode(), "haproxy"); err != nil {
 			t.Fatal(err)
 		}
 		// cockroach gen haproxy does not support specifying a non root user
@@ -165,12 +161,12 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Run(ctx, option.WithNodes(loadNode), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
-		c.Run(ctx, option.WithNodes(loadNode), "haproxy -f haproxy.cfg -D")
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), "haproxy -f haproxy.cfg -D")
 	}
 
 	t.Status("installing sysbench")
-	if err := c.Install(ctx, t.L(), loadNode, "sysbench"); err != nil {
+	if err := c.Install(ctx, t.L(), c.WorkloadNode(), "sysbench"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -179,12 +175,12 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	var start time.Time
 	runWorkload := func(ctx context.Context) error {
 		t.Status("preparing workload")
-		c.Run(ctx, option.WithNodes(loadNode), opts.cmd(false /* haproxy */)+" prepare")
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")
 		cmd := opts.cmd(useHAProxy /* haproxy */) + " run"
 		start = timeutil.Now()
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(loadNode), cmd)
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd)
 
 		// Sysbench occasionally segfaults. When that happens, don't fail the
 		// test.
@@ -211,7 +207,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			t.Fatal(err)
 		}
 	} else {
-		m := c.NewMonitor(ctx, roachNodes)
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(runWorkload)
 		m.Wait()
 	}
@@ -235,7 +231,7 @@ func registerSysbench(r registry.Registry) {
 				Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 				Benchmark:        true,
 				Owner:            registry.OwnerTestEng,
-				Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus)),
+				Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode()),
 				CompatibleClouds: registry.OnlyGCE,
 				Suites:           registry.Suites(registry.Nightly),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -251,7 +247,7 @@ func registerSysbench(r registry.Registry) {
 					Name:             fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, cpus, conc),
 					Benchmark:        true,
 					Owner:            registry.OwnerTestEng,
-					Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus)),
+					Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode()),
 					CompatibleClouds: registry.OnlyGCE,
 					Suites:           registry.ManualOnly,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

@@ -44,6 +44,8 @@ func registerLargeSchemaBenchmarks(r registry.Registry) {
 func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiRegion bool) {
 	clusterSpec := []spec.Option{
 		spec.CPU(8),
+		spec.WorkloadNode(),
+		spec.WorkloadNodeCPU(8),
 		spec.VolumeSize(800),
 		spec.GCEVolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
@@ -123,7 +125,6 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			// Create all the databases based on our lists of active vs inactive
 			// ones.
 			const inactiveDbListType = 1
-			var workloadNode option.NodeListOption
 			for dbListType, dbList := range [][]string{activeDBList, inactiveDBList} {
 				populateFileName := fmt.Sprintf("populate_%d", dbListType)
 				regionsArg := ""
@@ -171,19 +172,18 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						require.NoError(t, err)
 					}
 				}
-				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.Node(c.Spec().NodeCount))
+				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.WorkloadNode())
 				require.NoError(t, err)
-				_, workloadNode = setupTPCC(ctx, t, t.L(), c, options)
 			}
 			// Upload a file containing the ORM queries.
-			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, workloadNode))
+			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, c.WorkloadNode()))
 			mon := c.NewMonitor(ctx, c.All())
 			// Upload a file containing the web API calls we want to benchmark.
 			require.NoError(t, c.PutString(ctx,
 				LargeSchemaAPICalls,
 				"apiCalls",
 				0755,
-				workloadNode))
+				c.WorkloadNode()))
 			// Get a list of web console URLs.
 			webConsoleURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Range(1, c.Spec().NodeCount-1))
 			require.NoError(t, err)
@@ -210,7 +210,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						wlInstance = append(
 							wlInstance,
 							workloadInstance{
-								nodes:          c.Range(1, c.Spec().NodeCount-1),
+								nodes:          c.CRDBNodes(),
 								prometheusPort: 5050,
 							},
 						)
