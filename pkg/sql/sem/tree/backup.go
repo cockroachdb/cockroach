@@ -248,20 +248,6 @@ func (o *KVOptions) Format(ctx *FmtCtx) {
 	}
 }
 
-// StringOrPlaceholderOptList is a list of strings or placeholders.
-type StringOrPlaceholderOptList []Expr
-
-// Format implements the NodeFormatter interface.
-func (node *StringOrPlaceholderOptList) Format(ctx *FmtCtx) {
-	if len(*node) > 1 {
-		ctx.WriteString("(")
-	}
-	ctx.FormatNode((*Exprs)(node))
-	if len(*node) > 1 {
-		ctx.WriteString(")")
-	}
-}
-
 // Format implements the NodeFormatter interface
 func (o *BackupOptions) Format(ctx *FmtCtx) {
 	var addSep bool
