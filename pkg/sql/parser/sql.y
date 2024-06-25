@@ -4073,35 +4073,35 @@ alter_unsupported_stmt:
 //
 // %SeeAlso: CREATE TABLE, WEBDOCS/import-into.html
 import_stmt:
- IMPORT import_format '(' string_or_placeholder ')' opt_with_options
+ IMPORT import_format '(' uri ')' opt_with_options
   {
     /* SKIP DOC */
-    $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$4.expr()}, Options: $6.kvOptions()}
+    $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.URIs{$4.URI()}, Options: $6.kvOptions()}
   }
-| IMPORT import_format string_or_placeholder opt_with_options
+| IMPORT import_format uri opt_with_options
   {
-    $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$3.expr()}, Options: $4.kvOptions()}
+    $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.URIs{$3.URI()}, Options: $4.kvOptions()}
   }
-| IMPORT TABLE table_name FROM import_format '(' string_or_placeholder ')' opt_with_options
+| IMPORT TABLE table_name FROM import_format '(' uri ')' opt_with_options
   {
     /* SKIP DOC */
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$7.expr()}, Options: $9.kvOptions()}
+    $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.URIs{$7.URI()}, Options: $9.kvOptions()}
   }
-| IMPORT TABLE table_name FROM import_format string_or_placeholder opt_with_options
+| IMPORT TABLE table_name FROM import_format uri opt_with_options
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$6.expr()}, Options: $7.kvOptions()}
+    $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.URIs{$6.URI()}, Options: $7.kvOptions()}
   }
-| IMPORT INTO table_name '(' insert_column_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
+| IMPORT INTO table_name '(' insert_column_list ')' import_format DATA '(' uris ')' opt_with_options
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: $5.nameList(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
+    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: $5.nameList(), FileFormat: $7, Files: $10.URIs(), Options: $12.kvOptions()}
   }
-| IMPORT INTO table_name import_format DATA '(' string_or_placeholder_list ')' opt_with_options
+| IMPORT INTO table_name import_format DATA '(' uris ')' opt_with_options
   {
     name := $3.unresolvedObjectName().ToTableName()
-    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: nil, FileFormat: $4, Files: $7.exprs(), Options: $9.kvOptions()}
+    $$.val = &tree.Import{Table: &name, Into: true, IntoCols: nil, FileFormat: $4, Files: $7.URIs(), Options: $9.kvOptions()}
   }
 | IMPORT error // SHOW HELP: IMPORT
 
