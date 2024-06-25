@@ -178,7 +178,7 @@ func processCopyOptions(
 		c.csvEscape, _ = utf8.DecodeRuneInString(s)
 	}
 
-	if opts.Destination != nil {
+	if opts.Destination.Expr != nil {
 		return c, pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"DESTINATION can only be specified when table is external storage table",
