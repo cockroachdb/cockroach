@@ -539,7 +539,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		SecurityContext: secCtx,
 		rpcCompression:  enableRPCCompression,
 		MasterCtx:       masterCtx,
-		metrics:         makeMetrics(),
+		metrics:         makeMetrics(true /* byLocality */, false /* byClass */, opts.Locality),
 	}
 
 	rpcCtx.dialbackMu.Lock()

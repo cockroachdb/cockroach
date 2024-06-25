@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/VividCortex/ewma"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -136,9 +137,59 @@ over this connection.
 	}
 )
 
-func makeMetrics() *Metrics {
-	childLabels := []string{"remote_node_id", "remote_addr", "class"}
+func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []string {
+	//	log.Infof(context.TODO(), "Creating metric for key %v with remote locality %v", k, remoteLocality)
+	localLen := len(m.locality.Tiers)
+
+	// length is the shorter of the two, however we always need to fill localLen "slots"
+	length := localLen
+	if len(remoteLocality.Tiers) < length {
+		length = len(remoteLocality.Tiers)
+	}
+
+	childLabels := []string{}
+	if m.byLocality {
+		matching := true
+		for i := 0; i < length; i++ {
+			if matching {
+				childLabels = append(childLabels, remoteLocality.Tiers[i].Value)
+				if m.locality.Tiers[i].Value != remoteLocality.Tiers[i].Value {
+					matching = false
+				}
+			} else {
+				// Once we have a difference in locality, pad with empty strings.
+				childLabels = append(childLabels, "")
+			}
+		}
+		// Pad with empty strings if the remote locality is shorter than ours.
+		for i := length; i < localLen; i++ {
+			childLabels = append(childLabels, "")
+		}
+	} else {
+		childLabels = append(childLabels, k.NodeID.String(), k.TargetAddr)
+	}
+	if m.byClass {
+		childLabels = append(childLabels, k.Class.String())
+	}
+	return childLabels
+}
+
+func makeMetrics(byLocality bool, byClass bool, locality roachpb.Locality) *Metrics {
+	childLabels := []string{}
+	if byLocality {
+		for _, tier := range locality.Tiers {
+			childLabels = append(childLabels, tier.Key)
+		}
+	} else {
+		childLabels = append(childLabels, "remote_node_id", "remote_addr")
+	}
+	if byClass {
+		childLabels = append(childLabels, "class")
+	}
 	return &Metrics{
+		byLocality:                    byLocality,
+		byClass:                       byClass,
+		locality:                      locality,
 		ConnectionHealthy:             aggmetric.NewGauge(metaConnectionHealthy, childLabels...),
 		ConnectionUnhealthy:           aggmetric.NewGauge(metaConnectionUnhealthy, childLabels...),
 		ConnectionInactive:            aggmetric.NewGauge(metaConnectionInactive, childLabels...),
@@ -156,6 +207,9 @@ func makeMetrics() *Metrics {
 // Metrics is a metrics struct for Context metrics.
 // Field X is documented in metaX.
 type Metrics struct {
+	byLocality                    bool
+	byClass                       bool
+	locality                      roachpb.Locality
 	ConnectionHealthy             *aggmetric.AggGauge
 	ConnectionUnhealthy           *aggmetric.AggGauge
 	ConnectionInactive            *aggmetric.AggGauge
@@ -233,8 +287,8 @@ type peerMetrics struct {
 	ConnectionBytesRecv *aggmetric.Counter
 }
 
-func (m *Metrics) acquire(k peerKey) peerMetrics {
-	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String()}
+func (m *Metrics) acquire(k peerKey, l roachpb.Locality) peerMetrics {
+	labelVals := m.makeLabels(k, l)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// Concatenate the label values into a single string.
