@@ -45,7 +45,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 		// TODO(sumeer): Reduce to weekly after working well.
 		// Tags:      registry.Tags(`weekly`),
 		// Second node is solely for Prometheus.
-		Cluster:          r.MakeClusterSpec(2, spec.CPU(8)),
+		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNodes(1)),
 		RequiresLicense:  true,
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
@@ -54,13 +54,11 @@ func registerIntentResolutionOverload(r registry.Registry) {
 			if c.Spec().NodeCount != 2 {
 				t.Fatalf("expected 2 nodes, found %d", c.Spec().NodeCount)
 			}
-			crdbNodes := c.Spec().NodeCount - 1
-			promNode := crdbNodes + 1
 
 			promCfg := &prometheus.Config{}
-			promCfg.WithPrometheusNode(c.Node(promNode).InstallNodes()[0]).
-				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
-				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
+			promCfg.WithPrometheusNode(c.WorkloadNodes().InstallNodes()[0]).
+				WithNodeExporter(c.CRDBNodes().InstallNodes()).
+				WithCluster(c.CRDBNodes().InstallNodes()).
 				WithGrafanaDashboardJSON(grafana.ChangefeedAdmissionControlGrafana)
 			err := c.StartGrafana(ctx, t.L(), promCfg)
 			require.NoError(t, err)
@@ -70,7 +68,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 				"--vmodule=io_load_listener=2")
 			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
 			settings := install.MakeClusterSettings()
-			c.Start(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes))
+			c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
 			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
 			require.NoError(t, err)
@@ -78,9 +76,9 @@ func registerIntentResolutionOverload(r registry.Registry) {
 
 			setAdmissionControl(ctx, t, c, true)
 			t.Status("running txn")
-			m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
-				db := c.Conn(ctx, t.L(), crdbNodes)
+				db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 				defer db.Close()
 				_, err := db.Exec(`CREATE TABLE test_table(id integer PRIMARY KEY, t TEXT)`)
 				if err != nil {

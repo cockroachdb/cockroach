@@ -89,7 +89,6 @@ func runSchemaChangeRandomLoad(
 			t.Fatalf("found %d invalid objects", numInvalidObjects)
 		}
 	}
-
 	loadNode := c.Node(1)
 	roachNodes := c.Range(1, c.Spec().NodeCount)
 	t.Status("copying binaries")

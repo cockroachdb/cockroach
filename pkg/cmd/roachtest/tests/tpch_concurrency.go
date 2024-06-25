@@ -34,8 +34,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		c cluster.Cluster,
 		disableStreamer bool,
 	) {
-		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
-		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
 
 		conn := c.Conn(ctx, t.L(), 1)
 		if disableStreamer {
@@ -45,16 +44,16 @@ func registerTPCHConcurrency(r registry.Registry) {
 		}
 
 		if err := loadTPCHDataset(
-			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx, c.Range(1, numNodes-1)),
-			c.Range(1, numNodes-1), true, /* disableMergeQueue */
+			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx, c.CRDBNodes()),
+			c.CRDBNodes(), true, /* disableMergeQueue */
 		); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	restartCluster := func(ctx context.Context, c cluster.Cluster, t test.Test) {
-		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, numNodes-1))
-		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())
+		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
 	}
 
 	// checkConcurrency returns an error if at least one node of the cluster
@@ -63,7 +62,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 	checkConcurrency := func(ctx context.Context, t test.Test, c cluster.Cluster, concurrency int) error {
 		// Make sure to kill any workloads running from the previous
 		// iteration.
-		_ = c.RunE(ctx, option.WithNodes(c.Node(numNodes)), "killall workload")
+		_ = c.RunE(ctx, option.WithNodes(c.WorkloadNodes()), "killall workload")
 
 		restartCluster(ctx, c, t)
 
@@ -90,7 +89,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 			}
 		}
 
-		m := c.NewMonitor(ctx, c.Range(1, numNodes-1))
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			t.Status(fmt.Sprintf("running with concurrency = %d", concurrency))
 			// Run each query once on each connection.
@@ -141,11 +140,11 @@ func registerTPCHConcurrency(r registry.Registry) {
 				// Use very short duration for --display-every parameter so that
 				// all query runs are logged.
 				cmd := fmt.Sprintf(
-					"./workload run tpch {pgurl:1-%d} --display-every=1ns --tolerate-errors "+
+					"./cockroach workload run tpch {pgurl%s} --display-every=1ns --tolerate-errors "+
 						"--count-errors --queries=%d --concurrency=%d --max-ops=%d",
-					numNodes-1, queryNum, concurrency, maxOps,
+					c.CRDBNodes(), queryNum, concurrency, maxOps,
 				)
-				if err := c.RunE(ctx, option.WithNodes(c.Node(numNodes)), cmd); err != nil {
+				if err := c.RunE(ctx, option.WithNodes(c.WorkloadNodes()), cmd); err != nil {
 					return err
 				}
 			}
@@ -207,7 +206,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		Name:    "tpch_concurrency",
 		Owner:   registry.OwnerSQLQueries,
 		Timeout: timeout,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Cluster: r.MakeClusterSpec(numNodes, spec.WorkloadNodes(1)),
 		// Uses gs://cockroach-fixtures-us-east1. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
@@ -222,7 +221,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		Name:    "tpch_concurrency/no_streamer",
 		Owner:   registry.OwnerSQLQueries,
 		Timeout: timeout,
-		Cluster: r.MakeClusterSpec(numNodes),
+		Cluster: r.MakeClusterSpec(numNodes, spec.WorkloadNodes(1)),
 		// Uses gs://cockroach-fixtures-us-east1. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),

@@ -26,15 +26,11 @@ import (
 
 func registerAlterPK(r registry.Registry) {
 
-	setupTest := func(ctx context.Context, t test.Test, c cluster.Cluster) (option.NodeListOption, option.NodeListOption) {
-		roachNodes := c.Range(1, c.Spec().NodeCount-1)
-		loadNode := c.Node(c.Spec().NodeCount)
+	setupTest := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Status("copying binaries")
-		c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 		t.Status("starting cockroach nodes")
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-		return roachNodes, loadNode
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 	}
 
 	// runAlterPKBank runs a primary key change while the bank workload runs.
@@ -42,30 +38,26 @@ func registerAlterPK(r registry.Registry) {
 		const numRows = 1000000
 		const duration = 3 * time.Minute
 
-		roachNodes, loadNode := setupTest(ctx, t, c)
+		setupTest(ctx, t, c)
 
 		initDone := make(chan struct{}, 1)
 		pkChangeDone := make(chan struct{}, 1)
 
-		m := c.NewMonitor(ctx, roachNodes)
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			// Load up a relatively small dataset to perform a workload on.
 
 			// Init the workload.
-			cmd := fmt.Sprintf("./workload init bank --drop --rows %d {pgurl%s}", numRows, roachNodes)
-			if err := c.RunE(ctx, option.WithNodes(loadNode), cmd); err != nil {
+			cmd := fmt.Sprintf("./cockroach workload init bank --drop --rows %d {pgurl%s}", numRows, c.CRDBNodes())
+			if err := c.RunE(ctx, option.WithNodes(c.WorkloadNodes()), cmd); err != nil {
 				t.Fatal(err)
 			}
 			initDone <- struct{}{}
 
 			// Run the workload while the primary key change is happening.
-			cmd = fmt.Sprintf("./workload run bank --duration=%s {pgurl%s}", duration, roachNodes)
-			c.Run(ctx, option.WithNodes(loadNode), cmd)
-			// Wait for the primary key change to finish.
-			<-pkChangeDone
 			t.Status("starting second run of the workload after primary key change")
 			// Run the workload after the primary key change occurs.
-			c.Run(ctx, option.WithNodes(loadNode), cmd)
+			c.Run(ctx, option.WithNodes(c.WorkloadNodes()), cmd)
 			return nil
 		})
 		m.Go(func(ctx context.Context) error {
@@ -76,7 +68,7 @@ func registerAlterPK(r registry.Registry) {
 
 			t.Status("beginning primary key change")
 			defer func() { pkChangeDone <- struct{}{} }()
-			db := c.Conn(ctx, t.L(), roachNodes[0])
+			db := c.Conn(ctx, t.L(), c.WorkloadNodes()[0])
 			defer db.Close()
 			cmds := []string{
 				`SET CLUSTER SETTING kv.transaction.internal.max_auto_retries = 10000`,
@@ -104,26 +96,26 @@ func registerAlterPK(r registry.Registry) {
 	runAlterPKTPCC := func(ctx context.Context, t test.Test, c cluster.Cluster, warehouses int, expensiveChecks bool) {
 		const duration = 10 * time.Minute
 
-		roachNodes, loadNode := setupTest(ctx, t, c)
+		setupTest(ctx, t, c)
 		cmd := fmt.Sprintf(
 			"./cockroach workload fixtures import tpcc --warehouses=%d --db=tpcc {pgurl:1}",
 			warehouses,
 		)
-		if err := c.RunE(ctx, option.WithNodes(c.Node(roachNodes[0])), cmd); err != nil {
+		if err := c.RunE(ctx, option.WithNodes(c.Node(c.CRDBNodes()[0])), cmd); err != nil {
 			t.Fatal(err)
 		}
 
-		m := c.NewMonitor(ctx, roachNodes)
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			// Start running the workload.
 			runCmd := fmt.Sprintf(
-				"./workload run tpcc --warehouses=%d --split --scatter --duration=%s {pgurl%s}",
+				"./cockroach workload run tpcc --warehouses=%d --split --scatter --duration=%s {pgurl%s}",
 				warehouses,
 				duration,
-				roachNodes,
+				c.CRDBNodes(),
 			)
 			t.Status("beginning workload")
-			c.Run(ctx, option.WithNodes(loadNode), runCmd)
+			c.Run(ctx, option.WithNodes(c.WorkloadNodes()), runCmd)
 			t.Status("finished running workload")
 			return nil
 		})
@@ -148,7 +140,7 @@ func registerAlterPK(r registry.Registry) {
 			randStmt := alterStmts[rand.Intn(len(alterStmts))]
 			t.Status("Running command: ", randStmt)
 
-			db := c.Conn(ctx, t.L(), roachNodes[0])
+			db := c.Conn(ctx, t.L(), c.CRDBNodes()[0])
 			defer db.Close()
 			alterCmd := `USE tpcc; %s;`
 			t.Status("beginning primary key change")
@@ -167,13 +159,13 @@ func registerAlterPK(r registry.Registry) {
 			expensiveChecksArg = "--expensive-checks"
 		}
 		checkCmd := fmt.Sprintf(
-			"./workload check tpcc --warehouses %d %s {pgurl%s}",
+			"./cockroach workload check tpcc --warehouses %d %s {pgurl%s}",
 			warehouses,
 			expensiveChecksArg,
-			c.Node(roachNodes[0]),
+			c.Node(1),
 		)
 		t.Status("beginning database verification")
-		c.Run(ctx, option.WithNodes(loadNode), checkCmd)
+		c.Run(ctx, option.WithNodes(c.WorkloadNodes()), checkCmd)
 		t.Status("finished database verification")
 	}
 	r.Add(registry.TestSpec{
@@ -181,7 +173,7 @@ func registerAlterPK(r registry.Registry) {
 		Owner: registry.OwnerSQLFoundations,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
-		Cluster:          r.MakeClusterSpec(4),
+		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNodes(1)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -192,7 +184,7 @@ func registerAlterPK(r registry.Registry) {
 		Owner: registry.OwnerSQLFoundations,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(32)),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(32), spec.WorkloadNodes(1)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -205,7 +197,7 @@ func registerAlterPK(r registry.Registry) {
 		Owner: registry.OwnerSQLFoundations,
 		// Use a 4 node cluster -- 3 nodes will run cockroach, and the last will be the
 		// workload driver node.
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNodes(1)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),

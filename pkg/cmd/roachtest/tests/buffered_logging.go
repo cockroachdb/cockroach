@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -39,18 +40,15 @@ func registerBufferedLogging(r registry.Registry) {
 		t test.Test,
 		c cluster.Cluster,
 	) {
-		crdbNodes := c.Range(1, c.Spec().NodeCount-1)
-		workloadNode := c.Node(c.Spec().NodeCount)
-
 		// Install Docker, which we'll use for FluentBit.
 		t.Status("installing docker")
-		if err := c.Install(ctx, t.L(), crdbNodes, "docker"); err != nil {
+		if err := c.Install(ctx, t.L(), c.CRDBNodes(), "docker"); err != nil {
 			t.Fatalf("failed to install docker: %v", err)
 		}
 
 		t.Status("installing FluentBit containers on CRDB nodes")
 		// Create FluentBit container on the node with a TCP input and dev/null output.
-		err := c.RunE(ctx, option.WithNodes(crdbNodes), fmt.Sprintf(
+		err := c.RunE(ctx, option.WithNodes(c.CRDBNodes()), fmt.Sprintf(
 			"sudo docker run -d -p %d:%d --name=fluentbit fluent/fluent-bit -i tcp -o null",
 			fluentBitTCPPort,
 			fluentBitTCPPort))
@@ -69,7 +67,7 @@ func registerBufferedLogging(r registry.Registry) {
 		startOpts.RoachprodOpts.ExtraArgs = []string{
 			"--log", logCfg,
 		}
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
 
 		// Construct pgurls for the workload runner. As a roundabout way of detecting deadlocks,
 		// we set a client timeout on the workload pgclient. If the server becomes unavailable
@@ -78,7 +76,7 @@ func registerBufferedLogging(r registry.Registry) {
 		// so this helps detect such a case.
 		secureUrls, err := roachprod.PgURL(ctx,
 			t.L(),
-			c.MakeNodes(crdbNodes),
+			c.MakeNodes(c.CRDBNodes()),
 			install.CockroachNodeCertsDir, /* certsDir */
 			roachprod.PGURLOptions{
 				External: false,
@@ -97,14 +95,14 @@ func registerBufferedLogging(r registry.Registry) {
 		// Init & run a workload on the workload node.
 		t.Status("initializing workload")
 		initWorkloadCmd := fmt.Sprintf("./cockroach workload init kv %s ", secureUrls[0])
-		c.Run(ctx, option.WithNodes(workloadNode), initWorkloadCmd)
+		c.Run(ctx, option.WithNodes(c.WorkloadNodes()), initWorkloadCmd)
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx, crdbNodes)
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			joinedURLs := strings.Join(workloadPGURLs, " ")
 			runWorkloadCmd := fmt.Sprintf("./cockroach workload run kv --concurrency=32 --duration=1h %s", joinedURLs)
-			return c.RunE(ctx, option.WithNodes(workloadNode), runWorkloadCmd)
+			return c.RunE(ctx, option.WithNodes(c.WorkloadNodes()), runWorkloadCmd)
 		})
 		m.Wait()
 	}
@@ -112,7 +110,7 @@ func registerBufferedLogging(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "buffered_logging",
 		Owner:            registry.OwnerObservability,
-		Cluster:          r.MakeClusterSpec(numNodesBufferedLogging),
+		Cluster:          r.MakeClusterSpec(numNodesBufferedLogging, spec.WorkloadNodes(1)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,

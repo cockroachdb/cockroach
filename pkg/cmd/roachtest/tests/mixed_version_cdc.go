@@ -71,7 +71,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/mixed-versions",
 		Owner:            registry.OwnerCDC,
-		Cluster:          r.MakeClusterSpec(5, spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNodes(1), spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
 		Timeout:          120 * time.Minute,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
@@ -126,20 +126,13 @@ type cdcMixedVersionTester struct {
 	fprintV   *cdctest.FingerprintValidator
 }
 
-func newCDCMixedVersionTester(
-	ctx context.Context, t test.Test, c cluster.Cluster,
-) cdcMixedVersionTester {
-	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
-	lastNode := c.Node(c.Spec().NodeCount)
-
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", lastNode)
-
+func newCDCMixedVersionTester(ctx context.Context, c cluster.Cluster) cdcMixedVersionTester {
 	return cdcMixedVersionTester{
 		ctx:           ctx,
 		c:             c,
-		crdbNodes:     crdbNodes,
-		workloadNodes: lastNode,
-		kafkaNodes:    lastNode,
+		crdbNodes:     c.CRDBNodes(),
+		workloadNodes: c.WorkloadNodes(),
+		kafkaNodes:    c.WorkloadNodes(),
 		workloadInit:  make(chan struct{}),
 	}
 }
@@ -500,7 +493,7 @@ func canMixedVersionUseDeletedClusterSetting(
 }
 
 func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
-	tester := newCDCMixedVersionTester(ctx, t, c)
+	tester := newCDCMixedVersionTester(ctx, c)
 
 	// NB: We rely on the testing framework to choose a random predecessor
 	// to upgrade from.
