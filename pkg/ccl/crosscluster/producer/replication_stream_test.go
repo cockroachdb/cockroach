@@ -281,8 +281,8 @@ func TestReplicationStreamInitialization(t *testing.T) {
 
 		// Ensures the processor spec tracks the tenant span.
 		require.Equal(t, 1, len(spec.Partitions))
-		require.Equal(t, 1, len(spec.Partitions[0].PartitionSpec.Spans))
-		require.Equal(t, keys.MakeTenantSpan(srcTenant.ID), spec.Partitions[0].PartitionSpec.Spans[0])
+		require.Equal(t, 1, len(spec.Partitions[0].PlannedPartition.Spans))
+		require.Equal(t, keys.MakeTenantSpan(srcTenant.ID), spec.Partitions[0].PlannedPartition.Spans[0])
 	})
 
 	t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {

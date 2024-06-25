@@ -92,7 +92,8 @@ message ReplicationProducerRequest {
   repeated string table_names = 4;
 }
 
-// StreamPartitionSpec is the stream partition specification.
+// StreamPartitionSpec is the stream partition specification used to init an
+// eventStream.
 message StreamPartitionSpec {
   // PreviousReplicatedTimestamp specifies the timestamp from which spans will
   // start ingesting data in the replication job. This timestamp is empty unless
@@ -165,6 +166,15 @@ message LogicalReplicationPlanRequest {
     util.hlc.Timestamp plan_as_of = 2 [(gogoproto.nullable) = false];
 }
 
+// PlannPartition contains per partition information for a replication plan.
+message PlannedPartition {
+  // To maintain compatibility with the StreamPartitionSpec proto, reserve all
+  // wire types it uses.
+  reserved 1, 3, 4, 5, 6, 7, 8, 9, 10, 11;
+  // List of spans to stream.
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+}
+
 message ReplicationStreamSpec {
   message Partition {
     // ID of the node this partition resides
@@ -179,7 +189,7 @@ message ReplicationStreamSpec {
     roachpb.Locality locality = 3 [(gogoproto.nullable) = false];
 
     // The spec of the processor responsible for streaming this partition
-    StreamPartitionSpec partition_spec = 4 [(gogoproto.customname) = "PartitionSpec"];
+    PlannedPartition planned_partition = 4; 
   }
 
   repeated Partition partitions = 1 [(gogoproto.nullable) = false];

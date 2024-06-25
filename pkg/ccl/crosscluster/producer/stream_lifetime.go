@@ -339,7 +339,7 @@ func buildReplicationStreamSpec(
 			NodeID:     roachpb.NodeID(sp.SQLInstanceID),
 			SQLAddress: nodeInfo.SQLAddress,
 			Locality:   nodeInfo.Locality,
-			PartitionSpec: &streampb.StreamPartitionSpec{
+			PlannedPartition: &streampb.PlannedPartition{
 				Spans: sp.Spans,
 			},
 		})
