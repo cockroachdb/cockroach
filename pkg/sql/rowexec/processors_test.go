@@ -184,6 +184,8 @@ func TestPostProcess(t *testing.T) {
 		},
 	}
 
+	ctx := context.Background()
+	flowCtx := &execinfra.FlowCtx{}
 	for tcIdx, tc := range testCases {
 		t.Run(strconv.Itoa(tcIdx), func(t *testing.T) {
 			inBuf := distsqlutils.NewRowBuffer(types.ThreeIntCols, input, distsqlutils.RowBufferArgs{})
@@ -192,14 +194,14 @@ func TestPostProcess(t *testing.T) {
 			var out execinfra.ProcOutputHelper
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
 			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			defer evalCtx.Stop(context.Background())
-			if err := out.Init(context.Background(), &tc.post, inBuf.OutputTypes(), &semaCtx, evalCtx); err != nil {
+			defer evalCtx.Stop(ctx)
+			if err := out.Init(ctx, &tc.post, inBuf.OutputTypes(), &semaCtx, evalCtx, flowCtx); err != nil {
 				t.Fatal(err)
 			}
 
 			// Run the rows through the helper.
 			for i := range input {
-				status, err := out.EmitRow(context.Background(), input[i], outBuf)
+				status, err := out.EmitRow(ctx, input[i], outBuf)
 				if err != nil {
 					t.Fatal(err)
 				}

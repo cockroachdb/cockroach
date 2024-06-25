@@ -52,9 +52,8 @@ var restoreDataOutputTypes = []*types.T{}
 type restoreDataProcessor struct {
 	execinfra.ProcessorBase
 
-	flowCtx *execinfra.FlowCtx
-	spec    execinfrapb.RestoreDataSpec
-	input   execinfra.RowSource
+	spec  execinfrapb.RestoreDataSpec
+	input execinfra.RowSource
 
 	// numWorkers is the number of workers this processor should use. This
 	// number is determined by the cluster setting and the amount of memory
@@ -148,10 +147,9 @@ func newRestoreDataProcessor(
 	input execinfra.RowSource,
 ) (execinfra.Processor, error) {
 	rd := &restoreDataProcessor{
-		flowCtx: flowCtx,
-		input:   input,
-		spec:    spec,
-		progCh:  make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
+		input:  input,
+		spec:   spec,
+		progCh: make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
 	}
 
 	rd.qp = backuputils.NewMemoryBackedQuotaPool(ctx, flowCtx.Cfg.BackupMonitor, "restore-mon", 0)
@@ -162,7 +160,7 @@ func newRestoreDataProcessor(
 				rd.ConsumerClosed()
 				if rd.agg != nil {
 					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
-						rd.flowCtx.NodeID.SQLInstanceID(), rd.flowCtx.ID, rd.agg)
+						rd.FlowCtx.NodeID.SQLInstanceID(), rd.FlowCtx.ID, rd.agg)
 					return []execinfrapb.ProducerMetadata{*meta}
 				}
 				return nil
@@ -196,7 +194,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	// maximum number of workers is based on the cluster setting. If the cluster
 	// setting is updated, the job should be PAUSEd and RESUMEd for the new
 	// setting to take effect.
-	numWorkers, err := reserveRestoreWorkerMemory(ctx, rd.flowCtx.Cfg.Settings, rd.qp)
+	numWorkers, err := reserveRestoreWorkerMemory(ctx, rd.FlowCtx.Cfg.Settings, rd.qp)
 	if err != nil {
 		log.Warningf(ctx, "cannot reserve restore worker memory: %v", err)
 		rd.MoveToDraining(err)
@@ -354,7 +352,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		file := entry.Files[idx]
 
 		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
-		dir, err := rd.flowCtx.Cfg.ExternalStorage(ctx, file.Dir)
+		dir, err := rd.FlowCtx.Cfg.ExternalStorage(ctx, file.Dir)
 		if err != nil {
 			return mergedSST{}, nil, err
 		}
@@ -447,8 +445,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	ctx context.Context, kr *KeyRewriter, sst mergedSST,
 ) (kvpb.BulkOpSummary, error) {
-	db := rd.flowCtx.Cfg.DB
-	evalCtx := rd.EvalCtx
+	db := rd.FlowCtx.Cfg.DB
 	var summary kvpb.BulkOpSummary
 
 	entry := sst.entry
@@ -494,15 +491,15 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		batcher, err = bulk.MakeSSTBatcher(ctx,
 			"restore",
 			db.KV(),
-			evalCtx.Settings,
+			rd.FlowCtx.Cfg.Settings,
 			disallowShadowingBelow,
 			writeAtBatchTS,
 			false, /* scatterSplitRanges */
 			// TODO(rui): we can change this to the processor's bound account, but
 			// currently there seems to be some accounting errors that will cause
 			// tests to fail.
-			rd.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
-			rd.flowCtx.Cfg.BulkSenderLimiter,
+			rd.FlowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
+			rd.FlowCtx.Cfg.BulkSenderLimiter,
 		)
 		if err != nil {
 			return summary, err
@@ -599,7 +596,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		return summary, err
 	}
 
-	if restoreKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+	if restoreKnobs, ok := rd.FlowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
 		if restoreKnobs.RunAfterProcessingRestoreSpanEntry != nil {
 			if err := restoreKnobs.RunAfterProcessingRestoreSpanEntry(ctx, &entry); err != nil {
 				return summary, err
@@ -656,7 +653,7 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		rd.aggTimer.Read = true
 		rd.aggTimer.Reset(15 * time.Second)
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(rd.Ctx(),
-			rd.flowCtx.NodeID.SQLInstanceID(), rd.flowCtx.ID, rd.agg)
+			rd.FlowCtx.NodeID.SQLInstanceID(), rd.FlowCtx.ID, rd.agg)
 	case meta := <-rd.metaCh:
 		return nil, meta
 	case <-rd.Ctx().Done():

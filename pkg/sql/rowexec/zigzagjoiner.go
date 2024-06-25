@@ -305,7 +305,7 @@ func newZigzagJoiner(
 
 	leftColumnTypes := spec.Sides[0].FetchSpec.FetchedColumnTypes()
 	rightColumnTypes := spec.Sides[1].FetchSpec.FetchedColumnTypes()
-	err := z.joinerBase.init(
+	_, err := z.joinerBase.init(
 		ctx,
 		z, /* self */
 		flowCtx,
@@ -660,7 +660,7 @@ func (z *zigzagJoiner) nextRow(ctx context.Context) (rowenc.EncDatumRow, error) 
 			ctx,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			nil, /* spanIDs */
-			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
+			rowinfra.GetDefaultBatchBytesLimit(z.FlowCtx.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
 		)
 		if err != nil {
@@ -800,7 +800,7 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 			z.Ctx(),
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			nil, /* spanIDs */
-			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
+			rowinfra.GetDefaultBatchBytesLimit(z.FlowCtx.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
 		)
 		if err != nil {
