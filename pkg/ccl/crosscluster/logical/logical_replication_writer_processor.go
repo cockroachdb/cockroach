@@ -184,9 +184,6 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	ctx = lrw.StartInternal(ctx, logicalReplicationWriterProcessorName)
 
 	lrw.metrics = lrw.FlowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
-	for _, bh := range lrw.bh {
-		bh.SetMetrics(lrw.metrics)
-	}
 
 	db := lrw.FlowCtx.Cfg.DB
 
@@ -497,9 +494,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 				batchStart = batchEnd
 				batchTime := timeutil.Since(preBatchTime)
 
+				lrw.metrics.OptimisticInsertConflictCount.Inc(batchStats.optimisticInsertConflicts)
 				lrw.debug.RecordBatchApplied(batchTime, int64(batchEnd-batchStart))
 				lrw.metrics.ApplyBatchNanosHist.RecordValue(batchTime.Nanoseconds())
-				flushByteSize.Add(int64(batchStats.byteSize))
+				flushByteSize.Add(batchStats.byteSize)
 			}
 			return nil
 		})
@@ -528,21 +526,25 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 }
 
 type batchStats struct {
-	byteSize int
+	byteSize                  int64
+	optimisticInsertConflicts int64
+}
+
+func (b *batchStats) Add(o batchStats) {
+	b.byteSize += o.byteSize
+	b.optimisticInsertConflicts += o.optimisticInsertConflicts
 }
 
 type BatchHandler interface {
-	SetMetrics(metrics *Metrics)
 	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
 }
 
 // RowProcessor knows how to process a single row from an event stream.
 type RowProcessor interface {
-	SetMetrics(metrics *Metrics)
 	// ProcessRow processes a single KV update by inserting or deleting a row.
 	// Txn argument can be nil. The provided value is the "previous value",
 	// before the change was applied on the source.
-	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) error
+	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
 }
 
 type txnBatch struct {
@@ -550,10 +552,6 @@ type txnBatch struct {
 	rp       RowProcessor
 	settings *cluster.Settings
 	sd       *sessiondata.SessionData
-}
-
-func (t *txnBatch) SetMetrics(metrics *Metrics) {
-	t.rp.SetMetrics(metrics)
 }
 
 var useImplicitTxns = settings.RegisterBoolSetting(
@@ -576,22 +574,26 @@ func (t *txnBatch) HandleBatch(
 	// secondary indexes).
 	if useImplicitTxns.Get(&t.settings.SV) {
 		for _, kv := range batch {
-			stats.byteSize += kv.Size()
-			if err = t.rp.ProcessRow(ctx, nil /* txn */, kv.KeyValue, kv.PrevValue); err != nil {
+			rowStats, err := t.rp.ProcessRow(ctx, nil /* txn */, kv.KeyValue, kv.PrevValue)
+			if err != nil {
 				return stats, err
 			}
+			stats.Add(rowStats)
 		}
 	} else {
+		var txnStats batchStats
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			txnStats = batchStats{}
 			for _, kv := range batch {
-				stats.byteSize += kv.Size()
-				if err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue); err != nil {
+				rowStats, err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue)
+				if err != nil {
 					return err
 				}
-
+				txnStats.Add(rowStats)
 			}
 			return nil
 		}, isql.WithSessionData(t.sd))
+		stats = txnStats
 	}
 	return stats, err
 }

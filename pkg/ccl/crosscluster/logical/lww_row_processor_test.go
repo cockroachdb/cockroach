@@ -86,7 +86,8 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 			keyValue := replicationtestutils.EncodeKV(t, s.Codec(), desc, tc.row...)
 			keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				return rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
+				_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
+				return err
 			}))
 		})
 		t.Run(fmt.Sprintf("%s/delete", tc.name), func(t *testing.T) {
@@ -101,7 +102,8 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 			keyValue.Value.RawBytes = nil
 			keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				return rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
+				_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
+				return err
 			}))
 		})
 	}
@@ -206,7 +208,7 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 				if implicitTxn {
 					for i = 0; i < b.N; i++ {
 						// The error is expected here due to injected error.
-						lastRowErr = rp.ProcessRow(ctx, nil /* txn */, keyValue, tc.prevValue)
+						_, lastRowErr = rp.ProcessRow(ctx, nil /* txn */, keyValue, tc.prevValue)
 						keyValue.Value.Timestamp.WallTime += 1
 					}
 				} else {
@@ -216,7 +218,7 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 						// error.
 						lastTxnErr = s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 							// The error is expected here due to injected error.
-							lastRowErr = rp.ProcessRow(ctx, txn, keyValue, tc.prevValue)
+							_, lastRowErr = rp.ProcessRow(ctx, txn, keyValue, tc.prevValue)
 							keyValue.Value.Timestamp.WallTime += 1
 							return nil
 						}, isql.WithSessionData(sd))
