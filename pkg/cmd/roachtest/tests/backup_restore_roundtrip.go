@@ -82,7 +82,7 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			Name:              sp.name,
 			Timeout:           4 * time.Hour,
 			Owner:             registry.OwnerDisasterRecovery,
-			Cluster:           r.MakeClusterSpec(4),
+			Cluster:           r.MakeClusterSpec(4, spec.WorkloadNode()),
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			RequiresLicense:   true,
 			NativeLibs:        registry.LibGEOS,
@@ -105,8 +105,6 @@ func backupRestoreRoundTrip(
 		t.Skip("uses gs://cockroachdb-backup-testing; see https://github.com/cockroachdb/cockroach/issues/105968")
 	}
 	pauseProbability := 0.2
-	roachNodes := c.Range(1, c.Spec().NodeCount-1)
-	workloadNode := c.Node(c.Spec().NodeCount)
 	testRNG, seed := randutil.NewLockedPseudoRand()
 	t.L().Printf("random seed: %d", seed)
 
@@ -117,18 +115,18 @@ func backupRestoreRoundTrip(
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	})
 
-	c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings(envOption), roachNodes)
-	m := c.NewMonitor(ctx, roachNodes)
+	c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings(envOption), c.CRDBNodes())
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 
 	m.Go(func(ctx context.Context) error {
-		testUtils, err := newCommonTestUtils(ctx, t, c, roachNodes, sp.mock, sp.onlineRestore)
+		testUtils, err := newCommonTestUtils(ctx, t, c, c.CRDBNodes(), sp.mock, sp.onlineRestore)
 		if err != nil {
 			return err
 		}
 		defer testUtils.CloseConnections()
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
-		runBackgroundWorkload, err := startBackgroundWorkloads(ctx, t.L(), c, m, testRNG, roachNodes, workloadNode, testUtils, dbs)
+		runBackgroundWorkload, err := startBackgroundWorkloads(ctx, t.L(), c, m, testRNG, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs)
 		if err != nil {
 			return err
 		}
@@ -136,7 +134,7 @@ func backupRestoreRoundTrip(
 		if err != nil {
 			return err
 		}
-		d, err := newBackupRestoreTestDriver(ctx, t, c, testUtils, roachNodes, dbs, tables)
+		d, err := newBackupRestoreTestDriver(ctx, t, c, testUtils, c.CRDBNodes(), dbs, tables)
 		if err != nil {
 			return err
 		}
@@ -158,7 +156,7 @@ func backupRestoreRoundTrip(
 		defer stopBackgroundCommands()
 
 		for i := 0; i < numFullBackups; i++ {
-			allNodes := labeledNodes{Nodes: roachNodes, Version: clusterupgrade.CurrentVersion().String()}
+			allNodes := labeledNodes{Nodes: c.CRDBNodes(), Version: clusterupgrade.CurrentVersion().String()}
 			bspec := backupSpec{
 				PauseProbability: pauseProbability,
 				Plan:             allNodes,

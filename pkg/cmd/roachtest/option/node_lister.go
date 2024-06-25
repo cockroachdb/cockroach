@@ -64,5 +64,8 @@ func (l NodeLister) Node(n int) NodeListOption {
 // WorkloadNode returns the workload node—it assumes that one has
 // been created through the cluster spec WorkloadNode option.
 func (l NodeLister) WorkloadNode() NodeListOption {
+	if !l.WorkloadNodeProvisioned {
+		l.Fatalf("workload node specified but no workload nodes were provisioned by the cluster")
+	}
 	return l.Nodes(l.NodeCount)
 }

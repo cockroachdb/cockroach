@@ -250,7 +250,6 @@ func runDecommission(
 	// node1 is kept pinned (i.e. not decommissioned/restarted), and is the node
 	// through which we run the workload and other queries.
 	pinnedNode := 1
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(pinnedNode))
 
 	for i := 1; i <= nodes; i++ {
 		startOpts := option.DefaultStartOpts()
@@ -261,7 +260,7 @@ func runDecommission(
 		c.Start(ctx, t.L(), withDecommissionVMod(startOpts), install.MakeClusterSettings(), c.Node(i))
 	}
 	c.Run(ctx, option.WithNodes(c.Node(pinnedNode)),
-		fmt.Sprintf(`./workload init kv --drop {pgurl:%d}`, pinnedNode))
+		fmt.Sprintf(`./cockroach workload init kv --drop {pgurl:%d}`, pinnedNode))
 
 	h := newDecommTestHelper(t, c)
 
@@ -273,7 +272,7 @@ func runDecommission(
 		// TODO(tschottdorf): in remote mode, the ui shows that we consistently write
 		// at 330 qps (despite asking for 500 below). Locally we get 500qps (and a lot
 		// more without rate limiting). Check what's up with that.
-		fmt.Sprintf("./workload run kv --max-rate 500 --tolerate-errors --duration=%s {pgurl:1-%d}", duration.String(), nodes),
+		fmt.Sprintf("./cockroach workload run kv --max-rate 500 --tolerate-errors --duration=%s {pgurl:1-%d}", duration.String(), nodes),
 	}
 
 	run := func(stmt string) {

@@ -98,17 +98,13 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 }
 
 func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbenchOptions) {
-	allNodes := c.Range(1, c.Spec().NodeCount)
-	roachNodes := c.Range(1, c.Spec().NodeCount-1)
-	loadNode := c.Node(c.Spec().NodeCount)
-
 	t.Status("installing cockroach")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-	err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), allNodes[0]))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
+	err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), 1))
 	require.NoError(t, err)
 
 	t.Status("installing haproxy")
-	if err = c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
+	if err = c.Install(ctx, t.L(), c.WorkloadNode(), "haproxy"); err != nil {
 		t.Fatal(err)
 	}
 	// cockroach gen haproxy does not support specifying a non root user
@@ -120,23 +116,23 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Run(ctx, option.WithNodes(loadNode), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
-	c.Run(ctx, option.WithNodes(loadNode), "haproxy -f haproxy.cfg -D")
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
-	if err := c.Install(ctx, t.L(), loadNode, "sysbench"); err != nil {
+	if err := c.Install(ctx, t.L(), c.WorkloadNode(), "sysbench"); err != nil {
 		t.Fatal(err)
 	}
 
-	m := c.NewMonitor(ctx, roachNodes)
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		t.Status("preparing workload")
 		c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach sql --url={pgurl:1} -e "CREATE DATABASE sysbench"`)
-		c.Run(ctx, option.WithNodes(loadNode), opts.cmd(false /* haproxy */)+" prepare")
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")
 		cmd := opts.cmd(true /* haproxy */) + " run"
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(loadNode), cmd)
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), cmd)
 
 		// Sysbench occasionally segfaults. When that happens, don't fail the
 		// test.
@@ -170,7 +166,7 @@ func registerSysbench(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
 			Owner:            registry.OwnerTestEng,
-			Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus)),
+			Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode()),
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
