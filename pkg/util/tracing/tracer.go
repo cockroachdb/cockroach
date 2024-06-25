@@ -1516,9 +1516,7 @@ func (t *Tracer) ShouldRecordAsyncSpans() bool {
 // be possible (i.e. it's not possible if the Span is reused for a different
 // operation before the use-after-Finish occurs).
 func (t *Tracer) PanicOnUseAfterFinish() bool {
-	return false // TODO: lol
-
-	// return t.panicOnUseAfterFinish
+	return t.panicOnUseAfterFinish
 }
 
 // SpanRegistry exports the registry containing all currently-open spans.
