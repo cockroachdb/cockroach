@@ -32,9 +32,19 @@ func populatedMVCCValueHeader() MVCCValueHeader {
 		LocalTimestamp:   hlc.ClockTimestamp{WallTime: 1, Logical: 1},
 		OmitInRangefeeds: true,
 		ImportEpoch:      1,
+		OriginID:         1,
 	}
 	allFieldsSet.KVNemesisSeq.Set(123)
 	return allFieldsSet
+}
+
+func defaultMVCCValueHeader() MVCCValueHeader {
+	return MVCCValueHeader{
+		LocalTimestamp:   hlc.ClockTimestamp{},
+		OmitInRangefeeds: false,
+		ImportEpoch:      0,
+		OriginID:         0,
+	}
 }
 
 func TestMVCCValueHeader_IsEmpty(t *testing.T) {
@@ -43,9 +53,15 @@ func TestMVCCValueHeader_IsEmpty(t *testing.T) {
 
 	require.True(t, MVCCValueHeader{}.IsEmpty())
 
+	// Assert that default values in the value header are equivalent to empty, so
+	// we can omit them entirely from the encoding.
+	require.True(t, defaultMVCCValueHeader().IsEmpty())
+
 	require.False(t, allFieldsSet.IsEmpty())
 	require.False(t, MVCCValueHeader{LocalTimestamp: allFieldsSet.LocalTimestamp}.IsEmpty())
 	require.False(t, MVCCValueHeader{OmitInRangefeeds: allFieldsSet.OmitInRangefeeds}.IsEmpty())
+	require.False(t, MVCCValueHeader{ImportEpoch: allFieldsSet.ImportEpoch}.IsEmpty())
+	require.False(t, MVCCValueHeader{OriginID: allFieldsSet.OriginID}.IsEmpty())
 }
 
 func TestMVCCValueHeader_MarshalUnmarshal(t *testing.T) {
