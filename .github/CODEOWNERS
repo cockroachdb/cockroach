@@ -331,6 +331,7 @@
 /pkg/kv/kvserver/spanset/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/split/                 @cockroachdb/kv-prs
 /pkg/kv/kvserver/stateloader/           @cockroachdb/kv-prs
+/pkg/kv/kvserver/storeliveness/         @cockroachdb/kv-prs
 /pkg/kv/kvserver/tenantrate/            @cockroachdb/kv-prs
 #!/pkg/kv/kvserver/testdata/            @cockroachdb/kv-prs-noreview
 /pkg/kv/kvserver/tscache/               @cockroachdb/kv-prs
