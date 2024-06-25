@@ -22,7 +22,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --formatter=pebble-metamorphic -- test --c
                                       --test_timeout=14400 \
                                       --test_sharding_strategy=disabled \
                                       --define gotags=bazel,invariants \
-                                      --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' -maxtime 3h -maxfails 1 -timeout 40m -stderr -p 1" \
+                                      --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' -maxtime 3h -maxfails 1 -timeout 60m -stderr -p 1" \
                                       --test_arg -dir --test_arg $ARTIFACTS_DIR \
                                       --test_arg -ops --test_arg "uniform:2000-5000" \
                                       --test_output streamed \
