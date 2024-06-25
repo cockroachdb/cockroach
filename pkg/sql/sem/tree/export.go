@@ -14,7 +14,7 @@ package tree
 type Export struct {
 	Query      *Select
 	FileFormat string
-	File       Expr
+	File       URI
 	Options    KVOptions
 }
 

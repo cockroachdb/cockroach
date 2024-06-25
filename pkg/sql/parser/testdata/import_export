@@ -81,18 +81,20 @@ EXPORT INTO CSV 'a' FROM SELECT * FROM _ -- identifiers removed
 parse
 EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM TABLE a
 ----
-EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(delimiter = '|') FROM TABLE a -- normalized!
-EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH OPTIONS(delimiter = ('|')) FROM TABLE a -- fully parenthesized
+EXPORT INTO CSV '*****' WITH OPTIONS(delimiter = '|') FROM TABLE a -- normalized!
+EXPORT INTO CSV '*****' WITH OPTIONS(delimiter = ('|')) FROM TABLE a -- fully parenthesized
 EXPORT INTO CSV '_' WITH OPTIONS(delimiter = '_') FROM TABLE a -- literals removed
-EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(_ = '|') FROM TABLE _ -- identifiers removed
+EXPORT INTO CSV '*****' WITH OPTIONS(_ = '|') FROM TABLE _ -- identifiers removed
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(delimiter = '|') FROM TABLE a -- passwords exposed
 
 parse
 EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10
 ----
-EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(delimiter = '|') FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10 -- normalized!
-EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH OPTIONS(delimiter = ('|')) FROM SELECT (a), (sum((b))) FROM c WHERE ((d) = (1)) ORDER BY (sum((b))) DESC LIMIT (10) -- fully parenthesized
+EXPORT INTO CSV '*****' WITH OPTIONS(delimiter = '|') FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10 -- normalized!
+EXPORT INTO CSV '*****' WITH OPTIONS(delimiter = ('|')) FROM SELECT (a), (sum((b))) FROM c WHERE ((d) = (1)) ORDER BY (sum((b))) DESC LIMIT (10) -- fully parenthesized
 EXPORT INTO CSV '_' WITH OPTIONS(delimiter = '_') FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- literals removed
-EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(_ = '|') FROM SELECT _, _(_) FROM _ WHERE _ = 1 ORDER BY _(_) DESC LIMIT 10 -- identifiers removed
+EXPORT INTO CSV '*****' WITH OPTIONS(_ = '|') FROM SELECT _, _(_) FROM _ WHERE _ = 1 ORDER BY _(_) DESC LIMIT 10 -- identifiers removed
+EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(delimiter = '|') FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10 -- passwords exposed
 
 # Test redaction of secrets in URLs.
 
@@ -149,3 +151,12 @@ IMPORT INTO foo CSV DATA (('https://a:redacted@localhost:8000/c')) -- fully pare
 IMPORT INTO foo CSV DATA ('_') -- literals removed
 IMPORT INTO _ CSV DATA ('https://a:redacted@localhost:8000/c') -- identifiers removed
 IMPORT INTO foo CSV DATA ('https://a:b@localhost:8000/c') -- passwords exposed
+
+parse
+EXPORT INTO CSV 'https://foo:bar@baz.com/zoo' FROM TABLE a
+----
+EXPORT INTO CSV 'https://foo:redacted@baz.com/zoo' FROM TABLE a -- normalized!
+EXPORT INTO CSV ('https://foo:redacted@baz.com/zoo') FROM TABLE a -- fully parenthesized
+EXPORT INTO CSV '_' FROM TABLE a -- literals removed
+EXPORT INTO CSV 'https://foo:redacted@baz.com/zoo' FROM TABLE _ -- identifiers removed
+EXPORT INTO CSV 'https://foo:bar@baz.com/zoo' FROM TABLE a -- passwords exposed

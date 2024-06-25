@@ -1067,9 +1067,9 @@ var specs = []stmtSpec{
 	{
 		name: "export_stmt",
 		replace: map[string]string{
-			"import_data_format":    "CSV",
-			"string_or_placeholder": "file_location",
-			"select_stmt":           "(| 'select_stmt' | 'TABLE' 'table_name')",
+			"import_data_format": "CSV",
+			"uri":                "file_location",
+			"select_stmt":        "(| 'select_stmt' | 'TABLE' 'table_name')",
 		},
 		unlink: []string{"CSV", "file_location"},
 	},
