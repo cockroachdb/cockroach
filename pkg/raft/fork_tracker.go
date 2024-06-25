@@ -10,29 +10,34 @@
 
 package raft
 
-// logMark identifies a position in the log tied to a specific leader term.
-//
-// NB: the term does not necessarily match the "entry term" t1 at this index. An
-// entry proposed at term t1 and committed at t2, is present in the term = t1
-// leader log, some (possibly none or all) logs at t1 < term < t2, and all logs
-// at term >= t2. Between t1 and t2, leaders can overwrite this t1 entry.
-//
-// If t2 proposes/commits a different entry at this index (not the t1 entry),
-// the t1 entry never reappears in logs at term >= t2.
-type logMark entryID
+// LogMark identifies a position in the log tied to a specific leader term.
+type LogMark struct {
+	// Term is the leader term whose log is being considered.
+	// NB: this term does not necessarily match the "entry term" at Index.
+	Term uint64
+	// Index is the entry index in this log.
+	Index uint64
+}
+
+// Less returns true if the log mark "happens before" the other mark. All writes
+// and acknowledgements happen in this order.
+func (l LogMark) Less(other LogMark) bool {
+	return l.Term < other.Term || l.Term == other.Term && l.Index < other.Index
+}
 
 // ForkTracker tracks the in-flight state of raft log writes.
 //
 //	term
-//	  ^    (ack)  (f0)  (f1)      (write)
+//	  ^    [f0]        [f1]      [write]
 //	  │      (-----+-----+-----------]
-//	  │      |     |     |           |
-//	9 ┤      . . . . . . . . . (-----]
-//	7 ┤      . . . . . . (-----]
-//	5 ┤      . . . . . .     (----------]
-//	3 ┤      . . . (-----------------------]
-//	2 ┤      (--------]
+//	  │      |           |           |
+//	9 ┤      | . . . . . | . . (-----]
+//	7 ┤      | . . . . . (-----]
+//	5 ┤      | . . . . .     (----------]
+//	3 ┤      | . . (-----------------------]
+//	2 ┤      (-----]
 //	1 ┤                  (-----]
+//		│             (ack)┘
 //	  └──────┬─────┬─────┬─────┬─────┬─────┬─────> index
 //	         20    30    40    50    60    70
 //
@@ -48,84 +53,101 @@ type logMark entryID
 //
 // For each log index, we track the latest term under which it is written. We do
 // this efficiently, by maintaining an ordered list of "fork" points. An entry
-// at index > fork.index can only be acked by term >= fork.term.
+// at index between two consecutive forks (including the "write" pseudo-fork)
+// can only be released by an ack at term >= fork.term.
 type ForkTracker struct {
 	// write is the current state of the log:
-	//	- write.term is the leader term on whose behalf the last append was made.
-	//	- write.index is the last index in the current log.
-	write logMark
+	//	- write.Term is the leader term on whose behalf the last append was made.
+	//	- write.Index is the last index in the current log.
+	write LogMark
 	// ack is the current acknowledged log mark.
 	//
-	// Invariant: ack <= write, both by term and by index.
-	ack logMark
+	// Invariant: ack <= write.
+	ack LogMark
 
 	// forks lists all forks in (ack, write]. Can be empty.
 	//
-	// Invariant (if forks is not empty):
-	//	ack < forks[0] < forks[1] < ... < forks[len-1] <= write
-	// The inequality is both by term and by index.
-	forks shortSlice[logMark]
+	// Invariants (if forks is not empty):
+	//	- ack < forks[0] < forks[1] < ... < forks[len-1] <= write
+	//	- forks have unique terms
+	//	- forks have increasing indices
+	//
+	// Normally, there is 0 or 1 fork. A higher number of forks is possible only
+	// if leader changes spin rapidly, or acknowledgements are slow. The slice of
+	// forks is optimized for being short, to avoid allocations in most cases.
+	forks shortSlice[LogMark]
 }
 
-func NewForkTracker(term uint64, index uint64) ForkTracker {
-	mark := logMark{term: term, index: index}
+// NewForkTracker returns a tracker initialized to the given log state.
+func NewForkTracker(mark LogMark) ForkTracker {
 	return ForkTracker{write: mark, ack: mark}
 }
 
-// Append adds the (from, to] range of indices written under the given term.
-func (f *ForkTracker) Append(term uint64, from, to uint64) bool {
-	if term < f.write.term || from > f.write.index || to < from {
+// Append adds the (from.Index, to] range of indices written on behalf of the
+// leader at term from.Term.
+func (f *ForkTracker) Append(from LogMark, to uint64) bool {
+	if from.Index > to { // incorrect interval
+		return false
+	} else if from.Less(f.write) { // incorrect order of writes
+		return false
+	} else if from.Index > f.write.Index { // writes have gaps
+		// TODO(pav-kv): support this case for AC.
 		return false
 	}
-	if from == f.write.index {
-		f.write = logMark{term: term, index: to}
+
+	// Append-only case when there is no fork.
+	write := LogMark{Term: from.Term, Index: to}
+	if from.Term == f.write.Term || from.Index >= f.write.Index {
+		f.write = write
 		return true
 	}
-	if term == f.write.term {
-		return false
-	}
-	// term > write.term && from < write.index
 
+	// Otherwise, we are introducing a fork:
+	//	from.Term > f.write.Term && from.Index < f.write.Index.
+	//
+	// Truncate all the obsolete forks, and append a new one.
 	pop := len(f.forks.slice)
 	for ; pop > 0; pop-- {
-		if from >= f.forks.slice[pop-1].index {
+		if from.Index >= f.forks.slice[pop-1].Index {
 			break
 		}
 	}
+	f.forks.slice = append(f.forks.slice[:pop], from)
 
-	if pop != 0 {
-		f.forks.slice = f.forks.slice[:pop]
-		f.forks.compress()
-	}
-	f.forks.slice = append(f.forks.slice, logMark{term: term, index: from})
-	f.write = logMark{term: term, index: to}
-	if f.ack.index > from {
-		f.ack = logMark{term: term, index: from}
+	f.write = write
+	if f.ack.Index > from.Index {
+		f.ack = from
 	}
 	return true
 }
 
-// Ack acknowledges all writes up to the given log index at the given term.
-func (f *ForkTracker) Ack(term uint64, index uint64) {
-	if term < f.ack.term {
-		return
+// Ack acknowledges all writes up to the given log mark.
+func (f *ForkTracker) Ack(to LogMark) bool {
+	if to.Less(f.ack) { // incorrect order of acknowledgements
+		return false
 	}
+	f.ack = to
+
+	// Remove all forks that are now in the past.
 	skip := 0
 	for ln := len(f.forks.slice); skip < ln; skip++ {
-		if f.forks.slice[skip].term > term {
+		if f.forks.slice[skip].Term > to.Term {
 			break
 		}
 	}
-	if skip != 0 {
-		f.forks.slice = f.forks.slice[skip:]
-		f.forks.compress()
-	}
+	f.forks.skip(skip)
 
+	return true
+}
+
+// Released returns the current released log index. All in-flight writes are in
+// the (Released, write.Index] interval. All entries with lower indices have
+// been acknowledged.
+func (f *ForkTracker) Released() uint64 {
 	if len(f.forks.slice) == 0 {
-		f.ack = logMark{term: term, index: index}
-	} else {
-		f.ack = logMark{term: term, index: min(index, f.forks.slice[0].index)}
+		return f.ack.Index
 	}
+	return min(f.ack.Index, f.forks.slice[0].Index)
 }
 
 const shortSliceLen = 2
@@ -135,7 +157,11 @@ type shortSlice[T any] struct {
 	slice []T
 }
 
-func (s *shortSlice[T]) compress() {
+func (s *shortSlice[T]) skip(count int) {
+	if count == 0 {
+		return
+	}
+	s.slice = s.slice[count:]
 	if ln := len(s.slice); ln <= shortSliceLen {
 		s.slice = s.short[:copy(s.short[:ln], s.slice)]
 	}
