@@ -90,6 +90,9 @@ server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with 
 server.http.base_path	string	/	path to redirect the user to upon succcessful login	application
 server.identity_map.configuration	string		system-identity to database-username mappings	application
 server.jwt_authentication.issuer_custom_ca	string		sets the custom root CA for verifying certificates while fetching JWKS from the JWT issuer	application
+server.ldap_authentication.client.tls_certificate	string		sets the client certificate PEM for establishing mTLS connection with LDAP server	application
+server.ldap_authentication.client.tls_key	string		sets the client key PEM for establishing mTLS connection with LDAP server	application
+server.ldap_authentication.domain.custom_ca	string		sets the PEM encoded custom root CA for verifying domain certificates when establishing connection with LDAP server	application
 server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables	application
 server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries	application
 server.max_connections_per_gateway	integer	-1	the maximum number of SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.	application
