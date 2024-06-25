@@ -274,6 +274,13 @@ var jwtAuthEntry = hba.Entry{
 	Method:   rulebasedscanner.String{Value: "jwt_token"},
 }
 
+//var ldapAuthEntry = hba.Entry{
+//	ConnType: hba.ConnHostAny,
+//	User:     []rulebasedscanner.String{{Value: "all", Quoted: false}},
+//	Address:  hba.AnyAddr{},
+//	Method:   rulebasedscanner.String{Value: "ldap"},
+//}
+
 var rootEntry = hba.Entry{
 	ConnType: hba.ConnHostAny,
 	User:     []rulebasedscanner.String{{Value: username.RootUser, Quoted: false}},
