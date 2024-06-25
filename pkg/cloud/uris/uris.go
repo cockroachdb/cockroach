@@ -30,7 +30,7 @@ const (
 	// in a locality aware backup/restore.
 	LocalityURLParam = "COCKROACH_LOCALITY"
 
-	redactionMarker = "redacted"
+	RedactionMarker = "redacted"
 )
 
 // redactedQueryParams is the set of query parameter names registered by the
@@ -68,18 +68,18 @@ func SanitizeExternalStorageURI(path string, extraParams []string) (string, erro
 
 	if uri.User != nil {
 		if _, passwordSet := uri.User.Password(); passwordSet {
-			uri.User = url.UserPassword(uri.User.Username(), redactionMarker)
+			uri.User = url.UserPassword(uri.User.Username(), RedactionMarker)
 		}
 	}
 
 	params := uri.Query()
 	for param := range params {
 		if _, ok := redactedQueryParams[param]; ok {
-			params.Set(param, redactionMarker)
+			params.Set(param, RedactionMarker)
 		} else {
 			for _, p := range extraParams {
 				if param == p {
-					params.Set(param, redactionMarker)
+					params.Set(param, RedactionMarker)
 				}
 			}
 		}

@@ -18,6 +18,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/sqlutils",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cloud/uris",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/security/certnames",
