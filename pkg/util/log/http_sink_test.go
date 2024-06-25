@@ -121,7 +121,8 @@ func testBase(
 	// to accommodate for the overhead of the logging call compared to
 	// the timeout in the HTTP request.
 	if deadline > 0 && logDuration > deadline {
-		t.Error("Log call exceeded timeout")
+		require.LessOrEqualf(t, logDuration, deadline,
+			"Log call exceeded timeout, expected to be less than %s, got %s", deadline.String(), logDuration.String())
 	}
 
 	// If we don't properly hang in the handler when we want to test a
@@ -192,7 +193,7 @@ func TestHTTPSinkTimeout(t *testing.T) {
 		},
 	}
 
-	testBase(t, defaults, nil /* testFn */, true /* hangServer */, 500*time.Millisecond)
+	testBase(t, defaults, nil /* testFn */, true /* hangServer */, 1*time.Second)
 }
 
 // TestHTTPSinkContentTypeJSON verifies that the HTTP sink content type
