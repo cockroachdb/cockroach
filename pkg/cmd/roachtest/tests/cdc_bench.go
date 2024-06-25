@@ -103,7 +103,7 @@ func registerCDCBench(r registry.Registry) {
 	}
 
 	// Workload impact benchmarks.
-	for _, readPercent := range []int{0, 50, 100} {
+	for _, readPercent := range []int{0, 100} {
 		for _, ranges := range []int64{100, 100000} {
 			readPercent, ranges := readPercent, ranges // pin loop variables
 			const (
@@ -125,7 +125,7 @@ func registerCDCBench(r registry.Registry) {
 				RequiresLicense:  true,
 				Timeout:          time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "", false)
+					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "")
 				},
 			})
 
@@ -144,23 +144,7 @@ func registerCDCBench(r registry.Registry) {
 					RequiresLicense:  true,
 					Timeout:          time.Hour,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, false)
-					},
-				})
-
-				r.Add(registry.TestSpec{
-					Name: fmt.Sprintf(
-						"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=kafka",
-						readPercent, nodes, cpus, formatSI(ranges), server, format),
-					Owner:            registry.OwnerCDC,
-					Benchmark:        true,
-					Cluster:          r.MakeClusterSpec(nodes+3, spec.CPU(cpus)), // 5 + coordinator + workload + kafka
-					CompatibleClouds: registry.AllExceptAWS,
-					Suites:           registry.Suites(registry.Nightly),
-					RequiresLicense:  true,
-					Timeout:          time.Hour,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, true)
+						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format)
 					},
 				})
 			}
@@ -375,10 +359,9 @@ func runCDCBenchWorkload(
 	readPercent int,
 	server cdcBenchServer,
 	format string,
-	withKafka bool, // TODO: should be sinktype probably
 ) {
+	const sink = "null://"
 	var (
-		sinkURI   = "null://"
 		numNodes  = c.Spec().NodeCount
 		nData     = c.Range(1, numNodes-2)
 		nCoord    = c.Node(numNodes - 1)
@@ -390,23 +373,6 @@ func runCDCBenchWorkload(
 		insertCount  = int64(0)
 		cdcEnabled   = format != ""
 	)
-
-	if withKafka {
-		nData = c.Range(1, numNodes-3)
-		nCoord = c.Node(numNodes - 1)
-		nWorkload = c.Node(numNodes - 2)
-		nKafka := c.Node(numNodes)
-
-		kafka, cleanup := setupKafka(ctx, t, c, nKafka)
-		defer cleanup()
-		// kafka.validateOrder = true
-		// if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
-		// 	ct.t.Fatal(err)
-		// }
-
-		sinkURI = kafka.sinkURL(ctx)
-	}
-
 	if readPercent == 100 {
 		insertCount = 1_000_000 // ingest some data to read
 	}
@@ -421,23 +387,6 @@ func runCDCBenchWorkload(
 	// coordinator later, since we don't want any data on it.
 	opts, settings := makeCDCBenchOptions(c)
 	settings.ClusterSettings["kv.rangefeed.enabled"] = strconv.FormatBool(cdcEnabled)
-
-	// this makes it easier to work with in grafana
-	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
-
-	concurrency *= 10
-	// set new kafka sink option
-	settings.ClusterSettings["changefeed.new_kafka_sink.enabled"] = "true"
-	// TODO: even if emittedbytes is the same, what about network bandwidth?
-	// - single row 50 - ~72Mb/s
-	// - control (old kafka) 0 - 43Mb/s
-	// TODO: kafka metrics
-	// why is it limited to 2MiB/s for both control and singlerow kv0? trying control with only 100 ranges.
-	// -- control   0-100 - 3MiB/s in data, 72Mb/s in network. then it failed with the eof / connection lost error..
-	// -- singlerow 0-100 - 2.6MiB/s in data, 177Mb/s in network. and also failed. i think these really overload the cluster cpu wise
-	// -- control 0-100-10xconc - quickly got overloaded and died. with tolerate-errors:  4MiB/s, 62Mb/s. 5.5MiB in grafana
-	// -- singlerow 0-100-10xconc - 3.2MiB/s, 128 Mb/s. 4.7MiB in grafana. doesnt seem that bad actually
-	// TODO: next try upping kv workload's concurrency &/ batch size
 
 	switch server {
 	case cdcBenchProcessorServer:
@@ -507,8 +456,8 @@ func runCDCBenchWorkload(
 		require.NoError(t, err)
 
 		require.NoError(t, conn.QueryRowContext(ctx, fmt.Sprintf(
-			`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH format = '%s', initial_scan = 'no', resolved`, // added resolved to test that
-			sinkURI, format)).
+			`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH format = '%s', initial_scan = 'no'`,
+			sink, format)).
 			Scan(&jobID))
 
 		// Monitor the changefeed for failures. When the workload finishes, it will
@@ -567,7 +516,7 @@ func runCDCBenchWorkload(
 		//
 		// TODO(erikgrinaker): remove this when benchmarks are stable.
 		var extra string
-		if true || readPercent < 100 && (numRanges/int64(len(nData))) >= 10000 {
+		if readPercent < 100 && (numRanges/int64(len(nData))) >= 10000 {
 			extra += ` --tolerate-errors`
 		}
 		t.L().Printf("running workload")
