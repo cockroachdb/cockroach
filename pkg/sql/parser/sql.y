@@ -763,6 +763,15 @@ func (u *sqlSymUnion) stringOrPlaceholderOptList() tree.StringOrPlaceholderOptLi
 func (u *sqlSymUnion) listOfStringOrPlaceholderOptList() []tree.StringOrPlaceholderOptList {
     return u.val.([]tree.StringOrPlaceholderOptList)
 }
+func (u *sqlSymUnion) URI() tree.URI {
+    return u.val.(tree.URI)
+}
+func (u *sqlSymUnion) URIs() tree.URIs {
+    return u.val.(tree.URIs)
+}
+func (u *sqlSymUnion) listOfURIs() []tree.URIs {
+    return u.val.([]tree.URIs)
+}
 func (u *sqlSymUnion) fullBackupClause() *tree.FullBackupClause {
     return u.val.(*tree.FullBackupClause)
 }
@@ -1267,6 +1276,8 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt resume_all_jobs_stmt
 %type <tree.Statement> drop_schedule_stmt
 %type <tree.Statement> restore_stmt
+%type <tree.URIs> opt_uris opt_kms_uris
+%type <[]tree.URIs> list_of_opt_uris list_of_opt_kms_uris
 %type <tree.StringOrPlaceholderOptList> string_or_placeholder_opt_list
 %type <[]tree.StringOrPlaceholderOptList> list_of_string_or_placeholder_opt_list
 %type <tree.Statement> revoke_stmt
@@ -1622,6 +1633,8 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 %type <tree.RoleSpec> role_spec opt_owner_clause
 %type <tree.RoleSpecList> role_spec_list
 %type <tree.Expr> zone_value
+%type <tree.URI> uri kms_uri
+%type <tree.URIs> uris kms_uris
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
 %type <str> region_or_regions
@@ -3845,6 +3858,46 @@ restore_stmt:
   }
 | RESTORE error // SHOW HELP: RESTORE
 
+opt_uris:
+  uri
+  {
+    $$.val = tree.URIs{$1.URI()}
+  }
+| '(' uris ')'
+  {
+    $$.val = $2.URIs()
+  }
+
+opt_kms_uris:
+  kms_uri
+  {
+    $$.val = tree.URIs{$1.URI()}
+  }
+| '(' kms_uris ')'
+  {
+    $$.val = $2.URIs()
+  }
+
+list_of_opt_uris:
+  opt_uris
+  {
+    $$.val = []tree.URIs{$1.URIs()}
+  }
+| list_of_opt_uris ',' opt_uris
+  {
+    $$.val = append($1.listOfURIs(), $3.URIs())
+  }
+
+list_of_opt_kms_uris:
+  opt_kms_uris
+  {
+    $$.val = []tree.URIs{$1.URIs()}
+  }
+| list_of_opt_kms_uris ',' opt_kms_uris
+  {
+    $$.val = append($1.listOfURIs(), $3.URIs())
+  }
+
 string_or_placeholder_opt_list:
   string_or_placeholder
   {
@@ -4073,6 +4126,38 @@ export_stmt:
     $$.val = &tree.Export{Query: $7.slct(), FileFormat: $3, File: $4.expr(), Options: $5.kvOptions()}
   }
 | EXPORT error // SHOW HELP: EXPORT
+
+uri:
+  string_or_placeholder
+  {
+    $$.val = tree.NewURI($1.expr())
+  }
+
+kms_uri:
+  string_or_placeholder
+  {
+    $$.val = tree.NewKMSURI($1.expr())
+  }
+
+uris:
+  uri
+  {
+    $$.val = tree.URIs{$1.URI()}
+  }
+| uris ',' uri
+  {
+    $$.val = append($1.URIs(), $3.URI())
+  }
+
+kms_uris:
+  kms_uri
+  {
+    $$.val = tree.URIs{$1.URI()}
+  }
+| kms_uris ',' kms_uri
+  {
+    $$.val = append($1.URIs(), $3.URI())
+  }
 
 string_or_placeholder:
   non_reserved_word_or_sconst
