@@ -441,6 +441,20 @@ func (c ContextOptions) validate() error {
 	return nil
 }
 
+// childMetricsByLocality is a setting that controls whether child metrics are
+// grouped by locality or by node. This setting only matters if
+// server.child_metrics.enabled is true.
+//
+// TODO(baptist): Deprecate this setting in future releases. For any backports
+// to prior releases we may want to set the default to false to avoid changing
+// behavior in a point release.
+var childMetricsByLocality = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"rpc.child_metrics_by_locality.enabled",
+	"if true, child metrics are grouped by allocality, otherwise by node",
+	true,
+)
+
 // NewContext creates an rpc.Context with the supplied values.
 func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	if err := opts.validate(); err != nil {
@@ -534,12 +548,18 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	)
 	secCtx.useNodeAuth = opts.UseNodeAuth
 
+	var m *Metrics
+	if childMetricsByLocality.Get(&opts.Settings.SV) {
+		m = makeMetrics(true /* byLocality */, false /* byClass */, opts.Locality)
+	} else {
+		m = makeMetrics(false /* byLocality */, true /* byClass */, opts.Locality)
+	}
 	rpcCtx := &Context{
 		ContextOptions:  opts,
 		SecurityContext: secCtx,
 		rpcCompression:  enableRPCCompression,
 		MasterCtx:       masterCtx,
-		metrics:         makeMetrics(),
+		metrics:         m,
 	}
 
 	rpcCtx.dialbackMu.Lock()
