@@ -210,7 +210,7 @@ func (r *BatchReader) EngineRangeKeys() ([]EngineRangeKeyValue, error) {
 
 // rangeKeys decodes and returns the current Pebble range key.
 func (r *BatchReader) rangeKeys() (rangekey.Span, error) {
-	return rangekey.Decode(pebble.InternalKey{UserKey: r.key, Trailer: uint64(r.kind)}, r.value, nil)
+	return rangekey.Decode(pebble.MakeInternalKey(r.key, 0 /* seqNum */, r.kind), r.value, nil)
 }
 
 // Next advances to the next entry in the batch, returning false when the batch
