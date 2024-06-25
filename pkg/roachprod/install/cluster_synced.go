@@ -1242,48 +1242,6 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	}
 	return res, nil
 }
-func (c *SyncedCluster) RunSingleNodeStream(
-	ctx context.Context,
-	l *logger.Logger,
-	options RunOptions,
-	title, cmd string,
-) (stdout io.ReadCloser, stderr io.ReadCloser, errChan chan error) {
-	if len(options.Nodes) != 1 {
-		panic("expected exactly one node")
-	}
-	node := options.Nodes[0]
-
-	// Stream output if we're running the command on only 1 node.
-	stream := len(options.Nodes) == 1
-	// If the user has not specified a display string, and we are not streaming,
-	// we set a default display string.
-	if !stream && options.Display == "" {
-		options = options.WithDisplay(fmt.Sprintf("%s:%v: %s", c.Name, options.Nodes, title))
-	}
-
-	outR, outW := io.Pipe()
-	errR, errW := io.Pipe()
-	errChan = make(chan error, 1)
-
-	go func() {
-		sessionOpts := []remoteSessionOption{withDebugName(GenFilenameFromArgs(20, cmd))}
-		sess := c.newSession(l, node, cmd, sessionOpts...)
-		defer sess.Close()
-		defer close(errChan)
-
-		sess.SetStdout(outW)
-		sess.SetStderr(errW)
-
-		err := sess.Run(ctx)
-		_ = outW.Close()
-		_ = errW.Close()
-		if err != nil {
-			errChan <- err
-		}
-	}()
-
-	return outR, errR, errChan
-}
 
 // Run a command on >= 1 node in the cluster.
 //
@@ -1328,7 +1286,7 @@ func (c *SyncedCluster) Run(
 	return processResults(results, stream, stdout)
 }
 
-// processResults returns the error from the RunResultDehs with the highest RemoteExitStatus
+// processResults returns the error from the RunResultDetails with the highest RemoteExitStatus
 func processResults(results []*RunResultDetails, stream bool, stdout io.Writer) error {
 
 	// Easier to read output when we indent each line of the output. If an error is
