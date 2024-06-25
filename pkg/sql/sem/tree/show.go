@@ -103,7 +103,7 @@ const (
 // TODO(msbutler): implement a walkableStmt for ShowBackup.
 type ShowBackup struct {
 	Path         Expr
-	InCollection StringOrPlaceholderOptList
+	InCollection URIs
 	From         bool
 	Details      ShowBackupDetails
 	Options      ShowBackupOptions
@@ -149,8 +149,8 @@ type ShowBackupOptions struct {
 	AsJson               bool
 	CheckFiles           bool
 	DebugIDs             bool
-	IncrementalStorage   StringOrPlaceholderOptList
-	DecryptionKMSURI     StringOrPlaceholderOptList
+	IncrementalStorage   URIs
+	DecryptionKMSURI     URIs
 	EncryptionPassphrase Expr
 	Privileges           bool
 	SkipSize             bool
@@ -282,9 +282,7 @@ func combineExpr(v1 Expr, v2 Expr, label string) (Expr, error) {
 	}
 	return v2, nil
 }
-func combineStringOrPlaceholderOptList(
-	v1 StringOrPlaceholderOptList, v2 StringOrPlaceholderOptList, label string,
-) (StringOrPlaceholderOptList, error) {
+func combineURIs(v1, v2 URIs, label string) (URIs, error) {
 	if v1 != nil {
 		if v2 != nil {
 			return v1, errors.Newf("% option specified multiple times", label)
@@ -315,12 +313,12 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 	if err != nil {
 		return err
 	}
-	o.IncrementalStorage, err = combineStringOrPlaceholderOptList(o.IncrementalStorage,
+	o.IncrementalStorage, err = combineURIs(o.IncrementalStorage,
 		other.IncrementalStorage, "incremental_location")
 	if err != nil {
 		return err
 	}
-	o.DecryptionKMSURI, err = combineStringOrPlaceholderOptList(o.DecryptionKMSURI,
+	o.DecryptionKMSURI, err = combineURIs(o.DecryptionKMSURI,
 		other.DecryptionKMSURI, "kms")
 	if err != nil {
 		return err

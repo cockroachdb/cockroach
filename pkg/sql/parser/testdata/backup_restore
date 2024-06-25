@@ -131,10 +131,11 @@ SHOW BACKUP FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz', s
 parse
 SHOW BACKUP FROM LATEST IN ('bar','bar1') WITH KMS = ('foo', 'bar'), incremental_location=('hi','hello')
 ----
-SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- normalized!
-SHOW BACKUP FROM ('latest') IN (('bar'), ('bar1')) WITH OPTIONS (incremental_location = (('hi'), ('hello')), kms = (('foo'), ('bar'))) -- fully parenthesized
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('*****', '*****')) -- normalized!
+SHOW BACKUP FROM ('latest') IN (('bar'), ('bar1')) WITH OPTIONS (incremental_location = (('hi'), ('hello')), kms = ('*****', '*****')) -- fully parenthesized
 SHOW BACKUP FROM '_' IN ('_', '_') WITH OPTIONS (incremental_location = ('_', '_'), kms = ('_', '_')) -- literals removed
-SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- identifiers removed
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('*****', '*****')) -- identifiers removed
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- passwords exposed
 
 
 parse

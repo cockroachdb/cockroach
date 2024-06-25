@@ -8036,28 +8036,28 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder_opt_list
+  SHOW BACKUPS IN opt_uris
  {
     $$.val = &tree.ShowBackup{
-      InCollection:    $4.stringOrPlaceholderOptList(),
+      InCollection:    $4.URIs(),
     }
   }
-| SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
+| SHOW BACKUP show_backup_details FROM string_or_placeholder IN opt_uris opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 			From:    true,
 			Details:    $3.showBackupDetails(),
 			Path:    $5.expr(),
-			InCollection: $7.stringOrPlaceholderOptList(),
+			InCollection: $7.URIs(),
 			Options: *$8.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
+| SHOW BACKUP string_or_placeholder IN opt_uris opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 			Details:  tree.BackupDefaultDetails,
 			Path:    $3.expr(),
-			InCollection: $5.stringOrPlaceholderOptList(),
+			InCollection: $5.URIs(),
 			Options: *$6.showBackupOptions(),
 		}
 	}
@@ -8188,13 +8188,13 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{DebugIDs: true}
  }
- | INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
+ | INCREMENTAL_LOCATION '=' opt_uris
  {
- $$.val = &tree.ShowBackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
+ $$.val = &tree.ShowBackupOptions{IncrementalStorage: $3.URIs()}
  }
- | KMS '=' string_or_placeholder_opt_list
+ | KMS '=' opt_kms_uris
  {
- $$.val = &tree.ShowBackupOptions{DecryptionKMSURI: $3.stringOrPlaceholderOptList()}
+ $$.val = &tree.ShowBackupOptions{DecryptionKMSURI: $3.URIs()}
  }
  | ENCRYPTION_PASSPHRASE '=' string_or_placeholder
  {

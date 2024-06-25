@@ -204,9 +204,9 @@ func showBackupTypeCheck(
 			backup.Options.CheckConnectionDuration,
 		},
 		exprutil.StringArrays{
-			tree.Exprs(backup.InCollection),
-			tree.Exprs(backup.Options.IncrementalStorage),
-			tree.Exprs(backup.Options.DecryptionKMSURI),
+			backup.InCollection.Exprs(),
+			backup.Options.IncrementalStorage.Exprs(),
+			backup.Options.DecryptionKMSURI.Exprs(),
 		},
 	); err != nil {
 		return false, nil, err
@@ -269,7 +269,7 @@ func showBackupPlanHook(
 
 	if showStmt.Path == nil && showStmt.InCollection != nil {
 		collection, err := exprEval.StringArray(
-			ctx, tree.Exprs(showStmt.InCollection),
+			ctx, showStmt.InCollection.Exprs(),
 		)
 		if err != nil {
 			return nil, nil, nil, false, err
@@ -284,7 +284,7 @@ func showBackupPlanHook(
 
 	var inCol []string
 	if showStmt.InCollection != nil {
-		inCol, err = exprEval.StringArray(ctx, tree.Exprs(showStmt.InCollection))
+		inCol, err = exprEval.StringArray(ctx, showStmt.InCollection.Exprs())
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
@@ -391,7 +391,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				Key:  encryptionKey,
 			}
 		} else if showStmt.Options.DecryptionKMSURI != nil {
-			kms, err := exprEval.StringArray(ctx, tree.Exprs(showStmt.Options.DecryptionKMSURI))
+			kms, err := exprEval.StringArray(ctx, showStmt.Options.DecryptionKMSURI.Exprs())
 			if err != nil {
 				return err
 			}
@@ -424,7 +424,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		}
 		var explicitIncPaths []string
 		if showStmt.Options.IncrementalStorage != nil {
-			explicitIncPaths, err = exprEval.StringArray(ctx, tree.Exprs(showStmt.Options.IncrementalStorage))
+			explicitIncPaths, err = exprEval.StringArray(ctx, showStmt.Options.IncrementalStorage.Exprs())
 			if err != nil {
 				return err
 			}
@@ -1319,9 +1319,7 @@ var backupShowerDoctor = backupShower{
 	},
 }
 
-func backupShowerFileSetup(
-	p sql.PlanHookState, inCol tree.StringOrPlaceholderOptList,
-) backupShower {
+func backupShowerFileSetup(p sql.PlanHookState, inCol tree.URIs) backupShower {
 	return backupShower{header: colinfo.ResultColumns{
 		{Name: "path", Typ: types.String},
 		{Name: "backup_type", Typ: types.String},
@@ -1504,7 +1502,7 @@ func showBackupsInCollectionTypeCheck(
 	ctx context.Context, backup *tree.ShowBackup, p sql.PlanHookState,
 ) (matched bool, header colinfo.ResultColumns, _ error) {
 	if err := exprutil.TypeCheck(ctx, "SHOW BACKUPS", p.SemaCtx(),
-		exprutil.StringArrays{tree.Exprs(backup.InCollection)},
+		exprutil.StringArrays{backup.InCollection.Exprs()},
 	); err != nil {
 		return false, nil, err
 	}

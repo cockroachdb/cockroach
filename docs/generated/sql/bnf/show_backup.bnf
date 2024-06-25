@@ -1,11 +1,11 @@
 show_backup_stmt ::=
-	'SHOW' 'BACKUPS' 'IN' collectionURI
-	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' subdirectory 'IN' collectionURI 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
-	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' subdirectory 'IN' collectionURI 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
-	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' subdirectory 'IN' collectionURI 
-	| 'SHOW' 'BACKUP' collectionURI_path 'IN' string_or_placeholder_opt_list 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
-	| 'SHOW' 'BACKUP' collectionURI_path 'IN' string_or_placeholder_opt_list 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
-	| 'SHOW' 'BACKUP' collectionURI_path 'IN' string_or_placeholder_opt_list 
+	'SHOW' 'BACKUPS' 'IN' opt_uris
+	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' string_or_placeholder 'IN' opt_uris 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
+	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' string_or_placeholder 'IN' opt_uris 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
+	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' string_or_placeholder 'IN' opt_uris 
+	| 'SHOW' 'BACKUP' collectionURI_path 'IN' opt_uris 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
+	| 'SHOW' 'BACKUP' collectionURI_path 'IN' opt_uris 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
+	| 'SHOW' 'BACKUP' collectionURI_path 'IN' opt_uris 
 	| 'SHOW' 'BACKUP' collectionURI_path 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
 	| 'SHOW' 'BACKUP' collectionURI_path 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
 	| 'SHOW' 'BACKUP' collectionURI_path 
