@@ -197,3 +197,17 @@ test           sc102962     root     ALL             true
 
 statement error pgcode 2BP01 pq: cannot drop role/user r102962: grants still exist on test.sc102962
 DROP ROLE r102962
+
+subtest has_*_privilege_works_for_public
+
+statement ok
+CREATE SCHEMA roachema;
+GRANT USAGE ON SCHEMA roachema TO public;
+
+query B colnames
+SELECT has_schema_privilege('public', 'roachema', 'USAGE');
+----
+has_schema_privilege
+true
+
+subtest end
