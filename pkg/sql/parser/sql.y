@@ -6350,18 +6350,18 @@ alter_changefeed_cmd:
 // KMS:
 //    "[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : add new kms keys to backup
 alter_backup_stmt:
-  ALTER BACKUP string_or_placeholder alter_backup_cmds
+  ALTER BACKUP uri alter_backup_cmds
   {
     $$.val = &tree.AlterBackup {
-      Backup:	$3.expr(),
+      Backup:	$3.URI(),
       Cmds:	$4.alterBackupCmds(),
     }
   }
-| ALTER BACKUP string_or_placeholder IN string_or_placeholder alter_backup_cmds
+| ALTER BACKUP string_or_placeholder IN uri alter_backup_cmds
 	{
     $$.val = &tree.AlterBackup {
       Subdir:	$3.expr(),
-      Backup:	$5.expr(),
+      Backup:	$5.URI(),
       Cmds:	$6.alterBackupCmds(),
     }
 	}
@@ -6386,11 +6386,11 @@ alter_backup_cmd:
 	}
 
 backup_kms:
-	NEW_KMS '=' string_or_placeholder_opt_list WITH OLD_KMS '=' string_or_placeholder_opt_list
+	NEW_KMS '=' opt_kms_uris WITH OLD_KMS '=' opt_kms_uris
 	{
     $$.val = tree.BackupKMS{
-      NewKMSURI:	$3.stringOrPlaceholderOptList(),
-      OldKMSURI:	$7.stringOrPlaceholderOptList(),
+      NewKMSURI:	$3.URIs(),
+      OldKMSURI:	$7.URIs(),
     }
 	}
 

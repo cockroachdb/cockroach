@@ -13,7 +13,7 @@ package tree
 // AlterBackup represents an ALTER BACKUP statement.
 type AlterBackup struct {
 	// Backup contains the locations for the backup we seek to add new keys to.
-	Backup Expr
+	Backup URI
 	Subdir Expr
 	Cmds   AlterBackupCmds
 }
@@ -72,6 +72,6 @@ func (node *AlterBackupKMS) Format(ctx *FmtCtx) {
 
 // BackupKMS represents possible options used when altering a backup KMS
 type BackupKMS struct {
-	NewKMSURI StringOrPlaceholderOptList
-	OldKMSURI StringOrPlaceholderOptList
+	NewKMSURI URIs
+	OldKMSURI URIs
 }
