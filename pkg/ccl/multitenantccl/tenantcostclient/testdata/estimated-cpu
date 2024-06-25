@@ -18,9 +18,10 @@ token-bucket
 write repeat=250 count=6 bytes=2048 networkCost=1
 ----
 
+# Expect ~800 tokens to be consumed.
 token-bucket
 ----
-4280.01 tokens filling @ 0.00 tokens/s
+4202.01 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -37,8 +38,8 @@ tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 0.72
-tenant.sql_usage.estimated_cpu_seconds: 0.72
+tenant.sql_usage.estimated_kv_cpu_seconds: 0.80
+tenant.sql_usage.estimated_cpu_seconds: 0.80
 
 # Advance time to next period and do same writes, but with a different write
 # batch rate. This time, the estimated CPU consumption should be less.
@@ -60,9 +61,10 @@ token-bucket-response
 write repeat=250 count=6 bytes=2048 networkCost=1
 ----
 
+# Expect ~700 tokens to be consumed (rather than ~800 above).
 token-bucket
 ----
-3687.87 tokens filling @ 0.00 tokens/s
+3545.72 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -79,17 +81,63 @@ tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 1.31
-tenant.sql_usage.estimated_cpu_seconds: 1.31
+tenant.sql_usage.estimated_kv_cpu_seconds: 1.45
+tenant.sql_usage.estimated_cpu_seconds: 1.45
 
-# Perform some reads.
+# Advance time to next period and do same writes, with the same write batch
+# rate, but with a different estimated CPU rate. Now the estimated CPU
+# consumption should be even less, since we've exceeded the rate at which fixed
+# CPU overhead costs are fully amortized.
+
+configure
+write_batch_rate: 1000
+estimated_cpu_rate: 12
+throttle: -1
+----
+
+advance
+10s
+----
+00:00:20.000
+
+wait-for-event
+token-bucket-response
+----
+
+write repeat=250 count=6 bytes=2048 networkCost=1
+----
+
+# Expect ~620 tokens to be consumed (rather than ~700 above).
+token-bucket
+----
+2921.50 tokens filling @ 0.00 tokens/s
+
+metrics
+----
+tenant.sql_usage.request_units: 0.00
+tenant.sql_usage.kv_request_units: 0.00
+tenant.sql_usage.read_batches: 0
+tenant.sql_usage.read_requests: 0
+tenant.sql_usage.read_bytes: 0
+tenant.sql_usage.write_batches: 750
+tenant.sql_usage.write_requests: 4500
+tenant.sql_usage.write_bytes: 1536000
+tenant.sql_usage.sql_pods_cpu_seconds: 0.00
+tenant.sql_usage.pgwire_egress_bytes: 0
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
+tenant.sql_usage.estimated_kv_cpu_seconds: 2.08
+tenant.sql_usage.estimated_cpu_seconds: 2.08
+
+# Now perform some read operations.
 
 read repeat=1000 count=20 bytes=10000
 ----
 
 token-bucket
 ----
-2410.05 tokens filling @ 0.00 tokens/s
+1574.47 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -98,16 +146,16 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 1000
 tenant.sql_usage.read_requests: 20000
 tenant.sql_usage.read_bytes: 10000000
-tenant.sql_usage.write_batches: 500
-tenant.sql_usage.write_requests: 3000
-tenant.sql_usage.write_bytes: 1024000
+tenant.sql_usage.write_batches: 750
+tenant.sql_usage.write_requests: 4500
+tenant.sql_usage.write_bytes: 1536000
 tenant.sql_usage.sql_pods_cpu_seconds: 0.00
 tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 2.59
-tenant.sql_usage.estimated_cpu_seconds: 2.59
+tenant.sql_usage.estimated_kv_cpu_seconds: 3.43
+tenant.sql_usage.estimated_cpu_seconds: 3.43
 
 # KV CPU seconds should not change, only total CPU seconds.
 cpu
@@ -117,11 +165,11 @@ cpu
 advance wait=true
 1s
 ----
-00:00:11.000
+00:00:21.000
 
 token-bucket
 ----
-1420.05 tokens filling @ 0.00 tokens/s
+584.47 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -130,16 +178,16 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 1000
 tenant.sql_usage.read_requests: 20000
 tenant.sql_usage.read_bytes: 10000000
-tenant.sql_usage.write_batches: 500
-tenant.sql_usage.write_requests: 3000
-tenant.sql_usage.write_bytes: 1024000
+tenant.sql_usage.write_batches: 750
+tenant.sql_usage.write_requests: 4500
+tenant.sql_usage.write_bytes: 1536000
 tenant.sql_usage.sql_pods_cpu_seconds: 0.99
 tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 2.59
-tenant.sql_usage.estimated_cpu_seconds: 3.58
+tenant.sql_usage.estimated_kv_cpu_seconds: 3.43
+tenant.sql_usage.estimated_cpu_seconds: 4.47
 
 # External I/O should not block or consume tokens.
 external-egress bytes=1024000
@@ -150,7 +198,7 @@ external-ingress bytes=1024000
 
 token-bucket
 ----
-1420.05 tokens filling @ 0.00 tokens/s
+584.47 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -159,16 +207,16 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 1000
 tenant.sql_usage.read_requests: 20000
 tenant.sql_usage.read_bytes: 10000000
-tenant.sql_usage.write_batches: 500
-tenant.sql_usage.write_requests: 3000
-tenant.sql_usage.write_bytes: 1024000
+tenant.sql_usage.write_batches: 750
+tenant.sql_usage.write_requests: 4500
+tenant.sql_usage.write_bytes: 1536000
 tenant.sql_usage.sql_pods_cpu_seconds: 0.99
 tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 1024000
 tenant.sql_usage.external_io_egress_bytes: 1024000
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 2.59
-tenant.sql_usage.estimated_cpu_seconds: 3.58
+tenant.sql_usage.estimated_kv_cpu_seconds: 3.43
+tenant.sql_usage.estimated_cpu_seconds: 4.47
 
 # PGWire egress should not block or consume tokens.
 pgwire-egress
@@ -178,11 +226,11 @@ pgwire-egress
 advance wait=true
 1s
 ----
-00:00:12.000
+00:00:22.000
 
 token-bucket
 ----
-1420.05 tokens filling @ 0.00 tokens/s
+584.47 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -191,23 +239,23 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 1000
 tenant.sql_usage.read_requests: 20000
 tenant.sql_usage.read_bytes: 10000000
-tenant.sql_usage.write_batches: 500
-tenant.sql_usage.write_requests: 3000
-tenant.sql_usage.write_bytes: 1024000
+tenant.sql_usage.write_batches: 750
+tenant.sql_usage.write_requests: 4500
+tenant.sql_usage.write_bytes: 1536000
 tenant.sql_usage.sql_pods_cpu_seconds: 0.99
 tenant.sql_usage.pgwire_egress_bytes: 12345
 tenant.sql_usage.external_io_ingress_bytes: 1024000
 tenant.sql_usage.external_io_egress_bytes: 1024000
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 2.59
-tenant.sql_usage.estimated_cpu_seconds: 3.58
+tenant.sql_usage.estimated_kv_cpu_seconds: 3.43
+tenant.sql_usage.estimated_cpu_seconds: 4.47
 
 # Ensure that token bucket request is made after 10 seconds (though it returns
 # no tokens).
 advance
 10s
 ----
-00:00:22.000
+00:00:32.000
 
 wait-for-event
 token-bucket-response
@@ -215,7 +263,7 @@ token-bucket-response
 
 token-bucket
 ----
-1420.05 tokens filling @ 0.00 tokens/s
+584.47 tokens filling @ 0.00 tokens/s
 
 # Allow the provider to grant tokens again.
 configure
@@ -227,8 +275,8 @@ throttle: 0
 advance wait=true
 10s
 ----
-00:00:32.000
+00:00:42.000
 
 token-bucket
 ----
-1420.05 tokens filling @ 0.00 tokens/s
+584.47 tokens filling @ 0.00 tokens/s

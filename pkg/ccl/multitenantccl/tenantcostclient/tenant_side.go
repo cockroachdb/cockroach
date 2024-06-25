@@ -151,20 +151,25 @@ func newTenantSideCostController(
 		NotifyThreshold: bufferTokens,
 	})
 
-	// If any of the cost settings change, reload both models.
-	tenantcostmodel.SetOnChange(&st.SV, func(ctx context.Context) {
+	storeModels := func() {
 		ruModel := tenantcostmodel.RequestUnitModelFromSettings(&st.SV)
 		c.ruModel.Store(&ruModel)
 
 		cpuModel := tenantcostmodel.EstimatedCPUModelFromSettings(&st.SV)
 		c.cpuModel.Store(&cpuModel)
+
+		// Set default background CPU ratio. This can change depending on the
+		// rate of estimated CPU consumption.
+		c.setBackgroundCPUMultiplier(0)
+	}
+
+	// If any of the cost settings change, reload both models.
+	tenantcostmodel.SetOnChange(&st.SV, func(ctx context.Context) {
+		storeModels()
 	})
 
-	ruModel := tenantcostmodel.RequestUnitModelFromSettings(&st.SV)
-	c.ruModel.CompareAndSwap(nil, &ruModel)
-
-	cpuModel := tenantcostmodel.EstimatedCPUModelFromSettings(&st.SV)
-	c.cpuModel.CompareAndSwap(nil, &cpuModel)
+	// Set initial models.
+	storeModels()
 
 	return c, nil
 }
@@ -245,6 +250,12 @@ type tenantSideCostController struct {
 	// but can be read by multiple goroutines so is an atomic. It is a
 	// Uint64-encoded float64 value.
 	writeQPS atomic.Uint64
+
+	// cpuMultiplier increases CPU estimates to account for background KV CPU
+	// usage (e.g. heartbeats, GC, compactions). It is only written in the main
+	// loop, but can be read by multiple goroutines so is an atomic. It is a
+	// Uint64-encoded float64 value.
+	cpuMultiplier atomic.Uint64
 
 	// lowTokensNotifyChan is used when the number of available tokens is running
 	// low and we need to send an early token bucket request.
@@ -355,6 +366,33 @@ func (c *tenantSideCostController) useRequestUnitModel() bool {
 	return EstimatedNodesSetting.Get(&c.settings.SV) == 0
 }
 
+// setBackgroundCPUMultiplier calculates the background CPU multiplier that is
+// used to increase estimated CPU to account for background CPU usage such as
+// GC, compactions, etc., that is not part of request costing.
+func (c *tenantSideCostController) setBackgroundCPUMultiplier(estimatedCPURate float64) {
+	multiplier := float64(1)
+	cpuModel := c.cpuModel.Load()
+	if cpuModel.BackgroundCPU.Amortization > 0 {
+		ratio := float64(cpuModel.BackgroundCPU.Amount) / cpuModel.BackgroundCPU.Amortization
+		if estimatedCPURate > cpuModel.BackgroundCPU.Amortization {
+			// There are more than enough vCPUs to fully amortize the fixed overhead,
+			// so reduce the ratio accordingly.
+			ratio *= cpuModel.BackgroundCPU.Amortization / estimatedCPURate
+		}
+		multiplier += ratio
+	}
+	c.cpuMultiplier.Store(math.Float64bits(multiplier))
+}
+
+// addBackgroundCPU increases the given CPU amount by a multiplier, in order to
+// account for background CPU usage.
+func (c *tenantSideCostController) addBackgroundCPU(
+	amount tenantcostmodel.EstimatedCPU,
+) tenantcostmodel.EstimatedCPU {
+	multiplier := math.Float64frombits(c.cpuMultiplier.Load())
+	return amount * tenantcostmodel.EstimatedCPU(multiplier)
+}
+
 func (c *tenantSideCostController) initRunState(ctx context.Context) {
 	c.run.targetPeriod = TargetPeriodSetting.Get(&c.settings.SV)
 
@@ -424,7 +462,8 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	} else {
 		// Compute estimated CPU and convert CPU into tokens in order to adjust
 		// the token bucket.
-		c.metrics.TotalEstimatedCPUSeconds.Inc(deltaCPU)
+		estimatedCPU := c.addBackgroundCPU(tenantcostmodel.EstimatedCPU(deltaCPU))
+		c.metrics.TotalEstimatedCPUSeconds.Inc(float64(estimatedCPU))
 		newTokens = deltaCPU * tokensPerCPUSecond
 		totalTokens = c.metrics.TotalEstimatedCPUSeconds.Count() * tokensPerCPUSecond
 	}
@@ -525,6 +564,7 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		NextLiveInstanceID:          uint32(c.nextLiveInstanceIDFn(ctx)),
 		SeqNum:                      c.run.requestSeqNum,
 		ConsumptionSinceLastRequest: deltaConsumption,
+		ConsumptionPeriod:           now.Sub(c.run.lastRequestTime),
 		RequestedTokens:             requested,
 		TargetRequestPeriod:         c.run.targetPeriod,
 	}
@@ -647,8 +687,14 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 		cfg.MaxTokens = bufferTokens + granted
 	}
 
-	// Store global write QPS for the tenant.
-	c.writeQPS.Store(math.Float64bits(resp.ConsumptionRates.WriteBatchRate))
+	if !c.useRequestUnitModel() {
+		// Store global write QPS for the tenant.
+		c.writeQPS.Store(math.Float64bits(resp.ConsumptionRates.WriteBatchRate))
+
+		// Calculate background CPU ratio based on the rate of CPU consumption
+		// across all clients, as calculated by the server.
+		c.setBackgroundCPUMultiplier(resp.ConsumptionRates.EstimatedCPURate)
+	}
 
 	c.limiter.Reconfigure(now, cfg)
 	c.run.lastRate = cfg.NewRate
@@ -799,6 +845,7 @@ func (c *tenantSideCostController) OnResponseWait(
 		writeQPS := math.Float64frombits(c.writeQPS.Load())
 		estimatedCPU := cpuModel.RequestCost(req, writeQPS/nodeCount)
 		estimatedCPU += cpuModel.ResponseCost(resp)
+		estimatedCPU = c.addBackgroundCPU(estimatedCPU)
 		tokens = float64(estimatedCPU) * tokensPerCPUSecond
 
 		c.metrics.TotalEstimatedKVCPUSeconds.Inc(float64(estimatedCPU))

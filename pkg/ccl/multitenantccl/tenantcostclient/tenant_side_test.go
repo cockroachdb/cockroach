@@ -135,7 +135,7 @@ func (ts *testState) start(t *testing.T) {
 
 	ts.stopper = stop.NewStopper()
 	var err error
-	ts.provider = newTestProvider()
+	ts.provider = newTestProvider(ts.timeSrc)
 	ts.controller, err = tenantcostclient.TestingTenantSideCostController(
 		ts.settings,
 		roachpb.MustMakeTenantID(5),
@@ -566,7 +566,8 @@ func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 		"SQL Pods CPU seconds:  %.2f\n"+
 		"PGWire egress:  %d bytes\n"+
 		"ExternalIO egress: %d bytes\n"+
-		"ExternalIO ingress: %d bytes\n",
+		"ExternalIO ingress: %d bytes\n"+
+		"Estimated CPU seconds: %.2f\n",
 		c.RU,
 		c.KVRU,
 		c.CrossRegionNetworkRU,
@@ -580,6 +581,7 @@ func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 		c.PGWireEgressBytes,
 		c.ExternalIOEgressBytes,
 		c.ExternalIOIngressBytes,
+		c.EstimatedCPUSeconds,
 	)
 }
 
@@ -688,9 +690,11 @@ type testProvider struct {
 		consumption kvpb.TenantConsumption
 
 		lastSeqNum int64
+		lastTime   time.Time
 
 		cfg testProviderConfig
 	}
+	timeSource    timeutil.TimeSource
 	recvOnRequest chan struct{}
 	sendOnRequest chan struct{}
 }
@@ -710,13 +714,15 @@ type testProviderConfig struct {
 
 	FallbackRate float64 `yaml:"fallback_rate"`
 
-	WriteBatchRate float64 `yaml:"write_batch_rate"`
+	WriteBatchRate   float64 `yaml:"write_batch_rate"`
+	EstimatedCPURate float64 `yaml:"estimated_cpu_rate"`
 }
 
 var _ kvtenant.TokenBucketProvider = (*testProvider)(nil)
 
-func newTestProvider() *testProvider {
+func newTestProvider(timeSource timeutil.TimeSource) *testProvider {
 	return &testProvider{
+		timeSource:    timeSource,
 		recvOnRequest: make(chan struct{}),
 		sendOnRequest: make(chan struct{}),
 	}
@@ -798,6 +804,13 @@ func (tp *testProvider) TokenBucket(
 		}
 	}
 
+	now := tp.timeSource.Now()
+	elapsed := now.Sub(tp.mu.lastTime)
+	if elapsed != 0 && !tp.mu.lastTime.IsZero() && in.ConsumptionPeriod == 0 {
+		panic("zero-length consumption period")
+	}
+	tp.mu.lastTime = now
+
 	tp.mu.consumption.Add(&in.ConsumptionSinceLastRequest)
 	res := &kvpb.TokenBucketResponse{}
 
@@ -814,6 +827,7 @@ func (tp *testProvider) TokenBucket(
 	}
 	res.FallbackRate = tp.mu.cfg.FallbackRate
 	res.ConsumptionRates.WriteBatchRate = tp.mu.cfg.WriteBatchRate
+	res.ConsumptionRates.EstimatedCPURate = tp.mu.cfg.EstimatedCPURate
 	return res, nil
 }
 
@@ -829,7 +843,7 @@ func TestWaitingTokens(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	tenantcostclient.CPUUsageAllowance.Override(ctx, &st.SV, time.Second)
 
-	testProvider := newTestProvider()
+	testProvider := newTestProvider(timeutil.DefaultTimeSource{})
 	testProvider.configure(testProviderConfig{ProviderError: true})
 
 	tenantID := serverutils.TestTenantID()
@@ -938,7 +952,7 @@ func TestConsumption(t *testing.T) {
 	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, targetPeriod)
 	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, 0)
 
-	testProvider := newTestProvider()
+	testProvider := newTestProvider(timeutil.DefaultTimeSource{})
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
@@ -955,41 +969,64 @@ func TestConsumption(t *testing.T) {
 	// Create a secondary index to ensure that writes to both indexes are
 	// recorded in metrics.
 	r.Exec(t, "CREATE TABLE t (v STRING, w STRING, INDEX (w, v))")
-	// Do some writes and reads and check the reported consumption. Repeat the
-	// test a few times, since background requests can trick the test into
-	// passing.
-	for repeat := 0; repeat < 5; repeat++ {
-		beforeWrite := testProvider.waitForConsumption(t)
-		r.Exec(t, "INSERT INTO t (v) SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
-		const expectedBytes = 10 * 10 * 1024
 
-		// Try a few times because background activity can trigger bucket
-		// requests before the test query does.
-		testutils.SucceedsSoon(t, func() error {
-			afterWrite := testProvider.waitForConsumption(t)
-			delta := afterWrite
-			delta.Sub(&beforeWrite)
-			if delta.WriteBatches < 1 || delta.WriteRequests < 2 || delta.WriteBytes < expectedBytes*2 {
-				return errors.Newf("usage after write: %s", delta.String())
+	// Do some writes and reads and check reported consumption for each model.
+	for _, useRUModel := range []bool{true, false} {
+		t.Run(fmt.Sprintf("ru_model=%v", useRUModel), func(t *testing.T) {
+			// Repeat the test a few times, since background requests can trick the
+			// test into passing.
+			for repeat := 0; repeat < 5; repeat++ {
+				if !useRUModel {
+					// Switch to estimated CPU model.
+					tenantcostclient.EstimatedNodesSetting.Override(context.Background(), &st.SV, 3)
+				}
+
+				beforeWrite := testProvider.waitForConsumption(t)
+				r.Exec(t, "INSERT INTO t (v) SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
+				const expectedBytes = 10 * 10 * 1024
+
+				// Try a few times because background activity can trigger bucket
+				// requests before the test query does.
+				testutils.SucceedsSoon(t, func() error {
+					afterWrite := testProvider.waitForConsumption(t)
+					delta := afterWrite
+					delta.Sub(&beforeWrite)
+					if useRUModel {
+						if delta.RU < 1 || delta.KVRU < 1 ||
+							delta.WriteBatches < 1 || delta.WriteRequests < 2 || delta.WriteBytes < expectedBytes*2 {
+							return errors.Newf("usage after write: %s", delta.String())
+						}
+					} else {
+						if delta.EstimatedCPUSeconds == 0 {
+							return errors.Newf("usage after write: %s", delta.String())
+						}
+					}
+					return nil
+				})
+
+				beforeRead := testProvider.waitForConsumption(t)
+				r.QueryStr(t, "SELECT min(v) FROM t")
+
+				// Try a few times because background activity can trigger bucket
+				// requests before the test query does.
+				testutils.SucceedsSoon(t, func() error {
+					afterRead := testProvider.waitForConsumption(t)
+					delta := afterRead
+					delta.Sub(&beforeRead)
+					if useRUModel {
+						if delta.ReadBatches < 1 || delta.ReadRequests < 1 || delta.ReadBytes < expectedBytes {
+							return errors.Newf("usage after read: %s", delta.String())
+						}
+					} else {
+						if delta.EstimatedCPUSeconds == 0 {
+							return errors.Newf("usage after read: %s", delta.String())
+						}
+					}
+					return nil
+				})
+				r.Exec(t, "DELETE FROM t WHERE true")
 			}
-			return nil
 		})
-
-		beforeRead := testProvider.waitForConsumption(t)
-		r.QueryStr(t, "SELECT min(v) FROM t")
-
-		// Try a few times because background activity can trigger bucket
-		// requests before the test query does.
-		testutils.SucceedsSoon(t, func() error {
-			afterRead := testProvider.waitForConsumption(t)
-			delta := afterRead
-			delta.Sub(&beforeRead)
-			if delta.ReadBatches < 1 || delta.ReadRequests < 1 || delta.ReadBytes < expectedBytes {
-				return errors.Newf("usage after read: %s", delta.String())
-			}
-			return nil
-		})
-		r.Exec(t, "DELETE FROM t WHERE true")
 	}
 	// Make sure some CPU usage is reported.
 	testutils.SucceedsSoon(t, func() error {
@@ -1090,7 +1127,7 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	})
 	defer hostServer.Stopper().Stop(ctx)
 
-	testProvider := newTestProvider()
+	testProvider := newTestProvider(timeutil.DefaultTimeSource{})
 
 	env := jobstest.NewJobSchedulerTestEnv(jobstest.UseSystemTables, timeutil.Now())
 	var zeroDuration time.Duration
@@ -1187,7 +1224,7 @@ func TestConsumptionChangefeeds(t *testing.T) {
 	tenantcostclient.CPUUsageAllowance.Override(ctx, &st.SV, 0)
 	kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
 
-	testProvider := newTestProvider()
+	testProvider := newTestProvider(timeutil.DefaultTimeSource{})
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
@@ -1256,7 +1293,7 @@ func TestConsumptionExternalStorage(t *testing.T) {
 	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, time.Millisecond*20)
 	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, 0)
 
-	testProvider := newTestProvider()
+	testProvider := newTestProvider(timeutil.DefaultTimeSource{})
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
 		TenantID:      serverutils.TestTenantID(),
 		Settings:      st,
