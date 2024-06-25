@@ -562,18 +562,18 @@ func processInto(p sql.PlanHookState, spec *alterBackupScheduleSpec, s scheduleD
 		return nil
 	}
 	into := spec.into
-	s.fullStmt.To = make([]tree.Expr, len(into))
+	s.fullStmt.To = make(tree.URIs, len(into))
 	for i, dest := range spec.into {
-		s.fullStmt.To[i] = tree.NewStrVal(dest)
+		s.fullStmt.To[i] = tree.NewURI(tree.NewStrVal(dest))
 	}
 
 	if s.incJob == nil {
 		return nil
 	}
 
-	s.incStmt.To = make([]tree.Expr, len(into))
+	s.incStmt.To = make(tree.URIs, len(into))
 	for i, dest := range into {
-		s.incStmt.To[i] = tree.NewStrVal(dest)
+		s.incStmt.To[i] = tree.NewURI(tree.NewStrVal(dest))
 	}
 
 	// With a new destination, no full backup has completed yet.
@@ -681,7 +681,7 @@ func makeAlterBackupScheduleSpec(
 			if err := observe("SET INTO"); err != nil {
 				return nil, err
 			}
-			spec.into, err = exprEval.StringArray(ctx, tree.Exprs(typedCmd.Into))
+			spec.into, err = exprEval.StringArray(ctx, typedCmd.Into.Exprs())
 		case *tree.AlterBackupScheduleSetWith:
 			if typedCmd.With.Detached != nil {
 				err = errors.Newf("DETACHED is required for scheduled backups and cannot be altered")
@@ -743,7 +743,7 @@ func alterBackupScheduleTypeCheck(
 		case *tree.AlterBackupScheduleSetLabel:
 			strings = append(strings, typedCmd.Label)
 		case *tree.AlterBackupScheduleSetInto:
-			stringArrays = append(stringArrays, tree.Exprs(typedCmd.Into))
+			stringArrays = append(stringArrays, typedCmd.Into.Exprs())
 		case *tree.AlterBackupScheduleSetWith:
 
 		case *tree.AlterBackupScheduleSetScheduleOption:

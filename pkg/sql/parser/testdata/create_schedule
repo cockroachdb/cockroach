@@ -73,3 +73,23 @@ CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO 'webhook-https://0/change
 CREATE SCHEDULE FOR CHANGEFEED TABLE (d.public.foo) INTO ('webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown') WITH OPTIONS (initial_scan = ('only') ) RECURRING ('@hourly') -- fully parenthesized
 CREATE SCHEDULE FOR CHANGEFEED TABLE d.public.foo INTO '_' WITH OPTIONS (initial_scan = '_' ) RECURRING '_' -- literals removed
 CREATE SCHEDULE FOR CHANGEFEED TABLE _._._ INTO 'webhook-https://0/changefeed?AWS_SECRET_ACCESS_KEY=nevershown' WITH OPTIONS (_ = 'only' ) RECURRING '@hourly' -- identifiers removed
+
+# Test redaction of secrets in URLs.
+
+parse
+CREATE SCHEDULE FOR BACKUP INTO 'https://user:pass@localhost/foo' RECURRING 'very fast'
+----
+CREATE SCHEDULE FOR BACKUP INTO 'https://user:redacted@localhost/foo' RECURRING 'very fast' -- normalized!
+CREATE SCHEDULE FOR BACKUP INTO ('https://user:redacted@localhost/foo') RECURRING ('very fast') -- fully parenthesized
+CREATE SCHEDULE FOR BACKUP INTO '_' RECURRING '_' -- literals removed
+CREATE SCHEDULE FOR BACKUP INTO 'https://user:redacted@localhost/foo' RECURRING 'very fast' -- identifiers removed
+CREATE SCHEDULE FOR BACKUP INTO 'https://user:pass@localhost/foo' RECURRING 'very fast' -- passwords exposed
+
+parse
+CREATE SCHEDULE FOR BACKUP INTO 'foo' WITH KMS = 'https://user:pass@foo.com/bar' RECURRING 'occasionally'
+----
+CREATE SCHEDULE FOR BACKUP INTO 'foo' WITH kms = 'https://user:redacted@foo.com/redacted' RECURRING 'occasionally' -- normalized!
+CREATE SCHEDULE FOR BACKUP INTO ('foo') WITH kms = ('https://user:redacted@foo.com/redacted') RECURRING ('occasionally') -- fully parenthesized
+CREATE SCHEDULE FOR BACKUP INTO '_' WITH kms = '_' RECURRING '_' -- literals removed
+CREATE SCHEDULE FOR BACKUP INTO 'foo' WITH kms = 'https://user:redacted@foo.com/redacted' RECURRING 'occasionally' -- identifiers removed
+CREATE SCHEDULE FOR BACKUP INTO 'foo' WITH kms = 'https://user:pass@foo.com/bar' RECURRING 'occasionally' -- passwords exposed

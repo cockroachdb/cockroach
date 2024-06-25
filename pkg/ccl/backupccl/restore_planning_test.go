@@ -65,8 +65,8 @@ func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 
 		IntoDB:               tree.NewDString("test expr"),
 		NewDBName:            tree.NewDString("test expr"),
-		IncrementalStorage:   []tree.Expr{tree.NewDString("http://example.com")},
-		DecryptionKMSURI:     []tree.Expr{tree.NewDString("http://example.com")},
+		IncrementalStorage:   tree.URIs{tree.NewURI(tree.NewDString("http://example.com"))},
+		DecryptionKMSURI:     tree.URIs{tree.NewKMSURI(tree.NewDString("http://example.com"))},
 		EncryptionPassphrase: tree.NewDString("test expr"),
 	}
 

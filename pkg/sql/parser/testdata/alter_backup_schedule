@@ -61,3 +61,14 @@ ALTER BACKUP SCHEDULE 123 EXECUTE FULL IMMEDIATELY
 ALTER BACKUP SCHEDULE 123 EXECUTE FULL IMMEDIATELY -- fully parenthesized
 ALTER BACKUP SCHEDULE 123 EXECUTE FULL IMMEDIATELY -- literals removed
 ALTER BACKUP SCHEDULE 123 EXECUTE FULL IMMEDIATELY -- identifiers removed
+
+# Test redaction of secrets in URLs.
+
+parse
+ALTER BACKUP SCHEDULE 123 SET INTO 'https://user:secret@foo.com/bar'
+----
+ALTER BACKUP SCHEDULE 123 SET INTO 'https://user:redacted@foo.com/bar' -- normalized!
+ALTER BACKUP SCHEDULE 123 SET INTO ('https://user:redacted@foo.com/bar') -- fully parenthesized
+ALTER BACKUP SCHEDULE 123 SET INTO '_' -- literals removed
+ALTER BACKUP SCHEDULE 123 SET INTO 'https://user:redacted@foo.com/bar' -- identifiers removed
+ALTER BACKUP SCHEDULE 123 SET INTO 'https://user:secret@foo.com/bar' -- passwords exposed

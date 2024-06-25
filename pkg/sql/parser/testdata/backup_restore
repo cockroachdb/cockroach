@@ -367,10 +367,11 @@ BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, encryption_pass
 parse
 BACKUP foo TO 'bar' WITH KMS = ('foo', 'bar'), revision_history
 ----
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, kms = ('foo', 'bar')) -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH OPTIONS (revision_history = (true), kms = (('foo'), ('bar'))) -- fully parenthesized
+BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, kms = ('*****', '*****')) -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH OPTIONS (revision_history = (true), kms = ('*****', '*****')) -- fully parenthesized
 BACKUP TABLE foo TO '_' WITH OPTIONS (revision_history = _, kms = ('_', '_')) -- literals removed
-BACKUP TABLE _ TO 'bar' WITH OPTIONS (revision_history = true, kms = ('foo', 'bar')) -- identifiers removed
+BACKUP TABLE _ TO 'bar' WITH OPTIONS (revision_history = true, kms = ('*****', '*****')) -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, kms = ('foo', 'bar')) -- passwords exposed
 
 parse
 BACKUP foo TO 'bar' WITH OPTIONS (detached, ENCRYPTION_PASSPHRASE = 'secret', revision_history)
@@ -384,10 +385,11 @@ BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, encryption_pass
 parse
 BACKUP foo TO 'bar' WITH OPTIONS (detached, KMS = ('foo', 'bar'), revision_history)
 ----
-BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('foo', 'bar')) -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH OPTIONS (revision_history = (true), detached, kms = (('foo'), ('bar'))) -- fully parenthesized
+BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('*****', '*****')) -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH OPTIONS (revision_history = (true), detached, kms = ('*****', '*****')) -- fully parenthesized
 BACKUP TABLE foo TO '_' WITH OPTIONS (revision_history = _, detached, kms = ('_', '_')) -- literals removed
-BACKUP TABLE _ TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('foo', 'bar')) -- identifiers removed
+BACKUP TABLE _ TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('*****', '*****')) -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH OPTIONS (revision_history = true, detached, kms = ('foo', 'bar')) -- passwords exposed
 
 
 # Regression test for #95235.
@@ -1021,3 +1023,104 @@ SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h')
 SHOW BACKUP CONNECTION ('bar') WITH OPTIONS (TIME = ('1h')) -- fully parenthesized
 SHOW BACKUP CONNECTION '_' WITH OPTIONS (TIME = '_') -- literals removed
 SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h') -- identifiers removed
+
+# Test redaction of secrets in URLs.
+
+parse
+BACKUP TABLE foo INTO 'subdir' IN 'https://baz:passw0rd@localhost:8080/bar'
+----
+BACKUP TABLE foo INTO 'subdir' IN 'https://baz:redacted@localhost:8080/bar' -- normalized!
+BACKUP TABLE (foo) INTO ('subdir') IN ('https://baz:redacted@localhost:8080/bar') -- fully parenthesized
+BACKUP TABLE foo INTO '_' IN '_' -- literals removed
+BACKUP TABLE _ INTO 'subdir' IN 'https://baz:redacted@localhost:8080/bar' -- identifiers removed
+BACKUP TABLE foo INTO 'subdir' IN 'https://baz:passw0rd@localhost:8080/bar' -- passwords exposed
+
+parse
+BACKUP TABLE foo INTO ('https://baz:passw0rd@localhost:8080/bar', 'https://u:pass@localhost:9000/bar')
+----
+BACKUP TABLE foo INTO ('https://baz:redacted@localhost:8080/bar', 'https://u:redacted@localhost:9000/bar') -- normalized!
+BACKUP TABLE (foo) INTO (('https://baz:redacted@localhost:8080/bar'), ('https://u:redacted@localhost:9000/bar')) -- fully parenthesized
+BACKUP TABLE foo INTO ('_', '_') -- literals removed
+BACKUP TABLE _ INTO ('https://baz:redacted@localhost:8080/bar', 'https://u:redacted@localhost:9000/bar') -- identifiers removed
+BACKUP TABLE foo INTO ('https://baz:passw0rd@localhost:8080/bar', 'https://u:pass@localhost:9000/bar') -- passwords exposed
+
+parse
+BACKUP INTO LATEST IN 'https://baz:passw0rd@localhost:8080/bar'
+----
+BACKUP INTO LATEST IN 'https://baz:redacted@localhost:8080/bar' -- normalized!
+BACKUP INTO LATEST IN ('https://baz:redacted@localhost:8080/bar') -- fully parenthesized
+BACKUP INTO LATEST IN '_' -- literals removed
+BACKUP INTO LATEST IN 'https://baz:redacted@localhost:8080/bar' -- identifiers removed
+BACKUP INTO LATEST IN 'https://baz:passw0rd@localhost:8080/bar' -- passwords exposed
+
+parse
+BACKUP TO 'https://baz:passw0rd@localhost:8080/bar' INCREMENTAL FROM 'https://u:123@localhost/foo', 'https://u:abc@localhost/baz'
+----
+BACKUP TO 'https://baz:redacted@localhost:8080/bar' INCREMENTAL FROM 'https://u:redacted@localhost/foo', 'https://u:redacted@localhost/baz' -- normalized!
+BACKUP TO ('https://baz:redacted@localhost:8080/bar') INCREMENTAL FROM ('https://u:redacted@localhost/foo'), ('https://u:redacted@localhost/baz') -- fully parenthesized
+BACKUP TO '_' INCREMENTAL FROM '_', '_' -- literals removed
+BACKUP TO 'https://baz:redacted@localhost:8080/bar' INCREMENTAL FROM 'https://u:redacted@localhost/foo', 'https://u:redacted@localhost/baz' -- identifiers removed
+BACKUP TO 'https://baz:passw0rd@localhost:8080/bar' INCREMENTAL FROM 'https://u:123@localhost/foo', 'https://u:abc@localhost/baz' -- passwords exposed
+
+parse
+BACKUP TO 'https://baz:passw0rd@localhost:8080/bar' WITH ENCRYPTION_PASSPHRASE = 'abc', KMS = 'https://u:pass@foo.com/bar/baz', INCREMENTAL_LOCATION = 'https://u:pswd@foo.com'
+----
+BACKUP TO 'https://baz:redacted@localhost:8080/bar' WITH OPTIONS (encryption_passphrase = '*****', kms = 'https://u:redacted@foo.com/redacted', incremental_location = 'https://u:redacted@foo.com') -- normalized!
+BACKUP TO ('https://baz:redacted@localhost:8080/bar') WITH OPTIONS (encryption_passphrase = '*****', kms = ('https://u:redacted@foo.com/redacted'), incremental_location = ('https://u:redacted@foo.com')) -- fully parenthesized
+BACKUP TO '_' WITH OPTIONS (encryption_passphrase = '*****', kms = '_', incremental_location = '_') -- literals removed
+BACKUP TO 'https://baz:redacted@localhost:8080/bar' WITH OPTIONS (encryption_passphrase = '*****', kms = 'https://u:redacted@foo.com/redacted', incremental_location = 'https://u:redacted@foo.com') -- identifiers removed
+BACKUP TO 'https://baz:passw0rd@localhost:8080/bar' WITH OPTIONS (encryption_passphrase = 'abc', kms = 'https://u:pass@foo.com/bar/baz', incremental_location = 'https://u:pswd@foo.com') -- passwords exposed
+
+parse
+RESTORE FROM 'https://u:p@x.com', ('https://my:pass@foo.com', 'https://baz:bar@localhost:3030/rawr')
+----
+RESTORE FROM 'https://u:redacted@x.com', ('https://my:redacted@foo.com', 'https://baz:redacted@localhost:3030/rawr') -- normalized!
+RESTORE FROM ('https://u:redacted@x.com'), (('https://my:redacted@foo.com'), ('https://baz:redacted@localhost:3030/rawr')) -- fully parenthesized
+RESTORE FROM '_', ('_', '_') -- literals removed
+RESTORE FROM 'https://u:redacted@x.com', ('https://my:redacted@foo.com', 'https://baz:redacted@localhost:3030/rawr') -- identifiers removed
+RESTORE FROM 'https://u:p@x.com', ('https://my:pass@foo.com', 'https://baz:bar@localhost:3030/rawr') -- passwords exposed
+
+parse
+RESTORE TABLE foo FROM 'https://my:password@verysecure.com/stuff'
+----
+RESTORE TABLE foo FROM 'https://my:redacted@verysecure.com/stuff' -- normalized!
+RESTORE TABLE (foo) FROM ('https://my:redacted@verysecure.com/stuff') -- fully parenthesized
+RESTORE TABLE foo FROM '_' -- literals removed
+RESTORE TABLE _ FROM 'https://my:redacted@verysecure.com/stuff' -- identifiers removed
+RESTORE TABLE foo FROM 'https://my:password@verysecure.com/stuff' -- passwords exposed
+
+parse
+RESTORE DATABASE d FROM 'xyz' IN ('https://abc:def@mno.xyz', 'https://foo:bar@baz.com')
+----
+RESTORE DATABASE d FROM 'xyz' IN ('https://abc:redacted@mno.xyz', 'https://foo:redacted@baz.com') -- normalized!
+RESTORE DATABASE d FROM ('xyz') IN (('https://abc:redacted@mno.xyz'), ('https://foo:redacted@baz.com')) -- fully parenthesized
+RESTORE DATABASE d FROM '_' IN ('_', '_') -- literals removed
+RESTORE DATABASE _ FROM 'xyz' IN ('https://abc:redacted@mno.xyz', 'https://foo:redacted@baz.com') -- identifiers removed
+RESTORE DATABASE d FROM 'xyz' IN ('https://abc:def@mno.xyz', 'https://foo:bar@baz.com') -- passwords exposed
+
+parse
+RESTORE SYSTEM USERS FROM 'https://a:b@c.d/e'
+----
+RESTORE FROM 'https://a:redacted@c.d/e' -- normalized!
+RESTORE FROM ('https://a:redacted@c.d/e') -- fully parenthesized
+RESTORE FROM '_' -- literals removed
+RESTORE FROM 'https://a:redacted@c.d/e' -- identifiers removed
+RESTORE FROM 'https://a:b@c.d/e' -- passwords exposed
+
+parse
+RESTORE SYSTEM USERS FROM 'x' IN 'https://abc:123@example.com/stuff'
+----
+RESTORE FROM 'x' IN 'https://abc:redacted@example.com/stuff' -- normalized!
+RESTORE FROM ('x') IN ('https://abc:redacted@example.com/stuff') -- fully parenthesized
+RESTORE FROM '_' IN '_' -- literals removed
+RESTORE FROM 'x' IN 'https://abc:redacted@example.com/stuff' -- identifiers removed
+RESTORE FROM 'x' IN 'https://abc:123@example.com/stuff' -- passwords exposed
+
+parse
+RESTORE FROM 'https://burke:gilman@seattle.bikes' WITH KMS = 'https://foo:bar@baz.com/zing', INCREMENTAL_LOCATION = 'https://dot:com@dot.com/com'
+----
+RESTORE FROM 'https://burke:redacted@seattle.bikes' WITH OPTIONS (kms = 'https://foo:redacted@baz.com/redacted', incremental_location = 'https://dot:redacted@dot.com/com') -- normalized!
+RESTORE FROM ('https://burke:redacted@seattle.bikes') WITH OPTIONS (kms = ('https://foo:redacted@baz.com/redacted'), incremental_location = ('https://dot:redacted@dot.com/com')) -- fully parenthesized
+RESTORE FROM '_' WITH OPTIONS (kms = '_', incremental_location = '_') -- literals removed
+RESTORE FROM 'https://burke:redacted@seattle.bikes' WITH OPTIONS (kms = 'https://foo:redacted@baz.com/redacted', incremental_location = 'https://dot:redacted@dot.com/com') -- identifiers removed
+RESTORE FROM 'https://burke:gilman@seattle.bikes' WITH OPTIONS (kms = 'https://foo:bar@baz.com/zing', incremental_location = 'https://dot:com@dot.com/com') -- passwords exposed

@@ -82,7 +82,7 @@ func (node *AlterBackupScheduleSetLabel) Format(ctx *FmtCtx) {
 
 // AlterBackupScheduleSetInto represents a SET <destinations> command
 type AlterBackupScheduleSetInto struct {
-	Into StringOrPlaceholderOptList
+	Into URIs
 }
 
 // Format implements the NodeFormatter interface.

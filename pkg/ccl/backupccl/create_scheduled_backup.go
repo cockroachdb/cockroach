@@ -257,13 +257,13 @@ func doCreateBackupSchedules(
 	var kmsURIs []string
 	for _, kmsURI := range eval.kmsURIs {
 		backupNode.Options.EncryptionKMSURI = append(backupNode.Options.EncryptionKMSURI,
-			tree.NewStrVal(kmsURI))
+			tree.NewKMSURI(tree.NewStrVal(kmsURI)))
 	}
 
 	// Evaluate required backup destinations.
 	destinations := eval.destinations
 	for _, dest := range destinations {
-		backupNode.To = append(backupNode.To, tree.NewStrVal(dest))
+		backupNode.To = append(backupNode.To, tree.NewURI(tree.NewStrVal(dest)))
 	}
 
 	backupNode.Targets = eval.Targets
@@ -348,7 +348,8 @@ func doCreateBackupSchedules(
 		if eval.incrementalStorage != nil {
 			incDests = eval.incrementalStorage
 			for _, incDest := range incDests {
-				backupNode.Options.IncrementalStorage = append(backupNode.Options.IncrementalStorage, tree.NewStrVal(incDest))
+				backupNode.Options.IncrementalStorage = append(backupNode.Options.IncrementalStorage,
+					tree.NewURI(tree.NewStrVal(incDest)))
 			}
 		}
 		inc, incScheduledBackupArgs, err = makeBackupSchedule(
@@ -669,7 +670,7 @@ func makeScheduledBackupSpec(
 		return nil, err
 	}
 
-	spec.destinations, err = exprEval.StringArray(ctx, tree.Exprs(schedule.To))
+	spec.destinations, err = exprEval.StringArray(ctx, schedule.To.Exprs())
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to evaluate backup destination paths")
 	}
@@ -685,7 +686,7 @@ func makeScheduledBackupSpec(
 
 	if schedule.BackupOptions.EncryptionKMSURI != nil {
 		spec.kmsURIs, err = exprEval.StringArray(
-			ctx, tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
+			ctx, schedule.BackupOptions.EncryptionKMSURI.Exprs(),
 		)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to evaluate backup kms_uri")
@@ -693,7 +694,7 @@ func makeScheduledBackupSpec(
 	}
 	if schedule.BackupOptions.IncrementalStorage != nil {
 		spec.incrementalStorage, err = exprEval.StringArray(
-			ctx, tree.Exprs(schedule.BackupOptions.IncrementalStorage),
+			ctx, schedule.BackupOptions.IncrementalStorage.Exprs(),
 		)
 		if err != nil {
 			return nil, err
@@ -812,9 +813,9 @@ func createBackupScheduleTypeCheck(
 		Validation: scheduledBackupOptionExpectValues,
 	}
 	stringArrays := exprutil.StringArrays{
-		tree.Exprs(schedule.To),
-		tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
-		tree.Exprs(schedule.BackupOptions.IncrementalStorage),
+		schedule.To.Exprs(),
+		schedule.BackupOptions.EncryptionKMSURI.Exprs(),
+		schedule.BackupOptions.IncrementalStorage.Exprs(),
 	}
 	bools := exprutil.Bools{
 		schedule.BackupOptions.CaptureRevisionHistory,

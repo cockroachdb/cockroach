@@ -1374,7 +1374,7 @@ func (u *sqlSymUnion) logicalReplicationOptions() *tree.LogicalReplicationOption
 
 %type <tree.Statement> reindex_stmt
 
-%type <[]string> opt_incremental
+%type <tree.URIs> opt_incremental
 %type <tree.KVOption> kv_option
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
@@ -3334,11 +3334,11 @@ opt_clear_data:
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
-  BACKUP opt_backup_targets INTO sconst_or_placeholder IN string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
+  BACKUP opt_backup_targets INTO sconst_or_placeholder IN opt_uris opt_as_of_clause opt_with_backup_options
   {
     $$.val = &tree.Backup{
       Targets: $2.backupTargetListPtr(),
-      To: $6.stringOrPlaceholderOptList(),
+      To: $6.URIs(),
       Nested: true,
       AppendToLatest: false,
       Subdir: $4.expr(),
@@ -3346,33 +3346,33 @@ backup_stmt:
       Options: *$8.backupOptions(),
     }
   }
-| BACKUP opt_backup_targets INTO string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
+| BACKUP opt_backup_targets INTO opt_uris opt_as_of_clause opt_with_backup_options
   {
     $$.val = &tree.Backup{
       Targets: $2.backupTargetListPtr(),
-      To: $4.stringOrPlaceholderOptList(),
+      To: $4.URIs(),
       Nested: true,
       AsOf: $5.asOfClause(),
       Options: *$6.backupOptions(),
     }
   }
-| BACKUP opt_backup_targets INTO LATEST IN string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
+| BACKUP opt_backup_targets INTO LATEST IN opt_uris opt_as_of_clause opt_with_backup_options
   {
     $$.val = &tree.Backup{
       Targets: $2.backupTargetListPtr(),
-      To: $6.stringOrPlaceholderOptList(),
+      To: $6.URIs(),
       Nested: true,
       AppendToLatest: true,
       AsOf: $7.asOfClause(),
       Options: *$8.backupOptions(),
     }
   }
-| BACKUP opt_backup_targets TO string_or_placeholder_opt_list opt_as_of_clause opt_incremental opt_with_backup_options
+| BACKUP opt_backup_targets TO opt_uris opt_as_of_clause opt_incremental opt_with_backup_options
   {
     $$.val = &tree.Backup{
       Targets: $2.backupTargetListPtr(),
-      To: $4.stringOrPlaceholderOptList(),
-      IncrementalFrom: $6.exprs(),
+      To: $4.URIs(),
+      IncrementalFrom: $6.URIs(),
       AsOf: $5.asOfClause(),
       Options: *$7.backupOptions(),
     }
@@ -3444,13 +3444,13 @@ backup_options:
   {
     $$.val = &tree.BackupOptions{Detached: tree.MakeDBool(false)}
   }
-| KMS '=' string_or_placeholder_opt_list
+| KMS '=' opt_kms_uris
   {
-    $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
+    $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.URIs()}
   }
-| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
+| INCREMENTAL_LOCATION '=' opt_uris
   {
-    $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
+    $$.val = &tree.BackupOptions{IncrementalStorage: $3.URIs()}
   }
 | EXECUTION LOCALITY '=' string_or_placeholder
   {
@@ -3553,14 +3553,14 @@ include_all_clusters:
 // %SeeAlso: BACKUP
 create_schedule_for_backup_stmt:
  CREATE SCHEDULE /*$3=*/schedule_label_spec FOR BACKUP /*$6=*/opt_backup_targets INTO
-  /*$8=*/string_or_placeholder_opt_list /*$9=*/opt_with_backup_options
+  /*$8=*/opt_uris /*$9=*/opt_with_backup_options
   /*$10=*/cron_expr /*$11=*/opt_full_backup_clause /*$12=*/opt_with_schedule_options
   {
   $$.val = &tree.ScheduledBackup{
         ScheduleLabelSpec:    *($3.scheduleLabelSpec()),
         Recurrence:           $10.expr(),
         FullBackup:           $11.fullBackupClause(),
-        To:                   $8.stringOrPlaceholderOptList(),
+        To:                   $8.URIs(),
         Targets:              $6.backupTargetListPtr(),
         BackupOptions:        *($9.backupOptions()),
         ScheduleOptions:      $12.kvOptions(),
@@ -3612,10 +3612,10 @@ alter_backup_schedule_cmd:
 		  Label: $3.expr(),
 		}
 	}
-|	SET INTO string_or_placeholder_opt_list
+|	SET INTO opt_uris
   {
 		$$.val = &tree.AlterBackupScheduleSetInto{
-		  Into: $3.stringOrPlaceholderOptList(),
+      Into: $3.URIs(),
 		}
   }
 | SET WITH backup_options
@@ -3799,59 +3799,59 @@ drop_external_connection_stmt:
 //    include_all_virtual_clusters: enable backups of all virtual clusters during a cluster backup
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  RESTORE FROM list_of_opt_uris opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
     DescriptorCoverage: tree.AllDescriptors,
-    From: $3.listOfStringOrPlaceholderOptList(),
+    From: $3.listOfURIs(),
     AsOf: $4.asOfClause(),
     Options: *($5.restoreOptions()),
     }
   }
-| RESTORE FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE FROM string_or_placeholder IN list_of_opt_uris opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
     DescriptorCoverage: tree.AllDescriptors,
 		Subdir: $3.expr(),
-		From: $5.listOfStringOrPlaceholderOptList(),
+		From: $5.listOfURIs(),
 		AsOf: $6.asOfClause(),
 		Options: *($7.restoreOptions()),
     }
   }
-| RESTORE backup_targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE backup_targets FROM list_of_opt_uris opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
     Targets: $2.backupTargetList(),
-    From: $4.listOfStringOrPlaceholderOptList(),
+    From: $4.listOfURIs(),
     AsOf: $5.asOfClause(),
     Options: *($6.restoreOptions()),
     }
   }
-| RESTORE backup_targets FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE backup_targets FROM string_or_placeholder IN list_of_opt_uris opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
       Targets: $2.backupTargetList(),
       Subdir: $4.expr(),
-      From: $6.listOfStringOrPlaceholderOptList(),
+      From: $6.listOfURIs(),
       AsOf: $7.asOfClause(),
       Options: *($8.restoreOptions()),
     }
   }
-| RESTORE SYSTEM USERS FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE SYSTEM USERS FROM list_of_opt_uris opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
       DescriptorCoverage: tree.SystemUsers,
-      From: $5.listOfStringOrPlaceholderOptList(),
+      From: $5.listOfURIs(),
       AsOf: $6.asOfClause(),
       Options: *($7.restoreOptions()),
     }
   }
-| RESTORE SYSTEM USERS FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE SYSTEM USERS FROM string_or_placeholder IN list_of_opt_uris opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
       DescriptorCoverage: tree.SystemUsers,
       Subdir: $5.expr(),
-      From: $7.listOfStringOrPlaceholderOptList(),
+      From: $7.listOfURIs(),
       AsOf: $8.asOfClause(),
       Options: *($9.restoreOptions()),
     }
@@ -3952,10 +3952,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{EncryptionPassphrase: $3.expr()}
   }
-| KMS '=' string_or_placeholder_opt_list
-	{
-    $$.val = &tree.RestoreOptions{DecryptionKMSURI: $3.stringOrPlaceholderOptList()}
-	}
+| KMS '=' opt_kms_uris
+  {
+    $$.val = &tree.RestoreOptions{DecryptionKMSURI: $3.URIs()}
+  }
 | INTO_DB '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{IntoDB: $3.expr()}
@@ -3992,10 +3992,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
   }
-| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
-	{
-		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
-	}
+| INCREMENTAL_LOCATION '=' opt_uris
+  {
+    $$.val = &tree.RestoreOptions{IncrementalStorage: $3.URIs()}
+  }
 | virtual_cluster_name '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{AsTenant: $3.expr()}
@@ -4182,13 +4182,13 @@ string_or_placeholder_list:
   }
 
 opt_incremental:
-  INCREMENTAL FROM string_or_placeholder_list
+  INCREMENTAL FROM uris
   {
-    $$.val = $3.exprs()
+    $$.val = $3.URIs()
   }
 | /* EMPTY */
   {
-    $$.val = tree.Exprs(nil)
+    $$.val = tree.URIs(nil)
   }
 
 kv_option:

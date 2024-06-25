@@ -1300,7 +1300,7 @@ func (n *DropTenant) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Backup) copyNode() *Backup {
 	stmtCopy := *stmt
-	stmtCopy.IncrementalFrom = append(Exprs(nil), stmt.IncrementalFrom...)
+	stmtCopy.IncrementalFrom = append(URIs(nil), stmt.IncrementalFrom...)
 	return &stmtCopy
 }
 
@@ -1316,22 +1316,22 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 			ret.AsOf.Expr = e
 		}
 	}
-	for i, expr := range stmt.To {
-		e, changed := WalkExpr(v, expr)
+	for i, uri := range stmt.To {
+		e, changed := WalkExpr(v, uri.Expr)
 		if changed {
 			if ret == stmt {
 				ret = stmt.copyNode()
 			}
-			ret.To[i] = e
+			ret.To[i].Expr = e
 		}
 	}
-	for i, expr := range stmt.IncrementalFrom {
-		e, changed := WalkExpr(v, expr)
+	for i, uri := range stmt.IncrementalFrom {
+		e, changed := WalkExpr(v, uri.Expr)
 		if changed {
 			if ret == stmt {
 				ret = stmt.copyNode()
 			}
-			ret.IncrementalFrom[i] = e
+			ret.IncrementalFrom[i].Expr = e
 		}
 	}
 	if stmt.Options.EncryptionPassphrase != nil {
@@ -1593,7 +1593,7 @@ func (stmt *ParenSelect) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Restore) copyNode() *Restore {
 	stmtCopy := *stmt
-	stmtCopy.From = append([]StringOrPlaceholderOptList(nil), stmt.From...)
+	stmtCopy.From = append([]URIs(nil), stmt.From...)
 	return &stmtCopy
 }
 
@@ -1610,13 +1610,13 @@ func (stmt *Restore) walkStmt(v Visitor) Statement {
 		}
 	}
 	for i, backup := range stmt.From {
-		for j, expr := range backup {
-			e, changed := WalkExpr(v, expr)
+		for j, uri := range backup {
+			e, changed := WalkExpr(v, uri.Expr)
 			if changed {
 				if ret == stmt {
 					ret = stmt.copyNode()
 				}
-				ret.From[i][j] = e
+				ret.From[i][j].Expr = e
 			}
 		}
 	}
