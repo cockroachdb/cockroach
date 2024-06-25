@@ -1079,6 +1079,59 @@ func TestMakePriorityLimits(t *testing.T) {
 	}
 }
 
+func TestLeaseStringAndSafeFormat(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		lease Lease
+		exp   string
+	}{
+		{
+			name:  "empty",
+			lease: Lease{},
+			exp:   "<empty>",
+		},
+		{
+			name: "expiration",
+			lease: Lease{
+				Replica: ReplicaDescriptor{
+					NodeID:    1,
+					StoreID:   1,
+					ReplicaID: 1,
+				},
+				Start:      makeClockTS(1, 1),
+				Expiration: makeClockTS(2, 1).ToTimestamp().Clone(),
+				ProposedTS: makeClockTS(1, 0),
+				Sequence:   3,
+			},
+			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 exp=0.000000002,1 pro=0.000000001,0",
+		},
+		{
+			name: "epoch",
+			lease: Lease{
+				Replica: ReplicaDescriptor{
+					NodeID:    1,
+					StoreID:   1,
+					ReplicaID: 1,
+				},
+				Start:      makeClockTS(1, 1),
+				ProposedTS: makeClockTS(1, 0),
+				Sequence:   3,
+				Epoch:      4,
+			},
+			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 epo=4 pro=0.000000001,0",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// String.
+			require.Equal(t, tc.exp, tc.lease.String())
+			// Redactable string. Should be identical.
+			require.EqualValues(t, tc.exp, redact.Sprint(tc.lease))
+			// Redacted string. Should be identical.
+			require.EqualValues(t, tc.exp, redact.Sprint(tc.lease).Redact())
+		})
+	}
+}
+
 func TestLeaseEquivalence(t *testing.T) {
 	r1 := ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	r2 := ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
