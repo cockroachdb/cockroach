@@ -24,7 +24,7 @@ func (b *Builder) buildExport(export *tree.Export, inScope *scope) (outScope *sc
 	emptyScope := b.allocScope()
 	inputScope := b.buildStmt(export.Query, nil /* desiredTypes */, emptyScope)
 
-	texpr := emptyScope.resolveType(export.File, types.String)
+	texpr := emptyScope.resolveType(export.File.Expr, types.String)
 	fileName := b.buildScalar(
 		texpr, emptyScope, nil /* outScope */, nil /* outCol */, nil, /* colRefs */
 	)
