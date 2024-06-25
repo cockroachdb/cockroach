@@ -406,6 +406,13 @@ func makePGPrivilegeInquiryDef(
 				if withUser {
 					arg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 					userS, err := getNameForArg(ctx, evalCtx, arg, "pg_roles", "rolname")
+
+					// arg.String() unpredictably returns "public" as well as "'public'"
+					if userS == username.EmptyRole &&
+						(arg.String() == username.PublicRole || arg.String() == "'public'") {
+						userS = username.PublicRole
+					}
+
 					if err != nil {
 						return nil, err
 					}
