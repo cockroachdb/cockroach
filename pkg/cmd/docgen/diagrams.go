@@ -742,11 +742,11 @@ var specs = []stmtSpec{
 		name:   "create_changefeed_stmt",
 		inline: []string{"changefeed_targets", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
 		replace: map[string]string{
-			"table_option":                 "table_name",
-			"'INTO' string_or_placeholder": "'INTO' sink",
-			"name":                         "option",
-			"'SCONST'":                     "option",
-			"'=' string_or_placeholder":    "'=' value"},
+			"table_option":              "table_name",
+			"'INTO' uri":                "'INTO' sink",
+			"name":                      "option",
+			"'SCONST'":                  "option",
+			"'=' string_or_placeholder": "'=' value"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'OPTIONS'")},
 		unlink: []string{"table_name", "sink", "option", "value"},

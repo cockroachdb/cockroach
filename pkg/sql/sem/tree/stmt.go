@@ -857,7 +857,7 @@ func (*CreateChangefeed) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *CreateChangefeed) StatementTag() string {
-	if n.SinkURI == nil {
+	if n.SinkURI.Expr == nil {
 		return "EXPERIMENTAL CHANGEFEED"
 	}
 	return "CREATE CHANGEFEED"

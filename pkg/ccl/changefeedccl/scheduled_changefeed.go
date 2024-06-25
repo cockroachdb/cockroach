@@ -175,7 +175,7 @@ func (s *scheduledChangefeedExecutor) executeChangefeed(
 	}
 
 	// Sanity check: can't execute core changefeeds from schedule.
-	if changefeedStmt.SinkURI == nil {
+	if changefeedStmt.SinkURI.Expr == nil {
 		return errors.AssertionFailedf("cannot execute core changefeed from schedule")
 	}
 
@@ -361,7 +361,7 @@ func makeScheduledChangefeedSpec(
 		return nil, err
 	}
 
-	evaluatedSinkURI, err := exprEval.String(ctx, schedule.SinkURI)
+	evaluatedSinkURI, err := exprEval.String(ctx, schedule.SinkURI.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -630,7 +630,7 @@ func doCreateChangefeedSchedule(
 
 	createChangefeedNode := &tree.CreateChangefeed{
 		Targets: spec.Targets,
-		SinkURI: tree.NewStrVal(*spec.evaluatedSinkURI),
+		SinkURI: tree.NewURI(tree.NewStrVal(*spec.evaluatedSinkURI)),
 		Options: spec.Options,
 		Select:  spec.Select,
 	}
@@ -709,7 +709,7 @@ func createChangefeedScheduleTypeCheck(
 	}
 	if err := exprutil.TypeCheck(ctx, opName, p.SemaCtx(),
 		exprutil.Strings{
-			changefeedStmt.SinkURI,
+			changefeedStmt.SinkURI.Expr,
 			schedule.Recurrence,
 			schedule.ScheduleLabelSpec.Label,
 		},

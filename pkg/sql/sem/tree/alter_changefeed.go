@@ -91,6 +91,8 @@ type AlterChangefeedSetOptions struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterChangefeedSetOptions) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SET ")
+	// Node that for ALTER CHANGEFEED SET SINK we might be printing a URL in the
+	// clear here.
 	ctx.FormatNode(&node.Options)
 }
 

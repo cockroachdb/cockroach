@@ -116,7 +116,7 @@ func changefeedTypeCheck(
 		return false, nil, nil
 	}
 	if err := exprutil.TypeCheck(ctx, `CREATE CHANGEFEED`, p.SemaCtx(),
-		exprutil.Strings{changefeedStmt.SinkURI},
+		exprutil.Strings{changefeedStmt.SinkURI.Expr},
 		&exprutil.KVOptions{
 			KVOptions:  changefeedStmt.Options,
 			Validation: changefeedvalidators.CreateOptionValidations,
@@ -124,7 +124,7 @@ func changefeedTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
-	unspecifiedSink := changefeedStmt.SinkURI == nil
+	unspecifiedSink := changefeedStmt.SinkURI.Expr == nil
 	if unspecifiedSink {
 		return true, sinklessHeader, nil
 	}
@@ -142,7 +142,7 @@ func changefeedPlanHook(
 
 	exprEval := p.ExprEvaluator("CREATE CHANGEFEED")
 	var sinkURI string
-	unspecifiedSink := changefeedStmt.SinkURI == nil
+	unspecifiedSink := changefeedStmt.SinkURI.Expr == nil
 	avoidBuffering := unspecifiedSink
 	var header colinfo.ResultColumns
 	if unspecifiedSink {
@@ -157,7 +157,7 @@ func changefeedPlanHook(
 		header = sinklessHeader
 	} else {
 		var err error
-		sinkURI, err = exprEval.String(ctx, changefeedStmt.SinkURI)
+		sinkURI, err = exprEval.String(ctx, changefeedStmt.SinkURI.Expr)
 		if err != nil {
 			return nil, nil, nil, false, changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
 		}
@@ -373,7 +373,7 @@ func createChangefeedJobRecord(
 	jobID jobspb.JobID,
 	telemetryPath string,
 ) (*jobs.Record, error) {
-	unspecifiedSink := changefeedStmt.SinkURI == nil
+	unspecifiedSink := changefeedStmt.SinkURI.Expr == nil
 
 	for _, warning := range opts.DeprecationWarnings() {
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
@@ -985,7 +985,7 @@ func changefeedJobDescription(
 
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
-		SinkURI: tree.NewDString(cleanedSinkURI),
+		SinkURI: tree.NewSanitizedURI(cleanedSinkURI),
 		Select:  changefeed.Select,
 	}
 	if err = opts.ForEachWithRedaction(func(k string, v string) {
