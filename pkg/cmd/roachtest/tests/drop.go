@@ -35,12 +35,11 @@ func registerDrop(r registry.Registry) {
 	// rows). Next, it issues a `DROP` for the whole database, and sets the GC TTL
 	// to one second.
 	runDrop := func(ctx context.Context, t test.Test, c cluster.Cluster, warehouses, nodes int) {
-		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Range(1, nodes))
 		settings := install.MakeClusterSettings()
 		settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=15s")
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, nodes))
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 
-		m := c.NewMonitor(ctx, c.Range(1, nodes))
+		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.WorkerStatus("importing TPCC fixture")
 			c.Run(ctx, option.WithNodes(c.Node(1)), tpccImportCmd("", warehouses, "{pgurl:1}"))

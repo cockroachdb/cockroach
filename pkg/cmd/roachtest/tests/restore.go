@@ -765,7 +765,7 @@ func (tpce tpceRestore) getSpec(
 	if tpce.spec != nil {
 		return tpce.spec
 	}
-	tpceSpec, err := initTPCESpec(ctx, t.L(), c, sp.getWorkloadNode(), sp.getCRDBNodes())
+	tpceSpec, err := initTPCESpec(ctx, t.L(), c)
 	require.NoError(t, err)
 	return tpceSpec
 }
