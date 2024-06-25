@@ -406,6 +406,7 @@ func makePGPrivilegeInquiryDef(
 				if withUser {
 					arg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 					userS, err := getNameForArg(ctx, evalCtx, arg, "pg_roles", "rolname")
+
 					if err != nil {
 						return nil, err
 					}
@@ -468,8 +469,14 @@ func getNameForArg(
 	var query string
 	switch t := arg.(type) {
 	case *tree.DString:
+		if string(*t) == username.PublicRole {
+			return username.PublicRole, nil
+		}
 		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE %s = $1 LIMIT 1", pgCol, pgTable, pgCol)
 	case *tree.DOid:
+		if t.Oid == username.PublicRoleID {
+			return username.PublicRole, nil
+		}
 		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE oid = $1 LIMIT 1", pgCol, pgTable)
 	default:
 		return "", errors.AssertionFailedf("unexpected arg type %T", t)
