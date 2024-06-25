@@ -21,10 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -63,14 +61,7 @@ type SinkPayload interface{}
 // the SinkClient methods to form batches and flushes those batches across
 // multiple parallel IO workers.
 type batchingSink struct {
-	// if client is nil then we use clientFactory to create a new client for each ioWorker. we also make a client to use for making batches and flushing resolveds.
-	client              SinkClient
-	flushClientFactory  func(ctx context.Context) (any, error)
-	createdFlushClients struct {
-		syncutil.Mutex
-		clients []SinkClient
-	}
-
+	client       SinkClient
 	topicNamer   *TopicNamer
 	concreteType sinkType
 
@@ -232,19 +223,7 @@ func (s *batchingSink) Close() error {
 	close(s.doneCh)
 	_ = s.wg.Wait()
 	s.pacer.Close()
-	if s.client != nil {
-		return s.client.Close()
-	} else {
-		s.createdFlushClients.Lock()
-		defer s.createdFlushClients.Unlock()
-		var lastErr error
-		for _, client := range s.createdFlushClients.clients {
-			if err := client.Close(); err != nil {
-				lastErr = err
-			}
-		}
-		return lastErr
-	}
+	return s.client.Close()
 }
 
 // Dial implements the Sink interface.
@@ -350,19 +329,13 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 	// Once finalized, batches are sent to a parallelIO struct which handles
 	// performing multiple Flushes in parallel while maintaining Keys() ordering.
-	ioHandler := func(ctx context.Context, req IORequest, workerStuff any) error {
-		var client SinkClient
-		if workerStuff == nil {
-			client = s.client
-		} else {
-			client = workerStuff.(SinkClient)
-		}
+	ioHandler := func(ctx context.Context, req IORequest) error {
 		batch, _ := req.(*sinkBatch)
 		defer s.metrics.recordSinkIOInflightChange(int64(-batch.numMessages))
 		s.metrics.recordSinkIOInflightChange(int64(batch.numMessages))
-		return client.Flush(ctx, batch.payload)
+		return s.client.Flush(ctx, batch.payload)
 	}
-	ioEmitter := NewParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.flushClientFactory, s.metrics, s.settings)
+	ioEmitter := NewParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics, s.settings)
 	defer ioEmitter.Close()
 
 	// Flushing requires tracking the number of inflight messages and confirming
@@ -548,7 +521,6 @@ func makeBatchingSink(
 	ctx context.Context,
 	concreteType sinkType,
 	client SinkClient,
-	clientFactory func(ctx context.Context) (any, error),
 	minFlushFrequency time.Duration,
 	retryOpts retry.Options,
 	numWorkers int,
@@ -574,29 +546,6 @@ func makeBatchingSink(
 		pacerFactory:      pacerFactory,
 		pacer:             pacerFactory(),
 		doneCh:            make(chan struct{}),
-	}
-
-	if sink.client == nil && clientFactory != nil {
-		log.Infof(ctx, "creating new static client")
-		client, err := clientFactory(ctx)
-		if err != nil {
-			panic("TODO err: " + err.Error())
-		}
-		sink.client = client.(SinkClient)
-	}
-
-	if clientFactory != nil {
-		sink.flushClientFactory = func(ctx context.Context) (any, error) {
-			sink.createdFlushClients.Lock()
-			defer sink.createdFlushClients.Unlock()
-			client, err := clientFactory(ctx)
-			if err != nil {
-				return nil, err
-			}
-			sink.createdFlushClients.clients = append(sink.createdFlushClients.clients, client.(SinkClient))
-			log.Infof(ctx, "created new flush client (%d total)", len(sink.createdFlushClients.clients))
-			return client, nil
-		}
 	}
 
 	sink.wg.GoCtx(func(ctx context.Context) error {

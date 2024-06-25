@@ -347,7 +347,7 @@ func makeKafkaSinkV2(ctx context.Context,
 		return nil, err
 	}
 
-	return makeBatchingSink(ctx, sinkTypeKafka, client, nil, time.Second, retryOpts,
+	return makeBatchingSink(ctx, sinkTypeKafka, client, time.Second, retryOpts,
 		parallelism, topicNamer, pacerFactory, timeSource, mb(true), settings), nil
 }
 

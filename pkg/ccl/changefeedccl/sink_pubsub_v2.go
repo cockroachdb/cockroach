@@ -458,7 +458,6 @@ func makePubsubSink(
 		ctx,
 		sinkTypePubsub,
 		sinkClient,
-		nil,
 		time.Duration(batchCfg.Frequency),
 		retryOpts,
 		parallelism,
