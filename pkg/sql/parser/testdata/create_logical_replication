@@ -1,0 +1,64 @@
+parse
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON DATABASE foo INTO DATABASE foo;
+----
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON DATABASE foo INTO DATABASE foo -- normalized!
+CREATE LOGICAL REPLICATION STREAM FROM ('postgres://127.0.0.1:26257/defaultdb') ON DATABASE foo INTO DATABASE foo -- fully parenthesized
+CREATE LOGICAL REPLICATION STREAM FROM '_' ON DATABASE foo INTO DATABASE foo -- literals removed
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON DATABASE _ INTO DATABASE _ -- identifiers removed
+
+parse
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLE foo INTO TABLE foo;
+----
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON Table foo INTO Table foo -- normalized!
+CREATE LOGICAL REPLICATION STREAM FROM ('postgres://127.0.0.1:26257/defaultdb') ON Table (foo) INTO Table (foo) -- fully parenthesized
+CREATE LOGICAL REPLICATION STREAM FROM '_' ON Table foo INTO Table foo -- literals removed
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON Table _ INTO Table _ -- identifiers removed
+
+parse
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLE foo.bar INTO TABLE foo.bar;
+----
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON Table foo.bar INTO Table foo.bar -- normalized!
+CREATE LOGICAL REPLICATION STREAM FROM ('postgres://127.0.0.1:26257/defaultdb') ON Table (foo.bar) INTO Table (foo.bar) -- fully parenthesized
+CREATE LOGICAL REPLICATION STREAM FROM '_' ON Table foo.bar INTO Table foo.bar -- literals removed
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON Table _._ INTO Table _._ -- identifiers removed
+
+parse
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLES (a,b,c) INTO TABLES (a,b,c);
+----
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLES (a, b, c) INTO TABLES (a, b, c) -- normalized!
+CREATE LOGICAL REPLICATION STREAM FROM ('postgres://127.0.0.1:26257/defaultdb') ON TABLES ((a), (b), (c)) INTO TABLES ((a), (b), (c)) -- fully parenthesized
+CREATE LOGICAL REPLICATION STREAM FROM '_' ON TABLES (a, b, c) INTO TABLES (a, b, c) -- literals removed
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLES (_, _, _) INTO TABLES (_, _, _) -- identifiers removed
+
+parse
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLES (a.bar,b.bar,c.bar) INTO TABLES (a.bar,b.bar,c.bar);
+----
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLES (a.bar, b.bar, c.bar) INTO TABLES (a.bar, b.bar, c.bar) -- normalized!
+CREATE LOGICAL REPLICATION STREAM FROM ('postgres://127.0.0.1:26257/defaultdb') ON TABLES ((a.bar), (b.bar), (c.bar)) INTO TABLES ((a.bar), (b.bar), (c.bar)) -- fully parenthesized
+CREATE LOGICAL REPLICATION STREAM FROM '_' ON TABLES (a.bar, b.bar, c.bar) INTO TABLES (a.bar, b.bar, c.bar) -- literals removed
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLES (_._, _._, _._) INTO TABLES (_._, _._, _._) -- identifiers removed
+
+parse
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLE foo INTO TABLE foo WITH MODE = 'immediate', FUNCTION 'c' FOR TABLE d, FUNCTION 'a' FOR TABLE b;
+----
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON Table foo INTO Table foo WITH MODE = 'immediate', FUNCTION 'a' FOR TABLE b, FUNCTION 'c' FOR TABLE d -- normalized!
+CREATE LOGICAL REPLICATION STREAM FROM ('postgres://127.0.0.1:26257/defaultdb') ON Table (foo) INTO Table (foo) WITH MODE = ('immediate'), FUNCTION ('a') FOR TABLE (b), FUNCTION ('c') FOR TABLE (d) -- fully parenthesized
+CREATE LOGICAL REPLICATION STREAM FROM '_' ON Table foo INTO Table foo WITH MODE = '_', FUNCTION '_' FOR TABLE b, FUNCTION '_' FOR TABLE d -- literals removed
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON Table _ INTO Table _ WITH MODE = 'immediate', FUNCTION 'a' FOR TABLE _, FUNCTION 'c' FOR TABLE _ -- identifiers removed
+
+parse
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLE foo INTO TABLE foo WITH CURSOR = '1536242855577149065.0000000000', DEFAULT FUNCTION = 'lww', FUNCTION 'a' FOR TABLE b, MODE = 'immediate', FUNCTION 'c' FOR TABLE d
+----
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON Table foo INTO Table foo WITH CURSOR = '1536242855577149065.0000000000', DEFAULT FUNCTION = 'lww', MODE = 'immediate', FUNCTION 'a' FOR TABLE b, FUNCTION 'c' FOR TABLE d -- normalized!
+CREATE LOGICAL REPLICATION STREAM FROM ('postgres://127.0.0.1:26257/defaultdb') ON Table (foo) INTO Table (foo) WITH CURSOR = ('1536242855577149065.0000000000'), DEFAULT FUNCTION = ('lww'), MODE = ('immediate'), FUNCTION ('a') FOR TABLE (b), FUNCTION ('c') FOR TABLE (d) -- fully parenthesized
+CREATE LOGICAL REPLICATION STREAM FROM '_' ON Table foo INTO Table foo WITH CURSOR = '_', DEFAULT FUNCTION = '_', MODE = '_', FUNCTION '_' FOR TABLE b, FUNCTION '_' FOR TABLE d -- literals removed
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON Table _ INTO Table _ WITH CURSOR = '1536242855577149065.0000000000', DEFAULT FUNCTION = 'lww', MODE = 'immediate', FUNCTION 'a' FOR TABLE _, FUNCTION 'c' FOR TABLE _ -- identifiers removed
+
+error
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLE foo, bar INTO TABLE foo, bar;
+----
+at or near ",": syntax error
+DETAIL: source SQL:
+CREATE LOGICAL REPLICATION STREAM FROM 'postgres://127.0.0.1:26257/defaultdb' ON TABLE foo, bar INTO TABLE foo, bar
+                                                                                          ^
+HINT: try \h CREATE LOGICAL REPLICATION STREAM

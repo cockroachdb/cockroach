@@ -449,6 +449,26 @@ var queries = [...]benchQuery{
 		`,
 		args: []interface{}{1, 2, 3},
 	},
+
+	// Query with high column IDs and an aggregation.
+	{
+		name: "many-columns-and-indexes-d",
+		query: `
+			SELECT
+				k1.a, k2.a, k3.a, k4.a, k5.a, k6.a, k7.a, k8.a, k9.a, k10.a, k11.a,
+				min(k1.b), min(k2.b), min(k3.b), min(k4.b), min(k5.b), min(k6.b),
+				min(k7.b), min(k8.b), min(k9.b), min(k10.b), min(k11.b),
+				min(k1.c), min(k2.c), min(k3.c), min(k4.c), min(k5.c), min(k6.c),
+				min(k7.c), min(k8.c), min(k9.c), min(k10.c), min(k11.c),
+				min(k1.d), min(k2.d), min(k3.d), min(k4.d), min(k5.d), min(k6.d),
+				min(k7.d), min(k8.d), min(k9.d), min(k10.d), min(k11.d)
+			FROM
+			  k k1, k k2, k k3, k k4, k k5, k k6, k k7, k k8, k k9, k k10, k k11
+			WHERE k1.s = $1 AND k2.t = $2
+			GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+		`,
+		args: []interface{}{1, 2},
+	},
 	{
 		name:  "single-col-histogram-range",
 		query: "SELECT * FROM single_col_histogram WHERE k >= $1",
