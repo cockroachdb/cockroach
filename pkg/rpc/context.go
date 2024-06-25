@@ -228,7 +228,7 @@ type Context struct {
 		m map[roachpb.NodeID]*Connection
 	}
 
-	metrics Metrics
+	metrics *Metrics
 
 	// For unittesting.
 	testingDialOpts []grpc.DialOption
@@ -539,7 +539,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		SecurityContext: secCtx,
 		rpcCompression:  enableRPCCompression,
 		MasterCtx:       masterCtx,
-		metrics:         makeMetrics(),
+		metrics:         newMetrics(),
 	}
 
 	rpcCtx.dialbackMu.Lock()
@@ -622,7 +622,7 @@ func (rpcCtx *Context) ClusterName() string {
 
 // Metrics returns the Context's Metrics struct.
 func (rpcCtx *Context) Metrics() *Metrics {
-	return &rpcCtx.metrics
+	return rpcCtx.metrics
 }
 
 // GetLocalInternalClientForAddr returns the context's internal batch client
