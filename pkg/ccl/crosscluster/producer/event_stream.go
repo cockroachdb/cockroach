@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -551,6 +552,7 @@ func streamPartition(
 		return nil, errors.AssertionFailedf("expected at least one span, got none")
 	}
 	setConfigDefaults(&spec.Config)
+	crosscluster.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV)
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 
