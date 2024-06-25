@@ -975,9 +975,8 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:    "drop_role_stmt",
-		inline:  []string{"role_or_group_or_user"},
-		replace: map[string]string{"string_or_placeholder_list": "name"},
+		name:   "drop_role_stmt",
+		inline: []string{"role_or_group_or_user"},
 	},
 	{
 		name:   "drop_sequence_stmt",
