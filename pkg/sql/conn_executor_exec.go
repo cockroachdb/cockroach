@@ -3145,10 +3145,13 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			}
 		}
 
-		ex.statsCollector.EndTransaction(
+		discardedStats := ex.statsCollector.EndTransaction(
 			ctx,
 			transactionFingerprintID,
 		)
+		if discardedStats > 0 {
+			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(discardedStats)
+		}
 
 		if ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded != nil {
 			ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded(
