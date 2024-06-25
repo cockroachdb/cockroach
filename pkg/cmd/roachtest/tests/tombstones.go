@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/dustin/go-humanize"
@@ -31,7 +32,7 @@ func registerPointTombstone(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "point-tombstone/heterogeneous-value-sizes",
 		Owner:            registry.OwnerStorage,
-		Cluster:          r.MakeClusterSpec(4),
+		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNodes(1)),
 		CompatibleClouds: registry.AllExceptAWS,
 		// This roachtest is useful but relatively specific. Running it weekly
 		// should be fine to ensure we don't regress.
@@ -46,7 +47,7 @@ func registerPointTombstone(r registry.Registry) {
 			startSettings.Env = append(startSettings.Env, "COCKROACH_AUTO_BALLAST=false")
 
 			t.Status("starting cluster")
-			c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
+			c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
 
 			// Wait for upreplication.
 			conn := c.Conn(ctx, t.L(), 2)
@@ -60,7 +61,7 @@ func registerPointTombstone(r registry.Registry) {
 				}
 			}
 
-			c.Run(ctx, option.WithNodes(c.Node(4)), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
+			c.Run(ctx, option.WithNodes(c.WorkloadNodes()), `./cockroach workload init kv --splits 1000 {pgurl:1}`)
 
 			// Set a low 2m GC ttl.
 			execSQLOrFail("alter database kv configure zone using gc.ttlseconds = $1", 120)
@@ -69,9 +70,9 @@ func registerPointTombstone(r registry.Registry) {
 			// logical value data.
 			const numOps1MB = 30720
 			t.Status("starting 1MB-value workload")
-			m := c.NewMonitor(ctx, c.Range(1, 3))
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, option.WithNodes(c.Node(4)), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
+				c.Run(ctx, option.WithNodes(c.WorkloadNodes()), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
 					`--concurrency 128 --max-rate 512 --tolerate-errors `+
 					` --min-block-bytes=1048576 --max-block-bytes=1048576 `+
 					` --max-ops %d `+
@@ -87,7 +88,7 @@ func registerPointTombstone(r registry.Registry) {
 			t.Status("starting 4KB-value workload")
 			m = c.NewMonitor(ctx, c.Range(1, 3))
 			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, option.WithNodes(c.Node(4)), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
+				c.Run(ctx, option.WithNodes(c.WorkloadNodes()), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
 					`--concurrency 256 --max-rate 1024 --tolerate-errors `+
 					` --min-block-bytes=4096 --max-block-bytes=4096 `+
 					` --max-ops 122880 --write-seq R%d `+
@@ -99,7 +100,7 @@ func registerPointTombstone(r registry.Registry) {
 			// Delete the initially written 1MB values (eg, ~30 GB)
 			t.Status("deleting previously-written 1MB values")
 			var statsAfterDeletes tableSizeInfo
-			m = c.NewMonitor(ctx, c.Range(1, 3))
+			m = c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				n1Conn := c.Conn(ctx, t.L(), 1)
 				defer n1Conn.Close()
@@ -131,7 +132,7 @@ func registerPointTombstone(r registry.Registry) {
 			// Wait for garbage collection to delete the non-live data.
 			targetSize := uint64(3 << 30) /* 3 GiB */
 			t.Status("waiting for garbage collection and compaction to reduce on-disk size to ", humanize.IBytes(targetSize))
-			m = c.NewMonitor(ctx, c.Range(1, 3))
+			m = c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				ticker := time.NewTicker(10 * time.Second)
 				defer ticker.Stop()

@@ -25,9 +25,9 @@ import (
 
 func registerElasticControlForRowLevelTTL(r registry.Registry) {
 	const nodes = 7
-	var clusterSpec = spec.CPU(4)
-	r.Add(makeElasticControlRowLevelTTL(r.MakeClusterSpec(nodes, clusterSpec), false /* expiredRows */))
-	r.Add(makeElasticControlRowLevelTTL(r.MakeClusterSpec(nodes, clusterSpec), true /* expiredRows */))
+	var clusterSpec = r.MakeClusterSpec(nodes, spec.CPU(4), spec.WorkloadNodes(1))
+	r.Add(makeElasticControlRowLevelTTL(clusterSpec, false /* expiredRows */))
+	r.Add(makeElasticControlRowLevelTTL(clusterSpec, true /* expiredRows */))
 }
 
 func makeElasticControlRowLevelTTL(spec spec.ClusterSpec, expiredRows bool) registry.TestSpec {
@@ -40,24 +40,21 @@ func makeElasticControlRowLevelTTL(spec spec.ClusterSpec, expiredRows bool) regi
 		Cluster:          spec,
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			crdbNodes := c.Spec().NodeCount - 1
-			workloadNode := crdbNodes + 1
-
 			numWarehouses, activeWarehouses, workloadDuration, estimatedSetupTime := 1500, 100, 20*time.Minute, 20*time.Minute
 			if c.IsLocal() {
 				numWarehouses, activeWarehouses, workloadDuration, estimatedSetupTime = 1, 1, 3*time.Minute, 2*time.Minute
 			}
 
 			promCfg := &prometheus.Config{}
-			promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
-				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
-				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
+			promCfg.WithPrometheusNode(c.WorkloadNodes().InstallNodes()[0]).
+				WithNodeExporter(c.CRDBNodes().InstallNodes()).
+				WithCluster(c.CRDBNodes().InstallNodes()).
 				WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana").
 				WithScrapeConfigs(
 					prometheus.MakeWorkloadScrapeConfig("workload", "/",
 						makeWorkloadScrapeNodes(
-							c.Node(workloadNode).InstallNodes()[0],
-							[]workloadInstance{{nodes: c.Node(workloadNode)}},
+							c.WorkloadNodes().InstallNodes()[0],
+							[]workloadInstance{{nodes: c.WorkloadNodes()}},
 						),
 					),
 				)

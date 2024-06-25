@@ -2570,7 +2570,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		Name:              "backup-restore/mixed-version",
 		Timeout:           8 * time.Hour,
 		Owner:             registry.OwnerDisasterRecovery,
-		Cluster:           r.MakeClusterSpec(5),
+		Cluster:           r.MakeClusterSpec(5, spec.WorkloadNodes(1)),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
 		NativeLibs:        registry.LibGEOS,
@@ -2579,10 +2579,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			roachNodes := c.Range(1, c.Spec().NodeCount-1)
-			workloadNode := c.Node(c.Spec().NodeCount)
 			mvt := mixedversion.NewTest(
-				ctx, t, t.L(), c, roachNodes,
+				ctx, t, t.L(), c, c.CRDBNodes(),
 				// We use a longer upgrade timeout in this test to give the
 				// migrations enough time to finish considering all the data
 				// that might exist in the cluster by the time the upgrade is
@@ -2606,10 +2604,10 @@ func registerBackupMixedVersion(r registry.Registry) {
 			)
 			testRNG := mvt.RNG()
 
-			uploadCockroach(ctx, t, c, workloadNode, clusterupgrade.CurrentVersion())
+			uploadCockroach(ctx, t, c, c.WorkloadNodes(), clusterupgrade.CurrentVersion())
 
 			dbs := []string{"bank", "tpcc"}
-			backupTest, err := newMixedVersionBackup(t, c, roachNodes, dbs)
+			backupTest, err := newMixedVersionBackup(t, c, c.CRDBNodes(), dbs)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2625,8 +2623,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// for the cluster used in this test without overloading it,
 			// which can make the backups take much longer to finish.
 			const numWarehouses = 100
-			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, roachNodes, false)
-			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, numWarehouses, roachNodes)
+			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, c.CRDBNodes(), false)
+			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, numWarehouses, c.CRDBNodes())
 
 			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
 			mvt.OnStartup("take backup in previous version", backupTest.maybeTakePreviousVersionBackup)
@@ -2640,8 +2638,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 			//   the cluster relatively busy while the backup and restores
 			//   take place. Its schema is also more complex, and the
 			//   operations more closely resemble a customer workload.
-			stopBank := mvt.Workload("bank", workloadNode, bankInit, bankRun)
-			stopTPCC := mvt.Workload("tpcc", workloadNode, tpccInit, tpccRun)
+			stopBank := mvt.Workload("bank", c.WorkloadNodes(), bankInit, bankRun)
+			stopTPCC := mvt.Workload("tpcc", c.WorkloadNodes(), tpccInit, tpccRun)
 			stopSystemWriter := mvt.BackgroundFunc("system table writer", backupTest.systemTableWriter)
 
 			mvt.InMixedVersion("plan and run backups", backupTest.planAndRunBackups)

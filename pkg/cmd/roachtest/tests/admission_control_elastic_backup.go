@@ -42,23 +42,21 @@ func registerElasticControlForBackups(r registry.Registry) {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
 			}
 
-			crdbNodes := c.Spec().NodeCount - 1
-			workloadNode := crdbNodes + 1
 			numWarehouses, workloadDuration, estimatedSetupTime := 1000, 90*time.Minute, 10*time.Minute
 			if c.IsLocal() {
 				numWarehouses, workloadDuration, estimatedSetupTime = 1, time.Minute, 2*time.Minute
 			}
 
 			promCfg := &prometheus.Config{}
-			promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
-				WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
-				WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes()).
+			promCfg.WithPrometheusNode(c.WorkloadNodes().InstallNodes()[0]).
+				WithNodeExporter(c.CRDBNodes().InstallNodes()).
+				WithCluster(c.CRDBNodes().InstallNodes()).
 				WithGrafanaDashboardJSON(grafana.BackupAdmissionControlGrafanaJSON).
 				WithScrapeConfigs(
 					prometheus.MakeWorkloadScrapeConfig("workload", "/",
 						makeWorkloadScrapeNodes(
-							c.Node(workloadNode).InstallNodes()[0],
-							[]workloadInstance{{nodes: c.Node(workloadNode)}},
+							c.WorkloadNodes().InstallNodes()[0],
+							[]workloadInstance{{nodes: c.WorkloadNodes()}},
 						),
 					),
 				)
@@ -80,13 +78,13 @@ func registerElasticControlForBackups(r registry.Registry) {
 				PrometheusConfig:              promCfg,
 				DisableDefaultScheduledBackup: true,
 				During: func(ctx context.Context) error {
-					db := c.Conn(ctx, t.L(), crdbNodes)
+					db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 					defer db.Close()
 
 					t.Status(fmt.Sprintf("during: enabling admission control (<%s)", 30*time.Second))
 					setAdmissionControl(ctx, t, c, true)
 
-					m := c.NewMonitor(ctx, c.Range(1, crdbNodes))
+					m := c.NewMonitor(ctx, c.CRDBNodes())
 					m.Go(func(ctx context.Context) error {
 						t.Status(fmt.Sprintf("during: creating full backup schedule to run every 20m (<%s)", time.Minute))
 						bucketPrefix := "gs"
@@ -113,7 +111,7 @@ func registerElasticControlForBackups(r registry.Registry) {
 		Owner:            registry.OwnerAdmissionControl,
 		Benchmark:        true,
 		Suites:           registry.Suites(`weekly`),
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNodes(1)),
 		CompatibleClouds: registry.OnlyGCE,
 		Leases:           registry.MetamorphicLeases,
 		Run:              run("gce"),
@@ -124,7 +122,7 @@ func registerElasticControlForBackups(r registry.Registry) {
 		Owner:            registry.OwnerAdmissionControl,
 		Benchmark:        true,
 		Suites:           registry.Suites(`weekly`),
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNodes(1)),
 		CompatibleClouds: registry.OnlyAWS,
 		Leases:           registry.MetamorphicLeases,
 		Run:              run("aws"),

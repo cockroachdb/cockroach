@@ -277,6 +277,13 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 		extraNameParts = append(extraNameParts, "multi-region")
 	}
 
+	// Save some money and CPU quota by using a smaller workload CPU. Only
+	// do this for cluster of size 3 or smaller to avoid regressions.
+	specOptions = append(specOptions, spec.WorkloadNodes(1))
+	if benchSpec.nodes > 3 {
+		spec.WorkloadNodeCPU(16)
+	}
+
 	// If run with ROACHTEST_DECOMMISSION_NOSKIP=1, roachtest will enable all specs.
 	noSkipFlag := os.Getenv(envDecommissionNoSkipFlag)
 	if noSkipFlag != "" {
@@ -370,10 +377,9 @@ func setupDecommissionBench(
 	t test.Test,
 	c cluster.Cluster,
 	benchSpec decommissionBenchSpec,
-	workloadNode, pinnedNode int,
+	pinnedNode int,
 	importCmd string,
 ) {
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	for i := 1; i <= benchSpec.nodes; i++ {
 		// Don't start a scheduled backup as this roachtest reports to roachperf.
 		startOpts := option.NewStartOpts(option.NoBackupSchedule)
@@ -606,7 +612,7 @@ func runDecommissionBench(
 		`./cockroach workload fixtures import tpcc --warehouses=%d`,
 		benchSpec.warehouses,
 	)
-	workloadCmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
+	workloadCmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
 		"--histograms=%s/stats.json --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
 		testTimeout, t.PerfArtifactsDir(), rampDuration, benchSpec.nodes)
 
@@ -614,13 +620,13 @@ func runDecommissionBench(
 	// to run a write-heavy workload known to be difficult for compactions to keep
 	// pace with.
 	if benchSpec.slowWrites {
-		workloadCmd = fmt.Sprintf("./workload run kv --init --concurrency=%d --splits=1000 "+
+		workloadCmd = fmt.Sprintf("./cockroach workload run kv --init --concurrency=%d --splits=1000 "+
 			"--read-percent=50 --min-block-bytes=8192 --max-block-bytes=8192 --duration=%s "+
 			"--histograms=%s/stats.json --ramp=%s --tolerate-errors {pgurl:1-%d}", benchSpec.nodes*64,
 			testTimeout, t.PerfArtifactsDir(), rampDuration, benchSpec.nodes)
 	}
 
-	setupDecommissionBench(ctx, t, c, benchSpec, workloadNode, pinnedNode, importCmd)
+	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
 
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
 	m := c.NewMonitor(workloadCtx, crdbNodes)
@@ -632,7 +638,7 @@ func runDecommissionBench(
 
 				// Run workload effectively indefinitely, to be later killed by context
 				// cancellation once decommission has completed.
-				err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), workloadCmd)
+				err := c.RunE(ctx, option.WithNodes(c.WorkloadNodes()), workloadCmd)
 				if errors.Is(ctx.Err(), context.Canceled) {
 					// Workload intentionally cancelled via context, so don't return error.
 					return nil
@@ -751,11 +757,11 @@ func runDecommissionBenchLong(
 		`./cockroach workload fixtures import tpcc --warehouses=%d`,
 		benchSpec.warehouses,
 	)
-	workloadCmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
+	workloadCmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
 		"--histograms=%s/stats.json --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
 		testTimeout, t.PerfArtifactsDir(), rampDuration, benchSpec.nodes)
 
-	setupDecommissionBench(ctx, t, c, benchSpec, workloadNode, pinnedNode, importCmd)
+	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
 
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
 	m := c.NewMonitor(workloadCtx, crdbNodes)

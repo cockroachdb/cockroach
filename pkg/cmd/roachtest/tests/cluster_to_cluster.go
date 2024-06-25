@@ -225,13 +225,13 @@ type replicateTPCC struct {
 }
 
 func (tpcc replicateTPCC) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
-	return fmt.Sprintf(`./workload init tpcc --data-loader import --warehouses %d {pgurl%s:%s}`,
+	return fmt.Sprintf(`./cockroach workload init tpcc --data-loader import --warehouses %d {pgurl%s:%s}`,
 		tpcc.warehouses, nodes, tenantName)
 }
 
 func (tpcc replicateTPCC) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
 	// added --tolerate-errors flags to prevent test from flaking due to a transaction retry error
-	return fmt.Sprintf(`./workload run tpcc --warehouses %d --tolerate-errors {pgurl%s:%s}`,
+	return fmt.Sprintf(`./cockroach workload run tpcc --warehouses %d --tolerate-errors {pgurl%s:%s}`,
 		tpcc.warehouses, nodes, tenantName)
 }
 
@@ -309,7 +309,7 @@ type replicateKV struct {
 }
 
 func (kv replicateKV) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
-	cmd := roachtestutil.NewCommand(`./workload init kv`).
+	cmd := roachtestutil.NewCommand(`./cockroach workload init kv`).
 		MaybeFlag(kv.initRows > 0, "insert-count", kv.initRows).
 		// Only set the max block byte values for the init command if we
 		// actually need to insert rows.
@@ -321,7 +321,7 @@ func (kv replicateKV) sourceInitCmd(tenantName string, nodes option.NodeListOpti
 }
 
 func (kv replicateKV) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
-	cmd := roachtestutil.NewCommand(`./workload run kv`).
+	cmd := roachtestutil.NewCommand(`./cockroach workload run kv`).
 		Option("tolerate-errors").
 		Flag("max-block-bytes", kv.maxBlockBytes).
 		Flag("read-percent", kv.readPercent).
@@ -525,8 +525,7 @@ func (rd *replicationDriver) setupC2C(
 
 	srcCluster := c.Range(1, rd.rs.srcNodes)
 	dstCluster := c.Range(rd.rs.srcNodes+1, rd.rs.srcNodes+rd.rs.dstNodes)
-	workloadNode := c.Node(rd.rs.srcNodes + rd.rs.dstNodes + 1)
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
+	workloadNode := c.WorkloadNodes()
 
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
 	srcStartOps := option.NewStartOpts(option.NoBackupSchedule)
@@ -1054,6 +1053,7 @@ func c2cRegisterWrapper(
 	if sp.pdSize != 0 {
 		clusterOps = append(clusterOps, spec.VolumeSize(sp.pdSize))
 	}
+	clusterOps = append(clusterOps, spec.WorkloadNodes(1), spec.WorkloadNodeCPU(sp.cpus))
 
 	if len(sp.multiregion.srcLocalities) > 0 {
 		allZones := make([]string, 0, sp.srcNodes+sp.dstNodes+1)

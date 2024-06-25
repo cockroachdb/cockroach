@@ -96,8 +96,6 @@ func importBankDataSplit(
 ) string {
 	dest := destinationName(c)
 
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
 	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
@@ -613,7 +611,6 @@ func runBackupMVCCRangeTombstones(
 	ctx context.Context, t test.Test, c cluster.Cluster, config mvccRangeTombstoneConfig,
 ) {
 	if !config.skipClusterSetup {
-		c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
 		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
 	}
 	t.Status("starting csv servers")

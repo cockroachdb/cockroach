@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -30,7 +31,7 @@ func registerDiskFull(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "disk-full",
 		Owner:            registry.OwnerStorage,
-		Cluster:          r.MakeClusterSpec(5),
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNodes(1)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
@@ -39,8 +40,7 @@ func registerDiskFull(r registry.Registry) {
 				t.Skip("you probably don't want to fill your local disk")
 			}
 
-			nodes := c.Spec().NodeCount - 1
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 			// Node 1 will soon be killed, when the ballast file fills up its disk. To
 			// ensure that the ranges containing system tables are available on other
@@ -54,19 +54,19 @@ func registerDiskFull(r registry.Registry) {
 			_ = db.Close()
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, c.Range(1, nodes))
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
 					"./cockroach workload run kv --tolerate-errors --init --read-percent=0"+
 						" --concurrency=10 --duration=4m {pgurl:2-%d}",
-					nodes)
-				c.Run(ctx, option.WithNodes(c.Node(nodes+1)), cmd)
+					len(c.CRDBNodes()))
+				c.Run(ctx, option.WithNodes(c.WorkloadNodes()), cmd)
 				return nil
 			})
 
 			// Each node should have an automatically created
 			// EMERGENCY_BALLAST file in the auxiliary directory.
-			c.Run(ctx, option.WithNodes(c.Range(1, nodes)), "stat {store-dir}/auxiliary/EMERGENCY_BALLAST")
+			c.Run(ctx, option.WithNodes(c.CRDBNodes()), "stat {store-dir}/auxiliary/EMERGENCY_BALLAST")
 
 			m.Go(func(ctx context.Context) error {
 				const n = 1
