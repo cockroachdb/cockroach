@@ -1629,6 +1629,22 @@ var storageSnapshotCmd = &cobra.Command{
 	}),
 }
 
+var sideEyeRootCmd = &cobra.Command{
+	Use:   "side-eye",
+	Short: "interact with side-eye.io functionality",
+	Args:  cobra.MinimumNArgs(1),
+}
+var sideEyeSnapCmd = &cobra.Command{
+	Use:     "snapshot",
+	Aliases: []string{"snap"},
+	Short:   "interact with side-eye.io functionality",
+	Args:    cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		roachprod.CaptureSideEyeSnapshot(context.Background(), config.Logger, args[0])
+		return nil
+	}),
+}
+
 // Before executing any command, validate and canonicalize args.
 func validateAndConfigure(cmd *cobra.Command, args []string) {
 	// Skip validation for commands that are self-sufficient.
@@ -1940,6 +1956,7 @@ func main() {
 		jaegerStartCmd,
 		jaegerStopCmd,
 		jaegerURLCmd,
+		sideEyeRootCmd,
 		fluentBitStartCmd,
 		fluentBitStopCmd,
 		opentelemetryStartCmd,

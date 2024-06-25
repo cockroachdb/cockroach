@@ -32,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DataExMachina-dev/side-eye-go/sideeyeclient"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
@@ -2749,6 +2750,44 @@ func Deploy(
 		}
 	}
 	return nil
+}
+
+var sideEyeToken, _ = os.LookupEnv("SIDE_EYE_API_TOKEN")
+
+// CaptureSideEyeSnapshot asks the Side-Eye service to take a snapshot of the
+// cockroach processes of this cluster. All errors are logged and swallowed, and
+// the call is a no-op if the SIDE_EYE_API_TOKEN is not in the env. The agents
+// must previously have been installed and started with the cluster's name as
+// the env name.
+func CaptureSideEyeSnapshot(ctx context.Context, l *logger.Logger, sideEyeEnv string) {
+	if sideEyeToken == "" {
+		l.PrintfCtx(ctx, "Side-Eye token is not configured, skipping snapshot")
+		return
+	}
+
+	l.PrintfCtx(ctx, "capturing snapshot of %s env with Side-Eye", sideEyeEnv)
+
+	client, err := sideeyeclient.NewSideEyeClient(sideeyeclient.WithApiToken(sideEyeToken))
+	if err != nil {
+		l.Errorf("failed to create side-eye client: %s", err)
+		return
+	}
+	defer client.Close()
+
+	// Protect against the snapshot taking too long.
+	snapCtx, cancel := context.WithTimeout(ctx, time.Second*30)
+	defer cancel()
+	snapRes, err := client.CaptureSnapshot(snapCtx, sideEyeEnv)
+	if err != nil {
+		msg := err.Error()
+		if errors.Is(err, sideeyeclient.NoProcessesError{}) {
+			msg += "; is cockroach running?"
+		}
+		l.PrintfCtx(ctx, "side-eye failed to capture cluster snapshot: %s", msg)
+		return
+	}
+
+	l.PrintfCtx(ctx, "captured side-eye snapshot: %s", snapRes.SnapshotURL)
 }
 
 // getClusterFromCache finds and returns a SyncedCluster from
