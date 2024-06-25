@@ -93,3 +93,59 @@ EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(delimiter = '|') FROM SEL
 EXPORT INTO CSV ('s3://my/path/%part%.csv') WITH OPTIONS(delimiter = ('|')) FROM SELECT (a), (sum((b))) FROM c WHERE ((d) = (1)) ORDER BY (sum((b))) DESC LIMIT (10) -- fully parenthesized
 EXPORT INTO CSV '_' WITH OPTIONS(delimiter = '_') FROM SELECT a, sum(b) FROM c WHERE d = _ ORDER BY sum(b) DESC LIMIT _ -- literals removed
 EXPORT INTO CSV 's3://my/path/%part%.csv' WITH OPTIONS(_ = '|') FROM SELECT _, _(_) FROM _ WHERE _ = 1 ORDER BY _(_) DESC LIMIT 10 -- identifiers removed
+
+# Test redaction of secrets in URLs.
+
+parse
+IMPORT PGDUMP ('https://user:foo@example.com/bar')
+----
+IMPORT PGDUMP 'https://user:redacted@example.com/bar' -- normalized!
+IMPORT PGDUMP ('https://user:redacted@example.com/bar') -- fully parenthesized
+IMPORT PGDUMP '_' -- literals removed
+IMPORT PGDUMP 'https://user:redacted@example.com/bar' -- identifiers removed
+IMPORT PGDUMP 'https://user:foo@example.com/bar' -- passwords exposed
+
+parse
+IMPORT PGDUMP 'https://a:b@c.com/d'
+----
+IMPORT PGDUMP 'https://a:redacted@c.com/d' -- normalized!
+IMPORT PGDUMP ('https://a:redacted@c.com/d') -- fully parenthesized
+IMPORT PGDUMP '_' -- literals removed
+IMPORT PGDUMP 'https://a:redacted@c.com/d' -- identifiers removed
+IMPORT PGDUMP 'https://a:b@c.com/d' -- passwords exposed
+
+parse
+IMPORT TABLE foo FROM PGDUMP ('https://user:pass@foo.com')
+----
+IMPORT TABLE foo FROM PGDUMP 'https://user:redacted@foo.com' -- normalized!
+IMPORT TABLE foo FROM PGDUMP ('https://user:redacted@foo.com') -- fully parenthesized
+IMPORT TABLE foo FROM PGDUMP '_' -- literals removed
+IMPORT TABLE _ FROM PGDUMP 'https://user:redacted@foo.com' -- identifiers removed
+IMPORT TABLE foo FROM PGDUMP 'https://user:pass@foo.com' -- passwords exposed
+
+parse
+IMPORT TABLE foo FROM PGDUMP 'https://user:pass@foo.com'
+----
+IMPORT TABLE foo FROM PGDUMP 'https://user:redacted@foo.com' -- normalized!
+IMPORT TABLE foo FROM PGDUMP ('https://user:redacted@foo.com') -- fully parenthesized
+IMPORT TABLE foo FROM PGDUMP '_' -- literals removed
+IMPORT TABLE _ FROM PGDUMP 'https://user:redacted@foo.com' -- identifiers removed
+IMPORT TABLE foo FROM PGDUMP 'https://user:pass@foo.com' -- passwords exposed
+
+parse
+IMPORT INTO foo (a, b) CSV DATA ('https://user:pass@foo.com', 'https://a:b@example.com')
+----
+IMPORT INTO foo(a, b) CSV DATA ('https://user:redacted@foo.com', 'https://a:redacted@example.com') -- normalized!
+IMPORT INTO foo(a, b) CSV DATA (('https://user:redacted@foo.com'), ('https://a:redacted@example.com')) -- fully parenthesized
+IMPORT INTO foo(a, b) CSV DATA ('_', '_') -- literals removed
+IMPORT INTO _(_, _) CSV DATA ('https://user:redacted@foo.com', 'https://a:redacted@example.com') -- identifiers removed
+IMPORT INTO foo(a, b) CSV DATA ('https://user:pass@foo.com', 'https://a:b@example.com') -- passwords exposed
+
+parse
+IMPORT INTO foo CSV DATA ('https://a:b@localhost:8000/c')
+----
+IMPORT INTO foo CSV DATA ('https://a:redacted@localhost:8000/c') -- normalized!
+IMPORT INTO foo CSV DATA (('https://a:redacted@localhost:8000/c')) -- fully parenthesized
+IMPORT INTO foo CSV DATA ('_') -- literals removed
+IMPORT INTO _ CSV DATA ('https://a:redacted@localhost:8000/c') -- identifiers removed
+IMPORT INTO foo CSV DATA ('https://a:b@localhost:8000/c') -- passwords exposed

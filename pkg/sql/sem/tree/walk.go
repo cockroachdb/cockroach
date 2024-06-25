@@ -1552,7 +1552,7 @@ func (n *ControlSchedules) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Import) copyNode() *Import {
 	stmtCopy := *stmt
-	stmtCopy.Files = append(Exprs(nil), stmt.Files...)
+	stmtCopy.Files = append(URIs(nil), stmt.Files...)
 	stmtCopy.Options = append(KVOptions(nil), stmt.Options...)
 	return &stmtCopy
 }
@@ -1560,13 +1560,13 @@ func (stmt *Import) copyNode() *Import {
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Import) walkStmt(v Visitor) Statement {
 	ret := stmt
-	for i, expr := range stmt.Files {
-		e, changed := WalkExpr(v, expr)
+	for i, uri := range stmt.Files {
+		e, changed := WalkExpr(v, uri.Expr)
 		if changed {
 			if ret == stmt {
 				ret = stmt.copyNode()
 			}
-			ret.Files[i] = e
+			ret.Files[i].Expr = e
 		}
 	}
 	{
