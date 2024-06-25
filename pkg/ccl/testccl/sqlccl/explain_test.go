@@ -192,7 +192,6 @@ func TestExplainGist(t *testing.T) {
 			if err != nil && strings.Contains(err.Error(), "internal error") {
 				// Ignore all errors except the internal ones.
 				for _, knownErr := range []string{
-					"ALTER TABLE: failed to type check the cast of",     // #114316
 					"invalid datum type given: RECORD, expected RECORD", // #117101
 					"expected equivalence dependants to be its closure", // #119045
 				} {
