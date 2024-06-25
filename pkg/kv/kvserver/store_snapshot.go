@@ -634,14 +634,17 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		if len(req.SharedTables) > 0 && doExcise {
 			for i := range req.SharedTables {
 				sst := req.SharedTables[i]
+				pbToInternalKey := func(k *kvserverpb.SnapshotRequest_SharedTable_InternalKey) pebble.InternalKey {
+					return pebble.InternalKey{UserKey: k.UserKey, Trailer: pebble.InternalKeyTrailer(k.Trailer)}
+				}
 				sharedSSTs = append(sharedSSTs, pebble.SharedSSTMeta{
 					Backing:          stubBackingHandle{sst.Backing},
-					Smallest:         pebble.InternalKey{UserKey: sst.Smallest.UserKey, Trailer: sst.Smallest.Trailer},
-					Largest:          pebble.InternalKey{UserKey: sst.Largest.UserKey, Trailer: sst.Largest.Trailer},
-					SmallestRangeKey: pebble.InternalKey{UserKey: sst.SmallestRangeKey.UserKey, Trailer: sst.SmallestRangeKey.Trailer},
-					LargestRangeKey:  pebble.InternalKey{UserKey: sst.LargestRangeKey.UserKey, Trailer: sst.LargestRangeKey.Trailer},
-					SmallestPointKey: pebble.InternalKey{UserKey: sst.SmallestPointKey.UserKey, Trailer: sst.SmallestPointKey.Trailer},
-					LargestPointKey:  pebble.InternalKey{UserKey: sst.LargestPointKey.UserKey, Trailer: sst.LargestPointKey.Trailer},
+					Smallest:         pbToInternalKey(sst.Smallest),
+					Largest:          pbToInternalKey(sst.Largest),
+					SmallestRangeKey: pbToInternalKey(sst.SmallestRangeKey),
+					LargestRangeKey:  pbToInternalKey(sst.LargestRangeKey),
+					SmallestPointKey: pbToInternalKey(sst.SmallestPointKey),
+					LargestPointKey:  pbToInternalKey(sst.LargestPointKey),
 					Level:            uint8(sst.Level),
 					Size:             sst.Size_,
 				})
@@ -868,7 +871,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				ikeyToPb := func(ik pebble.InternalKey) *kvserverpb.SnapshotRequest_SharedTable_InternalKey {
 					return &kvserverpb.SnapshotRequest_SharedTable_InternalKey{
 						UserKey: ik.UserKey,
-						Trailer: ik.Trailer,
+						Trailer: uint64(ik.Trailer),
 					}
 				}
 				sharedSSTs = append(sharedSSTs, kvserverpb.SnapshotRequest_SharedTable{
@@ -927,7 +930,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 				return err
 			}
 			return maybeFlushBatch()
-		}, func(start, end []byte, seqNum uint64) error {
+		}, func(start, end []byte, seqNum pebble.SeqNum) error {
 			kvs++
 			if b == nil {
 				b = kvSS.newWriteBatch()
