@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -246,6 +248,40 @@ func TestGetFirstActiveClient(t *testing.T) {
 
 	// The 5th should've succeded as it was a valid scheme and succeeded Dial
 	require.Equal(t, activeClient.(*RandomStreamClient).streamURL.String(), streamAddresses[4])
+}
+
+func TestPlannedPartitionBackwardCompatibility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("old source, new client", func(t *testing.T) {
+		partitionSpec := streampb.StreamPartitionSpec{
+			Spans: []roachpb.Span{keys.MakeTenantSpan(serverutils.TestTenantID())},
+			Config: streampb.StreamPartitionSpec_ExecutionConfig{
+				MinCheckpointFrequency: 10 * time.Millisecond,
+			},
+		}
+		encodedSpec, err := protoutil.Marshal(&partitionSpec)
+		require.NoError(t, err)
+
+		var sourcePartition = streampb.SourcePartition{}
+		err = protoutil.Unmarshal(encodedSpec, &sourcePartition)
+		require.NoError(t, err)
+		require.Equal(t, partitionSpec.Spans, sourcePartition.Spans)
+	})
+
+	t.Run("new source, old client", func(t *testing.T) {
+		var sourcePartition = streampb.SourcePartition{
+			Spans: []roachpb.Span{keys.MakeTenantSpan(serverutils.TestTenantID())},
+		}
+		encodedSpec, err := protoutil.Marshal(&sourcePartition)
+		require.NoError(t, err)
+
+		partitionSpec := streampb.StreamPartitionSpec{}
+		err = protoutil.Unmarshal(encodedSpec, &partitionSpec)
+		require.NoError(t, err)
+		require.Equal(t, sourcePartition.Spans, partitionSpec.Spans)
+	})
 }
 
 // ExampleClientUsage serves as documentation to indicate how a stream

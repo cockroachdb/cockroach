@@ -339,11 +339,8 @@ func buildReplicationStreamSpec(
 			NodeID:     roachpb.NodeID(sp.SQLInstanceID),
 			SQLAddress: nodeInfo.SQLAddress,
 			Locality:   nodeInfo.Locality,
-			PartitionSpec: &streampb.StreamPartitionSpec{
+			SourcePartition: &streampb.SourcePartition{
 				Spans: sp.Spans,
-				Config: streampb.StreamPartitionSpec_ExecutionConfig{
-					MinCheckpointFrequency: crosscluster.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
-				},
 			},
 		})
 	}
