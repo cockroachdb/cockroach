@@ -753,7 +753,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "create_external_connection_stmt",
-		replace: map[string]string{"label_spec": "connection_name", "string_or_placeholder": "connection_URI"},
+		replace: map[string]string{"label_spec": "connection_name", "uri": "connection_URI"},
 		unlink:  []string{"connection_name", "connection_URI"},
 	},
 	{
