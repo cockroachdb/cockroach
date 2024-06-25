@@ -36,6 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	// These are the dependencies powering the new kafka batching sink, which will be added in a later PR.
+	_ "github.com/twmb/franz-go/pkg/kadm"
+	_ "github.com/twmb/franz-go/pkg/kgo"
 )
 
 var zeroTS hlc.Timestamp
