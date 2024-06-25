@@ -116,9 +116,11 @@ rm /tmp/otelcol-contrib.deb;
 // a command locally.
 var installLocalCmds = map[string]map[string]*exec.Cmd{
 	"side-eye": {
-		"%API_KEY%": exec.Command("gcloud", "secrets", "versions", "access", "latest", "--secret", "side-eye-key"),
+		"%API_KEY%": sideEyeSecretCmd,
 	},
 }
+
+var sideEyeSecretCmd = exec.Command("gcloud", "secrets", "versions", "access", "latest", "--secret", "side-eye-key")
 
 // SortedCmds TODO(peter): document
 func SortedCmds() []string {
@@ -173,4 +175,14 @@ func InstallTool(
 	}
 
 	return nil
+}
+
+func GetGcloudSideEyeSecret() string {
+	c := *sideEyeSecretCmd
+	c.Stderr = os.Stderr
+	out, err := c.Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
 }
