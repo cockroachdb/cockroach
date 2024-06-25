@@ -124,7 +124,7 @@ func changefeedTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
-	unspecifiedSink := changefeedStmt.SinkURI == nil
+	unspecifiedSink := changefeedStmt.SinkURI.Expr == nil
 	if unspecifiedSink {
 		return true, sinklessHeader, nil
 	}
@@ -142,7 +142,7 @@ func changefeedPlanHook(
 
 	exprEval := p.ExprEvaluator("CREATE CHANGEFEED")
 	var sinkURI string
-	unspecifiedSink := changefeedStmt.SinkURI == nil
+	unspecifiedSink := changefeedStmt.SinkURI.Expr == nil
 	avoidBuffering := unspecifiedSink
 	var header colinfo.ResultColumns
 	if unspecifiedSink {
@@ -373,7 +373,7 @@ func createChangefeedJobRecord(
 	jobID jobspb.JobID,
 	telemetryPath string,
 ) (*jobs.Record, error) {
-	unspecifiedSink := changefeedStmt.SinkURI == nil
+	unspecifiedSink := changefeedStmt.SinkURI.Expr == nil
 
 	for _, warning := range opts.DeprecationWarnings() {
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
@@ -985,7 +985,7 @@ func changefeedJobDescription(
 
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
-		SinkURI: tree.NewDString(cleanedSinkURI),
+		SinkURI: tree.NewSanitizedURI(cleanedSinkURI),
 		Select:  changefeed.Select,
 	}
 	if err = opts.ForEachWithRedaction(func(k string, v string) {

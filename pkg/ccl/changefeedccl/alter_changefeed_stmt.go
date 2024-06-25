@@ -178,7 +178,7 @@ func alterChangefeedPlanHook(
 			}
 			newChangefeedStmt.Options = append(newChangefeedStmt.Options, opt)
 		}
-		newChangefeedStmt.SinkURI = tree.NewDString(newSinkURI)
+		newChangefeedStmt.SinkURI = tree.NewURI(tree.NewDString(newSinkURI))
 
 		// We validate that all the tables are resolvable at the
 		// resolveTime below in validateNewTargets. resolveTime is also

@@ -175,7 +175,7 @@ func (s *scheduledChangefeedExecutor) executeChangefeed(
 	}
 
 	// Sanity check: can't execute core changefeeds from schedule.
-	if changefeedStmt.SinkURI == nil {
+	if changefeedStmt.SinkURI.Expr == nil {
 		return errors.AssertionFailedf("cannot execute core changefeed from schedule")
 	}
 
@@ -630,7 +630,7 @@ func doCreateChangefeedSchedule(
 
 	createChangefeedNode := &tree.CreateChangefeed{
 		Targets: spec.Targets,
-		SinkURI: tree.NewStrVal(*spec.evaluatedSinkURI),
+		SinkURI: tree.NewURI(tree.NewStrVal(*spec.evaluatedSinkURI)),
 		Options: spec.Options,
 		Select:  spec.Select,
 	}

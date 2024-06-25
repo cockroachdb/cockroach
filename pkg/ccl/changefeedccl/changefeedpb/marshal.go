@@ -30,7 +30,7 @@ func (m ScheduledChangefeedExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]
 		return nil, errors.Errorf("unexpected %T statement in backup schedule: %v", export, export)
 	}
 
-	rawURI, ok := export.SinkURI.(*tree.StrVal)
+	rawURI, ok := export.SinkURI.Expr.(*tree.StrVal)
 	if !ok {
 		return nil, errors.Errorf("unexpected %T arg in export schedule: %v", rawURI, rawURI)
 	}
@@ -38,7 +38,7 @@ func (m ScheduledChangefeedExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]
 	if err != nil {
 		return nil, err
 	}
-	export.SinkURI = tree.NewDString(sinkURI)
+	export.SinkURI = tree.NewSanitizedURI(sinkURI)
 
 	m.ChangefeedStatement = export.String()
 	return json.Marshal(m)
