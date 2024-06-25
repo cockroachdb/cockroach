@@ -1,6 +1,3 @@
-# TODO(kvoli): Update the testing harness and other tests to support this
-# syntax.
-#
 # Intialize two ranges, both having the leader on s1.
 init 
 range_id=1 tenant_id=1 local_replica_id=1
