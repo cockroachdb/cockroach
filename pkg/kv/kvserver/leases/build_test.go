@@ -15,7 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
 )
@@ -23,6 +25,7 @@ import (
 var (
 	repl1 = roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	repl2 = roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
+	desc  = roachpb.RangeDescriptor{InternalReplicas: []roachpb.ReplicaDescriptor{repl1, repl2}}
 	cts10 = hlc.ClockTimestamp{WallTime: 10}
 	cts20 = hlc.ClockTimestamp{WallTime: 20}
 	cts30 = hlc.ClockTimestamp{WallTime: 30}
@@ -112,6 +115,18 @@ func TestInputValidation(t *testing.T) {
 			expErr: "cannot acquire lease from another node before it has expired",
 		},
 		{
+			name: "bypass safety checks for acquisition",
+			input: BuildInput{
+				LocalStoreID:       repl1.StoreID,
+				Now:                cts20,
+				PrevLease:          roachpb.Lease{Replica: repl2, Expiration: &ts10},
+				PrevLeaseExpired:   true,
+				NextLeaseHolder:    repl1,
+				BypassSafetyChecks: true,
+			},
+			expErr: "cannot bypass safety checks for lease acquisition/extension",
+		},
+		{
 			name: "valid acquisition",
 			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
@@ -158,10 +173,11 @@ func TestInputValidation(t *testing.T) {
 
 func defaultSettings() Settings {
 	return Settings{
-		UseExpirationLeases:      false,
-		TransferExpirationLeases: true,
-		ExpToEpochEquiv:          true,
-		RangeLeaseDuration:       20,
+		UseExpirationLeases:        false,
+		TransferExpirationLeases:   true,
+		RejectLeaseOnLeaderUnknown: false,
+		ExpToEpochEquiv:            true,
+		RangeLeaseDuration:         20,
 	}
 }
 
@@ -221,7 +237,7 @@ func TestBuild(t *testing.T) {
 				if nl == nil {
 					nl = defaultNodeLiveness()
 				}
-				out, err := Build(st, nl, tt.input)
+				out, err := build(st, nl, tt.input)
 				if tt.expErr == "" {
 					require.NoError(t, err)
 					require.Equal(t, tt.expOutput, out)
@@ -630,4 +646,36 @@ func TestBuild(t *testing.T) {
 			},
 		})
 	})
+}
+
+func TestInputToVerifyInput(t *testing.T) {
+	cts := hlc.ClockTimestamp{WallTime: 1, Logical: 1}
+	ts := cts.ToTimestamp()
+	noZeroBuildInput := BuildInput{
+		LocalStoreID:   1,
+		LocalReplicaID: 1,
+		Desc:           &roachpb.RangeDescriptor{},
+		RaftStatus:     &raft.Status{},
+		RaftFirstIndex: 1,
+		PrevLease: roachpb.Lease{
+			Start:      cts,
+			Expiration: &ts,
+			Replica: roachpb.ReplicaDescriptor{
+				NodeID: 1, StoreID: 1, ReplicaID: 1, Type: 1,
+			},
+			DeprecatedStartStasis: &ts,
+			ProposedTS:            cts,
+			Epoch:                 1,
+			Sequence:              1,
+			AcquisitionType:       1,
+		},
+		PrevLeaseExpired: true,
+		NextLeaseHolder: roachpb.ReplicaDescriptor{
+			NodeID: 1, StoreID: 1, ReplicaID: 1, Type: 1,
+		},
+		BypassSafetyChecks: true,
+	}
+	verifyInput := noZeroBuildInput.toVerifyInput()
+	require.NoError(t, zerofields.NoZeroField(verifyInput),
+		"make sure you update BuildInput.toVerifyInput for the new field")
 }
