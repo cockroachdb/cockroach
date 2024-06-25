@@ -1290,6 +1290,7 @@ func TestLeaseEqual(t *testing.T) {
 		{ProposedTS: clockTS},
 		{Epoch: 1},
 		{Sequence: 1},
+		{AcquisitionType: 1},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
