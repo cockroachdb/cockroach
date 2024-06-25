@@ -363,11 +363,7 @@ func buildReplicationStreamSpec(
 func repartitionSpans(partitions []sql.SpanPartition, parts int) []sql.SpanPartition {
 	result := make([]sql.SpanPartition, 0, parts*len(partitions))
 	for part := range partitions {
-		if len(partitions[part].Spans) < parts {
-			result = append(result, partitions[part])
-			continue
-		}
-		repartitioned := make([]sql.SpanPartition, parts)
+		repartitioned := make([]sql.SpanPartition, min(parts, len(partitions[part].Spans)))
 		for i := range repartitioned {
 			repartitioned[i].SQLInstanceID = partitions[part].SQLInstanceID
 		}
