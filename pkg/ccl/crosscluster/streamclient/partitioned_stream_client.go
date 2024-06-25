@@ -173,7 +173,7 @@ func (p *partitionedStreamClient) createTopology(
 		if err != nil {
 			return Topology{}, err
 		}
-		rawSpec, err := protoutil.Marshal(sp.PartitionSpec)
+		rawSpec, err := protoutil.Marshal(sp.SourcePartition)
 		if err != nil {
 			return Topology{}, err
 		}
@@ -183,7 +183,7 @@ func (p *partitionedStreamClient) createTopology(
 			SrcInstanceID:     int(sp.NodeID),
 			SrcAddr:           crosscluster.PartitionAddress(pgURL.String()),
 			SrcLocality:       sp.Locality,
-			Spans:             sp.PartitionSpec.Spans,
+			Spans:             sp.SourcePartition.Spans,
 		})
 	}
 	return topology, nil
@@ -225,10 +225,12 @@ func (p *partitionedStreamClient) Subscribe(
 		opt(cfg)
 	}
 
-	sps := streampb.StreamPartitionSpec{}
-	if err := protoutil.Unmarshal(spec, &sps); err != nil {
+	sourcePartition := streampb.SourcePartition{}
+	if err := protoutil.Unmarshal(spec, &sourcePartition); err != nil {
 		return nil, err
 	}
+
+	sps := streampb.StreamPartitionSpec{}
 	sps.InitialScanTimestamp = initialScanTime
 	if previousReplicatedTimes != nil {
 		sps.PreviousReplicatedTimestamp = previousReplicatedTimes.Frontier()
@@ -237,6 +239,7 @@ func (p *partitionedStreamClient) Subscribe(
 			return span.ContinueMatch
 		})
 	}
+	sps.Spans = sourcePartition.Spans
 	sps.ConsumerNode = consumerNode
 	sps.ConsumerProc = consumerProc
 	sps.Compressed = true

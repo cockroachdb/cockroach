@@ -116,15 +116,15 @@ func (j JoinType) MakeOutputTypesWithContinuationColumn(left, right []*types.T) 
 
 func (j JoinType) makeOutputTypes(left, right []*types.T, continuationCol bool) []*types.T {
 	numOutputTypes := 0
-	if continuationCol {
-		// Add 1 to account for the continuation column.
-		numOutputTypes++
-	}
 	if j.ShouldIncludeLeftColsInOutput() {
 		numOutputTypes += len(left)
 	}
 	if j.ShouldIncludeRightColsInOutput() {
 		numOutputTypes += len(right)
+	}
+	if continuationCol {
+		// Add 1 to account for the continuation column.
+		numOutputTypes++
 	}
 	outputTypes := make([]*types.T, 0, numOutputTypes)
 	if j.ShouldIncludeLeftColsInOutput() {
