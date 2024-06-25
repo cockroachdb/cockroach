@@ -539,7 +539,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		SecurityContext: secCtx,
 		rpcCompression:  enableRPCCompression,
 		MasterCtx:       masterCtx,
-		metrics:         newMetrics(),
+		metrics:         newMetrics(opts.Locality),
 	}
 
 	rpcCtx.dialbackMu.Lock()
@@ -1478,7 +1478,7 @@ func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
 }
 
 type statsTracker struct {
-	m peerMetrics
+	m localityMetrics
 }
 
 func (t *statsTracker) TagRPC(ctx context.Context, _ *stats.RPCTagInfo) context.Context { return ctx }
