@@ -611,7 +611,7 @@ create_extension_stmt ::=
 	| 'CREATE' 'EXTENSION' name
 
 create_external_connection_stmt ::=
-	'CREATE' 'EXTERNAL' 'CONNECTION' label_spec 'AS' string_or_placeholder
+	'CREATE' 'EXTERNAL' 'CONNECTION' label_spec 'AS' uri
 
 create_schedule_stmt ::=
 	create_schedule_for_changefeed_stmt

@@ -2167,7 +2167,7 @@ func (node *CreateExtension) Format(ctx *FmtCtx) {
 // CreateExternalConnection represents a CREATE EXTERNAL CONNECTION statement.
 type CreateExternalConnection struct {
 	ConnectionLabelSpec LabelSpec
-	As                  Expr
+	As                  URI
 }
 
 var _ Statement = &CreateExternalConnection{}

@@ -176,7 +176,7 @@ func (e *MutableExternalConnection) UnredactedConnectionStatement() string {
 		ConnectionLabelSpec: tree.LabelSpec{
 			Label: tree.NewDString(e.rec.ConnectionName),
 		},
-		As: tree.NewDString(e.rec.ConnectionDetails.UnredactedURI()),
+		As: tree.NewURI(tree.NewDString(e.rec.ConnectionDetails.UnredactedURI())),
 	}
 	return tree.AsString(ecNode)
 }
