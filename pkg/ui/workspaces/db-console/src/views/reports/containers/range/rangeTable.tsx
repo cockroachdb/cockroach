@@ -87,6 +87,11 @@ const rangeTableDisplayList: RangeTableRow[] = [
     compareToLeader: true,
   },
   {
+    variable: "leaseMinExpiration",
+    display: "Lease Minimum Expiration",
+    compareToLeader: true,
+  },
+  {
     variable: "leaseAppliedIndex",
     display: "Lease Applied Index",
     compareToLeader: true,
@@ -750,6 +755,9 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         leaseExpiration: epoch
           ? rangeTableEmptyContent
           : this.contentTimestamp(lease.expiration, now),
+        leaseMinExpiration: epoch
+          ? this.contentTimestamp(lease.min_expiration, now)
+          : rangeTableEmptyContent,
         leaseAppliedIndex: this.createContent(
           FixLong(info.state.state.lease_applied_index),
         ),
