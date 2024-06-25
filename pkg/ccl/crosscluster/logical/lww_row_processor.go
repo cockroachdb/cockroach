@@ -61,8 +61,6 @@ type sqlLastWriteWinsRowProcessor struct {
 	settings    *cluster.Settings
 	ie          isql.Executor
 
-	metrics *Metrics
-
 	// scratch allows us to reuse some allocations between multiple calls to
 	// insertRow and deleteRow.
 	scratch struct {
@@ -129,28 +127,27 @@ func makeSQLLastWriteWinsHandler(
 	}, nil
 }
 
-func (lww *sqlLastWriteWinsRowProcessor) SetMetrics(metrics *Metrics) {
-	lww.metrics = metrics
-}
-
 func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, kv roachpb.KeyValue, prevValue roachpb.Value,
-) error {
+) (batchStats, error) {
 	var err error
 	kv.Key, err = keys.StripTenantPrefix(kv.Key)
 	if err != nil {
-		return errors.Wrap(err, "stripping tenant prefix")
+		return batchStats{}, errors.Wrap(err, "stripping tenant prefix")
 	}
 
 	row, err := lww.decoder.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
-		return errors.Wrap(err, "decoding KeyValue")
+		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
 	}
+	var stats batchStats
 	if row.IsDeleted() {
-		return lww.deleteRow(ctx, txn, row)
+		stats, err = lww.deleteRow(ctx, txn, row)
 	} else {
-		return lww.insertRow(ctx, txn, row, prevValue)
+		stats, err = lww.insertRow(ctx, txn, row, prevValue)
 	}
+	stats.byteSize = int64(kv.Size())
+	return stats, err
 }
 
 var ieOverrides = sessiondata.InternalExecutorOverride{
@@ -175,7 +172,7 @@ var tryOptimisticInsertEnabled = settings.RegisterBoolSetting(
 
 func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row, prevValue roachpb.Value,
-) error {
+) (batchStats, error) {
 	var kvTxn *kv.Txn
 	if txn != nil {
 		kvTxn = txn.KV()
@@ -198,18 +195,18 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 		return nil
 	})
 	if err != nil {
-		return err
+		return batchStats{}, err
 	}
 	lww.scratch.ts.Decimal = eval.TimestampToDecimal(row.MvccTimestamp)
 	datums = append(datums, &lww.scratch.ts)
 	lww.scratch.datums = datums[:0]
 	insertQueriesForTable, ok := lww.queryBuffer.insertQueries[row.TableID]
 	if !ok {
-		return errors.Errorf("no pre-generated insert query for table %d", row.TableID)
+		return batchStats{}, errors.Errorf("no pre-generated insert query for table %d", row.TableID)
 	}
 	insertQueries, ok := insertQueriesForTable[row.FamilyID]
 	if !ok {
-		return errors.Errorf("no pre-generated insert query for table %d column family %d", row.TableID, row.FamilyID)
+		return batchStats{}, errors.Errorf("no pre-generated insert query for table %d column family %d", row.TableID, row.FamilyID)
 	}
 	if prevValue.RawBytes == nil && tryOptimisticInsertEnabled.Get(&lww.settings.SV) {
 		// If there was no value before this change on the source, it means that
@@ -223,25 +220,24 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 			// then we bail completely.
 			if pgerror.GetPGCode(err) != pgcode.UniqueViolation {
 				log.Warningf(ctx, "replicated optimistic insert failed (query: %s): %s", query.SQL, err.Error())
-				return err
+				return batchStats{}, err
 			}
-			lww.metrics.OptimisticInsertConflictCount.Inc(1)
 		} else {
 			// There was no conflict - we're done.
-			return nil
+			return batchStats{}, nil
 		}
 	}
 	query := insertQueries[insertQueriesPessimisticIndex]
 	if _, err = lww.ie.ExecParsed(ctx, "replicated-insert", kvTxn, ieOverrides, query, datums...); err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", query.SQL, err.Error())
-		return err
+		return batchStats{}, err
 	}
-	return nil
+	return batchStats{optimisticInsertConflicts: 1}, nil
 }
 
 func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row,
-) error {
+) (batchStats, error) {
 	var kvTxn *kv.Txn
 	if txn != nil {
 		kvTxn = txn.KV()
@@ -251,7 +247,7 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 		datums = append(datums, d)
 		return nil
 	}); err != nil {
-		return err
+		return batchStats{}, err
 	}
 	lww.scratch.ts.Decimal = eval.TimestampToDecimal(row.MvccTimestamp)
 	datums = append(datums, &lww.scratch.ts)
@@ -259,9 +255,9 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 	deleteQuery := lww.queryBuffer.deleteQueries[row.TableID]
 	if _, err := lww.ie.ExecParsed(ctx, "replicated-delete", kvTxn, ieOverrides, deleteQuery, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", deleteQuery.SQL, err.Error())
-		return err
+		return batchStats{}, err
 	}
-	return nil
+	return batchStats{}, nil
 }
 
 func makeInsertQueries(
