@@ -51,6 +51,7 @@ SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 # Do a small read that uses less than 100 RUs. Consumption should only be
 # reported after 40s.
@@ -96,6 +97,7 @@ SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 advance
 30s
@@ -117,6 +119,7 @@ SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 # Metrics remain after we report consumption since there's no diff.
 metrics
@@ -161,6 +164,7 @@ SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 # Metrics now include write operation consumption.
 metrics
@@ -214,6 +218,7 @@ SQL Pods CPU seconds:  0.90
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 # Metrics with CPU usage.
 metrics
@@ -291,6 +296,7 @@ SQL Pods CPU seconds:  0.90
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 metrics
 ----
@@ -337,6 +343,7 @@ SQL Pods CPU seconds:  3.80
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 metrics
 ----
@@ -381,6 +388,7 @@ SQL Pods CPU seconds:  3.80
 PGWire egress:  12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 metrics
 ----
@@ -427,6 +435,7 @@ SQL Pods CPU seconds:  3.80
 PGWire egress:  12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 metrics
 ----
@@ -484,6 +493,7 @@ SQL Pods CPU seconds:  3.80
 PGWire egress:  12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 metrics
 ----
@@ -534,6 +544,7 @@ SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+Estimated CPU seconds: 0.00
 
 metrics
 ----
@@ -581,6 +592,7 @@ SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
 ExternalIO egress: 1024000 bytes
 ExternalIO ingress: 1024000 bytes
+Estimated CPU seconds: 0.00
 
 metrics
 ----
@@ -625,6 +637,7 @@ SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
 ExternalIO egress: 1024000 bytes
 ExternalIO ingress: 1024000 bytes
+Estimated CPU seconds: 0.00
 
 metrics
 ----
@@ -668,6 +681,7 @@ SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
 ExternalIO egress: 1024000 bytes
 ExternalIO ingress: 1024000 bytes
+Estimated CPU seconds: 0.00
 
 metrics
 ----
@@ -714,6 +728,7 @@ SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
 ExternalIO egress: 1024000 bytes
 ExternalIO ingress: 1024000 bytes
+Estimated CPU seconds: 0.00
 
 metrics
 ----

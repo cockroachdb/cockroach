@@ -50,6 +50,13 @@ func TestEstimatedCPUModel(t *testing.T) {
 			PayloadSize: []float64{256, 1024, 4096},
 			CPUPerByte:  []EstimatedCPU{2, 4, 8},
 		},
+		BackgroundCPU: struct {
+			Amount       EstimatedCPU
+			Amortization float64
+		}{
+			Amount:       0.5,
+			Amortization: 5,
+		},
 	}
 
 	t.Run("roundtrip model through JSON", func(t *testing.T) {

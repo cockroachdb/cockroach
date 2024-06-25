@@ -155,7 +155,11 @@ func validateEstimatedCPUSetting(values *settings.Values, jsonStr string) error 
 		len(model.WriteBatchCost.RatePerNode) != len(model.WriteBatchCost.CPUPerBatch) ||
 		len(model.WriteRequestCost.BatchSize) != len(model.WriteRequestCost.CPUPerRequest) ||
 		len(model.WriteBytesCost.PayloadSize) != len(model.WriteBytesCost.CPUPerByte) {
-		return errors.Newf("failed to validate estimated_cpu model: %s", jsonStr)
+		return errors.Newf("estimated_cpu model lookup arrays cannot have different lengths: %s", jsonStr)
+	}
+
+	if model.BackgroundCPU.Amount != 0 && model.BackgroundCPU.Amortization <= 0 {
+		return errors.Newf("estimated_cpu model cannot use zero or negative CPU amortization: %s", jsonStr)
 	}
 
 	return nil

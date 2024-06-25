@@ -42,6 +42,7 @@ go_test(
         "main_test.go",
         "query_ru_estimate_test.go",
         "tenant_side_test.go",
+        "tenant_side_unit_test.go",
         "token_bucket_test.go",
     ],
     data = glob(["testdata/**"]),

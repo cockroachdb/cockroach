@@ -328,6 +328,7 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 		PGWireEgressBytes:    9,
 		KVRU:                 10,
 		CrossRegionNetworkRU: 11,
+		EstimatedCPUSeconds:  12,
 	}
 	var b TenantConsumption
 	for i := 0; i < 10; i++ {
@@ -345,6 +346,7 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 		PGWireEgressBytes:    90,
 		KVRU:                 100,
 		CrossRegionNetworkRU: 110,
+		EstimatedCPUSeconds:  120,
 	}); b != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, b)
 	}
@@ -363,6 +365,7 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 		PGWireEgressBytes:    81,
 		KVRU:                 90,
 		CrossRegionNetworkRU: 99,
+		EstimatedCPUSeconds:  108,
 	}); c != exp {
 		t.Errorf("expected\n%#v\ngot\n%#v", exp, c)
 	}
