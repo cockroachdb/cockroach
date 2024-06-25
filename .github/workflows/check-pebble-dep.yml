@@ -1,0 +1,16 @@
+name: Check Pebble dep
+on:
+  schedule:
+    - cron: '0 8 * * 0,3' # Every Sun and Wed at 8:00 UTC
+
+jobs:
+  check-pebble-dep:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Check Pebble deps
+        shell: bash
+        run: scripts/check-pebble-dep.sh
