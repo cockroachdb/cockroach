@@ -237,7 +237,7 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 	// Connect method needs to do the short-circuiting (if a Connection is created
 	// while the breaker is tripped, we want to block in Connect only once we've
 	// seen the first heartbeat succeed).
-	pm := rpcCtx.metrics.acquire(k)
+	pm, lm := rpcCtx.metrics.acquire(k, locality)
 	p := &peer{
 		peerMetrics:        pm,
 		logDisconnectEvery: log.Every(time.Minute),
@@ -246,7 +246,7 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 		opts:               &rpcCtx.ContextOptions,
 		peers:              &rpcCtx.peers,
 		dial: func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error) {
-			additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{pm})}
+			additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{lm})}
 			additionalDialOpts = append(additionalDialOpts, rpcCtx.testingDialOpts...)
 			return rpcCtx.grpcDialRaw(ctx, target, class, additionalDialOpts...)
 		},
