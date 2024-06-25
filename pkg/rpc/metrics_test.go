@@ -37,9 +37,12 @@ func TestMetricsRelease(t *testing.T) {
 		return count
 	}
 
-	verifyAllFields := func(m Metrics, wantChildren int) (metricFields int) {
-		r := reflect.ValueOf(m)
+	verifyAllFields := func(m *Metrics, wantChildren int) (metricFields int) {
+		r := reflect.ValueOf(m).Elem()
 		for i, n := 0, r.NumField(); i < n; i++ {
+			if !r.Field(i).CanInterface() {
+				continue
+			}
 			field := r.Field(i).Interface()
 			metric, ok := field.(eacher)
 			if !ok { // skip all non-metric fields
@@ -52,7 +55,7 @@ func TestMetricsRelease(t *testing.T) {
 	}
 
 	const expectedCount = 11
-	m := makeMetrics()
+	m := newMetrics()
 	// Verify that each metric doesn't have any children at first. Verify the
 	// number of metric fields, as a sanity check (to be modified if fields are
 	// added/deleted).
