@@ -202,7 +202,18 @@ func TestRangeController(t *testing.T) {
 
 		stateString := func() string {
 			var buf strings.Builder
-			for rangeID, raftImpl := range raftImpls {
+
+			// Sort the rangeIDs for deterministic output.
+			rangeIDs := make([]roachpb.RangeID, 0, len(raftImpls))
+			for rangeID := range raftImpls {
+				rangeIDs = append(rangeIDs, rangeID)
+			}
+			sort.Slice(rangeIDs, func(i, j int) bool {
+				return rangeIDs[i] < rangeIDs[j]
+			})
+
+			for _, rangeID := range rangeIDs {
+				raftImpl := raftImpls[rangeID]
 				fmt.Fprintf(&buf, "range_id=%d\n", rangeID)
 				replicaIDs := make([]roachpb.ReplicaID, 0, len(raftImpl.replicas))
 				for replicaID := range raftImpl.replicas {
