@@ -583,6 +583,8 @@ func (t *txnBatch) HandleBatch(
 		}
 	} else {
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			// Reset the counter in case the txn was retried transparently.
+			stats.byteSize = 0
 			for _, kv := range batch {
 				stats.byteSize += kv.Size()
 				if err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue); err != nil {
