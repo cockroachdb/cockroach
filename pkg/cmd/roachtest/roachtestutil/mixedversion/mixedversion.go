@@ -447,7 +447,7 @@ func defaultTestOptions() testOptions {
 		minimumSupportedVersion:        OldestSupportedVersion,
 		predecessorFunc:                randomPredecessor,
 		enabledDeploymentModes:         []DeploymentMode{SystemOnlyDeployment},
-		skipVersionProbability:         0.5,
+		skipVersionProbability:         1.0,
 		overriddenMutatorProbabilities: make(map[string]float64),
 	}
 }
