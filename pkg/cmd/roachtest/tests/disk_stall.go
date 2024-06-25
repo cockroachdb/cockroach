@@ -206,7 +206,6 @@ func registerDiskStalledDetection(r registry.Registry) {
 	}
 
 	for name, makeStaller := range stallers {
-		name, makeStaller := name, makeStaller
 		r.Add(registry.TestSpec{
 			Name:  fmt.Sprintf("disk-stalled/detection/%s", name),
 			Owner: registry.OwnerStorage,

@@ -140,7 +140,6 @@ func runMultiTenantTPCH(
 func registerMultiTenantTPCH(r registry.Registry) {
 	for _, sharedProcess := range []bool{false, true} {
 		for _, enableDirectScans := range []bool{false, true} {
-			sharedProcess, enableDirectScans := sharedProcess, enableDirectScans
 			name := "multitenant/tpch"
 			if sharedProcess {
 				name += "/shared_process"

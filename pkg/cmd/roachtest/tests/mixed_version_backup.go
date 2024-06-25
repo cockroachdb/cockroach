@@ -1343,7 +1343,6 @@ func (u *CommonTestUtils) loadTablesForDBs(
 	allTables := make([][]string, len(dbs))
 	eg, _ := errgroup.WithContext(ctx)
 	for j, dbName := range dbs {
-		j, dbName := j, dbName // capture range variables
 		eg.Go(func() error {
 			node, db := u.RandomDB(rng, u.roachNodes)
 			l.Printf("loading table information for DB %q via node %d", dbName, node)
@@ -1697,7 +1696,6 @@ func (d *BackupRestoreTestDriver) computeTableContents(
 	result := make([]tableContents, len(tables))
 	eg, _ := errgroup.WithContext(ctx)
 	for j, table := range tables {
-		j, table := j, table // capture range variables
 		eg.Go(func() error {
 			node, db := d.testUtils.RandomDB(rng, d.roachNodes)
 			l.Printf("querying table contents for %s through node %d", table, node)
@@ -2010,7 +2008,6 @@ func (u *CommonTestUtils) disableJobAdoption(
 	l.Printf("disabling job adoption on nodes %v", nodes)
 	eg, _ := errgroup.WithContext(ctx)
 	for _, node := range nodes {
-		node := node // capture range variable
 		eg.Go(func() error {
 			l.Printf("node %d: disabling job adoption", node)
 			sentinelFilePath, err := u.sentinelFilePath(ctx, l, node)
@@ -2060,7 +2057,6 @@ func (u *CommonTestUtils) enableJobAdoption(
 	l.Printf("enabling job adoption on nodes %v", nodes)
 	eg, _ := errgroup.WithContext(ctx)
 	for _, node := range nodes {
-		node := node // capture range variable
 		eg.Go(func() error {
 			l.Printf("node %d: enabling job adoption", node)
 			sentinelFilePath, err := u.sentinelFilePath(ctx, l, node)

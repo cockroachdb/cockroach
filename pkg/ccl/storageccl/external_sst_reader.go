@@ -135,11 +135,7 @@ func ExternalSSTReader(
 	}()
 
 	for _, sf := range storeFiles {
-		// prevent capturing the loop variables by reference when defining openAt below.
-		filePath := sf.FilePath
-		store := sf.Store
-
-		f, sz, err := getFileWithRetry(ctx, filePath, store)
+		f, sz, err := getFileWithRetry(ctx, sf.FilePath, sf.Store)
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +145,7 @@ func ExternalSSTReader(
 			sz:   sizeStat(sz),
 			body: f,
 			openAt: func(offset int64) (ioctx.ReadCloserCtx, error) {
-				reader, _, err := store.ReadFile(ctx, filePath, cloud.ReadOptions{
+				reader, _, err := sf.Store.ReadFile(ctx, sf.FilePath, cloud.ReadOptions{
 					Offset:     offset,
 					NoFileSize: true,
 				})
