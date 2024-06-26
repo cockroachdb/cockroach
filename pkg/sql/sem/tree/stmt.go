@@ -182,7 +182,7 @@ func CanWriteData(stmt Statement) bool {
 	case *Split, *Unsplit, *Relocate, *RelocateRange, *Scatter:
 		return true
 	// Replication operations.
-	case *CreateTenantFromReplication, *AlterTenantReplication:
+	case *CreateTenantFromReplication, *AlterTenantReplication, *CreateLogicalReplicationStream:
 		return true
 	}
 	return false
