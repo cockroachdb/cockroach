@@ -92,14 +92,14 @@ db1 sc2 p2 function false
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(a db1.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
 	DECLARE
-	foobar db1.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
-	SELECT 'Good':::db1.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 	END;
 $$
@@ -132,14 +132,14 @@ USE db1_new
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(a db1_new.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
 	DECLARE
-	foobar db1_new.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1_new.sc1.tbl1;
-	SELECT 'Good':::db1_new.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 	END;
 $$
@@ -298,14 +298,14 @@ db1 sc2 p2 function true
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(a db1.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
 	DECLARE
-	foobar db1.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
-	SELECT 'Good':::db1.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 	END;
 $$
@@ -339,14 +339,14 @@ USE db1
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
-CREATE PROCEDURE sc1.p1(a db1.sc1.enum1)
+CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
 	DECLARE
-	foobar db1.sc1.enum1;
+	foobar sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
-	SELECT 'Good':::db1.sc1.enum1;
+	SELECT 'Good':::sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 	END;
 $$
