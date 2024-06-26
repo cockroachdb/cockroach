@@ -205,7 +205,6 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 	issuesWithSuffix := func(base github.Issue, suffixes ...string) []issueFactory {
 		factories := make([]issueFactory, 0, len(suffixes))
 		for k, suffix := range suffixes {
-			k, suffix := k, suffix // capture range variables
 			factories = append(factories,
 				func(packageName, testName string) github.Issue {
 					issueNum := *base.Number + k + 1

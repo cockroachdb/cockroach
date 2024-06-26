@@ -16,7 +16,6 @@ import (
 	"go/token"
 	"go/types"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/loopvarcapture"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
@@ -40,7 +39,15 @@ var Analyzer = &analysis.Analyzer{
 	Run:      run,
 }
 
-var mutexFunctions = []loopvarcapture.Function{
+// Function defines the location of a function (package-level or
+// method on a type).
+type Function struct {
+	Pkg  string
+	Type string // empty for package-level functions
+	Name string
+}
+
+var mutexFunctions = []Function{
 	{Pkg: "github.com/cockroachdb/cockroach/pkg/util/syncutil", Type: "Mutex", Name: "Lock"},
 	{Pkg: "github.com/cockroachdb/cockroach/pkg/util/syncutil", Type: "Mutex", Name: "Unlock"},
 	{Pkg: "github.com/cockroachdb/cockroach/pkg/util/syncutil", Type: "RWMutex", Name: "Lock"},

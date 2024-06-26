@@ -111,9 +111,6 @@ func runSchemaChangeMultiRegionBenchmarkLeasing(
 	}
 
 	for modeIdx, sessionBasedLeasingEnabled := range []bool{true, false} {
-		// Re-assign loop variables that are used in a closure.
-		modeIdx := modeIdx
-		sessionBasedLeasingEnabled := sessionBasedLeasingEnabled
 		func() {
 			// When session based leasing is disabled, force expiry based leasing.
 			var options map[string]string

@@ -707,3 +707,79 @@ SHOW SYSTEM GRANTS FOR roach
 grantee  privilege_type      is_grantable
 roach    VIEWACTIVITY        false
 roach    VIEWCLUSTERSETTING  true
+
+subtest disable_grant_option_inheritance
+
+statement ok
+SET CLUSTER SETTING sql.auth.grant_option_inheritance.enabled = false
+
+statement ok
+CREATE USER parent;
+CREATE USER child;
+CREATE USER other;
+
+statement ok
+GRANT parent TO child
+
+statement ok
+CREATE TABLE tbl_owned_by_root (a INT PRIMARY KEY)
+
+statement ok
+SET ROLE parent
+
+statement ok
+CREATE TABLE tbl_owned_by_parent (a INT PRIMARY KEY)
+
+statement ok
+RESET role
+
+statement ok
+INSERT INTO tbl_owned_by_root VALUES (1);
+INSERT INTO tbl_owned_by_parent VALUES (1);
+
+statement ok
+GRANT SELECT ON TABLE tbl_owned_by_root TO parent WITH GRANT OPTION
+
+statement ok
+SET ROLE child
+
+# child should inherit the SELECT privilege itself.
+query I
+SELECT a FROM tbl_owned_by_root LIMIT 1
+----
+1
+
+# child can also inherit SELECT via parent's ownership.
+query I
+SELECT a FROM tbl_owned_by_parent LIMIT 1
+----
+1
+
+# child should not inherit the grant option.
+statement error user child missing WITH GRANT OPTION privilege on SELECT
+GRANT SELECT ON TABLE tbl_owned_by_root TO other
+
+# Nor should child inherit the grant option from parent's ownership.
+statement error user child missing WITH GRANT OPTION privilege on SELECT
+GRANT SELECT ON TABLE tbl_owned_by_parent TO other
+
+statement ok
+RESET ROLE
+
+statement ok
+RESET CLUSTER SETTING sql.auth.grant_option_inheritance.enabled
+
+statement ok
+SET ROLE child
+
+# Now the GRANT command should work since child inherits the grant option.
+statement ok
+GRANT SELECT ON TABLE tbl_owned_by_root TO other
+
+statement ok
+GRANT SELECT ON TABLE tbl_owned_by_parent TO other
+
+statement ok
+RESET role
+
+subtest end

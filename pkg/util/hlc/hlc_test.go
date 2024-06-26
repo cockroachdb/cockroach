@@ -729,7 +729,6 @@ func BenchmarkUpdate(b *testing.B) {
 		clock := NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Second, time.Second)
 		wg := sync.WaitGroup{}
 		for w := 0; w < concurrency; w++ {
-			w := w // make sure we don't close over the loop variable
 			wg.Add(1)
 			go func() {
 				for _, timestamp := range timestamps[w] {
