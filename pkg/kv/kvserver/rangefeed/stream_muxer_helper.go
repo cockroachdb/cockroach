@@ -12,7 +12,6 @@ package rangefeed
 
 import (
 	"reflect"
-	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -47,14 +46,6 @@ type testServerStream struct {
 	events      map[int64][]*kvpb.MuxRangeFeedEvent
 	streamsDone map[int64]chan *kvpb.Error
 	sendErr     error
-}
-
-func (s *testServerStream) blockSend() func() {
-	s.Lock()
-	var once sync.Once
-	return func() {
-		once.Do(s.Unlock) // safe to call multiple times, e.g. defer and explicit //nolint:deferunlockcheck
-	}
 }
 
 func (s *testServerStream) registerDone(streamID int64, c chan *kvpb.Error) {

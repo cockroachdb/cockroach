@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -449,6 +451,7 @@ type testSingleFeedStream struct {
 	streamID int64
 	rangeID  roachpb.RangeID
 	muxer    *StreamMuxer
+	mu       syncutil.Mutex
 }
 
 func newTestSingleFeedStream(muxer *StreamMuxer, streamID int64) *testSingleFeedStream {
@@ -462,11 +465,22 @@ func (s *testSingleFeedStream) Context() context.Context {
 }
 
 func (s *testSingleFeedStream) Send(e *kvpb.RangeFeedEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.muxer.Send(s.streamID, s.rangeID, e)
 }
 
 func (s *testSingleFeedStream) Disconnect(err *kvpb.Error) {
 	s.muxer.DisconnectRangefeedWithError(s.streamID, s.rangeID, err)
+}
+
+func (s *testSingleFeedStream) blockSend() func() {
+	s.mu.Lock()
+	var once sync.Once
+	return func() {
+		// safe to call multiple times, e.g. defer and explicit //nolint:deferunlockcheck
+		once.Do(s.mu.Unlock)
+	}
 }
 
 func (s *testSingleFeedStream) RegisterCleanUp(f func()) {

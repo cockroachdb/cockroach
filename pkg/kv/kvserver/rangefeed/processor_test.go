@@ -413,7 +413,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		)
 
 		// Block its Send method and fill up the registration's input channel.
-		unblock := serverStream.blockSend()
+		unblock := r1Stream.blockSend()
 		defer func() {
 			if unblock != nil {
 				unblock()
@@ -504,7 +504,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		h.syncEventAndRegistrations()
 
 		// Block it.
-		unblock := serverStream.blockSend()
+		unblock := r1Stream.blockSend()
 		defer func() {
 			if unblock != nil {
 				unblock()
@@ -1488,7 +1488,7 @@ func TestProcessorBackpressure(t *testing.T) {
 	// the stream, which should block. The rangefeed pipeline buffers a few
 	// additional events in intermediate goroutines between channels, so post 10
 	// events to be sure.
-	unblock := serverStream.blockSend()
+	unblock := stream.blockSend()
 	defer unblock()
 
 	const numEvents = 10

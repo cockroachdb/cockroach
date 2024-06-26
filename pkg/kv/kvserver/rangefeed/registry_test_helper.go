@@ -12,7 +12,6 @@ package rangefeed
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -112,15 +111,6 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 	es := s.mu.events
 	s.mu.events = nil
 	return es
-}
-
-func (s *testStream) BlockSend() func() {
-	s.mu.Lock()
-	var once sync.Once
-	return func() {
-		// safe to call multiple times, e.g. defer and explicit
-		once.Do(s.mu.Unlock) //nolint:deferunlockcheck
-	}
 }
 
 type testRegistration struct {
