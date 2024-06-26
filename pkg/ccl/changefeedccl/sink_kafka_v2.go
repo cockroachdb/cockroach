@@ -552,7 +552,10 @@ type kgoChangefeedTopicPartitioner struct {
 
 func (p *kgoChangefeedTopicPartitioner) RequiresConsistency(*kgo.Record) bool { return true }
 func (p *kgoChangefeedTopicPartitioner) Partition(r *kgo.Record, n int) int {
-	if r.Key == nil { // Let messages without keys specify where they want to go (for resolved messages).
+	// Let messages without keys specify where they want to go (for resolved messages).
+	// TODO: i think csv messages (and others?) always have a nil key. We dont want to send them all to partition 0 surely... right?
+	// what happens currently in v1?
+	if r.Key == nil {
 		return int(r.Partition)
 	}
 	return p.inner.Partition(r, n)

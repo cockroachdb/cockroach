@@ -7615,6 +7615,9 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 						if err != nil {
 							return err
 						}
+						if len(m.Resolved) > 0 { // Ignore resolved messages.
+							continue
+						}
 						actualMessages = append(actualMessages, string(m.Value))
 					}
 				})
