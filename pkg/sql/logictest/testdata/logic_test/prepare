@@ -1708,3 +1708,16 @@ statement error pgcode 42601 syntax error
 PREPARE bar AS CALL foo($1);
 
 subtest end
+
+# Regression test for #126288 to make sure that zone configurations in
+# prepared statements work as expected.
+subtest zone_config
+
+statement ok
+PREPARE p AS
+ALTER DATABASE test CONFIGURE ZONE USING gc.ttlseconds = $1
+
+statement ok
+EXECUTE p(120)
+
+subtest end

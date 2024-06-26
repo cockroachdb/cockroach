@@ -277,7 +277,7 @@ func newBuilderState(
 		ctx:                      ctx,
 		clusterSettings:          d.ClusterSettings(),
 		evalCtx:                  newEvalCtx(d),
-		semaCtx:                  newSemaCtx(d),
+		semaCtx:                  d.SemaCtx(),
 		cr:                       d.CatalogReader(),
 		tr:                       d.TableReader(),
 		auth:                     d.AuthorizationAccessor(),
