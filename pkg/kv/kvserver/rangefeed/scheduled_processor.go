@@ -341,9 +341,12 @@ func (p *ScheduledProcessor) Register(
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
 		r.stream.RegisterCleanUp(func() {
-			p.reg.Unregister(ctx, &r)
-			if r.unreg != nil {
-				r.unreg()
+			if p.unregisterClient(&r) {
+				// unreg callback is set by replica to tear down processors that have
+				// zero registrations left and to update event filters.
+				if r.unreg != nil {
+					r.unreg()
+				}
 			}
 		})
 
@@ -366,12 +369,12 @@ func (p *ScheduledProcessor) Register(
 	return false, nil
 }
 
-//func (p *ScheduledProcessor) unregisterClient(r *registration) bool {
-//	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) bool {
-//		p.reg.Unregister(ctx, r)
-//		return true
-//	})
-//}
+func (p *ScheduledProcessor) unregisterClient(r *registration) bool {
+	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) bool {
+		p.reg.Unregister(ctx, r)
+		return true
+	})
+}
 
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
 // operations. It returns false if consuming the operations hit a timeout, as

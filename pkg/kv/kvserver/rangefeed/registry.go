@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Stream is a object capable of transmitting RangeFeedEvents.
+// stream is a object capable of transmitting RangeFeedEvents.
 type Stream interface {
 	// Context returns the context for this stream.
 	Context() context.Context

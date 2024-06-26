@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package rangefeed
 
 import (
 	"context"
@@ -20,22 +20,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// Implemented by nodeMetrics.
 type rangefeedMetricsRecorder interface {
-	incrementRangefeedCounter()
-	decrementRangefeedCounter()
+	IncrementRangefeedCounter()
+	DecrementRangefeedCounter()
 }
 
-var _ rangefeedMetricsRecorder = (*nodeMetrics)(nil)
-
 // severStreamSender is a wrapper around a grpc stream. Note that it should be
-// safe for concurrent Sends.
+// safe for concurrent Sends. Implemented by lockedMuxStream.
 type severStreamSender interface {
 	Send(*kvpb.MuxRangeFeedEvent) error
 }
 
-var _ severStreamSender = (*lockedMuxStream)(nil)
-
-type streamMuxer struct {
+type StreamMuxer struct {
 	// stream is the server stream to which the muxer sends events. Note that the
 	// stream is a locked mux stream, so it is safe for concurrent Sends.
 	sender severStreamSender
@@ -65,8 +62,8 @@ type streamMuxer struct {
 	}
 }
 
-func (s *streamMuxer) newStream(streamID int64, cancel context.CancelFunc) {
-	s.metrics.incrementRangefeedCounter()
+func (s *StreamMuxer) NewStream(streamID int64, cancel context.CancelFunc) {
+	s.metrics.IncrementRangefeedCounter()
 	s.activeStreams.Store(streamID, cancel)
 }
 
@@ -86,21 +83,21 @@ func transformToClientErr(err *kvpb.Error) *kvpb.Error {
 	return err
 }
 
-func newStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) *streamMuxer {
-	return &streamMuxer{
+func NewStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) *StreamMuxer {
+	return &StreamMuxer{
 		sender:           sender,
 		metrics:          metrics,
 		notifyCompletion: make(chan struct{}, 1),
 	}
 }
 
-func (s *streamMuxer) registerRangefeedCleanUp(streamID int64, cleanUp func()) {
+func (s *StreamMuxer) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
 	s.rangefeedCleanUps.Store(streamID, cleanUp)
 }
 
 // send annotates the rangefeed event with streamID and rangeID and sends it to
 // the grpc stream.
-func (s *streamMuxer) send(
+func (s *StreamMuxer) Send(
 	streamID int64, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent,
 ) error {
 	response := &kvpb.MuxRangeFeedEvent{
@@ -114,7 +111,7 @@ func (s *streamMuxer) send(
 // appendMuxError appends the mux error to the muxer's error slice. This slice
 // is processed by streamMuxer.run and sent to the client. We want to avoid
 // blocking here.
-func (s *streamMuxer) appendMuxError(ev *kvpb.MuxRangeFeedEvent) {
+func (s *StreamMuxer) appendMuxError(ev *kvpb.MuxRangeFeedEvent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.muxErrors = append(s.mu.muxErrors, ev)
@@ -129,7 +126,7 @@ func (s *streamMuxer) appendMuxError(ev *kvpb.MuxRangeFeedEvent) {
 
 // disconnectRangefeedWithError disconnects the rangefeed stream with the given
 // streamID and sends the error to the client.
-func (s *streamMuxer) disconnectRangefeedWithError(
+func (s *StreamMuxer) DisconnectRangefeedWithError(
 	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
 ) {
 	if cancelFunc, ok := s.activeStreams.LoadAndDelete(streamID); ok {
@@ -149,13 +146,13 @@ func (s *streamMuxer) disconnectRangefeedWithError(
 		})
 
 		s.appendMuxError(ev)
-		s.metrics.decrementRangefeedCounter()
+		s.metrics.DecrementRangefeedCounter()
 	}
 }
 
 // detachMuxErrors returns mux errors that need to be sent to the client. The
 // caller should make sure to send these errors to the client.
-func (s *streamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
+func (s *StreamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	toSend := s.mu.muxErrors
@@ -166,7 +163,7 @@ func (s *streamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 // If run returns (due to context cancellation, broken stream, or quiescing),
 // there is nothing we could do. We expect registrations to receive the same
 // error and shut streams down.
-func (s *streamMuxer) run(ctx context.Context, stopper *stop.Stopper) {
+func (s *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 	for {
 		select {
 		case <-s.notifyCompletion:
