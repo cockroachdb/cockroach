@@ -39,15 +39,43 @@ func TestSDNotify(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = l.close() }()
 
-	ch := make(chan error)
-	go func() {
-		ch <- l.wait()
-	}()
+	t.Run("environment set", func(t *testing.T) {
+		ch := make(chan error)
+		go func() {
+			ch <- l.wait()
+		}()
 
-	if err := notify(l.Path, readyMsg); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-ch; err != nil {
-		t.Fatal(err)
-	}
+		require.NoError(t, os.Setenv(envName, l.Path))
+		defer func() {
+			require.NoError(t, os.Unsetenv(envName))
+		}()
+
+		preNotifyCalled := false
+		require.NoError(t, notifyEnv(func() { preNotifyCalled = true }, readyMsg))
+		err := <-ch
+		require.NoError(t, err)
+		require.True(t, preNotifyCalled)
+	})
+
+	t.Run("environment set with nil preNotify", func(t *testing.T) {
+		ch := make(chan error)
+		go func() {
+			ch <- l.wait()
+		}()
+
+		require.NoError(t, os.Setenv(envName, l.Path))
+		defer func() {
+			require.NoError(t, os.Unsetenv(envName))
+		}()
+
+		require.NoError(t, notifyEnv(nil /* preNotify */, readyMsg))
+		err := <-ch
+		require.NoError(t, err)
+	})
+
+	t.Run("environment not set", func(t *testing.T) {
+		preNotifyCalled := false
+		require.NoError(t, notifyEnv(func() { preNotifyCalled = true }, readyMsg))
+		require.False(t, preNotifyCalled)
+	})
 }
