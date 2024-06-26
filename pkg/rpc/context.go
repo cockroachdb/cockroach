@@ -1926,8 +1926,8 @@ func (rpcCtx *Context) grpcDialRaw(
 // node ID between client and server. This function should only be
 // used with the gossip client and CLI commands which can talk to any
 // node. This method implies a SystemClass.
-func (rpcCtx *Context) GRPCUnvalidatedDial(target string) *Connection {
-	return rpcCtx.grpcDialNodeInternal(target, 0, roachpb.Locality{}, SystemClass)
+func (rpcCtx *Context) GRPCUnvalidatedDial(target string, locality roachpb.Locality) *Connection {
+	return rpcCtx.grpcDialNodeInternal(target, 0, locality, SystemClass)
 }
 
 // GRPCDialNode calls grpc.Dial with options appropriate for the
@@ -2035,7 +2035,7 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 //go:generate mockgen -destination=mocks_generated_test.go --package=. Dialbacker
 
 type Dialbacker interface {
-	GRPCUnvalidatedDial(string) *Connection
+	GRPCUnvalidatedDial(string, roachpb.Locality) *Connection
 	GRPCDialNode(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *Connection
 	grpcDialRaw(
 		context.Context, string, ConnectionClass, ...grpc.DialOption,
@@ -2086,7 +2086,7 @@ func VerifyDialback(
 		// The incoming connection was initiated using rpcCtx.GRPCUnvalidatedDial,
 		// so we don't know the origin's NodeID and use gRPCUnvalidatedDial to
 		// inform the fast path as well.
-		connHealthErr = rpcCtx.GRPCUnvalidatedDial(target).Health() // NB: dials SystemClass
+		connHealthErr = rpcCtx.GRPCUnvalidatedDial(target, roachpb.Locality{}).Health() // NB: dials SystemClass
 	} else {
 		connHealthErr = rpcCtx.GRPCDialNode(target, request.OriginNodeID, roachpb.Locality{}, SystemClass).Health()
 	}
