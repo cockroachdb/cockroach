@@ -198,6 +198,18 @@ func (u *unstable) restore(s pb.Snapshot) {
 
 func (u *unstable) truncateAndAppend(ents []pb.Entry) {
 	fromIndex := ents[0].Index
+
+	// We do not expect appends at or before the snapshot index.
+	//
+	// The caller does stronger checks preventing appends at <= commit index, so
+	// the check here is redundant. But it's a defense-in-depth guarding the
+	// unstable struct invariant: entries begin at snapshot index + 1. The code
+	// below does not regress offset beyond the snapshot.
+	if u.snapshot != nil && fromIndex <= u.snapshot.Metadata.Index {
+		u.logger.Panicf("appending entry %+v before snapshot %s",
+			pbEntryID(&ents[0]), DescribeSnapshot(*u.snapshot))
+	}
+
 	switch {
 	case fromIndex == u.offset+uint64(len(u.entries)):
 		// fromIndex is the next index in the u.entries, so append directly.
