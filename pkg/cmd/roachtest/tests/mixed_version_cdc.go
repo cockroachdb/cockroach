@@ -510,18 +510,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// NB: We rely on the testing framework to choose a random predecessor
 	// to upgrade from.
-	mvt := mixedversion.NewTest(
-		ctx, t, t.L(), c, tester.crdbNodes,
-		// For now, we perform at most 2 upgrades in this test so that the
-		// lowest version we start from is 22.2. The reason for this is
-		// that, in 22.1, node draining errors were common and led to
-		// changefeeds failing. See #106878.
-		//
-		// TODO(renato): remove this restriction by not failing the test
-		// if the changefeed failed due to "node draining" errors while
-		// still in 22.1 or older.
-		mixedversion.MaxUpgrades(2),
-	)
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, tester.crdbNodes)
 
 	cleanupKafka := tester.StartKafka(t, c)
 	defer cleanupKafka()
