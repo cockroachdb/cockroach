@@ -70,7 +70,7 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		panic(err)
 	}
 
-	options, err := getUpdatedZoneConfigOptions(b, n.Options, n.ZoneSpecifier.TelemetryName())
+	options, err := getUpdatedZoneConfigOptions(b, n)
 	if err != nil {
 		panic(err)
 	}
@@ -180,14 +180,20 @@ func getTargetIDFromZoneSpecifier(b BuildCtx, zs tree.ZoneSpecifier) (catid.Desc
 // USING ...` stmt. It ensures all kv options are supported and the values are
 // type-checked and normalized.
 func getUpdatedZoneConfigOptions(
-	b BuildCtx, n tree.KVOptions, telemetryName string,
+	b BuildCtx, n *tree.SetZoneConfig,
 ) (map[tree.Name]zone.OptionValue, error) {
-
+	opts := n.Options
+	telemetryName := n.ZoneSpecifier.TelemetryName()
 	var options map[tree.Name]zone.OptionValue
 	// We have a CONFIGURE ZONE USING ... assignment.
-	if n != nil {
+	if opts != nil {
 		options = make(map[tree.Name]zone.OptionValue)
-		for _, opt := range n {
+		for _, opt := range opts {
+			// TODO(#126288): opt values of type Placeholder were likely introduced
+			// in a prepared statement. Fallback to the legacy schema changer for now.
+			if _, ok := opt.Value.(*tree.Placeholder); ok {
+				panic(scerrors.NotImplementedErrorf(n, "prepared statements are not handled"))
+			}
 			if _, alreadyExists := options[opt.Key]; alreadyExists {
 				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"duplicate zone config parameter: %q", tree.ErrString(&opt.Key))
