@@ -38,6 +38,7 @@ type client struct {
 	peerID                roachpb.NodeID
 	resolvedPlaceholder   bool                     // Whether we've resolved the nodeSet's placeholder for this client
 	addr                  net.Addr                 // Peer node network address
+	locality              roachpb.Locality         // Peer node locality (if known)
 	forwardAddr           *util.UnresolvedAddr     // Set if disconnected with an alternate addr
 	remoteHighWaterStamps map[roachpb.NodeID]int64 // Remote server's high water timestamps
 	closer                chan struct{}            // Client shutdown channel
@@ -55,11 +56,14 @@ func extractKeys(delta map[string]*Info) string {
 }
 
 // newClient creates and returns a client struct.
-func newClient(ambient log.AmbientContext, addr net.Addr, nodeMetrics Metrics) *client {
+func newClient(
+	ambient log.AmbientContext, addr net.Addr, locality roachpb.Locality, nodeMetrics Metrics,
+) *client {
 	return &client{
 		AmbientContext:        ambient,
 		createdAt:             timeutil.Now(),
 		addr:                  addr,
+		locality:              locality,
 		remoteHighWaterStamps: map[roachpb.NodeID]int64{},
 		closer:                make(chan struct{}),
 		clientMetrics:         makeMetrics(),
@@ -103,7 +107,16 @@ func (c *client) startLocked(
 			// asynchronous from the caller's perspective, so the only effect of
 			// `WithBlock` here is blocking shutdown - at the time of this writing,
 			// that ends ups up making `kv` tests take twice as long.
-			conn, err := rpcCtx.GRPCUnvalidatedDial(c.addr.String()).Connect(ctx)
+			var connection *rpc.Connection
+			if c.peerID != 0 {
+				connection = rpcCtx.GRPCDialNode(c.addr.String(), c.peerID, c.locality, rpc.SystemClass)
+			} else {
+				// TODO(baptist): Use this as a temporary connection for getting
+				// onto gossip and then replace with a validated connection.
+				log.Infof(ctx, "unvalidated bootstrap gossip dial to %s", c.addr)
+				connection = rpcCtx.GRPCUnvalidatedDial(c.addr.String(), c.locality)
+			}
+			conn, err := connection.Connect(ctx)
 			if err != nil {
 				return nil, err
 			}

@@ -264,6 +264,8 @@ type Gossip struct {
 	bootstrapInterval time.Duration
 	cullInterval      time.Duration
 
+	// TODO(baptist): Remember the localities for each remote address. Then pass
+	// it into the Dial.
 	// addresses is a list of bootstrap host addresses for
 	// connecting to the gossip network.
 	addressIdx     int
@@ -531,6 +533,8 @@ func (g *Gossip) GetNodeDescriptorCount() int {
 	return count
 }
 
+// TODO(baptist): StoreDescriptors don't belong in the Gossip package at all.
+// This method should be moved out of gossip.
 // GetStoreDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
 	if value, ok := g.storeDescs.Load(int64(storeID)); ok {
@@ -1206,8 +1210,21 @@ func (g *Gossip) bootstrap(rpcContext *rpc.Context) {
 				log.Eventf(ctx, "have clients: %t, have sentinel: %t", haveClients, haveSentinel)
 				if !haveClients || !haveSentinel {
 					// Try to get another bootstrap address.
+					//
+					// TODO(baptist): The bootstrap address from the
+					// configuration does not have locality information. We
+					// could use "our" locality or leave it blank like it
+					// currently does. Alternatively we could break and
+					// reconnect once we determine the remote locality from
+					// gossip.
 					if addr := g.getNextBootstrapAddressLocked(); !addr.IsEmpty() {
-						g.startClientLocked(addr, rpcContext)
+						locality := roachpb.Locality{}
+						nodeID := g.bootstrapAddrs[addr]
+						// We may not have a node descriptor for this node yet, in which case we dial without one.
+						if nd, err := g.getNodeDescriptor(nodeID, true); err == nil {
+							locality = nd.Locality
+						}
+						g.startClientLocked(addr, locality, rpcContext)
 					} else {
 						bootstrapAddrs := make([]string, 0, len(g.bootstrapping))
 						for addr := range g.bootstrapping {
@@ -1345,13 +1362,13 @@ func (g *Gossip) tightenNetwork(ctx context.Context, rpcContext *rpc.Context) {
 		// If tightening is needed, then reset lastTighten to avoid restricting how
 		// soon we try again.
 		g.mu.lastTighten = time.Time{}
-		if nodeAddr, _, err := g.getNodeIDAddress(distantNodeID, true /* locked */); err != nil || nodeAddr == nil {
+		if nodeAddr, locality, err := g.getNodeIDAddress(distantNodeID, true /* locked */); err != nil || nodeAddr == nil {
 			log.Health.Errorf(ctx, "unable to get address for n%d: %s", distantNodeID, err)
 		} else {
 			log.Health.Infof(ctx, "starting client to n%d (%d > %d) to tighten network graph",
 				distantNodeID, distantHops, maxHops)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
-			g.startClientLocked(*nodeAddr, rpcContext)
+			g.startClientLocked(*nodeAddr, locality, rpcContext)
 		}
 	}
 }
@@ -1363,7 +1380,12 @@ func (g *Gossip) doDisconnected(c *client, rpcContext *rpc.Context) {
 
 	// If the client was disconnected with a forwarding address, connect now.
 	if c.forwardAddr != nil {
-		g.startClientLocked(*c.forwardAddr, rpcContext)
+		locality := roachpb.Locality{}
+		// If we have a node descriptor for this node use it when dialing.
+		if nd, err := g.getNodeDescriptor(c.peerID, true); err == nil {
+			locality = nd.Locality
+		}
+		g.startClientLocked(*c.forwardAddr, locality, rpcContext)
 	}
 	g.maybeSignalStatusChangeLocked()
 }
@@ -1435,12 +1457,14 @@ func (g *Gossip) signalConnectedLocked() {
 // startClientLocked launches a new client connected to remote address.
 // The client is added to the outgoing address set and launched in
 // a goroutine.
-func (g *Gossip) startClientLocked(addr util.UnresolvedAddr, rpcContext *rpc.Context) {
+func (g *Gossip) startClientLocked(
+	addr util.UnresolvedAddr, locality roachpb.Locality, rpcContext *rpc.Context,
+) {
 	g.clientsMu.Lock()
 	defer g.clientsMu.Unlock()
 	ctx := g.AnnotateCtx(context.TODO())
 	log.VEventf(ctx, 1, "starting new client to %s", addr)
-	c := newClient(g.server.AmbientContext, &addr, g.serverMetrics)
+	c := newClient(g.server.AmbientContext, &addr, locality, g.serverMetrics)
 	g.clientsMu.clients = append(g.clientsMu.clients, c)
 	c.startLocked(g, g.disconnected, rpcContext, g.server.stopper)
 }
