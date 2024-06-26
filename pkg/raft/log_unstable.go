@@ -35,6 +35,8 @@ import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 // might need to truncate the log before persisting unstable.entries.
 type unstable struct {
 	// the incoming unstable snapshot, if any.
+	//
+	// Invariant: snapshot == nil ==> !snapshotInProgress
 	snapshot *pb.Snapshot
 	// all entries that have not yet been written to storage.
 	entries []pb.Entry
@@ -46,10 +48,20 @@ type unstable struct {
 	// entries[:offsetInProgress-offset] are being written to storage.
 	// Like offset, offsetInProgress is exclusive, meaning that it
 	// contains the index following the largest in-progress entry.
+	//
 	// Invariant: offset <= offsetInProgress
+	// Invariant: offsetInProgress - offset <= len(entries)
 	offsetInProgress uint64
 
 	logger Logger
+}
+
+func newUnstable(offset uint64, logger Logger) unstable {
+	return unstable{
+		offset:           offset,
+		offsetInProgress: offset,
+		logger:           logger,
+	}
 }
 
 // maybeFirstIndex returns the index of the first possible entry in entries
