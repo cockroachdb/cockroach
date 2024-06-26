@@ -1353,7 +1353,6 @@ type consumer struct {
 	blockAfter int
 	blocked    chan interface{}
 	resume     chan error
-	cleanUp    func()
 }
 
 func newConsumer(blockAfter int) *consumer {
@@ -1365,7 +1364,6 @@ func newConsumer(blockAfter int) *consumer {
 		blocked:    make(chan interface{}),
 		resume:     make(chan error),
 		done:       make(chan *kvpb.Error, 1),
-		cleanUp:    func() {},
 	}
 }
 
@@ -1391,7 +1389,6 @@ func (c *consumer) Context() context.Context {
 
 func (c *consumer) Disconnect(error *kvpb.Error) {
 	c.done <- error
-	c.cleanUp()
 }
 
 func (c *consumer) Err(t *testing.T) error {
@@ -1405,7 +1402,6 @@ func (c *consumer) Err(t *testing.T) error {
 }
 
 func (c *consumer) RegisterCleanUp(f func()) {
-	c.cleanUp = f
 }
 
 func (c *consumer) Cancel() {
