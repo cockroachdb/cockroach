@@ -354,6 +354,11 @@ func dumpNewDepsBzl(
 # The ` + "`remote` " + `can be EITHER a URL, or an absolute local path to a clone, such
 # as ` + "`/Users/ricky/go/src/github.com/cockroachdb/sentry-go`" + `. Bazel will clone
 # from the remote and check out the commit you specify.
+#
+# If the dependency has a WORKSPACE and BUILD.bazel files, you can build against
+# it directly using the --override_repository flag. For example:
+#   dev build short -- --override_repository=com_github_cockroachdb_pebble=~/go/src/github.com/cockroachdb/pebble
+# In Pebble, ` + "`make gen-bazel`" + ` can be used to generate the necessary files.
 
 def go_deps():
     # NOTE: We ensure that we pin to these specific dependencies by calling
