@@ -1563,7 +1563,7 @@ func writeAsHexString(ctx *FmtCtx, b string) {
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if f.HasFlags(fmtPgwireFormat) {
+	if f.HasFlags(fmtPgwireFormat) || f.HasFlags(fmtPGCatalog) {
 		ctx.WriteString(`\x`)
 		writeAsHexString(ctx, string(*d))
 	} else if f.HasFlags(fmtFormatByteLiterals) {
@@ -4904,7 +4904,9 @@ func (d *DArray) AmbiguousFormat() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(ctx *FmtCtx) {
-	if ctx.flags.HasAnyFlags(fmtPgwireFormat | FmtPGCatalog) {
+	if ctx.flags.HasAnyFlags(fmtPgwireFormat | fmtPGCatalog) {
+		defer func(f FmtFlags) { ctx.flags = f }(ctx.flags)
+		ctx.flags = ctx.flags & ^fmtPGCatalogCasts
 		d.pgwireFormat(ctx)
 		return
 	}
