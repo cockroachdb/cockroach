@@ -150,16 +150,21 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	return stats, err
 }
 
-var ieOverrides = sessiondata.InternalExecutorOverride{
-	AttributeToUser: true,
-	// TODO(ssd): we do this for now to prevent the data from being emitted back
-	// to the source. However, I don't think we want to do this in the long run.
-	// Rather, we want to store the inbound cluster ID and store that in a way
-	// that allows us to choose to filter it out from or not. Doing it this way
-	// means that you can't choose to run CDC just from one side and not the
-	// other.
-	DisableChangefeedReplication: true,
-}
+var (
+	implicitTxnOverrides = sessiondata.InternalExecutorOverride{
+		AttributeToUser: true,
+		// TODO(ssd): we do this for now to prevent the data from being emitted back
+		// to the source. However, I don't think we want to do this in the long run.
+		// Rather, we want to store the inbound cluster ID and store that in a way
+		// that allows us to choose to filter it out from or not. Doing it this way
+		// means that you can't choose to run CDC just from one side and not the
+		// other.
+		DisableChangefeedReplication: true,
+	}
+	explicitTxnOverrides = sessiondata.InternalExecutorOverride{
+		AttributeToUser: true,
+	}
+)
 
 var tryOptimisticInsertEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -174,8 +179,10 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row, prevValue roachpb.Value,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
+	ieOverrides := implicitTxnOverrides
 	if txn != nil {
 		kvTxn = txn.KV()
+		ieOverrides = explicitTxnOverrides
 	}
 	datums := lww.scratch.datums[:0]
 	err := row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
@@ -241,8 +248,10 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
+	ieOverrides := implicitTxnOverrides
 	if txn != nil {
 		kvTxn = txn.KV()
+		ieOverrides = explicitTxnOverrides
 	}
 	datums := lww.scratch.datums[:0]
 	if err := row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
