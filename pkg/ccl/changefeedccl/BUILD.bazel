@@ -62,6 +62,7 @@ go_library(
         "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/cloud/uris",
