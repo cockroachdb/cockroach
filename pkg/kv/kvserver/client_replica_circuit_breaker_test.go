@@ -472,11 +472,9 @@ func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 
 func (s *dummyStream) Disconnect(err *kvpb.Error) {
 	s.done <- err
-	s.cleanUp()
 }
 
 func (s *dummyStream) RegisterCleanUp(f func()) {
-	s.cleanUp = f
 }
 
 func waitReplicaRangeFeed(

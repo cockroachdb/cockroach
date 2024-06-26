@@ -12,7 +12,6 @@ package rangefeed
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -473,7 +472,6 @@ func (s *testSingleFeedStream) Send(e *kvpb.RangeFeedEvent) error {
 	s.mu.Lock()
 	defer func() {
 		s.mu.Unlock()
-		fmt.Println("send event", e, s.streamID) //nolint:deferunlockcheck
 	}()
 	return s.muxer.Send(s.streamID, s.rangeID, e)
 }
@@ -505,16 +503,49 @@ func (s *testSingleFeedStream) Err(t *testing.T) error {
 	}
 }
 
-//
-//func (s *testSingleFeedStream) Err(t *testing.T, stream *testServerStream) error {
-//	done := make(chan error, 1)
-//	stream.registerDone(s.streamID, done)
-//	fmt.Println("waiting for stream to close", s.streamID)
-//	select {
-//	case err := <-done:
-//		return err
-//	case <-time.After(30 * time.Second):
-//		t.Fatalf("time out waiting for rangefeed completion")
-//		return nil
-//	}
-//}
+// clean up only stream muxer
+type TestStreamMuxer struct {
+	rangefeedCleanUps sync.Map
+	notifyCleanUp     chan int64
+}
+
+func NewTestStremMuxer(stopper *stop.Stopper) (muxer *TestStreamMuxer, cleanUp func()) {
+	muxer = &TestStreamMuxer{
+		notifyCleanUp: make(chan int64, 20),
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	// Make sure to shut down the muxer before wg.Wait().
+	if err := stopper.RunAsyncTask(context.Background(), "mux-term-forwarder", func(ctx context.Context) {
+		defer wg.Done()
+		muxer.Run(ctx, stopper)
+	}); err != nil {
+		wg.Done()
+	}
+	return muxer, wg.Wait
+}
+
+func (m *TestStreamMuxer) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
+	m.rangefeedCleanUps.Store(streamID, cleanUp)
+}
+
+func (m *TestStreamMuxer) DisconnectRangefeedWithError(streamID int64) {
+	m.notifyCleanUp <- streamID
+}
+
+func (m *TestStreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
+	for {
+		select {
+		case streamID := <-m.notifyCleanUp:
+			if cleanUp, ok := m.rangefeedCleanUps.LoadAndDelete(streamID); ok {
+				if f, ok := cleanUp.(func()); ok {
+					f()
+				}
+			}
+		case <-ctx.Done():
+			return
+		case <-stopper.ShouldQuiesce():
+			return
+		}
+	}
+}

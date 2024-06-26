@@ -89,11 +89,9 @@ func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 
 func (s *testStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
-	s.cleanUp()
 }
 
 func (s *testStream) RegisterCleanUp(f func()) {
-	s.cleanUp = f
 }
 
 func (s *testStream) Err(t *testing.T) error {

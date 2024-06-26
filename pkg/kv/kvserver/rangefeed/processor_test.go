@@ -1123,10 +1123,14 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
 			withEventTimeout(100*time.Millisecond), withProcType(pt))
 		ctx := context.Background()
+
+		muxer, cleanUp := NewTestStremMuxer(stopper)
+		defer cleanUp()
 		defer stopper.Stop(ctx)
 
 		// Add a registration.
-		rStream := newConsumer(50)
+		const r1streamID = int64(1)
+		rStream := newConsumer(r1streamID, 50, muxer)
 		defer func() { rStream.Resume() }()
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
@@ -1202,10 +1206,14 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
 			withEventTimeout(time.Millisecond), withProcType(pt))
 		ctx := context.Background()
+
+		muxer, cleanUp := NewTestStremMuxer(stopper)
+		defer cleanUp()
 		defer stopper.Stop(ctx)
 
 		// Add a registration.
-		rStream := newConsumer(90)
+		const r1streamID = int64(1)
+		rStream := newConsumer(r1streamID, 90, muxer)
 		defer func() { rStream.Resume() }()
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
@@ -1271,10 +1279,14 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanCap(channelCapacity),
 			withEventTimeout(100*time.Millisecond), withProcType(pt))
 		ctx := context.Background()
+
+		muxer, cleanUp := NewTestStremMuxer(stopper)
+		defer cleanUp()
 		defer stopper.Stop(ctx)
 
 		// Add a registration.
-		r1Stream := newConsumer(50)
+		const r1streamID, r2streamID = int64(1), int64(2)
+		r1Stream := newConsumer(r1streamID, 50, muxer)
 		defer func() { r1Stream.Resume() }()
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
@@ -1287,7 +1299,7 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		)
 
 		// Non-blocking registration that would consume all events.
-		r2Stream := newConsumer(0)
+		r2Stream := newConsumer(r2streamID, 0, muxer)
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
@@ -1349,13 +1361,15 @@ type consumer struct {
 	ctxDone    func()
 	sentValues int32
 	done       chan *kvpb.Error
+	streamID   int64
 
 	blockAfter int
 	blocked    chan interface{}
 	resume     chan error
+	muxer      *TestStreamMuxer
 }
 
-func newConsumer(blockAfter int) *consumer {
+func newConsumer(streamID int64, blockAfter int, muxer *TestStreamMuxer) *consumer {
 	ctx, done := context.WithCancel(context.Background())
 	return &consumer{
 		ctx:        ctx,
@@ -1364,6 +1378,8 @@ func newConsumer(blockAfter int) *consumer {
 		blocked:    make(chan interface{}),
 		resume:     make(chan error),
 		done:       make(chan *kvpb.Error, 1),
+		muxer:      muxer,
+		streamID:   streamID,
 	}
 }
 
@@ -1389,6 +1405,7 @@ func (c *consumer) Context() context.Context {
 
 func (c *consumer) Disconnect(error *kvpb.Error) {
 	c.done <- error
+	c.muxer.DisconnectRangefeedWithError(int64(1))
 }
 
 func (c *consumer) Err(t *testing.T) error {
@@ -1402,6 +1419,7 @@ func (c *consumer) Err(t *testing.T) error {
 }
 
 func (c *consumer) RegisterCleanUp(f func()) {
+	c.muxer.RegisterRangefeedCleanUp(int64(1), f)
 }
 
 func (c *consumer) Cancel() {
