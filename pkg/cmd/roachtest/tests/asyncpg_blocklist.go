@@ -87,6 +87,7 @@ var asyncpgBlocklist = blocklist{
 
 var asyncpgIgnoreList = blocklist{
 	`test_pool.TestPool.test_pool_01`:                                   "can't parse output",
+	`test_codecs.TestCodecs.test_interval`:                              "can't parse output",
 	`test_copy.TestCopyFrom.test_copy_from_query_basics`:                "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
 	`test_copy.TestCopyFrom.test_copy_from_query_cancellation_explicit`: "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
 	`test_copy.TestCopyFrom.test_copy_from_query_timeout_1`:             "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
