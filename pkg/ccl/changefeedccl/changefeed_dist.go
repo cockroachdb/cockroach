@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 
@@ -522,6 +523,18 @@ func makePlan(
 
 		p.PlanToStreamColMap = []int{1, 2, 3}
 		sql.FinalizePlan(ctx, planCtx, p)
+
+		// Log the plan diagram URL so that we don't have to rely on it being in system.job_info.
+		flowSpecs := p.GenerateFlowSpecs()
+		if _, diagURL, err := execinfrapb.GeneratePlanDiagramURL(
+			fmt.Sprintf("changefeed: %d", jobID),
+			flowSpecs,
+			execinfrapb.DiagramFlags{},
+		); err != nil {
+			log.Warningf(ctx, "failed to generate changefeed plan diagram: %s", err)
+		} else {
+			log.Infof(ctx, "changefeed plan diagram: %s", diagURL.String())
+		}
 
 		return p, planCtx, nil
 	}
