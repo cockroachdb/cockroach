@@ -452,12 +452,17 @@ type testSingleFeedStream struct {
 	rangeID  roachpb.RangeID
 	muxer    *StreamMuxer
 	mu       syncutil.Mutex
+	doneC    chan error
 }
 
-func newTestSingleFeedStream(muxer *StreamMuxer, streamID int64) *testSingleFeedStream {
+func newTestSingleFeedStream(
+	muxer *StreamMuxer, streamID int64, serverStream *testServerStream,
+) *testSingleFeedStream {
 	ctx, done := context.WithCancel(context.Background())
 	muxer.AddStream(streamID, done)
-	return &testSingleFeedStream{ctx: ctx, streamID: streamID, rangeID: 1, muxer: muxer}
+	doneC := make(chan error, 1)
+	serverStream.registerDone(streamID, doneC)
+	return &testSingleFeedStream{ctx: ctx, streamID: streamID, rangeID: 1, muxer: muxer, doneC: doneC}
 }
 
 func (s *testSingleFeedStream) Context() context.Context {
@@ -466,7 +471,10 @@ func (s *testSingleFeedStream) Context() context.Context {
 
 func (s *testSingleFeedStream) Send(e *kvpb.RangeFeedEvent) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer func() {
+		s.mu.Unlock()
+		fmt.Println("send event", e, s.streamID) //nolint:deferunlockcheck
+	}()
 	return s.muxer.Send(s.streamID, s.rangeID, e)
 }
 
@@ -478,8 +486,8 @@ func (s *testSingleFeedStream) blockSend() func() {
 	s.mu.Lock()
 	var once sync.Once
 	return func() {
-		// safe to call multiple times, e.g. defer and explicit //nolint:deferunlockcheck
-		once.Do(s.mu.Unlock)
+		// safe to call multiple times, e.g. defer and explicit
+		once.Do(s.mu.Unlock) //nolint:deferunlockcheck
 	}
 }
 
@@ -487,15 +495,26 @@ func (s *testSingleFeedStream) RegisterCleanUp(f func()) {
 	s.muxer.RegisterRangefeedCleanUp(s.streamID, f)
 }
 
-func (s *testSingleFeedStream) Err(t *testing.T, stream *testServerStream) error {
-	done := make(chan *kvpb.Error, 1)
-	stream.registerDone(s.streamID, done)
-	fmt.Println("waiting for stream to close", s.streamID)
+func (s *testSingleFeedStream) Err(t *testing.T) error {
 	select {
-	case err := <-done:
-		return err.GoError()
+	case err := <-s.doneC:
+		return err
 	case <-time.After(30 * time.Second):
 		t.Fatalf("time out waiting for rangefeed completion")
 		return nil
 	}
 }
+
+//
+//func (s *testSingleFeedStream) Err(t *testing.T, stream *testServerStream) error {
+//	done := make(chan error, 1)
+//	stream.registerDone(s.streamID, done)
+//	fmt.Println("waiting for stream to close", s.streamID)
+//	select {
+//	case err := <-done:
+//		return err
+//	case <-time.After(30 * time.Second):
+//		t.Fatalf("time out waiting for rangefeed completion")
+//		return nil
+//	}
+//}

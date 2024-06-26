@@ -328,6 +328,7 @@ func (r *registration) outputLoop(ctx context.Context) error {
 		overflowed := false
 		r.mu.Lock()
 		if len(r.buf) == 0 {
+			fmt.Println("len(r.buf) == 0, set overflowed")
 			overflowed = r.mu.overflowed
 			r.mu.caughtUp = true
 		}

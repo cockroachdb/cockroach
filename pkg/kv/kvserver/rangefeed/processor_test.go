@@ -83,7 +83,7 @@ func TestProcessorBasic(t *testing.T) {
 
 		// Add a registration.
 		const r1StreamId, r2StreamId, r3StreamID = int64(1), int64(2), int64(3)
-		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId)
+		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId, serverStream)
 		r1OK, r1Filter := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
@@ -218,7 +218,7 @@ func TestProcessorBasic(t *testing.T) {
 		)
 
 		// Add another registration with withDiff = true and withFiltering = true.
-		r2Stream := newTestSingleFeedStream(streamMuxer, r2StreamId)
+		r2Stream := newTestSingleFeedStream(streamMuxer, r2StreamId, serverStream)
 		r2OK, r1And2Filter := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
@@ -325,17 +325,17 @@ func TestProcessorBasic(t *testing.T) {
 
 		// Cancel the first registration.
 		r1Stream.Disconnect(kvpb.NewError(context.Canceled))
-		require.NotNil(t, r1Stream.Err(t, serverStream))
+		require.NotNil(t, r1Stream.Err(t))
 
 		// Stop the processor with an error.
 		pErr := kvpb.NewErrorf("stop err")
 		p.StopWithErr(pErr)
-		require.NotNil(t, r2Stream.Err(t, serverStream))
+		require.NotNil(t, r2Stream.Err(t))
 
 		fmt.Println("HERE6")
 
 		// Adding another registration should fail.
-		r3Stream := newTestSingleFeedStream(streamMuxer, r3StreamID)
+		r3Stream := newTestSingleFeedStream(streamMuxer, r3StreamID, serverStream)
 		r3OK, _ := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
@@ -371,7 +371,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 
 		// Add a registration.
 		const r1StreamId, r2StreamId = int64(1), int64(2)
-		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId)
+		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId, serverStream)
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
@@ -381,7 +381,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 			r1Stream,
 			func() {},
 		)
-		r2Stream := newTestSingleFeedStream(streamMuxer, r2StreamId)
+		r2Stream := newTestSingleFeedStream(streamMuxer, r2StreamId, serverStream)
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
@@ -450,8 +450,11 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		// exactly one event to be dropped, but it is possible that multiple events
 		// were dropped due to rapid event consumption before the r1's outputLoop
 		// began consuming from its event buffer.
-		require.LessOrEqual(t, len(serverStream.rangefeedEventsSentById(r1StreamId)), toFill)
-		require.Equal(t, newErrBufferCapacityExceeded().GoError(), r1Stream.Err(t, serverStream))
+		normalEventsSentById := serverStream.filterEventsSentById(r1StreamId, func(e *kvpb.MuxRangeFeedEvent) bool {
+			return e.Error != nil
+		})
+		require.LessOrEqual(t, len(normalEventsSentById), toFill)
+		require.Equal(t, newErrBufferCapacityExceeded().GoError(), r1Stream.Err(t))
 		testutils.SucceedsSoon(t, func() error {
 			if act, exp := p.Len(), 1; exp != act {
 				return fmt.Errorf("processor had %d regs, wanted %d", act, exp)
@@ -490,21 +493,21 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		}
 
 		// Add a registration.
-		const r1StreamId = int64(1)
-		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId)
+		const streamId = int64(1)
+		stream := newTestSingleFeedStream(streamMuxer, streamId, serverStream)
 		_, _ = p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
-			r1Stream,
+			stream,
 			func() {},
 		)
 		h.syncEventAndRegistrations()
 
 		// Block it.
-		unblock := r1Stream.blockSend()
+		unblock := stream.blockSend()
 		defer func() {
 			if unblock != nil {
 				unblock()
@@ -528,7 +531,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		unblock = nil
 		h.syncEventAndRegistrations()
 
-		require.Equal(t, newErrBufferCapacityExceeded().GoError(), r1Stream.Err(t, serverStream))
+		require.Equal(t, newErrBufferCapacityExceeded().GoError(), stream.Err(t))
 		require.Equal(t, 0, p.Len(), "registration was not removed")
 		require.Equal(t, int64(1), m.RangeFeedBudgetExhausted.Count())
 	})
@@ -558,15 +561,15 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 		}
 
 		// Add a registration.
-		const r1StreamId = int64(1)
-		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId)
+		const streamId = int64(1)
+		stream := newTestSingleFeedStream(streamMuxer, streamId, serverStream)
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
 			nil,   /* catchUpIter */
 			false, /* withDiff */
 			false, /* withFiltering */
-			r1Stream,
+			stream,
 			func() {},
 		)
 		h.syncEventAndRegistrations()
@@ -584,7 +587,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 
 		// Count consumed values
 		consumedOps := 0
-		for _, e := range serverStream.rangefeedEventsSentById(r1StreamId) {
+		for _, e := range serverStream.rangefeedEventsSentById(streamId) {
 			if e.Val != nil {
 				consumedOps++
 			}
@@ -653,7 +656,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 
 		// Add a registration.
 		const r1StreamId = int64(1)
-		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId)
+		r1Stream := newTestSingleFeedStream(streamMuxer, r1StreamId, serverStream)
 		p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
@@ -983,7 +986,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 			go func(id int) {
 				defer wg.Done()
 				runtime.Gosched()
-				s := newTestSingleFeedStream(streamMuxer, int64(id))
+				s := newTestSingleFeedStream(streamMuxer, int64(id), serverStream)
 				p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, s, func() {})
 			}(i)
@@ -1069,7 +1072,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 			for firstIdx := range firstC {
 				// For each index, create a new registration. The first
 				// operation is should see is firstIdx.
-				s := newTestSingleFeedStream(streamMuxer, id)
+				s := newTestSingleFeedStream(streamMuxer, id, serverStream)
 				regs[id] = firstIdx
 				p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, s, func() {})
@@ -1475,7 +1478,7 @@ func TestProcessorBackpressure(t *testing.T) {
 
 	// Add a registration.
 	const streamId = int64(1)
-	stream := newTestSingleFeedStream(streamMuxer, streamId)
+	stream := newTestSingleFeedStream(streamMuxer, streamId, serverStream)
 	ok, _ := p.Register(span, hlc.MinTimestamp, nil, /* catchUpIter */
 		false /* withDiff */, false /* withFiltering */, stream, nil)
 	require.True(t, ok)

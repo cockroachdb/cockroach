@@ -11,7 +11,9 @@
 package rangefeed
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -44,11 +46,11 @@ type testServerStream struct {
 	syncutil.Mutex
 	totalEvents int
 	events      map[int64][]*kvpb.MuxRangeFeedEvent
-	streamsDone map[int64]chan *kvpb.Error
+	streamsDone map[int64]chan error
 	sendErr     error
 }
 
-func (s *testServerStream) registerDone(streamID int64, c chan *kvpb.Error) {
+func (s *testServerStream) registerDone(streamID int64, c chan error) {
 	s.Lock()
 	defer s.Unlock()
 	s.streamsDone[streamID] = c
@@ -71,19 +73,35 @@ func (s *testServerStream) hasEvent(e *kvpb.MuxRangeFeedEvent) bool {
 	return false
 }
 
+type muxEvents map[int64][]*kvpb.MuxRangeFeedEvent
+
 func newTestServerStream() *testServerStream {
 	return &testServerStream{
-		events:      make(map[int64][]*kvpb.MuxRangeFeedEvent),
-		streamsDone: make(map[int64]chan *kvpb.Error),
+		events:      make(muxEvents),
+		streamsDone: make(map[int64]chan error),
 	}
 }
+func (s *testServerStream) String() string {
+	str := strings.Builder{}
+	for streamID, eventList := range s.events {
+		str.WriteString(fmt.Sprintf("Stream ID: %d, Len: %d, Events: %v\n", streamID, len(eventList), eventList))
+	}
+	return str.String()
+}
 
-func (s *testServerStream) eventsSentById(streamID int64) []*kvpb.MuxRangeFeedEvent {
+func (s *testServerStream) filterEventsSentById(
+	streamID int64, condition func(*kvpb.MuxRangeFeedEvent) bool,
+) (res []*kvpb.MuxRangeFeedEvent) {
 	s.Lock()
 	defer s.Unlock()
 	sent := s.events[streamID]
 	s.events[streamID] = nil
-	return sent
+	for _, event := range sent {
+		if condition(event) {
+			s.events[streamID] = append(s.events[streamID], event)
+		}
+	}
+	return
 }
 
 func (s *testServerStream) rangefeedEventsSentById(
@@ -108,7 +126,7 @@ func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	}
 	s.events[e.StreamID] = append(s.events[e.StreamID], e)
 	if e.Error != nil && s.streamsDone[e.StreamID] != nil {
-		s.streamsDone[e.StreamID] <- kvpb.NewError(e.Error.Error.GoError())
+		s.streamsDone[e.StreamID] <- e.Error.Error.GoError()
 	}
 	return nil
 }
