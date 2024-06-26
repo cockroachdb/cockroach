@@ -1195,8 +1195,8 @@ func TestChangefeedInitialScan(t *testing.T) {
 	}
 
 	initialScanTests := map[string]string{
-		`cursor - with initial scan`:     `CREATE CHANGEFEED FOR initial_scan WITH initial_scan, resolved='1s', cursor='%s'`,
-		`cursor - with initial backfill`: `CREATE CHANGEFEED FOR initial_scan WITH initial_scan = 'yes', resolved='1s', cursor='%s'`,
+		`cursor - with initial scan`:     `CREATE CHANGEFEED FOR initial_scan WITH initial_scan, resolved='2s', cursor='%s'`,
+		`cursor - with initial backfill`: `CREATE CHANGEFEED FOR initial_scan WITH initial_scan = 'yes', resolved='2s', cursor='%s'`,
 	}
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
