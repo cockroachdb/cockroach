@@ -120,9 +120,9 @@ func newLogicalReplicationWriterProcessor(
 	for i := range bhPool {
 		rp, err := makeSQLLastWriteWinsHandler(
 			ctx, flowCtx.Cfg.Settings, spec.TableDescriptors,
-			// Initialize the executor with the copy of the current session's
-			// variables in order to avoid creating a fresh copy on each usage.
-			flowCtx.Cfg.DB.Executor(isql.WithSessionData(flowCtx.EvalCtx.SessionData().Clone())),
+			// Initialize the executor with a fresh session data - this will
+			// avoid creating a new copy on each executor usage.
+			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
 		)
 		if err != nil {
 			return nil, err
@@ -131,7 +131,7 @@ func newLogicalReplicationWriterProcessor(
 			db:       flowCtx.Cfg.DB,
 			rp:       rp,
 			settings: flowCtx.Cfg.Settings,
-			sd:       flowCtx.EvalCtx.SessionData().Clone(),
+			sd:       sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */),
 		}
 	}
 
