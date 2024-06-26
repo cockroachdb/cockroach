@@ -1678,14 +1678,13 @@ func GC(l *logger.Logger, dryrun bool) error {
 		}()
 	}
 
-	// GCAwsKeyPairs has no dependencies and can start immediately.
 	addOpFn(func() error {
-		return cloud.GCAWSKeyPairs(l, dryrun)
+		return cloud.GCAWS(l, dryrun)
 	})
 
 	// ListCloud may fail for a provider, but we can still attempt GC on
 	// the clusters we do have.
-	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
+	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{gce.ProviderName, azure.ProviderName}})
 	addOpFn(func() error {
 		return cloud.GCClusters(l, cld, dryrun)
 	})
