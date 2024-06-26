@@ -26,6 +26,7 @@ import (
 )
 
 const MaxRetainedDSPDiagramsPerJob = 5
+const MaxDiagSize = 512 << 10
 
 // dspDiagMaxCulledPerWrite limits how many old diagrams writing a new one will
 // cull to try to maintain the limit of 5; typically it would cull no more than
@@ -53,6 +54,10 @@ func StorePlanDiagram(
 			return
 		}
 		diagString := diagURL.String()
+		if len(diagString) > MaxDiagSize {
+			log.Warningf(ctx, "plan diagram is too large (%dk) to store", len(diagString)/1024)
+			return
+		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			dspKey := profilerconstants.MakeDSPDiagramInfoKey(timeutil.Now().UnixNano())
 			infoStorage := jobs.InfoStorageForJob(txn, jobID)
