@@ -376,11 +376,15 @@ func alterColumnTypeGeneral(
 		}
 	}
 
+	// Set up the new column's descriptor. Since it is a computed column,
+	// we need to omit the default and onUpdate expressions, as computed columns
+	// cannot have them. These expressions are set during the computed column swap
+	// later.
 	newCol := descpb.ColumnDescriptor{
 		Name:            shadowColName,
 		Type:            toType,
 		Nullable:        col.IsNullable(),
-		DefaultExpr:     col.ColumnDesc().DefaultExpr,
+		Hidden:          col.IsHidden(),
 		UsesSequenceIds: col.ColumnDesc().UsesSequenceIds,
 		OwnsSequenceIds: col.ColumnDesc().OwnsSequenceIds,
 		ComputeExpr:     newColComputeExpr,
