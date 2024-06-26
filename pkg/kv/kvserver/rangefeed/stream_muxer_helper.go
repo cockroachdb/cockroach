@@ -131,7 +131,7 @@ func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	return nil
 }
 
-func (s *testServerStream) breakStreamWithErr(err error) {
+func (s *testServerStream) SetSendErr(err error) {
 	s.Lock()
 	defer s.Unlock()
 	s.sendErr = err

@@ -12,7 +12,6 @@ package rangefeed
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -130,7 +129,6 @@ func (s *StreamMuxer) appendMuxError(ev *kvpb.MuxRangeFeedEvent) {
 func (s *StreamMuxer) DisconnectRangefeedWithError(
 	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
 ) {
-	fmt.Println("DisconnectRangefeedWithError with streamID ", streamID, err)
 	if cancelFunc, ok := s.activeStreams.LoadAndDelete(streamID); ok {
 		// Canceling the context will cause the registration to disconnect unless
 		// registration is not set up yet in which case it will be a no-op.
@@ -148,7 +146,6 @@ func (s *StreamMuxer) DisconnectRangefeedWithError(
 		})
 
 		s.appendMuxError(ev)
-		fmt.Println("DisconnectRangefeedWithError with streamID ", streamID)
 		s.metrics.DecrementRangefeedCounter()
 	}
 }

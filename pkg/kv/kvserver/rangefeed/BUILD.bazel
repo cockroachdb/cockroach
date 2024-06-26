@@ -73,7 +73,6 @@ go_test(
     ],
     embed = [":rangefeed"],
     deps = [
-        "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv/kvpb",
@@ -89,7 +88,6 @@ go_test(
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/testutils",
-        "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/storageutils",
         "//pkg/util/encoding",
