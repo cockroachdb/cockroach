@@ -12,6 +12,9 @@ package cloud
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -19,7 +22,13 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/aws-sdk-go-v2/service/sts/types"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	rochprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -219,9 +228,9 @@ func deleteKeyPair(EC2Client *ec2.Client, keyPairName string) error {
 	return nil
 }
 
-// GCAWSKeyPairs tags keypairs created by roachprod with IAMUserName and CreatedAt if untagged and
+// gcAWSKeyPairs tags keypairs created by roachprod with IAMUserName and CreatedAt if untagged and
 // deletes keypairs created by previous users/employees (TeamCity keypairs are deleted after 10 days).
-func GCAWSKeyPairs(l *logger.Logger, dryrun bool) error {
+func gcAWSKeyPairs(l *logger.Logger, dryrun bool) error {
 	timestamp := timeutil.Now()
 
 	// Pass empty string as region to use default region (IAM is global).
@@ -315,4 +324,106 @@ func GCAWSKeyPairs(l *logger.Logger, dryrun bool) error {
 		}
 	}
 	return nil
+}
+
+// gc garbage-collects expired clusters, unused SSH key pairs in a
+// single AWS account
+func gc(l *logger.Logger, dryrun bool) error {
+	var (
+		wg            sync.WaitGroup
+		keyPairErr    error
+		combinedError error
+	)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		keyPairErr = gcAWSKeyPairs(l, dryrun)
+	}()
+
+	cld, _ := ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{rochprodaws.ProviderName}})
+	err := GCClusters(l, cld, dryrun)
+	combinedError = errors.CombineErrors(combinedError, err)
+
+	wg.Wait()
+	combinedError = errors.CombineErrors(combinedError, keyPairErr)
+
+	return combinedError
+}
+
+// assumeRole uses AWS STS to get temporary AWS credentials by assuming an IAM role
+func assumeRole(roleArn, roleSessionName, region string) (*types.Credentials, error) {
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	if err != nil {
+		return nil, errors.Wrap(err, "assumeRole: failed to load config")
+	}
+
+	stsClient := sts.NewFromConfig(cfg)
+	tmpCredentials, err := stsClient.AssumeRole(context.TODO(), &sts.AssumeRoleInput{
+		RoleArn:         aws.String(roleArn),
+		RoleSessionName: aws.String(roleSessionName),
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to assume role %s", roleArn)
+	}
+
+	return tmpCredentials.Credentials, nil
+}
+
+// stsCredentials fetches temporary aws credentials by assuming an IAM role and sets
+// amazon.AWSAccessKeyParam, amazon.AWSSecretParam, amazon.AWSTempTokenParam in environment variables.
+// The caller must invoke the unset function after completing the task that requires
+// using STS credentials set as environment variables to clear them.
+// To clear AWS credentials set via STS, call the unset function.
+func stsCredentials(roleArn, roleSessionName, region string) (func(), error) {
+	unset := func() {
+		_ = os.Unsetenv(amazon.AWSAccessKeyParam)
+		_ = os.Unsetenv(amazon.AWSSecretParam)
+		_ = os.Unsetenv(amazon.AWSTempTokenParam)
+	}
+
+	tmpCredentials, err := assumeRole(roleArn, roleSessionName, region)
+	if err != nil {
+		return unset, err
+	}
+
+	_ = os.Setenv(amazon.AWSAccessKeyParam, *tmpCredentials.AccessKeyId)
+	_ = os.Setenv(amazon.AWSSecretParam, *tmpCredentials.SecretAccessKey)
+	_ = os.Setenv(amazon.AWSTempTokenParam, *tmpCredentials.SessionToken)
+	return unset, nil
+}
+
+// GCAWS garbage collects expired clusters, unused SSH keys for a single or multiple AWS accounts
+func GCAWS(l *logger.Logger, dryrun bool) error {
+	provider := vm.Providers[rochprodaws.ProviderName]
+	var awsAccountIDs []string
+	if awsProviderInstance, ok := provider.(*rochprodaws.Provider); ok {
+		awsAccountIDs = awsProviderInstance.AccountIDs
+	}
+
+	// if accountIds are not provided performs cleanup on a single AWS account configured in ${HOME}/.aws/credentials file
+	if len(awsAccountIDs) == 0 {
+		return gc(l, dryrun)
+	}
+
+	// performs garbage collection on all aws account one by one
+	var combinedErrors error
+	for _, accountID := range awsAccountIDs {
+		roleArn := fmt.Sprintf("arn:aws:iam::%s:role/crl-roachprod-gc-cronjob", accountID)
+		roleSessionName := fmt.Sprintf("gc-role-session-%s", accountID)
+
+		unsetAwsEnvVariables, err := stsCredentials(roleArn, roleSessionName, "")
+		if err != nil {
+			l.Errorf("failed to get sts credentials for account: %s,  %v", accountID, err)
+			continue
+		}
+
+		if err := gc(l, dryrun); err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
+		}
+
+		unsetAwsEnvVariables()
+	}
+
+	return combinedErrors
 }
