@@ -116,6 +116,7 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 		p, /* temporarySchemaProvider */
 		p, /* nodesStatusInfo */
 		p, /* regionProvider */
+		p.SemaCtx(),
 	)
 }
 
