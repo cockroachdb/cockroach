@@ -26,6 +26,7 @@ import (
 )
 
 const MaxRetainedDSPDiagramsPerJob = 5
+const MaxDiagSize = 512 << 10
 
 // dspDiagMaxCulledPerWrite limits how many old diagrams writing a new one will
 // cull to try to maintain the limit of 5; typically it would cull no more than
@@ -45,14 +46,19 @@ func StorePlanDiagram(
 		ctx, cancel = stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			flowSpecs := p.GenerateFlowSpecs()
-			_, diagURL, err := execinfrapb.GeneratePlanDiagramURL(fmt.Sprintf("job:%d", jobID), flowSpecs,
-				execinfrapb.DiagramFlags{})
-			if err != nil {
-				return err
-			}
-
+		flowSpecs := p.GenerateFlowSpecs()
+		_, diagURL, err := execinfrapb.GeneratePlanDiagramURL(fmt.Sprintf("job:%d", jobID), flowSpecs,
+			execinfrapb.DiagramFlags{})
+		if err != nil {
+			log.Warningf(ctx, "plan diagram failed to generate: %v", err)
+			return
+		}
+		diagString := diagURL.String()
+		if len(diagString) > MaxDiagSize {
+			log.Warningf(ctx, "plan diagram is too large (%dk) to store", len(diagString)/1024)
+			return
+		}
+		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			dspKey := profilerconstants.MakeDSPDiagramInfoKey(timeutil.Now().UnixNano())
 			infoStorage := jobs.InfoStorageForJob(txn, jobID)
 
@@ -71,14 +77,9 @@ func StorePlanDiagram(
 			}
 
 			// Write the new diagram.
-			return infoStorage.Write(ctx, dspKey, []byte(diagURL.String()))
-		})
-		// Don't log the error if the context has been canceled. This will likely be
-		// when the node is shutting down and so it doesn't add value to spam the
-		// logs with the error.
-		if err != nil && ctx.Err() == nil {
-			log.Warningf(ctx, "failed to generate and write DistSQL diagram for job %d: %v",
-				jobID, err.Error())
+			return infoStorage.Write(ctx, dspKey, []byte(diagString))
+		}); err != nil && ctx.Err() == nil {
+			log.Warningf(ctx, "failed to write DistSQL diagram for job %d: %v", jobID, err.Error())
 		}
 	}); err != nil {
 		log.Warningf(ctx, "failed to spawn task to generate DistSQL plan diagram for job %d: %v",
