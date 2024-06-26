@@ -82,6 +82,12 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSQLReplanCount = metric.Metadata{
+		Name:        "logical_replication.replan_count",
+		Help:        "Total number of dist sql replanning events",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of logical replication jobs.
@@ -106,6 +112,7 @@ type Metrics struct {
 	StreamBatchBytesHist          metric.IHistogram
 	StreamBatchNanosHist          metric.IHistogram
 	OptimisticInsertConflictCount *metric.Counter
+	ReplanCount                   *metric.Counter
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -149,5 +156,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
 		OptimisticInsertConflictCount: metric.NewCounter(metaOptimisticInsertConflictCount),
+		ReplanCount:                   metric.NewCounter(metaDistSQLReplanCount),
 	}
 }
