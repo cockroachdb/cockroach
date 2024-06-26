@@ -11,13 +11,10 @@ package logical
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -29,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -109,62 +105,24 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 	}
 }
 
-// BenchmarkLastWriteWinsInsert is a microbenchmark that targets overhead of the
-// SQL layer when processing the INSERT query of the LWW handler. It mocks out
-// the KV layer by injecting an error during KV request evaluation.
-func BenchmarkLastWriteWinsInsert(b *testing.B) {
+func BenchmarkLWWInsertBatch(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
-
-	var discardWrite atomic.Bool
-	// key will be set later, before flipping discardWrite to true.
-	var key roachpb.Key
-	var numInjectedErrors atomic.Int64
-	injectedErr := kvpb.NewError(errors.New("injected error"))
 
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-					// In order to focus the benchmark on the SQL overhead of
-					// evaluating INSERT stmts via the internal executor, we'll
-					// inject errors for them so that the processing of the KV
-					// request stops once it reaches the KV client.
-					//
-					// With explicit txns we expect to have a batch with a
-					// single request, with implicit txns - with two requests
-					// (second being EndTxn).
-					if !discardWrite.Load() || !ba.IsWrite() || len(ba.Requests) > 2 {
-						return nil
-					}
-					switch req := ba.Requests[0].GetInner().(type) {
-					case *kvpb.PutRequest:
-						if !req.Key.Equal(key) {
-							return nil
-						}
-						numInjectedErrors.Add(1)
-						return injectedErr
-					case *kvpb.ConditionalPutRequest:
-						if !req.Key.Equal(key) {
-							return nil
-						}
-						numInjectedErrors.Add(1)
-						return injectedErr
-					default:
-						return nil
-					}
-				},
-			},
-		},
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
+	// batchSize determines the number of INSERTs within a single iteration of
+	// the benchmark.
+	batchSize := int(flushBatchSize.Get(&s.ClusterSettings().SV))
+
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	tableName := "tab"
-	runner.Exec(b, "CREATE TABLE tab (pk int primary key, payload string)")
+	runner.Exec(b, "CREATE TABLE tab (pk INT PRIMARY KEY, payload STRING)")
 	runner.Exec(b, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
@@ -181,54 +139,147 @@ func BenchmarkLastWriteWinsInsert(b *testing.B) {
 	}, s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)))
 	require.NoError(b, err)
 
-	// We'll be simulating processing the same INSERT over and over in the loop.
-	keyValue := replicationtestutils.EncodeKV(b, s.Codec(), desc, 1, "hello")
-	keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	key = keyValue.Key
-
-	for _, implicitTxn := range []bool{false, true} {
-		namePrefix := "explicitTxn"
-		if implicitTxn {
-			namePrefix = "implicitTxn"
+	// In some configs, we'll be simulating processing the same INSERT over and
+	// over in the loop.
+	sameKV := replicationtestutils.EncodeKV(b, s.Codec(), desc, 1, "hello")
+	sameKV.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	advanceTS := func(keyValue roachpb.KeyValue) roachpb.KeyValue {
+		keyValue.Value.Timestamp.WallTime += 1
+		return keyValue
+	}
+	// In other configs, we'll be simulating an INSERT with a constantly
+	// increasing PK. To make generation of the key easier, we start out with a
+	// value that needs 4 bytes when encoded. As a result, we'll have about 2^24
+	// values before getting into "5-bytes-encoded integers" land.
+	getDifferentKV := func() roachpb.KeyValue {
+		differentKV := replicationtestutils.EncodeKV(b, s.Codec(), desc, 0xffff+1, "hello")
+		differentKV.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		return differentKV
+	}
+	// advanceKeyAndTS assumes that it works on the KVs that started with the
+	// one returned by getDifferentKV.
+	advanceKeyAndTS := func(keyValue roachpb.KeyValue) roachpb.KeyValue {
+		// Key is of the form
+		//   []byte{240, 137, 248, 1, 0, 0, 136}
+		// where:
+		// - first two bytes are TableID / IndexID pair
+		// - third byte is integer marker for using 4 bytes total
+		// - fourth through sixth bytes indicate the integer value
+		// - seventh byte is the column family marker.
+		// In order to advance the key, we need to increment sixth byte with a
+		// carryover into fifth and possibly fourth.
+		keyValue.Key[5]++
+		if keyValue.Key[5] == 0 {
+			keyValue.Key[4]++
+			if keyValue.Key[4] == 0 {
+				keyValue.Key[3]++
+			}
 		}
-		for _, tc := range []struct {
-			name      string
-			prevValue roachpb.Value
-		}{
-			{name: "noPrevValue"},
-			{name: "withPrevValue", prevValue: keyValue.Value},
-		} {
-			b.Run(namePrefix+"/"+tc.name, func(b *testing.B) {
-				b.ReportAllocs()
-				numInjectedErrors.Store(0)
-				defer discardWrite.Store(false)
-				discardWrite.Store(true)
-				var lastRowErr error
-				var i int
-				if implicitTxn {
-					for i = 0; i < b.N; i++ {
-						// The error is expected here due to injected error.
+		keyValue.Value.Timestamp.WallTime += 1
+		return keyValue
+	}
+	// The contents of prevValue don't matter as long as RawBytes is non-nil.
+	prevValue := roachpb.Value{RawBytes: make([]byte, 1)}
+	for _, tc := range []struct {
+		name        string
+		implicitTxn bool
+		// keyValue specifies the KV used on the first ProcessRow call.
+		keyValue roachpb.KeyValue
+		// afterEachRow will be invoked after each ProcessRow call. It should be
+		// a quick function that takes the KV used on a previous call and
+		// returns the KV for the next one.
+		afterEachRow func(roachpb.KeyValue) roachpb.KeyValue
+		// prevValue will be passed to ProcessRow.
+		prevValue roachpb.Value
+	}{
+		// A set of configs that repeatedly processes the same KV resulting in
+		// a conflict.
+		{
+			name:         "conflict/implicit/noPrevValue",
+			implicitTxn:  true,
+			keyValue:     sameKV,
+			afterEachRow: advanceTS,
+		},
+		{
+			name:         "conflict/implicit/withPrevValue",
+			implicitTxn:  true,
+			keyValue:     sameKV,
+			afterEachRow: advanceTS,
+			prevValue:    prevValue,
+		},
+		{
+			name:         "conflict/explicit/noPrevValue",
+			keyValue:     sameKV,
+			afterEachRow: advanceTS,
+		},
+		{
+			name:         "conflict/explicit/withPrevValue",
+			keyValue:     sameKV,
+			afterEachRow: advanceTS,
+			prevValue:    prevValue,
+		},
+		// A set of configs that processes a new KV on each iteration resulting
+		// in a non-conflicting write.
+		{
+			name:         "noConflict/implicit/noPrevValue",
+			implicitTxn:  true,
+			keyValue:     getDifferentKV(),
+			afterEachRow: advanceKeyAndTS,
+		},
+		{
+			name:         "noConflict/implicit/withPrevValue",
+			implicitTxn:  true,
+			keyValue:     getDifferentKV(),
+			afterEachRow: advanceKeyAndTS,
+			prevValue:    prevValue,
+		},
+		{
+			name:         "noConflict/explicit/noPrevValue",
+			keyValue:     getDifferentKV(),
+			afterEachRow: advanceKeyAndTS,
+		},
+		{
+			name:         "noConflict/explicit/withPrevValue",
+			keyValue:     getDifferentKV(),
+			afterEachRow: advanceKeyAndTS,
+			prevValue:    prevValue,
+		},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			// Ensure that any previous writes are deleted.
+			runner.Exec(b, "DELETE FROM tab WHERE true")
+			b.ResetTimer()
+			b.ReportAllocs()
+			var lastRowErr error
+			keyValue := tc.keyValue
+			if tc.implicitTxn {
+			OUTER:
+				for i := 0; i < b.N; i++ {
+					for j := 0; j < batchSize; j++ {
 						_, lastRowErr = rp.ProcessRow(ctx, nil /* txn */, keyValue, tc.prevValue)
-						keyValue.Value.Timestamp.WallTime += 1
+						if lastRowErr != nil {
+							break OUTER
+						}
+						keyValue = tc.afterEachRow(keyValue)
 					}
-				} else {
-					var lastTxnErr error
-					for i = 0; i < b.N; i++ {
-						// We need to start a fresh Txn since we're injecting an
-						// error.
-						lastTxnErr = s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-							// The error is expected here due to injected error.
-							_, lastRowErr = rp.ProcessRow(ctx, txn, keyValue, tc.prevValue)
-							keyValue.Value.Timestamp.WallTime += 1
-							return nil
-						}, isql.WithSessionData(sd))
-					}
-					require.Error(b, lastTxnErr)
 				}
-				require.Error(b, lastRowErr)
-				// Sanity check that an error was injected on each iteration.
-				require.Equal(b, numInjectedErrors.Load(), int64(i))
-			})
-		}
+			} else {
+				var lastTxnErr error
+				for i := 0; i < b.N; i++ {
+					lastTxnErr = s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+						for j := 0; j < batchSize; j++ {
+							_, lastRowErr = rp.ProcessRow(ctx, txn, keyValue, tc.prevValue)
+							if lastRowErr != nil {
+								return lastRowErr
+							}
+							keyValue = tc.afterEachRow(keyValue)
+						}
+						return nil
+					}, isql.WithSessionData(sd))
+				}
+				require.NoError(b, lastTxnErr)
+			}
+			require.NoError(b, lastRowErr)
+		})
 	}
 }
