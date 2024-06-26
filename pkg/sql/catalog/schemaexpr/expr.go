@@ -316,7 +316,7 @@ func deserializeExprForFormatting(
 	}
 
 	// In pg_catalog, we need to make sure we always display constants instead of
-	// expressions, when possible (e.g., turn Array expr into a DArrray). This is
+	// expressions, when possible (e.g., turn Array expr into a DArray). This is
 	// best-effort, so if there is any error, it is safe to fallback to the
 	// typedExpr.
 	if fmtFlags == tree.FmtPGCatalog {

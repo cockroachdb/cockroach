@@ -3553,7 +3553,7 @@ PREPARE args_deduce_type_1(int) AS SELECT $1::int, $2::varchar(10), $3::varchar(
 query TTTB
 SELECT name, statement, parameter_types, from_sql FROM pg_prepared_statements WHERE name LIKE 'args_%' ORDER BY 1,2
 ----
-args_deduce_type    PREPARE args_deduce_type (int, varchar, int, int) AS INSERT INTO t_prepare VALUES ($1, $2, $3)                   {bigint,"'character varying'",bigint,bigint}          true
+args_deduce_type    PREPARE args_deduce_type (int, varchar, int, int) AS INSERT INTO t_prepare VALUES ($1, $2, $3)           {bigint,"'character varying'",bigint,bigint}          true
 args_deduce_type_1  PREPARE args_deduce_type_1 (int, varchar, varchar) AS SELECT $1::INT8, $2::VARCHAR(10), $3::VARCHAR(20)  {bigint,"'character varying'","'character varying'"}  true
 args_test_few       PREPARE args_test_few (int, int) AS SELECT $1, $2::INT8                                                  {bigint,bigint}                                       true
 args_test_many      PREPARE args_test_many (int, int) AS SELECT $1                                                           {bigint,bigint}                                       true
@@ -5153,5 +5153,26 @@ SELECT typname, typrelid, typarray FROM pg_catalog.pg_type WHERE oid = 'u[]'::re
 ----
 typname  typrelid  typarray
 _u       0         0
+
+subtest end
+
+subtest regression_126042
+
+statement ok
+CREATE TABLE t126042 (
+  id INT8 NOT NULL PRIMARY KEY,
+  bytes_array BYTES[] DEFAULT '{f}'::BYTES[]
+)
+
+# Regression test for #126042. Expressions of type BYTES[] should be parsable.
+query TT
+SELECT a.attname, pg_get_expr(d.adbin, d.adrelid)
+FROM pg_attribute a
+LEFT JOIN pg_attrdef d ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+WHERE a.attrelid = 't126042'::REGCLASS
+ORDER BY 1
+----
+bytes_array  '{"\\x66"}'::BYTES[]
+id           NULL
 
 subtest end
