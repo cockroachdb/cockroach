@@ -118,7 +118,6 @@ func registerYCSB(r registry.Registry) {
 			} else {
 				name = fmt.Sprintf("ycsb/%s/nodes=3/cpu=%d", wl, cpus)
 			}
-			wl, cpus := wl, cpus
 			r.Add(registry.TestSpec{
 				Name:      name,
 				Owner:     registry.OwnerTestEng,

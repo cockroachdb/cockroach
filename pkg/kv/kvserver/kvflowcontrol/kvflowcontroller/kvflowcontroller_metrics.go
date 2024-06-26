@@ -156,7 +156,6 @@ func newMetrics(c *Controller) *metrics {
 		admissionpb.RegularWorkClass,
 		admissionpb.ElasticWorkClass,
 	} {
-		wc := wc // copy loop variable
 		m.FlowTokensAvailable[wc] = metric.NewFunctionalGauge(
 			annotateMetricTemplateWithWorkClass(wc, flowTokensAvailable),
 			func() int64 {

@@ -97,7 +97,6 @@ func NewMetrics(registry *metric.Registry) *Metrics {
 		admissionpb.RegularWorkClass,
 		admissionpb.ElasticWorkClass,
 	} {
-		wc := wc // copy loop variable
 		m.RequestsWaiting[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClass(wc, requestsWaiting),
 		)

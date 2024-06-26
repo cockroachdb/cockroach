@@ -1091,7 +1091,6 @@ func (nl *NodeLiveness) updateLiveness(
 func (nl *NodeLiveness) verifyDiskHealth(ctx context.Context) error {
 	resultCs := make([]singleflight.Future, len(nl.engines))
 	for i, eng := range nl.engines {
-		eng := eng // pin the loop variable
 		resultCs[i], _ = nl.engineSyncs.DoChan(ctx,
 			strconv.Itoa(i),
 			singleflight.DoOpts{

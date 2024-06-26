@@ -712,7 +712,6 @@ func cumulativeTestForEachPostCommitStage(
 		}
 		var hasFailed bool
 		for _, tc := range testCases {
-			tc := tc // capture loop variable
 			fn := func(t *testing.T) {
 				tf(t, tc)
 			}
