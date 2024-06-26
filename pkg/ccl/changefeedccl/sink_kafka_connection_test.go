@@ -41,10 +41,14 @@ func (e *externalConnectionKafkaSink) getConcreteType() sinkType {
 
 // Dial implements the Sink interface.
 func (e *externalConnectionKafkaSink) Dial() error {
-	if _, ok := e.sink.(*kafkaSink); !ok {
+	switch sink := e.sink.(type) {
+	case *kafkaSink:
+		return sink.Dial()
+	case *batchingSink:
+		return sink.Dial()
+	default:
 		return errors.Newf("unexpected sink type %T; expected a kafka sink", e.sink)
 	}
-	return nil
 }
 
 // Close implements the Sink interface.

@@ -1645,6 +1645,7 @@ func (p *asyncIgnoreCloseProducer) Close() error {
 
 // sinkKnobs override behavior for the simulated sink.
 type sinkKnobs struct {
+	// Only valid for the v1 sink.
 	kafkaInterceptor func(m *sarama.ProducerMessage, client kafkaClient) error
 }
 
@@ -1744,9 +1745,13 @@ func (s *fakeKafkaSinkV2) Dial() error {
 	s.client = mocks.NewMockKafkaClientV2(s.ctrl)
 	s.client.EXPECT().ProduceSync(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msgs ...*kgo.Record) kgo.ProduceResults {
 		for _, m := range msgs {
+			var key sarama.Encoder
+			if m.Key != nil {
+				key = sarama.ByteEncoder(m.Key)
+			}
 			s.feedCh <- &sarama.ProducerMessage{
 				Topic:     m.Topic,
-				Key:       sarama.ByteEncoder(m.Key),
+				Key:       key,
 				Value:     sarama.ByteEncoder(m.Value),
 				Partition: m.Partition,
 			}

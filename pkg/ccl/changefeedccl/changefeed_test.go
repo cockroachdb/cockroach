@@ -8520,6 +8520,10 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		if KafkaV2Enabled.Get(&s.Server.ClusterSettings().SV) {
+			t.Skip("This is already covered for the v2 sink in another test")
+		}
+
 		changefeedbase.BatchReductionRetryEnabled.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, true)
 
