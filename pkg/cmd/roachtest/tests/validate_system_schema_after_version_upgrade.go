@@ -73,9 +73,6 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
 		// Fixtures are generated on a version that's too old for this test.
 		mixedversion.NeverUseFixtures,
-		// We limit the number of upgrades since the test is not expected to work
-		// on versions older than 22.2.
-		mixedversion.MaxUpgrades(2),
 	)
 	mvt.AfterUpgradeFinalized(
 		"obtain system schema from the upgraded cluster",

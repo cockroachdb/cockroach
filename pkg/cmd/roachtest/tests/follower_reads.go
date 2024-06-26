@@ -915,14 +915,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	topology := topologySpec{multiRegion: false}
-	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
-		// In 23.1, the `user_id` field was added to `system.web_sessions`.
-		// If the cluster is migrating to 23.1, auth-session login will not
-		// be aware of this new field and authentication will fail.
-		// TODO(DarrylWong): When 22.2 is no longer supported, we won't run
-		// into the above issue anymore and can enable secure clusters.
-		mixedversion.ClusterSettingOption(install.SecureOption(false)),
-	)
+	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness)
 }
 
 // runFollowerReadsMixedVersionGlobalTableTest runs a multi-region follower-read
@@ -942,12 +935,6 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// Use a longer upgrade timeout to give the migrations enough time to finish
 		// considering the cross-region latency.
 		mixedversion.UpgradeTimeout(60*time.Minute),
-		// In 23.1, the `user_id` field was added to `system.web_sessions`.
-		// If the cluster is migrating to 23.1, auth-session login will not
-		// be aware of this new field and authentication will fail.
-		// TODO(DarrylWong): When 22.2 is no longer supported, we won't run
-		// into the above issue anymore and can enable secure clusters.
-		mixedversion.ClusterSettingOption(install.SecureOption(false)),
 	)
 }
 
