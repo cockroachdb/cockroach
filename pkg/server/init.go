@@ -657,10 +657,7 @@ func newInitServerConfig(
 				}
 			}
 			if bootstrapVersion == (roachpb.Version{}) {
-				// As a special case, we tolerate initializing clusters at versions
-				// older than the min supported for some specific tests (we will just
-				// use the minimum supported version for the initial values).
-				bootstrapVersion = overrideVersion
+				panic(fmt.Sprintf("BinaryVersionOverride version %s too low", overrideVersion))
 			}
 			latestVersion = bootstrapVersion
 		}
