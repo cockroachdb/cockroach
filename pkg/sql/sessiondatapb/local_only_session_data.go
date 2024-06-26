@@ -350,7 +350,9 @@ const (
 // use pointers to constants, we define these variables to use in
 // those cases.
 var (
-	UserLowQoS = UserLow
+	SystemLowQoS = SystemLow
+	TTLLowQoS    = TTLLow
+	UserLowQoS   = UserLow
 )
 
 var qosLevelsDict = map[QoSLevel]string{
