@@ -439,6 +439,10 @@ func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
 	// distSQL plan if a node is lagging for 2 checks in a row.
 	checkFreq := crosscluster.ReplanFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV) / 2
 	maxLag := crosscluster.InterNodeLag.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	if sf.persistedReplicatedTime.IsEmpty() {
+		log.VEvent(ctx, 2, "skipping lag replanning check: no persisted replicated time")
+		return nil
+	}
 	if checkFreq == 0 || maxLag == 0 || timeutil.Since(sf.lastNodeLagCheck) < checkFreq {
 		log.VEventf(ctx, 2, "skipping lag replanning check: maxLag %d; checkFreq %.2f; last node check %s; time since last check %.2f",
 			maxLag, checkFreq.Minutes(), sf.lastNodeLagCheck, timeutil.Since(sf.lastNodeLagCheck).Minutes())
