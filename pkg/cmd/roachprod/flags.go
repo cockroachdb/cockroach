@@ -163,6 +163,9 @@ func initFlags() {
 			// createCmd only accepts a single GCE project, as opposed to all the other
 			// commands.
 			providerOptsContainer[providerName].ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
+
+			// set up cluster cleanup flag for gcCmd
+			providerOptsContainer[providerName].ConfigureClusterCleanupFlags(gcCmd.Flags())
 		}
 	}
 
