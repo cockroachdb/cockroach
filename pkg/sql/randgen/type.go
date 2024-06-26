@@ -97,7 +97,8 @@ func IsAllowedForArray(typ *types.T) bool {
 	return true
 }
 
-// RandType returns a random type value.
+// RandType returns a random type value. Note that unlike RandTypeFromSlice,
+// RandType will never produce an ENUM or other user-defined type.
 func RandType(rng *rand.Rand) *types.T {
 	return RandTypeFromSlice(rng, SeedTypes)
 }
