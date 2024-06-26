@@ -444,36 +444,36 @@ func newTestProcessor(
 	return s, &h, stopper
 }
 
-type testStream struct {
+type testSingleFeedStream struct {
 	ctx      context.Context
 	streamID int64
 	rangeID  roachpb.RangeID
 	muxer    *StreamMuxer
 }
 
-func newTestStream(muxer *StreamMuxer, streamID int64) *testStream {
+func newTestSingleFeedStream(muxer *StreamMuxer, streamID int64) *testSingleFeedStream {
 	ctx, done := context.WithCancel(context.Background())
 	muxer.AddStream(streamID, done)
-	return &testStream{ctx: ctx, streamID: streamID, rangeID: 1, muxer: muxer}
+	return &testSingleFeedStream{ctx: ctx, streamID: streamID, rangeID: 1, muxer: muxer}
 }
 
-func (s *testStream) Context() context.Context {
+func (s *testSingleFeedStream) Context() context.Context {
 	return s.ctx
 }
 
-func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
+func (s *testSingleFeedStream) Send(e *kvpb.RangeFeedEvent) error {
 	return s.muxer.Send(s.streamID, s.rangeID, e)
 }
 
-func (s *testStream) Disconnect(err *kvpb.Error) {
+func (s *testSingleFeedStream) Disconnect(err *kvpb.Error) {
 	s.muxer.DisconnectRangefeedWithError(s.streamID, s.rangeID, err)
 }
 
-func (s *testStream) RegisterCleanUp(f func()) {
+func (s *testSingleFeedStream) RegisterCleanUp(f func()) {
 	s.muxer.RegisterRangefeedCleanUp(s.streamID, f)
 }
 
-func (s *testStream) Err(t *testing.T, stream *testServerStream) error {
+func (s *testSingleFeedStream) Err(t *testing.T, stream *testServerStream) error {
 	done := make(chan *kvpb.Error, 1)
 	stream.registerDone(s.streamID, done)
 	fmt.Println("waiting for stream to close", s.streamID)
