@@ -40,6 +40,7 @@ go_test(
         "hash_sharded_test.go",
         "impure_builtin_test.go",
         "inverted_index_test.go",
+        "job_statement_timeout_test.go",
         "kv_test.go",
         "main_test.go",
         "max_open_txns_test.go",
