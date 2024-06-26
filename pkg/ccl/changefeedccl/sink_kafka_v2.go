@@ -292,6 +292,10 @@ func makeKafkaSinkV2(ctx context.Context,
 	mb metricsRecorderBuilder,
 	knobs kafkaSinkV2Knobs,
 ) (Sink, error) {
+
+	_ = parallelism
+	parallelism = 1 // dbg
+
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
 		// Defaults from the old kafka sink (nearly -- we require Frequency to be nonzero if anything else is, but the old sink did not. Set it low.)
 		Flush: sinkBatchConfig{

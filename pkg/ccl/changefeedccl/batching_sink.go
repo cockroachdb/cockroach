@@ -228,6 +228,7 @@ func (s *batchingSink) Close() error {
 
 // Dial implements the Sink interface.
 func (s *batchingSink) Dial() error {
+	// TODO: kafka sink v1 makes a metadata request here to check if the connection works. this might be important for ux. if so, can we replicate it?
 	return nil
 }
 

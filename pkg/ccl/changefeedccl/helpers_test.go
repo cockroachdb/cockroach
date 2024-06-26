@@ -964,8 +964,8 @@ func makeFeedFactoryWithOptions(
 			Host:   s.SQLAddr()}, func() {}
 	}
 	switch sinkType {
-	case "kafka":
-		f := makeKafkaFeedFactory(srvOrCluster, db)
+	case "kafka": // and then maybe something in here idk
+		f := makeKafkaFeedFactory(t, srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*kafkaFeedFactory).configureUserDB(userDB)
 		return f, func() { cleanup() }

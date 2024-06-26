@@ -3834,7 +3834,7 @@ func TestChangefeedRestartMultiNode(t *testing.T) {
 	db = cluster.ServerConn(feedServerID)
 	sqlDB = sqlutils.MakeSQLRunner(db)
 
-	f := makeKafkaFeedFactory(cluster, db)
+	f := makeKafkaFeedFactory(t, cluster, db)
 	feed := feed(t, f, "CREATE CHANGEFEED FOR test_tab WITH updated")
 	defer closeFeed(t, feed)
 	assertPayloadsStripTs(t, feed, []string{
@@ -3892,7 +3892,7 @@ func TestChangefeedStopPolicyMultiNode(t *testing.T) {
 	db = cluster.ServerConn(feedServerID)
 	sqlDB = sqlutils.MakeSQLRunner(db)
 
-	f := makeKafkaFeedFactory(cluster, db)
+	f := makeKafkaFeedFactory(t, cluster, db)
 	feed := feed(t, f, "CREATE CHANGEFEED FOR test_tab WITH schema_change_policy='stop'")
 	defer closeFeed(t, feed)
 	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (1)`)
@@ -4011,7 +4011,7 @@ func TestChangefeedRBRAvroAddRegion(t *testing.T) {
 	cluster, db, cleanup := startTestCluster(t)
 	defer cleanup()
 
-	f := makeKafkaFeedFactory(cluster, db)
+	f := makeKafkaFeedFactory(t, cluster, db)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY)`)
 	waitForSchemaChange(t, sqlDB, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
