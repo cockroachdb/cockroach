@@ -276,7 +276,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 			skip.IgnoreLint(t, "AWS_ROLE_ARN_CHAIN env var must be set")
 		}
 
-		assumeRoleProvider, delegateRoleProviders := uris.ParseRoleProvidersString(roleChainStr)
+		assumeRoleProvider, delegateRoleProviders := cloudpb.ParseRoleProvidersString(roleChainStr)
 		providerChain := append(delegateRoleProviders, assumeRoleProvider)
 		for _, tc := range []struct {
 			auth      string

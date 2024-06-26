@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -196,7 +197,7 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 
 	t.Run("role-chaining-external-id", func(t *testing.T) {
 		roleChainStr := os.Getenv("AWS_ROLE_ARN_CHAIN")
-		assumeRoleProvider, delegateRoleProviders := uris.ParseRoleProvidersString(roleChainStr)
+		assumeRoleProvider, delegateRoleProviders := cloudpb.ParseRoleProvidersString(roleChainStr)
 		providerChain := append(delegateRoleProviders, assumeRoleProvider)
 
 		// First verify that none of the individual roles in the chain can be used

@@ -5,7 +5,6 @@ go_library(
     srcs = ["uris.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/uris",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/cloud/cloudpb"],
 )
 
 go_test(

@@ -18,7 +18,7 @@ import (
 	pubsub "cloud.google.com/go/pubsub/apiv1"
 	pb "cloud.google.com/go/pubsub/apiv1/pubsubpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -389,7 +389,7 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, err
 
 	credsOpt := option.WithCredentials(creds)
 	if assumeRoleOption != "" {
-		assumeRole, delegateRoles := uris.ParseRoleString(assumeRoleOption)
+		assumeRole, delegateRoles := cloudpb.ParseRoleString(assumeRoleOption)
 		cfg := impersonate.CredentialsConfig{
 			TargetPrincipal: assumeRole,
 			Scopes:          []string{gcpScope},
