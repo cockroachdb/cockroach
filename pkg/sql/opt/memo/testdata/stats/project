@@ -295,3 +295,40 @@ project
  └── projections
       ├── NULL [as="?column?":7, type=unknown]
       └── CASE x:1 WHEN y:2 THEN CAST(NULL AS INT8) ELSE x:1 END [as=nullif:8, type=int, outer=(1,2)]
+
+# Regression test for #124831 - don't panic due to statistics assertion with
+# optimizer rules disabled.
+exec-ddl
+CREATE TABLE t124831 (a INT, b INT);
+----
+
+norm disable=(SimplifyZeroCardinalityGroup,EliminateExistsZeroRows,SimplifyZeroCardinalitySemiJoin,PushFilterIntoJoinLeft)
+SELECT a FROM t124831 WHERE NULL::INT IN (SELECT 1 LIMIT b);
+----
+project
+ ├── columns: a:1(int)
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── stats: [rows=0]
+ └── semi-join-apply
+      ├── columns: a:1(int) b:2(int)
+      ├── cardinality: [0 - 0]
+      ├── immutable
+      ├── stats: [rows=0]
+      ├── scan t124831
+      │    ├── columns: a:1(int) b:2(int)
+      │    └── stats: [rows=1000]
+      ├── limit
+      │    ├── outer: (2)
+      │    ├── cardinality: [1 - 1]
+      │    ├── immutable
+      │    ├── stats: [rows=1]
+      │    ├── key: ()
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── stats: [rows=1]
+      │    │    ├── key: ()
+      │    │    └── () [type=tuple]
+      │    └── b:2 [type=int]
+      └── filters
+           └── false [type=bool, constraints=(contradiction; tight)]

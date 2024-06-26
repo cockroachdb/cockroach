@@ -2672,14 +2672,14 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 
 	switch h.joinType {
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		if right.IsZero() {
+		if right.IsZero() || h.filterIsFalse {
 			return left
 		}
 		// Anti join cardinality never exceeds left input cardinality, and
 		// allows zero rows.
 		return left.AsLowAs(0)
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
-		if right.IsZero() {
+		if right.IsZero() || h.filterIsFalse {
 			return props.ZeroCardinality
 		}
 		// Semi join cardinality never exceeds left input cardinality, and
