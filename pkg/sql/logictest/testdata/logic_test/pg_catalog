@@ -998,22 +998,22 @@ JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public' ORDER BY ad.oid DESC
 ----
-oid         relname  adrelid  adnum  adbin                                   adsrc                                   pg_get_expr
-4171354239  t2       113      2      unique_rowid()                          unique_rowid()                          unique_rowid()
-3086013501  t5       117      4      unique_rowid()                          unique_rowid()                          unique_rowid()
-2306804703  t1       110      13     a * b                                   a * b                                   a * b
-2306804701  t1       110      15     nextval('public.t1_n_seq'::REGCLASS)    nextval('public.t1_n_seq'::REGCLASS)    nextval('public.t1_n_seq'::REGCLASS)
-2306804700  t1       110      14     nextval('public.t1_m_seq'::REGCLASS)    nextval('public.t1_m_seq'::REGCLASS)    nextval('public.t1_m_seq'::REGCLASS)
-2306804698  t1       110      8      a * b                                   a * b                                   a * b
-2306804694  t1       110      4      12                                      12                                      12
-2000672759  mv1      121      2      unique_rowid()                          unique_rowid()                          unique_rowid()
-1740936492  t4       116      4      unique_rowid()                          unique_rowid()                          unique_rowid()
-1221463949  t3       114      3      'FOO'::STRING                           'FOO'::STRING                           'FOO'::STRING
-1221463946  t3       114      4      unique_rowid()                          unique_rowid()                          unique_rowid()
-655595756   t6       120      8      m = 'foo'::constraint_db.public.mytype  m = 'foo'::constraint_db.public.mytype  m = 'foo'::constraint_db.public.mytype
-655595747   t6       120      7      lower(c)                                lower(c)                                lower(c)
-655595746   t6       120      6      unique_rowid()                          unique_rowid()                          unique_rowid()
-655595745   t6       120      5      a + b                                   a + b                                   a + b
+oid         relname  adrelid  adnum  adbin                                 adsrc                                 pg_get_expr
+4171354239  t2       113      2      unique_rowid()                        unique_rowid()                        unique_rowid()
+3086013501  t5       117      4      unique_rowid()                        unique_rowid()                        unique_rowid()
+2306804703  t1       110      13     a * b                                 a * b                                 a * b
+2306804701  t1       110      15     nextval('public.t1_n_seq'::REGCLASS)  nextval('public.t1_n_seq'::REGCLASS)  nextval('public.t1_n_seq'::REGCLASS)
+2306804700  t1       110      14     nextval('public.t1_m_seq'::REGCLASS)  nextval('public.t1_m_seq'::REGCLASS)  nextval('public.t1_m_seq'::REGCLASS)
+2306804698  t1       110      8      a * b                                 a * b                                 a * b
+2306804694  t1       110      4      12                                    12                                    12
+2000672759  mv1      121      2      unique_rowid()                        unique_rowid()                        unique_rowid()
+1740936492  t4       116      4      unique_rowid()                        unique_rowid()                        unique_rowid()
+1221463949  t3       114      3      'FOO'::STRING                         'FOO'::STRING                         'FOO'::STRING
+1221463946  t3       114      4      unique_rowid()                        unique_rowid()                        unique_rowid()
+655595756   t6       120      8      m = 'foo'::public.mytype              m = 'foo'::public.mytype              m = 'foo'::public.mytype
+655595747   t6       120      7      lower(c)                              lower(c)                              lower(c)
+655595746   t6       120      6      unique_rowid()                        unique_rowid()                        unique_rowid()
+655595745   t6       120      5      a + b                                 a + b                                 a + b
 
 ## pg_catalog.pg_indexes
 
@@ -1062,7 +1062,7 @@ crdb_oid    tablename  indexname          indexdef
 1869730585  t5         t5_pkey            CREATE UNIQUE INDEX t5_pkey ON constraint_db.public.t5 USING btree (rowid ASC)
 2129466854  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
 2129466855  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
-2129466850  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::constraint_db.public.mytype) ASC) WHERE (m = 'foo'::constraint_db.public.mytype)
+2129466850  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
 2129466848  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
 2129466852  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
 
@@ -1110,12 +1110,12 @@ JOIN pg_catalog.pg_class c ON i.indexrelid = c.oid
 WHERE c.relname LIKE 't6_%'
 ORDER BY 1
 ----
-relname            indkey  indexprs                                      indpred
-t6_expr_expr1_idx  0 0     {(lower(c)),"(a + b)"}                        NULL
-t6_expr_idx        0       {"(a + b)"}                                   NULL
-t6_expr_idx1       0       {"(m = 'foo'::constraint_db.public.mytype)"}  m = 'foo'::constraint_db.public.mytype
-t6_expr_key        0       {(lower(c))}                                  NULL
-t6_pkey            6       NULL                                          NULL
+relname            indkey  indexprs                        indpred
+t6_expr_expr1_idx  0 0     {(lower(c)),"(a + b)"}          NULL
+t6_expr_idx        0       {"(a + b)"}                     NULL
+t6_expr_idx1       0       {"(m = 'foo'::public.mytype)"}  m = 'foo'::public.mytype
+t6_expr_key        0       {(lower(c))}                    NULL
+t6_pkey            6       NULL                            NULL
 
 statement ok
 SET DATABASE = system
@@ -3419,7 +3419,7 @@ WHERE n.nspname = 'public' ORDER BY def.oid DESC
 1740936492  t4             unique_rowid()
 1221463949  t3             'FOO'::STRING
 1221463946  t3             unique_rowid()
-655595756   t6             m = 'foo'::constraint_db.public.mytype
+655595756   t6             m = 'foo'::public.mytype
 655595747   t6             lower(c)
 655595746   t6             unique_rowid()
 655595745   t6             a + b
@@ -3919,7 +3919,7 @@ ORDER BY indexname
 ----
 indexname                   indexdef
 partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE (a > 0)
-partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::test.public.testenum, 'bar'::test.public.testenum))
+partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
 partial_index_table_pkey    CREATE UNIQUE INDEX partial_index_table_pkey ON test.public.partial_index_table USING btree (rowid ASC)
 
 query TT colnames
@@ -3931,7 +3931,7 @@ ORDER BY conname
 ----
 conname                     condef
 partial_index_table_a_key   UNIQUE (a ASC) WHERE (a > 0)
-partial_index_table_a_key1  UNIQUE (a ASC) WHERE (b IN ('foo'::test.public.testenum, 'bar'::test.public.testenum))
+partial_index_table_a_key1  UNIQUE (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
 partial_index_table_pkey    PRIMARY KEY (rowid ASC)
 
 subtest regression_46799

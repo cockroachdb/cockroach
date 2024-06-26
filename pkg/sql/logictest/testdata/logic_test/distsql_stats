@@ -1740,6 +1740,24 @@ job.schema_change.successful
 job.create_stats.successful
 job.auto_create_stats.successful
 
+# Check that we can inject the statistics back into the table from a different
+# database.
+
+let $db
+SHOW DATABASE
+
+statement ok
+CREATE DATABASE another_db
+
+statement ok
+USE another_db
+
+statement ok
+ALTER TABLE $db.public.greeting_stats INJECT STATISTICS '$stats'
+
+statement ok
+USE $db
+
 # Regression test for #63387. Stats collection should succeed when partial index
 # predicates reference inverted-type columns.
 statement ok
