@@ -16,12 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +29,7 @@ func TestNodeStreamMuxer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
+	stopper := stop.NewStopper()
 
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
@@ -39,10 +38,10 @@ func TestNodeStreamMuxer(t *testing.T) {
 	wg.Add(1)
 	defer wg.Wait()
 	// Make sure to shut down the muxer before wg.Wait().
-	defer tc.Stopper().Stop(ctx)
-	if err := tc.Stopper().RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+	defer stopper.Stop(ctx)
+	if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
 		defer wg.Done()
-		streamMuxer.Run(ctx, tc.Stopper())
+		streamMuxer.Run(ctx, stopper)
 	}); err != nil {
 		wg.Done()
 	}
