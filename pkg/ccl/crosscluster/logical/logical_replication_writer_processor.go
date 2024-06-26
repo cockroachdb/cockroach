@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -558,7 +559,7 @@ var useImplicitTxns = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.use_implicit_txns.enabled",
 	"determines whether the consumer processes each row in a separate implicit txn",
-	true,
+	metamorphic.ConstantWithTestBool("logical_replication.consumer.use_implicit_txns.enabled", true),
 )
 
 func (t *txnBatch) HandleBatch(
@@ -583,6 +584,17 @@ func (t *txnBatch) HandleBatch(
 	} else {
 		var txnStats batchStats
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			// Note that we cannot use the DisableChangefeedReplication override
+			// option in LWW row processor because it only affects new txns, and
+			// we already have one.
+			// TODO(ssd): For now, we SetOmitInRangefeeds to
+			// prevent the data from being emitted back to the source.
+			// However, I don't think we want to do this in the long run.
+			// Rather, we want to store the inbound cluster ID and store that
+			// in a way that allows us to choose to filter it out from or not.
+			// Doing it this way means that you can't choose to run CDC just from
+			// one side and not the other.
+			txn.KV().SetOmitInRangefeeds()
 			txnStats = batchStats{}
 			for _, kv := range batch {
 				rowStats, err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue)
