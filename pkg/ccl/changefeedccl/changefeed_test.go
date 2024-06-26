@@ -1244,7 +1244,7 @@ func TestChangefeedInitialScan(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 // TestChangefeedLaggingRangesMetrics tests the behavior of the

@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/golang/mock/gomock"
 	"github.com/jackc/pgx/v4"
+	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -1726,10 +1727,11 @@ type fakeKafkaSinkV2 struct {
 	Sink
 	// for compatibility with all the other fakeKafka test stuff, convert things to sarama messages.
 	// TODO: clean this up when we remove the v1 sink.
-	feedCh chan *sarama.ProducerMessage
-	t      *testing.T
-	ctrl   *gomock.Controller
-	client *mocks.MockKafkaClientV2
+	feedCh      chan *sarama.ProducerMessage
+	t           *testing.T
+	ctrl        *gomock.Controller
+	client      *mocks.MockKafkaClientV2
+	adminClient *mocks.MockKafkaAdminClientV2
 }
 
 var _ Sink = (*fakeKafkaSinkV2)(nil)
@@ -1755,6 +1757,22 @@ func (s *fakeKafkaSinkV2) Dial() error {
 
 	kc.client.Close()
 	kc.client = s.client
+
+	s.adminClient = mocks.NewMockKafkaAdminClientV2(s.ctrl)
+	s.adminClient.EXPECT().ListTopics(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, topics ...string) (kadm.TopicDetails, error) {
+		// Say each topic has one partition and one replica.
+		td := kadm.TopicDetails{}
+		for _, topic := range topics {
+			td[topic] = kadm.TopicDetail{
+				Topic: topic,
+				Partitions: map[int32]kadm.PartitionDetail{
+					0: {Topic: topic, Partition: 0, Leader: 0, Replicas: []int32{0}, ISR: []int32{0}},
+				},
+			}
+		}
+		return td, nil
+	}).AnyTimes()
+	kc.adminClient = s.adminClient
 
 	return bs.Dial()
 }
