@@ -9,21 +9,26 @@
 package logical
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -34,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -59,25 +66,65 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	// keyPrefix will be set later, but before countPuts is set.
+	var keyPrefix []byte
+	var countPuts atomic.Bool
+	var numPuts, numCPuts atomic.Int64
+	// seenPuts and seenCPuts track which transactions have already been counted
+	// in the number of Puts and CPuts, respectively (we want to ignore any txn
+	// retries).
+	seenPuts, seenCPuts := make(map[uuid.UUID]struct{}), make(map[uuid.UUID]struct{})
+	var muSeenTxns syncutil.Mutex
+	// seenTxn returns whether we've already seen this txn and includes it into
+	// the map if not.
+	seenTxn := func(seenTxns map[uuid.UUID]struct{}, txnID uuid.UUID) bool {
+		muSeenTxns.Lock()
+		defer muSeenTxns.Unlock()
+		_, seen := seenTxns[txnID]
+		seenTxns[txnID] = struct{}{}
+		return seen
+	}
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+						if !countPuts.Load() || !ba.IsWrite() || len(ba.Requests) > 2 {
+							return nil
+						}
+						switch req := ba.Requests[0].GetInner().(type) {
+						case *kvpb.PutRequest:
+							if bytes.HasPrefix(req.Key, keyPrefix) && !seenTxn(seenPuts, ba.Txn.ID) {
+								numPuts.Add(1)
+							}
+							return nil
+						case *kvpb.ConditionalPutRequest:
+							if bytes.HasPrefix(req.Key, keyPrefix) && !seenTxn(seenCPuts, ba.Txn.ID) {
+								numCPuts.Add(1)
+							}
+							return nil
+						default:
+							return nil
+						}
+					},
+				},
 			},
 		},
 	}
 
 	server := testcluster.StartTestCluster(t, 1, clusterArgs)
 	defer server.Stopper().Stop(ctx)
+	s := server.Server(0).ApplicationLayer()
 
 	_, err := server.Conns[0].Exec("CREATE DATABASE a")
 	require.NoError(t, err)
 	_, err = server.Conns[0].Exec("CREATE DATABASE B")
 	require.NoError(t, err)
 
-	dbA := sqlutils.MakeSQLRunner(server.Server(0).ApplicationLayer().SQLConn(t, serverutils.DBName("a")))
-	dbB := sqlutils.MakeSQLRunner(server.Server(0).ApplicationLayer().SQLConn(t, serverutils.DBName("b")))
+	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
+	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
 
 	for _, s := range testClusterSettings {
 		dbA.Exec(t, s)
@@ -89,13 +136,17 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	dbA.Exec(t, lwwColumnAdd)
 	dbB.Exec(t, lwwColumnAdd)
 
+	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
+	keyPrefix = rowenc.MakeIndexKeyPrefix(s.Codec(), desc.GetID(), desc.GetPrimaryIndexID())
+	countPuts.Store(true)
+
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
 
-	dbAURL, cleanup := sqlutils.PGUrl(t, server.Server(0).ApplicationLayer().SQLAddr(), t.Name(), url.User(username.RootUser))
+	dbAURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	dbAURL.Path = "a"
 	defer cleanup()
-	dbBURL, cleanupB := sqlutils.PGUrl(t, server.Server(0).ApplicationLayer().SQLAddr(), t.Name(), url.User(username.RootUser))
+	dbBURL, cleanupB := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupB()
 	dbBURL.Path = "b"
 
@@ -128,6 +179,19 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	}
 	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRows)
 	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRows)
+
+	// Verify that we didn't have the data looping problem. We expect 3 CPuts
+	// when inserting new rows and 3 Puts when updating existing rows.
+	expPuts, expCPuts := 3, 3
+	if tryOptimisticInsertEnabled.Get(&s.ClusterSettings().SV) {
+		// When performing 1 update, we don't have the prevValue set, so if
+		// we're using the optimistic insert strategy, it would result in an
+		// additional CPut (that ultimately fails). The cluster setting is
+		// randomized in tests, so we need to handle both cases.
+		expCPuts++
+	}
+	require.Equal(t, int64(expPuts), numPuts.Load())
+	require.Equal(t, int64(expCPuts), numCPuts.Load())
 }
 
 func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
