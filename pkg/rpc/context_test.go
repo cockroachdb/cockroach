@@ -1402,7 +1402,7 @@ func TestClusterNameMismatch(t *testing.T) {
 			for i := 0; i < 10; i++ {
 				wg.Add(1)
 				go func(expectedErr string) {
-					_, err := clientCtx.GRPCUnvalidatedDial(remoteAddr).Connect(context.Background())
+					_, err := clientCtx.GRPCUnvalidatedDial(remoteAddr, roachpb.Locality{}).Connect(context.Background())
 					if !testutils.IsError(err, expectedErr) {
 						t.Errorf("expected %s error, got %v", expectedErr, err)
 					}
@@ -2105,8 +2105,8 @@ func TestVerifyDialback(t *testing.T) {
 		// and still do the one-off dialback (in BLOCKING mode)
 		req := ping(PingRequest_BLOCKING)
 		req.OriginNodeID = 0
-		mockRPCCtx.EXPECT().GRPCUnvalidatedDial("1.1.1.1").
-			DoAndReturn(func(string) *Connection {
+		mockRPCCtx.EXPECT().GRPCUnvalidatedDial("1.1.1.1", roachpb.Locality{}).
+			DoAndReturn(func(string, roachpb.Locality) *Connection {
 				tmpConn := mkConn()
 				assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
 				return tmpConn

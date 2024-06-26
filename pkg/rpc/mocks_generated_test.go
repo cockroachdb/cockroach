@@ -51,17 +51,17 @@ func (mr *MockDialbackerMockRecorder) GRPCDialNode(arg0, arg1, arg2, arg3 interf
 }
 
 // GRPCUnvalidatedDial mocks base method.
-func (m *MockDialbacker) GRPCUnvalidatedDial(arg0 string) *Connection {
+func (m *MockDialbacker) GRPCUnvalidatedDial(arg0 string, arg1 roachpb.Locality) *Connection {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GRPCUnvalidatedDial", arg0)
+	ret := m.ctrl.Call(m, "GRPCUnvalidatedDial", arg0, arg1)
 	ret0, _ := ret[0].(*Connection)
 	return ret0
 }
 
 // GRPCUnvalidatedDial indicates an expected call of GRPCUnvalidatedDial.
-func (mr *MockDialbackerMockRecorder) GRPCUnvalidatedDial(arg0 interface{}) *gomock.Call {
+func (mr *MockDialbackerMockRecorder) GRPCUnvalidatedDial(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GRPCUnvalidatedDial", reflect.TypeOf((*MockDialbacker)(nil).GRPCUnvalidatedDial), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GRPCUnvalidatedDial", reflect.TypeOf((*MockDialbacker)(nil).GRPCUnvalidatedDial), arg0, arg1)
 }
 
 // grpcDialRaw mocks base method.
