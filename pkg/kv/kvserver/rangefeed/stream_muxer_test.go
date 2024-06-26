@@ -12,9 +12,7 @@ package rangefeed
 
 import (
 	"context"
-	"reflect"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,90 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
-
-type testRangefeedCounter struct {
-	count atomic.Int32
-}
-
-func newTestRangefeedCounter() *testRangefeedCounter {
-	return &testRangefeedCounter{}
-}
-
-func (c *testRangefeedCounter) IncrementRangefeedCounter() {
-	c.count.Add(1)
-}
-
-func (c *testRangefeedCounter) DecrementRangefeedCounter() {
-	c.count.Add(-1)
-}
-
-func (c *testRangefeedCounter) get() int32 {
-	return c.count.Load()
-}
-
-// noopStream is a stream that does nothing, except count events.
-type testServerStream struct {
-	syncutil.Mutex
-	numOfEvents int
-	events      map[int64][]*kvpb.MuxRangeFeedEvent
-	sendErr     error
-}
-
-func (s *testServerStream) numOfSentEvents() int {
-	s.Lock()
-	defer s.Unlock()
-	return s.numOfEvents
-}
-
-func (s *testServerStream) HasEvent(e *kvpb.MuxRangeFeedEvent) bool {
-	s.Lock()
-	defer s.Unlock()
-	for _, streamEvent := range s.events[e.StreamID] {
-		if reflect.DeepEqual(e, streamEvent) {
-			return true
-		}
-	}
-	return false
-}
-
-func newTestServerStream() *testServerStream {
-	return &testServerStream{
-		events: make(map[int64][]*kvpb.MuxRangeFeedEvent),
-	}
-}
-
-func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
-	s.Lock()
-	defer s.Unlock()
-	s.numOfEvents++
-	if s.sendErr != nil {
-		return s.sendErr
-	}
-	s.events[e.StreamID] = append(s.events[e.StreamID], e)
-	return nil
-}
-
-func (s *testServerStream) BreakStreamWithErr(err error) {
-	s.Lock()
-	defer s.Unlock()
-	s.sendErr = err
-}
-
-func makeRangefeedErrorEvent(
-	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
-) *kvpb.MuxRangeFeedEvent {
-	ev := &kvpb.MuxRangeFeedEvent{
-		StreamID: streamID,
-		RangeID:  rangeID,
-	}
-	ev.SetValue(&kvpb.RangeFeedError{
-		Error: *err,
-	})
-	return ev
-}
 
 func TestNodeStreamMuxer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -136,7 +52,7 @@ func TestNodeStreamMuxer(t *testing.T) {
 	}
 
 	_, streamCancel := context.WithCancel(context.Background())
-	streamMuxer.NewStream(0, streamCancel)
+	streamMuxer.AddStream(0, streamCancel)
 	require.Equal(t, testRangefeedCounter.get(), int32(1))
 
 	rangefeedStreams := []struct {
@@ -169,7 +85,7 @@ func TestNodeStreamMuxer(t *testing.T) {
 			streamCtx, streamCancel := context.WithCancel(context.Background())
 			require.Equal(t, testRangefeedCounter.get(), int32(1))
 
-			streamMuxer.NewStream(stream.streamID, streamCancel)
+			streamMuxer.AddStream(stream.streamID, streamCancel)
 			require.Equal(t, testRangefeedCounter.get(), int32(2))
 
 			streamMuxer.DisconnectRangefeedWithError(stream.streamID, stream.rangeID, stream.serverDisconnectErr)
@@ -181,7 +97,7 @@ func TestNodeStreamMuxer(t *testing.T) {
 
 		// Check client errors sent to stream.
 		for _, stream := range rangefeedStreams {
-			require.True(t, testServerStream.HasEvent(makeRangefeedErrorEvent(
+			require.True(t, testServerStream.hasEvent(makeRangefeedErrorEvent(
 				stream.streamID, stream.rangeID, stream.clientErr)))
 		}
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
@@ -191,7 +107,7 @@ func TestNodeStreamMuxer(t *testing.T) {
 		_, noop := context.WithCancel(context.Background())
 		defer noop()
 		for _, stream := range rangefeedStreams {
-			streamMuxer.NewStream(stream.streamID, noop)
+			streamMuxer.AddStream(stream.streamID, noop)
 		}
 		require.Equal(t, testRangefeedCounter.get(), int32(5))
 
@@ -210,19 +126,19 @@ func TestNodeStreamMuxer(t *testing.T) {
 
 		// Check client errors sent to stream.
 		for _, stream := range rangefeedStreams {
-			require.True(t, testServerStream.HasEvent(makeRangefeedErrorEvent(
+			require.True(t, testServerStream.hasEvent(makeRangefeedErrorEvent(
 				stream.streamID, stream.rangeID, stream.clientErr)))
 		}
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
 	})
 
 	t.Run("repeatedly closing streams does nothing", func(t *testing.T) {
-		prevNum := testServerStream.numOfSentEvents()
+		prevNum := testServerStream.eventSentCount()
 		streamMuxer.DisconnectRangefeedWithError(1, 1,
 			wrapReasonInError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
 		// Pause for one second to make sure muxer has time to process all the errors.
 		time.Sleep(1 * time.Second)
-		require.Equal(t, prevNum, testServerStream.numOfSentEvents())
+		require.Equal(t, prevNum, testServerStream.eventSentCount())
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
 	})
 }

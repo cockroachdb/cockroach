@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -43,20 +42,16 @@ var (
 )
 
 type testStream struct {
-	ctx     context.Context
-	ctxDone func()
-	done    chan *kvpb.Error
-	cleanUp func()
-	mu      struct {
-		syncutil.Mutex
-		sendErr error
-		events  []*kvpb.RangeFeedEvent
-	}
+	ctx      context.Context
+	streamID int64
+	rangeID  roachpb.RangeID
+	muxer    *StreamMuxer
 }
 
-func newTestStream() *testStream {
+func newTestStream(muxer *StreamMuxer, streamID int64) *testStream {
 	ctx, done := context.WithCancel(context.Background())
-	return &testStream{ctx: ctx, ctxDone: done, done: make(chan *kvpb.Error, 1), cleanUp: func() {}}
+	muxer.AddStream(streamID, done)
+	return &testStream{ctx: ctx, streamID: streamID, rangeID: 1, muxer: muxer}
 }
 
 func (s *testStream) Context() context.Context {
@@ -64,28 +59,20 @@ func (s *testStream) Context() context.Context {
 }
 
 func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.mu.sendErr != nil {
-		return s.mu.sendErr
-	}
-	s.mu.events = append(s.mu.events, e)
-	return nil
+	return s.muxer.Send(s.streamID, s.rangeID, e)
 }
 
 func (s *testStream) Disconnect(err *kvpb.Error) {
-	s.ctxDone()
-	s.done <- err
-	s.cleanUp()
+	s.muxer.DisconnectRangefeedWithError(s.streamID, s.rangeID, err)
 }
 
 func (s *testStream) RegisterCleanUp(f func()) {
-	s.cleanUp = f
+	s.muxer.RegisterRangefeedCleanUp(s.streamID, f)
 }
 
-func (s *testStream) Err(t *testing.T) error {
+func (s *testStream) Err(t *testing.T, done chan *kvpb.Error) error {
 	select {
-	case err := <-s.done:
+	case err := <-done:
 		return err.GoError()
 	case <-time.After(30 * time.Second):
 		t.Fatalf("time out waiting for rangefeed completion")
@@ -94,9 +81,7 @@ func (s *testStream) Err(t *testing.T) error {
 }
 
 func (s *testStream) SetSendErr(err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.sendErr = err
+
 }
 
 func (s *testStream) Events() []*kvpb.RangeFeedEvent {
@@ -252,6 +237,7 @@ func TestRegistrationBasic(t *testing.T) {
 	streamErrReg := newTestRegistration(spAB, hlc.Timestamp{}, nil, /* catchup */
 		false /* withDiff */, false /* withFiltering */)
 	streamErr := fmt.Errorf("stream error")
+
 	streamErrReg.stream.SetSendErr(streamErr)
 	go streamErrReg.runOutputLoop(ctx, 0)
 	streamErrReg.publish(ctx, ev1, nil /* alloc */)

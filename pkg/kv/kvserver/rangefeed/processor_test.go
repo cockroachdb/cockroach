@@ -43,7 +43,20 @@ func TestProcessorBasic(t *testing.T) {
 	testutils.RunValues(t, "proc type", testTypes, func(t *testing.T, pt procType) {
 		p, h, stopper := newTestProcessor(t, withProcType(pt))
 		ctx := context.Background()
+
+		serverStream := newTestServerStream()
+		streamMuxer := NewStreamMuxer(serverStream, newTestRangefeedCounter())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		defer wg.Wait()
+		// Make sure to shut down the muxer before wg.Wait().
 		defer stopper.Stop(ctx)
+		if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+			defer wg.Done()
+			streamMuxer.Run(ctx, stopper)
+		}); err != nil {
+			wg.Done()
+		}
 
 		// Test processor without registrations.
 		require.Equal(t, 0, p.Len())
@@ -65,7 +78,7 @@ func TestProcessorBasic(t *testing.T) {
 		require.NotPanics(t, func() { p.ForwardClosedTS(ctx, hlc.Timestamp{WallTime: 1}) })
 
 		// Add a registration.
-		r1Stream := newTestStream()
+		r1Stream := newTestStream(streamMuxer, int64(1))
 		r1OK, r1Filter := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
@@ -198,7 +211,7 @@ func TestProcessorBasic(t *testing.T) {
 		)
 
 		// Add another registration with withDiff = true and withFiltering = true.
-		r2Stream := newTestStream()
+		r2Stream := newTestStream(streamMuxer, int64(2))
 		r2OK, r1And2Filter := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
@@ -303,15 +316,19 @@ func TestProcessorBasic(t *testing.T) {
 
 		// Cancel the first registration.
 		r1Stream.Disconnect(kvpb.NewError(context.Canceled))
-		require.NotNil(t, r1Stream.Err(t))
+		r1StreamDone := make(chan *kvpb.Error, 1)
+		serverStream.registerDone(r1Stream.streamID, r1StreamDone)
+		require.NotNil(t, r1Stream.Err(t, r1StreamDone))
 
 		// Stop the processor with an error.
 		pErr := kvpb.NewErrorf("stop err")
 		p.StopWithErr(pErr)
-		require.NotNil(t, r2Stream.Err(t))
+		r2StreamDone := make(chan *kvpb.Error, 1)
+		serverStream.registerDone(r2Stream.streamID, r1StreamDone)
+		require.NotNil(t, r2Stream.Err(t, r2StreamDone))
 
 		// Adding another registration should fail.
-		r3Stream := newTestStream()
+		r3Stream := newTestStream(streamMuxer, int64(3))
 		r3OK, _ := p.Register(
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},

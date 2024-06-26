@@ -62,7 +62,7 @@ type StreamMuxer struct {
 	}
 }
 
-func (s *StreamMuxer) NewStream(streamID int64, cancel context.CancelFunc) {
+func (s *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
 	s.metrics.IncrementRangefeedCounter()
 	s.activeStreams.Store(streamID, cancel)
 }
