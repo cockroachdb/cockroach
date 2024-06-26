@@ -1145,6 +1145,9 @@ func (ie *InternalExecutor) execInternal(
 			sessionDataOverride.MultiOverride = globalOverride
 		}
 	}
+	if txn != nil && sessionDataOverride.DisableChangefeedReplication {
+		return nil, errors.AssertionFailedf("DisableChangefeedReplication session override cannot apply with non-nil txn")
+	}
 
 	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)

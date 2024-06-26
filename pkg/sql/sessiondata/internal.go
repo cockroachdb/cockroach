@@ -66,7 +66,8 @@ type InternalExecutorOverride struct {
 	// the construction of the connExecutor used for the query.
 	AttributeToUser bool
 	// DisableChangefeedReplication, when true, disables changefeed events from
-	// being emitted for changes to data made in a session.
+	// being emitted for changes to data made in a session. It is illegal to set
+	// this option when using the internal executor with an outer txn.
 	DisableChangefeedReplication bool
 }
 
