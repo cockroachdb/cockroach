@@ -174,7 +174,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// When multiple OUT parameters are present, parameter names become the
 	// labels in the output RECORD type.
 	var outParamNames []string
-	var sawDefaultExpr bool
+	var sawDefaultExpr, sawPolymorphicInParam, sawPolymorphicOutParam bool
 	for i := range cf.Params {
 		param := &cf.Params[i]
 		typ, err := tree.ResolveType(b.ctx, param.Type, b.semaCtx.TypeResolver)
@@ -184,6 +184,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if param.Class == tree.RoutineParamInOut && param.Name == "" {
 			panic(unimplemented.NewWithIssue(121251, "unnamed INOUT parameters are not yet supported"))
 		}
+		if param.IsInParam() && typ.IsPolymorphicType() {
+			sawPolymorphicInParam = true
+		}
 		if param.IsOutParam() {
 			outParamTypes = append(outParamTypes, typ)
 			paramName := string(param.Name)
@@ -191,6 +194,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 				paramName = fmt.Sprintf("column%d", len(outParamTypes))
 			}
 			outParamNames = append(outParamNames, paramName)
+			if typ.IsPolymorphicType() {
+				sawPolymorphicOutParam = true
+			}
 		}
 		// The parameter type must be supported by the current cluster version.
 		checkUnsupportedType(b.ctx, b.semaCtx, typ)
@@ -226,9 +232,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 				"DEFAULT expressions", tree.RejectSubqueries)
 			if resolved := texpr.ResolvedType(); !resolved.Identical(typ) {
 				if !cast.ValidCast(resolved, typ, cast.ContextAssignment) {
-					panic(pgerror.Newf(pgcode.DatatypeMismatch,
-						"argument of DEFAULT must be type %s, not type %s", typ.Name(), resolved.Name(),
-					))
+					// Note: If the argument's type is polymorphic and equivalent to the
+					// DEFAULT expression's type, then a cast is not necessary.
+					if !typ.IsPolymorphicType() || !resolved.Equivalent(typ) {
+						panic(pgerror.Newf(pgcode.DatatypeMismatch,
+							"argument of DEFAULT must be type %s, not type %s", typ.Name(), resolved.Name(),
+						))
+					}
 				}
 			}
 			// Store the typed expression so that we get the right type
@@ -301,8 +311,32 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "function result type must be specified"))
 		}
 	}
-	// We disallow creating functions that return UNKNOWN, for consistency with postgres.
-	if funcReturnType.Family() == types.UnknownFamily {
+	if b.evalCtx.SessionData().OptimizerUsePolymorphicParameterFix &&
+		(funcReturnType.IsPolymorphicType() || sawPolymorphicOutParam) {
+		// The routine return type has or contains a polymorphic type. Validate that
+		// there is at least one polymorphic IN parameter.
+		if !sawPolymorphicInParam {
+			makeErr := func(polyTyp *types.T) {
+				panic(errors.WithDetailf(
+					pgerror.New(pgcode.InvalidFunctionDefinition, "cannot determine result data type"),
+					"A result of type %s requires at least one input of type "+
+						"anyelement, anyarray, anynonarray, anyenum, anyrange, or anymultirange.",
+					polyTyp.Name(),
+				))
+			}
+			if funcReturnType.IsPolymorphicType() {
+				makeErr(funcReturnType)
+			} else {
+				for _, tc := range funcReturnType.TupleContents() {
+					if tc.IsPolymorphicType() {
+						makeErr(tc)
+					}
+				}
+			}
+		}
+	} else if funcReturnType.Family() == types.UnknownFamily {
+		// We disallow creating functions that return UNKNOWN, for consistency with
+		// postgres.
 		if language == tree.RoutineLangSQL {
 			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "SQL functions cannot return type unknown"))
 		} else if language == tree.RoutineLangPLpgSQL {

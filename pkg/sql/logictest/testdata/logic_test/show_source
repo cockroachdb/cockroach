@@ -141,6 +141,7 @@ optimizer_use_limit_ordering_for_streaming_group_by        on
 optimizer_use_lock_op_for_serializable                     off
 optimizer_use_multicol_stats                               on
 optimizer_use_not_visible_indexes                          off
+optimizer_use_polymorphic_parameter_fix                    on
 optimizer_use_provided_ordering_fix                        on
 optimizer_use_trigram_similarity_optimization              on
 optimizer_use_virtual_computed_column_stats                on
