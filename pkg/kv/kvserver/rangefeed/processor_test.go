@@ -1405,7 +1405,7 @@ func (c *consumer) Context() context.Context {
 
 func (c *consumer) Disconnect(error *kvpb.Error) {
 	c.done <- error
-	c.muxer.DisconnectRangefeedWithError(int64(1))
+	c.muxer.DisconnectRangefeedWithError(c.streamID)
 }
 
 func (c *consumer) Err(t *testing.T) error {
@@ -1419,7 +1419,7 @@ func (c *consumer) Err(t *testing.T) error {
 }
 
 func (c *consumer) RegisterCleanUp(f func()) {
-	c.muxer.RegisterRangefeedCleanUp(int64(1), f)
+	c.muxer.RegisterRangefeedCleanUp(c.streamID, f)
 }
 
 func (c *consumer) Cancel() {
