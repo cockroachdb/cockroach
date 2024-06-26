@@ -59,6 +59,7 @@ func NewBuilderDependencies(
 	temporarySchemaProvider scbuild.TemporarySchemaProvider,
 	nodesStatusInfo scbuild.NodesStatusInfo,
 	regionProvider scbuild.RegionProvider,
+	semaCtx *tree.SemaContext,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -81,6 +82,7 @@ func NewBuilderDependencies(
 		temporarySchemaProvider:  temporarySchemaProvider,
 		nodesStatusInfo:          nodesStatusInfo,
 		regionProvider:           regionProvider,
+		semaCtx:                  semaCtx,
 	}
 }
 
@@ -103,6 +105,7 @@ type buildDeps struct {
 	temporarySchemaProvider  scbuild.TemporarySchemaProvider
 	nodesStatusInfo          scbuild.NodesStatusInfo
 	regionProvider           scbuild.RegionProvider
+	semaCtx                  *tree.SemaContext
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -370,6 +373,11 @@ func (d *buildDeps) ClusterSettings() *cluster.Settings {
 // Statements implements the scbuild.Dependencies interface.
 func (d *buildDeps) Statements() []string {
 	return d.statements
+}
+
+// SemaCtx implements the scbuild.Dependencies interface.
+func (d *buildDeps) SemaCtx() *tree.SemaContext {
+	return d.semaCtx
 }
 
 // AstFormatter implements the scbuild.Dependencies interface.

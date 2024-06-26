@@ -99,6 +99,11 @@ func (s *TestState) Statements() []string {
 	return s.statements
 }
 
+// SemaCtx implements the scbuild.Dependencies interface.
+func (s *TestState) SemaCtx() *tree.SemaContext {
+	return s.SemaCtx()
+}
+
 // IncrementSchemaChangeAlterCounter implements the scbuild.Dependencies
 // interface.
 func (s *TestState) IncrementSchemaChangeAlterCounter(counterType string, extra ...string) {

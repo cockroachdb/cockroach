@@ -22,17 +22,7 @@ var _ scbuildstmt.TreeContextBuilder = buildCtx{}
 
 // SemaCtx implements the scbuildstmt.TreeContextBuilder interface.
 func (b buildCtx) SemaCtx() *tree.SemaContext {
-	return newSemaCtx(b.Dependencies)
-}
-
-func newSemaCtx(d Dependencies) *tree.SemaContext {
-	semaCtx := tree.MakeSemaContext(d.CatalogReader())
-	semaCtx.Annotations = nil
-	semaCtx.SearchPath = &d.SessionData().SearchPath
-	semaCtx.DateStyle = d.SessionData().GetDateStyle()
-	semaCtx.IntervalStyle = d.SessionData().GetIntervalStyle()
-	semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(d.ClusterSettings().Version)
-	return &semaCtx
+	return b.Dependencies.SemaCtx()
 }
 
 // EvalCtx implements the scbuildstmt.TreeContextBuilder interface.
@@ -55,5 +45,6 @@ func newEvalCtx(d Dependencies) *eval.Context {
 		Settings:             d.ClusterSettings(),
 		Codec:                d.Codec(),
 		DescIDGenerator:      d.DescIDGenerator(),
+		Placeholders:         &d.SemaCtx().Placeholders,
 	}
 }
