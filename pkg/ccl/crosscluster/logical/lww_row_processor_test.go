@@ -16,10 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -126,14 +126,8 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	runner.Exec(b, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
-	// Simulate the setup of the main code path where we have access to the
-	// session data defaults.
-	var sd *sessiondata.SessionData
-	err := s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		sd = txn.SessionData().Clone()
-		return nil
-	})
-	require.NoError(b, err)
+	// Simulate how we set up the row processor on the main code path.
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
 	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
 		int32(desc.GetID()): *desc.TableDesc(),
 	}, s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)))

@@ -99,7 +99,6 @@ go_test(
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sessiondata",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",
