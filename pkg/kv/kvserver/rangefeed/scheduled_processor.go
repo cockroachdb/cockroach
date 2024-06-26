@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -341,7 +342,12 @@ func (p *ScheduledProcessor) Register(
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
 		r.stream.RegisterCleanUp(func() {
+			//p.reg.Unregister(ctx, &r)
+			//if r.unreg != nil {
+			//	r.unreg()
+			//}
 			if p.unregisterClient(&r) {
+				fmt.Println("unregistering")
 				// unreg callback is set by replica to tear down processors that have
 				// zero registrations left and to update event filters.
 				if r.unreg != nil {

@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -441,4 +442,46 @@ func newTestProcessor(
 	}
 	require.NoError(t, s.Start(stopper, cfg.isc))
 	return s, &h, stopper
+}
+
+type testStream struct {
+	ctx      context.Context
+	streamID int64
+	rangeID  roachpb.RangeID
+	muxer    *StreamMuxer
+}
+
+func newTestStream(muxer *StreamMuxer, streamID int64) *testStream {
+	ctx, done := context.WithCancel(context.Background())
+	muxer.AddStream(streamID, done)
+	return &testStream{ctx: ctx, streamID: streamID, rangeID: 1, muxer: muxer}
+}
+
+func (s *testStream) Context() context.Context {
+	return s.ctx
+}
+
+func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
+	return s.muxer.Send(s.streamID, s.rangeID, e)
+}
+
+func (s *testStream) Disconnect(err *kvpb.Error) {
+	s.muxer.DisconnectRangefeedWithError(s.streamID, s.rangeID, err)
+}
+
+func (s *testStream) RegisterCleanUp(f func()) {
+	s.muxer.RegisterRangefeedCleanUp(s.streamID, f)
+}
+
+func (s *testStream) Err(t *testing.T, stream *testServerStream) error {
+	done := make(chan *kvpb.Error, 1)
+	stream.registerDone(s.streamID, done)
+	fmt.Println("waiting for stream to close", s.streamID)
+	select {
+	case err := <-done:
+		return err.GoError()
+	case <-time.After(30 * time.Second):
+		t.Fatalf("time out waiting for rangefeed completion")
+		return nil
+	}
 }

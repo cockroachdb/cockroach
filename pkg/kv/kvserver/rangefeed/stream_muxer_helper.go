@@ -82,8 +82,30 @@ func (s *testServerStream) hasEvent(e *kvpb.MuxRangeFeedEvent) bool {
 
 func newTestServerStream() *testServerStream {
 	return &testServerStream{
-		events: make(map[int64][]*kvpb.MuxRangeFeedEvent),
+		events:      make(map[int64][]*kvpb.MuxRangeFeedEvent),
+		streamsDone: make(map[int64]chan *kvpb.Error),
 	}
+}
+
+func (s *testServerStream) eventsSentById(streamID int64) []*kvpb.MuxRangeFeedEvent {
+	s.Lock()
+	defer s.Unlock()
+	sent := s.events[streamID]
+	s.events[streamID] = nil
+	return sent
+}
+
+func (s *testServerStream) rangefeedEventsSentById(
+	streamID int64,
+) (rangefeedEvents []*kvpb.RangeFeedEvent) {
+	s.Lock()
+	defer s.Unlock()
+	sent := s.events[streamID]
+	s.events[streamID] = nil
+	for _, e := range sent {
+		rangefeedEvents = append(rangefeedEvents, &e.RangeFeedEvent)
+	}
+	return
 }
 
 func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
