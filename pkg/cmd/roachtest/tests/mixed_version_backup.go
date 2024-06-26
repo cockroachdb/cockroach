@@ -2490,6 +2490,20 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// attempted.
 				mixedversion.UpgradeTimeout(30*time.Minute),
 				mixedversion.AlwaysUseLatestPredecessors,
+				// We disable cluster setting mutators because this test
+				// resets the cluster to older versions when verifying cluster
+				// backups. This makes the mixed-version context inaccurate
+				// and leads to flakes.
+				//
+				// TODO(renato): don't disable these mutators when the
+				// framework exposes some utility to provide mutual exclusion
+				// of concurrent steps.
+				mixedversion.DisableMutators(
+					mixedversion.ClusterSettingMutator("kv.expiration_leases_only.enabled"),
+					mixedversion.ClusterSettingMutator("kv.snapshot_receiver.excise.enabled"),
+					mixedversion.ClusterSettingMutator("storage.ingest_split.enabled"),
+					mixedversion.ClusterSettingMutator("storage.sstable.compression_algorithm"),
+				),
 			)
 			testRNG := mvt.RNG()
 
