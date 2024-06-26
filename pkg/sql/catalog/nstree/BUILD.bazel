@@ -39,15 +39,20 @@ go_test(
     srcs = [
         "datadriven_test.go",
         "map_test.go",
+        "mutable_catalog_test.go",
         "set_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":nstree"],
     deps = [
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
         "//pkg/testutils/datapathutils",
+        "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )
