@@ -968,10 +968,10 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 
 func (c *connector) dialAddr(ctx context.Context, addr string) (conn *grpc.ClientConn, err error) {
 	if c.rpcDialTimeout == 0 {
-		return c.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
+		return c.rpcContext.GRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
 	}
 	err = timeutil.RunWithTimeout(ctx, "dial addr", c.rpcDialTimeout, func(ctx context.Context) error {
-		conn, err = c.rpcContext.GRPCUnvalidatedDial(addr).Connect(ctx)
+		conn, err = c.rpcContext.GRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
 		return err
 	})
 	return conn, err
