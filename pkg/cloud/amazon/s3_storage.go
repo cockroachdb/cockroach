@@ -306,8 +306,8 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	// version cluster with nodes on 22.2.0 and 22.2.1+. The logic around the
 	// RoleARN fields can be removed in 23.2.
 	assumeRoleValue := s3URL.ConsumeParam(AssumeRoleParam)
-	assumeRoleProvider, delegateRoleProviders := uris.ParseRoleProvidersString(assumeRoleValue)
-	assumeRole, delegateRoles := uris.ParseRoleString(assumeRoleValue)
+	assumeRoleProvider, delegateRoleProviders := cloudpb.ParseRoleProvidersString(assumeRoleValue)
+	assumeRole, delegateRoles := cloudpb.ParseRoleString(assumeRoleValue)
 
 	conf.S3Config = &cloudpb.ExternalStorage_S3{
 		Bucket:                s3URL.Host,

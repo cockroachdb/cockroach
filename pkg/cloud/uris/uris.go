@@ -14,8 +14,6 @@ import (
 	"net/url"
 	"path"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 )
 
 const (
@@ -24,10 +22,10 @@ const (
 	AuthParam = "AUTH"
 	// AuthParamImplicit is the query parameter for the implicit authentication
 	// mode in a URI.
-	AuthParamImplicit = cloudpb.ExternalStorageAuthImplicit
+	AuthParamImplicit = "implicit"
 	// AuthParamSpecified is the query parameter for the specified authentication
 	// mode in a URI.
-	AuthParamSpecified = cloudpb.ExternalStorageAuthSpecified
+	AuthParamSpecified = "specified"
 	// LocalityURLParam is the parameter name used when specifying a locality tag
 	// in a locality aware backup/restore.
 	LocalityURLParam = "COCKROACH_LOCALITY"
@@ -126,44 +124,6 @@ func JoinPathPreservingTrailingSlash(prefix, suffix string) string {
 		out += "/"
 	}
 	return out
-}
-
-// ParseRoleString parses a comma separated string of roles into a list of
-// intermediate delegate roles and the final assumed role.
-func ParseRoleString(roleString string) (string, []string) {
-	roleProvider, delegateRoleProviders := ParseRoleProvidersString(roleString)
-
-	delegateRoles := make([]string, len(delegateRoleProviders))
-	for i := range delegateRoleProviders {
-		delegateRoles[i] = delegateRoleProviders[i].Role
-	}
-	return roleProvider.Role, delegateRoles
-}
-
-// ParseRoleProvidersString parses a comma separated list of role provider
-// strings.
-//
-// Each role provider string is in the format: "<role>;external_id=<id>"
-// The external ID portion of the format, including the ';', is optional and can
-// be omitted if there is no external ID needed when assuming the role.
-func ParseRoleProvidersString(
-	roleProvidersString string,
-) (
-	assumeRole cloudpb.ExternalStorage_AssumeRoleProvider,
-	delegateRoles []cloudpb.ExternalStorage_AssumeRoleProvider,
-) {
-	if roleProvidersString == "" {
-		return assumeRole, delegateRoles
-	}
-
-	roleProviders := strings.Split(roleProvidersString, ",")
-	delegateRoles = make([]cloudpb.ExternalStorage_AssumeRoleProvider, len(roleProviders)-1)
-
-	assumeRole = cloudpb.DecodeRoleProviderString(roleProviders[len(roleProviders)-1])
-	for i := 0; i < len(roleProviders)-1; i++ {
-		delegateRoles[i] = cloudpb.DecodeRoleProviderString(roleProviders[i])
-	}
-	return assumeRole, delegateRoles
 }
 
 // ConsumeURL is a helper struct which for "consuming" URL query

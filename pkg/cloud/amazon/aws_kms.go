@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -73,7 +74,7 @@ var kmsClientCache struct {
 }
 
 func resolveKMSURIParams(kmsURI uris.ConsumeURL) (kmsURIParams, error) {
-	assumeRoleProto, delegateRoleProtos := uris.ParseRoleProvidersString(kmsURI.ConsumeParam(AssumeRoleParam))
+	assumeRoleProto, delegateRoleProtos := cloudpb.ParseRoleProvidersString(kmsURI.ConsumeParam(AssumeRoleParam))
 	assumeRoleProvider := makeRoleProvider(assumeRoleProto)
 	delegateProviders := make([]roleProvider, len(delegateRoleProtos))
 	for i := range delegateRoleProtos {
