@@ -313,9 +313,7 @@ func startDistChangefeed(
 			finishedSetupFn = func(flowinfra.Flow) { resultsCh <- tree.Datums(nil) }
 		}
 
-		if log.V(1) {
-			jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
-		}
+		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
 
 		// Make sure to use special changefeed monitor going forward as the
 		// parent monitor for the DistSQL infrastructure. This is needed to
