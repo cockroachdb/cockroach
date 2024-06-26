@@ -1460,6 +1460,13 @@ func TestTenantLogic_procedure_params(
 	runLogicTest(t, "procedure_params")
 }
 
+func TestTenantLogic_procedure_polymorphic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_polymorphic")
+}
+
 func TestTenantLogic_procedure_privileges(
 	t *testing.T,
 ) {
@@ -2284,6 +2291,13 @@ func TestTenantLogic_udf_params(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_params")
+}
+
+func TestTenantLogic_udf_polymorphic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_polymorphic")
 }
 
 func TestTenantLogic_udf_prepare(

@@ -3400,6 +3400,23 @@ var varGen = map[string]sessionVar{
 			return sessiondatapb.PlanCacheModeForceCustom.String()
 		},
 	},
+
+	// CockroachDB extension.
+	`optimizer_use_polymorphic_parameter_fix`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_polymorphic_parameter_fix`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_polymorphic_parameter_fix", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUsePolymorphicParameterFix(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUsePolymorphicParameterFix), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

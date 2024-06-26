@@ -3826,6 +3826,10 @@ func (m *sessionDataMutator) SetPlanCacheMode(val sessiondatapb.PlanCacheMode) {
 	m.data.PlanCacheMode = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUsePolymorphicParameterFix(val bool) {
+	m.data.OptimizerUsePolymorphicParameterFix = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

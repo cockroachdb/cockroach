@@ -1071,7 +1071,7 @@ func TestOidSetDuringUpgrade(t *testing.T) {
 }
 
 func TestSQLStandardName(t *testing.T) {
-	for _, typ := range Scalar {
+	for _, typ := range append([]*T{Any, AnyArray}, Scalar...) {
 		t.Run(typ.Name(), func(t *testing.T) {
 			require.NotEmpty(t, typ.SQLStandardName())
 		})

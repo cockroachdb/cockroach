@@ -3613,6 +3613,102 @@ func getMostSignificantOverload(
 	return ret, nil
 }
 
+// ResolvePolymorphicArgTypes iterates through the list of routine parameters
+// and supplied arguments (including default expressions), and attempts to
+// determine the concrete types for any polymorphic-typed parameters. It returns
+// true if the supplied argument types are valid, as well as the determined
+// element type (nil if there were no polymorphic parameters).
+//
+// CRDB currently supports two polymorphic types:
+// * ANYELEMENT allows any argument type.
+// * ANYARRAY allows only array types.
+//
+// The rules for argument validity are as follows:
+//  1. The arguments supplied for ANYELEMENT parameters must all have the same
+//     type.
+//  2. The supplied types for ANYARRAY parameters must match each other, and the
+//     array *element* type must match all ANYELEMENT parameters.
+//  3. NULL arguments are exempt from the above two rules. However, there must
+//     be at least one non-NULL argument in order to resolve a concrete type.
+//
+// anyElemTyp, if non-nil, allows the caller to pass in the expected concrete
+// type for ANYELEMENT parameters.
+//
+// enforceConsistency, if true, indicates that ResolvePolymorphicArgTypes should
+// throw a suitable error in the case of invalid arguments, rather than
+// returning with ok=false. Note: we do this instead of always returning the
+// error because error construction can be expensive.
+func ResolvePolymorphicArgTypes(
+	paramTypes ParamTypes, argTypes []*types.T, anyElemTyp *types.T, enforceConsistency bool,
+) (ok bool, numPolyParams int, _ *types.T) {
+	var anyArrayTyp *types.T
+	for i := range paramTypes {
+		paramTyp := paramTypes[i].Typ
+		if !paramTyp.IsPolymorphicType() {
+			continue
+		}
+		argTyp := argTypes[i]
+		numPolyParams++
+		if argTyp.Family() == types.UnknownFamily {
+			continue
+		}
+		maybeMakeNotAlikeErr := func(polyTypeName string, actualTyp, expectedTyp *types.T) {
+			if enforceConsistency {
+				err := pgerror.Newf(pgcode.DatatypeMismatch,
+					"arguments declared \"%s\" are not all alike", polyTypeName,
+				)
+				panic(errors.WithDetailf(err, "%s versus %s", actualTyp, expectedTyp))
+			}
+		}
+		switch paramTyp.Family() {
+		case types.AnyFamily:
+			if anyElemTyp == nil {
+				anyElemTyp = argTyp
+			} else if !anyElemTyp.Identical(argTyp) {
+				maybeMakeNotAlikeErr("anyelement", anyElemTyp, argTyp)
+				return false, 0, nil
+			}
+		case types.ArrayFamily:
+			if anyArrayTyp == nil {
+				anyArrayTyp = argTyp
+			} else if !anyArrayTyp.Identical(argTyp) {
+				maybeMakeNotAlikeErr("anyarray", anyArrayTyp, argTyp)
+				return false, 0, nil
+			}
+		case types.EnumFamily:
+			panic(unimplemented.NewWithIssue(123048, "ANYENUM is not yet supported"))
+		default:
+			panic(errors.AssertionFailedf("unexpected type: %s", paramTyp.SQLStringForError()))
+		}
+	}
+	if numPolyParams == 0 {
+		return true, 0, nil
+	}
+	if anyArrayTyp != nil {
+		if anyArrayTyp.Family() != types.ArrayFamily {
+			if enforceConsistency {
+				panic(pgerror.Newf(pgcode.DatatypeMismatch,
+					"argument declared anyarray is not an array but type %s", anyArrayTyp,
+				))
+			}
+			return false, 0, nil
+		}
+		if anyElemTyp == nil {
+			// Derive the type from the array element type.
+			anyElemTyp = anyArrayTyp.ArrayContents()
+		} else if !anyArrayTyp.ArrayContents().Identical(anyElemTyp) {
+			if enforceConsistency {
+				err := pgerror.New(pgcode.DatatypeMismatch,
+					"argument declared anyarray is not consistent with argument declared anyelement",
+				)
+				panic(errors.WithDetailf(err, "%s versus %s", anyArrayTyp, anyElemTyp))
+			}
+			return false, 0, nil
+		}
+	}
+	return true, numPolyParams, anyElemTyp
+}
+
 // UnsupportedTypeChecker is used to check that a type is supported by the
 // current cluster version. It is an interface because some packages cannot
 // import the clusterversion package.
