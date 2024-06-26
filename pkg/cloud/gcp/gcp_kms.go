@@ -19,6 +19,7 @@ import (
 	kms "cloud.google.com/go/kms/apiv1"
 	kmspb "cloud.google.com/go/kms/apiv1/kmspb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/api/option"
@@ -51,7 +52,7 @@ type kmsURIParams struct {
 
 // resolveKMSURIParams parses the `kmsURI` for all the supported KMS parameters.
 func resolveKMSURIParams(kmsURI uris.ConsumeURL) (kmsURIParams, error) {
-	assumeRole, delegateRoles := uris.ParseRoleString(kmsURI.ConsumeParam(AssumeRoleParam))
+	assumeRole, delegateRoles := cloudpb.ParseRoleString(kmsURI.ConsumeParam(AssumeRoleParam))
 	params := kmsURIParams{
 		credentials:   kmsURI.ConsumeParam(CredentialsParam),
 		auth:          kmsURI.ConsumeParam(uris.AuthParam),
