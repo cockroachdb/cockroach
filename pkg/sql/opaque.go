@@ -421,6 +421,7 @@ func init() {
 		&tree.Import{},
 		&tree.ScheduledBackup{},
 		&tree.CreateTenantFromReplication{},
+		&tree.CreateLogicalReplicationStream{},
 	} {
 		typ := optbuilder.OpaqueReadOnly
 		if tree.CanModifySchema(stmt) {
