@@ -237,6 +237,9 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 	}
 
 	providerNames := vm.AllProviderNames()
+	if len(options.IncludeProviders) > 0 {
+		providerNames = options.IncludeProviders
+	}
 	providerVMs := make([]vm.List, len(providerNames))
 	var g errgroup.Group
 	for i, providerName := range providerNames {
