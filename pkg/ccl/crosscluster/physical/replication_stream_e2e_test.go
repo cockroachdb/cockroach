@@ -917,14 +917,14 @@ func TestStreamingReplanOnLag(t *testing.T) {
 
 	// Configure the ingestion job to replan eagerly based on node lagging.
 	serverutils.SetClusterSetting(t, c.DestCluster, "physical_replication.consumer.node_lag_replanning_threshold", time.Second)
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.lag_check_frequency", time.Millisecond*500)
 
 	// The ingestion job should eventually retry because it detects a lagging node.
 	require.ErrorContains(t, <-retryErrorChan, ErrNodeLagging.Error())
 
 	// Prevent continuous replanning to reduce test runtime.
 	serverutils.SetClusterSetting(t, c.DestCluster, "physical_replication.consumer.node_lag_replanning_threshold", time.Minute*10)
-	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Minute*10)
+	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.lag_check_frequency", time.Minute*10)
 	close(turnOffReplanning)
 
 	cutoverTime := c.DestSysServer.Clock().Now()
