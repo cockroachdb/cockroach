@@ -749,7 +749,7 @@ func (r *testRunner) runWorker(
 		// If DebugKeepAlways is set, mark it as a saved cluster, so it isn't
 		// cleaned up. Do it now instead of at the end as the test may be interrupted
 		// with ctrl c before we get there.
-		if clustersOpt.debugMode == DebugKeepAlways {
+		if c != nil && clustersOpt.debugMode == DebugKeepAlways {
 			c.Save(ctx, "cluster saved since --debug-always set", l)
 		}
 
