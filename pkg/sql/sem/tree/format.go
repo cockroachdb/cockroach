@@ -116,13 +116,16 @@ const (
 	// the numeric by enclosing them within parentheses.
 	FmtParsableNumerics
 
-	// FmtPGCatalog is used to produce expressions formatted in a way that's as
-	// close as possible to what clients expect to live in pg_catalog (e.g.
-	// pg_attrdef.adbin, pg_constraint.condef and pg_indexes.indexdef columns).
-	// Specifically, this strips type annotations (Postgres doesn't know what
-	// those are), adds cast expressions for non-numeric constants, and formats
-	// indexes in Postgres-specific syntax.
-	FmtPGCatalog
+	// fmtPGCatalog is used to produce array and bytes expressions formatted in
+	// a way that's as close as possible to what clients expect to live in
+	// pg_catalog (e.g. pg_attrdef.adbin, pg_constraint.condef and
+	// pg_indexes.indexdef columns).
+	fmtPGCatalog
+
+	// fmtPGCatalogCasts adds cast expressions for non-numeric constants and
+	// strips type annotations. This matches Postgres's formatting of
+	// expressions in pg_catalog.
+	fmtPGCatalogCasts
 
 	// If set, user defined types and datums of user defined types will be
 	// formatted in a way that is stable across changes to the underlying type.
@@ -213,6 +216,16 @@ const (
 	// a pg-compatible conversion to strings. See comments
 	// in pgwire_encode.go.
 	FmtPgwireText = fmtPgwireFormat | FmtFlags(lexbase.EncBareStrings)
+
+	// FmtPGCatalog is used to produce expressions formatted in a way that's as
+	// close as possible to what clients expect to live in pg_catalog (e.g.
+	// pg_attrdef.adbin, pg_constraint.condef and pg_indexes.indexdef columns).
+	// Specifically, this strips type annotations (Postgres doesn't know what
+	// those are), adds cast expressions for non-numeric constants, formats
+	// arrays as strings with curly brackets (like FmtPGWireText), formats bytes
+	// with double quotes (also like FmtPGWireText), and formats indexes in
+	// Postgres-specific syntax.
+	FmtPGCatalog = fmtPGCatalog | fmtPGCatalogCasts
 
 	// FmtParsable instructs the pretty-printer to produce a representation that
 	// can be parsed into an equivalent expression. If there is a chance that the
@@ -507,7 +520,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			ctx.WriteByte(')')
 		}
 	}
-	if f.HasAnyFlags(fmtDisambiguateDatumTypes | FmtPGCatalog) {
+	if f.HasAnyFlags(fmtDisambiguateDatumTypes | fmtPGCatalogCasts) {
 		var typ *types.T
 		if d, isDatum := n.(Datum); isDatum {
 			if p, isPlaceholder := d.(*Placeholder); isPlaceholder {
@@ -515,7 +528,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 				typ = p.typ
 			} else if d.AmbiguousFormat() {
 				typ = d.ResolvedType()
-			} else if _, isArray := d.(*DArray); isArray && f.HasFlags(FmtPGCatalog) {
+			} else if _, isArray := d.(*DArray); isArray && f.HasFlags(fmtPGCatalogCasts) {
 				typ = d.ResolvedType()
 			}
 		}
@@ -523,7 +536,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 			if f.HasFlags(fmtDisambiguateDatumTypes) {
 				ctx.WriteString(":::")
 				ctx.FormatTypeReference(typ)
-			} else if f.HasFlags(FmtPGCatalog) && !typ.IsNumeric() {
+			} else if f.HasFlags(fmtPGCatalogCasts) && !typ.IsNumeric() {
 				ctx.WriteString("::")
 				ctx.FormatTypeReference(typ)
 			}

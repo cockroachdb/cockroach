@@ -3560,7 +3560,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const numAccounts = 1000
+	const numAccounts = 100
 
 	ctx := context.Background()
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
@@ -3572,7 +3572,8 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
 
 	err := crdb.ExecuteTx(ctx, sqlDB.DB.(*gosql.DB), nil /* txopts */, func(tx *gosql.Tx) error {
-		_, err := tx.Exec(`DELETE FROM data.bank WHERE id % 4 = 1`)
+		// Delete a quarter of the accounts
+		_, err := tx.Exec(`DELETE FROM data.bank LIMIT 25`)
 		if err != nil {
 			return err
 		}

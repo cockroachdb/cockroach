@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -187,5 +188,9 @@ var defaultOptions = []Option{
 		state.merger = &testBackfiller{s: state}
 		state.indexSpanSplitter = &indexSpanSplitter{}
 		state.approximateTimestamp = defaultCreatedAt
+
+		semaCtx := tree.MakeSemaContext(state)
+		semaCtx.SearchPath = &state.SessionData().SearchPath
+		state.semaCtx = &semaCtx
 	}),
 }
