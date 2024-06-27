@@ -1610,7 +1610,7 @@ func (l *leaseTransferTest) ensureLeaderAndRaftState(
 
 	testutils.SucceedsSoon(t, func() error {
 		status := leader.RaftStatus()
-		progress, ok := status.Progress[uint64(follower.ReplicaID)]
+		progress, ok := status.Progress[raftpb.PeerID(follower.ReplicaID)]
 		if !ok {
 			return errors.Errorf(
 				"replica %v progress not found in progress map: %v",

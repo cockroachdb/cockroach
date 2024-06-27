@@ -21,10 +21,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // isVoter checks whether node id is in the voter list within st.
-func isVoter(id uint64, st raft.Status) bool {
+func isVoter(id raftpb.PeerID, st raft.Status) bool {
 	idMap := st.Config.Voters.IDs()
 	for idx := range idMap {
 		if id == idx {

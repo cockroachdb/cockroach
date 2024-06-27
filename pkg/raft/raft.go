@@ -36,15 +36,17 @@ import (
 
 const (
 	// None is a placeholder node ID used when there is no leader.
-	None uint64 = 0
+	//
+	// TODO(arul): consider pulling these into raftpb as well.
+	None pb.PeerID = 0
 	// LocalAppendThread is a reference to a local thread that saves unstable
 	// log entries and snapshots to stable storage. The identifier is used as a
 	// target for MsgStorageAppend messages when AsyncStorageWrites is enabled.
-	LocalAppendThread uint64 = math.MaxUint64
+	LocalAppendThread pb.PeerID = math.MaxUint64
 	// LocalApplyThread is a reference to a local thread that applies committed
 	// log entries to the local state machine. The identifier is used as a
 	// target for MsgStorageApply messages when AsyncStorageWrites is enabled.
-	LocalApplyThread uint64 = math.MaxUint64 - 1
+	LocalApplyThread pb.PeerID = math.MaxUint64 - 1
 )
 
 // Possible values for StateType.
@@ -112,7 +114,7 @@ func (st StateType) String() string {
 // Config contains the parameters to start a raft.
 type Config struct {
 	// ID is the identity of the local raft. ID cannot be 0.
-	ID uint64
+	ID pb.PeerID
 
 	// ElectionTick is the number of Node.Tick invocations that must pass between
 	// elections. That is, if a follower does not receive any message from the
@@ -308,10 +310,10 @@ func (c *Config) validate() error {
 }
 
 type raft struct {
-	id uint64
+	id pb.PeerID
 
 	Term uint64
-	Vote uint64
+	Vote pb.PeerID
 
 	// the log
 	raftLog *raftLog
@@ -344,7 +346,7 @@ type raft struct {
 	msgsAfterAppend []pb.Message
 
 	// the leader id
-	lead uint64
+	lead pb.PeerID
 	// accTerm is the term of the leader whose append was accepted into the log
 	// last. Note that a rejected append does not update accTerm, by definition.
 	//
@@ -363,7 +365,7 @@ type raft struct {
 	accTerm uint64
 	// leadTransferee is id of the leader transfer target when its value is not zero.
 	// Follow the procedure defined in raft thesis 3.10.
-	leadTransferee uint64
+	leadTransferee pb.PeerID
 	// Only one conf change may be pending (in the log, but not yet
 	// applied) at a time. This is enforced via pendingConfIndex, which
 	// is set to a value >= the log index of the latest pending
@@ -592,7 +594,7 @@ func (r *raft) send(m pb.Message) {
 // Returns true if a message was sent, or false otherwise. A message is not sent
 // if the follower log and commit index are up-to-date, the flow is paused (for
 // reasons like in-flight limits), or the message could not be constructed.
-func (r *raft) maybeSendAppend(to uint64) bool {
+func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	pr := r.trk.Progress[to]
 
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
@@ -633,7 +635,7 @@ func (r *raft) maybeSendAppend(to uint64) bool {
 
 // maybeSendSnapshot fetches a snapshot from Storage, and sends it to the given
 // node. Returns true iff the snapshot message has been emitted successfully.
-func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress) bool {
+func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 	if !pr.RecentActive {
 		r.logger.Debugf("ignore sending snapshot to %x since it is not recently active", to)
 		return false
@@ -661,7 +663,7 @@ func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress) bool {
 }
 
 // sendHeartbeat sends a heartbeat RPC to the given peer.
-func (r *raft) sendHeartbeat(to uint64) {
+func (r *raft) sendHeartbeat(to pb.PeerID) {
 	pr := r.trk.Progress[to]
 	// Attach the commit as min(to.matched, r.committed).
 	// When the leader sends out heartbeat message,
@@ -682,7 +684,7 @@ func (r *raft) sendHeartbeat(to uint64) {
 // bcastAppend sends RPC, with entries to all peers that are not up-to-date
 // according to the progress recorded in r.trk.
 func (r *raft) bcastAppend() {
-	r.trk.Visit(func(id uint64, _ *tracker.Progress) {
+	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
 		if id == r.id {
 			return
 		}
@@ -692,7 +694,7 @@ func (r *raft) bcastAppend() {
 
 // bcastHeartbeat sends RPC, without entries to all the peers.
 func (r *raft) bcastHeartbeat() {
-	r.trk.Visit(func(id uint64, _ *tracker.Progress) {
+	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
 		if id == r.id {
 			return
 		}
@@ -756,7 +758,7 @@ func (r *raft) reset(term uint64) {
 	r.abortLeaderTransfer()
 
 	r.trk.ResetVotes()
-	r.trk.Visit(func(id uint64, pr *tracker.Progress) {
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		*pr = tracker.Progress{
 			Match:     0,
 			Next:      r.raftLog.lastIndex() + 1,
@@ -844,7 +846,7 @@ func (r *raft) tickHeartbeat() {
 	}
 }
 
-func (r *raft) becomeFollower(term uint64, lead uint64) {
+func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 	r.step = stepFollower
 	r.reset(term)
 	r.tick = r.tickElection
@@ -993,10 +995,10 @@ func (r *raft) campaign(t CampaignType) {
 		voteMsg = pb.MsgVote
 		term = r.Term
 	}
-	var ids []uint64
+	var ids []pb.PeerID
 	{
 		idMap := r.trk.Voters.IDs()
-		ids = make([]uint64, 0, len(idMap))
+		ids = make([]pb.PeerID, 0, len(idMap))
 		for id := range idMap {
 			ids = append(ids, id)
 		}
@@ -1026,7 +1028,7 @@ func (r *raft) campaign(t CampaignType) {
 }
 
 func (r *raft) poll(
-	id uint64, t pb.MessageType, v bool,
+	id pb.PeerID, t pb.MessageType, v bool,
 ) (granted int, rejected int, result quorum.VoteResult) {
 	if v {
 		r.logger.Infof("%x received %s from %x at term %d", r.id, t, id, r.Term)
@@ -1230,7 +1232,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		}
 		// Mark everyone (but ourselves) as inactive in preparation for the next
 		// CheckQuorum.
-		r.trk.Visit(func(id uint64, pr *tracker.Progress) {
+		r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 			if id != r.id {
 				pr.RecentActive = false
 			}
@@ -1817,7 +1819,7 @@ func (r *raft) restore(s pb.Snapshot) bool {
 	found := false
 	cs := s.Metadata.ConfState
 
-	for _, set := range [][]uint64{
+	for _, set := range [][]pb.PeerID{
 		cs.Voters,
 		cs.Learners,
 		cs.VotersOutgoing,
@@ -1981,7 +1983,7 @@ func (r *raft) resetRandomizedElectionTimeout() {
 	r.randomizedElectionTimeout = r.electionTimeout + globalRand.Intn(r.electionTimeout)
 }
 
-func (r *raft) sendTimeoutNow(to uint64) {
+func (r *raft) sendTimeoutNow(to pb.PeerID) {
 	r.send(pb.Message{To: to, Type: pb.MsgTimeoutNow})
 }
 

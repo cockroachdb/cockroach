@@ -527,14 +527,14 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	self := uint64(1)
+	self := raftpb.PeerID(1)
 	// Each subtest will try to propose a lease acquisition in a different Raft
 	// scenario. Some proposals should be allowed, some should be rejected.
 	for _, tc := range []struct {
 		name  string
 		state raft.StateType
 		// raft.None means there's no leader, or the leader is unknown.
-		leader uint64
+		leader raftpb.PeerID
 		// Empty means VOTER_FULL.
 		leaderRepType roachpb.ReplicaType
 		// Set to simulate situations where the local replica is so behind that the
@@ -677,9 +677,9 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	proposer := uint64(1)
+	proposer := raftpb.PeerID(1)
 	proposerFirstIndex := kvpb.RaftIndex(5)
-	target := uint64(2)
+	target := raftpb.PeerID(2)
 
 	// Each subtest will try to propose a lease transfer in a different Raft
 	// scenario. Some proposals should be allowed, some should be rejected.
@@ -775,7 +775,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			raftStatus.RaftState = tc.proposerState
 			if tc.proposerState == raft.StateLeader {
 				raftStatus.Lead = proposer
-				raftStatus.Progress = map[uint64]rafttracker.Progress{
+				raftStatus.Progress = map[raftpb.PeerID]rafttracker.Progress{
 					proposer: {State: rafttracker.StateReplicate, Match: uint64(proposerFirstIndex)},
 				}
 				if tc.targetState != math.MaxUint64 {
@@ -1095,7 +1095,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &testProposerRaft{}
 			r.status.RaftState = raft.StateLeader
-			r.status.Progress = map[uint64]rafttracker.Progress{
+			r.status.Progress = map[raftpb.PeerID]rafttracker.Progress{
 				1: {State: rafttracker.StateReplicate},
 			}
 			p := testProposer{

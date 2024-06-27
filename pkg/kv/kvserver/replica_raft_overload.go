@@ -17,6 +17,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -47,7 +48,7 @@ type computeExpendableOverloadedFollowersInput struct {
 	ioOverloadMap ioThresholdMapI
 	// getProgressMap returns Raft's view of the progress map. This is only called
 	// when needed, and at most once.
-	getProgressMap func(context.Context) map[uint64]tracker.Progress
+	getProgressMap func(context.Context) map[raftpb.PeerID]tracker.Progress
 	// seed is used to randomize selection of which followers to pause in case
 	// there are multiple followers that qualify, but quorum constraints require
 	// picking a subset. In practice, we set this to the RangeID to ensure maximum
@@ -102,7 +103,7 @@ func computeExpendableOverloadedFollowers(
 	var nonLive map[roachpb.ReplicaID]nonLiveReason
 	var liveOverloadedVoterCandidates map[roachpb.ReplicaID]struct{}
 	var liveOverloadedNonVoterCandidates map[roachpb.ReplicaID]struct{}
-	var prs map[uint64]tracker.Progress
+	var prs map[raftpb.PeerID]tracker.Progress
 
 	for _, replDesc := range d.replDescs.Descriptors() {
 		if pausable := d.ioOverloadMap.AbovePauseThreshold(replDesc.StoreID); !pausable || replDesc.ReplicaID == d.self {
@@ -139,7 +140,7 @@ func computeExpendableOverloadedFollowers(
 		// follower immediately becomes non-live, so if we want stable metrics on
 		// which followers are "paused", then we need the "pausing" state to
 		// overrule the "non-live" state.
-		if prs[uint64(replDesc.ReplicaID)].IsLearner {
+		if prs[raftpb.PeerID(replDesc.ReplicaID)].IsLearner {
 			liveOverloadedNonVoterCandidates[replDesc.ReplicaID] = struct{}{}
 		} else {
 			liveOverloadedVoterCandidates[replDesc.ReplicaID] = struct{}{}
@@ -345,7 +346,7 @@ func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMa
 		self:          r.replicaID,
 		replDescs:     repls,
 		ioOverloadMap: ioThresholdMap,
-		getProgressMap: func(_ context.Context) map[uint64]tracker.Progress {
+		getProgressMap: func(_ context.Context) map[raftpb.PeerID]tracker.Progress {
 			prs := r.mu.internalRaftGroup.Status().Progress
 			updateRaftProgressFromActivity(ctx, prs, repls.Descriptors(), func(id roachpb.ReplicaID) bool {
 				return r.mu.lastUpdateTimes.isFollowerActiveSince(id, now, r.store.cfg.RangeLeaseDuration)
@@ -364,7 +365,7 @@ func (r *Replica) updatePausedFollowersLocked(ctx context.Context, ioThresholdMa
 		// MsgApp (which it can only do once we stop dropping messages). Something
 		// similar would result naturally if we didn't report as unreachable, but
 		// with more wasted work.
-		r.mu.internalRaftGroup.ReportUnreachable(uint64(replicaID))
+		r.mu.internalRaftGroup.ReportUnreachable(raftpb.PeerID(replicaID))
 	}
 	r.mu.replicaFlowControlIntegration.onFollowersPaused(ctx)
 }
