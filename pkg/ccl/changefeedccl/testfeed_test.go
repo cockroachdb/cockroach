@@ -297,11 +297,11 @@ func (e *externalConnectionFeedFactory) Feed(
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI != nil {
+	if createStmt.SinkURI.Expr != nil {
 		return nil, errors.Errorf(
 			`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}
-	createStmt.SinkURI = tree.NewStrVal(`external://` + randomExternalConnectionName)
+	createStmt.SinkURI = tree.NewURI(tree.NewStrVal(`external://` + randomExternalConnectionName))
 
 	return e.TestFeedFactory.Feed(createStmt.String(), args...)
 }
@@ -309,7 +309,7 @@ func (e *externalConnectionFeedFactory) Feed(
 func setURI(
 	createStmt *tree.CreateChangefeed, uri string, allowOverride bool, args *[]interface{},
 ) error {
-	if createStmt.SinkURI != nil {
+	if createStmt.SinkURI.Expr != nil {
 		u, err := url.Parse(tree.AsStringWithFlags(createStmt.SinkURI, tree.FmtBareStrings))
 		if err != nil {
 			return err
@@ -327,7 +327,7 @@ func setURI(
 		return errors.Errorf(
 			`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}
-	createStmt.SinkURI = tree.NewStrVal(uri)
+	createStmt.SinkURI = tree.NewURI(tree.NewStrVal(uri))
 	return nil
 }
 
@@ -2402,7 +2402,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI == nil {
+	if createStmt.SinkURI.Expr == nil {
 		err = setURI(createStmt, GcpScheme+"://testfeed?region=testfeedRegion", true, &args)
 		if err != nil {
 			return nil, err
@@ -2693,7 +2693,7 @@ func (p *pulsarFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI == nil {
+	if createStmt.SinkURI.Expr == nil {
 		err = setURI(createStmt, changefeedbase.SinkSchemePulsar+"://testfeed?region=testfeedRegion", true, &args)
 		if err != nil {
 			return nil, err

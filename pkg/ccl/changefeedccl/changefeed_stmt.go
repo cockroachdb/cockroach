@@ -116,7 +116,7 @@ func changefeedTypeCheck(
 		return false, nil, nil
 	}
 	if err := exprutil.TypeCheck(ctx, `CREATE CHANGEFEED`, p.SemaCtx(),
-		exprutil.Strings{changefeedStmt.SinkURI},
+		exprutil.Strings{changefeedStmt.SinkURI.Expr},
 		&exprutil.KVOptions{
 			KVOptions:  changefeedStmt.Options,
 			Validation: changefeedvalidators.CreateOptionValidations,
@@ -157,7 +157,7 @@ func changefeedPlanHook(
 		header = sinklessHeader
 	} else {
 		var err error
-		sinkURI, err = exprEval.String(ctx, changefeedStmt.SinkURI)
+		sinkURI, err = exprEval.String(ctx, changefeedStmt.SinkURI.Expr)
 		if err != nil {
 			return nil, nil, nil, false, changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
 		}

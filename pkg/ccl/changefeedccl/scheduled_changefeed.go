@@ -361,7 +361,7 @@ func makeScheduledChangefeedSpec(
 		return nil, err
 	}
 
-	evaluatedSinkURI, err := exprEval.String(ctx, schedule.SinkURI)
+	evaluatedSinkURI, err := exprEval.String(ctx, schedule.SinkURI.Expr)
 	if err != nil {
 		return nil, err
 	}
@@ -709,7 +709,7 @@ func createChangefeedScheduleTypeCheck(
 	}
 	if err := exprutil.TypeCheck(ctx, opName, p.SemaCtx(),
 		exprutil.Strings{
-			changefeedStmt.SinkURI,
+			changefeedStmt.SinkURI.Expr,
 			schedule.Recurrence,
 			schedule.ScheduleLabelSpec.Label,
 		},
