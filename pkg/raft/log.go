@@ -129,15 +129,14 @@ func (l *raftLog) maybeAppend(a logSlice, committed uint64) (lastnewi uint64, ok
 	return lastnewi, true
 }
 
-func (l *raftLog) append(ents ...pb.Entry) uint64 {
+func (l *raftLog) append(ents ...pb.Entry) {
 	if len(ents) == 0 {
-		return l.lastIndex()
+		return
 	}
 	if after := ents[0].Index - 1; after < l.committed {
 		l.logger.Panicf("after(%d) is out of range [committed(%d)]", after, l.committed)
 	}
 	l.unstable.truncateAndAppend(ents)
-	return l.lastIndex()
 }
 
 // findConflict finds the index of the conflict.
