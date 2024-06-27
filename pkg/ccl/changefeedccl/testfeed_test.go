@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -1647,6 +1648,7 @@ func (p *asyncIgnoreCloseProducer) Close() error {
 type sinkKnobs struct {
 	// Only valid for the v1 sink.
 	kafkaInterceptor func(m *sarama.ProducerMessage, client kafkaClient) error
+	// v2Knobs *kafkaSinkV2Knobs
 }
 
 // fakeKafkaSink is a sink that arranges for fake kafka client and producer
@@ -1761,6 +1763,11 @@ func (s *fakeKafkaSinkV2) Dial() error {
 	s.client.EXPECT().Close().AnyTimes()
 
 	kc.client.Close()
+
+	buf := make([]byte, 1<<16)
+	_ = runtime.Stack(buf, false)
+	fmt.Printf("closed a client; stack:\n%s\n", buf)
+
 	kc.client = s.client
 
 	s.adminClient = mocks.NewMockKafkaAdminClientV2(s.ctrl)

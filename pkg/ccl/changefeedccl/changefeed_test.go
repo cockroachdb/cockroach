@@ -5002,6 +5002,11 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 }
 
 func TestChangefeedErrors(t *testing.T) {
+	defer func() {
+		fmt.Printf("create cat counts: %+v\n", createClientCategoryCounts)
+		fmt.Printf("close cat counts: %+v\n", closeClientCategoryCounts)
+	}()
+
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

@@ -59,7 +59,7 @@ func (e *externalConnectionKafkaSink) Dial() error {
 
 // Close implements the Sink interface.
 func (e *externalConnectionKafkaSink) Close() error {
-	return nil
+	return e.sink.Close()
 }
 
 // EmitRow implements the Sink interface.

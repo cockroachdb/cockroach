@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"hash/fnv"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 
@@ -73,6 +75,20 @@ func newKafkaSinkClientV2(
 	var client KafkaClientV2
 	var adminClient KafkaAdminClientV2
 	var err error
+
+	buf := make([]byte, 1<<16)
+	_ = runtime.Stack(buf, false)
+	cat := categorizeStack(buf)
+	createClientCategoryCounts[cat]++
+	if createClientCategoryCounts[cat] == 1 {
+		fmt.Printf("**info: stack category %v's stack is %s\n", cat, buf)
+	}
+	if cat == "unknown" {
+		fmt.Printf("creating a client with unknown stack category; stack:\n%s\n", buf)
+	} else {
+		fmt.Printf("creating a client with stack category: %s\n", cat)
+	}
+
 	if knobs.OverrideClient != nil {
 		client, adminClient = knobs.OverrideClient(clientOpts)
 	} else {
@@ -113,6 +129,19 @@ type kafkaSinkClientV2 struct {
 
 // Close implements SinkClient.
 func (k *kafkaSinkClientV2) Close() error {
+	buf := make([]byte, 1<<16)
+	_ = runtime.Stack(buf, false)
+	cat := categorizeStack(buf)
+	closeClientCategoryCounts[cat]++
+	if closeClientCategoryCounts[cat] == 1 {
+		fmt.Printf("**info: close stack category %v's stack is %s\n", cat, buf)
+	}
+	if cat == "unknown" {
+		fmt.Printf("closing a client with unknown stack category; stack:\n%s\n", buf)
+	} else {
+		fmt.Printf("closing a client with stack category: %s\n", cat)
+	}
+
 	k.client.Close()
 	return nil
 }
@@ -618,3 +647,27 @@ func (k *kgoMetricsAdapter) OnBrokerThrottle(meta kgo.BrokerMetadata, throttleIn
 }
 
 var _ kgo.HookBrokerThrottle = (*kgoMetricsAdapter)(nil)
+
+func categorizeStack(sb []byte) string {
+	stack := string(sb)
+	if len(stack) == 0 {
+		return ""
+	}
+
+	cats := []string{
+		"validateExternalConnectionSinkURI",
+		"validateSink",
+		"startDistChangefeed",
+	}
+
+	for _, cat := range cats {
+		if strings.Contains(stack, cat) {
+			return cat
+		}
+	}
+
+	return "unknown"
+}
+
+var createClientCategoryCounts = make(map[string]int)
+var closeClientCategoryCounts = make(map[string]int)

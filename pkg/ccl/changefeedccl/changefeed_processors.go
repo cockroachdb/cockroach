@@ -609,8 +609,10 @@ func (ca *changeAggregator) close() {
 		ca.closeTelemetryRecorder()
 	}
 
+	fmt.Printf("ca closing. sink=%+#v\n", ca.sink)
 	if ca.sink != nil {
 		// Best effort: context is often cancel by now, so we expect to see an error
+		// todo: somehow this doesnt actually get into the kafka sink v2 close()
 		_ = ca.sink.Close()
 	}
 
