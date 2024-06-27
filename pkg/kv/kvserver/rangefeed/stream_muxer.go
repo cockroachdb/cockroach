@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // Implemented by nodeMetrics.
@@ -114,6 +115,10 @@ func (s *StreamMuxer) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
 func (s *StreamMuxer) Send(
 	streamID int64, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent,
 ) error {
+	if _, ok := s.activeStreams.Load(streamID); !ok {
+		// Check if we should return err here.
+		return errors.Errorf("stream %d not found", streamID)
+	}
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		StreamID:       streamID,
