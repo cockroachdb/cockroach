@@ -21,7 +21,7 @@ import (
 
 // MakeTenantPrefix creates the key prefix associated with the specified tenant.
 func MakeTenantPrefix(tenID roachpb.TenantID) roachpb.Key {
-	if tenID == roachpb.SystemTenantID {
+	if tenID == roachpb.TenantOne {
 		return nil
 	}
 	return encoding.EncodeUvarintAscending(TenantPrefix, tenID.ToUint64())
@@ -29,7 +29,7 @@ func MakeTenantPrefix(tenID roachpb.TenantID) roachpb.Key {
 
 // MakeTenantSpan creates the start/end key pair associated with the specified tenant.
 func MakeTenantSpan(tenID roachpb.TenantID) roachpb.Span {
-	if tenID == roachpb.SystemTenantID {
+	if tenID == roachpb.TenantOne {
 		return roachpb.Span{Key: TableDataMin, EndKey: TableDataMax}
 	}
 	tenIDint := tenID.ToUint64()
@@ -43,10 +43,10 @@ func MakeTenantSpan(tenID roachpb.TenantID) roachpb.Span {
 // the remainder of the key (with the prefix removed) and the decoded tenant ID.
 func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 	if len(key) == 0 { // key.Equal(roachpb.RKeyMin)
-		return nil, roachpb.SystemTenantID, nil
+		return nil, roachpb.TenantOne, nil
 	}
 	if key[0] != tenantPrefixByte {
-		return key, roachpb.SystemTenantID, nil
+		return key, roachpb.TenantOne, nil
 	}
 	rem, tenID, err := encoding.DecodeUvarintAscending(key[1:])
 	if err != nil {
@@ -129,6 +129,7 @@ type sqlEncoder struct {
 	// compute it once, and store it here, instead of having to do so every time
 	// we need access to it.
 	endKey *roachpb.Key
+	roachpb.TenantID
 }
 
 // sqlDecoder implements the decoding logic for SQL keys.
@@ -149,7 +150,7 @@ func MakeSQLCodec(tenID roachpb.TenantID) SQLCodec {
 	sp.Key = sp.Key[:len(sp.Key):len(sp.Key)]             // bound capacity, avoid aliasing
 	sp.EndKey = sp.EndKey[:len(sp.EndKey):len(sp.EndKey)] // bound capacity, avoid aliasing
 	return SQLCodec{
-		sqlEncoder: sqlEncoder{&sp.Key, &sp.EndKey},
+		sqlEncoder: sqlEncoder{&sp.Key, &sp.EndKey, tenID},
 		sqlDecoder: sqlDecoder{&sp.Key},
 	}
 }
@@ -163,13 +164,13 @@ func MakeSQLCodec(tenID roachpb.TenantID) SQLCodec {
 // defined in terms of this codec. We would want to fix this if/when we make the
 // tenant with ID one non-system, but we'll get rid of/rename this then as well.
 var SystemSQLCodec = SQLCodec{
-	sqlEncoder: sqlEncoder{&MinKey, &MaxKey},
+	sqlEncoder: sqlEncoder{&MinKey, &MaxKey, roachpb.SystemTenantID},
 	sqlDecoder: sqlDecoder{&MinKey},
 }
 
 // ForSystemTenant returns whether the encoder is bound to the system tenant.
 func (e sqlEncoder) ForSystemTenant() bool {
-	return len(e.TenantPrefix()) == 0
+	return e.TenantID.IsSystem()
 }
 
 // TenantPrefix returns the key prefix used for the tenants's data.
