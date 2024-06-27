@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/sqlstats/ssmemstorage",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/mon",
