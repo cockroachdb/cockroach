@@ -1006,24 +1006,27 @@ func TestCommit(t *testing.T) {
 		{[]uint64{1}, index(1).terms(2), 2, 1},
 
 		// odd
-		{[]uint64{2, 1, 1}, index(1).terms(1, 2), 1, 1},
+		{[]uint64{2, 1, 1}, index(1).terms(1, 1), 1, 1},
 		{[]uint64{2, 1, 1}, index(1).terms(1, 1), 2, 0},
-		{[]uint64{2, 1, 2}, index(1).terms(1, 2), 2, 2},
+		{[]uint64{2, 1, 2}, index(1).terms(1, 1), 1, 2},
 		{[]uint64{2, 1, 2}, index(1).terms(1, 1), 2, 0},
+		{[]uint64{2, 1, 1}, index(1).terms(1, 2), 2, 0},
+		{[]uint64{2, 1, 2}, index(1).terms(1, 2), 2, 2},
 
 		// even
-		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 2), 1, 1},
+		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 1), 1, 1},
 		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 1), 2, 0},
-		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 2), 1, 1},
+		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 2), 2, 0},
+		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 1), 1, 1},
 		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 1), 2, 0},
-		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 2), 2, 2},
 		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 1), 2, 0},
+		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 2), 2, 2},
 	}
 
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1))
+		storage.SetHardState(pb.HardState{Term: tt.smTerm})
 		storage.Append(tt.logs)
-		storage.hardState = pb.HardState{Term: tt.smTerm}
 
 		sm := newTestRaft(1, 10, 2, storage)
 		for j := 0; j < len(tt.matches); j++ {
@@ -1118,9 +1121,9 @@ func TestHandleMsgApp(t *testing.T) {
 
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1))
+		require.NoError(t, storage.SetHardState(pb.HardState{Term: 2}))
 		require.NoError(t, storage.Append(index(1).terms(1, 2)))
 		sm := newTestRaft(1, 10, 1, storage)
-		sm.becomeFollower(2, None)
 
 		sm.handleAppendEntries(tt.m)
 		assert.Equal(t, tt.wIndex, sm.raftLog.lastIndex(), "#%d", i)
@@ -1152,9 +1155,9 @@ func TestHandleHeartbeat(t *testing.T) {
 
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2))
+		require.NoError(t, storage.SetHardState(pb.HardState{Term: 2}))
 		require.NoError(t, storage.Append([]pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}, {Index: 3, Term: tt.accTerm}}))
 		sm := newTestRaft(1, 5, 1, storage)
-		sm.becomeFollower(2, 2)
 		sm.raftLog.commitTo(commit)
 		sm.handleHeartbeat(tt.m)
 		assert.Equal(t, tt.wCommit, sm.raftLog.committed, "#%d", i)
@@ -1167,6 +1170,7 @@ func TestHandleHeartbeat(t *testing.T) {
 // TestHandleHeartbeatResp ensures that we re-send log entries when we get a heartbeat response.
 func TestHandleHeartbeatResp(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
+	require.NoError(t, storage.SetHardState(pb.HardState{Term: 3}))
 	require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
 	sm := newTestRaft(1, 5, 1, storage)
 	sm.becomeCandidate()
@@ -1953,9 +1957,9 @@ func TestBcastBeat(t *testing.T) {
 		},
 	}
 	storage := NewMemoryStorage()
+	storage.SetHardState(pb.HardState{Term: s.Metadata.Term, Commit: s.Metadata.Index})
 	storage.ApplySnapshot(s)
 	sm := newTestRaft(1, 10, 1, storage)
-	sm.Term = 1
 
 	sm.becomeCandidate()
 	sm.becomeLeader()
@@ -2136,6 +2140,7 @@ func TestSendAppendForProgressSnapshot(t *testing.T) {
 func TestRecvMsgUnreachable(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	s := newTestMemoryStorage(withPeers(1, 2))
+	s.SetHardState(pb.HardState{Term: 3})
 	s.Append(previousEnts)
 	r := newTestRaft(1, 10, 1, s)
 	r.becomeCandidate()
@@ -3555,24 +3560,18 @@ func TestFastLogRejection(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			s1 := NewMemoryStorage()
 			s1.snapshot.Metadata.ConfState = pb.ConfState{Voters: []uint64{1, 2, 3}}
-			s1.Append(test.leaderLog)
 			last := test.leaderLog[len(test.leaderLog)-1]
-			s1.SetHardState(pb.HardState{
-				Term:   last.Term - 1,
-				Commit: last.Index,
-			})
+			term := max(test.followerLog[len(test.followerLog)-1].Term, last.Term)
+			s1.SetHardState(pb.HardState{Term: term})
+			s1.Append(test.leaderLog)
 			n1 := newTestRaft(1, 10, 1, s1)
-			n1.becomeCandidate() // bumps Term to last.Term
+			n1.becomeCandidate()
 			n1.becomeLeader()
 
 			s2 := NewMemoryStorage()
 			s2.snapshot.Metadata.ConfState = pb.ConfState{Voters: []uint64{1, 2, 3}}
+			s2.SetHardState(pb.HardState{Term: term + 1})
 			s2.Append(test.followerLog)
-			s2.SetHardState(pb.HardState{
-				Term:   last.Term,
-				Vote:   1,
-				Commit: 0,
-			})
 			n2 := newTestRaft(2, 10, 1, s2)
 			if test.followerCompact != 0 {
 				s2.Compact(test.followerCompact)
@@ -3609,6 +3608,7 @@ func TestFastLogRejection(t *testing.T) {
 
 func entsWithConfig(configFunc func(*Config), terms ...uint64) *raft {
 	storage := NewMemoryStorage()
+	storage.SetHardState(pb.HardState{Term: terms[len(terms)-1]})
 	for i, term := range terms {
 		storage.Append([]pb.Entry{{Index: uint64(i + 1), Term: term}})
 	}
@@ -3617,7 +3617,6 @@ func entsWithConfig(configFunc func(*Config), terms ...uint64) *raft {
 		configFunc(cfg)
 	}
 	sm := newRaft(cfg)
-	sm.reset(terms[len(terms)-1])
 	return sm
 }
 

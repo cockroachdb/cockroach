@@ -473,9 +473,9 @@ func TestLeaderCommitPrecedingEntries(t *testing.T) {
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2, 3))
+		storage.SetHardState(pb.HardState{Term: 2})
 		storage.Append(tt)
 		r := newTestRaft(1, 10, 1, storage)
-		r.loadState(pb.HardState{Term: 2})
 		r.becomeCandidate()
 		r.becomeLeader()
 		r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
@@ -567,10 +567,9 @@ func TestFollowerCheckMsgApp(t *testing.T) {
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2, 3))
+		storage.SetHardState(pb.HardState{Term: 2, Commit: 1})
 		storage.Append(ents)
 		r := newTestRaft(1, 10, 1, storage)
-		r.loadState(pb.HardState{Commit: 1})
-		r.becomeFollower(2, 2)
 
 		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 2, LogTerm: tt.term, Index: tt.index})
 
@@ -619,9 +618,9 @@ func TestFollowerAppendEntries(t *testing.T) {
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2, 3))
+		storage.SetHardState(pb.HardState{Term: 2})
 		storage.Append([]pb.Entry{{Term: 1, Index: 1}, {Term: 2, Index: 2}})
 		r := newTestRaft(1, 10, 1, storage)
-		r.becomeFollower(2, 2)
 
 		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 2, LogTerm: tt.term, Index: tt.index, Entries: tt.ents})
 
@@ -645,13 +644,13 @@ func TestLeaderSyncFollowerLog(t *testing.T) {
 		index(0).terms(0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3),
 	} {
 		leadStorage := newTestMemoryStorage(withPeers(1, 2, 3))
+		leadStorage.SetHardState(pb.HardState{Term: term, Commit: ents[len(ents)-1].Index})
 		leadStorage.Append(ents)
 		lead := newTestRaft(1, 10, 1, leadStorage)
-		lead.loadState(pb.HardState{Commit: lead.raftLog.lastIndex(), Term: term})
 		followerStorage := newTestMemoryStorage(withPeers(1, 2, 3))
+		followerStorage.SetHardState(pb.HardState{Term: term - 1})
 		followerStorage.Append(tt)
 		follower := newTestRaft(2, 10, 1, followerStorage)
-		follower.loadState(pb.HardState{Term: term - 1})
 		// It is necessary to have a three-node cluster.
 		// The second may have more up-to-date log than the first one, so the
 		// first node needs the vote from the third node to become the leader.
@@ -730,6 +729,7 @@ func TestVoter(t *testing.T) {
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2))
+		storage.SetHardState(pb.HardState{Term: 2})
 		storage.Append(tt.ents)
 		r := newTestRaft(1, 10, 1, storage)
 
@@ -760,9 +760,9 @@ func TestLeaderOnlyCommitsLogFromCurrentTerm(t *testing.T) {
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2))
+		storage.SetHardState(pb.HardState{Term: 2})
 		storage.Append(ents)
 		r := newTestRaft(1, 10, 1, storage)
-		r.loadState(pb.HardState{Term: 2})
 		// become leader at term 3
 		r.becomeCandidate()
 		r.becomeLeader()
