@@ -85,12 +85,8 @@ func newLogWithSize(
 		panic(err) // TODO(bdarnell)
 	}
 	return &raftLog{
-		storage: storage,
-		unstable: unstable{
-			offset:           lastIndex + 1,
-			offsetInProgress: lastIndex + 1,
-			logger:           logger,
-		},
+		storage:             storage,
+		unstable:            newUnstable(lastIndex+1, logger),
 		maxApplyingEntsSize: maxApplyingEntsSize,
 
 		// Initialize our committed and applied pointers to the time of the last compaction.
