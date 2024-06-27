@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -247,7 +248,7 @@ func (s *PersistedSQLStats) doFlushSingleTxnStats(
 			return errors.Wrapf(err, "flushing transaction %d's statistics", stats.TransactionFingerprintID)
 		}
 		return nil
-	})
+	}, isql.WithPriority(admissionpb.UserLowPri))
 }
 
 func (s *PersistedSQLStats) doFlushSingleStmtStats(
@@ -320,7 +321,7 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 			return errors.Wrapf(err, "flush statement %d's statistics", scopedStats.ID)
 		}
 		return nil
-	})
+	}, isql.WithPriority(admissionpb.UserLowPri))
 }
 
 func (s *PersistedSQLStats) doInsertElseDoUpdate(
