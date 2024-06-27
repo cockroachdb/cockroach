@@ -86,7 +86,7 @@ func createRemoteProduceJobForLogicalReplication(
 		return nil, err
 	}
 
-	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr)
+	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr, streamclient.WithLogical())
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (r *logicalReplicationResumer) ingest(
 		return err
 	}
 
-	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr, streamclient.WithStreamID(streampb.StreamID(streamID)))
+	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr, streamclient.WithStreamID(streampb.StreamID(streamID)), streamclient.WithLogical())
 	if err != nil {
 		return err
 	}

@@ -35,6 +35,7 @@ type partitionedStreamClient struct {
 	urlPlaceholder url.URL
 	pgxConfig      *pgx.ConnConfig
 	compressed     bool
+	logical        bool
 
 	mu struct {
 		syncutil.Mutex
@@ -57,6 +58,7 @@ func NewPartitionedStreamClient(
 		urlPlaceholder: *remote,
 		pgxConfig:      config,
 		compressed:     options.compressed,
+		logical:        options.logical,
 	}
 	client.mu.activeSubscriptions = make(map[*partitionedStreamSubscription]struct{})
 	client.mu.srcConn = conn
@@ -73,6 +75,10 @@ func (p *partitionedStreamClient) CreateForTenant(
 	defer sp.Finish()
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if p.logical {
+		return streampb.ReplicationProducerSpec{}, errors.New("cannot create a tenant scoped stream with logical replication flag")
+	}
 
 	var row pgx.Row
 	if !req.ReplicationStartTime.IsEmpty() {
@@ -148,6 +154,10 @@ func (p *partitionedStreamClient) PlanPhysicalReplication(
 	{
 		p.mu.Lock()
 		defer p.mu.Unlock()
+
+		if p.logical {
+			return Topology{}, errors.New("cannot plan physical replication with logical replication flag")
+		}
 
 		row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.replication_stream_spec($1)`, streamID)
 		var rawSpec []byte
@@ -245,6 +255,10 @@ func (p *partitionedStreamClient) Subscribe(
 	sps.WrappedEvents = true
 	sps.WithDiff = cfg.withDiff
 	sps.WithFiltering = cfg.withFiltering
+	sps.Type = streampb.ReplicationType_PHYSICAL
+	if p.logical {
+		sps.Type = streampb.ReplicationType_LOGICAL
+	}
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {
@@ -294,6 +308,10 @@ func (p *partitionedStreamClient) PlanLogicalReplication(
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.PlanLogicalReplication")
 	defer sp.Finish()
 
+	if !p.logical {
+		return LogicalReplicationPlan{}, errors.New("cannot plan logical replication without logical replication flag")
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -338,6 +356,10 @@ func (p *partitionedStreamClient) CreateForTables(
 ) (*streampb.ReplicationProducerSpec, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.CreateForTables")
 	defer sp.Finish()
+
+	if !p.logical {
+		return nil, errors.New("cannot create a table scoped stream without logical replication flag")
+	}
 
 	reqBytes, err := protoutil.Marshal(req)
 	if err != nil {

@@ -127,7 +127,7 @@ func createLogicalReplicationStreamPlanHook(
 		}
 		streamAddress = crosscluster.StreamAddress(streamURL.String())
 
-		client, err := streamclient.NewStreamClient(ctx, streamAddress, p.ExecCfg().InternalDB)
+		client, err := streamclient.NewStreamClient(ctx, streamAddress, p.ExecCfg().InternalDB, streamclient.WithLogical())
 		if err != nil {
 			return err
 		}
