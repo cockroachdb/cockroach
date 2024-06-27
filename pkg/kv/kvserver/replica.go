@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -174,15 +173,6 @@ func (c *atomicConnectionClass) get() rpc.ConnectionClass {
 // set updates the current value of the ConnectionClass.
 func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 	atomic.StoreUint32((*uint32)(c), uint32(cc))
-}
-
-// raftSparseStatus is a variant of raft.Status without Config and
-// Progress.Inflights, which are expensive to copy.
-//
-// TODO(arul): move this to raft/status.go.
-type raftSparseStatus struct {
-	raft.BasicStatus
-	Progress map[raftpb.PeerID]tracker.Progress
 }
 
 // ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
@@ -1606,21 +1596,13 @@ func (r *Replica) raftStatusRLocked() *raft.Status {
 // raftSparseStatusRLocked returns a sparse Raft status without Config and
 // Progress.Inflights which are expensive to copy, or nil if the Raft group has
 // not been initialized yet. Progress is only populated on the leader.
-func (r *Replica) raftSparseStatusRLocked() *raftSparseStatus {
+func (r *Replica) raftSparseStatusRLocked() *raft.SparseStatus {
 	rg := r.mu.internalRaftGroup
 	if rg == nil {
 		return nil
 	}
-	status := &raftSparseStatus{
-		BasicStatus: rg.BasicStatus(),
-	}
-	if status.RaftState == raft.StateLeader {
-		status.Progress = map[raftpb.PeerID]tracker.Progress{}
-		rg.WithProgress(func(id raftpb.PeerID, _ raft.ProgressType, pr tracker.Progress) {
-			status.Progress[id] = pr
-		})
-	}
-	return status
+	status := rg.SparseStatus()
+	return &status
 }
 
 func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {

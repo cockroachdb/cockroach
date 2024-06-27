@@ -44,6 +44,27 @@ type BasicStatus struct {
 	LeadTransferee pb.PeerID
 }
 
+// SparseStatus is a variant of Status without Config and Progress.Inflights,
+// which are expensive to copy.
+type SparseStatus struct {
+	BasicStatus
+	Progress map[pb.PeerID]tracker.Progress
+}
+
+// withProgress calls the supplied visitor to introspect the progress for the
+// supplied raft group. Cannot be used to introspect p.Inflights.
+func withProgress(r *raft, visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		typ := ProgressTypePeer
+		if pr.IsLearner {
+			typ = ProgressTypeLearner
+		}
+		p := *pr
+		p.Inflights = nil
+		visitor(id, typ, p)
+	})
+}
+
 func getProgressCopy(r *raft) map[pb.PeerID]tracker.Progress {
 	m := make(map[pb.PeerID]tracker.Progress)
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
@@ -76,6 +97,22 @@ func getStatus(r *raft) Status {
 	}
 	s.Config = r.trk.Config.Clone()
 	return s
+}
+
+// getSparseStatus gets a sparse[*] copy of the current raft status.
+//
+// [*] See struct definition for what this entails.
+func getSparseStatus(r *raft) SparseStatus {
+	status := SparseStatus{
+		BasicStatus: getBasicStatus(r),
+	}
+	if status.RaftState == StateLeader {
+		status.Progress = map[pb.PeerID]tracker.Progress{}
+		withProgress(r, func(id pb.PeerID, _ ProgressType, pr tracker.Progress) {
+			status.Progress[id] = pr
+		})
+	}
+	return status
 }
 
 // MarshalJSON translates the raft status into JSON.
