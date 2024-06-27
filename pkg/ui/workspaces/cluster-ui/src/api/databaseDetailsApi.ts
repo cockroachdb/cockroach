@@ -370,8 +370,12 @@ const getDatabaseReplicasAndRegions: DatabaseDetailsQuery<DatabaseReplicasRegion
     ) => {
       if (txn_result.error) {
         resp.stats.replicaData.error = txn_result.error;
+        // We don't expect to have any rows for this query on error.
+        return;
       }
-      resp.stats.replicaData.storeIDs = txn_result?.rows[0]?.store_ids ?? [];
+      if (!txnResultIsEmpty(txn_result)) {
+        resp.stats.replicaData.storeIDs = txn_result?.rows[0]?.store_ids ?? [];
+      }
     },
     handleMaxSizeError: (_dbName, _response, _dbDetail) => {
       return Promise.resolve(false);
