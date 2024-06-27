@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 // Progress represents a follower’s progress in the view of the leader. Leader
@@ -352,11 +354,11 @@ func (pr *Progress) String() string {
 }
 
 // ProgressMap is a map of *Progress.
-type ProgressMap map[uint64]*Progress
+type ProgressMap map[pb.PeerID]*Progress
 
 // String prints the ProgressMap in sorted key order, one Progress per line.
 func (m ProgressMap) String() string {
-	ids := make([]uint64, 0, len(m))
+	ids := make([]pb.PeerID, 0, len(m))
 	for k := range m {
 		ids = append(ids, k)
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -326,13 +327,13 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 
 func updateRaftProgressFromActivity(
 	ctx context.Context,
-	prs map[uint64]tracker.Progress,
+	prs map[raftpb.PeerID]tracker.Progress,
 	replicas []roachpb.ReplicaDescriptor,
 	replicaActive func(roachpb.ReplicaID) bool,
 ) {
 	for _, replDesc := range replicas {
 		replicaID := replDesc.ReplicaID
-		pr, ok := prs[uint64(replicaID)]
+		pr, ok := prs[raftpb.PeerID(replicaID)]
 		if !ok {
 			continue
 		}
@@ -345,7 +346,7 @@ func updateRaftProgressFromActivity(
 		// and it isn't initialized with the index of the snapshot that is actually
 		// sent by us (out of band), which likely is lower.
 		pr.PendingSnapshot = 0
-		prs[uint64(replicaID)] = pr
+		prs[raftpb.PeerID(replicaID)] = pr
 	}
 }
 

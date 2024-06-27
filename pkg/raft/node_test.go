@@ -561,7 +561,7 @@ func TestNodeRestart(t *testing.T) {
 func TestNodeRestartFromSnapshot(t *testing.T) {
 	snap := raftpb.Snapshot{
 		Metadata: raftpb.SnapshotMetadata{
-			ConfState: raftpb.ConfState{Voters: []uint64{1, 2}},
+			ConfState: raftpb.ConfState{Voters: []raftpb.PeerID{1, 2}},
 			Index:     2,
 			Term:      1,
 		},

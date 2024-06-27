@@ -36,12 +36,14 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 		for i := range arg.Vals {
 			switch arg.Key {
 			case "voters":
-				var id uint64
-				arg.Scan(t, i, &id)
+				var rawID uint64
+				arg.Scan(t, i, &rawID)
+				id := pb.PeerID(rawID)
 				snap.Metadata.ConfState.Voters = append(snap.Metadata.ConfState.Voters, id)
 			case "learners":
-				var id uint64
-				arg.Scan(t, i, &id)
+				var rawID uint64
+				arg.Scan(t, i, &rawID)
+				id := pb.PeerID(rawID)
 				snap.Metadata.ConfState.Learners = append(snap.Metadata.ConfState.Learners, id)
 			case "inflight":
 				arg.Scan(t, i, &cfg.MaxInflightMsgs)
@@ -87,7 +89,7 @@ var _ raft.Storage = snapOverrideStorage{}
 func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) error {
 	bootstrap := !reflect.DeepEqual(snap, pb.Snapshot{})
 	for i := 0; i < n; i++ {
-		id := uint64(1 + len(env.Nodes))
+		id := pb.PeerID(1 + len(env.Nodes))
 		s := snapOverrideStorage{
 			Storage: raft.NewMemoryStorage(),
 			// When you ask for a snapshot, you get the most recent snapshot.

@@ -178,9 +178,11 @@ func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 
 // raftSparseStatus is a variant of raft.Status without Config and
 // Progress.Inflights, which are expensive to copy.
+//
+// TODO(arul): move this to raft/status.go.
 type raftSparseStatus struct {
 	raft.BasicStatus
-	Progress map[uint64]tracker.Progress
+	Progress map[raftpb.PeerID]tracker.Progress
 }
 
 // ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
@@ -1613,8 +1615,8 @@ func (r *Replica) raftSparseStatusRLocked() *raftSparseStatus {
 		BasicStatus: rg.BasicStatus(),
 	}
 	if status.RaftState == raft.StateLeader {
-		status.Progress = map[uint64]tracker.Progress{}
-		rg.WithProgress(func(id uint64, _ raft.ProgressType, pr tracker.Progress) {
+		status.Progress = map[raftpb.PeerID]tracker.Progress{}
+		rg.WithProgress(func(id raftpb.PeerID, _ raft.ProgressType, pr tracker.Progress) {
 			status.Progress[id] = pr
 		})
 	}
@@ -2367,7 +2369,7 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 	if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
 		return
 	}
-	lhReplicaID := uint64(status.Lease.Replica.ReplicaID)
+	lhReplicaID := raftpb.PeerID(status.Lease.Replica.ReplicaID)
 	lhProgress, ok := raftStatus.Progress[lhReplicaID]
 	if (ok && lhProgress.Match >= raftStatus.Commit) || r.store.IsDraining() {
 		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)

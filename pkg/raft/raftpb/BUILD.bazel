@@ -24,6 +24,7 @@ go_library(
     srcs = [
         "confchange.go",
         "confstate.go",
+        "raft.go",
     ],
     embed = [":raftpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/raftpb",
