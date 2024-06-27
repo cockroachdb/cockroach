@@ -204,8 +204,14 @@ type peerMetrics struct {
 	// See TestMetricsRelease.
 	release func()
 
-	// 1 on first heartbeat success (via reportHealthy), reset after
-	// runHeartbeatUntilFailure returns.
+	// The invariant is that sum(ConnectionHealthy, ConnectionUnhealthy,
+	// ConnectionInactive) == 1 for any connection that run() has been called
+	// on. A connection begins in an unhealthy state prior to connection
+	// attempt, it then transitions to healthy if the connection succeeds and
+	// stays there until it disconnects and then transitions to either unhealthy
+	// or inactive depending on whether it is going to attempt to reconnect. Any
+	// increment to one of these counter always has to decrement another one to
+	// keep this invariant.
 	ConnectionHealthy *aggmetric.Gauge
 	// Reset on first successful heartbeat (via reportHealthy), 1 after
 	// runHeartbeatUntilFailure returns.
@@ -287,5 +293,7 @@ func (m *Metrics) acquire(k peerKey) peerMetrics {
 		pm.ConnectionBytesRecv.Unlink()
 	}
 
+	// We temporarily increment the inactive count until we actually connect.
+	pm.ConnectionInactive.Inc(1)
 	return pm
 }
