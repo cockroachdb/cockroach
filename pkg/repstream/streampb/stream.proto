@@ -92,6 +92,11 @@ message ReplicationProducerRequest {
   repeated string table_names = 4;
 }
 
+enum ReplicationType {
+  PHYSICAL = 0;
+  LOGICAL = 1;
+}
+
 // StreamPartitionSpec is the stream partition specification used to init an
 // eventStream.
 message StreamPartitionSpec {
@@ -144,7 +149,9 @@ message StreamPartitionSpec {
 
   bool wrapped_events = 11;
 
-  // NEXT ID: 11.
+  ReplicationType type = 12;
+
+  // NEXT ID: 13.
 }
 
 // SpanConfigEventStreamSpec is the span config event stream specification.
