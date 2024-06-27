@@ -378,7 +378,7 @@ func (i *Inbox) Next() coldata.Batch {
 					// to keep errors unchanged (e.g. kvpb.ErrPriority() will
 					// be called on each error in the DistSQLReceiver).
 					i.bufferedMeta = append(i.bufferedMeta, meta)
-					colexecutils.AccountForMetadata(i.allocator, i.bufferedMeta[len(i.bufferedMeta)-1:])
+					colexecutils.AccountForMetadata(i.Ctx, i.allocator.Acc(), i.bufferedMeta[len(i.bufferedMeta)-1:])
 				}
 			}
 			if receivedErr != nil {

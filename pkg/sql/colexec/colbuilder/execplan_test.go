@@ -141,7 +141,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	defer r.TestCleanupNoError(t)
 
 	m := colexec.NewMaterializer(
-		nil, /* allocator */
+		nil, /* streamingMemAcc */
 		flowCtx,
 		0, /* processorID */
 		r.OpWithMetaInfo,

@@ -89,7 +89,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 			arrowOp := newArrowTestOperator(columnarizer, c, r, typs)
 
 			materializer := NewMaterializer(
-				nil, /* allocator */
+				nil, /* streamingMemAcc */
 				flowCtx,
 				1, /* processorID */
 				colexecargs.OpWithMetaInfo{Root: arrowOp},

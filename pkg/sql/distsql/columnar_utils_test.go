@@ -164,7 +164,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	defer result.TestCleanupNoError(t)
 
 	outColOp := colexec.NewMaterializer(
-		nil, /* allocator */
+		nil, /* streamingMemAcc */
 		flowCtx,
 		int32(len(args.inputs))+2,
 		result.OpWithMetaInfo,
