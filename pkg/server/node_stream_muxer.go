@@ -137,12 +137,12 @@ func (s *streamMuxer) disconnectRangefeedWithError(
 		// Canceling the context will cause the registration to disconnect unless
 		// registration is not set up yet in which case it will be a no-op.
 		f()
+		s.appendMuxError(&muxError{
+			err:      err,
+			streamID: streamID,
+			rangeID:  rangeID,
+		})
 	}
-	s.appendMuxError(&muxError{
-		err:      err,
-		streamID: streamID,
-		rangeID:  rangeID,
-	})
 }
 
 // detachMuxErrors returns mux errors that need to be sent to the client. The

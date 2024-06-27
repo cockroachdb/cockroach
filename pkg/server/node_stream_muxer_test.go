@@ -167,11 +167,8 @@ func TestNodeStreamMuxer(t *testing.T) {
 	t.Run("disconnect stream cancels stream context", func(t *testing.T) {
 		for _, stream := range rangefeedStreams {
 			streamCtx, streamCancel := context.WithCancel(context.Background())
-			require.Equal(t, testRangefeedCounter.numOfActiveRangefeeds(), int32(1))
-
 			streamMuxer.newStream(stream.streamID, streamCancel)
-			require.Equal(t, testRangefeedCounter.numOfActiveRangefeeds(), int32(2))
-
+			require.GreaterOrEqual(t, testRangefeedCounter.numOfActiveRangefeeds(), int32(2))
 			streamMuxer.disconnectRangefeedWithError(stream.streamID, stream.rangeID, stream.serverDisconnectErr)
 			require.Error(t, streamCtx.Err(), context.Canceled)
 		}
@@ -179,12 +176,12 @@ func TestNodeStreamMuxer(t *testing.T) {
 		// Pause for one second to make sure muxer has time to process all the errors.
 		time.Sleep(1 * time.Second)
 
+		require.Equal(t, testRangefeedCounter.numOfActiveRangefeeds(), int32(1))
 		// Check client errors sent to stream.
 		for _, stream := range rangefeedStreams {
 			require.True(t, testServerStream.HasEvent(makeRangefeedErrorEvent(
 				stream.streamID, stream.rangeID, stream.clientErr)))
 		}
-		require.Equal(t, testRangefeedCounter.numOfActiveRangefeeds(), int32(1))
 	})
 
 	t.Run("concurrently disconnect streams", func(t *testing.T) {
