@@ -343,6 +343,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 	rpcCtxOpts.TenantRPCAuthorizer = authorizer
 	rpcCtxOpts.NeedsDialback = true
+	rpcCtxOpts.Locality = cfg.Locality
 
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)

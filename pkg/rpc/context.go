@@ -377,6 +377,9 @@ type ContextOptions struct {
 	// node-to-node connections and prevents one-way partitions from occurring by
 	// turing them into two-way partitions.
 	NeedsDialback bool
+
+	// Locality stores the locality of this node.
+	Locality roachpb.Locality
 }
 
 // DefaultContextOptions are mostly used in tests.
