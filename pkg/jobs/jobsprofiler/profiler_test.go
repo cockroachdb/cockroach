@@ -63,11 +63,14 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 			sql:  "RESTORE TABLE foo FROM LATEST IN 'userfile:///foo' WITH into_db='test'",
 			typ:  jobspb.TypeRestore,
 		},
-		{
-			name: "changefeed",
-			sql:  "CREATE CHANGEFEED FOR foo INTO 'null://sink'",
-			typ:  jobspb.TypeChangefeed,
-		},
+		/*
+			TODO(dt): re-enable this once #126083 is fixed.
+			 {
+				name: "changefeed",
+				sql:  "CREATE CHANGEFEED FOR foo INTO 'null://sink'",
+				typ:  jobspb.TypeChangefeed,
+			},
+		*/
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := sqlDB.Exec(tc.sql)
