@@ -245,6 +245,18 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 	// Immediately run probe after breaker circuit is tripped, optimizing for the
 	// case in which we can immediately reconnect.
 	t.Reset(0)
+	// We temporarily increment the unhealthy and inactive count since we don't
+	// know if this connection will succeed. This counter will decrement
+	// immediately once we connect in runOnce. We also need to decrement it when
+	// we exit from run for any reason.
+	p.ConnectionUnhealthy.Inc(1)
+	defer func() {
+		if p.snap().deleteAfter == 0 {
+			p.ConnectionUnhealthy.Dec(1)
+		} else {
+			p.ConnectionInactive.Dec(1)
+		}
+	}()
 	for {
 		if p.snap().deleted {
 			return
@@ -265,8 +277,10 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 		// Peer is currently initializing (first use) or unhealthy (looped around
 		// from earlier attempt). `runOnce` will try to establish a connection and
 		// keep it healthy for as long as possible. On first error, it will return
-		// back to us.
-		err := p.runOnce(ctx, report)
+		// back to us whether it was able to connect at least once successfully
+		// and update metrics.
+		initialSuccess, err := p.runOnce(ctx, report)
+
 		// If ctx is done, Stopper is draining. Unconditionally override the error
 		// to clean up the logging in this case.
 		if ctx.Err() != nil {
@@ -275,7 +289,7 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 
 		// Transition peer into unhealthy state.
 		now := p.opts.Clock.Now()
-		p.onHeartbeatFailed(ctx, err, now, report)
+		p.onHeartbeatFailed(ctx, err, now, initialSuccess, report)
 
 		// Release peer and delete from map, if appropriate. We'll detect
 		// whether this happened after looping around.
@@ -303,10 +317,10 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 	}
 }
 
-func (p *peer) runOnce(ctx context.Context, report func(error)) error {
+func (p *peer) runOnce(ctx context.Context, report func(error)) (bool, error) {
 	cc, err := p.dial(ctx, p.k.TargetAddr, p.k.Class)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() {
 		_ = cc.Close() // nolint:grpcconnclose
@@ -326,12 +340,12 @@ func (p *peer) runOnce(ctx context.Context, report func(error)) error {
 	if err := runSingleHeartbeat(
 		ctx, NewHeartbeatClient(cc), p.k, p.peerMetrics.roundTripLatency, nil /* no remote clocks */, p.opts, p.heartbeatTimeout, PingRequest_BLOCKING,
 	); err != nil {
-		return err
+		return false, err
 	}
 
 	p.onInitialHeartbeatSucceeded(ctx, p.opts.Clock.Now(), cc, report)
 
-	return p.runHeartbeatUntilFailure(ctx, connFailedCh)
+	return true, p.runHeartbeatUntilFailure(ctx, connFailedCh)
 }
 
 func runSingleHeartbeat(
@@ -503,14 +517,20 @@ func (p *peer) onInitialHeartbeatSucceeded(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.mu.connected = now
+	p.ConnectionHealthy.Inc(1)
+	// If we had a previous connection and it is now connected, then we are no
+	// longer inactive, otherwise we are no longer unhealthy.
+	if p.mu.deleteAfter != 0 {
+		p.ConnectionInactive.Dec(1)
+	} else {
+		p.ConnectionUnhealthy.Dec(1)
+	}
 	// If the probe was inactive, the fact that we managed to heartbeat implies
 	// that it ought not have been.
 	p.mu.deleteAfter = 0
 
 	// Gauge updates.
-	p.ConnectionHealthy.Update(1)
-	p.ConnectionUnhealthy.Update(0)
-	p.ConnectionInactive.Update(0)
+
 	// ConnectionHealthyFor is already zero.
 	p.ConnectionUnhealthyFor.Update(0)
 	// AvgRoundTripLatency is already zero. We don't use the initial
@@ -604,7 +624,7 @@ func maybeLogOnFailedHeartbeat(
 }
 
 func (p *peer) onHeartbeatFailed(
-	ctx context.Context, err error, now time.Time, report func(err error),
+	ctx context.Context, err error, now time.Time, initialSuccess bool, report func(err error),
 ) {
 	prevErr := p.b.Signal().Err()
 	// For simplicity, we have the convention that this method always returns
@@ -648,35 +668,32 @@ func (p *peer) onHeartbeatFailed(
 	if ls.disconnected.IsZero() || ls.disconnected.Before(ls.connected) {
 		ls.disconnected = now
 	}
+
+	// Only update unhealthy and healthy once after the first successful connection.
+	if initialSuccess {
+		p.ConnectionUnhealthy.Inc(1)
+		p.ConnectionHealthy.Dec(1)
+	}
+
 	// If we're not already soft-deleted and soft deletion is indicated now,
 	// mark as such.
 	if ls.deleteAfter == 0 && deleteAfter != 0 {
 		ls.deleteAfter = deleteAfter
+		// Transition from unhealthy to inactive.
+		p.ConnectionUnhealthy.Dec(1)
+		p.ConnectionInactive.Inc(1)
 	}
 
 	maybeLogOnFailedHeartbeat(ctx, now, err, prevErr, *ls, &p.logDisconnectEvery)
 
-	nConnUnhealthy := int64(1)
-	nConnInactive := int64(0)
-	connUnhealthyFor := now.Sub(ls.disconnected).Nanoseconds() + 1 // 1ns for unit tests w/ manual clock
-	if ls.deleteAfter != 0 {
-		// The peer got marked as pending deletion, so the probe becomes lazy
-		// (i.e. we terminate the for-loop here and only probe again when someone
-		// consults the breaker). Reset the gauges, causing this peer to not be
-		// reflected in aggregate stats any longer.
-		nConnUnhealthy = 0
-		nConnInactive = 1
-		connUnhealthyFor = 0
-	}
 	// Gauge updates.
-	p.ConnectionHealthy.Update(0)
-	p.ConnectionUnhealthy.Update(nConnUnhealthy)
-	p.ConnectionInactive.Update(nConnInactive)
 	p.ConnectionHealthyFor.Update(0)
-	p.ConnectionUnhealthyFor.Update(connUnhealthyFor)
-	// NB: keep this last for TestGrpcDialInternal_ReconnectPeer.
-	p.AvgRoundTripLatency.Update(0)
-	p.roundTripLatency.Set(0)
+
+	// Only update the unhealthy duration if it is considered unhealthy.
+	if ls.deleteAfter == 0 {
+		connUnhealthyFor := now.Sub(ls.disconnected).Nanoseconds() + 1 // 1ns for unit tests w/ manual clock
+		p.ConnectionUnhealthyFor.Update(connUnhealthyFor)
+	}
 	// Counter updates.
 	p.ConnectionFailures.Inc(1)
 }
