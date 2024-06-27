@@ -1496,6 +1496,7 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/split:split_test",
     "//pkg/kv/kvserver/stateloader:stateloader",
     "//pkg/kv/kvserver/stateloader:stateloader_test",
+    "//pkg/kv/kvserver/storeliveness/storelivenesspb:storelivenesspb",
     "//pkg/kv/kvserver/tenantrate:tenantrate",
     "//pkg/kv/kvserver/tenantrate:tenantrate_test",
     "//pkg/kv/kvserver/tscache:tscache",
