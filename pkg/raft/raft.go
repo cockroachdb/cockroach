@@ -417,6 +417,12 @@ func newRaft(c *Config) *raft {
 		panic(err) // TODO(bdarnell)
 	}
 
+	// Check term correctness invariant.
+	lastID := raftlog.lastEntryID()
+	if hs.Term < lastID.term {
+		c.Logger.Panicf("%x: Storage: HardState.Term < Term(LastIndex): %d < %d", c.ID, hs.Term, lastID.term)
+	}
+
 	r := &raft{
 		id:                          c.ID,
 		lead:                        None,
@@ -434,7 +440,6 @@ func newRaft(c *Config) *raft {
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		stepDownOnRemoval:           c.StepDownOnRemoval,
 	}
-	lastID := r.raftLog.lastEntryID()
 
 	// To initialize accTerm correctly, we make sure its invariant is true: the
 	// log is a prefix of the accTerm leader's log. This can be achieved by
