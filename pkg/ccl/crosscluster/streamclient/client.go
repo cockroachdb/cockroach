@@ -311,6 +311,7 @@ func getFirstDialer(
 type options struct {
 	streamID   streampb.StreamID
 	compressed bool
+	logical    bool
 }
 
 func (o *options) appName() string {
@@ -337,6 +338,12 @@ func WithStreamID(id streampb.StreamID) Option {
 func WithCompression(enabled bool) Option {
 	return func(o *options) {
 		o.compressed = enabled
+	}
+}
+
+func WithLogical() Option {
+	return func(o *options) {
+		o.logical = true
 	}
 }
 
