@@ -155,6 +155,10 @@ CREATE TYPE d.farewell AS ENUM ('bye', 'cya');
 ----
 
 exec-sql
+CREATE TYPE d.roach_status AS (queen_roach UUID, king_roach  UUID, worker_roach INT);
+----
+
+exec-sql
 CREATE TABLE d.t1 (x d.greeting);
 ----
 
