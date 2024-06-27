@@ -167,6 +167,10 @@ var SystemSQLCodec = SQLCodec{
 	sqlDecoder: sqlDecoder{&MinKey},
 }
 
+// PrefixlessCodec is a SQL key codec for the prefix-free tenant (typically the
+// system tenant).
+var PrefixlessCodec = MakeSQLCodec(roachpb.SystemTenantID)
+
 // ForSystemTenant returns whether the encoder is bound to the system tenant.
 func (e sqlEncoder) ForSystemTenant() bool {
 	return len(e.TenantPrefix()) == 0
