@@ -153,10 +153,7 @@ func (k *kafkaSinkClientV2) FlushResolvedPayload(
 	forEachTopic func(func(topic string) error) error,
 	retryOpts retry.Options,
 ) error {
-	k.metadataMu.Lock()
-	defer k.metadataMu.Unlock()
-
-	if err := k.maybeUpdateTopicPartitionsLocked(ctx, forEachTopic); err != nil {
+	if err := k.maybeUpdateTopicPartitions(ctx, forEachTopic); err != nil {
 		return err
 	}
 	msgs := make([]*kgo.Record, 0, len(k.metadataMu.allTopicPartitions))
@@ -178,9 +175,9 @@ func (k *kafkaSinkClientV2) FlushResolvedPayload(
 	return k.Flush(ctx, msgs)
 }
 
-// update metadata ourselves since kgo doesnt expose it to us :/
-func (k *kafkaSinkClientV2) maybeUpdateTopicPartitionsLocked(ctx context.Context, forEachTopic func(func(topic string) error) error) error {
-	k.metadataMu.AssertHeld()
+func (k *kafkaSinkClientV2) maybeUpdateTopicPartitions(ctx context.Context, forEachTopic func(func(topic string) error) error) error {
+	k.metadataMu.Lock()
+	defer k.metadataMu.Unlock()
 	log.Infof(ctx, `updating topic partitions for kafka sink`)
 
 	const metadataRefreshMinDuration = time.Minute
@@ -339,6 +336,11 @@ func makeKafkaSinkV2(ctx context.Context,
 	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb)
 	if err != nil {
 		return nil, err
+	}
+
+	// Make a call here to validate the connection, so that if the uri is wrong the CREATE CHANGEFEED stmt fails.
+	if _, err = client.adminClient.ListTopics(ctx, topicNamer.DisplayNamesSlice()...); err != nil {
+		return nil, errors.Wrap(err, `failed to list topics`)
 	}
 
 	return makeBatchingSink(ctx, sinkTypeKafka, client, time.Second, retryOpts,

@@ -5174,15 +5174,20 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?confluent_schema_registry=foo&weird=bar`,
 	)
 
+	badHostErrRE := "client has run out of available brokers"
+	if KafkaV2Enabled.Get(&s.ClusterSettings().SV) {
+		badHostErrRE = "unable to dial.*no such host"
+	}
+
 	// Check unavailable kafka.
 	sqlDB.ExpectErrWithTimeout(
-		t, `client has run out of available brokers`,
+		t, badHostErrRE,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope'`,
 	)
 
 	// Test that a well-formed URI gets as far as unavailable kafka error.
 	sqlDB.ExpectErrWithTimeout(
-		t, `client has run out of available brokers`,
+		t, badHostErrRE,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true&topic_name=foo'`,
 	)
 
@@ -5297,7 +5302,7 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported`,
 	)
 	sqlDB.ExpectErrWithTimeout(
-		t, `client has run out of available brokers`,
+		t, badHostErrRE,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 	)
 	sqlDB.ExpectErrWithTimeout(

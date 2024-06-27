@@ -242,6 +242,9 @@ func (sr *SQLRunner) ExpectErrWithTimeout(
 	err := timeutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
 		_, err := sr.DB.ExecContext(ctx, query, args...)
 		if !testutils.IsError(err, errRE) {
+			if err == nil {
+				return errors.Newf("expected error '%s', got: nil", errRE)
+			}
 			return errors.Newf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
 		}
 		return nil
