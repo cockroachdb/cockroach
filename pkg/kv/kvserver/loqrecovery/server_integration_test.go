@@ -52,6 +52,8 @@ func TestReplicaCollection(t *testing.T) {
 
 	ctx := context.Background()
 
+	skip.UnderDeadlock(t, "occasionally flakes")
+
 	// This test stops cluster servers. Use "reusable" listeners, otherwise the
 	// ports can be reused by other test clusters, and we may accidentally connect
 	// to a wrong node.
