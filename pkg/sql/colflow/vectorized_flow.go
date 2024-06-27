@@ -1042,6 +1042,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	opWithMetaInfo colexecargs.OpWithMetaInfo,
 	opOutputTypes []*types.T,
 	factory coldata.ColumnFactory,
+	streamingMemAccount *mon.BoundAccount,
 ) error {
 	output := &pspec.Output[0]
 	if output.Type != execinfrapb.OutputRouterSpec_PASS_THROUGH {
@@ -1097,7 +1098,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			if input == nil {
 				// We couldn't remove the columnarizer.
 				input = colexec.NewMaterializer(
-					colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
+					colmem.NewAllocator(ctx, streamingMemAccount, factory),
 					flowCtx,
 					pspec.ProcessorID,
 					opWithMetaInfo,
@@ -1174,10 +1175,11 @@ func (s *vectorizedFlowCreator) setupFlow(
 				return
 			}
 
+			streamingMemAccount := s.monitorRegistry.NewStreamingMemAccount(flowCtx)
 			args := &colexecargs.NewColOperatorArgs{
 				Spec:                 pspec,
 				Inputs:               inputs,
-				StreamingMemAccount:  s.monitorRegistry.NewStreamingMemAccount(flowCtx),
+				StreamingMemAccount:  streamingMemAccount,
 				ProcessorConstructor: rowexec.NewProcessor,
 				LocalProcessors:      s.f.GetLocalProcessors(),
 				LocalVectorSources:   s.f.GetLocalVectorSources(),
@@ -1214,7 +1216,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 
 			if err = s.setupOutput(
-				ctx, flowCtx, pspec, result.OpWithMetaInfo, result.ColumnTypes, factory,
+				ctx, flowCtx, pspec, result.OpWithMetaInfo, result.ColumnTypes, factory, streamingMemAccount,
 			); err != nil {
 				return
 			}

@@ -321,14 +321,18 @@ func init() {
 	}
 }
 
-// AccountForMetadata registers the memory footprint of meta with the allocator.
-func AccountForMetadata(allocator *colmem.Allocator, meta []execinfrapb.ProducerMetadata) {
+// AccountForMetadata registers the memory footprint of meta with the allocator
+// and returns the total new memory usage.
+func AccountForMetadata(allocator *colmem.Allocator, meta []execinfrapb.ProducerMetadata) int64 {
+	var newMemUsage int64
 	for i := range meta {
 		// Perform the memory accounting for the LeafTxnFinalState metadata
 		// since it might be of non-trivial size.
 		if ltfs := meta[i].LeafTxnFinalState; ltfs != nil {
 			memUsage := roachpb.Spans(ltfs.RefreshSpans).MemUsageUpToLen()
 			allocator.AdjustMemoryUsageAfterAllocation(memUsage)
+			newMemUsage += memUsage
 		}
 	}
+	return newMemUsage
 }

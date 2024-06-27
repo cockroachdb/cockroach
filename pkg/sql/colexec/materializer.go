@@ -72,7 +72,8 @@ type drainHelper struct {
 	ctx context.Context
 
 	// allocator can be nil in tests.
-	allocator *colmem.Allocator
+	allocator            *colmem.Allocator
+	metadataAccountedFor int64
 
 	statsCollectors []colexecop.VectorizedStatsCollector
 	sources         colexecop.MetadataSources
@@ -119,16 +120,17 @@ func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 		d.meta = d.sources.DrainMeta()
 		d.drained = true
 		if d.allocator != nil {
-			colexecutils.AccountForMetadata(d.allocator, d.meta)
+			d.metadataAccountedFor = colexecutils.AccountForMetadata(d.allocator, d.meta)
 		}
 	}
 	if len(d.meta) == 0 {
 		// Eagerly lose the reference to the slice.
 		d.meta = nil
 		if d.allocator != nil {
-			// At this point, the caller took over all of the metadata, so we
-			// can release all of the allocations.
-			d.allocator.ReleaseAll()
+			// At this point, the caller took over the metadata, so we can
+			// release the allocations.
+			d.allocator.ReleaseMemory(d.metadataAccountedFor)
+			d.metadataAccountedFor = 0
 		}
 		return nil, nil
 	}
@@ -152,8 +154,7 @@ var materializerPool = sync.Pool{
 // NewMaterializer creates a new Materializer processor which processes the
 // columnar data coming from input to return it as rows.
 // Arguments:
-// - allocator must use a memory account that is not shared with any other user,
-// can be nil in tests.
+// - allocator can be nil in tests.
 // - typs is the output types schema. Typs are assumed to have been hydrated.
 // NOTE: the constructor does *not* take in an execinfrapb.PostProcessSpec
 // because we expect input to handle that for us.
