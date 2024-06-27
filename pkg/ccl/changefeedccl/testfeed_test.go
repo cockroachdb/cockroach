@@ -1885,7 +1885,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 		}
 	}
 
-	// piggyback on the existing fakeKafka stuff. TODO: clean this up when we remove the v1 sink.
+	// Piggyback on the existing fakeKafka stuff. TODO: clean this up when we remove the v1 sink.
 	if KafkaV2Enabled.Get(&k.s.ClusterSettings().SV) {
 		wrapSink = func(s Sink) Sink {
 			return &fakeKafkaSinkV2{

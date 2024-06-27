@@ -3684,7 +3684,6 @@ func TestChangefeedOutputTopics(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE ☃ (i INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO ☃ VALUES (0)`)
 
-		// TODO: here?
 		tg := newTeeGroup()
 		feedCh := make(chan *sarama.ProducerMessage, 1024)
 		wrapSink := func(s Sink) Sink {
@@ -3692,6 +3691,15 @@ func TestChangefeedOutputTopics(t *testing.T) {
 				Sink:   s,
 				tg:     tg,
 				feedCh: feedCh,
+			}
+		}
+		if KafkaV2Enabled.Get(&s.Server.ClusterSettings().SV) {
+			wrapSink = func(s Sink) Sink {
+				return &fakeKafkaSinkV2{
+					t:      t,
+					Sink:   s,
+					feedCh: feedCh,
+				}
 			}
 		}
 
