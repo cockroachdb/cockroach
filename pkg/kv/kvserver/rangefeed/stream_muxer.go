@@ -214,7 +214,7 @@ func (s *StreamMuxer) detachCleanUpIDs() []int64 {
 }
 
 // Note that since we are already in the muxer goroutine, we are okay with
-// blocking and calling rangefeed clean up.
+// blocking and calling rangefeed clean up. Maybe called twice.
 func (s *StreamMuxer) DisconnectAllWithErr(err error) {
 	s.activeStreams.Range(func(key, value interface{}) bool {
 		defer func() {
@@ -257,7 +257,7 @@ func (s *StreamMuxer) DisconnectAllWithErr(err error) {
 // If run returns (due to context cancellation, broken stream, or quiescing),
 // there is nothing we could do. We expect registrations to receive the same
 // error and shut streams down.
-func (s *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
+func (s *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper, errC chan error) {
 	for {
 		select {
 		case <-s.notifyCompletion:
@@ -279,11 +279,14 @@ func (s *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 					}
 				}
 			}
+		case err := <-errC:
+			s.DisconnectAllWithErr(err)
+			return
 		case <-ctx.Done():
+			// ctx should be canceled if the underlying stream is broken.
 			s.DisconnectAllWithErr(ctx.Err())
 			return
 		case <-stopper.ShouldQuiesce():
-			s.DisconnectAllWithErr(nil)
 			// TODO(wenyihu6): should we cancel context here?
 			s.DisconnectAllWithErr(nil)
 			return
