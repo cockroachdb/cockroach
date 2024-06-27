@@ -178,27 +178,27 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 func TestLeaderElectionInOneRoundRPC(t *testing.T) {
 	tests := []struct {
 		size  int
-		votes map[uint64]bool
+		votes map[pb.PeerID]bool
 		state StateType
 	}{
 		// win the election when receiving votes from a majority of the servers
-		{1, map[uint64]bool{}, StateLeader},
-		{3, map[uint64]bool{2: true, 3: true}, StateLeader},
-		{3, map[uint64]bool{2: true}, StateLeader},
-		{5, map[uint64]bool{2: true, 3: true, 4: true, 5: true}, StateLeader},
-		{5, map[uint64]bool{2: true, 3: true, 4: true}, StateLeader},
-		{5, map[uint64]bool{2: true, 3: true}, StateLeader},
+		{1, map[pb.PeerID]bool{}, StateLeader},
+		{3, map[pb.PeerID]bool{2: true, 3: true}, StateLeader},
+		{3, map[pb.PeerID]bool{2: true}, StateLeader},
+		{5, map[pb.PeerID]bool{2: true, 3: true, 4: true, 5: true}, StateLeader},
+		{5, map[pb.PeerID]bool{2: true, 3: true, 4: true}, StateLeader},
+		{5, map[pb.PeerID]bool{2: true, 3: true}, StateLeader},
 
 		// return to follower state if it receives vote denial from a majority
-		{3, map[uint64]bool{2: false, 3: false}, StateFollower},
-		{5, map[uint64]bool{2: false, 3: false, 4: false, 5: false}, StateFollower},
-		{5, map[uint64]bool{2: true, 3: false, 4: false, 5: false}, StateFollower},
+		{3, map[pb.PeerID]bool{2: false, 3: false}, StateFollower},
+		{5, map[pb.PeerID]bool{2: false, 3: false, 4: false, 5: false}, StateFollower},
+		{5, map[pb.PeerID]bool{2: true, 3: false, 4: false, 5: false}, StateFollower},
 
 		// stay in candidate if it does not obtain the majority
-		{3, map[uint64]bool{}, StateCandidate},
-		{5, map[uint64]bool{2: true}, StateCandidate},
-		{5, map[uint64]bool{2: false, 3: false}, StateCandidate},
-		{5, map[uint64]bool{}, StateCandidate},
+		{3, map[pb.PeerID]bool{}, StateCandidate},
+		{5, map[pb.PeerID]bool{2: true}, StateCandidate},
+		{5, map[pb.PeerID]bool{2: false, 3: false}, StateCandidate},
+		{5, map[pb.PeerID]bool{}, StateCandidate},
 	}
 	for i, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(idsBySize(tt.size)...)))
@@ -219,8 +219,8 @@ func TestLeaderElectionInOneRoundRPC(t *testing.T) {
 // Reference: section 5.2
 func TestFollowerVote(t *testing.T) {
 	tests := []struct {
-		vote    uint64
-		nvote   uint64
+		vote    pb.PeerID
+		nvote   pb.PeerID
 		wreject bool
 	}{
 		{None, 2, false},
@@ -415,7 +415,7 @@ func TestLeaderCommitEntry(t *testing.T) {
 	msgs := r.readMessages()
 	sort.Sort(messageSlice(msgs))
 	for i, m := range msgs {
-		assert.Equal(t, uint64(i+2), m.To)
+		assert.Equal(t, pb.PeerID(i+2), m.To)
 		assert.Equal(t, pb.MsgApp, m.Type)
 		assert.Equal(t, li+1, m.Commit)
 	}
@@ -427,18 +427,18 @@ func TestLeaderCommitEntry(t *testing.T) {
 func TestLeaderAcknowledgeCommit(t *testing.T) {
 	tests := []struct {
 		size               int
-		nonLeaderAcceptors map[uint64]bool
+		nonLeaderAcceptors map[pb.PeerID]bool
 		wack               bool
 	}{
 		{1, nil, true},
 		{3, nil, false},
-		{3, map[uint64]bool{2: true}, true},
-		{3, map[uint64]bool{2: true, 3: true}, true},
+		{3, map[pb.PeerID]bool{2: true}, true},
+		{3, map[pb.PeerID]bool{2: true, 3: true}, true},
 		{5, nil, false},
-		{5, map[uint64]bool{2: true}, false},
-		{5, map[uint64]bool{2: true, 3: true}, true},
-		{5, map[uint64]bool{2: true, 3: true, 4: true}, true},
-		{5, map[uint64]bool{2: true, 3: true, 4: true, 5: true}, true},
+		{5, map[pb.PeerID]bool{2: true}, false},
+		{5, map[pb.PeerID]bool{2: true, 3: true}, true},
+		{5, map[pb.PeerID]bool{2: true, 3: true, 4: true}, true},
+		{5, map[pb.PeerID]bool{2: true, 3: true, 4: true, 5: true}, true},
 	}
 	for i, tt := range tests {
 		s := newTestMemoryStorage(withPeers(idsBySize(tt.size)...))
@@ -694,7 +694,7 @@ func TestVoteRequest(t *testing.T) {
 		require.Len(t, msgs, 2, "#%d", j)
 		for i, m := range msgs {
 			assert.Equal(t, pb.MsgVote, m.Type, "#%d.%d", j, i)
-			assert.Equal(t, uint64(i+2), m.To, "#%d.%d", j, i)
+			assert.Equal(t, pb.PeerID(i+2), m.To, "#%d.%d", j, i)
 			assert.Equal(t, tt.wterm, m.Term, "#%d.%d", j, i)
 
 			assert.Equal(t, tt.ents[len(tt.ents)-1].Index, m.Index, "#%d.%d", j, i)

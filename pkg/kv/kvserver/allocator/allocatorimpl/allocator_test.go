@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1916,7 +1917,7 @@ type mockRepl struct {
 
 func (r *mockRepl) RaftStatus() *raft.Status {
 	raftStatus := &raft.Status{
-		Progress: make(map[uint64]tracker.Progress),
+		Progress: make(map[raftpb.PeerID]tracker.Progress),
 	}
 	raftStatus.RaftState = raft.StateLeader
 	for i := int32(1); i <= r.replicationFactor; i++ {
@@ -1924,7 +1925,7 @@ func (r *mockRepl) RaftStatus() *raft.Status {
 		if _, ok := r.replsInNeedOfSnapshot[roachpb.ReplicaID(i)]; ok {
 			state = tracker.StateSnapshot
 		}
-		raftStatus.Progress[uint64(i)] = tracker.Progress{State: state}
+		raftStatus.Progress[raftpb.PeerID(i)] = tracker.Progress{State: state}
 	}
 	return raftStatus
 }
@@ -8081,7 +8082,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 
 	testCases := []struct {
 		commit   uint64
-		leader   uint64
+		leader   raftpb.PeerID
 		progress []uint64
 		expected []uint64
 	}{
@@ -8112,7 +8113,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			status := &raft.Status{
-				Progress: make(map[uint64]tracker.Progress),
+				Progress: make(map[raftpb.PeerID]tracker.Progress),
 			}
 			status.Lead = c.leader
 			status.RaftState = raft.StateLeader
@@ -8126,7 +8127,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 				if v == 0 {
 					p.State = tracker.StateProbe
 				}
-				replicaID := uint64(j + 1)
+				replicaID := raftpb.PeerID(j + 1)
 				status.Progress[replicaID] = p
 				replicas = append(replicas, roachpb.ReplicaDescriptor{
 					ReplicaID: roachpb.ReplicaID(replicaID),
@@ -8183,7 +8184,7 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			status := &raft.Status{
-				Progress: make(map[uint64]tracker.Progress),
+				Progress: make(map[raftpb.PeerID]tracker.Progress),
 			}
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
 			// valid replica IDs.
@@ -8199,7 +8200,7 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 				if v == 0 {
 					p.State = tracker.StateProbe
 				}
-				replicaID := uint64(j + 1)
+				replicaID := raftpb.PeerID(j + 1)
 				status.Progress[replicaID] = p
 				replicas = append(replicas, roachpb.ReplicaDescriptor{
 					ReplicaID: roachpb.ReplicaID(replicaID),
@@ -8241,7 +8242,7 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			status := &raft.Status{
-				Progress: make(map[uint64]tracker.Progress),
+				Progress: make(map[raftpb.PeerID]tracker.Progress),
 			}
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
 			// valid replica IDs.
@@ -8257,7 +8258,7 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 				if v == 0 {
 					p.State = tracker.StateProbe
 				}
-				replicaID := uint64(j + 1)
+				replicaID := raftpb.PeerID(j + 1)
 				status.Progress[replicaID] = p
 				replicas = append(replicas, roachpb.ReplicaDescriptor{
 					ReplicaID: roachpb.ReplicaID(replicaID),

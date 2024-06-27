@@ -1037,7 +1037,7 @@ func proposeBatch(
 	replID := p.getReplicaID()
 	err := raftGroup.Step(raftpb.Message{
 		Type:    raftpb.MsgProp,
-		From:    uint64(replID),
+		From:    raftpb.PeerID(replID),
 		Entries: ents,
 	})
 	if err != nil && errors.Is(err, raft.ErrProposalDropped) {

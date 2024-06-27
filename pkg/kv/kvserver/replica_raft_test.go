@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -64,7 +65,7 @@ func TestLastUpdateTimesMap(t *testing.T) {
 
 	t4 := t3.Add(time.Second)
 	descs = append(descs, []roachpb.ReplicaDescriptor{{ReplicaID: 5}, {ReplicaID: 6}}...)
-	prs := map[uint64]tracker.Progress{
+	prs := map[raftpb.PeerID]tracker.Progress{
 		1: {State: tracker.StateReplicate}, // should be updated
 		// 2 is missing because why not
 		3: {State: tracker.StateProbe},     // should be ignored

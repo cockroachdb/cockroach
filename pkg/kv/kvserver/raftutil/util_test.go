@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ func TestReplicaIsBehind(t *testing.T) {
 	makeStatus := func(f func(*raft.Status)) *raft.Status {
 		st := new(raft.Status)
 		st.Commit = 10
-		st.Progress = make(map[uint64]tracker.Progress)
+		st.Progress = make(map[raftpb.PeerID]tracker.Progress)
 		f(st)
 		return st
 	}
@@ -122,7 +123,7 @@ func TestReplicaMayNeedSnapshot(t *testing.T) {
 	makeStatus := func(f func(*raft.Status)) *raft.Status {
 		st := new(raft.Status)
 		st.Commit = 10
-		st.Progress = make(map[uint64]tracker.Progress)
+		st.Progress = make(map[raftpb.PeerID]tracker.Progress)
 		f(st)
 		return st
 	}

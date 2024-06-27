@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -346,10 +347,10 @@ func TestReplicaDescriptorsCanMakeProgressRandom(t *testing.T) {
 				}
 				return false, true
 			}
-			votes := make(map[uint64]bool, len(rng.wrapped))
+			votes := make(map[raftpb.PeerID]bool, len(rng.wrapped))
 			for _, rDesc := range rng.wrapped {
 				if liveness[rDesc.ReplicaID-1] {
-					votes[uint64(rDesc.ReplicaID)] = true
+					votes[raftpb.PeerID(rDesc.ReplicaID)] = true
 				}
 			}
 			return cfg.Voters.VoteResult(votes) == quorum.VoteWon, false

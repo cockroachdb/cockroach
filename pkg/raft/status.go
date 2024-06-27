@@ -29,24 +29,24 @@ import (
 type Status struct {
 	BasicStatus
 	Config   tracker.Config
-	Progress map[uint64]tracker.Progress
+	Progress map[pb.PeerID]tracker.Progress
 }
 
 // BasicStatus contains basic information about the Raft peer. It does not allocate.
 type BasicStatus struct {
-	ID uint64
+	ID pb.PeerID
 
 	pb.HardState
 	SoftState
 
 	Applied uint64
 
-	LeadTransferee uint64
+	LeadTransferee pb.PeerID
 }
 
-func getProgressCopy(r *raft) map[uint64]tracker.Progress {
-	m := make(map[uint64]tracker.Progress)
-	r.trk.Visit(func(id uint64, pr *tracker.Progress) {
+func getProgressCopy(r *raft) map[pb.PeerID]tracker.Progress {
+	m := make(map[pb.PeerID]tracker.Progress)
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		p := *pr
 		p.Inflights = pr.Inflights.Clone()
 		pr = nil
@@ -79,7 +79,6 @@ func getStatus(r *raft) Status {
 }
 
 // MarshalJSON translates the raft status into JSON.
-// TODO: try to simplify this by introducing ID type into raft
 func (s Status) MarshalJSON() ([]byte, error) {
 	j := fmt.Sprintf(`{"id":"%x","term":%d,"vote":"%x","commit":%d,"lead":"%x","raftState":%q,"applied":%d,"progress":{`,
 		s.ID, s.Term, s.Vote, s.Commit, s.Lead, s.RaftState, s.Applied)

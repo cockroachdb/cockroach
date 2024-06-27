@@ -410,10 +410,10 @@ func shouldReplicaQuiesce(
 	var foundSelf bool
 	var lagging laggingReplicaSet
 	for _, rep := range q.descRLocked().Replicas().Descriptors() {
-		if uint64(rep.ReplicaID) == status.ID {
+		if raftpb.PeerID(rep.ReplicaID) == status.ID {
 			foundSelf = true
 		}
-		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; !ok {
+		if progress, ok := status.Progress[raftpb.PeerID(rep.ReplicaID)]; !ok {
 			if log.V(4) {
 				log.Infof(ctx, "not quiescing: could not locate replica %d in progress: %+v",
 					rep.ReplicaID, progress)
@@ -493,7 +493,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 			curLagging = nil
 		}
 		msg := raftpb.Message{
-			From:   uint64(r.replicaID),
+			From:   raftpb.PeerID(r.replicaID),
 			To:     id,
 			Type:   raftpb.MsgHeartbeat,
 			Term:   status.Term,

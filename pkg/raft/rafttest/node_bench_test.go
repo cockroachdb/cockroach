@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
 func BenchmarkProposal3Nodes(b *testing.B) {
@@ -32,7 +33,7 @@ func BenchmarkProposal3Nodes(b *testing.B) {
 	nodes := make([]*node, 0)
 
 	for i := 1; i <= 3; i++ {
-		n := startNode(uint64(i), peers, nt.nodeNetwork(uint64(i)))
+		n := startNode(pb.PeerID(i), peers, nt.nodeNetwork(pb.PeerID(i)))
 		nodes = append(nodes, n)
 	}
 	// get ready and warm up

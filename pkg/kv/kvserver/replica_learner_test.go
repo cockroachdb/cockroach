@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -786,7 +787,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 				if status == nil {
 					return errors.Errorf(`%s is still waking up`, repl)
 				}
-				if _, ok := status.Config.Learners[uint64(id)]; !ok {
+				if _, ok := status.Config.Learners[raftpb.PeerID(id)]; !ok {
 					return errors.Errorf(`%s thinks %d is not a learner`, repl, id)
 				}
 			}

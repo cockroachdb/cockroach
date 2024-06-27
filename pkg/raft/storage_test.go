@@ -148,7 +148,7 @@ func TestStorageCompact(t *testing.T) {
 
 func TestStorageCreateSnapshot(t *testing.T) {
 	ents := index(3).terms(3, 4, 5)
-	cs := &pb.ConfState{Voters: []uint64{1, 2, 3}}
+	cs := &pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
 	data := []byte("data")
 
 	tests := []struct {
@@ -229,7 +229,7 @@ func TestStorageAppend(t *testing.T) {
 }
 
 func TestStorageApplySnapshot(t *testing.T) {
-	cs := &pb.ConfState{Voters: []uint64{1, 2, 3}}
+	cs := &pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
 	data := []byte("data")
 
 	tests := []pb.Snapshot{{Data: data, Metadata: pb.SnapshotMetadata{Index: 4, Term: 4, ConfState: *cs}},

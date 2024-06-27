@@ -3323,8 +3323,8 @@ func (r *Replica) followerSendSnapshot(
 			ToReplica:   req.RecipientReplica,
 			Message: raftpb.Message{
 				Type:     raftpb.MsgSnap,
-				From:     uint64(req.CoordinatorReplica.ReplicaID),
-				To:       uint64(req.RecipientReplica.ReplicaID),
+				From:     raftpb.PeerID(req.CoordinatorReplica.ReplicaID),
+				To:       raftpb.PeerID(req.RecipientReplica.ReplicaID),
 				Term:     uint64(req.Term),
 				Snapshot: &snap.RaftSnap,
 			},

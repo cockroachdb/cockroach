@@ -496,8 +496,8 @@ const (
 
 // WithProgress is a helper to introspect the Progress for this node and its
 // peers.
-func (rn *RawNode) WithProgress(visitor func(id uint64, typ ProgressType, pr tracker.Progress)) {
-	rn.raft.trk.Visit(func(id uint64, pr *tracker.Progress) {
+func (rn *RawNode) WithProgress(visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
+	rn.raft.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		typ := ProgressTypePeer
 		if pr.IsLearner {
 			typ = ProgressTypeLearner
@@ -509,19 +509,19 @@ func (rn *RawNode) WithProgress(visitor func(id uint64, typ ProgressType, pr tra
 }
 
 // ReportUnreachable reports the given node is not reachable for the last send.
-func (rn *RawNode) ReportUnreachable(id uint64) {
+func (rn *RawNode) ReportUnreachable(id pb.PeerID) {
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgUnreachable, From: id})
 }
 
 // ReportSnapshot reports the status of the sent snapshot.
-func (rn *RawNode) ReportSnapshot(id uint64, status SnapshotStatus) {
+func (rn *RawNode) ReportSnapshot(id pb.PeerID, status SnapshotStatus) {
 	rej := status == SnapshotFailure
 
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgSnapStatus, From: id, Reject: rej})
 }
 
 // TransferLeader tries to transfer leadership to the given transferee.
-func (rn *RawNode) TransferLeader(transferee uint64) {
+func (rn *RawNode) TransferLeader(transferee pb.PeerID) {
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgTransferLeader, From: transferee})
 }
 
