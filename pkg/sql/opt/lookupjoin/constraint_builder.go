@@ -169,7 +169,6 @@ func (b *ConstraintBuilder) Build(
 	// Extract the equality columns from the ON and derived FK filters.
 	leftEq, rightEq, eqFilterOrds :=
 		memo.ExtractJoinEqualityColumnsWithFilterOrds(b.leftCols, b.rightCols, b.allFilters)
-	rightEqSet := rightEq.ToSet()
 
 	// Retrieve the inequality columns from the ON and derived FK filters.
 	var rightCmp opt.ColList
@@ -194,7 +193,7 @@ func (b *ConstraintBuilder) Build(
 	// columns, but it avoids unnecessary work in most cases.
 	firstIdxCol := b.table.IndexColumnID(index, 0)
 	if _, ok := rightEq.Find(firstIdxCol); !ok {
-		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEqSet); !ok {
+		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEq.ToSet()); !ok {
 			if !HasJoinFilterConstants(b.ctx, b.allFilters, firstIdxCol, b.evalCtx) {
 				if _, ok := rightCmp.Find(firstIdxCol); !ok {
 					return Constraint{}, false
@@ -290,7 +289,16 @@ func (b *ConstraintBuilder) Build(
 		// and construct a Project expression that wraps the join's input
 		// below. See findComputedColJoinEquality for the requirements to
 		// synthesize a computed column equality constraint.
-		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, rightEqSet); ok {
+		//
+		// NOTE: we must only consider equivalent columns with identical types,
+		// since column remapping is otherwise not valid.
+		var rightEqIdenticalTypeCols opt.ColSet
+		for i := range rightEq {
+			if b.md.ColumnMeta(rightEq[i]).Type.Identical(b.md.ColumnMeta(leftEq[i]).Type) {
+				rightEqIdenticalTypeCols.Add(rightEq[i])
+			}
+		}
+		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, rightEqIdenticalTypeCols); ok {
 			colMeta := b.md.ColumnMeta(idxCol)
 			compEqCol := b.md.AddColumn(fmt.Sprintf("%s_eq", colMeta.Alias), colMeta.Type)
 
