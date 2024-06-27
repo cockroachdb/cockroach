@@ -1891,18 +1891,19 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
+	// Note that ctx is done when stream is done as well.
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	// Make sure cancel context first before wait.
 	defer cancel()
 
 	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
 	wg.Add(1)
+	errC := make(chan error, 1)
 	if err := n.stopper.RunAsyncTask(ctx, "buffered stream output", func(ctx context.Context) {
 		defer wg.Done()
 		if err := bufferedStream.RunOutputLoop(ctx, n.stopper); err != nil {
-			streamMuxer.DisconnectAllWithErr(err)
+			errC <- err
 		}
-		cancel()
 	}); err != nil {
 		wg.Done()
 		return err
@@ -1911,7 +1912,8 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	wg.Add(1)
 	if err := n.stopper.RunAsyncTask(ctx, "stream muxer", func(ctx context.Context) {
 		defer wg.Done()
-		streamMuxer.Run(ctx, n.stopper)
+		streamMuxer.Run(ctx, n.stopper, errC)
+		// Shutdown everything and the buffered stream output.
 		cancel()
 	}); err != nil {
 		wg.Done()

@@ -96,7 +96,7 @@ func (b *LockedBufferedStream) RunOutputLoop(ctx context.Context, stopper *stop.
 				continue
 			}
 			if err := b.wrapped.Send(e); err != nil {
-				return nil
+				return err
 			}
 		}
 	}
