@@ -175,6 +175,12 @@ func (k *kafkaSinkClientV2) FlushResolvedPayload(
 	return k.Flush(ctx, msgs)
 }
 
+func (k *kafkaSinkClientV2) CheckConnection(ctx context.Context) error {
+	return k.maybeUpdateTopicPartitions(ctx, func(cb func(topic string) error) error {
+		return nil
+	})
+}
+
 func (k *kafkaSinkClientV2) maybeUpdateTopicPartitions(ctx context.Context, forEachTopic func(func(topic string) error) error) error {
 	k.metadataMu.Lock()
 	defer k.metadataMu.Unlock()
@@ -336,11 +342,6 @@ func makeKafkaSinkV2(ctx context.Context,
 	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb)
 	if err != nil {
 		return nil, err
-	}
-
-	// Make a call here to validate the connection, so that if the uri is wrong the CREATE CHANGEFEED stmt fails.
-	if _, err = client.adminClient.ListTopics(ctx, topicNamer.DisplayNamesSlice()...); err != nil {
-		return nil, errors.Wrap(err, `failed to list topics`)
 	}
 
 	return makeBatchingSink(ctx, sinkTypeKafka, client, time.Second, retryOpts,
