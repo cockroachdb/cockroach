@@ -100,7 +100,7 @@ func TestNodeStreamMuxer(t *testing.T) {
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
 	})
 
-	t.Run("repeatedly closing streams does nothing", func(t *testing.T) {
+	t.Run("repeatedly close streams does nothing", func(t *testing.T) {
 		const streamID = int64(0)
 		const rangeID = roachpb.RangeID(1)
 		eventSentBefore := testServerStream.eventSentCount()
@@ -142,7 +142,7 @@ func TestNodeStreamMuxer(t *testing.T) {
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
 	})
 
-	t.Run("registering after node for clean up should clean up but no more error", func(t *testing.T) {
+	t.Run("registering clean up after stream disconnect should still work properly", func(t *testing.T) {
 		_, noop := context.WithCancel(context.Background())
 		const streamID = int64(0)
 		const rangeID = roachpb.RangeID(1)
