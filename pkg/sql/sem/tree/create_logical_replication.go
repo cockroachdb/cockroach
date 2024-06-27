@@ -24,7 +24,7 @@ type CreateLogicalReplicationStream struct {
 }
 
 type LogicalReplicationResources struct {
-	Tables   TablePatterns
+	Tables   []*UnresolvedName
 	Database Name
 }
 

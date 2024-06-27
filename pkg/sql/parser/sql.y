@@ -4617,7 +4617,7 @@ logical_replication_resources:
   TABLE db_object_name
   {
     $$.val = tree.LogicalReplicationResources{
-      Tables: tree.TablePatterns{
+      Tables: []*tree.UnresolvedName{
         $2.unresolvedObjectName().ToUnresolvedName(),
       },
     }
@@ -4637,7 +4637,7 @@ logical_replication_resources_list:
   db_object_name
   {
     $$.val = tree.LogicalReplicationResources{
-      Tables: tree.TablePatterns{
+      Tables: []*tree.UnresolvedName{
         $1.unresolvedObjectName().ToUnresolvedName(),
       },
     }
