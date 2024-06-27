@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 )
 
 const (
@@ -1053,6 +1054,14 @@ func (r *raft) poll(
 }
 
 func (r *raft) Step(m pb.Message) error {
+	if buildutil.CrdbTestBuild {
+		defer func() {
+			if err := r.checkInvariants(); err != nil {
+				r.logger.Panicf("%x: invariant check failed: %v", r.id, err)
+			}
+		}()
+	}
+
 	// Handle the message term, which may result in our stepping down to a follower.
 	switch {
 	case m.Term == 0:

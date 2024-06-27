@@ -1322,6 +1322,7 @@ func testRecvMsgVote(t *testing.T, msgType pb.MessageType) {
 		// different term number, so we simply initialize both term numbers to
 		// be the same.
 		term := max(sm.raftLog.lastEntryID().term, tt.logTerm)
+		sm.accTerm = sm.raftLog.lastEntryID().term
 		sm.Term = term
 		sm.Step(pb.Message{Type: msgType, Term: term, From: 2, Index: tt.index, LogTerm: tt.logTerm})
 
@@ -2010,6 +2011,7 @@ func TestRecvMsgBeat(t *testing.T) {
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 		sm.raftLog = newLog(&MemoryStorage{ents: index(0).terms(0, 1, 1)}, nil)
+		sm.accTerm = 1
 		sm.Term = 1
 		sm.state = tt.state
 		switch tt.state {
@@ -2302,12 +2304,12 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 	n1 := newTestLearnerRaft(1, 10, 1, store)
 	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
 
-	n1.restore(s)
+	nt := newNetwork(n1, n2)
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgSnap, Term: s.Metadata.Term, Snapshot: &s})
+
 	snap := n1.raftLog.nextUnstableSnapshot()
 	store.ApplySnapshot(*snap)
 	n1.appliedSnap(snap)
-
-	nt := newNetwork(n1, n2)
 
 	setRandomizedElectionTimeout(n1, n1.electionTimeout)
 	for i := 0; i < n1.electionTimeout; i++ {
@@ -2406,7 +2408,7 @@ func TestRestoreFromSnapMsg(t *testing.T) {
 			ConfState: pb.ConfState{Voters: []uint64{1, 2}},
 		},
 	}
-	m := pb.Message{Type: pb.MsgSnap, From: 1, Term: 2, Snapshot: s}
+	m := pb.Message{Type: pb.MsgSnap, From: 1, Term: 11, Snapshot: s}
 
 	sm := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 	sm.Step(m)

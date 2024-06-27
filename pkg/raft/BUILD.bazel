@@ -23,6 +23,7 @@ go_library(
         "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
+        "//pkg/util/buildutil",
     ],
 )
 
