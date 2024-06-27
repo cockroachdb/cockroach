@@ -891,5 +891,4 @@ type AddDatabaseZoneConfig struct {
 	immediateMutationOp
 	DatabaseID descpb.ID
 	ZoneConfig *zonepb.ZoneConfig
-	SeqNum     uint32
 }
