@@ -51,16 +51,17 @@ func TestMetricsRelease(t *testing.T) {
 		return metricFields
 	}
 
+	const expectedCount = 8
 	m := makeMetrics()
 	// Verify that each metric doesn't have any children at first. Verify the
 	// number of metric fields, as a sanity check (to be modified if fields are
 	// added/deleted).
-	require.Equal(t, 8, verifyAllFields(m, 0))
+	require.Equal(t, expectedCount, verifyAllFields(m, 0))
 	// Verify that a new peer's metrics all get registered.
 	k := peerKey{NodeID: 5, TargetAddr: "192.168.0.1:1234", Class: DefaultClass}
 	pm := m.acquire(k)
-	require.Equal(t, 8, verifyAllFields(m, 1))
+	require.Equal(t, expectedCount, verifyAllFields(m, 1))
 	// Verify that all metrics are unlinked when the peer is released.
 	pm.release()
-	require.Equal(t, 8, verifyAllFields(m, 0))
+	require.Equal(t, expectedCount, verifyAllFields(m, 0))
 }
