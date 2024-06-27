@@ -87,7 +87,7 @@ func TestNodeStreamMuxer(t *testing.T) {
 		streamCtx, streamCancel := context.WithCancel(context.Background())
 		const streamID = int64(0)
 		const rangeID = roachpb.RangeID(1)
-		streamMuxer.AddStream(streamID, streamCancel)
+		streamMuxer.AddStream(streamID, rangeID, streamCancel)
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
 
 		streamMuxer.DisconnectRangefeedWithError(streamID, rangeID,
@@ -117,7 +117,7 @@ func TestNodeStreamMuxer(t *testing.T) {
 		const rangeID = roachpb.RangeID(0)
 		for streamID := 1; streamID <= totalStreams; streamID++ {
 			_, noop := context.WithCancel(context.Background())
-			streamMuxer.AddStream(int64(streamID), noop)
+			streamMuxer.AddStream(int64(streamID), rangeID, noop)
 		}
 		require.Equal(t, testRangefeedCounter.get(), int32(totalStreams))
 
@@ -146,7 +146,7 @@ func TestNodeStreamMuxer(t *testing.T) {
 		_, noop := context.WithCancel(context.Background())
 		const streamID = int64(0)
 		const rangeID = roachpb.RangeID(1)
-		streamMuxer.AddStream(streamID, noop)
+		streamMuxer.AddStream(streamID, rangeID, noop)
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
 		streamMuxer.DisconnectRangefeedWithError(streamID, rangeID,
 			wrapReasonInError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
