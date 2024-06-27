@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 
@@ -520,6 +521,21 @@ func makePlan(
 
 		p.PlanToStreamColMap = []int{1, 2, 3}
 		sql.FinalizePlan(ctx, planCtx, p)
+
+		// Log the plan diagram URL so that we don't have to rely on it being in system.job_info.
+		const maxLenDiagURL = 1 << 20 // 1 MiB
+		flowSpecs := p.GenerateFlowSpecs()
+		if _, diagURL, err := execinfrapb.GeneratePlanDiagramURL(
+			fmt.Sprintf("changefeed: %d", jobID),
+			flowSpecs,
+			execinfrapb.DiagramFlags{},
+		); err != nil {
+			log.Warningf(ctx, "failed to generate changefeed plan diagram: %s", err)
+		} else if diagURL := diagURL.String(); len(diagURL) > maxLenDiagURL {
+			log.Warningf(ctx, "changefeed plan diagram length is too large to be logged: %d", len(diagURL))
+		} else {
+			log.Infof(ctx, "changefeed plan diagram: %s", diagURL)
+		}
 
 		return p, planCtx, nil
 	}
