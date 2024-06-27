@@ -38,6 +38,20 @@ func CPU(n int) Option {
 	}
 }
 
+// WorkloadNode indicates that the last node is a workload node.
+// Defaults to a VM with 4 CPUs if not specified by WorkloadNodeCPUs.
+func WorkloadNode() Option {
+	return func(spec *ClusterSpec) {
+		spec.WorkloadNode = true
+	}
+}
+
+func WorkloadNodeCPU(n int) Option {
+	return func(spec *ClusterSpec) {
+		spec.WorkloadNodeCPUs = n
+	}
+}
+
 // Mem requests nodes with low/standard/high ratio of memory per CPU.
 func Mem(level MemPerCPU) Option {
 	return func(spec *ClusterSpec) {

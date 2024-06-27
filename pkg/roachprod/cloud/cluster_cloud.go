@@ -310,31 +310,51 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 	return cloud, providerErr
 }
 
+type ClusterCreateOpts struct {
+	// Nodes indicates how many nodes in the cluster should be created with the
+	// respective CreateOpts and ProviderOpts.
+	Nodes                 int
+	CreateOpts            vm.CreateOpts
+	ProviderOptsContainer vm.ProviderOptionsContainer
+}
+
 // CreateCluster TODO(peter): document
-func CreateCluster(
-	l *logger.Logger,
-	nodes int,
-	opts vm.CreateOpts,
-	providerOptsContainer vm.ProviderOptionsContainer,
-) error {
-	providerCount := len(opts.VMProviders)
-	if providerCount == 0 {
-		return errors.New("no VMProviders configured")
+// opts is a slice of all node VM specs to be provisioned for the cluster. Generally,
+// non uniform VM specs are not supported for a CRDB cluster, but we often want to provision
+// an additional "workload node". This node often times does not need the same CPU count as
+// the rest of the cluster. i.e. it is overkill for a 3 node 32 CPU cluster to have a 32 CPU
+// workload node, but a 50 node 8 CPU cluster might find a 8 CPU workload node inadequate.
+func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) error {
+	// Keep track of the total number of nodes created, as we append all cluster names
+	// with the node count.
+	var nodesCreated int
+	vmName := func(name string) string {
+		nodesCreated++
+		return vm.Name(name, nodesCreated)
+	}
+	for _, o := range opts {
+		providerCount := len(o.CreateOpts.VMProviders)
+		if providerCount == 0 {
+			return errors.New("no VMProviders configured")
+		}
+
+		// Allocate vm names over the configured providers
+		// N.B., nodeIdx starts at 1 as nodes are one-based, i.e. n1, n2, ...
+		vmLocations := map[string][]string{}
+		for nodeIdx, p := 1, 0; nodeIdx <= o.Nodes; nodeIdx++ {
+			pName := o.CreateOpts.VMProviders[p]
+			vmLocations[pName] = append(vmLocations[pName], vmName(o.CreateOpts.ClusterName))
+			p = (p + 1) % providerCount
+		}
+
+		if err := vm.ProvidersParallel(o.CreateOpts.VMProviders, func(p vm.Provider) error {
+			return p.Create(l, vmLocations[p.Name()], o.CreateOpts, o.ProviderOptsContainer[p.Name()])
+		}); err != nil {
+			return err
+		}
 	}
 
-	// Allocate vm names over the configured providers
-	vmLocations := map[string][]string{}
-	for i, p := 1, 0; i <= nodes; i++ {
-		pName := opts.VMProviders[p]
-		vmName := vm.Name(opts.ClusterName, i)
-		vmLocations[pName] = append(vmLocations[pName], vmName)
-
-		p = (p + 1) % providerCount
-	}
-
-	return vm.ProvidersParallel(opts.VMProviders, func(p vm.Provider) error {
-		return p.Create(l, vmLocations[p.Name()], opts, providerOptsContainer[p.Name()])
-	})
+	return nil
 }
 
 // GrowCluster adds new nodes to an existing cluster.

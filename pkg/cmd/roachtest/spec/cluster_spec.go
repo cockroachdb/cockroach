@@ -99,6 +99,11 @@ const (
 type ClusterSpec struct {
 	Arch      vm.CPUArch // CPU architecture; auto-chosen if left empty
 	NodeCount int
+	// WorkloadNode indicates that the last node of the cluster should be a
+	// workload node. Defaults to a VM with 4 CPUs if not specified by
+	// WorkloadNodeCPUs.
+	WorkloadNode     bool
+	WorkloadNodeCPUs int
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
 	Mem                  MemPerCPU
@@ -145,7 +150,7 @@ type ClusterSpec struct {
 // MakeClusterSpec makes a ClusterSpec.
 func MakeClusterSpec(nodeCount int, opts ...Option) ClusterSpec {
 	spec := ClusterSpec{NodeCount: nodeCount}
-	defaultOpts := []Option{CPU(4), nodeLifetime(12 * time.Hour), ReuseAny()}
+	defaultOpts := []Option{CPU(4), WorkloadNodeCPU(4), nodeLifetime(12 * time.Hour), ReuseAny()}
 	for _, o := range append(defaultOpts, opts...) {
 		o(&spec)
 	}
@@ -324,10 +329,9 @@ type RoachprodClusterConfig struct {
 
 // RoachprodOpts returns the opts to use when calling `roachprod.Create()`
 // in order to create the cluster described in the spec.
-// If
 func (s *ClusterSpec) RoachprodOpts(
 	params RoachprodClusterConfig,
-) (vm.CreateOpts, vm.ProviderOpts, vm.CPUArch, error) {
+) (vm.CreateOpts, vm.ProviderOpts, vm.ProviderOpts, vm.CPUArch, error) {
 	useIOBarrier := params.UseIOBarrierOnLocalSSD
 	requestedArch := params.PreferredArch
 
@@ -351,17 +355,17 @@ func (s *ClusterSpec) RoachprodOpts(
 	case Local:
 		createVMOpts.VMProviders = []string{cloud}
 		// remaining opts are not applicable to local clusters
-		return createVMOpts, nil, requestedArch, nil
+		return createVMOpts, nil, nil, requestedArch, nil
 	case AWS, GCE, Azure:
 		createVMOpts.VMProviders = []string{cloud}
 	default:
-		return vm.CreateOpts{}, nil, "", errors.Errorf("unsupported cloud %v", cloud)
+		return vm.CreateOpts{}, nil, nil, "", errors.Errorf("unsupported cloud %v", cloud)
 	}
 	if cloud != GCE {
 		// TODO(DarrylWong): support specifying SSD count on other providers, see: #123777.
 		// Once done, revisit all tests that set SSD count to see if they can run on non GCE.
 		if s.SSDs != 0 {
-			return vm.CreateOpts{}, nil, "", errors.Errorf("specifying SSD count is not yet supported on %s", cloud)
+			return vm.CreateOpts{}, nil, nil, "", errors.Errorf("specifying SSD count is not yet supported on %s", cloud)
 		}
 	}
 
@@ -401,7 +405,7 @@ func (s *ClusterSpec) RoachprodOpts(
 			}
 
 			if err != nil {
-				return vm.CreateOpts{}, nil, "", err
+				return vm.CreateOpts{}, nil, nil, "", err
 			}
 			if requestedArch != "" && selectedArch != requestedArch {
 				// TODO(srosenberg): we need a better way to monitor the rate of this mismatch, i.e.,
@@ -431,7 +435,7 @@ func (s *ClusterSpec) RoachprodOpts(
 
 	if s.FileSystem == Zfs {
 		if cloud != GCE {
-			return vm.CreateOpts{}, nil, "", errors.Errorf(
+			return vm.CreateOpts{}, nil, nil, "", errors.Errorf(
 				"node creation with zfs file system not yet supported on %s", cloud,
 			)
 		}
@@ -466,26 +470,48 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
+	var workloadMachineType string
+	var err error
+	switch cloud {
+	case AWS:
+		workloadMachineType, _, err = SelectAWSMachineType(s.WorkloadNodeCPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, requestedArch)
+	case GCE:
+		workloadMachineType, _ = SelectGCEMachineType(s.WorkloadNodeCPUs, s.Mem, requestedArch)
+	case Azure:
+		workloadMachineType, _, err = SelectAzureMachineType(s.WorkloadNodeCPUs, s.Mem, requestedArch)
+	}
+	if err != nil {
+		return vm.CreateOpts{}, nil, nil, "", err
+	}
+
 	if createVMOpts.Arch == string(vm.ArchFIPS) && !(cloud == GCE || cloud == AWS) {
-		return vm.CreateOpts{}, nil, "", errors.Errorf(
+		return vm.CreateOpts{}, nil, nil, "", errors.Errorf(
 			"FIPS not yet supported on %s", cloud,
 		)
 	}
 	var providerOpts vm.ProviderOpts
+	var workloadProviderOpts vm.ProviderOpts
 	switch cloud {
 	case AWS:
 		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, s.AWS.VolumeThroughput,
+			createVMOpts.SSDOpts.UseLocalSSD)
+		workloadProviderOpts = getAWSOpts(workloadMachineType, zones, s.VolumeSize, s.AWS.VolumeThroughput,
 			createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
 			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.UseSpotVMs,
 		)
+		workloadProviderOpts = getGCEOpts(workloadMachineType, zones, s.VolumeSize, ssdCount,
+			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.UseSpotVMs,
+		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones, s.VolumeSize)
+		workloadProviderOpts = getAzureOpts(workloadMachineType, zones, s.VolumeSize)
 	}
 
-	return createVMOpts, providerOpts, selectedArch, nil
+	return createVMOpts, providerOpts, workloadProviderOpts, selectedArch, nil
 }
 
 // Expiration is the lifetime of the cluster. It may be destroyed after
@@ -496,4 +522,12 @@ func (s *ClusterSpec) Expiration() time.Time {
 		l = 12 * time.Hour
 	}
 	return timeutil.Now().Add(l)
+}
+
+// TotalCPUs is the total amount of CPUs allocated for a cluster.
+func (s *ClusterSpec) TotalCPUs() int {
+	if !s.WorkloadNode {
+		return s.NodeCount * s.CPUs
+	}
+	return (s.NodeCount-1)*s.CPUs + s.WorkloadNodeCPUs
 }

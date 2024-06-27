@@ -34,9 +34,11 @@ type Cluster interface {
 	// Selecting nodes.
 
 	All() option.NodeListOption
+	CRDBNodes() option.NodeListOption
 	Range(begin, end int) option.NodeListOption
 	Nodes(ns ...int) option.NodeListOption
 	Node(i int) option.NodeListOption
+	WorkloadNode() option.NodeListOption
 
 	// Uploading and downloading from/to nodes.
 
