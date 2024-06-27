@@ -141,4 +141,29 @@ func TestNodeStreamMuxer(t *testing.T) {
 		}
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
 	})
+
+	t.Run("registering after node for clean up should clean up but no more error", func(t *testing.T) {
+		_, noop := context.WithCancel(context.Background())
+		const streamID = int64(0)
+		const rangeID = roachpb.RangeID(1)
+		streamMuxer.AddStream(streamID, noop)
+		require.Equal(t, testRangefeedCounter.get(), int32(1))
+		streamMuxer.DisconnectRangefeedWithError(streamID, rangeID,
+			wrapReasonInError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
+		time.Sleep(1 * time.Second)
+		require.True(t, testServerStream.hasEvent(makeRangefeedErrorEvent(
+			streamID, rangeID, wrapReasonInError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))))
+		require.Equal(t, testRangefeedCounter.get(), int32(0))
+
+		value := 1
+		streamMuxer.RegisterRangefeedCleanUp(streamID, func() {
+			value = 2
+		})
+		eventSentBefore := testServerStream.eventSentCount()
+		streamMuxer.DisconnectRangefeedWithError(streamID, rangeID,
+			wrapReasonInError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
+		time.Sleep(1 * time.Second)
+		require.Equal(t, eventSentBefore, testServerStream.eventSentCount())
+		require.Equal(t, value, 2)
+	})
 }
