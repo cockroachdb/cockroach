@@ -963,6 +963,32 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaSSTableCompressionSnappy = metric.Metadata{
+		Name: "storage.sstable.compression.snappy.count",
+		Help: "Count of SSTables that have compressed with the snappy compression " +
+			"algorithm.",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSSTableCompressionZstd = metric.Metadata{
+		Name: "storage.sstable.compression.zstd.count",
+		Help: "Count of SSTables that have compressed with the zstd compression " +
+			"algorithm.",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSSTableCompressionUnknown = metric.Metadata{
+		Name:        "storage.sstable.compression.unknown.count",
+		Help:        "Count of SSTables that have an unknown compression algorithm.",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSSTableCompressionNone = metric.Metadata{
+		Name:        "storage.sstable.compression.none.count",
+		Help:        "Count of SSTables that are uncompressed.",
+		Measurement: "SSTables",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 var (
@@ -2645,6 +2671,10 @@ type StoreMetrics struct {
 	BatchCommitWALRotWaitDuration     *metric.Counter
 	BatchCommitCommitWaitDuration     *metric.Counter
 	SSTableZombieBytes                *metric.Gauge
+	SSTableCompressionSnappy          *metric.Gauge
+	SSTableCompressionZstd            *metric.Gauge
+	SSTableCompressionUnknown         *metric.Gauge
+	SSTableCompressionNone            *metric.Gauge
 	categoryIterMetrics               pebbleCategoryIterMetricsContainer
 	categoryDiskWriteMetrics          pebbleCategoryDiskWriteMetricsContainer
 	WALBytesWritten                   *metric.Counter
@@ -3357,6 +3387,10 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BatchCommitWALRotWaitDuration:     metric.NewCounter(metaBatchCommitWALRotDuration),
 		BatchCommitCommitWaitDuration:     metric.NewCounter(metaBatchCommitCommitWaitDuration),
 		SSTableZombieBytes:                metric.NewGauge(metaSSTableZombieBytes),
+		SSTableCompressionSnappy:          metric.NewGauge(metaSSTableCompressionSnappy),
+		SSTableCompressionZstd:            metric.NewGauge(metaSSTableCompressionZstd),
+		SSTableCompressionUnknown:         metric.NewGauge(metaSSTableCompressionUnknown),
+		SSTableCompressionNone:            metric.NewGauge(metaSSTableCompressionNone),
 		categoryIterMetrics: pebbleCategoryIterMetricsContainer{
 			registry: storeRegistry,
 		},
@@ -3803,6 +3837,10 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
 	sm.SSTableZombieBytes.Update(int64(m.Table.ZombieSize))
+	sm.SSTableCompressionSnappy.Update(m.Table.CompressedCountSnappy)
+	sm.SSTableCompressionZstd.Update(m.Table.CompressedCountZstd)
+	sm.SSTableCompressionUnknown.Update(m.Table.CompressedCountUnknown)
+	sm.SSTableCompressionNone.Update(m.Table.CompressedCountNone)
 	sm.categoryIterMetrics.update(m.CategoryStats)
 	sm.categoryDiskWriteMetrics.update(m.DiskWriteStats)
 
