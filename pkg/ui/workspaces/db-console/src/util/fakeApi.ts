@@ -11,6 +11,7 @@
 import * as $protobuf from "protobufjs";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
+import { SqlTxnResult } from "@cockroachlabs/cluster-ui/dist/types/api";
 
 import { cockroach } from "src/js/protos";
 import { API_PREFIX, STATUS_PREFIX } from "src/util/api";
@@ -185,3 +186,22 @@ function buildSqlTxnResult<RowType>(
     error: mock.error,
   };
 }
+
+const mockStmtExecErrorResponse = <T>(
+  res: Partial<SqlTxnResult<unknown>>,
+): SqlTxnResult<T> => ({
+  statement: res?.statement ?? 1,
+  tag: "SELECT",
+  start: "2022-01-01T00:00:00Z",
+  end: "2022-01-01T00:00:01Z",
+  error: new Error("error"),
+  rows_affected: 0,
+});
+
+export const mockExecSQLErrors = <T>(
+  statements: number,
+): mockSqlTxnResult<T>[] => {
+  return Array.from({ length: statements }, (_, i) =>
+    mockStmtExecErrorResponse<T>({ statement: i + 1 }),
+  );
+};
