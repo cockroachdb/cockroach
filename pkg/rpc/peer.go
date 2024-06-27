@@ -105,7 +105,6 @@ func (p *peer) releaseMetricsLocked() {
 	p.setInactiveLocked()
 	p.ConnectionInactive.Dec(1)
 	p.mu.peerStatus = peerStatusDeleted
-	p.peerMetrics.release()
 }
 
 // A peer is a remote node that we are trying to maintain a healthy RPC
