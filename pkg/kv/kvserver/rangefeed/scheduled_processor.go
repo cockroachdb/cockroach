@@ -340,7 +340,7 @@ func (p *ScheduledProcessor) Register(
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
-		r.stream.RegisterCleanUp(func() {
+		r.stream.RegisterRangefeedCleanUp(func() {
 			//p.reg.Unregister(ctx, &r)
 			//if r.unreg != nil {
 			//	r.unreg()

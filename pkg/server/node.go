@@ -1861,7 +1861,7 @@ func (s *setRangeIDEventSink) Disconnect(err *kvpb.Error) {
 	s.wrapped.DisconnectRangefeedWithError(s.streamID, s.rangeID, err)
 }
 
-func (s *setRangeIDEventSink) RegisterCleanUp(rangefeedCleanUp func()) {
+func (s *setRangeIDEventSink) RegisterRangefeedCleanUp(rangefeedCleanUp func()) {
 	s.wrapped.RegisterRangefeedCleanUp(s.streamID, rangefeedCleanUp)
 }
 
@@ -1929,7 +1929,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			wrapped:  streamMuxer,
 		}
 
-		streamMuxer.AddStream(req.StreamID, cancel)
+		streamMuxer.AddStream(req.StreamID, req.RangeID, cancel)
 
 		if err := n.stores.RangeFeed(req, streamSink); err != nil {
 			streamMuxer.DisconnectRangefeedWithError(

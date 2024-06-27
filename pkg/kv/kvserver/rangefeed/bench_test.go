@@ -204,7 +204,7 @@ func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
 	return nil
 }
 
-func (s *noopStream) RegisterCleanUp(f func()) {
+func (s *noopStream) RegisterRangefeedCleanUp(f func()) {
 	s.cleanUp = f
 }
 

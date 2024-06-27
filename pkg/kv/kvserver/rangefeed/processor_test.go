@@ -1418,7 +1418,7 @@ func (c *consumer) Err(t *testing.T) error {
 	}
 }
 
-func (c *consumer) RegisterCleanUp(f func()) {
+func (c *consumer) RegisterRangefeedCleanUp(f func()) {
 	c.muxer.RegisterRangefeedCleanUp(c.streamID, f)
 }
 
