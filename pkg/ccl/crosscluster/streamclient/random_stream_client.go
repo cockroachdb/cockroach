@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -742,4 +743,16 @@ func (m *RandomStreamClient) ClearInterceptors() {
 	m.mu.heartbeatInterceptors = m.mu.heartbeatInterceptors[:0]
 	m.mu.dialInterceptors = m.mu.dialInterceptors[:0]
 	m.mu.sstMaker = nil
+}
+
+func (p *RandomStreamClient) PlanLogicalReplication(
+	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
+) (LogicalReplicationPlan, error) {
+	return LogicalReplicationPlan{}, errors.AssertionFailedf("unimplemented")
+}
+
+func (p *RandomStreamClient) CreateForTables(
+	ctx context.Context, req *streampb.ReplicationProducerRequest,
+) (*streampb.ReplicationProducerSpec, error) {
+	return nil, errors.AssertionFailedf("unimplemented")
 }

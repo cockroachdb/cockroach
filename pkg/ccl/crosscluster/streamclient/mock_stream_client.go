@@ -133,6 +133,18 @@ func (m *MockStreamClient) PriorReplicationDetails(
 	return "", "", hlc.Timestamp{}, nil
 }
 
+func (p *MockStreamClient) PlanLogicalReplication(
+	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
+) (LogicalReplicationPlan, error) {
+	return LogicalReplicationPlan{}, errors.AssertionFailedf("unimplemented")
+}
+
+func (p *MockStreamClient) CreateForTables(
+	ctx context.Context, req *streampb.ReplicationProducerRequest,
+) (*streampb.ReplicationProducerSpec, error) {
+	return nil, errors.AssertionFailedf("unimplemented")
+}
+
 // ErrorStreamClient always returns an error when consuming a partition.
 type ErrorStreamClient struct{ MockStreamClient }
 
