@@ -103,12 +103,15 @@ func (l *raftLog) String() string {
 		l.committed, l.applied, l.applying, l.unstable.offset, l.unstable.offsetInProgress, len(l.unstable.entries))
 }
 
-// maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
-// it returns (last index of new entries, true).
-func (l *raftLog) maybeAppend(a logSlice) (lastnewi uint64, ok bool) {
+// maybeAppend appends the given log slice to the log. Returns false if the
+// slice can not be appended (because it is out of bounds, or a.prev does not
+// match the log).
+//
+// TODO(pav-kv): merge maybeAppend and append into one method.
+func (l *raftLog) maybeAppend(a logSlice) bool {
 	match, ok := l.findConflict(a)
 	if !ok {
-		return 0, false
+		return false
 	}
 
 	// Fast-forward to the first mismatching or missing entry.
@@ -119,7 +122,7 @@ func (l *raftLog) maybeAppend(a logSlice) (lastnewi uint64, ok bool) {
 	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
 	// bookkeeping in the unstable structure.
 	l.append(a.entries...)
-	return a.lastIndex(), true
+	return true
 }
 
 func (l *raftLog) append(ents ...pb.Entry) {
