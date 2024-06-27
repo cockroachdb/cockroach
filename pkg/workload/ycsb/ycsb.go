@@ -388,7 +388,7 @@ func (g *ycsb) Tables() []workload.Table {
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					rowOffset := rowIdx - rowBegin
 
-					key.Set(rowOffset, []byte(w.buildKeyName(uint64(rowIdx))))
+					key.Set(rowOffset, []byte(w.buildKeyName(uint64(g.insertStart+rowIdx))))
 
 					for i := range fields {
 						randStringLetters(rng, tmpbuf[:])
