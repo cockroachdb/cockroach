@@ -469,7 +469,7 @@ INNER JOIN latestprogress ON j.id = latestprogress.job_id;`,
 // An error is returned by this function if it is unable to write to
 // the output file or some other unrecoverable error is encountered.
 func (zc *debugZipContext) dumpTableDataForZip(
-	zr *zipReporter, conn clisqlclient.Conn, base, table, query string,
+	zr *zipReporter, conn clisqlclient.Conn, base, table string, tableQuery TableQuery,
 ) error {
 	ctx := context.Background()
 	baseName := base + "/" + sanitizeFilename(table)
@@ -477,6 +477,10 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	s := zr.start(redact.Sprintf("retrieving SQL data for %s", table))
 	const maxRetries = 5
 	suffix := ""
+
+	query := tableQuery.query
+	fallback := tableQuery.fallback != ""
+
 	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
 		name := baseName + suffix + "." + zc.clusterPrinter.sqlOutputFilenameExtension
 		s.progress("writing output: %s", name)
@@ -524,7 +528,18 @@ func (zc *debugZipContext) dumpTableDataForZip(
 				break
 			}
 			if pgcode.MakeCode(pgErr.Code) != pgcode.SerializationFailure {
-				// A non-retry error. We've printed the error, and
+				// A non-retry error. If we have a fallback, try with that.
+				if fallback {
+					fallback = false
+
+					query = tableQuery.fallback
+					numRetries = 1 // Reset counter since this is a different query.
+					baseName = baseName + ".fallback"
+					s = zr.start(redact.Sprintf("retrieving SQL data for %s (fallback)", table))
+
+					continue
+				}
+				// A non-retry error, no fallback. We've printed the error, and
 				// there's nothing to retry. Stop here.
 				break
 			}
