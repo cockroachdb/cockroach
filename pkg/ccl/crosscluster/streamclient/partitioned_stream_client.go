@@ -64,7 +64,6 @@ func NewPartitionedStreamClient(
 }
 
 var _ Client = &partitionedStreamClient{}
-var _ LogicalReplicationClient = &partitionedStreamClient{}
 
 // CreateForTenant implements Client interface.
 func (p *partitionedStreamClient) CreateForTenant(
