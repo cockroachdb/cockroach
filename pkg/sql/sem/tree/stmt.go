@@ -928,7 +928,7 @@ func (*CreateTenantFromReplication) StatementTag() string {
 func (*CreateTenantFromReplication) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
-func (*CreateLogicalReplicationStream) StatementReturnType() StatementReturnType { return Replication }
+func (*CreateLogicalReplicationStream) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
 func (*CreateLogicalReplicationStream) StatementType() StatementType { return TypeDML }
