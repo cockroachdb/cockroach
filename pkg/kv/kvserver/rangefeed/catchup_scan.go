@@ -141,7 +141,11 @@ type outputEventFn func(e *kvpb.RangeFeedEvent) error
 // TODO(sumeer): ctx is not used for SeekGE and Next. Fix by adding a method
 // to SimpleMVCCIterator to replace the context.
 func (i *CatchUpIterator) CatchUpScan(
-	ctx context.Context, outputFn outputEventFn, withDiff bool, withFiltering bool,
+	ctx context.Context,
+	outputFn outputEventFn,
+	withDiff bool,
+	withFiltering bool,
+	withOmitRemote bool,
 ) error {
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
@@ -322,9 +326,10 @@ func (i *CatchUpIterator) CatchUpScan(
 				// Update the last version with its previous value (this version).
 				if l := len(reorderBuf) - 1; l >= 0 {
 					// The previous value may have already been set by an event with
-					// OmitInRangefeeds = true (and withFiltering = true). That event
-					// is not in reorderBuf because we want to filter it out of the
-					// rangefeed, but we still want to keep it as a previous value.
+					// either OmitInRangefeeds = true (and withFiltering = true) or
+					// OriginID !=0 (and withOmitRemote = true). That event is not in
+					// reorderBuf because we want to filter it out of the rangefeed, but
+					// we still want to keep it as a previous value.
 					if !reorderBuf[l].Val.PrevValue.IsPresent() {
 						// However, don't emit a value if an MVCC range tombstone existed
 						// between this value and the next one. The RangeKeysIgnoringTime()
@@ -339,10 +344,12 @@ func (i *CatchUpIterator) CatchUpScan(
 				}
 			}
 
-			// If this value has the flag to omit from rangefeeds, and if the consumer
-			// has opted into filtering, move to the next version for this the key
-			// (which may or may not have OmitInRangefeeds = true).
-			if mvccVal.OmitInRangefeeds && withFiltering {
+			// The iterator may move to the next version for this key if at least one
+			// of the conditions is met: 1) the value has the OmitInRangefeeds flag,
+			// and this iterator has opted into filtering; 2) the value is from a
+			// remote cluster (non zero originID), and the iterator has opted into
+			// omitting remote values.
+			if (mvccVal.OmitInRangefeeds && withFiltering) || (mvccVal.OriginID != 0 && withOmitRemote) {
 				i.Next()
 				continue
 			}
