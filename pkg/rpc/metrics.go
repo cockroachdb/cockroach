@@ -108,6 +108,29 @@ is reset to zero.
 `,
 		Measurement: "Latency",
 	}
+	metaConnectionConnected = metric.Metadata{
+		Name: "rpc.connection.connected",
+		Help: `Counter of TCP level connected connections.
+
+This metric is the number of gRPC connections from the TCP level. Unlike rpc.connection.healthy
+this metric does not take into account whether the application has been able to heartbeat
+over this connection.
+`,
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaNetworkBytesEgress = metric.Metadata{
+		Name:        "rpc.client.bytes.egress",
+		Unit:        metric.Unit_BYTES,
+		Help:        `Counter of TCP bytes sent via gRPC on connections we initiated.`,
+		Measurement: "Bytes",
+	}
+	metaNetworkBytesIngress = metric.Metadata{
+		Name:        "rpc.client.bytes.ingress",
+		Unit:        metric.Unit_BYTES,
+		Help:        `Counter of TCP bytes received via gRPC on connections we initiated.`,
+		Measurement: "Bytes",
+	}
 )
 
 func makeMetrics() Metrics {
@@ -120,6 +143,9 @@ func makeMetrics() Metrics {
 		ConnectionUnhealthyFor:        aggmetric.NewGauge(metaConnectionUnhealthyNanos, childLabels...),
 		ConnectionHeartbeats:          aggmetric.NewCounter(metaConnectionHeartbeats, childLabels...),
 		ConnectionFailures:            aggmetric.NewCounter(metaConnectionFailures, childLabels...),
+		ConnectionConnected:           aggmetric.NewGauge(metaConnectionConnected, childLabels...),
+		ConnectionBytesSent:           aggmetric.NewCounter(metaNetworkBytesEgress, childLabels...),
+		ConnectionBytesRecv:           aggmetric.NewCounter(metaNetworkBytesIngress, childLabels...),
 		ConnectionAvgRoundTripLatency: aggmetric.NewGauge(metaConnectionAvgRoundTripLatency, childLabels...),
 	}
 }
@@ -134,6 +160,9 @@ type Metrics struct {
 	ConnectionUnhealthyFor        *aggmetric.AggGauge
 	ConnectionHeartbeats          *aggmetric.AggCounter
 	ConnectionFailures            *aggmetric.AggCounter
+	ConnectionConnected           *aggmetric.AggGauge
+	ConnectionBytesSent           *aggmetric.AggCounter
+	ConnectionBytesRecv           *aggmetric.AggCounter
 	ConnectionAvgRoundTripLatency *aggmetric.AggGauge
 }
 
@@ -181,6 +210,10 @@ type peerMetrics struct {
 	ConnectionHeartbeats *aggmetric.Counter
 	// Updated before each loop around in breakerProbe.run.
 	ConnectionFailures *aggmetric.Counter
+
+	ConnectionConnected *aggmetric.Gauge
+	ConnectionBytesSent *aggmetric.Counter
+	ConnectionBytesRecv *aggmetric.Counter
 }
 
 func (m *Metrics) acquire(k peerKey) peerMetrics {
@@ -194,6 +227,9 @@ func (m *Metrics) acquire(k peerKey) peerMetrics {
 		ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
 		ConnectionFailures:     m.ConnectionFailures.AddChild(labelVals...),
 		AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
+		ConnectionConnected:    m.ConnectionConnected.AddChild(labelVals...),
+		ConnectionBytesSent:    m.ConnectionBytesSent.AddChild(labelVals...),
+		ConnectionBytesRecv:    m.ConnectionBytesRecv.AddChild(labelVals...),
 
 		// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
 		// and operates on a ~60s decay rate.
@@ -215,6 +251,7 @@ func (pm *peerMetrics) release() {
 	pm.ConnectionUnhealthyFor.Update(0)
 	pm.AvgRoundTripLatency.Update(0)
 	pm.roundTripLatency.Set(0)
+	pm.ConnectionConnected.Update(0)
 
 	pm.ConnectionHealthy.Unlink()
 	pm.ConnectionUnhealthy.Unlink()
@@ -224,4 +261,7 @@ func (pm *peerMetrics) release() {
 	pm.ConnectionHeartbeats.Unlink()
 	pm.ConnectionFailures.Unlink()
 	pm.AvgRoundTripLatency.Unlink()
+	pm.ConnectionConnected.Unlink()
+	pm.ConnectionBytesSent.Unlink()
+	pm.ConnectionBytesRecv.Unlink()
 }
