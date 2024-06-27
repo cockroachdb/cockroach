@@ -208,7 +208,7 @@ type quiescer interface {
 	StoreID() roachpb.StoreID
 	descRLocked() *roachpb.RangeDescriptor
 	isRaftLeaderRLocked() bool
-	raftSparseStatusRLocked() *raftSparseStatus
+	raftSparseStatusRLocked() *raft.SparseStatus
 	raftBasicStatusRLocked() raft.BasicStatus
 	raftLastIndexRLocked() kvpb.RaftIndex
 	hasRaftReadyRLocked() bool
@@ -291,7 +291,7 @@ func shouldReplicaQuiesce(
 	leaseStatus kvserverpb.LeaseStatus,
 	livenessMap livenesspb.IsLiveMap,
 	pausedFollowers map[roachpb.ReplicaID]struct{},
-) (*raftSparseStatus, laggingReplicaSet, bool) {
+) (*raft.SparseStatus, laggingReplicaSet, bool) {
 	if !q.isRaftLeaderRLocked() { // fast path
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leader")
@@ -449,7 +449,7 @@ func shouldReplicaQuiesce(
 }
 
 func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
-	ctx context.Context, status *raftSparseStatus, lagging laggingReplicaSet,
+	ctx context.Context, status *raft.SparseStatus, lagging laggingReplicaSet,
 ) bool {
 	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.replicaID, lastToReplica)
