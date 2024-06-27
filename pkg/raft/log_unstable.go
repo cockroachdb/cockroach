@@ -35,6 +35,14 @@ import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 // might need to truncate the log before persisting unstable.entries.
 type unstable struct {
 	// the incoming unstable snapshot, if any.
+	//
+	// Invariants:
+	//	- snapshot == nil ==> !snapshotInProgress
+	//	- snapshot != nil ==> offset == snapshot.Metadata.Index + 1
+	//
+	// The last invariant enforces the order of handling a situation when there is
+	// both a snapshot and entries. The snapshot must be acknowledged first,
+	// before entries are acknowledged and offset moves forward.
 	snapshot *pb.Snapshot
 	// all entries that have not yet been written to storage.
 	entries []pb.Entry
@@ -42,14 +50,30 @@ type unstable struct {
 	offset uint64
 
 	// if true, snapshot is being written to storage.
+	//
+	// Invariant: snapshotInProgress ==> snapshot != nil
 	snapshotInProgress bool
 	// entries[:offsetInProgress-offset] are being written to storage.
 	// Like offset, offsetInProgress is exclusive, meaning that it
 	// contains the index following the largest in-progress entry.
+	//
 	// Invariant: offset <= offsetInProgress
+	// Invariant: offsetInProgress - offset <= len(entries)
+	// Invariant: offsetInProgress > offset ==> snapshot == nil || snapshotInProgress
+	//
+	// The last invariant enforces the order of handling a situation when there is
+	// both a snapshot and entries. The snapshot must be sent to storage first.
 	offsetInProgress uint64
 
 	logger Logger
+}
+
+func newUnstable(offset uint64, logger Logger) unstable {
+	return unstable{
+		offset:           offset,
+		offsetInProgress: offset,
+		logger:           logger,
+	}
 }
 
 // maybeFirstIndex returns the index of the first possible entry in entries
@@ -119,12 +143,12 @@ func (u *unstable) nextSnapshot() *pb.Snapshot {
 // entries/snapshots added after a call to acceptInProgress will be returned
 // from those methods, until the next call to acceptInProgress.
 func (u *unstable) acceptInProgress() {
+	if u.snapshot != nil {
+		u.snapshotInProgress = true
+	}
 	if len(u.entries) > 0 {
 		// NOTE: +1 because offsetInProgress is exclusive, like offset.
 		u.offsetInProgress = u.entries[len(u.entries)-1].Index + 1
-	}
-	if u.snapshot != nil {
-		u.snapshotInProgress = true
 	}
 }
 
@@ -154,6 +178,10 @@ func (u *unstable) stableTo(id entryID) {
 		u.logger.Infof("entry at (index,term)=(%d,%d) mismatched with "+
 			"entry at (%d,%d) in unstable log; ignoring", id.index, id.term, id.index, gt)
 		return
+	}
+	if u.snapshot != nil {
+		u.logger.Panicf("entry %+v acked earlier than the snapshot(in-progress=%t): %s",
+			id, u.snapshotInProgress, DescribeSnapshot(*u.snapshot))
 	}
 	num := int(id.index + 1 - u.offset)
 	u.entries = u.entries[num:]
@@ -198,6 +226,18 @@ func (u *unstable) restore(s pb.Snapshot) {
 
 func (u *unstable) truncateAndAppend(ents []pb.Entry) {
 	fromIndex := ents[0].Index
+
+	// We do not expect appends at or before the snapshot index.
+	//
+	// The caller does stronger checks preventing appends at <= commit index, so
+	// the check here is redundant. But it's a defense-in-depth guarding the
+	// unstable struct invariant: entries begin at snapshot index + 1. The code
+	// below does not regress offset beyond the snapshot.
+	if u.snapshot != nil && fromIndex <= u.snapshot.Metadata.Index {
+		u.logger.Panicf("appending entry %+v before snapshot %s",
+			pbEntryID(&ents[0]), DescribeSnapshot(*u.snapshot))
+	}
+
 	switch {
 	case fromIndex == u.offset+uint64(len(u.entries)):
 		// fromIndex is the next index in the u.entries, so append directly.
