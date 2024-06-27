@@ -377,6 +377,7 @@ message RaftState {
   uint64 replica_id = 1 [ (gogoproto.customname) = "ReplicaID" ];
   raftpb.HardState hard_state = 2 [ (gogoproto.nullable) = false ];
   // Lead is part of Raft's SoftState.
+  // TODO(arul): cast this and some other fields here to raftpb.PeerID.
   uint64 lead = 3;
   // State is part of Raft's SoftState.
   // It's not an enum because this is primarily for ui consumption and there

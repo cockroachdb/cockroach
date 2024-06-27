@@ -30,7 +30,7 @@ import (
 
 type node struct {
 	raft.Node
-	id     uint64
+	id     raftpb.PeerID
 	iface  iface
 	stopc  chan struct{}
 	pausec chan bool
@@ -42,7 +42,7 @@ type node struct {
 	state raftpb.HardState
 }
 
-func startNode(id uint64, peers []raft.Peer, iface iface) *node {
+func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 	st := raft.NewMemoryStorage()
 	c := &raft.Config{
 		ID:                        id,

@@ -71,8 +71,8 @@ enum MessageType {
 
 message Message {
 	optional MessageType type        = 1  [(gogoproto.nullable) = false];
-	optional uint64      to          = 2  [(gogoproto.nullable) = false];
-	optional uint64      from        = 3  [(gogoproto.nullable) = false];
+	optional uint64      to          = 2  [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
+	optional uint64      from        = 3  [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
 	optional uint64      term        = 4  [(gogoproto.nullable) = false];
 	// logTerm is generally used for appending Raft logs to followers. For example,
 	// (type=MsgApp,index=100,logTerm=5) means the leader appends entries starting
@@ -93,7 +93,7 @@ message Message {
 	// will either all be set (to facilitate the construction of a HardState) if
 	// any of the fields have changed or will all be unset if none of the fields
 	// have changed.
-	optional uint64      vote        = 13 [(gogoproto.nullable) = false];
+	optional uint64      vote        = 13 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
 	// snapshot is non-nil and non-empty for MsgSnap messages and nil for all other
 	// message types. However, peer nodes running older binary versions may send a
 	// non-nil, empty value for the snapshot field of non-MsgSnap messages. Code
@@ -125,7 +125,7 @@ message Message {
 
 message HardState {
 	optional uint64 term   = 1 [(gogoproto.nullable) = false];
-	optional uint64 vote   = 2 [(gogoproto.nullable) = false];
+	optional uint64 vote   = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
 	optional uint64 commit = 3 [(gogoproto.nullable) = false];
 }
 
@@ -152,20 +152,22 @@ enum ConfChangeTransition {
 message ConfState {
 	// The voters in the incoming config. (If the configuration is not joint,
 	// then the outgoing config is empty).
-	repeated uint64 voters = 1;
+	repeated uint64 voters = 1 [(gogoproto.casttype) = "PeerID"];
 	// The learners in the incoming config.
-	repeated uint64 learners          = 2;
+	repeated uint64 learners          = 2 [(gogoproto.casttype) = "PeerID"];
 	// The voters in the outgoing config.
-	repeated uint64 voters_outgoing   = 3;
-	// The nodes that will become learners when the outgoing config is removed.
-	// These nodes are necessarily currently in nodes_joint (or they would have
-	// been added to the incoming config right away).
-	repeated uint64 learners_next     = 4;
+	repeated uint64 voters_outgoing   = 3 [(gogoproto.casttype) = "PeerID"];
+	// The peers that will become learners when the outgoing config is removed.
+	// These peers are necessarily currently in voters (or they would have been
+	// added to the incoming config right away).
+	repeated uint64 learners_next     = 4 [(gogoproto.casttype) = "PeerID"];
 	// If set, the config is joint and Raft will automatically transition into
 	// the final config (i.e. remove the outgoing config) when this is safe.
 	optional bool   auto_leave        = 5 [(gogoproto.nullable) = false];
 }
 
+// TODO(arul): In the future, consider renaming all of these to be suffixed with
+// Peer as opposed to Node.
 enum ConfChangeType {
 	ConfChangeAddNode        = 0;
 	ConfChangeRemoveNode     = 1;
@@ -175,7 +177,7 @@ enum ConfChangeType {
 
 message ConfChange {
 	optional ConfChangeType  type    = 2 [(gogoproto.nullable) = false];
-	optional uint64          node_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID"];
+	optional uint64          node_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "PeerID"];
 	optional bytes           context = 4;
 
 	// NB: this is used only by etcd to thread through a unique identifier.
@@ -188,7 +190,7 @@ message ConfChange {
 // such operations can be carried out atomically via a ConfChangeV2.
 message ConfChangeSingle {
 	optional ConfChangeType  type    = 1 [(gogoproto.nullable) = false];
-	optional uint64          node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID"];
+	optional uint64          node_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "PeerID"];
 }
 
 // ConfChangeV2 messages initiate configuration changes. They support both the

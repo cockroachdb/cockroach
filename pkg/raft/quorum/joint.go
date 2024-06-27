@@ -1,3 +1,6 @@
+// This code has been modified from its original form by Cockroach Labs, Inc.
+// All modifications are Copyright 2024 Cockroach Labs, Inc.
+//
 // Copyright 2019 The etcd Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +17,8 @@
 
 package quorum
 
+import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+
 // JointConfig is a configuration of two groups of (possibly overlapping)
 // majority configurations. Decisions require the support of both majorities.
 type JointConfig [2]MajorityConfig
@@ -27,8 +32,8 @@ func (c JointConfig) String() string {
 
 // IDs returns a newly initialized map representing the set of voters present
 // in the joint configuration.
-func (c JointConfig) IDs() map[uint64]struct{} {
-	m := map[uint64]struct{}{}
+func (c JointConfig) IDs() map[pb.PeerID]struct{} {
+	m := map[pb.PeerID]struct{}{}
 	for _, cc := range c {
 		for id := range cc {
 			m[id] = struct{}{}
@@ -58,7 +63,7 @@ func (c JointConfig) CommittedIndex(l AckedIndexer) Index {
 // VoteResult takes a mapping of voters to yes/no (true/false) votes and returns
 // a result indicating whether the vote is pending, lost, or won. A joint quorum
 // requires both majority quorums to vote in favor.
-func (c JointConfig) VoteResult(votes map[uint64]bool) VoteResult {
+func (c JointConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
 	r1 := c[0].VoteResult(votes)
 	r2 := c[1].VoteResult(votes)
 
