@@ -19,11 +19,13 @@ package rafttest
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/datadriven"
+	"golang.org/x/exp/maps"
 )
 
 func (env *InteractionEnv) handleProcessReady(t *testing.T, d datadriven.TestData) error {
@@ -47,6 +49,19 @@ func (env *InteractionEnv) handleProcessReady(t *testing.T, d datadriven.TestDat
 func (env *InteractionEnv) ProcessReady(idx int) error {
 	// TODO(tbg): Allow simulating crashes here.
 	n := &env.Nodes[idx]
+
+	// TODO(pav-kv): have a precise way of enumerating all the replication streams
+	// ready to send entries. Today this can be done by exposing a set of IDs in
+	// StateReplicate with Next <= raftLog.lastIndex && !Inflights.Full().
+	if n.Config.EnableLazyAppends {
+		ids := maps.Keys(n.EntriesReady())
+		slices.Sort(ids)
+		for _, id := range ids {
+			for n.SendAppend(id) {
+			}
+		}
+	}
+
 	rd := n.Ready()
 	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
 

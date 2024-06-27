@@ -118,21 +118,23 @@ stabilize
   1/5 EntryNormal ""
   1/6 EntryConfChangeV2
   Messages:
-  1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
-  1->2 MsgApp Term:1 Log:1/5 Commit:4 Entries:[1/6 EntryConfChangeV2]
+  1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[
+    1/5 EntryNormal ""
+    1/6 EntryConfChangeV2
+  ]
 > 2 receiving messages
-  1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
-  1->2 MsgApp Term:1 Log:1/5 Commit:4 Entries:[1/6 EntryConfChangeV2]
+  1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[
+    1/5 EntryNormal ""
+    1/6 EntryConfChangeV2
+  ]
 > 2 handling Ready
   Ready MustSync=true:
   Entries:
   1/5 EntryNormal ""
   1/6 EntryConfChangeV2
   Messages:
-  2->1 MsgAppResp Term:1 Log:0/5
   2->1 MsgAppResp Term:1 Log:0/6
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/5
   2->1 MsgAppResp Term:1 Log:0/6
 > 1 handling Ready
   Ready MustSync=false:
@@ -141,11 +143,9 @@ stabilize
   1/5 EntryNormal ""
   1/6 EntryConfChangeV2
   Messages:
-  1->2 MsgApp Term:1 Log:1/6 Commit:5
   1->2 MsgApp Term:1 Log:1/6 Commit:6
   INFO 1 switched to configuration voters=(1 2)
 > 2 receiving messages
-  1->2 MsgApp Term:1 Log:1/6 Commit:5
   1->2 MsgApp Term:1 Log:1/6 Commit:6
 > 2 handling Ready
   Ready MustSync=false:
@@ -155,10 +155,8 @@ stabilize
   1/6 EntryConfChangeV2
   Messages:
   2->1 MsgAppResp Term:1 Log:0/6
-  2->1 MsgAppResp Term:1 Log:0/6
   INFO 2 switched to configuration voters=(1 2)
 > 1 receiving messages
-  2->1 MsgAppResp Term:1 Log:0/6
   2->1 MsgAppResp Term:1 Log:0/6
 
 # Check that trying to transition out again won't do anything.

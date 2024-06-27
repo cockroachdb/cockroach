@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -207,6 +208,14 @@ type Config struct {
 	// throughput limit of 10 MB/s for this group. With RTT of 400ms, this drops
 	// to 2.5 MB/s. See Little's law to understand the maths behind.
 	MaxInflightBytes uint64
+	// EnableLazyAppends makes raft hold off constructing log append messages in
+	// response to Step() calls, for the StateReplicate followers. The messages
+	// can be triggered via a separate RawNode.SendAppend method.
+	//
+	// This way, the application has better control when raft may call Storage
+	// methods and allocate memory for entries and messages. This provides flow
+	// control for leader->follower log replication streams.
+	EnableLazyAppends bool
 
 	// CheckQuorum specifies if the leader should check quorum activity. Leader
 	// steps down when quorum is not active for an electionTimeout.
@@ -320,6 +329,28 @@ type raft struct {
 	maxUncommittedSize entryPayloadSize
 
 	trk tracker.ProgressTracker
+	// entriesReady contains all followers in StateReplicate to which there are
+	// any unsent entries, ready to be sent. It is used only in StateLeader.
+	//
+	// Invariant: entriesReady[id] == true iff for trk.Progress[id]:
+	//	- State == StateReplicate &&
+	//	- Next <= raftLog.lastIndex() &&
+	//	- !Inflights.Full()
+	//
+	// The exhaustive list of places where this needs to be updated:
+	//	- in reset() and becomeLeader(), when we switch to/from StateLeader
+	//	- on Progress.Become{Probe,Replicate,Snapshot}, when the replication flow
+	//    state flips to/from StateReplicate
+	//	- on appending entries to the log, when raftLog.lastIndex() grows
+	//	- on Progress.SentEntries, when we send some entries and bump Next
+	//	- on Progress.MaybeUpdate, when we receive a MsgApp ack that bumps Next
+	//	- in applyConfChange, when a peer is removed
+	//
+	// TODO(pav-kv): integrate this with tracker.Progress. Currently it is not
+	// trivial because Progress does not know about raftLog.
+	// TODO(pav-kv): move this out of raft, and integrate with Admission Control.
+	// This is one of the signals input into AC decisions.
+	entriesReady map[uint64]struct{}
 
 	state StateType
 
@@ -342,6 +373,10 @@ type raft struct {
 	// Messages in this list have the type MsgAppResp, MsgVoteResp, or
 	// MsgPreVoteResp. See the comment in raft.send for details.
 	msgsAfterAppend []pb.Message
+	// enableLazyAppends delays append message construction and sending until the
+	// RawNode is explicitly requested to do so. This provides control over the
+	// follower replication flows.
+	enableLazyAppends bool
 
 	// the leader id
 	lead uint64
@@ -425,6 +460,8 @@ func newRaft(c *Config) *raft {
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
 		trk:                         tracker.MakeProgressTracker(c.MaxInflightMsgs, c.MaxInflightBytes),
+		entriesReady:                map[uint64]struct{}{},
+		enableLazyAppends:           c.EnableLazyAppends,
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
@@ -579,6 +616,21 @@ func (r *raft) send(m pb.Message) {
 	}
 }
 
+// updateEntriesReady updates the entriesReady status for the given peer.
+func (r *raft) updateEntriesReady(id uint64, pr *tracker.Progress) {
+	if id == r.id || pr.State != tracker.StateReplicate {
+		return
+	}
+	isReady := pr.Next <= r.raftLog.lastIndex() && !pr.Inflights.Full()
+	if _, wasReady := r.entriesReady[id]; wasReady {
+		if !isReady {
+			delete(r.entriesReady, id)
+		}
+	} else if isReady {
+		r.entriesReady[id] = struct{}{}
+	}
+}
+
 // maybeSendAppend sends an append RPC with log entries (if any) that are not
 // yet known to be replicated in the given peer's log, as well as the current
 // commit index. Usually it sends a MsgApp message, but in some cases (e.g. the
@@ -593,10 +645,19 @@ func (r *raft) send(m pb.Message) {
 // if the follower log and commit index are up-to-date, the flow is paused (for
 // reasons like in-flight limits), or the message could not be constructed.
 func (r *raft) maybeSendAppend(to uint64) bool {
-	pr := r.trk.Progress[to]
+	return r.maybeSendAppendImpl(to, r.enableLazyAppends)
+}
 
+// maybeSendAppendImpl is the same as maybeSendAppend, but it supports the lazy
+// mode for StateReplicate, in which appends are not sent.
+func (r *raft) maybeSendAppendImpl(to uint64, lazy bool) bool {
+	pr := r.trk.Progress[to]
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
-	if !pr.ShouldSendMsgApp(last, commit) {
+	msgAppType := pr.ShouldSendMsgApp(last, commit)
+	if msgAppType == tracker.MsgAppNone {
+		return false
+	}
+	if lazy && pr.State == tracker.StateReplicate && msgAppType == tracker.MsgAppWithEntries {
 		return false
 	}
 
@@ -609,7 +670,7 @@ func (r *raft) maybeSendAppend(to uint64) bool {
 	}
 
 	var entries []pb.Entry
-	if pr.CanSendEntries(last) {
+	if msgAppType == tracker.MsgAppWithEntries {
 		if entries, err = r.raftLog.entries(pr.Next, r.maxMsgSize); err != nil {
 			// Send a snapshot if we failed to get the entries.
 			return r.maybeSendSnapshot(to, pr)
@@ -628,6 +689,7 @@ func (r *raft) maybeSendAppend(to uint64) bool {
 	})
 	pr.SentEntries(len(entries), uint64(payloadsSize(entries)))
 	pr.SentCommit(commit)
+	r.updateEntriesReady(to, pr)
 	return true
 }
 
@@ -654,6 +716,7 @@ func (r *raft) maybeSendSnapshot(to uint64, pr *tracker.Progress) bool {
 	r.logger.Debugf("%x [firstindex: %d, commit: %d] sent snapshot[index: %d, term: %d] to %x [%s]",
 		r.id, r.raftLog.firstIndex(), r.raftLog.committed, sindex, sterm, to, pr)
 	pr.BecomeSnapshot(sindex)
+	clear(r.entriesReady)
 	r.logger.Debugf("%x paused sending replication messages to %x [%s]", r.id, to, pr)
 
 	r.send(pb.Message{To: to, Type: pb.MsgSnap, Snapshot: &snapshot})
@@ -767,6 +830,7 @@ func (r *raft) reset(term uint64) {
 			pr.Match = r.raftLog.lastIndex()
 		}
 	})
+	clear(r.entriesReady)
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
@@ -789,6 +853,7 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 	}
 	// use latest "last" index after truncate/append
 	li = r.raftLog.append(es...)
+	r.trk.Visit(r.updateEntriesReady)
 	// The leader needs to self-ack the entries just appended once they have
 	// been durably persisted (since it doesn't send an MsgApp to itself). This
 	// response message will be added to msgsAfterAppend and delivered back to
@@ -1449,6 +1514,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
 				if pr.State == tracker.StateReplicate {
 					pr.BecomeProbe()
+					clear(r.entriesReady)
 				}
 				r.maybeSendAppend(m.From)
 			}
@@ -1483,6 +1549,7 @@ func stepLeader(r *raft, m pb.Message) error {
 				case pr.State == tracker.StateReplicate:
 					pr.Inflights.FreeLE(m.Index)
 				}
+				r.updateEntriesReady(m.From, pr)
 
 				if r.maybeCommit() {
 					r.bcastAppend()
@@ -1530,6 +1597,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		// there is huge probability that a MsgApp is lost.
 		if pr.State == tracker.StateReplicate {
 			pr.BecomeProbe()
+			clear(r.entriesReady)
 		}
 		r.logger.Debugf("%x failed to send message to %x because it is unreachable [%s]", r.id, m.From, pr)
 	case pb.MsgTransferLeader:
@@ -1874,6 +1942,11 @@ func (r *raft) promotable() bool {
 }
 
 func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
+	var ids []uint64
+	if r.state == StateLeader {
+		ids = maps.Keys(r.trk.Progress)
+	}
+
 	cfg, trk, err := func() (tracker.Config, tracker.ProgressMap, error) {
 		changer := confchange.Changer{
 			Tracker:   r.trk,
@@ -1890,6 +1963,15 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 	if err != nil {
 		// TODO(tbg): return the error to the caller.
 		panic(err)
+	}
+
+	// If we are in StateLeader, clear entriesReady for all nodes that were
+	// removed from the config.
+	for _, id := range ids {
+		if id == r.id || trk[id] != nil {
+			continue
+		}
+		delete(r.entriesReady, id)
 	}
 
 	return r.switchToConfig(cfg, trk)
