@@ -6296,6 +6296,129 @@ func TestOptimisticRangeDescriptorLookups(t *testing.T) {
 	})
 }
 
+// TestProxyRequestDoesNotSplit tests that a proxy request does not split even
+// if the proxy node would normally split the request . Spliting the request can
+// result in different errors from the two requests and requires complex
+// handling including retries to handle correctly. Also it is better to fail
+// fast and let the client update its cache and retry.
+func TestProxyRequestDoesNotSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	require.NoError(t, g.SetNodeDescriptor(newNodeDesc(1)))
+	require.NoError(t, g.SetNodeDescriptor(newNodeDesc(2)))
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
+	// Fill MockRangeDescriptorDB with two descriptors. The generation for each
+	// descriptor is 2 which is higher than the generation in the proxy request.
+	var descriptor1 = roachpb.RangeDescriptor{
+		RangeID:  2,
+		StartKey: keys.MustAddr(keyA),
+		EndKey:   keys.MustAddr(keyB),
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  1,
+				StoreID: 1,
+			},
+		},
+		Generation: 2,
+	}
+	var descriptor2 = roachpb.RangeDescriptor{
+		RangeID:  3,
+		StartKey: keys.MustAddr(keyB),
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				NodeID:  2,
+				StoreID: 2,
+			},
+		},
+		Generation: 2,
+	}
+	descDB := mockRangeDescriptorDBForDescs(
+		TestMetaRangeDescriptor,
+		descriptor1,
+		descriptor2,
+	)
+
+	// Track how many times the transport is called.
+	sendCount := atomic.Int64{}
+	var transportFn = func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		sendCount.Add(1)
+		return ba.CreateReply(), nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.MakeTestingAmbientContext(stopper.Tracer()),
+		Clock:             clock,
+		NodeDescs:         g,
+		Stopper:           stopper,
+		RangeDescriptorDB: descDB,
+		TransportFactory:  adaptSimpleTransport(transportFn),
+		Settings:          cluster.MakeTestingClusterSettings(),
+	}
+	ds := NewDistSender(cfg)
+
+	// Send without the proxy header. This request will be split into two and
+	// sent through the transport twice, once to each store.
+	{
+		ba := &kvpb.BatchRequest{}
+		ba.Txn = &roachpb.Transaction{Name: "test"}
+		ba.Add(kvpb.NewGet(keyA), kvpb.NewGet(keyB))
+		_, pErr := ds.Send(ctx, ba)
+		require.NoError(t, pErr.GoError())
+		rangeInfo, err := ds.rangeCache.Lookup(ctx, keys.MustAddr(keyA))
+		require.NoError(t, err)
+		require.Equal(t, roachpb.RangeGeneration(2), rangeInfo.Desc.Generation)
+		// Validate it sent the request to both stores.
+		require.Equal(t, int64(2), sendCount.Load())
+	}
+
+	// Reset the send count before the next request.
+	sendCount.Store(0)
+
+	// Send the identical request again, but this time with a proxy header with
+	// a stale range descriptor. Since it is a proxy request we only send to the
+	// header in the request.
+	{
+		ba := &kvpb.BatchRequest{}
+		ba.Txn = &roachpb.Transaction{Name: "test"}
+		ba.Add(kvpb.NewGet(keyA), kvpb.NewGet(keyB))
+		proxyDesc := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
+		ba.ProxyRangeInfo = &roachpb.RangeInfo{
+			Desc: roachpb.RangeDescriptor{
+				RangeID:          roachpb.RangeID(1),
+				Generation:       1,
+				StartKey:         keys.MustAddr(keyA),
+				EndKey:           roachpb.RKeyMax,
+				InternalReplicas: []roachpb.ReplicaDescriptor{proxyDesc},
+			},
+			Lease: roachpb.Lease{Replica: proxyDesc},
+		}
+
+		// Normally this request would be split to the two descriptors, but with the
+		// proxy range info, it will only go to the proxy store.
+		_, pErr := ds.Send(ctx, ba)
+		require.NoError(t, pErr.GoError())
+
+		rangeInfo, err := ds.rangeCache.Lookup(ctx, keys.MustAddr(keyA))
+		require.NoError(t, err)
+		// Validate the cache still has the correct range descriptor.
+		require.Equal(t, roachpb.RangeGeneration(2), rangeInfo.Desc.Generation)
+		// Validate the request was not split and only sent to one store.
+		require.Equal(t, int64(1), sendCount.Load())
+	}
+}
+
 type mockFirstRangeProvider struct {
 	d *roachpb.RangeDescriptor
 }
