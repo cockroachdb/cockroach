@@ -11,9 +11,12 @@
 package rpc
 
 import (
+	"strings"
+
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 var (
@@ -164,6 +167,11 @@ type Metrics struct {
 	ConnectionBytesSent           *aggmetric.AggCounter
 	ConnectionBytesRecv           *aggmetric.AggCounter
 	ConnectionAvgRoundTripLatency *aggmetric.AggGauge
+	mu                            struct {
+		syncutil.Mutex
+		// peerMetrics is a map of peerKey to peerMetrics.
+		peerMetrics map[string]peerMetrics
+	}
 }
 
 // peerMetrics are metrics that are kept on a per-peer basis.
@@ -179,6 +187,8 @@ type peerMetrics struct {
 	//
 	// See TestMetricsRelease.
 	release func()
+
+	registeredCount int
 
 	// The invariant is that sum(ConnectionHealthy, ConnectionUnhealthy,
 	// ConnectionInactive) == 1 for any connection that run() has been called
@@ -225,52 +235,73 @@ type peerMetrics struct {
 
 func (m *Metrics) acquire(k peerKey) peerMetrics {
 	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String()}
-
-	pm :=
-		peerMetrics{
-			ConnectionHealthy:      m.ConnectionHealthy.AddChild(labelVals...),
-			ConnectionUnhealthy:    m.ConnectionUnhealthy.AddChild(labelVals...),
-			ConnectionInactive:     m.ConnectionInactive.AddChild(labelVals...),
-			ConnectionHealthyFor:   m.ConnectionHealthyFor.AddChild(labelVals...),
-			ConnectionUnhealthyFor: m.ConnectionUnhealthyFor.AddChild(labelVals...),
-			ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
-			ConnectionFailures:     m.ConnectionFailures.AddChild(labelVals...),
-			AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
-			ConnectionConnected:    m.ConnectionConnected.AddChild(labelVals...),
-			ConnectionBytesSent:    m.ConnectionBytesSent.AddChild(labelVals...),
-			ConnectionBytesRecv:    m.ConnectionBytesRecv.AddChild(labelVals...),
-
-			// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
-			// and operates on a ~60s decay rate.
-			//
-			// Note that this is *not* thread safe.
-			roundTripLatency: &ewma.SimpleEWMA{},
-		}
-	pm.release = func() {
-		// All the gauges should be zero now, or the aggregate will be off forever.
-		// Note that this isn't true for counters, as the aggregate *should* track
-		// the count of all children that ever existed, even if they have been
-		// released. (Releasing a peer doesn't "undo" past heartbeats).
-		pm.ConnectionHealthy.Update(0)
-		pm.ConnectionUnhealthy.Update(0)
-		pm.ConnectionInactive.Update(0)
-		pm.ConnectionHealthyFor.Update(0)
-		pm.ConnectionUnhealthyFor.Update(0)
-		pm.AvgRoundTripLatency.Update(0)
-		pm.roundTripLatency.Set(0)
-		pm.ConnectionConnected.Update(0)
-
-		pm.ConnectionHealthy.Unlink()
-		pm.ConnectionUnhealthy.Unlink()
-		pm.ConnectionInactive.Unlink()
-		pm.ConnectionHealthyFor.Unlink()
-		pm.ConnectionUnhealthyFor.Unlink()
-		pm.ConnectionHeartbeats.Unlink()
-		pm.ConnectionFailures.Unlink()
-		pm.AvgRoundTripLatency.Unlink()
-		pm.ConnectionConnected.Unlink()
-		pm.ConnectionBytesSent.Unlink()
-		pm.ConnectionBytesRecv.Unlink()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Concatenate the label values into a single string.
+	if m.mu.peerMetrics == nil {
+		m.mu.peerMetrics = make(map[string]peerMetrics)
 	}
+	labelKey := strings.Join(labelVals, ",")
+
+	pm, ok := m.mu.peerMetrics[labelKey]
+	if !ok {
+		pm =
+			peerMetrics{
+				ConnectionHealthy:      m.ConnectionHealthy.AddChild(labelVals...),
+				ConnectionUnhealthy:    m.ConnectionUnhealthy.AddChild(labelVals...),
+				ConnectionInactive:     m.ConnectionInactive.AddChild(labelVals...),
+				ConnectionHealthyFor:   m.ConnectionHealthyFor.AddChild(labelVals...),
+				ConnectionUnhealthyFor: m.ConnectionUnhealthyFor.AddChild(labelVals...),
+				ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
+				ConnectionFailures:     m.ConnectionFailures.AddChild(labelVals...),
+				AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
+				ConnectionConnected:    m.ConnectionConnected.AddChild(labelVals...),
+				ConnectionBytesSent:    m.ConnectionBytesSent.AddChild(labelVals...),
+				ConnectionBytesRecv:    m.ConnectionBytesRecv.AddChild(labelVals...),
+
+				// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
+				// and operates on a ~60s decay rate.
+				//
+				// Note that this is *not* thread safe.
+				roundTripLatency: &ewma.SimpleEWMA{},
+			}
+		m.mu.peerMetrics[labelKey] = pm
+		pm.release = func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+
+			pm.registeredCount -= 1
+			if pm.registeredCount > 0 {
+				return
+			}
+			// All the gauges should be zero now, or the aggregate will be off forever.
+			// Note that this isn't true for counters, as the aggregate *should* track
+			// the count of all children that ever existed, even if they have been
+			// released. (Releasing a peer doesn't "undo" past heartbeats).
+			pm.ConnectionHealthy.Update(0)
+			pm.ConnectionUnhealthy.Update(0)
+			pm.ConnectionInactive.Update(0)
+			pm.ConnectionHealthyFor.Update(0)
+			pm.ConnectionUnhealthyFor.Update(0)
+			pm.AvgRoundTripLatency.Update(0)
+			pm.roundTripLatency.Set(0)
+			pm.ConnectionConnected.Update(0)
+
+			pm.ConnectionHealthy.Unlink()
+			pm.ConnectionUnhealthy.Unlink()
+			pm.ConnectionInactive.Unlink()
+			pm.ConnectionHealthyFor.Unlink()
+			pm.ConnectionUnhealthyFor.Unlink()
+			pm.ConnectionHeartbeats.Unlink()
+			pm.ConnectionFailures.Unlink()
+			pm.AvgRoundTripLatency.Unlink()
+			pm.ConnectionConnected.Unlink()
+			pm.ConnectionBytesSent.Unlink()
+			pm.ConnectionBytesRecv.Unlink()
+
+			delete(m.mu.peerMetrics, labelKey)
+		}
+	}
+	pm.registeredCount++
 	return pm
 }
