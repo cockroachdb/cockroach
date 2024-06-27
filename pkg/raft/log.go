@@ -106,8 +106,6 @@ func (l *raftLog) String() string {
 // maybeAppend appends the given log slice to the log. Returns false if the
 // slice can not be appended (because it is out of bounds, or a.prev does not
 // match the log).
-//
-// TODO(pav-kv): merge maybeAppend and append into one method.
 func (l *raftLog) maybeAppend(a logSlice) bool {
 	match, ok := l.findConflict(a)
 	if !ok {
@@ -117,17 +115,9 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 	// NB: prev.index <= match.index <= a.lastIndex(), so the sub-slicing is safe.
 	a.entries = a.entries[match.index-a.prev.index:]
 	a.prev = match
-	return l.append(a)
-}
 
-// append adds the given log slice to the end of the log, and truncates the log
-// beyond the logSlice.lastIndex() if the logSlice has a higher term than the
-// last accepted term.
-//
-// TODO(pav-kv): the term logic needs to be implemented.
-func (l *raftLog) append(a logSlice) {
 	if len(a.entries) == 0 {
-		return
+		return true
 	}
 	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
@@ -135,6 +125,7 @@ func (l *raftLog) append(a logSlice) {
 	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
 	// bookkeeping in the unstable structure.
 	l.unstable.truncateAndAppend(a.entries)
+	return true
 }
 
 // findConflict finds the last entry in the given log slice that matches the
@@ -153,6 +144,10 @@ func (l *raftLog) append(a logSlice) {
 // entry has a mismatching entryID.term. In this case an append request can not
 // proceed.
 func (l *raftLog) findConflict(s logSlice) (entryID, bool) {
+	// Fast-path for the appends at the very end of the log.
+	if s.prev == l.lastEntryID() {
+		return s.prev, true
+	}
 	if !l.matchTerm(s.prev) {
 		return entryID{}, false
 	}
