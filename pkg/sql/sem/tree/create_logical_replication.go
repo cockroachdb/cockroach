@@ -49,8 +49,9 @@ func (node *CreateLogicalReplicationStream) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Into)
 
 	if !node.Options.IsDefault() {
-		ctx.WriteString(" WITH ")
+		ctx.WriteString(" WITH OPTIONS (")
 		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
