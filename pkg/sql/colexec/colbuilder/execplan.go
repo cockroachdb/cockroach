@@ -68,9 +68,9 @@ func checkNumIn(inputs []colexecargs.OpWithMetaInfo, numIn int) error {
 func wrapRowSources(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
+	args *colexecargs.NewColOperatorArgs,
 	inputs []colexecargs.OpWithMetaInfo,
 	inputTypes [][]*types.T,
-	monitorRegistry *colexecargs.MonitorRegistry,
 	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 	factory coldata.ColumnFactory,
@@ -88,10 +88,8 @@ func wrapRowSources(
 			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
-			// We need to create a separate memory account for the materializer.
-			materializerMemAcc := monitorRegistry.NewStreamingMemAccount(flowCtx)
 			toWrapInput := colexec.NewMaterializer(
-				colmem.NewAllocator(ctx, materializerMemAcc, factory),
+				getStreamingMemAccount(args, flowCtx),
 				flowCtx,
 				processorID,
 				inputs[i],
@@ -117,13 +115,12 @@ func wrapRowSources(
 	if !isProcessor {
 		return nil, errors.AssertionFailedf("unexpectedly %T is not an execinfra.Processor", toWrap)
 	}
-	batchAllocator := colmem.NewAllocator(ctx, monitorRegistry.NewStreamingMemAccount(flowCtx), factory)
-	metadataAllocator := colmem.NewAllocator(ctx, monitorRegistry.NewStreamingMemAccount(flowCtx), factory)
+	batchAllocator := colmem.NewAllocator(ctx, args.MonitorRegistry.NewStreamingMemAccount(flowCtx), factory)
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
-		c = colexec.NewStreamingColumnarizer(batchAllocator, metadataAllocator, flowCtx, processorID, toWrap)
+		c = colexec.NewStreamingColumnarizer(batchAllocator, getStreamingMemAccount(args, flowCtx), flowCtx, processorID, toWrap)
 	} else {
-		c = colexec.NewBufferingColumnarizer(batchAllocator, metadataAllocator, flowCtx, processorID, toWrap)
+		c = colexec.NewBufferingColumnarizer(batchAllocator, getStreamingMemAccount(args, flowCtx), flowCtx, processorID, toWrap)
 	}
 	return c, nil
 }
@@ -530,9 +527,9 @@ func (r opResult) createAndWrapRowSource(
 	c, err := wrapRowSources(
 		ctx,
 		flowCtx,
+		args,
 		inputs,
 		inputTypes,
-		args.MonitorRegistry,
 		processorID,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
 			// We provide a slice with a single nil as 'outputs' parameter
