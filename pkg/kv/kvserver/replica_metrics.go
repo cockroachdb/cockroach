@@ -127,7 +127,7 @@ type calcReplicaMetricsInput struct {
 	vitalityMap              livenesspb.NodeVitalityMap
 	clusterNodes             int
 	desc                     *roachpb.RangeDescriptor
-	raftStatus               *raftSparseStatus
+	raftStatus               *raft.SparseStatus
 	leaseStatus              kvserverpb.LeaseStatus
 	storeID                  roachpb.StoreID
 	storeAttrs, nodeAttrs    roachpb.Attributes
@@ -304,7 +304,7 @@ func calcLiveReplicas(
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raftSparseStatus,
+	raftStatus *raft.SparseStatus,
 	desc *roachpb.RangeDescriptor,
 	vitalityMap livenesspb.NodeVitalityMap,
 ) int64 {
