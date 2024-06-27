@@ -311,9 +311,12 @@ func TestLogMaybeAppend(t *testing.T) {
 					require.True(t, tt.wpanic)
 				}
 			}()
-			glasti, gappend := raftLog.maybeAppend(app, tt.committed)
+			glasti, gappend := raftLog.maybeAppend(app)
 			require.Equal(t, tt.wlasti, glasti)
 			require.Equal(t, tt.wappend, gappend)
+			if gappend {
+				raftLog.commitTo(min(glasti, tt.committed))
+			}
 			require.Equal(t, tt.wcommit, raftLog.committed)
 			if gappend && len(tt.ents) != 0 {
 				gents, err := raftLog.slice(raftLog.lastIndex()-uint64(len(tt.ents))+1, raftLog.lastIndex()+1, noLimit)
