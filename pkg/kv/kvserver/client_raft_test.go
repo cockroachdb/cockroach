@@ -3387,7 +3387,7 @@ func TestReplicaGCRace(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		status := repl.RaftStatus()
 		progressByID := status.Progress
-		progress, ok := progressByID[uint64(toReplicaDesc.ReplicaID)]
+		progress, ok := progressByID[raftpb.PeerID(toReplicaDesc.ReplicaID)]
 		if !ok {
 			return errors.Errorf("%+v does not yet contain %s", progressByID, toReplicaDesc)
 		}
@@ -3837,8 +3837,8 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		ToReplica:   replica1,
 		FromReplica: replica0,
 		Message: raftpb.Message{
-			From: uint64(replica0.ReplicaID),
-			To:   uint64(replica1.ReplicaID),
+			From: raftpb.PeerID(replica0.ReplicaID),
+			To:   raftpb.PeerID(replica1.ReplicaID),
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
@@ -4186,7 +4186,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		if status := repl0.RaftStatus(); status == nil {
 			return errors.New("raft status is nil")
-		} else if a, e := status.Lead, uint64(rd1.ReplicaID); a != e {
+		} else if a, e := status.Lead, raftpb.PeerID(rd1.ReplicaID); a != e {
 			return errors.Errorf("expected raft leader be %d; got %d", e, a)
 		}
 		return nil

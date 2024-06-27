@@ -1765,8 +1765,8 @@ func SendEmptySnapshot(
 		ToReplica:   to,
 		Message: raftpb.Message{
 			Type:     raftpb.MsgSnap,
-			To:       uint64(to.ReplicaID),
-			From:     uint64(from.ReplicaID),
+			To:       raftpb.PeerID(to.ReplicaID),
+			From:     raftpb.PeerID(from.ReplicaID),
 			Term:     hs.Term,
 			Snapshot: &outgoingSnap.RaftSnap,
 		},

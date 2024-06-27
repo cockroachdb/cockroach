@@ -25,8 +25,8 @@ import (
 func (cs ConfState) Equivalent(cs2 ConfState) error {
 	cs1 := cs
 	orig1, orig2 := cs1, cs2
-	s := func(sl *[]uint64) {
-		*sl = append([]uint64(nil), *sl...)
+	s := func(sl *[]PeerID) {
+		*sl = append([]PeerID(nil), *sl...)
 		sort.Slice(*sl, func(i, j int) bool { return (*sl)[i] < (*sl)[j] })
 	}
 

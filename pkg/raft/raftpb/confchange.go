@@ -145,7 +145,7 @@ func ConfChangesFromString(s string) ([]ConfChangeSingle, error) {
 		if err != nil {
 			return nil, err
 		}
-		cc.NodeID = id
+		cc.NodeID = PeerID(id)
 		ccs = append(ccs, cc)
 	}
 	return ccs, nil
