@@ -490,7 +490,7 @@ func (s *dummyStream) Disconnect(err *kvpb.Error) {
 	s.muxer.DisconnectRangefeedWithError(s.streamID)
 }
 
-func (s *dummyStream) RegisterCleanUp(f func()) {
+func (s *dummyStream) RegisterRangefeedCleanUp(f func()) {
 	s.muxer.RegisterRangefeedCleanUp(s.streamID, f)
 }
 

@@ -91,7 +91,7 @@ func (s *testStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
 }
 
-func (s *testStream) RegisterCleanUp(f func()) {
+func (s *testStream) RegisterRangefeedCleanUp(f func()) {
 }
 
 func (s *testStream) Err(t *testing.T) error {
