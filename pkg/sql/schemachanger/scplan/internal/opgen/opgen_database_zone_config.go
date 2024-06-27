@@ -24,7 +24,6 @@ func init() {
 					return &scop.AddDatabaseZoneConfig{
 						DatabaseID: this.DatabaseID,
 						ZoneConfig: this.ZoneConfig,
-						SeqNum:     this.SeqNum,
 					}
 				}),
 			),
