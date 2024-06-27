@@ -2638,8 +2638,15 @@ func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, 
 func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
 	var onType string
 
-	// COMMENT ON TYPE is only implemented in the declarative schema changer.
-	if og.useDeclarativeSchemaChanger {
+	// COMMENT ON TYPE is only implemented in the declarative schema changer in v24.2.
+	commentOnTypeNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.V24_2.Version())
+	if err != nil {
+		return nil, err
+	}
+	if og.useDeclarativeSchemaChanger && !commentOnTypeNotSupported {
 		onType = `UNION ALL
 	SELECT 'TYPE ' || quote_ident(schema) || '.' || quote_ident(name) FROM [SHOW TYPES]`
 	}
