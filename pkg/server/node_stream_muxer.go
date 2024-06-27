@@ -35,6 +35,12 @@ type severStreamSender interface {
 
 var _ severStreamSender = (*lockedMuxStream)(nil)
 
+type muxError struct {
+	streamID int64
+	rangeID  roachpb.RangeID
+	err      *kvpb.Error
+}
+
 type streamMuxer struct {
 	// stream is the server stream to which the muxer sends events. Note that the
 	// stream is a locked mux stream, so it is safe for concurrent Sends.
@@ -59,7 +65,7 @@ type streamMuxer struct {
 
 		// muxErrors is a list of errors that need to be sent to the client to
 		// signal rangefeed completion.
-		muxErrors []*kvpb.MuxRangeFeedEvent
+		muxErrors []*muxError
 	}
 }
 
@@ -108,7 +114,7 @@ func (s *streamMuxer) send(
 // appendMuxError appends the mux error to the muxer's error slice. This slice
 // is processed by streamMuxer.run and sent to the client. We want to avoid
 // blocking here.
-func (s *streamMuxer) appendMuxError(ev *kvpb.MuxRangeFeedEvent) {
+func (s *streamMuxer) appendMuxError(ev *muxError) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.muxErrors = append(s.mu.muxErrors, ev)
@@ -131,24 +137,17 @@ func (s *streamMuxer) disconnectRangefeedWithError(
 		// Canceling the context will cause the registration to disconnect unless
 		// registration is not set up yet in which case it will be a no-op.
 		f()
-
-		clientErrorEvent := transformToClientErr(err)
-		ev := &kvpb.MuxRangeFeedEvent{
-			StreamID: streamID,
-			RangeID:  rangeID,
-		}
-		ev.SetValue(&kvpb.RangeFeedError{
-			Error: *clientErrorEvent,
-		})
-
-		s.appendMuxError(ev)
-		s.metrics.decrementRangefeedCounter()
 	}
+	s.appendMuxError(&muxError{
+		err:      err,
+		streamID: streamID,
+		rangeID:  rangeID,
+	})
 }
 
 // detachMuxErrors returns mux errors that need to be sent to the client. The
 // caller should make sure to send these errors to the client.
-func (s *streamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
+func (s *streamMuxer) detachMuxErrors() []*muxError {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	toSend := s.mu.muxErrors
@@ -163,9 +162,18 @@ func (s *streamMuxer) run(ctx context.Context, stopper *stop.Stopper) {
 	for {
 		select {
 		case <-s.notifyCompletion:
-			toSend := s.detachMuxErrors()
-			for _, clientErr := range toSend {
-				if err := s.sender.Send(clientErr); err != nil {
+			muxErrors := s.detachMuxErrors()
+			for _, err := range muxErrors {
+				clientErr := transformToClientErr(err.err)
+				ev := &kvpb.MuxRangeFeedEvent{
+					StreamID: err.streamID,
+					RangeID:  err.rangeID,
+				}
+				ev.SetValue(&kvpb.RangeFeedError{
+					Error: *clientErr,
+				})
+				s.metrics.decrementRangefeedCounter()
+				if err := s.sender.Send(ev); err != nil {
 					return
 				}
 			}
