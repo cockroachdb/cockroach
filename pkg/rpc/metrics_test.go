@@ -51,7 +51,7 @@ func TestMetricsRelease(t *testing.T) {
 		return metricFields
 	}
 
-	const expectedCount = 8
+	const expectedCount = 11
 	m := makeMetrics()
 	// Verify that each metric doesn't have any children at first. Verify the
 	// number of metric fields, as a sanity check (to be modified if fields are
