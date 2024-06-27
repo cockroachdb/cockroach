@@ -154,8 +154,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 		jobAID jobspb.JobID
 		jobBID jobspb.JobID
 	)
-	dbA.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", dbBURL.String(), `ARRAY['tab']`)).Scan(&jobAID)
-	dbB.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", dbAURL.String(), `ARRAY['tab']`)).Scan(&jobBID)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM $1 ON TABLE tab INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM $1 ON TABLE tab INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
 
 	now := server.Server(0).Clock().Now()
 	t.Logf("waiting for replication job %d", jobAID)
@@ -242,7 +242,7 @@ family f2(other_payload, v2))
 	defer cleanup()
 
 	var jobBID jobspb.JobID
-	serverBSQL.QueryRow(t, fmt.Sprintf("SELECT crdb_internal.start_logical_replication_job('%s', %s)", serverAURL.String(), `ARRAY['tab']`)).Scan(&jobBID)
+	serverBSQL.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM $1 ON TABLE tab INTO TABLE tab", serverAURL.String()).Scan(&jobBID)
 
 	WaitUntilReplicatedTime(t, serverA.Server(0).Clock().Now(), serverBSQL, jobBID)
 	serverASQL.Exec(t, "INSERT INTO tab(pk, payload, other_payload) VALUES (2, 'potato', 'ruroh2')")
@@ -319,10 +319,10 @@ func TestRandomTables(t *testing.T) {
 	defer cleanup()
 
 	streamStartStmt := fmt.Sprintf(
-		"SELECT crdb_internal.start_logical_replication_job('%s', ARRAY['%s'])",
-		dbAURL.String(), tableName)
+		"CREATE LOGICAL REPLICATION STREAM FROM $1 ON TABLE %s INTO TABLE %s",
+		tableName, tableName)
 	var jobBID jobspb.JobID
-	runnerB.QueryRow(t, streamStartStmt).Scan(&jobBID)
+	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
 	t.Logf("waiting for replication job %d", jobBID)
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
@@ -396,10 +396,10 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 				sqlA, tableName, numInserts, nil)
 			require.NoError(t, err)
 			streamStartStmt := fmt.Sprintf(
-				"SELECT crdb_internal.start_logical_replication_job('%s', ARRAY['%s'])",
-				dbAURL.String(), tableName)
+				"CREATE LOGICAL REPLICATION STREAM FROM $1 ON TABLE %s INTO TABLE %s",
+				tableName, tableName)
 			var jobBID jobspb.JobID
-			runnerB.QueryRow(t, streamStartStmt).Scan(&jobBID)
+			runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 
 			t.Logf("waiting for replication job %d", jobBID)
 			WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
