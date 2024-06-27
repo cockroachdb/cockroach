@@ -185,6 +185,10 @@ func (s *batchingSink) EmitRow(
 ) error {
 	s.metrics.recordMessageSize(int64(len(key) + len(value)))
 
+	if len(key) == 0 {
+		fmt.Printf("bs had empty key: %s\n", value)
+	}
+
 	payload := newRowEvent()
 	payload.key = key
 	payload.val = value

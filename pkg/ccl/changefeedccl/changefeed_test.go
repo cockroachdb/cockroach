@@ -9,6 +9,7 @@
 package changefeedccl
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
@@ -3683,6 +3684,7 @@ func TestChangefeedOutputTopics(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE ☃ (i INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO ☃ VALUES (0)`)
 
+		// TODO: here?
 		tg := newTeeGroup()
 		feedCh := make(chan *sarama.ProducerMessage, 1024)
 		wrapSink := func(s Sink) Sink {
@@ -7615,8 +7617,16 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 						if err != nil {
 							return err
 						}
-						if len(m.Resolved) > 0 { // Ignore resolved messages.
+						// Ignore resolved messages. Unfortunately, initial backfill messages will get treated as resolved by the framework because
+						// they have nil keys. It will put the contents of m.Value in m.Resolved.
+						// (TODO: why do they have nil/len 0 keys? surely that's bad for kafka if they all go to partition 0..).
+						if len(m.Resolved) > 0 && !bytes.Contains(m.Resolved, []byte(",")) {
 							continue
+						} else {
+							// Undo the mangling done by the test framework
+							if len(m.Value) == 0 && len(m.Resolved) > 0 && len(m.Key) == 0 {
+								m.Value = m.Resolved
+							}
 						}
 						actualMessages = append(actualMessages, string(m.Value))
 					}
