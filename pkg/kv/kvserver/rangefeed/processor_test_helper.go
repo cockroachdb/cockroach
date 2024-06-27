@@ -458,7 +458,7 @@ func newTestSingleFeedStream(
 	muxer *StreamMuxer, streamID int64, serverStream *testServerStream,
 ) *testSingleFeedStream {
 	ctx, done := context.WithCancel(context.Background())
-	muxer.AddStream(streamID, done)
+	muxer.AddStream(streamID, 1, done)
 	doneC := make(chan error, 1)
 	serverStream.registerDone(streamID, doneC)
 	return &testSingleFeedStream{ctx: ctx, streamID: streamID, rangeID: 1, muxer: muxer, doneC: doneC}

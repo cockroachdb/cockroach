@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -63,9 +64,18 @@ type StreamMuxer struct {
 		cleanUpIDs []int64
 	}
 }
+type streamInfo struct {
+	rangeID roachpb.RangeID
+	cancel  context.CancelFunc
+}
 
-func (s *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
-	s.activeStreams.Store(streamID, cancel)
+func (s *StreamMuxer) AddStream(
+	streamID int64, rangeID roachpb.RangeID, cancel context.CancelFunc,
+) {
+	s.activeStreams.Store(streamID, &streamInfo{
+		rangeID: rangeID,
+		cancel:  cancel,
+	})
 	s.metrics.IncrementRangefeedCounter()
 }
 
@@ -94,6 +104,7 @@ func NewStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) 
 	}
 }
 
+// Note that the cleanup function has to be thread safe.
 func (s *StreamMuxer) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
 	s.rangefeedCleanUps.Store(streamID, cleanUp)
 }
@@ -143,11 +154,11 @@ func (s *StreamMuxer) appendCleanUp(streamID int64) {
 func (s *StreamMuxer) DisconnectRangefeedWithError(
 	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
 ) {
-	if cancelFunc, ok := s.activeStreams.LoadAndDelete(streamID); ok {
+	if stream, ok := s.activeStreams.LoadAndDelete(streamID); ok {
 		// Canceling the context will cause the registration to disconnect unless
 		// registration is not set up yet in which case it will be a no-op.
-		if f, ok := cancelFunc.(context.CancelFunc); ok {
-			f()
+		if f, ok := stream.(*streamInfo); ok {
+			f.cancel()
 		}
 
 		clientErrorEvent := transformToClientErr(err)
@@ -186,6 +197,48 @@ func (s *StreamMuxer) detachCleanUpIDs() []int64 {
 	return toCleanUp
 }
 
+// Note that since we are already in the muxer goroutine, we are okay with
+// blocking and calling rangefeed clean up.
+func (s *StreamMuxer) DisconnectAllWithErr(err error) {
+	s.activeStreams.Range(func(key, value interface{}) bool {
+		defer func() {
+			s.activeStreams.Delete(key)
+		}()
+		streamID, ok := key.(int64)
+		if !ok {
+			log.Errorf(context.Background(), "unexpected streamID type %T", key)
+			return true
+		}
+		info, ok := value.(*streamInfo)
+		if !ok {
+			panic("kjkdjsk")
+			log.Errorf(context.Background(), "unexpected streamID type %T", key)
+			return true
+		}
+		info.cancel()
+		if err == nil {
+			return true
+		}
+		ev := &kvpb.MuxRangeFeedEvent{
+			StreamID: streamID,
+			RangeID:  info.rangeID,
+		}
+		ev.SetValue(&kvpb.RangeFeedError{
+			Error: *kvpb.NewError(err),
+		})
+		_ = s.sender.Send(ev) // check if we should handle this err
+		return true
+	})
+
+	s.rangefeedCleanUps.Range(func(key, value interface{}) bool {
+		// TODO(wenyihu6): think about whether this is okay to call before r.disconnect
+		cleanUp := value.(func())
+		cleanUp()
+		s.rangefeedCleanUps.Delete(key)
+		return true
+	})
+}
+
 // If run returns (due to context cancellation, broken stream, or quiescing),
 // there is nothing we could do. We expect registrations to receive the same
 // error and shut streams down.
@@ -198,6 +251,7 @@ func (s *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 				// have another slice to process disconnect signals can deadlock here in
 				// callback and also disconnected signal
 				if err := s.sender.Send(clientErr); err != nil {
+					s.DisconnectAllWithErr(err)
 					return
 				}
 			}
@@ -211,8 +265,10 @@ func (s *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 				}
 			}
 		case <-ctx.Done():
+			s.DisconnectAllWithErr(ctx.Err())
 			return
 		case <-stopper.ShouldQuiesce():
+			s.DisconnectAllWithErr(nil)
 			// TODO(wenyihu6): should we cancel context here?
 			return
 		}
