@@ -38,6 +38,15 @@ func TestQueryForTable(t *testing.T) {
 			customQueryUnredacted: "SELECT * FROM table_with_custom_queries",
 			customQueryRedacted:   "SELECT a, b, c FROM table_with_custom_queries",
 		},
+		"table_with_non_sensitive_cols_and_custom_unredacted_query": {
+			nonSensitiveCols:      NonSensitiveColumns{"x", "crdb_internal.pretty_key(y, 0) as y", "z"},
+			customQueryUnredacted: "SELECT x, crdb_internal.pretty_key(y, 0) as y, z FROM table_with_non_sensitive_cols_and_custom_unredacted_query",
+		},
+		"table_with_non_sensitive_cols_and_custom_unredacted_query_with_fallback": {
+			nonSensitiveCols:              NonSensitiveColumns{"x", "crdb_internal.pretty_key(y, 0) as y", "z"},
+			customQueryUnredacted:         "SELECT x, crdb_internal.pretty_key(y, 0) as y, z FROM table_with_non_sensitive_cols_and_custom_unredacted_query_with_fallback",
+			customQueryUnredactedFallback: "SELECT x FROM table_with_non_sensitive_cols_and_custom_unredacted_query_with_fallback",
+		},
 	}
 
 	t.Run("errors if no table config present in registry", func(t *testing.T) {
@@ -49,7 +58,7 @@ func TestQueryForTable(t *testing.T) {
 
 	t.Run("produces `TABLE` query when unredacted with no custom query", func(t *testing.T) {
 		table := "table_with_sensitive_cols"
-		expected := "TABLE table_with_sensitive_cols"
+		expected := TableQuery{query: "TABLE table_with_sensitive_cols"}
 		actual, err := reg.QueryForTable(table, false /* redact */)
 		assert.NoError(t, err)
 		assert.Equal(t, expected, actual)
@@ -57,7 +66,7 @@ func TestQueryForTable(t *testing.T) {
 
 	t.Run("produces custom query when unredacted and custom query supplied", func(t *testing.T) {
 		table := "table_with_custom_queries"
-		expected := "SELECT * FROM table_with_custom_queries"
+		expected := TableQuery{query: "SELECT * FROM table_with_custom_queries"}
 		actual, err := reg.QueryForTable(table, false /* redact */)
 		assert.NoError(t, err)
 		assert.Equal(t, expected, actual)
@@ -65,7 +74,7 @@ func TestQueryForTable(t *testing.T) {
 
 	t.Run("produces query with only non-sensitive columns when redacted and no custom query", func(t *testing.T) {
 		table := "table_with_sensitive_cols"
-		expected := `SELECT x, y, z FROM table_with_sensitive_cols`
+		expected := TableQuery{query: `SELECT x, y, z FROM table_with_sensitive_cols`}
 		actual, err := reg.QueryForTable(table, true /* redact */)
 		assert.NoError(t, err)
 		assert.Equal(t, expected, actual)
@@ -73,7 +82,7 @@ func TestQueryForTable(t *testing.T) {
 
 	t.Run("produces custom when redacted and custom query supplied", func(t *testing.T) {
 		table := "table_with_custom_queries"
-		expected := "SELECT a, b, c FROM table_with_custom_queries"
+		expected := TableQuery{query: "SELECT a, b, c FROM table_with_custom_queries"}
 		actual, err := reg.QueryForTable(table, true /* redact */)
 		assert.NoError(t, err)
 		assert.Equal(t, expected, actual)
@@ -85,6 +94,34 @@ func TestQueryForTable(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "no non-sensitive columns defined")
 		assert.Empty(t, actual)
+	})
+
+	t.Run("produces query when a combination of nonSensitiveCols and customQueryUnredacted is supplied", func(t *testing.T) {
+		table := "table_with_non_sensitive_cols_and_custom_unredacted_query"
+		expected := TableQuery{query: "SELECT x, crdb_internal.pretty_key(y, 0) as y, z FROM table_with_non_sensitive_cols_and_custom_unredacted_query"}
+
+		t.Run("with redact flag", func(t *testing.T) {
+			actual, err := reg.QueryForTable(table, true /* redact */)
+			assert.NoError(t, err)
+			assert.Equal(t, expected, actual)
+		})
+
+		t.Run("without redact flag", func(t *testing.T) {
+			actual, err := reg.QueryForTable(table, false /* redact */)
+			assert.NoError(t, err)
+			assert.Equal(t, expected, actual)
+		})
+	})
+
+	t.Run("with fallback query", func(t *testing.T) {
+		table := "table_with_non_sensitive_cols_and_custom_unredacted_query_with_fallback"
+		expected := TableQuery{
+			query:    "SELECT x, crdb_internal.pretty_key(y, 0) as y, z FROM table_with_non_sensitive_cols_and_custom_unredacted_query_with_fallback",
+			fallback: "SELECT x FROM table_with_non_sensitive_cols_and_custom_unredacted_query_with_fallback",
+		}
+		actual, err := reg.QueryForTable(table, false /* redact */)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, actual)
 	})
 }
 
@@ -104,8 +141,8 @@ func TestNoForbiddenSystemTablesInDebugZip(t *testing.T) {
 		"system.transaction_activity",
 	}
 	for _, forbiddenTable := range forbiddenSysTables {
-		query, err := zipSystemTables.QueryForTable(forbiddenTable, false /* redact */)
-		assert.Equal(t, "", query)
+		tableQuery, err := zipSystemTables.QueryForTable(forbiddenTable, false /* redact */)
+		assert.Equal(t, "", tableQuery.query)
 		assert.Error(t, err)
 		assert.Equal(t, fmt.Sprintf("no entry found in table registry for: %s", forbiddenTable), err.Error())
 	}
