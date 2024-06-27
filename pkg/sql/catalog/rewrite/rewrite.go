@@ -601,7 +601,7 @@ func TypeDescs(types []*typedesc.Mutable, descriptorRewrites jobspb.DescRewriteM
 			}
 		}
 		switch t := typ.Kind; t {
-		case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
+		case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_COMPOSITE, descpb.TypeDescriptor_MULTIREGION_ENUM:
 			if rw, ok := descriptorRewrites[typ.ArrayTypeID]; ok {
 				typ.ArrayTypeID = rw.ID
 			}
