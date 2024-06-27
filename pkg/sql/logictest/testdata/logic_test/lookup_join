@@ -1578,3 +1578,26 @@ query I
 SELECT count(v) FROM l_101823 LEFT LOOKUP JOIN r_101823 ON a = u AND b = v;
 ----
 1
+
+# Regression test for incorrectly remapping equal columns with non-identical
+# types (#124732).
+statement ok
+CREATE TABLE table_1_124732 (col1_6 REGCLASS);
+
+statement ok
+CREATE TABLE table_3_124732 (
+  col3_0 OID,
+  col3_7 STRING AS (col3_0::STRING) VIRTUAL PRIMARY KEY
+);
+
+statement ok
+INSERT INTO table_1_124732 (col1_6) VALUES (0);
+INSERT INTO table_3_124732 (col3_0) VALUES (0);
+
+query T
+SELECT col1_6 FROM table_1_124732 INNER HASH JOIN table_3_124732 ON col3_0 = col1_6;
+----
+-
+
+statement error pgcode XXUUU pq: could not produce a query plan conforming to the LOOKUP JOIN hint
+SELECT col1_6 FROM table_1_124732 INNER LOOKUP JOIN table_3_124732 ON col3_0 = col1_6;
