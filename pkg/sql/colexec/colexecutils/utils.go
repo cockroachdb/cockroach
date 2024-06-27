@@ -11,6 +11,8 @@
 package colexecutils
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -18,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -321,14 +324,22 @@ func init() {
 	}
 }
 
-// AccountForMetadata registers the memory footprint of meta with the allocator.
-func AccountForMetadata(allocator *colmem.Allocator, meta []execinfrapb.ProducerMetadata) {
+// AccountForMetadata registers the memory footprint of meta with the memory
+// account and returns the total new memory usage.
+func AccountForMetadata(
+	ctx context.Context, memAcc *mon.BoundAccount, meta []execinfrapb.ProducerMetadata,
+) int64 {
+	var newMemUsage int64
 	for i := range meta {
 		// Perform the memory accounting for the LeafTxnFinalState metadata
 		// since it might be of non-trivial size.
 		if ltfs := meta[i].LeafTxnFinalState; ltfs != nil {
 			memUsage := roachpb.Spans(ltfs.RefreshSpans).MemUsageUpToLen()
-			allocator.AdjustMemoryUsageAfterAllocation(memUsage)
+			if err := memAcc.Grow(ctx, memUsage); err != nil {
+				colexecerror.InternalError(err)
+			}
+			newMemUsage += memUsage
 		}
 	}
+	return newMemUsage
 }

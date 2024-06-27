@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -66,11 +66,14 @@ const (
 type ParallelUnorderedSynchronizer struct {
 	colexecop.InitHelper
 
-	flowCtx     *execinfra.FlowCtx
-	processorID int32
-	allocator   *colmem.Allocator
-	inputs      []colexecargs.OpWithMetaInfo
-	inputCtxs   []context.Context
+	flowCtx         *execinfra.FlowCtx
+	processorID     int32
+	streamingMemAcc *mon.BoundAccount
+	// metadataAccountedFor tracks how much memory has been reserved in the
+	// streamingMemAcc for the metadata.
+	metadataAccountedFor int64
+	inputs               []colexecargs.OpWithMetaInfo
+	inputCtxs            []context.Context
 	// cancelLocalInput stores context cancellation functions for each of the
 	// inputs. The functions are populated only if localPlan is true.
 	cancelLocalInput []context.CancelFunc
@@ -131,11 +134,10 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.
 // increment the passed-in WaitGroup and decrement when done. It is also
 // guaranteed that these spawned goroutines will have completed on any error or
 // zero-length batch received from Next.
-// - allocator must use a memory account that is not shared with any other user.
 func NewParallelUnorderedSynchronizer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	allocator *colmem.Allocator,
+	streamingMemAcc *mon.BoundAccount,
 	inputs []colexecargs.OpWithMetaInfo,
 	wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
@@ -148,7 +150,7 @@ func NewParallelUnorderedSynchronizer(
 	return &ParallelUnorderedSynchronizer{
 		flowCtx:           flowCtx,
 		processorID:       processorID,
-		allocator:         allocator,
+		streamingMemAcc:   streamingMemAcc,
 		inputs:            inputs,
 		inputCtxs:         make([]context.Context, len(inputs)),
 		cancelLocalInput:  make([]context.CancelFunc, len(inputs)),
@@ -388,7 +390,7 @@ func (s *ParallelUnorderedSynchronizer) Next() coldata.Batch {
 			}
 			s.lastReadInputIdx = msg.inputIdx
 			if msg.meta != nil {
-				colexecutils.AccountForMetadata(s.allocator, msg.meta)
+				s.metadataAccountedFor += colexecutils.AccountForMetadata(s.Ctx, s.streamingMemAcc, msg.meta)
 				s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
 				continue
 			}
@@ -482,7 +484,8 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 	s.bufferedMeta = nil
 	// The caller takes ownership of the metadata, so we can release all of the
 	// allocations.
-	s.allocator.ReleaseAll()
+	s.streamingMemAcc.Shrink(s.Ctx, s.metadataAccountedFor)
+	s.metadataAccountedFor = 0
 	return bufferedMeta
 }
 

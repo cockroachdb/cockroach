@@ -76,7 +76,7 @@ func assertProjOpAgainstRowByRow(
 	// column of the projection operator.
 	op := colexecbase.NewSimpleProjectOp(projOp, len(inputTypes)+1, []uint32{uint32(len(inputTypes))})
 	materializer := NewMaterializer(
-		nil, /* allocator */
+		nil, /* streamingMemAcc */
 		flowCtx,
 		1, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: op},
