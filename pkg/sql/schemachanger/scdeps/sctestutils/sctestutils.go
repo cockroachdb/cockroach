@@ -68,6 +68,7 @@ func WithBuilderDependenciesFromTestServer(
 		InternalSQLTxn() descs.Txn
 		Descriptors() *descs.Collection
 		SessionData() *sessiondata.SessionData
+		SemaCtx() *tree.SemaContext
 		resolver.SchemaResolver
 		scbuild.AuthorizationAccessor
 		scbuild.AstFormatter
@@ -106,6 +107,7 @@ func WithBuilderDependenciesFromTestServer(
 		planner, /* temporarySchemaProvider */
 		planner, /* nodesStatusInfo */
 		planner, /* regionProvider */
+		planner.SemaCtx(),
 	))
 }
 

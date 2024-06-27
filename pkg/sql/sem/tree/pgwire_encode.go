@@ -136,7 +136,7 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 		return
 	}
 
-	if ctx.HasFlags(FmtPGCatalog) {
+	if ctx.HasFlags(fmtPGCatalog) {
 		ctx.WriteByte('\'')
 	}
 	ctx.WriteByte('{')
@@ -172,7 +172,7 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 		delimiter = d.ParamTyp.Delimiter()
 	}
 	ctx.WriteByte('}')
-	if ctx.HasFlags(FmtPGCatalog) {
+	if ctx.HasFlags(fmtPGCatalog) {
 		ctx.WriteByte('\'')
 	}
 }
@@ -242,7 +242,7 @@ func pgwireFormatStringInArray(ctx *FmtCtx, in string) {
 			// Strings in arrays escape " and \.
 			buf.WriteByte('\\')
 			buf.WriteByte(byte(r))
-		} else if ctx.HasFlags(FmtPGCatalog) && r == '\'' {
+		} else if ctx.HasFlags(fmtPGCatalog) && r == '\'' {
 			buf.WriteByte('\'')
 			buf.WriteByte('\'')
 		} else {

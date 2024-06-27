@@ -61,6 +61,9 @@ type Dependencies interface {
 	// Statements returns the statements behind this schema change.
 	Statements() []string
 
+	// SemaCtx returns the tree.SemaContext for the schema change statement.
+	SemaCtx() *tree.SemaContext
+
 	// AstFormatter returns something that can format AST nodes.
 	AstFormatter() AstFormatter
 
