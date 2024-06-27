@@ -1959,7 +1959,7 @@ func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 			Partition: `kafka`, // TODO(yevgeniy): support multiple partitions.
 		}
 
-		fmt.Printf("Next() received message: %q\n", string(msg.Value.(sarama.ByteEncoder)))
+		fmt.Printf("Next() received message: %q %#+v\n", string(msg.Value.(sarama.ByteEncoder)), msg)
 
 		decode := func(encoded sarama.Encoder, dest *[]byte) error {
 			// It's a bit weird to use encoder to get decoded bytes.
@@ -1984,8 +1984,7 @@ func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return nil
 		}
 
-		if msg.Key == nil || msg.Key.Length() == 0 {
-			// wait this isnt true.. is it?
+		if msg.Key == nil {
 			// It's a resolved timestamp
 			if err := decode(msg.Value, &fm.Resolved); err != nil {
 				return nil, err

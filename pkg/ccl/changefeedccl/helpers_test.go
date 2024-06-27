@@ -99,16 +99,16 @@ func readNextMessages(
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		if log.V(1) {
-			log.Infof(context.Background(), "About to read a message (%d out of %d)", len(actual), numMessages)
+		if true || log.V(1) {
+			fmt.Printf("About to read a message (%d out of %d)\n", len(actual), numMessages)
 		}
 		m, err := f.Next()
-		if log.V(1) {
+		if true || log.V(1) {
 			if m != nil {
-				log.Infof(context.Background(), `msg %s: %s->%s (%s) (%s)`,
+				fmt.Printf("msg %s: %s->%s (%s) (%s)\n",
 					m.Topic, m.Key, m.Value, m.Resolved, timeutil.Since(lastMessage))
 			} else {
-				log.Infof(context.Background(), `err %v`, err)
+				fmt.Printf("err %v\n", err)
 			}
 		}
 		lastMessage = timeutil.Now()

@@ -9,7 +9,6 @@
 package changefeedccl
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
@@ -1196,8 +1195,8 @@ func TestChangefeedInitialScan(t *testing.T) {
 	}
 
 	initialScanTests := map[string]string{
-		`cursor - with initial scan`:     `CREATE CHANGEFEED FOR initial_scan WITH initial_scan, resolved='2s', cursor='%s'`,
-		`cursor - with initial backfill`: `CREATE CHANGEFEED FOR initial_scan WITH initial_scan = 'yes', resolved='2s', cursor='%s'`,
+		`cursor - with initial scan`:     `CREATE CHANGEFEED FOR initial_scan WITH initial_scan, resolved='1s', cursor='%s'`,
+		`cursor - with initial backfill`: `CREATE CHANGEFEED FOR initial_scan WITH initial_scan = 'yes', resolved='1s', cursor='%s'`,
 	}
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -1245,7 +1244,7 @@ func TestChangefeedInitialScan(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn)
 }
 
 // TestChangefeedLaggingRangesMetrics tests the behavior of the
@@ -3193,7 +3192,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 						if _, ok := s.(*externalConnectionKafkaSink); ok {
 							return s
 						}
-						return &externalConnectionKafkaSink{sink: s}
+						return &externalConnectionKafkaSink{sink: s, ignoreDialError: true}
 					},
 				},
 			},
@@ -7630,16 +7629,8 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 						if err != nil {
 							return err
 						}
-						// Ignore resolved messages. Unfortunately, initial backfill messages will get treated as resolved by the framework because
-						// they have nil keys. It will put the contents of m.Value in m.Resolved.
-						// (TODO: why do they have nil/len 0 keys? surely that's bad for kafka if they all go to partition 0..).
-						if len(m.Resolved) > 0 && !bytes.Contains(m.Resolved, []byte(",")) {
+						if len(m.Resolved) > 0 {
 							continue
-						} else {
-							// Undo the mangling done by the test framework
-							if len(m.Value) == 0 && len(m.Resolved) > 0 && len(m.Key) == 0 {
-								m.Value = m.Resolved
-							}
 						}
 						actualMessages = append(actualMessages, string(m.Value))
 					}

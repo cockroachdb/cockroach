@@ -259,6 +259,12 @@ type kafkaBuffer struct {
 
 // Append implements BatchBuffer.
 func (b *kafkaBuffer) Append(key []byte, value []byte, _ attributes) {
+	// HACK: kafka sink v1 encodes nil keys as sarama.ByteEncoder(key) which is != nil, and unit tests rely on this.
+	// So do something equivalent.
+	if key == nil {
+		key = []byte{}
+	}
+
 	b.messages = append(b.messages, keyPlusPayload{key: key, payload: value})
 	b.byteCount += len(value)
 }
