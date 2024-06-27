@@ -47,6 +47,7 @@ type StreamMuxer struct {
 	activeStreams sync.Map
 
 	rangefeedCleanUps sync.Map
+	notifyCleanUp     chan struct{}
 
 	// notifyCompletion is a buffered channel of size 1 used to signal the
 	// presence of muxErrors that need to be sent. Additional signals are dropped
@@ -58,13 +59,14 @@ type StreamMuxer struct {
 
 		// muxErrors is a list of errors that need to be sent to the client to
 		// signal rangefeed completion.
-		muxErrors []*kvpb.MuxRangeFeedEvent
+		muxErrors  []*kvpb.MuxRangeFeedEvent
+		cleanUpIDs []int64
 	}
 }
 
 func (s *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
-	s.metrics.IncrementRangefeedCounter()
 	s.activeStreams.Store(streamID, cancel)
+	s.metrics.IncrementRangefeedCounter()
 }
 
 // transformToClientErr transforms a rangefeed completion error to a client side
@@ -124,6 +126,17 @@ func (s *StreamMuxer) appendMuxError(ev *kvpb.MuxRangeFeedEvent) {
 	}
 }
 
+func (s *StreamMuxer) appendCleanUp(streamID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.cleanUpIDs = append(s.mu.cleanUpIDs, streamID)
+
+	select {
+	case s.notifyCleanUp <- struct{}{}:
+	default:
+	}
+}
+
 // disconnectRangefeedWithError disconnects the rangefeed stream with the given
 // streamID and sends the error to the client.
 func (s *StreamMuxer) DisconnectRangefeedWithError(
@@ -148,6 +161,10 @@ func (s *StreamMuxer) DisconnectRangefeedWithError(
 		s.appendMuxError(ev)
 		s.metrics.DecrementRangefeedCounter()
 	}
+
+	if _, ok := s.rangefeedCleanUps.Load(streamID); ok {
+		s.appendCleanUp(streamID)
+	}
 }
 
 // detachMuxErrors returns mux errors that need to be sent to the client. The
@@ -158,6 +175,14 @@ func (s *StreamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	toSend := s.mu.muxErrors
 	s.mu.muxErrors = nil
 	return toSend
+}
+
+func (s *StreamMuxer) detachCleanUpIDs() []int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	toCleanUp := s.mu.cleanUpIDs
+	s.mu.cleanUpIDs = nil
+	return toCleanUp
 }
 
 // If run returns (due to context cancellation, broken stream, or quiescing),
@@ -171,13 +196,17 @@ func (s *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 			for _, clientErr := range toSend {
 				// have another slice to process disconnect signals can deadlock here in
 				// callback and also disconnected signal
-				if cleanUp, ok := s.rangefeedCleanUps.LoadAndDelete(clientErr.StreamID); ok {
+				if err := s.sender.Send(clientErr); err != nil {
+					return
+				}
+			}
+		case <-s.notifyCleanUp:
+			toCleanUp := s.detachCleanUpIDs()
+			for _, streamID := range toCleanUp {
+				if cleanUp, ok := s.rangefeedCleanUps.LoadAndDelete(streamID); ok {
 					if f, ok := cleanUp.(func()); ok {
 						f()
 					}
-				}
-				if err := s.sender.Send(clientErr); err != nil {
-					return
 				}
 			}
 		case <-ctx.Done():
