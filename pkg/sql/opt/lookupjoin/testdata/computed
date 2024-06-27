@@ -169,3 +169,10 @@ input projections:
   v_eq = a + 10
 lookup expression:
   ((y > 0) AND (v_eq = v)) AND (a = x)
+
+# Regression test for #124732: Computed columns cannot be remapped unless the
+# column types are identical.
+lookup-constraints left=(a regclass, b int) right=(x oid, v string not null as (x::string) stored) index=(v, x)
+x = a
+----
+lookup join not possible
