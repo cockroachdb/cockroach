@@ -57,7 +57,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	flow := colflow.NewVectorizedFlow(base)
 
 	mat := colexec.NewMaterializer(
-		nil, /* allocator */
+		nil, /* streamingMemAcc */
 		&flowCtx,
 		0, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: &colexecop.CallbackOperator{
