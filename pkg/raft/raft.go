@@ -485,6 +485,16 @@ func newRaft(c *Config) *raft {
 	return r
 }
 
+// checkInvariants checks the raft node invariants. For testing.
+func (r *raft) checkInvariants() error {
+	last := r.raftLog.lastEntryID()
+	if r.accTerm < last.term || r.Term < r.accTerm {
+		return fmt.Errorf("lastTerm, accTerm, Term not ordered: %d, %d, %d", last.term, r.accTerm, r.Term)
+	}
+	// TODO(pav-kv): add more invariants.
+	return nil
+}
+
 func (r *raft) hasLeader() bool { return r.lead != None }
 
 func (r *raft) softState() SoftState { return SoftState{Lead: r.lead, RaftState: r.state} }
