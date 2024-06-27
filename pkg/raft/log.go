@@ -105,7 +105,7 @@ func (l *raftLog) String() string {
 
 // maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
 // it returns (last index of new entries, true).
-func (l *raftLog) maybeAppend(a logSlice, committed uint64) (lastnewi uint64, ok bool) {
+func (l *raftLog) maybeAppend(a logSlice) (lastnewi uint64, ok bool) {
 	if !l.matchTerm(a.prev) {
 		return 0, false
 	}
@@ -125,7 +125,6 @@ func (l *raftLog) maybeAppend(a logSlice, committed uint64) (lastnewi uint64, ok
 		}
 		l.append(a.entries[ci-offset:]...)
 	}
-	l.commitTo(min(committed, lastnewi))
 	return lastnewi, true
 }
 

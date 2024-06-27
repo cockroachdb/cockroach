@@ -1681,8 +1681,13 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed})
 		return
 	}
-	if mlastIndex, ok := r.raftLog.maybeAppend(a, m.Commit); ok {
+	if mlastIndex, ok := r.raftLog.maybeAppend(a); ok {
 		r.accTerm = m.Term // our log is now consistent with the m.Term leader
+		// TODO(pav-kv): make it possible to commit even if the append did not
+		// succeed or is stale. If r.accTerm >= m.Term, then our log contains all
+		// committed entries at m.Term (by raft invariants), so it is safe to bump
+		// the commit index even if the MsgApp is stale.
+		r.raftLog.commitTo(min(m.Commit, mlastIndex))
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: mlastIndex})
 		return
 	}
