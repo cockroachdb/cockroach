@@ -497,8 +497,13 @@ func (s *dummyStream) RegisterCleanUp(f func()) {
 func waitReplicaRangeFeed(
 	ctx context.Context, r *kvserver.Replica, req *kvpb.RangeFeedRequest, stream *dummyStream,
 ) error {
-	if err := r.RangeFeed(req, stream, nil /* pacer */); err != nil {
-		return err
+	err := r.RangeFeed(req, stream, nil /* pacer */)
+	if err != nil {
+		var event kvpb.RangeFeedEvent
+		event.SetValue(&kvpb.RangeFeedError{
+			Error: *kvpb.NewError(err),
+		})
+		return stream.Send(&event)
 	}
 
 	select {
