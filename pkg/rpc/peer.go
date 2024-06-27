@@ -34,6 +34,80 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+type peerStatus int
+
+const (
+	peerStatusInactive = iota
+	peerStatusHealthy
+	peerStatusUnhealthy
+	peerStatusDeleted
+)
+
+func (p *peer) setHealthyLocked() {
+	if p.mu.peerStatus == peerStatusDeleted {
+		return
+	}
+	p.ConnectionUnhealthyFor.Update(0)
+	switch p.mu.peerStatus {
+	case peerStatusUnhealthy:
+		p.ConnectionHealthy.Inc(1)
+		p.ConnectionUnhealthy.Dec(1)
+	case peerStatusInactive:
+		p.ConnectionHealthy.Inc(1)
+		p.ConnectionInactive.Dec(1)
+	}
+	p.mu.peerStatus = peerStatusHealthy
+}
+
+func (p *peer) setUnhealthyLocked(connUnhealthyFor int64) {
+	if p.mu.peerStatus == peerStatusDeleted {
+		return
+	}
+	p.ConnectionHealthyFor.Update(0)
+	p.ConnectionUnhealthyFor.Update(connUnhealthyFor)
+	p.AvgRoundTripLatency.Update(0)
+
+	switch p.mu.peerStatus {
+	case peerStatusHealthy:
+		p.ConnectionUnhealthy.Inc(1)
+		p.ConnectionHealthy.Dec(1)
+	case peerStatusInactive:
+		p.ConnectionUnhealthy.Inc(1)
+		p.ConnectionInactive.Dec(1)
+	}
+	p.mu.peerStatus = peerStatusUnhealthy
+}
+
+func (p *peer) setInactiveLocked() {
+	if p.mu.peerStatus == peerStatusDeleted {
+		return
+	}
+	p.ConnectionHealthyFor.Update(0)
+	p.ConnectionUnhealthyFor.Update(0)
+	p.AvgRoundTripLatency.Update(0)
+
+	switch p.mu.peerStatus {
+	case peerStatusHealthy:
+		p.ConnectionInactive.Inc(1)
+		p.ConnectionHealthy.Dec(1)
+	case peerStatusUnhealthy:
+		p.ConnectionInactive.Inc(1)
+		p.ConnectionUnhealthy.Dec(1)
+	}
+	p.mu.peerStatus = peerStatusInactive
+}
+
+func (p *peer) releaseMetricsLocked() {
+	if p.mu.peerStatus == peerStatusDeleted {
+		return
+	}
+	// Always set to inactive before releasing.
+	p.setInactiveLocked()
+	p.ConnectionInactive.Dec(1)
+	p.mu.peerStatus = peerStatusDeleted
+	p.peerMetrics.release()
+}
+
 // A peer is a remote node that we are trying to maintain a healthy RPC
 // connection (for a given connection class not known to the peer itself) to. It
 // maintains metrics on our connection state to the peer (see the embedded
@@ -70,6 +144,7 @@ type peer struct {
 		// Copies of PeerSnap may be leaked outside of lock, since the memory within
 		// is never mutated in place.
 		PeerSnap
+		peerStatus peerStatus
 	}
 	remoteClocks *RemoteClockMonitor
 	// NB: lock order: peers.mu then peers.mu.m[k].mu (but better to avoid
@@ -507,15 +582,7 @@ func (p *peer) onInitialHeartbeatSucceeded(
 	// If the probe was inactive, the fact that we managed to heartbeat implies
 	// that it ought not have been.
 	p.mu.deleteAfter = 0
-
-	// Gauge updates.
-	p.ConnectionHealthy.Update(1)
-	p.ConnectionUnhealthy.Update(0)
-	p.ConnectionInactive.Update(0)
-	// ConnectionHealthyFor is already zero.
-	p.ConnectionUnhealthyFor.Update(0)
-	// AvgRoundTripLatency is already zero. We don't use the initial
-	// ping since it has overhead of TLS handshake, blocking dialback, etc.
+	p.setHealthyLocked()
 
 	// Counter updates.
 	p.ConnectionHeartbeats.Inc(1)
@@ -657,27 +724,13 @@ func (p *peer) onHeartbeatFailed(
 
 	maybeLogOnFailedHeartbeat(ctx, now, err, prevErr, *ls, &p.logDisconnectEvery)
 
-	nConnUnhealthy := int64(1)
-	nConnInactive := int64(0)
-	connUnhealthyFor := now.Sub(ls.disconnected).Nanoseconds() + 1 // 1ns for unit tests w/ manual clock
-	if ls.deleteAfter != 0 {
-		// The peer got marked as pending deletion, so the probe becomes lazy
-		// (i.e. we terminate the for-loop here and only probe again when someone
-		// consults the breaker). Reset the gauges, causing this peer to not be
-		// reflected in aggregate stats any longer.
-		nConnUnhealthy = 0
-		nConnInactive = 1
-		connUnhealthyFor = 0
+	// Only update the unhealthy duration if it is considered unhealthy.
+	if ls.deleteAfter == 0 {
+		connUnhealthyFor := now.Sub(ls.disconnected).Nanoseconds() + 1 // 1ns for unit tests w/ manual clock
+		p.setUnhealthyLocked(connUnhealthyFor)
+	} else {
+		p.setInactiveLocked()
 	}
-	// Gauge updates.
-	p.ConnectionHealthy.Update(0)
-	p.ConnectionUnhealthy.Update(nConnUnhealthy)
-	p.ConnectionInactive.Update(nConnInactive)
-	p.ConnectionHealthyFor.Update(0)
-	p.ConnectionUnhealthyFor.Update(connUnhealthyFor)
-	// NB: keep this last for TestGrpcDialInternal_ReconnectPeer.
-	p.AvgRoundTripLatency.Update(0)
-	p.roundTripLatency.Set(0)
 	// Counter updates.
 	p.ConnectionFailures.Inc(1)
 }
@@ -853,7 +906,7 @@ func (p *peer) maybeDelete(ctx context.Context, now time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.mu.deleted = true
-	p.peerMetrics.release()
+	p.releaseMetricsLocked()
 }
 
 func launchConnStateWatcher(
