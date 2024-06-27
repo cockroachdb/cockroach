@@ -1884,20 +1884,35 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	muxStream := &lockedMuxStream{wrapped: stream}
+	bufferedStream := rangefeed.NewLockedBufferedStream(muxStream)
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
 
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
+	// Make sure cancel context first before wait.
 	defer cancel()
 
 	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
-
-	var wg sync.WaitGroup
 	wg.Add(1)
-	defer wg.Wait()
-	if err := n.stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+	if err := n.stopper.RunAsyncTask(ctx, "buffered stream output", func(ctx context.Context) {
+		defer wg.Done()
+		if err := bufferedStream.RunOutputLoop(ctx, n.stopper); err != nil {
+			streamMuxer.DisconnectAllWithErr(err)
+		}
+		cancel()
+	}); err != nil {
+		wg.Done()
+		return err
+	}
+
+	wg.Add(1)
+	if err := n.stopper.RunAsyncTask(ctx, "stream muxer", func(ctx context.Context) {
 		defer wg.Done()
 		streamMuxer.Run(ctx, n.stopper)
+		cancel()
 	}); err != nil {
 		wg.Done()
 		return err
