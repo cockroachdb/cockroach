@@ -523,7 +523,7 @@ func printSQLResult(l *logger.Logger, i int, r *install.RunResultDetails, args [
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		if i == 0 { // Print the header line of the results once.
 			fmt.Printf("    %s\n", lines[0])
-			if tableFormatted {
+			if tableFormatted && len(lines) > 1 {
 				fmt.Printf("    %s\n", lines[1])
 			}
 		}
