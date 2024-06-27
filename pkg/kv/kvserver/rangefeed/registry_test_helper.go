@@ -72,7 +72,7 @@ func (s *testStream) Disconnect(err *kvpb.Error) {
 	s.cleanUp()
 }
 
-func (s *testStream) RegisterCleanUp(f func()) {
+func (s *testStream) RegisterRangefeedCleanUp(f func()) {
 	s.cleanUp = f
 }
 

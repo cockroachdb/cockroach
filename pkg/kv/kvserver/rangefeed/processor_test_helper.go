@@ -489,7 +489,7 @@ func (s *testSingleFeedStream) blockSend() func() {
 	}
 }
 
-func (s *testSingleFeedStream) RegisterCleanUp(f func()) {
+func (s *testSingleFeedStream) RegisterRangefeedCleanUp(f func()) {
 	s.muxer.RegisterRangefeedCleanUp(s.streamID, f)
 }
 

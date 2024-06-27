@@ -1659,7 +1659,7 @@ func (c *channelSink) Disconnect(err *kvpb.Error) {
 	c.done <- err
 }
 
-func (c *channelSink) RegisterCleanUp(func()) {
+func (c *channelSink) RegisterRangefeedCleanUp(func()) {
 }
 
 // TestRangeFeedMetadataManualSplit tests that a spawned rangefeed emits a

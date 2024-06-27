@@ -35,7 +35,7 @@ type Stream interface {
 	// Send must be safe to call on the same stream in different goroutines.
 	Send(*kvpb.RangeFeedEvent) error
 	Disconnect(err *kvpb.Error)
-	RegisterCleanUp(func())
+	RegisterRangefeedCleanUp(func())
 }
 
 // Shared event is an entry stored in registration channel. Each entry is
