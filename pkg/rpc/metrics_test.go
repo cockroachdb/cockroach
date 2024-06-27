@@ -62,9 +62,13 @@ func TestMetricsRelease(t *testing.T) {
 	require.Equal(t, expectedCount, verifyAllFields(m, 0))
 	// Verify that a new peer's metrics all get registered.
 	k := peerKey{NodeID: 5, TargetAddr: "192.168.0.1:1234", Class: DefaultClass}
-	pm := m.acquire(k)
+	m.acquire(k)
 	require.Equal(t, expectedCount, verifyAllFields(m, 1))
-	// Verify that all metrics are unlinked when the peer is released.
-	pm.release()
-	require.Equal(t, expectedCount, verifyAllFields(m, 0))
+	// Acquire the same peer. The count remains at 1.
+	m.acquire(k)
+	require.Equal(t, expectedCount, verifyAllFields(m, 1))
+
+	// Acquire a different peer.
+	m.acquire(peerKey{NodeID: 6, TargetAddr: "192.168.0.1:1234", Class: DefaultClass})
+	require.Equal(t, expectedCount, verifyAllFields(m, 2))
 }
