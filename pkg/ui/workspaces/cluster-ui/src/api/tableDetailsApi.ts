@@ -464,12 +464,16 @@ const getTableReplicaStoreIDs: TableDetailsQuery<TableReplicasRow> = {
   ) => {
     if (txnResult.error) {
       resp.stats.replicaData.error = txnResult.error;
+      // We don't expect to have any rows for this query on error.
+      return;
     }
 
     // TODO #118957 (xinhaoz) Store IDs and node IDs cannot be used interchangeably.
-    resp.stats.replicaData.storeIDs = txnResult?.rows[0]?.store_ids ?? [];
-    resp.stats.replicaData.replicaCount =
-      txnResult?.rows[0]?.replica_count ?? 0;
+    if (!txnResultIsEmpty(txnResult)) {
+      resp.stats.replicaData.storeIDs = txnResult?.rows[0]?.store_ids ?? [];
+      resp.stats.replicaData.replicaCount =
+        txnResult?.rows[0]?.replica_count ?? 0;
+    }
   },
 };
 

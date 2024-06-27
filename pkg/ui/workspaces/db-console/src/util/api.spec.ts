@@ -19,7 +19,7 @@ import {
   REMOTE_DEBUGGING_ERROR_TEXT,
   indexUnusedDuration,
 } from "src/util/constants";
-import { stubSqlApiCall } from "src/util/fakeApi";
+import { mockExecSQLErrors, stubSqlApiCall } from "src/util/fakeApi";
 
 import * as api from "./api";
 import fetchMock from "./fetch-mock";
@@ -304,6 +304,20 @@ describe("rest api", function () {
           done();
         });
     });
+
+    it("should not error when any query fails", async () => {
+      const req = { database, csIndexUnusedDuration: indexUnusedDuration };
+      const mockResults = mockExecSQLErrors<clusterUiApi.DatabaseDetailsRow>(6);
+      stubSqlApiCall<clusterUiApi.DatabaseDetailsRow>(
+        clusterUiApi.createDatabaseDetailsReq(req),
+        mockResults,
+      );
+
+      // This call should not throw.
+      const result = await clusterUiApi.getDatabaseDetails(req);
+      expect(result.results).toBeDefined();
+      expect(result.results.error).toBeDefined();
+    });
   });
 
   describe("table details request", function () {
@@ -497,6 +511,27 @@ describe("rest api", function () {
           expect(startsWith(e.message, "Promise timed out")).toBeTruthy();
           done();
         });
+    });
+
+    it("should not error when any query fails", async () => {
+      const mockResults = mockExecSQLErrors<clusterUiApi.TableDetailsRow>(10);
+      stubSqlApiCall<clusterUiApi.TableDetailsRow>(
+        clusterUiApi.createTableDetailsReq(
+          dbName,
+          tableName,
+          indexUnusedDuration,
+        ),
+        mockResults,
+      );
+
+      // This call should not throw.
+      const result = await clusterUiApi.getTableDetails({
+        database: dbName,
+        table: tableName,
+        csIndexUnusedDuration: indexUnusedDuration,
+      });
+      expect(result.results).toBeDefined();
+      expect(result.results.error).toBeDefined();
     });
   });
 
