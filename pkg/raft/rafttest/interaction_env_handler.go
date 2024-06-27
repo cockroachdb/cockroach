@@ -204,6 +204,14 @@ func (env *InteractionEnv) Handle(t *testing.T, d datadriven.TestData) string {
 		}
 		env.Output.WriteString(err.Error())
 	}
+
+	// Check invariants on every node.
+	for _, n := range env.Nodes {
+		if err := n.CheckInvariants(); err != nil {
+			t.Fatalf("%d: CheckInvariants: %v", n.Config.ID, err)
+		}
+	}
+
 	if env.Output.Len() == 0 {
 		return "ok"
 	}

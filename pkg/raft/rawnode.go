@@ -530,3 +530,8 @@ func (rn *RawNode) TransferLeader(transferee uint64) {
 func (rn *RawNode) ForgetLeader() error {
 	return rn.raft.Step(pb.Message{Type: pb.MsgForgetLeader})
 }
+
+// CheckInvariants checks the raft node invariants. For testing.
+func (rn *RawNode) CheckInvariants() error {
+	return rn.raft.checkInvariants()
+}
