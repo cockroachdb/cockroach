@@ -1538,13 +1538,9 @@ func (n *Node) maybeProxyRequest(
 	if pErr == nil {
 		log.VEvent(ctx, 2, "proxy request completed")
 		return br
-	} else if pErr == kvcoord.ProxyFailedWithSendError {
-		log.VEventf(ctx, 2, "proxy failed with send error %v", pErr)
-		// Use the original error NLHE from local evaluation.
-		return nil
 	}
 	// It is rare to get here on a proxy request because wrapping normally
-	// happens in DistSender.sendPartialBatch. Pessimistically wrap the error
+	// happens in DistSender.sendProxyRequest. Pessimistically wrap the error
 	// and convert this to a ProxyFailedError which may become an ambiguous
 	// error on the other side.
 	log.VEventf(ctx, 2, "proxy attempt resulted in error %v", pErr)
