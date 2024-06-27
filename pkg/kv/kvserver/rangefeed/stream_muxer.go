@@ -266,7 +266,7 @@ func (s *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 				// have another slice to process disconnect signals can deadlock here in
 				// callback and also disconnected signal
 				if err := s.sender.Send(clientErr); err != nil {
-					s.DisconnectAllWithErr(err)
+					s.DisconnectAllWithErr(nil)
 					return
 				}
 			}
@@ -285,6 +285,7 @@ func (s *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 		case <-stopper.ShouldQuiesce():
 			s.DisconnectAllWithErr(nil)
 			// TODO(wenyihu6): should we cancel context here?
+			s.DisconnectAllWithErr(nil)
 			return
 		}
 	}
