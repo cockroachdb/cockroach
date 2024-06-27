@@ -178,6 +178,7 @@ const UPGRADE_RELATED_ERRORS = [
 ];
 
 export function isUpgradeError(message: string): boolean {
+  if (message == null) return false;
   return UPGRADE_RELATED_ERRORS.some(err => message.search(err) !== -1);
 }
 
@@ -196,6 +197,10 @@ export function isUpgradeError(message: string): boolean {
  * @param message
  */
 export function sqlApiErrorMessage(message: string): string {
+  if (!message) {
+    return "";
+  }
+
   if (isUpgradeError(message)) {
     return "This page may not be available during an upgrade.";
   }
