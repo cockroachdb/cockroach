@@ -53,6 +53,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/stats"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -1660,6 +1661,32 @@ func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
 	}
 
 	return dialOpts, nil
+}
+
+type statsTracker struct {
+	m peerMetrics
+}
+
+func (t *statsTracker) TagRPC(ctx context.Context, _ *stats.RPCTagInfo) context.Context { return ctx }
+
+func (t *statsTracker) HandleRPC(_ context.Context, s stats.RPCStats) {
+	if out, ok := s.(*stats.OutPayload); ok {
+		t.m.ConnectionBytesSent.Inc(int64(out.WireLength))
+	}
+	if in, ok := s.(*stats.InPayload); ok {
+		t.m.ConnectionBytesRecv.Inc(int64(in.WireLength))
+	}
+}
+
+func (t *statsTracker) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context { return ctx }
+
+func (t *statsTracker) HandleConn(ctx context.Context, s stats.ConnStats) {
+	if _, ok := s.(*stats.ConnEnd); ok {
+		t.m.ConnectionConnected.Inc(-1)
+	}
+	if _, ok := s.(*stats.ConnBegin); ok {
+		t.m.ConnectionConnected.Inc(1)
+	}
 }
 
 // dialOptsNetwork compute options used only for over-the-network RPC
