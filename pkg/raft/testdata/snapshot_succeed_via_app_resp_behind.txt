@@ -42,9 +42,9 @@ ok
 # is still at index 5, and has not received any MsgApp from the leader yet.
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1
-2: StateFollower (Voter) Term:1 Lead:1
-3: StateFollower (Voter) Term:1 Lead:0
+1: StateLeader (Voter) Term:2 Lead:1
+2: StateFollower (Voter) Term:2 Lead:1
+3: StateFollower (Voter) Term:2 Lead:0
 
 status 1
 ----
@@ -60,8 +60,8 @@ log is empty: first index=6, last index=5
 # does not move 3 to StateSnapshot.
 send-snapshot 1 3
 ----
-1->3 MsgSnap Term:1 Log:0/0
-  Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+1->3 MsgSnap Term:2 Log:0/0
+  Snapshot: Index:11 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 
 # Propose and commit an additional entry, which makes the leader's
 # last index 12, beyond the snapshot it sent at index 11.
@@ -91,7 +91,7 @@ status 1
 # 11 but this is rejected because the follower's log started at index 5.
 deliver-msgs 3 type=MsgApp
 ----
-1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+1->3 MsgApp Term:2 Log:1/10 Commit:10 Entries:[2/11 EntryNormal ""]
 DEBUG 3 [logterm: 0, index: 10] rejected MsgApp [logterm: 1, index: 10] from 1
 
 # Note below that the RejectionHint is 5, which is below the first index 10 of the
@@ -102,17 +102,17 @@ process-ready 3
 Ready MustSync=false:
 Lead:1 State:StateFollower
 Messages:
-3->1 MsgAppResp Term:1 Log:1/10 Rejected (Hint: 5)
+3->1 MsgAppResp Term:2 Log:1/10 Rejected (Hint: 5)
 
 # 3 receives and applies the snapshot, but doesn't respond with MsgAppResp yet.
 deliver-msgs 3
 ----
-1->3 MsgSnap Term:1 Log:0/0
-  Snapshot: Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
-INFO log [committed=5, applied=5, applying=5, unstable.offset=6, unstable.offsetInProgress=6, len(unstable.Entries)=0] starts to restore snapshot [index: 11, term: 1]
+1->3 MsgSnap Term:2 Log:0/0
+  Snapshot: Index:11 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+INFO log [committed=5, applied=5, applying=5, unstable.offset=6, unstable.offsetInProgress=6, len(unstable.Entries)=0] starts to restore snapshot [index: 11, term: 2]
 INFO 3 switched to configuration voters=(1 2 3)
-INFO 3 [commit: 11, lastindex: 11, lastterm: 1] restored snapshot [index: 11, term: 1]
-INFO 3 [commit: 11] restored snapshot [index: 11, term: 1]
+INFO 3 [commit: 11, lastindex: 11, lastterm: 2] restored snapshot [index: 11, term: 2]
+INFO 3 [commit: 11] restored snapshot [index: 11, term: 2]
 
 
 # 1 sees the MsgApp rejection and asks for a snapshot at index 12 (which is 1's
@@ -120,22 +120,22 @@ INFO 3 [commit: 11] restored snapshot [index: 11, term: 1]
 stabilize 1
 ----
 > 1 receiving messages
-  3->1 MsgAppResp Term:1 Log:1/10 Rejected (Hint: 5)
+  3->1 MsgAppResp Term:2 Log:1/10 Rejected (Hint: 5)
   DEBUG 1 received MsgAppResp(rejected, hint: (index 5, term 1)) from 3 for index 10
   DEBUG 1 decreased progress of 3 to [StateProbe match=0 next=6]
-  DEBUG 1 [firstindex: 11, commit: 12] sent snapshot[index: 12, term: 1] to 3 [StateProbe match=0 next=6]
+  DEBUG 1 [firstindex: 11, commit: 12] sent snapshot[index: 12, term: 2] to 3 [StateProbe match=0 next=6]
   DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=13 paused pendingSnap=12]
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
-  1->3 MsgSnap Term:1 Log:0/0
-    Snapshot: Index:12 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  1->3 MsgSnap Term:2 Log:0/0
+    Snapshot: Index:12 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 
 # Drop the extra MsgSnap(index=12) that 1 just sent, to keep the test tidy.
 deliver-msgs drop=(3)
 ----
-dropped: 1->3 MsgSnap Term:1 Log:0/0
-  Snapshot: Index:12 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+dropped: 1->3 MsgSnap Term:2 Log:0/0
+  Snapshot: Index:12 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
 
 # 3 sends the affirmative MsgAppResp that resulted from applying the snapshot
 # at index 11.
@@ -143,20 +143,20 @@ stabilize 3
 ----
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:11
-  Snapshot Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
+  HardState Term:2 Vote:1 Commit:11
+  Snapshot Index:11 Term:2 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
-  3->1 MsgAppResp Term:1 Log:0/11
+  3->1 MsgAppResp Term:2 Log:0/11
 
 stabilize 1
 ----
 > 1 receiving messages
-  3->1 MsgAppResp Term:1 Log:0/11
+  3->1 MsgAppResp Term:2 Log:0/11
   DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=11 next=13 paused pendingSnap=12]
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
-  1->3 MsgApp Term:1 Log:1/11 Commit:12 Entries:[1/12 EntryNormal "\"foo\""]
+  1->3 MsgApp Term:2 Log:2/11 Commit:12 Entries:[2/12 EntryNormal "\"foo\""]
 
 # 3 is in StateReplicate thanks to receiving the snapshot at index 11.
 # This is despite its PendingSnapshot having been 12.

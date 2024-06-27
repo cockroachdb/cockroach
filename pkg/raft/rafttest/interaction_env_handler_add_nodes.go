@@ -108,6 +108,11 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 				return errors.New("index must be specified as > 1 due to bootstrap")
 			}
 			snap.Metadata.Term = 1
+			if err := s.SetHardState(pb.HardState{
+				Term: 1, Commit: snap.Metadata.Index,
+			}); err != nil {
+				return err
+			}
 			if err := s.ApplySnapshot(snap); err != nil {
 				return err
 			}
