@@ -40,6 +40,7 @@ func Increment(
 		Stats:                          cArgs.Stats,
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
 		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
+		OriginID:                       h.WriteOptions.GetOriginID(),
 		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		Category:                       fs.BatchEvalReadCategory,

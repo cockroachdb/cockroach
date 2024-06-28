@@ -1099,8 +1099,8 @@ func TestHandleMsgApp(t *testing.T) {
 		wReject bool
 	}{
 		// Ensure 1
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 3, Index: 2, Commit: 3}, 2, 0, true}, // previous log mismatch
-		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 3, Index: 3, Commit: 3}, 2, 0, true}, // previous log non-exist
+		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 2, Commit: 3}, 2, 0, true}, // previous log mismatch
+		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 3, Commit: 3}, 2, 0, true}, // previous log non-exist
 
 		// Ensure 2
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 1}, 2, 1, false},
@@ -1111,7 +1111,7 @@ func TestHandleMsgApp(t *testing.T) {
 
 		// Ensure 3
 		{pb.Message{Type: pb.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3}, 2, 1, false},                                           // match entry 1, commit up to last new entry 1
-		{pb.Message{Type: pb.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false}, // match entry 1, commit up to last new entry 2
+		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 3, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false}, // match entry 1, commit up to last new entry 2
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3}, 2, 2, false},                                           // match entry 2, commit up to last new entry 2
 		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4}, 2, 2, false},                                           // commit up to log.last()
 	}
@@ -2294,6 +2294,7 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 	}
 
 	store := newTestMemoryStorage(withPeers(1), withLearners(2))
+	store.SetHardState(pb.HardState{Term: 11})
 	n1 := newTestLearnerRaft(1, 10, 1, store)
 	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
 

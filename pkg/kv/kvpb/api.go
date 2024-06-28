@@ -2532,3 +2532,10 @@ type RangeFeedEventProducer interface {
 
 // SafeValue implements the redact.SafeValue interface.
 func (PushTxnType) SafeValue() {}
+
+func (writeOptions *WriteOptions) GetOriginID() uint32 {
+	if writeOptions == nil {
+		return 0
+	}
+	return writeOptions.OriginID
+}
