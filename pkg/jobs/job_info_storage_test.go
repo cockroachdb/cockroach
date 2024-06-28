@@ -58,7 +58,7 @@ func TestJobInfoAccessors(t *testing.T) {
 	job1 := createJob(1)
 	job2 := createJob(2)
 	job3 := createJob(3)
-	kPrefix, kA, kB, kC, kD := "🔑", "🔑A", "🔑B", "🔑C", "🔑D"
+	kPrefix, kA, kB, kC, kD, kE, kF, kG, kZ := "🔑", "🔑A", "🔑B", "🔑C", "🔑D", "🔑E", "🔑F", "🔑G", "🔑Z"
 	v1, v2, v3 := []byte("val1"), []byte("val2"), []byte("val3")
 
 	// Key doesn't exist yet.
@@ -156,6 +156,13 @@ func TestJobInfoAccessors(t *testing.T) {
 	}))
 	require.Equal(t, 3, i)
 
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		count, err := infoStorage.Count(ctx, kPrefix, kZ)
+		require.Equal(t, 3, count)
+		return err
+	}))
+
 	// Add a new revision to kC.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job2.InfoStorage(txn)
@@ -189,7 +196,7 @@ func TestJobInfoAccessors(t *testing.T) {
 	// Delete kA-kB.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job2.InfoStorage(txn)
-		return infoStorage.DeleteRange(ctx, kA, kC)
+		return infoStorage.DeleteRange(ctx, kA, kC, 0)
 	}))
 	// Verify only kC remains.
 	i = 0
@@ -202,6 +209,66 @@ func TestJobInfoAccessors(t *testing.T) {
 		})
 	}))
 	require.Equal(t, 1, i)
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		count, err := infoStorage.Count(ctx, kPrefix, kZ)
+		require.Equal(t, 1, count)
+		return err
+	}))
+
+	// Write kE, kF, kG.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		for _, k := range []string{kE, kF, kG} {
+			if err := infoStorage.Write(ctx, k, v2); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+
+	// Verify we see 4 rows (c, e, f, g) in the prefix.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		count, err := infoStorage.Count(ctx, kPrefix, kZ)
+		if err != nil {
+			return err
+		}
+		require.Equal(t, 4, count)
+		_, ok, err := infoStorage.Get(ctx, kC)
+		if err != nil {
+			return err
+		}
+		require.True(t, ok)
+		return nil
+	}))
+
+	// Delete [k, kZ) but with a limit of 2 so just kC and kE.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		return infoStorage.DeleteRange(ctx, kC, kZ, 2)
+	}))
+
+	// Verify we see 2 rows (F, G) in the prefix and C and E are missing.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job2.InfoStorage(txn)
+		count, err := infoStorage.Count(ctx, kPrefix, kZ)
+		if err != nil {
+			return err
+		}
+		require.Equal(t, 2, count)
+		_, ok, err := infoStorage.Get(ctx, kC)
+		if err != nil {
+			return err
+		}
+		require.False(t, ok)
+		_, ok, err = infoStorage.Get(ctx, kF)
+		if err != nil {
+			return err
+		}
+		require.True(t, ok)
+		return nil
+	}))
 
 	// Iterate a different job.
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
