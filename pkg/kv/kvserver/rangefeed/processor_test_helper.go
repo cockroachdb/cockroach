@@ -473,11 +473,11 @@ func (s *testSingleFeedStream) Send(e *kvpb.RangeFeedEvent) error {
 	defer func() {
 		s.mu.Unlock()
 	}()
-	return s.muxer.Send(s.streamID, s.rangeID, e)
+	return s.muxer.Send(s.streamID, e)
 }
 
 func (s *testSingleFeedStream) Disconnect(err *kvpb.Error) {
-	s.muxer.DisconnectRangefeedWithError(s.streamID, s.rangeID, err)
+	s.muxer.DisconnectRangefeedWithError(s.streamID, err)
 }
 
 func (s *testSingleFeedStream) blockSend() func() {
