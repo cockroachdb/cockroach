@@ -190,6 +190,54 @@ service:
       - datadog
 EOF"
         ;;
+
+      "workload-large")
+        roachprod ssh ${cluster} -- "mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
+---
+receivers:
+  prometheus/workload:
+    config:
+      global:
+        scrape_interval: 30s
+      scrape_configs:
+      - job_name: workload1
+        honor_timestamps: false
+        metrics_path: /metrics
+        tls_config:
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        static_configs:
+        - targets:
+          - "localhost:2112"
+        relabel_configs:
+        - action: replace
+          replacement: 1
+          target_label: workload
+
+processors:
+  filter/workload:
+    metrics:
+      include:
+        match_type: regexp
+        expressions:
+        - workload_tpcc.*
+
+# The */datadog elements are defined in the primary configuration file.
+service:
+  pipelines:
+    metrics:
+      receivers:
+      - prometheus/workload
+      processors:
+      - memory_limiter/datadog
+      - filter/workload
+      - batch/datadog
+      - attributes/datadog
+      exporters:
+      - datadog
+EOF"
+        ;;
     esac
 
     roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
