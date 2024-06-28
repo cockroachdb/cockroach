@@ -1231,6 +1231,30 @@ SELECT is_temporary FROM crdb_internal.create_statements WHERE descriptor_name =
 ----
 true
 
+statement ok
+CREATE TABLE defaultdb.public.in_other_db (x INT PRIMARY KEY);
+CREATE TABLE public.in_this_db (x INT PRIMARY KEY);
+
+# Verify that we can inspect all databases by using "" as the database name.
+query TTT colnames
+SELECT database_name, schema_name, descriptor_name
+FROM "".crdb_internal.create_statements
+WHERE descriptor_name IN ('in_other_db', 'in_this_db')
+ORDER BY 1,2,3
+----
+database_name  schema_name  descriptor_name
+defaultdb      public       in_other_db
+test           public       in_this_db
+
+# Also verify that using the virtul index on descriptor_id works.
+query TTT colnames
+SELECT database_name, schema_name, descriptor_name
+FROM "".crdb_internal.create_statements
+WHERE descriptor_id = 'defaultdb.public.in_other_db'::regclass::int
+----
+database_name  schema_name  descriptor_name
+defaultdb      public       in_other_db
+
 query TT
 SELECT * FROM crdb_internal.regions ORDER BY 1
 ----
@@ -1586,17 +1610,17 @@ FROM crdb_internal.create_procedure_statements
 WHERE procedure_name IN ('p', 'p2')
 ORDER BY procedure_id;
 ----
-104  test  105  public  137  p   CREATE PROCEDURE public.p(INT8)
+104  test  105  public  139  p   CREATE PROCEDURE public.p(INT8)
                                    LANGUAGE SQL
                                    AS $$
                                    SELECT 1;
                                  $$
-104  test  105  public  138  p   CREATE PROCEDURE public.p(STRING, b INT8)
+104  test  105  public  140  p   CREATE PROCEDURE public.p(STRING, b INT8)
                                    LANGUAGE SQL
                                    AS $$
                                    SELECT 'hello';
                                  $$
-104  test  140  sc      141  p2  CREATE PROCEDURE sc.p2(STRING)
+104  test  142  sc      143  p2  CREATE PROCEDURE sc.p2(STRING)
                                    LANGUAGE SQL
                                    AS $$
                                    SELECT 'hello';
@@ -1614,22 +1638,22 @@ FROM "".crdb_internal.create_procedure_statements
 WHERE procedure_name IN ('p', 'p2', 'p_cross_db')
 ORDER BY procedure_id;
 ----
-104  test           105  public  137  p           CREATE PROCEDURE public.p(INT8)
+104  test           105  public  139  p           CREATE PROCEDURE public.p(INT8)
                                                     LANGUAGE SQL
                                                     AS $$
                                                     SELECT 1;
                                                   $$
-104  test           105  public  138  p           CREATE PROCEDURE public.p(STRING, b INT8)
+104  test           105  public  140  p           CREATE PROCEDURE public.p(STRING, b INT8)
                                                     LANGUAGE SQL
                                                     AS $$
                                                     SELECT 'hello';
                                                   $$
-104  test           140  sc      141  p2          CREATE PROCEDURE sc.p2(STRING)
+104  test           142  sc      143  p2          CREATE PROCEDURE sc.p2(STRING)
                                                     LANGUAGE SQL
                                                     AS $$
                                                     SELECT 'hello';
                                                   $$
-142  test_cross_db  143  public  144  p_cross_db  CREATE PROCEDURE public.p_cross_db()
+144  test_cross_db  145  public  146  p_cross_db  CREATE PROCEDURE public.p_cross_db()
                                                     LANGUAGE SQL
                                                     AS $$
                                                     SELECT 1;
