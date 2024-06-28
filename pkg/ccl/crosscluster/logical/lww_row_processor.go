@@ -39,13 +39,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const originTimestampColumnName = "crdb_internal_origin_timestamp"
+const originTimestampColumnName = "crdb_replication_origin_timestamp"
 
 // sqlLastWriteWinsRowProcessor is a row processor that implements partial
 // last-write-wins semantics using SQL queries. We assume that the table has an
-// crdb_internal_origin_timestamp column defined as:
+// crdb_replication_origin_timestamp column defined as:
 //
-//	crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL
+//	crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL
 //
 // This row is explicitly set by the INSERT query using the MVCC timestamp of
 // the inbound write.
@@ -54,7 +54,7 @@ const originTimestampColumnName = "crdb_internal_origin_timestamp"
 //
 //  1. An UPDATE and a DELETE may be applied out of order because we have no way
 //     from SQL of knowing the write timestamp of the deletion tombstone.
-//  2. The crdb_internal_origin_timestamp requires modifying the user's schema.
+//  2. The crdb_replication_origin_timestamp requires modifying the user's schema.
 //
 // See the design document for possible solutions to both of these problems.
 type sqlLastWriteWinsRowProcessor struct {
@@ -316,10 +316,10 @@ VALUES (%s)
 ON CONFLICT ON CONSTRAINT %s
 DO UPDATE SET
 %s
-WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_internal_origin_timestamp
-     AND t.crdb_internal_origin_timestamp IS NULL)
- OR (t.crdb_internal_origin_timestamp <= excluded.crdb_internal_origin_timestamp
-     AND t.crdb_internal_origin_timestamp IS NOT NULL)`
+WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_replication_origin_timestamp
+     AND t.crdb_replication_origin_timestamp IS NULL)
+ OR (t.crdb_replication_origin_timestamp <= excluded.crdb_replication_origin_timestamp
+     AND t.crdb_replication_origin_timestamp IS NOT NULL)`
 )
 
 func makeInsertQueries(
@@ -361,7 +361,7 @@ func makeInsertQueries(
 				return nil
 			}
 			colName := col.GetName()
-			// We will set crdb_internal_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
+			// We will set crdb_replication_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
 			// We should never see this on the rangefeed as a non-null value as that would imply we've looped data around.
 			if colName == originTimestampColumnName {
 				return nil
@@ -439,9 +439,9 @@ func makeDeleteQuery(dstTableDescID int32, td catalog.TableDescriptor) (queryBui
 	baseQuery := `
 DELETE FROM [%d as t] WHERE %s
    AND ((t.crdb_internal_mvcc_timestamp < $%[3]d
-        AND t.crdb_internal_origin_timestamp IS NULL)
-    OR (t.crdb_internal_origin_timestamp < $%[3]d
-        AND t.crdb_internal_origin_timestamp IS NOT NULL))`
+        AND t.crdb_replication_origin_timestamp IS NULL)
+    OR (t.crdb_replication_origin_timestamp < $%[3]d
+        AND t.crdb_replication_origin_timestamp IS NOT NULL))`
 	stmt, err := parser.ParseOne(
 		fmt.Sprintf(baseQuery, dstTableDescID, whereClause.String(), originTSIdx))
 	if err != nil {

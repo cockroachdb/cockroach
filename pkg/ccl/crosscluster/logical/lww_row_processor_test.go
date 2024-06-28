@@ -64,7 +64,7 @@ func TestLWWInsertQueryQuoting(t *testing.T) {
 		tableName := fmt.Sprintf("tab%d", tableNumber)
 		runner.Exec(t, fmt.Sprintf(stmt, tableName))
 		runner.Exec(t, fmt.Sprintf(
-			"ALTER TABLE %s ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL",
+			"ALTER TABLE %s "+lwwColumnAdd,
 			tableName))
 		tableNumber++
 		return tableName
@@ -123,7 +123,7 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	tableName := "tab"
 	runner.Exec(b, "CREATE TABLE tab (pk INT PRIMARY KEY, payload STRING)")
-	runner.Exec(b, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL")
+	runner.Exec(b, "ALTER TABLE tab "+lwwColumnAdd)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	// Simulate how we set up the row processor on the main code path.
