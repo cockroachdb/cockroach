@@ -21,26 +21,61 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
 )
 
-func registerSchemaChangeBenchmarkLargeSchema(r registry.Registry, numTables int) {
+// registerLargeSchemaBenchmarks registers all permutations of
+// multi-region large schema benchmarking (for different scales
+// and multi-region).
+func registerLargeSchemaBenchmarks(r registry.Registry) {
+	for _, isMultiRegion := range []bool{false, true} {
+		for _, scale := range []int{1000, 5000, 10000, 25000, 40000} {
+			// We limit scale on the multi-region variant of this test,
+			// since the data import itself can take substantial time.
+			if isMultiRegion && scale > 10000 {
+				continue
+			}
+			registerLargeSchemaBenchmark(r, scale, isMultiRegion)
+		}
+	}
+}
+
+func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiRegion bool) {
+	clusterSpec := []spec.Option{
+		spec.CPU(8),
+		spec.VolumeSize(800),
+		spec.GCEVolumeType("pd-ssd"),
+		spec.GCEMachineType("n2-standard-8"),
+	}
+	testTimeout := 19 * time.Hour
+	regions := ""
+	if isMultiRegion {
+		regions = "us-east1,us-west1,us-central1"
+		// When running this test in the multi-region mode importing gigabytes
+		// / terabytes of data can take a substantial amount of time. So, give
+		// multi-region variants of this test extra time.
+		testTimeout = 24 * time.Hour
+		clusterSpec = append(clusterSpec, spec.Geo(),
+			spec.GCEZones("us-east1-b,us-west1-b,us-central1-b,"+
+				"us-east1-b,us-west1-b,us-central1-b,"+
+				"us-east1-b,us-west1-b,us-central1-b,"+
+				"us-east1-b"))
+	}
+
 	r.Add(registry.TestSpec{
-		Name:      fmt.Sprintf("tpcc/large-schema-benchmark/tables=%d", numTables),
+		Name:      fmt.Sprintf("tpcc/large-schema-benchmark/multiregion=%t/tables=%d", isMultiRegion, numTables),
 		Owner:     registry.OwnerSQLFoundations,
 		Benchmark: true,
 		Cluster: r.MakeClusterSpec(
 			// 9 CRDB nodes and one will be used for the TPCC workload
 			// runner.
 			10,
-			spec.CPU(8),
-			spec.VolumeSize(800),
-			spec.GCEVolumeType("pd-ssd"),
-			spec.GCEMachineType("n2-standard-8"),
+			clusterSpec...,
 		),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Weekly),
-		Timeout:          18 * time.Hour,
+		Timeout:          testTimeout,
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			numWorkers := (len(c.All()) - 1) * 10
@@ -92,15 +127,43 @@ func registerSchemaChangeBenchmarkLargeSchema(r registry.Registry, numTables int
 			var workloadNode option.NodeListOption
 			for dbListType, dbList := range [][]string{activeDBList, inactiveDBList} {
 				populateFileName := fmt.Sprintf("populate_%d", dbListType)
+				regionsArg := ""
+				importConcurrencyLimit := 32
+				if isMultiRegion {
+					regionsArg = fmt.Sprintf("--regions=%q --partitions=%d", regions, 3)
+					// For multi-region use a slower ingest rate, since the
+					// cluster can't keep up.
+					importConcurrencyLimit = 12
+				}
 				options := tpccOptions{
-					WorkloadCmd:    "tpccmultidb",
-					DB:             strings.Split(dbList[0], ".")[0],
-					SetupType:      usingInit,
-					Warehouses:     len(c.All()) - 1,
-					ExtraSetupArgs: fmt.Sprintf("--db-list-file=%s", populateFileName),
+					WorkloadCmd: "tpccmultidb",
+					DB:          strings.Split(dbList[0], ".")[0],
+					SetupType:   usingInit,
+					Warehouses:  len(c.All()) - 1,
+					ExtraSetupArgs: fmt.Sprintf("--db-list-file=%s %s --import-concurrency-limit=%d",
+						populateFileName,
+						regionsArg,
+						importConcurrencyLimit,
+					),
 				}
 				if dbListType == inactiveDbListType {
 					options.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					}
+				} else {
+					options.Start = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						settings := install.MakeClusterSettings()
+						startOpts := option.DefaultStartOpts()
+						startOpts.RoachprodOpts.ScheduleBackups = false
+						crdbNodes := c.Range(1, c.Spec().NodeCount-1)
+						c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
+						conn := c.Conn(ctx, t.L(), 1)
+						defer conn.Close()
+						// Since we will be making a large number of databases / tables
+						// quickly,on MR the job retention can slow things down. Let's
+						// minimize how long jobs are kept, so that the creation / ingest
+						// completes in a reasonable amount of time.
+						_, err := conn.Exec("SET CLUSTER SETTING jobs.retention_time='1h'")
+						require.NoError(t, err)
 					}
 				}
 				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.Node(c.Spec().NodeCount))
