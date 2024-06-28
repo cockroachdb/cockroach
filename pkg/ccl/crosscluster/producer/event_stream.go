@@ -148,12 +148,17 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
 		rangefeed.WithOnValues(s.onValues),
-		rangefeed.WithFiltering(s.spec.WithFiltering),
 		rangefeed.WithDiff(s.spec.WithDiff),
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
 	}
 	if emitMetadata.Get(&s.execCfg.Settings.SV) {
 		opts = append(opts, rangefeed.WithOnMetadata(s.onMetadata))
+	}
+	if s.spec.Type == streampb.ReplicationType_LOGICAL {
+		// To prevent data looping during Logical Replication, only emit events that
+		// were written by the foreground workload, not from the LDR replication
+		// stream.
+		opts = append(opts, rangefeed.WithOriginIDsMatching(0))
 	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
