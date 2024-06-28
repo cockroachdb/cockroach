@@ -173,7 +173,7 @@ func registerKV(r registry.Registry) {
 				url = fmt.Sprintf(" {pgurl:1-%d:%s}", nodes, appTenantName)
 			}
 			cmd := fmt.Sprintf(
-				"./workload run kv --tolerate-errors --init --user=%s --password=%s", install.DefaultUser, install.DefaultPassword,
+				"./cockroach workload run kv --tolerate-errors --init --user=%s --password=%s", install.DefaultUser, install.DefaultPassword,
 			) +
 				histograms + concurrency + splits + duration + readPercent +
 				batchSize + blockSize + sequential + envFlags + url
