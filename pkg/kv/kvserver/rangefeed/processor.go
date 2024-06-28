@@ -263,7 +263,7 @@ type LegacyProcessor struct {
 	reg registry
 	rts resolvedTimestamp
 
-	regC       chan registration
+	regC       chan *registration
 	unregC     chan *registration
 	lenReqC    chan struct{}
 	lenResC    chan int
@@ -342,7 +342,7 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 		reg:    makeRegistry(cfg.Metrics),
 		rts:    makeResolvedTimestamp(cfg.Settings),
 
-		regC:       make(chan registration),
+		regC:       make(chan *registration),
 		unregC:     make(chan *registration),
 		lenReqC:    make(chan struct{}),
 		lenResC:    make(chan int),
@@ -434,7 +434,7 @@ func (p *LegacyProcessor) run(
 			}
 
 			// Add the new registration to the registry.
-			p.reg.Register(ctx, &r)
+			p.reg.Register(ctx, r)
 
 			// Publish an updated filter that includes the new registration.
 			p.filterResC <- p.reg.NewFilter()
@@ -450,7 +450,7 @@ func (p *LegacyProcessor) run(
 			runOutputLoop := func(ctx context.Context) {
 				r.runOutputLoop(ctx, p.RangeID)
 				select {
-				case p.unregC <- &r:
+				case p.unregC <- r:
 					if r.unreg != nil {
 						r.unreg()
 					}
@@ -459,7 +459,7 @@ func (p *LegacyProcessor) run(
 			}
 			if err := stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
 				r.disconnect(kvpb.NewError(err))
-				p.reg.Unregister(ctx, &r)
+				p.reg.Unregister(ctx, r)
 			}
 
 		// Respond to unregistration requests; these come from registrations that
