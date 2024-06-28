@@ -80,18 +80,18 @@ func createLogicalReplicationStreamPlanHook(
 		if !stmt.Options.IsDefault() {
 			return errors.UnimplementedErrorf(issuelink.IssueLink{}, "logical replication stream options are not yet supported")
 		}
-		if stmt.On.Database != "" {
+		if stmt.From.Database != "" {
 			return errors.UnimplementedErrorf(issuelink.IssueLink{}, "logical replication streams on databases are unsupported")
 		}
-		if len(stmt.On.Tables) != len(stmt.Into.Tables) {
+		if len(stmt.From.Tables) != len(stmt.Into.Tables) {
 			return pgerror.New(pgcode.InvalidParameterValue, "the same number of source and destination tables must be specified")
 		}
 
 		var targetsDescription string
-		srcTableNames := make([]string, len(stmt.On.Tables))
+		srcTableNames := make([]string, len(stmt.From.Tables))
 
 		repPairs := make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(stmt.Into.Tables))
-		for i := range stmt.On.Tables {
+		for i := range stmt.From.Tables {
 
 			dstObjName, err := stmt.Into.Tables[i].ToUnresolvedObjectName(tree.NoAnnotation)
 			if err != nil {
@@ -111,7 +111,7 @@ func createLogicalReplicationStreamPlanHook(
 				tree.Name(td.GetName()),
 			)
 
-			srcTableNames[i] = stmt.On.Tables[i].String()
+			srcTableNames[i] = stmt.From.Tables[i].String()
 
 			if i == 0 {
 				targetsDescription = tbNameWithSchema.FQString()
