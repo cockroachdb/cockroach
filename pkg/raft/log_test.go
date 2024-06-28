@@ -226,7 +226,6 @@ func TestLogMaybeAppend(t *testing.T) {
 		committed uint64
 		ents      []pb.Entry
 
-		wlasti  uint64
 		wappend bool
 		wcommit uint64
 		wpanic  bool
@@ -235,75 +234,75 @@ func TestLogMaybeAppend(t *testing.T) {
 		{
 			entryID{term: lastterm - 1, index: lastindex}, lastindex,
 			index(lastindex + 1).terms(4),
-			0, false, commit, false,
+			false, commit, false,
 		},
 		// not match: index out of bound
 		{
 			entryID{term: lastterm, index: lastindex + 1}, lastindex,
 			index(lastindex + 2).terms(4),
-			0, false, commit, false,
+			false, commit, false,
 		},
 		// match with the last existing entry
 		{
 			entryID{term: lastterm, index: lastindex}, lastindex, nil,
-			lastindex, true, lastindex, false,
+			true, lastindex, false,
 		},
 		{
 			entryID{term: lastterm, index: lastindex}, lastindex + 1, nil,
-			lastindex, true, lastindex, false, // do not increase commit higher than lastnewi
+			true, lastindex, false, // do not increase commit higher than lastnewi
 		},
 		{
 			entryID{term: lastterm, index: lastindex}, lastindex - 1, nil,
-			lastindex, true, lastindex - 1, false, // commit up to the commit in the message
+			true, lastindex - 1, false, // commit up to the commit in the message
 		},
 		{
 			entryID{term: lastterm, index: lastindex}, 0, nil,
-			lastindex, true, commit, false, // commit do not decrease
+			true, commit, false, // commit do not decrease
 		},
 		{
 			entryID{}, lastindex, nil,
-			0, true, commit, false, // commit do not decrease
+			true, commit, false, // commit do not decrease
 		},
 		{
 			entryID{term: lastterm, index: lastindex}, lastindex,
 			index(lastindex + 1).terms(4),
-			lastindex + 1, true, lastindex, false,
+			true, lastindex, false,
 		},
 		{
 			entryID{term: lastterm, index: lastindex}, lastindex + 1,
 			index(lastindex + 1).terms(4),
-			lastindex + 1, true, lastindex + 1, false,
+			true, lastindex + 1, false,
 		},
 		{
 			entryID{term: lastterm, index: lastindex}, lastindex + 2,
 			index(lastindex + 1).terms(4),
-			lastindex + 1, true, lastindex + 1, false, // do not increase commit higher than lastnewi
+			true, lastindex + 1, false, // do not increase commit higher than lastnewi
 		},
 		{
 			entryID{term: lastterm, index: lastindex}, lastindex + 2,
 			index(lastindex+1).terms(4, 4),
-			lastindex + 2, true, lastindex + 2, false,
+			true, lastindex + 2, false,
 		},
 		// match with the entry in the middle
 		{
 			entryID{term: lastterm - 1, index: lastindex - 1}, lastindex,
 			index(lastindex).terms(4),
-			lastindex, true, lastindex, false,
+			true, lastindex, false,
 		},
 		{
 			entryID{term: lastterm - 2, index: lastindex - 2}, lastindex,
 			index(lastindex - 1).terms(4),
-			lastindex - 1, true, lastindex - 1, false,
+			true, lastindex - 1, false,
 		},
 		{
 			entryID{term: lastterm - 3, index: lastindex - 3}, lastindex,
 			index(lastindex - 2).terms(4),
-			lastindex - 2, true, lastindex - 2, true, // conflict with existing committed entry
+			true, lastindex - 2, true, // conflict with existing committed entry
 		},
 		{
 			entryID{term: lastterm - 2, index: lastindex - 2}, lastindex,
 			index(lastindex-1).terms(4, 4),
-			lastindex, true, lastindex, false,
+			true, lastindex, false,
 		},
 	}
 
@@ -328,11 +327,10 @@ func TestLogMaybeAppend(t *testing.T) {
 					require.True(t, tt.wpanic)
 				}
 			}()
-			glasti, gappend := raftLog.maybeAppend(app)
-			require.Equal(t, tt.wlasti, glasti)
+			gappend := raftLog.maybeAppend(app)
 			require.Equal(t, tt.wappend, gappend)
 			if gappend {
-				raftLog.commitTo(min(glasti, tt.committed))
+				raftLog.commitTo(min(app.lastIndex(), tt.committed))
 			}
 			require.Equal(t, tt.wcommit, raftLog.committed)
 			if gappend && len(tt.ents) != 0 {
