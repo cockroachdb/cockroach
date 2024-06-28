@@ -69,7 +69,7 @@ func (lrr *LogicalReplicationResources) Format(ctx *FmtCtx) {
 		}
 		ctx.WriteString(")")
 	} else {
-		ctx.WriteString("Table ")
+		ctx.WriteString("TABLE ")
 		ctx.FormatNode(lrr.Tables[0])
 	}
 }
