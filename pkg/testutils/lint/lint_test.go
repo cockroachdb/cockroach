@@ -232,35 +232,6 @@ func TestLint(t *testing.T) {
 	t.Run("TestCopyrightHeaders", func(t *testing.T) {
 		t.Parallel()
 
-		bslHeader := regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
-`)
-
-		cclHeader := regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License \(the "License"\); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
-`)
-
-		apacheHeader := regexp.MustCompile(`// Copyright 20\d\d The Cockroach Authors.
-//
-// Licensed under the Apache License, Version 2.0 \(the "License"\);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-`)
-
 		// These extensions identify source files that should have copyright headers.
 		extensions := []string{
 			"*.go", "*.cc", "*.h", "*.js", "*.ts", "*.tsx", "*.s", "*.S", "*.styl", "*.proto", "*.rl",
@@ -344,24 +315,6 @@ func TestLint(t *testing.T) {
 			skip.IgnoreLint(t, "PKG specified")
 		}
 
-		apacheHeader := regexp.MustCompile(`// Copyright 20\d\d The etcd Authors
-//
-// Licensed under the Apache License, Version 2.0 \(the "License"\);
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-`)
-		cockroachCopyright := regexp.MustCompile(
-			`// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 20\d\d Cockroach Labs, Inc.`)
-
 		raftDir := filepath.Join(pkgDir, "raft")
 		// These extensions identify source files that should have copyright headers.
 		// TODO(pav-kv): add "*.proto". Currently raft.proto has no header.
@@ -369,12 +322,13 @@ func TestLint(t *testing.T) {
 
 		// The commit that imported etcd-io/raft into pkg/raft.
 		const baseSHA = "cd6f4f263bd42688096064825dfa668bde2d3720"
-		// modified will contain the set of all files in pkg/raft that were modified
-		// since importing etcd-io/raft into it.
-		modified := func() map[string]struct{} {
+		const modifiedFlag = "M"
+		const addedFlag = "A"
+		gitDiff := func(flag string) map[string]struct{} {
 			// List the source files that have been modified.
 			cmd, stderr, filter, err := dirCmd(raftDir, "git", append([]string{
-				"diff", baseSHA, "--name-status", "--diff-filter=M", "--"}, extensions...)...)
+				"diff", baseSHA, "--name-status", fmt.Sprintf("--diff-filter=%s", flag), "--"},
+				extensions...)...)
 			require.NoError(t, err)
 			require.NoError(t, cmd.Start())
 			// The command outputs lines of the form "M\t<filename>".
@@ -388,7 +342,13 @@ func TestLint(t *testing.T) {
 				require.Empty(t, stderr.String(), "err=%s", err)
 			}
 			return paths
-		}()
+		}
+		// modified will contain the set of all files in pkg/raft that were
+		// modified since importing etcd-io/raft into it.
+		modified := gitDiff(modifiedFlag)
+		// added will contain the set of all files in pkg/raft that were added
+		// since importing etcd-io/raft into it.
+		added := gitDiff(addedFlag)
 
 		cmd, stderr, filter, err := dirCmd(raftDir, "git",
 			append([]string{"ls-files", "--full-name"}, extensions...)...)
@@ -405,10 +365,15 @@ func TestLint(t *testing.T) {
 			n, err := file.Read(data)
 			require.NoError(t, err)
 			data = data[0:n]
-			assert.NotNilf(t, apacheHeader.Find(data),
-				"did not find expected Apache license header in %s", filename)
+			if _, ok := added[filename]; ok {
+				assert.NotNilf(t, bslHeader.Find(data),
+					"did not find expected Cockroach BSL license header in %s", filename)
+			} else {
+				assert.NotNilf(t, etcdApacheHeader.Find(data),
+					"did not find expected Apache license header in %s", filename)
+			}
 			if _, ok := modified[filename]; ok {
-				assert.NotNilf(t, cockroachCopyright.Find(data),
+				assert.NotNilf(t, cockroachModifiedCopyright.Find(data),
 					"did not find expected Cockroach copyright header in %s", filename)
 			}
 		}))
