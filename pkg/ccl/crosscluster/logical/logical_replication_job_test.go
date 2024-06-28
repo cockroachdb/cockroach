@@ -228,6 +228,11 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 
 	dbB.Exec(t, fmt.Sprintf("ALTER TABLE tab RENAME COLUMN %[1]s TO str_col, ADD COLUMN %[1]s DECIMAL", originTimestampColumnName))
 
+	if s.Codec().IsSystem() {
+		dbB.ExpectErr(t, "kv.rangefeed.enabled must be enabled on the source cluster for logical replication", createQ, urlA)
+		kvserver.RangefeedEnabled.Override(ctx, &server.Server(0).ClusterSettings().SV, true)
+	}
+
 	dbB.Exec(t, createQ, urlA)
 }
 
