@@ -511,7 +511,7 @@ const pauseAndCancelUpdate = `
 					last_run = NULL
     WHERE (status IN ('` + string(StatusPauseRequested) + `', '` + string(StatusCancelRequested) + `'))
       AND ((claim_session_id = $1) AND (claim_instance_id = $2))
-RETURNING id, status
+RETURNING id, status, job_type
 `
 
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
@@ -536,6 +536,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 			id := jobspb.JobID(*row[0].(*tree.DInt))
 			job := &Job{id: id, registry: r}
 			statusString := *row[1].(*tree.DString)
+			jobTypeString := *row[2].(*tree.DString)
 			switch Status(statusString) {
 			case StatusPaused:
 				if !r.cancelRegisteredJobContext(id) {
@@ -544,6 +545,15 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 					// cleared out on Resume exit.
 					r.clearLeaseForJobID(id, txn, txn.KV())
 				}
+				txn.KV().AddCommitTrigger(func(ctx context.Context) {
+					LogStatusChangeStructured(ctx,
+						id,
+						string(jobTypeString),
+						nil,
+						&RunStats{},
+						StatusPauseRequested,
+						StatusPaused)
+				})
 				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
 			case StatusReverting:
 				if err := job.WithTxn(txn).Update(ctx, func(
@@ -571,6 +581,14 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 					// so that the job can be picked-up in the next adopt-loop, sooner
 					// than its current next-retry time.
 					ju.UpdateRunStats(0 /* numRuns */, r.clock.Now().GoTime() /* lastRun */)
+					txn.KV().AddCommitTrigger(func(ctx context.Context) {
+						LogStatusChangeStructured(ctx,
+							id,
+							md.Payload.Type().String(),
+							md.Payload, ju.md.RunStats,
+							StatusCancelRequested,
+							StatusReverting)
+					})
 					return nil
 				}); err != nil {
 					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting", id)
