@@ -162,9 +162,10 @@ func TestReplicaRangefeed(t *testing.T) {
 					Timestamp: initTime,
 					RangeID:   rangeID,
 				},
-				Span:          rangefeedSpan,
-				WithDiff:      true,
-				WithFiltering: true,
+				Span:           rangefeedSpan,
+				WithDiff:       true,
+				WithFiltering:  true,
+				WithOmitRemote: true,
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
@@ -458,6 +459,15 @@ func TestReplicaRangefeed(t *testing.T) {
 	pArgs = putArgs(roachpb.Key("o"), []byte("val13"))
 	_, err = kv.SendWrappedWith(ctx, db, kvpb.Header{Timestamp: ts13}, pArgs)
 	require.Nil(t, err)
+
+	// Insert a key transactionally with OriginID == 1.
+	ts14 := initTime.Add(0, 14)
+	pArgs = putArgs(roachpb.Key("o"), []byte("val14"))
+	_, err = kv.SendWrappedWith(ctx, db, kvpb.Header{Timestamp: ts14, WriteOptions: &kvpb.WriteOptions{OriginID: 1}}, pArgs)
+	require.Nil(t, err)
+	// Read to force intent resolution.
+	_, pErr = store1.DB().Get(ctx, roachpb.Key("o"))
+	require.Nil(t, pErr)
 
 	// Wait for all streams to observe the expected events.
 	expVal2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), ts2)
