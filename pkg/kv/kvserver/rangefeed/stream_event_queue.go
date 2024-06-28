@@ -41,6 +41,7 @@ func NewLockedBufferedStream(wrapped severStreamSender) *LockedBufferedStream {
 	return l
 }
 
+// TODO(wenyihu6): check how we want to handle the capacity.
 func (b *LockedBufferedStream) AddCapacity() {
 	b.queueMu.Lock()
 	defer b.queueMu.Unlock()
