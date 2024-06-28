@@ -43,6 +43,7 @@ type config struct {
 
 	withDiff             bool
 	withFiltering        bool
+	withOmitRemote       bool
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
 	frontierQuantize     time.Duration
@@ -154,6 +155,12 @@ func WithDiff(withDiff bool) Option {
 func WithFiltering(withFiltering bool) Option {
 	return optionFunc(func(c *config) {
 		c.withFiltering = withFiltering
+	})
+}
+
+func WithOmitRemote(withOmitRemote bool) Option {
+	return optionFunc(func(c *config) {
+		c.withOmitRemote = withOmitRemote
 	})
 }
 

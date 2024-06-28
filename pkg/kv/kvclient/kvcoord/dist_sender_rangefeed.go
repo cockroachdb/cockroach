@@ -68,6 +68,7 @@ type rangeFeedConfig struct {
 	withDiff        bool
 	withFiltering   bool
 	withMetadata    bool
+	withOmitRemote  bool
 	rangeObserver   func(ForEachRangeFn)
 
 	knobs struct {
@@ -115,6 +116,14 @@ func WithDiff() RangeFeedOption {
 func WithFiltering() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.withFiltering = true
+	})
+}
+
+// WithOmitRemote opts into rangefeed omitting events originally written by
+// remote clusters during logical data replication.
+func WithOmitRemote() RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.withOmitRemote = true
 	})
 }
 
@@ -656,6 +665,7 @@ func makeRangeFeedRequest(
 	startAfter hlc.Timestamp,
 	withDiff bool,
 	withFiltering bool,
+	withOmitRemote bool,
 ) kvpb.RangeFeedRequest {
 	admissionPri := admissionpb.BulkNormalPri
 	if isSystemRange {
@@ -667,8 +677,9 @@ func makeRangeFeedRequest(
 			Timestamp: startAfter,
 			RangeID:   rangeID,
 		},
-		WithDiff:      withDiff,
-		WithFiltering: withFiltering,
+		WithDiff:       withDiff,
+		WithFiltering:  withFiltering,
+		WithOmitRemote: withOmitRemote,
 		AdmissionHeader: kvpb.AdmissionHeader{
 			// NB: AdmissionHeader is used only at the start of the range feed
 			// stream since the initial catch-up scan is expensive.
