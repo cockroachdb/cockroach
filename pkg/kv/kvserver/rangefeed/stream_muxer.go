@@ -227,7 +227,6 @@ func (s *StreamMuxer) DisconnectAllWithErr(err error) {
 		}
 		info, ok := value.(*streamInfo)
 		if !ok {
-			panic("kjkdjsk")
 			log.Errorf(context.Background(), "unexpected streamID type %T", key)
 			return true
 		}
