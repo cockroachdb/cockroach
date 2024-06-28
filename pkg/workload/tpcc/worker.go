@@ -36,7 +36,7 @@ const (
 // tpccTX is an interface for running a TPCC transaction.
 type tpccTx interface {
 	// run executes the TPCC transaction against the given warehouse ID.
-	run(ctx context.Context, wID int) (interface{}, error)
+	run(ctx context.Context, wID int) (txnData interface{}, onTxnStartDuration time.Duration, err error)
 }
 
 type createTxFn func(ctx context.Context, config *tpcc, mcp *workload.MultiConnPool) (tpccTx, error)
@@ -92,7 +92,7 @@ type txCounter struct {
 
 type txCounters map[string]txCounter
 
-func setupTPCCMetrics(reg prometheus.Registerer) txCounters {
+func setupTPCCMetrics(workloadName string, reg prometheus.Registerer) txCounters {
 	m := txCounters{}
 	f := promauto.With(reg)
 	for _, tx := range allTxs {
@@ -100,7 +100,7 @@ func setupTPCCMetrics(reg prometheus.Registerer) txCounters {
 			success: f.NewCounter(
 				prometheus.CounterOpts{
 					Namespace: histogram.PrometheusNamespace,
-					Subsystem: tpccMeta.Name,
+					Subsystem: workloadName,
 					Name:      fmt.Sprintf("%s_success_total", tx.name),
 					Help:      fmt.Sprintf("The total number of successful %s transactions.", tx.name),
 				},
@@ -108,7 +108,7 @@ func setupTPCCMetrics(reg prometheus.Registerer) txCounters {
 			error: f.NewCounter(
 				prometheus.CounterOpts{
 					Namespace: histogram.PrometheusNamespace,
-					Subsystem: tpccMeta.Name,
+					Subsystem: workloadName,
 					Name:      fmt.Sprintf("%s_error_total", tx.name),
 					Help:      fmt.Sprintf("The total number of error %s transactions.", tx.name),
 				}),
@@ -228,7 +228,8 @@ func (w *worker) run(ctx context.Context) error {
 	// cancel them when the context expires. Instead, let them finish normally
 	// but don't account for them in the histogram.
 	start := timeutil.Now()
-	if _, err := tx.run(context.Background(), warehouseID); err != nil {
+	_, onTxnStartDuration, err := tx.run(context.Background(), warehouseID)
+	if err != nil {
 		w.counters[txInfo.name].error.Inc()
 		return errors.Wrapf(err, "error in %s", txInfo.name)
 	}
@@ -237,7 +238,7 @@ func (w *worker) run(ctx context.Context) error {
 		// NB: this histogram *should* be named along the lines of
 		// `txInfo.name+"_success"` but we already rely on the names and shouldn't
 		// change them now.
-		w.hists.Get(txInfo.name).Record(elapsed)
+		w.hists.Get(txInfo.name).Record(elapsed - onTxnStartDuration)
 	}
 	w.counters[txInfo.name].success.Inc()
 
