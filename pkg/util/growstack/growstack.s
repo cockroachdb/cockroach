@@ -13,3 +13,7 @@
 TEXT ·Grow(SB),0,$32768-0
         NO_LOCAL_POINTERS
         RET
+
+TEXT ·Grow16(SB),0,$16384-0
+        NO_LOCAL_POINTERS
+        RET

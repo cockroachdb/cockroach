@@ -18,3 +18,5 @@ package growstack
 // placing a 32 KB object on the stack early in the lifetime of a goroutine we
 // force the runtime to use a 64 KB stack for the goroutine.
 func Grow()
+
+func Grow16()
