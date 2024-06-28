@@ -583,7 +583,7 @@ func TestUnstableTruncateAndAppend(t *testing.T) {
 			u.checkInvariants(t)
 
 			require.NoError(t, tt.app.valid())
-			u.truncateAndAppend(tt.app.entries)
+			u.truncateAndAppend(tt.app)
 			u.checkInvariants(t)
 			require.Equal(t, tt.woffset, u.offset)
 			require.Equal(t, tt.woffsetInProgress, u.offsetInProgress)
