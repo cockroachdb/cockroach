@@ -19,6 +19,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/workload",

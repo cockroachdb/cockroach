@@ -390,6 +390,10 @@ type InitialDataLoader interface {
 // IMPORT-based InitialDataLoader implementation.
 var ImportDataLoader InitialDataLoader = requiresCCLBinaryDataLoader(`IMPORT`)
 
+// ImportDataLoaderConcurrencyFlag that can be used to control import concurrency.
+const ImportDataLoaderConcurrencyFlag = "import-concurrency-limit"
+const ImportDataLoaderConcurrencyFlagDescription = "limit for concurrency of import operations"
+
 type requiresCCLBinaryDataLoader string
 
 func (l requiresCCLBinaryDataLoader) InitialDataLoad(
