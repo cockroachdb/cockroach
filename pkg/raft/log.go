@@ -113,26 +113,28 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 	if !ok {
 		return false
 	}
-
 	// Fast-forward to the first mismatching or missing entry.
 	// NB: prev.index <= match.index <= a.lastIndex(), so the sub-slicing is safe.
 	a.entries = a.entries[match.index-a.prev.index:]
 	a.prev = match
-
-	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
-	// bookkeeping in the unstable structure.
-	l.append(a.entries...)
-	return true
+	return l.append(a)
 }
 
-func (l *raftLog) append(ents ...pb.Entry) {
-	if len(ents) == 0 {
+// append adds the given log slice to the end of the log, and truncates the log
+// beyond the logSlice.lastIndex() if the logSlice has a higher term than the
+// last accepted term.
+//
+// TODO(pav-kv): the term logic needs to be implemented.
+func (l *raftLog) append(a logSlice) {
+	if len(a.entries) == 0 {
 		return
 	}
-	if first := ents[0].Index; first <= l.committed {
+	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
 	}
-	l.unstable.truncateAndAppend(ents)
+	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
+	// bookkeeping in the unstable structure.
+	l.unstable.truncateAndAppend(a.entries)
 }
 
 // findConflict finds the last entry in the given log slice that matches the
