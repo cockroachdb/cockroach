@@ -148,9 +148,9 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
 		rangefeed.WithOnValues(s.onValues),
-		rangefeed.WithFiltering(s.spec.WithFiltering),
 		rangefeed.WithDiff(s.spec.WithDiff),
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
+		rangefeed.WithOmitRemote(s.spec.Type == streampb.ReplicationType_LOGICAL),
 	}
 	if emitMetadata.Get(&s.execCfg.Settings.SV) {
 		opts = append(opts, rangefeed.WithOnMetadata(s.onMetadata))
