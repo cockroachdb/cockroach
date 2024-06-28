@@ -18,7 +18,7 @@ import (
 
 type CreateLogicalReplicationStream struct {
 	PGURL   Expr
-	On      LogicalReplicationResources
+	From    LogicalReplicationResources
 	Into    LogicalReplicationResources
 	Options LogicalReplicationOptions
 }
@@ -42,9 +42,9 @@ var _ NodeFormatter = &LogicalReplicationOptions{}
 // Format implements the NodeFormatter interface.
 func (node *CreateLogicalReplicationStream) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE LOGICAL REPLICATION STREAM FROM ")
-	ctx.FormatNode(node.PGURL)
+	ctx.FormatNode(&node.From)
 	ctx.WriteString(" ON ")
-	ctx.FormatNode(&node.On)
+	ctx.FormatNode(node.PGURL)
 	ctx.WriteString(" INTO ")
 	ctx.FormatNode(&node.Into)
 

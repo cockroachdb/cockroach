@@ -4601,12 +4601,12 @@ create_stmt:
 //  < FUNCTION 'udf' FOR TABLE local_name  , ... >
 // ]
 create_logical_replication_stream_stmt:
-  CREATE LOGICAL REPLICATION STREAM FROM string_or_placeholder ON logical_replication_resources INTO logical_replication_resources opt_logical_replication_options
+  CREATE LOGICAL REPLICATION STREAM FROM logical_replication_resources ON string_or_placeholder INTO logical_replication_resources opt_logical_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateLogicalReplicationStream{
-      PGURL: $6.expr(),
-      On: $8.logicalReplicationResources(),
+      From: $6.logicalReplicationResources(),
+      PGURL: $8.expr(),
       Into: $10.logicalReplicationResources(),
       Options: *$11.logicalReplicationOptions(),
     }
