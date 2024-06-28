@@ -341,15 +341,14 @@ func (p *ScheduledProcessor) Register(
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
 		r.stream.RegisterRangefeedCleanUp(func() {
-			//p.reg.Unregister(ctx, &r)
-			//if r.unreg != nil {
-			//	r.unreg()
-			//}
-			if p.unregisterClient(&r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if r.unreg != nil {
-					r.unreg()
+			needCleanUp := r.setDisconnected()
+			if needCleanUp {
+				if p.unregisterClient(&r) {
+					// unreg callback is set by replica to tear down processors that have
+					// zero registrations left and to update event filters.
+					if r.unreg != nil {
+						r.unreg()
+					}
 				}
 			}
 		})
