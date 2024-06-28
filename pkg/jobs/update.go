@@ -171,6 +171,11 @@ WHERE id = $1
 	if err := updateFn(u.txn, md, &ju); err != nil {
 		return err
 	}
+	if ju.md.Status != "" {
+		u.txn.KV().AddCommitTrigger(func(ctx context.Context) {
+			LogStateChangeStructured(ctx, md.ID, ju.md.Payload, md.RunStats, status, ju.md.Status)
+		})
+	}
 	if j.registry.knobs.BeforeUpdate != nil {
 		if err := j.registry.knobs.BeforeUpdate(md, ju.md); err != nil {
 			return err
