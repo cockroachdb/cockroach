@@ -41,18 +41,19 @@ type config struct {
 
 	invoker func(func() error) error
 
-	withDiff             bool
-	withFiltering        bool
-	onUnrecoverableError OnUnrecoverableError
-	onCheckpoint         OnCheckpoint
-	frontierQuantize     time.Duration
-	onFrontierAdvance    OnFrontierAdvance
-	frontierVisitor      FrontierSpanVisitor
-	onSSTable            OnSSTable
-	onValues             OnValues
-	onDeleteRange        OnDeleteRange
-	onMetadata           OnMetadata
-	extraPProfLabels     []string
+	withDiff              bool
+	withFiltering         bool
+	withMatchingOriginIDs []uint32
+	onUnrecoverableError  OnUnrecoverableError
+	onCheckpoint          OnCheckpoint
+	frontierQuantize      time.Duration
+	onFrontierAdvance     OnFrontierAdvance
+	frontierVisitor       FrontierSpanVisitor
+	onSSTable             OnSSTable
+	onValues              OnValues
+	onDeleteRange         OnDeleteRange
+	onMetadata            OnMetadata
+	extraPProfLabels      []string
 }
 
 type scanConfig struct {
@@ -154,6 +155,12 @@ func WithDiff(withDiff bool) Option {
 func WithFiltering(withFiltering bool) Option {
 	return optionFunc(func(c *config) {
 		c.withFiltering = withFiltering
+	})
+}
+
+func WithOriginIDsMatching(originIDs ...uint32) Option {
+	return optionFunc(func(c *config) {
+		c.withMatchingOriginIDs = originIDs
 	})
 }
 
