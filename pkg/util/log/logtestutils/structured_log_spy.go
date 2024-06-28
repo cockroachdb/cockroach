@@ -142,6 +142,10 @@ type StructuredLogSpy[T any] struct {
 
 		// Function to transform log entries into the desired format.
 		format func(entry logpb.Entry) (T, error)
+
+		// lastReadIdx is a map of channel to int, representing the last read log
+		// line read when calling GetUnreadLogs.
+		lastReadIdx map[logpb.Channel]int
 	}
 }
 
@@ -169,6 +173,7 @@ func NewStructuredLogSpy[T any](
 	for _, ch := range channels {
 		s.channels[ch] = struct{}{}
 	}
+	s.mu.lastReadIdx = make(map[logpb.Channel]int, len(channels))
 	s.mu.logs = make(map[logpb.Channel][]T, len(s.channels))
 	s.mu.format = format
 	s.mu.filters = append(s.mu.filters, filters...)
@@ -237,6 +242,19 @@ func (s *StructuredLogSpy[T]) GetLogs(ch logpb.Channel) []T {
 	return logs
 }
 
+// GetUnreadLogs returns all logs that have been intercepted in the given channel
+// since the last time this method was called.
+func (s *StructuredLogSpy[T]) GetUnreadLogs(ch logpb.Channel) []T {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	currentCount := len(s.mu.logs[ch])
+	lastReadLogLine := s.mu.lastReadIdx[ch]
+	logs := make([]T, 0, currentCount-lastReadLogLine)
+	logs = append(logs, s.mu.logs[ch][lastReadLogLine:currentCount]...)
+	s.mu.lastReadIdx[ch] = currentCount
+	return logs
+}
+
 // Intercept intercepts a log entry and stores it in memory.
 // Logs are formatted and then filtered before being stored.
 func (s *StructuredLogSpy[T]) Intercept(entry []byte) {
@@ -287,6 +305,7 @@ func (s *StructuredLogSpy[T]) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.logs = make(map[logpb.Channel][]T, len(s.channels))
+	s.mu.lastReadIdx = make(map[logpb.Channel]int, len(s.channels))
 }
 
 // Channels returns a list of the channels that the spy is
