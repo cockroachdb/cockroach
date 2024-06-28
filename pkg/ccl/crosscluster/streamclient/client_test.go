@@ -45,6 +45,18 @@ func (sc testStreamClient) Dial(_ context.Context) error {
 	return nil
 }
 
+func (testStreamClient) PlanLogicalReplication(
+	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
+) (LogicalReplicationPlan, error) {
+	return LogicalReplicationPlan{}, errors.AssertionFailedf("unimplemented")
+}
+
+func (testStreamClient) CreateForTables(
+	ctx context.Context, req *streampb.ReplicationProducerRequest,
+) (*streampb.ReplicationProducerSpec, error) {
+	return nil, errors.AssertionFailedf("unimplemented")
+}
+
 // CreateForTenant implements the Client interface.
 func (sc testStreamClient) CreateForTenant(
 	_ context.Context, _ roachpb.TenantName, _ streampb.ReplicationProducerRequest,

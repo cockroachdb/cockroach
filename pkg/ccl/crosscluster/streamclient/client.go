@@ -111,12 +111,6 @@ type Client interface {
 	PriorReplicationDetails(
 		ctx context.Context, tenant roachpb.TenantName,
 	) (id string, replicatedFrom string, activated hlc.Timestamp, _ error)
-}
-
-// LogicalReplicationClient is a Client with additional methods
-// specific to logical replication.
-type LogicalReplicationClient interface {
-	Client
 
 	PlanLogicalReplication(ctx context.Context, req streampb.LogicalReplicationPlanRequest) (LogicalReplicationPlan, error)
 	CreateForTables(ctx context.Context, req *streampb.ReplicationProducerRequest) (*streampb.ReplicationProducerSpec, error)
