@@ -1103,6 +1103,20 @@ func (b *builderState) ResolveTable(
 	return b.QueryByID(c.desc.GetID())
 }
 
+// ResolvePhysicalTable implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolvePhysicalTable(
+	name *tree.UnresolvedObjectName, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	c := b.resolveRelation(name, p)
+	if c == nil {
+		return nil
+	}
+	if rel, ok := c.desc.(catalog.TableDescriptor); !ok || !rel.IsPhysicalTable() {
+		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table, view, or sequence", c.desc.GetName()))
+	}
+	return b.QueryByID(c.desc.GetID())
+}
+
 // ResolveSequence implements the scbuildstmt.NameResolver interface.
 func (b *builderState) ResolveSequence(
 	name *tree.UnresolvedObjectName, p scbuildstmt.ResolveParams,
