@@ -162,9 +162,10 @@ func TestReplicaRangefeed(t *testing.T) {
 					Timestamp: initTime,
 					RangeID:   rangeID,
 				},
-				Span:          rangefeedSpan,
-				WithDiff:      true,
-				WithFiltering: true,
+				Span:                  rangefeedSpan,
+				WithDiff:              true,
+				WithFiltering:         true,
+				WithMatchingOriginIDs: []uint32{0},
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
@@ -458,6 +459,15 @@ func TestReplicaRangefeed(t *testing.T) {
 	pArgs = putArgs(roachpb.Key("o"), []byte("val13"))
 	_, err = kv.SendWrappedWith(ctx, db, kvpb.Header{Timestamp: ts13}, pArgs)
 	require.Nil(t, err)
+
+	// Insert a key transactionally with OriginID == 1.
+	ts14 := initTime.Add(0, 14)
+	pArgs = putArgs(roachpb.Key("o"), []byte("val14"))
+	_, err = kv.SendWrappedWith(ctx, db, kvpb.Header{Timestamp: ts14, WriteOptions: &kvpb.WriteOptions{OriginID: 1}}, pArgs)
+	require.Nil(t, err)
+	// Read to force intent resolution.
+	_, pErr = store1.DB().Get(ctx, roachpb.Key("o"))
+	require.Nil(t, pErr)
 
 	// Wait for all streams to observe the expected events.
 	expVal2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), ts2)
@@ -1150,6 +1160,36 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 
 		// Wait for the first checkpoint event.
 		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
+	})
+	t.Run("multiple-origin-ids", func(t *testing.T) {
+		tc, rangeID := setup(t, base.TestingKnobs{})
+		defer tc.Stopper().Stop(ctx)
+
+		// Establish a rangefeed on the replica we plan to split.
+		stream := newTestStream()
+		streamErrC := make(chan error, 1)
+		rangefeedSpan := mkSpan("a", "z")
+		ts := tc.Servers[0]
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() {
+			req := kvpb.RangeFeedRequest{
+				Header: kvpb.Header{
+					RangeID: rangeID,
+				},
+				Span:                  rangefeedSpan,
+				WithMatchingOriginIDs: []uint32{0, 1},
+			}
+			timer := time.AfterFunc(10*time.Second, stream.Cancel)
+			defer timer.Stop()
+			streamErrC <- waitRangeFeed(store, &req, stream)
+		}()
+
+		// Check the error.
+		pErr := <-streamErrC
+		require.Equal(t, pErr.Error(), "multiple origin IDs and OriginID != 0 not supported yet")
 	})
 }
 

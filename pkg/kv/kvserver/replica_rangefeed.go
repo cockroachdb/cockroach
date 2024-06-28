@@ -342,9 +342,16 @@ func (r *Replica) RangeFeed(
 			catchUpIter.OnEmit = f
 		}
 	}
+	var omitRemote bool
+	if len(args.WithMatchingOriginIDs) == 1 && args.WithMatchingOriginIDs[0] == 0 {
+		omitRemote = true
+	} else if len(args.WithMatchingOriginIDs) > 0 {
+		return future.MakeCompletedErrorFuture(errors.Errorf("multiple origin IDs and OriginID != 0 not supported yet"))
+	}
+
 	var done future.ErrorFuture
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, lockedStream, &done,
+		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, lockedStream, &done,
 	)
 	r.raftMu.Unlock()
 
@@ -441,6 +448,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	catchUpIter *rangefeed.CatchUpIterator,
 	withDiff bool,
 	withFiltering bool,
+	withOmitRemote bool,
 	stream rangefeed.Stream,
 	done *future.ErrorFuture,
 ) rangefeed.Processor {
@@ -462,7 +470,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p := r.rangefeedMu.proc
 
 	if p != nil {
-		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, withFiltering, false, /* withOmitRemote */
+		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 		if reg {
 			// Registered successfully with an existing processor.
@@ -551,7 +559,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
 	reg, filter := p.Register(span, startTS, catchUpIter, withDiff,
-		withFiltering, false /* withOmitRemote */, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
+		withFiltering, withOmitRemote, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
