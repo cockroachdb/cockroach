@@ -478,6 +478,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				tree.DNull, // atthasmissing
 				// These columns were automatically created by pg_catalog_test's missing column generator.
 				tree.DNull, // attmissingval
+				tree.MakeDBool(tree.DBool(column.IsHidden())), // attishidden
 			)
 		}
 
@@ -533,6 +534,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 					tree.DNull, // atthasmissing
 					// These columns were automatically created by pg_catalog_test's missing column generator.
 					tree.DNull, // attmissingval
+					tree.DNull, // attishidden
 				); err != nil {
 					return err
 				}
@@ -3540,7 +3542,8 @@ func addPGAttributeRowForCompositeType(
 			// These columns were automatically created by pg_catalog_test's missing column generator.
 			tree.DNull, // atthasmissing
 			// These columns were automatically created by pg_catalog_test's missing column generator.
-			tree.DNull, // attmissingval
+			tree.DNull,      // attmissingval
+			tree.DBoolFalse, // attishidden
 		); err != nil {
 			return err
 		}

@@ -5196,6 +5196,18 @@ CREATE TABLE t_indkey_not_visible (
   INDEX idx_c_d (c, d)
 )
 
+query TB colnames
+SELECT attname, attishidden
+FROM pg_attribute
+WHERE attrelid = 't_indkey_not_visible'::regclass::oid
+ORDER BY attname
+----
+attname  attishidden
+a        true
+b        false
+c        true
+d        false
+
 query TBTT colnames
 SELECT ix_class.relname, ix.indisprimary, ix.indkey, ix.indoption
 FROM pg_catalog.pg_index ix
