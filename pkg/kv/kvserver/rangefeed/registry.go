@@ -310,7 +310,7 @@ func (r *registration) setDisconnected() (needCleanUp bool) {
 // Safe to run multiple times, but subsequent errors would be discarded.
 func (r *registration) disconnect(pErr *kvpb.Error) {
 	needCleanUp := r.setDisconnected()
-	if needCleanUp {
+	if !needCleanUp {
 		r.stream.Disconnect(pErr)
 	}
 }
