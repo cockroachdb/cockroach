@@ -2961,7 +2961,13 @@ message Header {
 
   reserved 7, 10, 12, 14, 20;
 
-  // Next ID: 35
+  WriteOptions write_options = 35;
+   
+  // Next ID: 36
+}
+
+message WriteOptions {
+  uint32 origin_id = 1[(gogoproto.customname) = "OriginID"];
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded
