@@ -514,12 +514,11 @@ func TestUnstableStableTo(t *testing.T) {
 }
 
 func TestUnstableTruncateAndAppend(t *testing.T) {
-	tests := []struct {
-		entries          []pb.Entry
-		offset           uint64
+	for _, tt := range []struct {
+		init             logSlice
 		offsetInProgress uint64
 		snap             *pb.Snapshot
-		toappend         []pb.Entry
+		app              logSlice
 
 		woffset           uint64
 		woffsetInProgress uint64
@@ -527,64 +526,64 @@ func TestUnstableTruncateAndAppend(t *testing.T) {
 	}{
 		// append to the end
 		{
-			index(5).terms(1), 5, 5, nil,
-			index(6).terms(1, 1),
+			entryID{term: 1, index: 4}.terms(1), 5, nil,
+			entryID{term: 1, index: 5}.terms(1, 1),
 			5, 5, index(5).terms(1, 1, 1),
 		},
 		{
-			index(5).terms(1), 5, 6, nil,
-			index(6).terms(1, 1),
+			entryID{term: 1, index: 4}.terms(1), 6, nil,
+			entryID{term: 1, index: 5}.terms(1, 1),
 			5, 6, index(5).terms(1, 1, 1),
 		},
 		// replace the unstable entries
 		{
-			index(5).terms(1), 5, 5, nil,
-			index(5).terms(2, 2),
+			entryID{term: 1, index: 4}.terms(1), 5, nil,
+			entryID{term: 1, index: 4}.terms(2, 2),
 			5, 5, index(5).terms(2, 2),
 		},
 		{
-			index(5).terms(1), 5, 5, nil,
-			index(4).terms(2, 2, 2),
+			entryID{term: 1, index: 4}.terms(1), 5, nil,
+			entryID{term: 1, index: 3}.terms(2, 2, 2),
 			4, 4, index(4).terms(2, 2, 2),
 		},
 		{
-			index(5).terms(1), 5, 6, nil,
-			index(5).terms(2, 2),
+			entryID{term: 1, index: 4}.terms(1), 6, nil,
+			entryID{term: 1, index: 4}.terms(2, 2),
 			5, 5, index(5).terms(2, 2),
 		},
 		// truncate the existing entries and append
 		{
-			index(5).terms(1, 1, 1), 5, 5, nil,
-			index(6).terms(2),
+			entryID{term: 1, index: 4}.terms(1, 1, 1), 5, nil,
+			entryID{term: 1, index: 5}.terms(2),
 			5, 5, index(5).terms(1, 2),
 		},
 		{
-			index(5).terms(1, 1, 1), 5, 5, nil,
-			index(7).terms(2, 2),
+			entryID{term: 1, index: 4}.terms(1, 1, 1), 5, nil,
+			entryID{term: 1, index: 6}.terms(2, 2),
 			5, 5, index(5).terms(1, 1, 2, 2),
 		},
 		{
-			index(5).terms(1, 1, 1), 5, 6, nil,
-			index(6).terms(2),
+			entryID{term: 1, index: 4}.terms(1, 1, 1), 6, nil,
+			entryID{term: 1, index: 5}.terms(2),
 			5, 6, index(5).terms(1, 2),
 		},
 		{
-			index(5).terms(1, 1, 1), 5, 7, nil,
-			index(6).terms(2),
+			entryID{term: 1, index: 4}.terms(1, 1, 1), 7, nil,
+			entryID{term: 1, index: 5}.terms(2),
 			5, 6, index(5).terms(1, 2),
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			u := newUnstable(tt.offset, raftLogger)
+	} {
+		t.Run("", func(t *testing.T) {
+			require.NoError(t, tt.init.valid())
+			u := newUnstable(tt.init.prev.index+1, raftLogger)
 			u.snapshot = tt.snap
-			u.entries = tt.entries
+			u.entries = tt.init.entries
 			u.offsetInProgress = tt.offsetInProgress
 			u.snapshotInProgress = u.snapshot != nil && u.offsetInProgress > u.offset
 			u.checkInvariants(t)
 
-			u.truncateAndAppend(tt.toappend)
+			require.NoError(t, tt.app.valid())
+			u.truncateAndAppend(tt.app.entries)
 			u.checkInvariants(t)
 			require.Equal(t, tt.woffset, u.offset)
 			require.Equal(t, tt.woffsetInProgress, u.offsetInProgress)
