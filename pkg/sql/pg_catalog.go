@@ -5157,7 +5157,7 @@ func funcVolatility(v catpb.Function_Volatility) string {
 func populateVirtualIndexForTable(
 	ctx context.Context,
 	p *planner,
-	db catalog.DatabaseDescriptor,
+	dbContext catalog.DatabaseDescriptor,
 	tableDesc catalog.TableDescriptor,
 	addRow func(...tree.Datum) error,
 	populateFromTable func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor,
@@ -5168,7 +5168,7 @@ func populateVirtualIndexForTable(
 
 	// Don't include tables that aren't in the current database unless
 	// they're virtual, dropped tables, or ones that the user can't see.
-	canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, tableDesc, db, true /*allowAdding*/)
+	canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, tableDesc, dbContext, true /*allowAdding*/)
 	if err != nil {
 		return false, err
 	}
@@ -5176,8 +5176,9 @@ func populateVirtualIndexForTable(
 	// or are dropped. From a virtual index viewpoint, we will consider
 	// this result set as populated, since the underlying full table will
 	// also skip the same descriptors.
-	if (!tableDesc.IsVirtualTable() && tableDesc.GetParentID() != db.GetID()) ||
-		tableDesc.Dropped() || !canSeeDescriptor {
+	if (!tableDesc.IsVirtualTable() && dbContext != nil && tableDesc.GetParentID() != dbContext.GetID()) ||
+		tableDesc.Dropped() ||
+		!canSeeDescriptor {
 		return true, nil
 	}
 	h := makeOidHasher()
@@ -5188,7 +5189,7 @@ func populateVirtualIndexForTable(
 		// Ideally, the catalog API would be able to return the temporary
 		// schemas from other sessions, but it cannot right now. See
 		// https://github.com/cockroachdb/cockroach/issues/97822.
-		if err := forEachSchema(ctx, p, db, false /* requiresPrivileges*/, func(schema catalog.SchemaDescriptor) error {
+		if err := forEachSchema(ctx, p, dbContext, false /* requiresPrivileges*/, func(schema catalog.SchemaDescriptor) error {
 			if schema.GetID() == tableDesc.GetParentSchemaID() {
 				sc = schema
 			}
@@ -5199,6 +5200,13 @@ func populateVirtualIndexForTable(
 	}
 	if sc == nil {
 		sc, err = p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+		if err != nil {
+			return false, err
+		}
+	}
+	db := dbContext
+	if db == nil {
+		db, err = p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
 		if err != nil {
 			return false, err
 		}
