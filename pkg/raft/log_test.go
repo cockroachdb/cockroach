@@ -205,92 +205,65 @@ func TestAppend(t *testing.T) {
 }
 
 func TestLogMaybeAppend(t *testing.T) {
-	previousEnts := index(1).terms(1, 2, 3)
-	lastindex := uint64(3)
-	lastterm := uint64(3)
+	init := logSlice{term: 3, entries: index(1).terms(1, 2, 3)}
+	require.NoError(t, init.valid())
+	last := init.lastEntryID()
 	commit := uint64(1)
 
-	// TODO(pav-kv): clean-up this test.
-	tests := []struct {
-		prev entryID
-		ents []pb.Entry
-
-		wappend bool
-		wpanic  bool
+	for _, tt := range []struct {
+		app   logSlice
+		notOk bool
+		panic bool
 	}{
-		// not match: term is different
+		// rejected appends
 		{
-			entryID{term: lastterm - 1, index: lastindex},
-			index(lastindex + 1).terms(4),
-			false, false,
+			app:   entryID{term: last.term - 1, index: last.index}.terms(4),
+			notOk: true, // term mismatch
+		}, {
+			app:   entryID{term: last.term, index: last.index + 1}.terms(4),
+			notOk: true, // out of bounds
 		},
-		// not match: index out of bound
+		// appends at the end of the log
+		{app: last.terms()},
+		{app: last.terms(4)},
+		{app: last.terms(4, 4)},
+		// appends from before the end of the log
+		{app: logSlice{}},
+		{app: entryID{term: 2, index: 2}.terms(4)},
+		{app: entryID{term: 1, index: 1}.terms(4)},
+		{app: entryID{term: 1, index: 1}.terms(4, 4)},
+		// panics
 		{
-			entryID{term: lastterm, index: lastindex + 1},
-			index(lastindex + 2).terms(4),
-			false, false,
+			app:   entryID{}.terms(4),
+			panic: true, // conflict with existing committed entry
 		},
-		// match with the last existing entry
-		{
-			entryID{term: lastterm, index: lastindex}, nil,
-			true, false,
-		},
-		{
-			entryID{term: lastterm, index: lastindex},
-			index(lastindex + 1).terms(4),
-			true, false,
-		},
-		// match with an entry before the last one
-		{
-			entryID{}, nil,
-			true, false,
-		},
-		{
-			entryID{term: lastterm - 1, index: lastindex - 1},
-			index(lastindex).terms(4),
-			true, false,
-		},
-		{
-			entryID{term: lastterm - 2, index: lastindex - 2},
-			index(lastindex - 1).terms(4),
-			true, false,
-		},
-		// panic
-		{
-			entryID{term: lastterm - 3, index: lastindex - 3},
-			index(lastindex - 2).terms(4),
-			true, true, // conflict with existing committed entry
-		},
-	}
-
-	for i, tt := range tests {
+	} {
 		// TODO(pav-kv): for now, we pick a high enough app.term so that it
 		// represents a valid append message. The maybeAppend currently ignores it,
 		// but it must check that the append does not regress the term.
-		app := logSlice{
-			term:    100,
-			prev:    tt.prev,
-			entries: tt.ents,
-		}
+		app := tt.app
+		app.term = 100
 		require.NoError(t, app.valid())
 
-		raftLog := newLog(NewMemoryStorage(), raftLogger)
-		raftLog.append(previousEnts...)
+		raftLog := newLog(NewMemoryStorage(), discardLogger)
+		raftLog.append(init.entries...)
 		raftLog.committed = commit
 
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
-					require.True(t, tt.wpanic)
+					require.True(t, tt.panic)
 				}
 			}()
-			gappend := raftLog.maybeAppend(app)
-			require.Equal(t, tt.wappend, gappend)
+			ok := raftLog.maybeAppend(app)
+			require.Equal(t, !tt.notOk, ok)
 			require.Equal(t, commit, raftLog.committed) // commit index did not change
-			if gappend && len(tt.ents) != 0 {
-				gents, err := raftLog.slice(raftLog.lastIndex()-uint64(len(tt.ents))+1, raftLog.lastIndex()+1, noLimit)
+			if ok {
+				entries, err := raftLog.slice(app.prev.index+1, app.lastIndex()+1, noLimit)
 				require.NoError(t, err)
-				require.Equal(t, tt.ents, gents)
+				require.Equal(t, app.entries, entries)
+			} else {
+				require.Equal(t, init.entries, raftLog.allEntries())
 			}
 		})
 	}
@@ -1000,6 +973,9 @@ type index uint64
 // terms generates a slice of entries at indices [index, index+len(terms)), with
 // the given terms of each entry. Terms must be non-decreasing.
 func (i index) terms(terms ...uint64) []pb.Entry {
+	if len(terms) == 0 {
+		return nil
+	}
 	index := uint64(i)
 	entries := make([]pb.Entry, 0, len(terms))
 	for _, term := range terms {
@@ -1019,4 +995,19 @@ func (i index) termRange(from, to uint64) []pb.Entry {
 		index++
 	}
 	return entries
+}
+
+// terms generates a logSlice of entries appended after the given entry ID, at
+// indices [id.index+1, id.index+len(terms)], with the given terms of each
+// entry. Terms must be >= id.term, and non-decreasing.
+func (id entryID) terms(terms ...uint64) logSlice {
+	term := id.term
+	if ln := len(terms); ln != 0 {
+		term = terms[ln-1]
+	}
+	return logSlice{
+		term:    term,
+		prev:    id,
+		entries: index(id.index + 1).terms(terms...),
+	}
 }
