@@ -112,17 +112,23 @@ func (s *StreamMuxer) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
 
 // send annotates the rangefeed event with streamID and rangeID and sends it to
 // the grpc stream.
-func (s *StreamMuxer) Send(
-	streamID int64, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent,
-) error {
-	if _, ok := s.activeStreams.Load(streamID); !ok {
+func (s *StreamMuxer) Send(streamID int64, event *kvpb.RangeFeedEvent) error {
+	stream, ok := s.activeStreams.Load(streamID)
+	if !ok {
 		// Check if we should return err here.
+		// This is how we reject events on shutting down stream while reg clean up takes place.
 		return errors.Errorf("stream %d not found", streamID)
+	}
+
+	streamInfo, ok := stream.(*streamInfo)
+	if !ok {
+		log.Errorf(context.Background(), "unexpected stream type %T", stream)
+		return errors.Errorf("unexpected ")
 	}
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		StreamID:       streamID,
-		RangeID:        rangeID,
+		RangeID:        streamInfo.rangeID,
 	}
 	return s.sender.Send(response)
 }
@@ -154,31 +160,36 @@ func (s *StreamMuxer) appendCleanUp(streamID int64) {
 	}
 }
 
+func (s *StreamMuxer) disconnectActiveStreams(streamID int64, err *kvpb.Error) {
+	stream, ok := s.activeStreams.LoadAndDelete(streamID)
+	if !ok {
+		return
+	}
+	// Canceling the context will cause the registration to disconnect unless
+	// registration is not set up yet in which case it will be a no-op.
+	f, ok := stream.(*streamInfo)
+	if !ok {
+		return
+	}
+	f.cancel()
+
+	clientErrorEvent := transformToClientErr(err)
+	ev := &kvpb.MuxRangeFeedEvent{
+		StreamID: streamID,
+		RangeID:  f.rangeID,
+	}
+	ev.SetValue(&kvpb.RangeFeedError{
+		Error: *clientErrorEvent,
+	})
+
+	s.appendMuxError(ev)
+	s.metrics.DecrementRangefeedCounter()
+}
+
 // disconnectRangefeedWithError disconnects the rangefeed stream with the given
 // streamID and sends the error to the client.
-func (s *StreamMuxer) DisconnectRangefeedWithError(
-	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
-) {
-	if stream, ok := s.activeStreams.LoadAndDelete(streamID); ok {
-		// Canceling the context will cause the registration to disconnect unless
-		// registration is not set up yet in which case it will be a no-op.
-		if f, ok := stream.(*streamInfo); ok {
-			f.cancel()
-		}
-
-		clientErrorEvent := transformToClientErr(err)
-		ev := &kvpb.MuxRangeFeedEvent{
-			StreamID: streamID,
-			RangeID:  rangeID,
-		}
-		ev.SetValue(&kvpb.RangeFeedError{
-			Error: *clientErrorEvent,
-		})
-
-		s.appendMuxError(ev)
-		s.metrics.DecrementRangefeedCounter()
-	}
-
+func (s *StreamMuxer) DisconnectRangefeedWithError(streamID int64, err *kvpb.Error) {
+	s.disconnectActiveStreams(streamID, err)
 	if _, ok := s.rangefeedCleanUps.Load(streamID); ok {
 		s.appendCleanUp(streamID)
 	}
