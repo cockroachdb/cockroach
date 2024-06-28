@@ -3200,6 +3200,11 @@ message RangeFeedRequest {
   // OmitInRangefeeds = true, the write will not be emitted on the rangefeed.
   // WithFiltering should NOT be set for system-table rangefeeds.
   bool with_filtering = 7;
+  
+  // WithMatchingOriginIDs specifies if the rangefeed server should emit events
+  // originating from specific clusters during Logical Data Replication. If this
+  // field is empty, all events are emitted.
+  repeated uint32 with_matching_origin_ids = 8 [(gogoproto.customname) = "WithMatchingOriginIDs"];
 }
 
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to

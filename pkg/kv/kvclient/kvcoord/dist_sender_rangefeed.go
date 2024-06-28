@@ -64,11 +64,12 @@ var catchupStartupRate = settings.RegisterIntSetting(
 type ForEachRangeFn func(fn ActiveRangeFeedIterFn) error
 
 type rangeFeedConfig struct {
-	overSystemTable bool
-	withDiff        bool
-	withFiltering   bool
-	withMetadata    bool
-	rangeObserver   func(ForEachRangeFn)
+	overSystemTable       bool
+	withDiff              bool
+	withFiltering         bool
+	withMetadata          bool
+	withMatchingOriginIDs []uint32
+	rangeObserver         func(ForEachRangeFn)
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -115,6 +116,14 @@ func WithDiff() RangeFeedOption {
 func WithFiltering() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.withFiltering = true
+	})
+}
+
+// WithMatchingOriginIDs opts the rangefeed into emitting events originally written by
+// clusters with the assoicated origin IDs during logical data replication.
+func WithMatchingOriginIDs(originIDs ...uint32) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.withMatchingOriginIDs = originIDs
 	})
 }
 
@@ -656,6 +665,7 @@ func makeRangeFeedRequest(
 	startAfter hlc.Timestamp,
 	withDiff bool,
 	withFiltering bool,
+	withMatchingOriginIDs []uint32,
 ) kvpb.RangeFeedRequest {
 	admissionPri := admissionpb.BulkNormalPri
 	if isSystemRange {
@@ -667,8 +677,9 @@ func makeRangeFeedRequest(
 			Timestamp: startAfter,
 			RangeID:   rangeID,
 		},
-		WithDiff:      withDiff,
-		WithFiltering: withFiltering,
+		WithDiff:              withDiff,
+		WithFiltering:         withFiltering,
+		WithMatchingOriginIDs: withMatchingOriginIDs,
 		AdmissionHeader: kvpb.AdmissionHeader{
 			// NB: AdmissionHeader is used only at the start of the range feed
 			// stream since the initial catch-up scan is expensive.
