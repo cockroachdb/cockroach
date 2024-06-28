@@ -315,20 +315,29 @@ func (p *ScheduledProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn)
+
+	useNewReg := true
+	var r registrationI
+	if useNewReg {
+		r = newRegistration(
+			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn)
+		useNewReg = false
+	} else {
+		r = newNonBufferedRegistration(span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn)
+	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
 		if p.stopping {
 			return nil
 		}
-		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
+		if !p.Span.AsRawSpanWithNoLocals().Contains(r.getSpan()) {
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
 		// Add the new registration to the registry.
-		p.reg.Register(ctx, &r)
+		p.reg.Register(ctx, r)
 
 		// Prep response with filter that includes the new registration.
 		f := p.reg.NewFilter()
@@ -340,14 +349,14 @@ func (p *ScheduledProcessor) Register(
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
-		r.stream.RegisterRangefeedCleanUp(func() {
+		r.registerRangefeedCleanUp(func() {
 			needCleanUp := r.setDisconnected()
 			if !needCleanUp {
-				if p.unregisterClient(&r) {
+				if p.unregisterClient(r) {
 					// unreg callback is set by replica to tear down processors that have
 					// zero registrations left and to update event filters.
-					if r.unreg != nil {
-						r.unreg()
+					if unreg := r.getUnreg(); unreg != nil {
+						unreg()
 					}
 				}
 			}
@@ -372,7 +381,7 @@ func (p *ScheduledProcessor) Register(
 	return false, nil
 }
 
-func (p *ScheduledProcessor) unregisterClient(r *registration) bool {
+func (p *ScheduledProcessor) unregisterClient(r registrationI) bool {
 	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) bool {
 		p.reg.Unregister(ctx, r)
 		return true
