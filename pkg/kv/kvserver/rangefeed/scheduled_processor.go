@@ -342,7 +342,7 @@ func (p *ScheduledProcessor) Register(
 
 		r.stream.RegisterRangefeedCleanUp(func() {
 			needCleanUp := r.setDisconnected()
-			if needCleanUp {
+			if !needCleanUp {
 				if p.unregisterClient(&r) {
 					// unreg callback is set by replica to tear down processors that have
 					// zero registrations left and to update event filters.

@@ -1831,8 +1831,8 @@ func (n *Node) RangeLookup(
 }
 
 type eventSender interface {
-	Send(streamID int64, rangeID roachpb.RangeID, event *kvpb.RangeFeedEvent) error
-	DisconnectRangefeedWithError(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error)
+	Send(streamID int64, event *kvpb.RangeFeedEvent) error
+	DisconnectRangefeedWithError(streamID int64, err *kvpb.Error)
 	RegisterRangefeedCleanUp(streamID int64, cleanUp func())
 }
 
@@ -1854,11 +1854,11 @@ func (s *setRangeIDEventSink) Context() context.Context {
 }
 
 func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
-	return s.wrapped.Send(s.streamID, s.rangeID, event)
+	return s.wrapped.Send(s.streamID, event)
 }
 
 func (s *setRangeIDEventSink) Disconnect(err *kvpb.Error) {
-	s.wrapped.DisconnectRangefeedWithError(s.streamID, s.rangeID, err)
+	s.wrapped.DisconnectRangefeedWithError(s.streamID, err)
 }
 
 func (s *setRangeIDEventSink) RegisterRangefeedCleanUp(rangefeedCleanUp func()) {
