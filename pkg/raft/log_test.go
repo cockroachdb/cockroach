@@ -217,26 +217,27 @@ func TestLogMaybeAppend(t *testing.T) {
 
 	for _, tt := range []struct {
 		app   logSlice
+		want  []pb.Entry
 		notOk bool
 		panic bool
 	}{
 		// rejected appends
 		{
-			app:   entryID{term: 2, index: 3}.terms(4),
+			app: entryID{term: 2, index: 3}.terms(4), want: init.entries,
 			notOk: true, // term mismatch
 		}, {
-			app:   entryID{term: 3, index: 4}.terms(4),
+			app: entryID{term: 3, index: 4}.terms(4), want: init.entries,
 			notOk: true, // out of bounds
 		},
 		// appends at the end of the log
-		{app: last.terms()},
-		{app: last.terms(4)},
-		{app: last.terms(4, 4)},
+		{app: last.terms(), want: init.entries},
+		{app: last.terms(4), want: index(1).terms(1, 2, 3, 4)},
+		{app: last.terms(4, 4), want: index(1).terms(1, 2, 3, 4, 4)},
 		// appends from before the end of the log
-		{app: logSlice{}},
-		{app: entryID{term: 1, index: 1}.terms(4)},
-		{app: entryID{term: 1, index: 1}.terms(4, 4)},
-		{app: entryID{term: 2, index: 2}.terms(4)},
+		{app: logSlice{}, want: init.entries},
+		{app: entryID{term: 1, index: 1}.terms(4), want: index(1).terms(1, 4)},
+		{app: entryID{term: 1, index: 1}.terms(4, 4), want: index(1).terms(1, 4, 4)},
+		{app: entryID{term: 2, index: 2}.terms(4), want: index(1).terms(1, 2, 4)},
 		// panics
 		{
 			app:   entryID{}.terms(4),
@@ -263,13 +264,7 @@ func TestLogMaybeAppend(t *testing.T) {
 			ok := raftLog.maybeAppend(app)
 			require.Equal(t, !tt.notOk, ok)
 			require.Equal(t, commit, raftLog.committed) // commit index did not change
-			if ok {
-				entries, err := raftLog.slice(app.prev.index+1, app.lastIndex()+1, noLimit)
-				require.NoError(t, err)
-				require.Equal(t, app.entries, entries)
-			} else {
-				require.Equal(t, init.entries, raftLog.allEntries())
-			}
+			require.Equal(t, tt.want, raftLog.allEntries())
 		})
 	}
 }
