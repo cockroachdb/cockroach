@@ -528,6 +528,12 @@ message LocalOnlySessionData {
   // validate a routine's polymorphic parameters during overload resolution
   // and type-checking.
   bool optimizer_use_polymorphic_parameter_fix = 134;
+  // OriginIDForLogicalDataReplication is an identifier for the cluster that
+	// originally wrote the data that are being written in this session. An
+	// originID of 0 (the default) identifies a local write, 1 identifies a remote
+	// write of unspecified origin, and 2+ are reserved to identify remote writes
+	// from specific clusters.
+  uint32 origin_id_for_logical_data_replication = 135 [(gogoproto.customname) = "OriginIDForLogicalDataReplication"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
