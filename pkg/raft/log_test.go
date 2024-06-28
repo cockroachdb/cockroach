@@ -153,53 +153,57 @@ func TestIsUpToDate(t *testing.T) {
 	}
 }
 
-func TestAppend(t *testing.T) {
-	previousEnts := index(1).terms(1, 2)
-	tests := []struct {
-		ents      []pb.Entry
-		windex    uint64
-		wents     []pb.Entry
-		wunstable uint64
+// TODO(pav-kv): merge into TestLogMaybeAppend when the two method are merged.
+func TestLogAppend(t *testing.T) {
+	init := logSlice{term: 2, entries: index(1).terms(1, 2)}
+	require.NoError(t, init.valid())
+	commit := uint64(1)
+
+	for _, tt := range []struct {
+		app   logSlice
+		want  []pb.Entry
+		panic bool
 	}{
 		{
-			nil,
-			2,
-			index(1).terms(1, 2),
-			3,
+			app:  logSlice{},
+			want: init.entries,
+		}, {
+			app:  entryID{term: 1, index: 1}.terms(),
+			want: init.entries,
+		}, {
+			app:  entryID{term: 2, index: 2}.terms(2),
+			want: index(1).terms(1, 2, 2),
+		}, {
+			app:  entryID{term: 1, index: 1}.terms(3, 3),
+			want: index(1).terms(1, 3, 3), // overrides from index 2
+		}, {
+			app:   entryID{}.terms(3),
+			panic: true, // can't override committed index 1
 		},
-		{
-			index(3).terms(2),
-			3,
-			index(1).terms(1, 2, 2),
-			3,
-		},
-		// conflicts with index 1
-		{
-			index(1).terms(2),
-			1,
-			index(1).terms(2),
-			1,
-		},
-		// conflicts with index 2
-		{
-			index(2).terms(3, 3),
-			3,
-			index(1).terms(1, 3, 3),
-			2,
-		},
-	}
+	} {
+		t.Run("", func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					require.True(t, tt.panic)
+				}
+			}()
 
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			storage := NewMemoryStorage()
-			storage.Append(previousEnts)
-			raftLog := newLog(storage, raftLogger)
-			raftLog.append(tt.ents...)
-			require.Equal(t, tt.windex, raftLog.lastIndex())
-			g, err := raftLog.entries(1, noLimit)
-			require.NoError(t, err)
-			require.Equal(t, tt.wents, g)
-			require.Equal(t, tt.wunstable, raftLog.unstable.offset)
+			require.NoError(t, storage.Append(init.entries))
+			raftLog := newLog(storage, discardLogger)
+			raftLog.committed = commit
+
+			require.NoError(t, tt.app.valid())
+			raftLog.append(tt.app.entries...) // TODO(pav-kv): pass the logSlice
+
+			entries := raftLog.allEntries()
+			require.Equal(t, tt.want, entries)
+			require.Equal(t, entries[len(entries)-1].Index, raftLog.lastIndex())
+			if len(tt.app.entries) == 0 {
+				require.Equal(t, init.lastIndex()+1, raftLog.unstable.offset)
+			} else {
+				require.Equal(t, tt.app.prev.index+1, raftLog.unstable.offset)
+			}
 		})
 	}
 }
