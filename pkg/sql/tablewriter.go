@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -146,6 +147,9 @@ type tableWriterBase struct {
 	forceProductionBatchSizes bool
 	// Adapter to make expose a kv.Batch as a Putter
 	putter row.KVBatchAdapter
+	// originID is an identifier for the cluster that originally wrote the data
+	// being written by the table writer during Logical Data Replication.
+	originID uint32
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
@@ -164,8 +168,10 @@ func (tb *tableWriterBase) init(
 	tb.txn = txn
 	tb.desc = tableDesc
 	tb.lockTimeout = 0
+	tb.originID = 0
 	if evalCtx != nil {
 		tb.lockTimeout = evalCtx.SessionData().LockTimeout
+		tb.originID = evalCtx.SessionData().OriginIDForLogicalDataReplication
 	}
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionValues
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
@@ -264,6 +270,9 @@ func (tb *tableWriterBase) initNewBatch() {
 	tb.b = tb.txn.NewBatch()
 	tb.putter.Batch = tb.b
 	tb.b.Header.LockTimeout = tb.lockTimeout
+	if tb.originID != 0 {
+		tb.b.Header.WriteOptions = &kvpb.WriteOptions{OriginID: tb.originID}
+	}
 }
 
 func (tb *tableWriterBase) clearLastBatch(ctx context.Context) {
