@@ -34,6 +34,9 @@ type Stream interface {
 	// Send blocks until it sends m, the stream is done, or the stream breaks.
 	// Send must be safe to call on the same stream in different goroutines.
 	Send(*kvpb.RangeFeedEvent) error
+	// Make sure this does nothing if called repatedly for the same disconnect.
+	// Possible since r.disconnect no longer checks for r.disconnected. This is
+	// necessary to avoid deadlocks.
 	Disconnect(err *kvpb.Error)
 	RegisterRangefeedCleanUp(func())
 }
@@ -283,21 +286,31 @@ func (r *registration) maybeStripEvent(
 	return ret
 }
 
+// safe to csll multiple times, but subsequent calls would be ignored.
+func (r *registration) setDisconnected() (needCleanUp bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.disconnected {
+		return false
+	}
+
+	if r.mu.catchUpIter != nil {
+		r.mu.catchUpIter.Close()
+		r.mu.catchUpIter = nil
+	}
+	if r.mu.outputLoopCancelFn != nil {
+		r.mu.outputLoopCancelFn()
+	}
+	r.mu.disconnected = true
+	return true
+}
+
 // disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
 func (r *registration) disconnect(pErr *kvpb.Error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.mu.disconnected {
-		if r.mu.catchUpIter != nil {
-			r.mu.catchUpIter.Close()
-			r.mu.catchUpIter = nil
-		}
-		if r.mu.outputLoopCancelFn != nil {
-			r.mu.outputLoopCancelFn()
-		}
-		r.mu.disconnected = true
+	needCleanUp := r.setDisconnected()
+	if needCleanUp {
 		r.stream.Disconnect(pErr)
 	}
 }
