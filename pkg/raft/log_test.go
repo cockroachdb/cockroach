@@ -120,29 +120,31 @@ func TestFindConflictByTerm(t *testing.T) {
 }
 
 func TestIsUpToDate(t *testing.T) {
-	previousEnts := index(1).terms(1, 2, 3)
+	init := entryID{}.append(1, 1, 2, 2, 3)
 	raftLog := newLog(NewMemoryStorage(), discardLogger)
-	raftLog.append(previousEnts...)
+	raftLog.append(init.entries...)
+	last := raftLog.lastEntryID()
+	require.Equal(t, entryID{term: 3, index: 5}, last)
 	for _, tt := range []struct {
-		lastIndex uint64
-		term      uint64
-		wUpToDate bool
+		term  uint64
+		index uint64
+		want  bool
 	}{
-		// greater term, ignore lastIndex
-		{raftLog.lastIndex() - 1, 4, true},
-		{raftLog.lastIndex(), 4, true},
-		{raftLog.lastIndex() + 1, 4, true},
-		// smaller term, ignore lastIndex
-		{raftLog.lastIndex() - 1, 2, false},
-		{raftLog.lastIndex(), 2, false},
-		{raftLog.lastIndex() + 1, 2, false},
-		// equal term, equal or lager lastIndex wins
-		{raftLog.lastIndex() - 1, 3, false},
-		{raftLog.lastIndex(), 3, true},
-		{raftLog.lastIndex() + 1, 3, true},
+		// greater term, ignore last index
+		{term: last.term + 1, index: last.index - 1, want: true},
+		{term: last.term + 1, index: last.index, want: true},
+		{term: last.term + 1, index: last.index + 1, want: true},
+		// smaller term, ignore last index
+		{term: last.term - 1, index: last.index - 1, want: false},
+		{term: last.term - 1, index: last.index, want: false},
+		{term: last.term - 1, index: last.index + 1, want: false},
+		// equal term, lager or equal index wins
+		{term: last.term, index: last.index - 1, want: false},
+		{term: last.term, index: last.index, want: true},
+		{term: last.term, index: last.index + 1, want: true},
 	} {
 		t.Run("", func(t *testing.T) {
-			require.Equal(t, tt.wUpToDate, raftLog.isUpToDate(entryID{term: tt.term, index: tt.lastIndex}))
+			require.Equal(t, tt.want, raftLog.isUpToDate(entryID{term: tt.term, index: tt.index}))
 		})
 	}
 }
