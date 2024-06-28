@@ -201,6 +201,7 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	streamClient, err := streamclient.NewStreamClient(ctx, crosscluster.StreamAddress(addr), db,
 		streamclient.WithStreamID(streampb.StreamID(lrw.spec.StreamID)),
 		streamclient.WithCompression(true),
+		streamclient.WithLogical(),
 	)
 	if err != nil {
 		lrw.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, redactedAddr))
