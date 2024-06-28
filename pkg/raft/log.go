@@ -335,6 +335,12 @@ func (l *raftLog) lastIndex() uint64 {
 	return i
 }
 
+// commitTo bumps the commit index to the given value if it is higher than the
+// current commit index.
+//
+// TODO(pav-kv): this method should accept the term of the leader on whose
+// behalf the commit index is bumped. It is only safe to update the commit index
+// if our log is consistent with this leader, i.e. accTerm >= term.
 func (l *raftLog) commitTo(tocommit uint64) {
 	// never decrease commit
 	if l.committed < tocommit {

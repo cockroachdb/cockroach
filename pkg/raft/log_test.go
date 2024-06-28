@@ -623,27 +623,26 @@ func TestNextUnstableEnts(t *testing.T) {
 func TestCommitTo(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	commit := uint64(2)
-	tests := []struct {
-		commit  uint64
-		wcommit uint64
-		wpanic  bool
+	for _, tt := range []struct {
+		commit uint64
+		want   uint64
+		panic  bool
 	}{
-		{3, 3, false},
-		{1, 2, false}, // never decrease
-		{4, 0, true},  // commit out of range -> panic
-	}
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+		{commit: 3, want: 3},
+		{commit: 1, want: 2},     // commit does not regress
+		{commit: 4, panic: true}, // commit out of range -> panic
+	} {
+		t.Run("", func(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
-					require.True(t, tt.wpanic)
+					require.True(t, tt.panic)
 				}
 			}()
-			raftLog := newLog(NewMemoryStorage(), raftLogger)
+			raftLog := newLog(NewMemoryStorage(), discardLogger)
 			raftLog.append(previousEnts...)
 			raftLog.committed = commit
 			raftLog.commitTo(tt.commit)
-			require.Equal(t, tt.wcommit, raftLog.committed)
+			require.Equal(t, tt.want, raftLog.committed)
 		})
 	}
 }
