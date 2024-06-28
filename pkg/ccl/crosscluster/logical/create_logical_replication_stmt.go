@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -73,6 +75,14 @@ func createLogicalReplicationStreamPlanHook(
 		if err := utilccl.CheckEnterpriseEnabled(
 			p.ExecCfg().Settings,
 			"CREATE LOGICAL REPLICATION",
+		); err != nil {
+			return err
+		}
+
+		// TODO(dt): the global priv is a big hammer; should we be checking just on
+		// table(s) or database being replicated from and into?
+		if err := p.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATION,
 		); err != nil {
 			return err
 		}
