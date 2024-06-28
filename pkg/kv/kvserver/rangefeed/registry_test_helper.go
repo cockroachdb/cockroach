@@ -152,7 +152,7 @@ func newTestRegistration(
 		func() {},
 	)
 	return &testRegistration{
-		registration: r,
+		registration: *r,
 		testStream:   s,
 	}
 }
