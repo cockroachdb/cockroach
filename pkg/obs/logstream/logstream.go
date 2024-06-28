@@ -99,6 +99,33 @@ func RegisterProcessor(
 	tenantRouter.register(logMeta.EventType, processor)
 }
 
+func RegisterGlobalProcessor(ctx context.Context, stopper *stop.Stopper, processor Processor) {
+	if controller == nil {
+		panic(errors.AssertionFailedf("attempted to registry logstream processor before controller was initialized"))
+	}
+	tID, ok := roachpb.ClientTenantFromContext(ctx)
+	if !ok {
+		tID = roachpb.SystemTenantID
+	}
+	controller.rmu.Lock()
+	defer controller.rmu.Unlock()
+	tenantRouter, ok := controller.rmu.tenantRouters[tID]
+	if !ok {
+		// TODO(abarganier): config knobs around flush trigger criteria.
+		tenantRouter = newAsyncProcessorRouter(
+			10*time.Second,
+			100,  /* triggerLen */
+			1000, /* maxLen */
+		)
+		controller.rmu.tenantRouters[tID] = tenantRouter
+		if err := tenantRouter.Start(ctx, stopper); err != nil {
+			panic(errors.AssertionFailedf(
+				"failed to start asyncProcessorRouter for tenant ID %d", tID))
+		}
+	}
+	tenantRouter.registerGlobal(processor)
+}
+
 // Process implements the log.StructuredLogProcessor interface.
 //
 // logstream.Process enforces tenant-separation for buffering & processing of events. The provided

@@ -63,6 +63,8 @@ type asyncProcessorRouter struct {
 		syncutil.RWMutex
 		// routes maps each log.EventType to the Processors registered for that type.
 		routes map[log.EventType][]Processor
+		// Global processors will run for every event, no matter the event type.
+		globalProcessors []Processor
 	}
 }
 
@@ -98,7 +100,7 @@ func newAsyncProcessorRouter(
 	return apr
 }
 
-// Register registers a new processor for events of the given type.
+// register registers a new processor for events of the given type.
 func (bs *asyncProcessorRouter) register(eventType log.EventType, p Processor) {
 	bs.rwmu.Lock()
 	defer bs.rwmu.Unlock()
@@ -107,6 +109,13 @@ func (bs *asyncProcessorRouter) register(eventType log.EventType, p Processor) {
 		container = make([]Processor, 0)
 	}
 	bs.rwmu.routes[eventType] = append(container, p)
+}
+
+// registerGlobal registers a new processor to run for ALL event types
+func (bs *asyncProcessorRouter) registerGlobal(p Processor) {
+	bs.rwmu.Lock()
+	defer bs.rwmu.Unlock()
+	bs.rwmu.globalProcessors = append(bs.rwmu.globalProcessors, p)
 }
 
 // Start starts an internal goroutine that will run until the provided stopper is
