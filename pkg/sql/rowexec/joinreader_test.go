@@ -123,6 +123,9 @@ func TestJoinReader(t *testing.T) {
 		lookupCols       []uint32
 		joinType         descpb.JoinType
 		inputTypes       []*types.T
+		perLookupLimit   int64
+		lookupOrdering   bool
+		reverse          bool
 		// The output types for the case without continuation. The test adds the
 		// bool type for the case with continuation.
 		outputTypes            []*types.T
@@ -1053,6 +1056,88 @@ func TestJoinReader(t *testing.T) {
 			outputTypes:      types.TwoIntCols,
 			expected:         "[[0 1]]",
 		},
+		{
+			description: "Test unique lookups with per-row limit",
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 3},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			fetchCols:      []uint32{0, 1, 2},
+			lookupCols:     []uint32{0, 1},
+			inputTypes:     types.TwoIntCols,
+			outputTypes:    types.ThreeIntCols,
+			perLookupLimit: 1,
+			expected:       "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
+		},
+		{
+			description: "Test non-unique ordered lookups with per-row limit",
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2, 4},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				// No match for this row.
+				{aFn(200), bFn(200)},
+				{aFn(12), bFn(12)},
+			},
+			fetchCols:      []uint32{0, 1, 2},
+			lookupCols:     []uint32{0},
+			inputTypes:     types.TwoIntCols,
+			outputTypes:    types.FourIntCols,
+			perLookupLimit: 1,
+			lookupOrdering: true,
+			expected:       "[[0 2 0 1] [1 2 1 1]]",
+		},
+		{
+			description: "Test non-unique ordered reverse lookups with per-row limit",
+			post: execinfrapb.PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2, 4},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				// No match for this row.
+				{aFn(200), bFn(200)},
+				{aFn(12), bFn(12)},
+			},
+			fetchCols:      []uint32{0, 1, 2},
+			lookupCols:     []uint32{0},
+			inputTypes:     types.TwoIntCols,
+			outputTypes:    types.FourIntCols,
+			perLookupLimit: 1,
+			lookupOrdering: true,
+			reverse:        true,
+			expected:       "[[0 2 0 9] [1 2 1 10]]",
+		},
+		{
+			description: "Test non-unique unordered lookups with per-row limit",
+			post: execinfrapb.PostProcessSpec{
+				Projection: true,
+				// Only the equality column is emitted from the join, so the ordering
+				// doesn't matter despite the limit.
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				// No match for this row.
+				{aFn(200), bFn(200)},
+				{aFn(12), bFn(12)},
+			},
+			fetchCols:      []uint32{0, 1, 2},
+			lookupCols:     []uint32{0},
+			inputTypes:     types.TwoIntCols,
+			outputTypes:    types.ThreeIntCols,
+			perLookupLimit: 1,
+			expected:       "[[0 2 0] [1 2 1]]",
+		},
 	}
 	st := cluster.MakeTestingClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
@@ -1141,9 +1226,12 @@ func TestJoinReader(t *testing.T) {
 									RemoteLookupExpr:                  execinfrapb.Expression{Expr: c.remoteLookupExpr},
 									OnExpr:                            execinfrapb.Expression{Expr: c.onExpr},
 									Type:                              c.joinType,
-									MaintainOrdering:                  reqOrdering,
+									MaintainOrdering:                  reqOrdering || c.lookupOrdering,
 									LeftJoinWithPairedJoiner:          c.secondJoinInPairedJoin,
 									OutputGroupContinuationForLeftRow: outputContinuation,
+									PerLookupLimit:                    c.perLookupLimit,
+									MaintainLookupOrdering:            c.lookupOrdering,
+									ReverseScans:                      c.reverse,
 								},
 								in,
 								&post,

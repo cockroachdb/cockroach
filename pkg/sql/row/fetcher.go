@@ -337,6 +337,11 @@ type FetcherInitArgs struct {
 	// row is being processed. In practice, this means that span IDs must be
 	// passed in when SpansCanOverlap is true.
 	SpansCanOverlap bool
+	// PerScanRequestKeyLimit is a limit on the number of keys that will be
+	// returned for each scan request. It is set when the caller only needs a
+	// limited number of rows. The fetcher may return extra KV pairs beyond just
+	// those for the needed rows.
+	PerScanRequestKeyLimit rowinfra.KeyLimit
 }
 
 // Init sets up a Fetcher for a given table and index.
@@ -469,6 +474,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			forceProductionKVBatchSize: args.ForceProductionKVBatchSize,
 			kvPairsRead:                &kvPairsRead,
 			batchRequestsIssued:        &batchRequestsIssued,
+			perScanRequestKeyLimit:     args.PerScanRequestKeyLimit,
 		}
 		if args.Txn != nil {
 			fetcherArgs.sendFn = makeTxnKVFetcherDefaultSendFunc(args.Txn, &batchRequestsIssued)

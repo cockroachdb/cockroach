@@ -509,6 +509,12 @@ define LookupJoinPrivate {
     # that read into remote regions, though the lookups are defined in
     # LookupExpr, not RemoteLookupExpr.
     RemoteOnlyLookups bool
+
+    # PerLookupLimit, if nonzero, represents an enforced limit on the number of
+    # rows returned by each lookup, as well as the direction of each lookup.
+    # This is useful when only a subset of matching rows is needed, for example
+    # by a foreign-key check.
+    PerLookupLimit ScanLimit
     _ JoinPrivate
 }
 

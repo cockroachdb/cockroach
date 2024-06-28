@@ -23,7 +23,12 @@ func indexJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoi
 	return required.CanProjectCols(inputCols)
 }
 
-func lookupJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+// LookupJoinCanProvideOrdering determines whether the given LookupJoin
+// expression can provide the given ordering, as well as whether its lookups
+// must be conducted using reverse scans to do so.
+func LookupJoinCanProvideOrdering(
+	expr memo.RelExpr, required *props.OrderingChoice,
+) (canProvide, reverse bool) {
 	lookupJoin := expr.(*memo.LookupJoinExpr)
 
 	// LookupJoin can pass through its ordering if the ordering depends only on
@@ -31,53 +36,59 @@ func lookupJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingCho
 	inputCols := lookupJoin.Input.Relational().OutputCols
 	canProjectUsingOnlyInputCols := required.CanProjectCols(inputCols)
 
-	if canProjectUsingOnlyInputCols && lookupJoin.IsSecondJoinInPairedJoiner {
-		// Can only pass through ordering if the ordering can be provided by the
-		// child, since we don't want a sort to be interposed between the child
-		// and this join.
-		//
-		// We may need to remove ordering columns that are not output by the input
-		// expression. This results in an equivalent ordering, but with fewer
-		// options in the OrderingChoice.
-		child := lookupJoin.Input
-		res := projectOrderingToInput(child, required)
-		// It is in principle possible that the lookup join has an ON condition that
-		// forces an equality on two columns in the input. In this case we need to
-		// trim the column groups to keep the ordering valid w.r.t the child FDs
-		// (similar to Select).
-		//
-		// This case indicates that we didn't do a good job pushing down equalities
-		// (see #36219), but it should be handled correctly here nevertheless.
-		res = trimColumnGroups(&res, &child.Relational().FuncDeps)
-		return CanProvide(child, &res)
-	}
-	if !canProjectUsingOnlyInputCols {
-		// It is not possible to serve the required ordering using only input
-		// columns. However, the lookup join may be able to satisfy the required
-		// ordering by appending index columns to the input ordering. See the
-		// getLookupOrdCols comment for more information.
-		//
-		// Iterate through the prefix of the required columns that can project input
-		// columns, and set up to test whether the input ordering can be extended
-		// with index columns.
-		var remainingRequired props.OrderingChoice
-		canProjectPrefixCols := required.Optional.Copy()
-		for i := range required.Columns {
-			if !required.Columns[i].Group.Intersects(inputCols) {
-				// We have reached the end of the prefix of the required ordering that
-				// can be projected by input columns. Keep track of the rest of the
-				// columns that cannot be satisfied by an ordering on the input.
-				remainingRequired.Columns = required.Columns[i:]
-				break
-			}
-			canProjectPrefixCols.UnionWith(required.Columns[i].Group)
+	if canProjectUsingOnlyInputCols {
+		if lookupJoin.IsSecondJoinInPairedJoiner {
+			// Can only pass through ordering if the ordering can be provided by the
+			// child, since we don't want a sort to be interposed between the child
+			// and this join.
+			//
+			// We may need to remove ordering columns that are not output by the input
+			// expression. This results in an equivalent ordering, but with fewer
+			// options in the OrderingChoice.
+			child := lookupJoin.Input
+			res := projectOrderingToInput(child, required)
+			// It is in principle possible that the lookup join has an ON condition that
+			// forces an equality on two columns in the input. In this case we need to
+			// trim the column groups to keep the ordering valid w.r.t the child FDs
+			// (similar to Select).
+			//
+			// This case indicates that we didn't do a good job pushing down equalities
+			// (see #36219), but it should be handled correctly here nevertheless.
+			res = trimColumnGroups(&res, &child.Relational().FuncDeps)
+			return CanProvide(child, &res), false
 		}
-		// Check whether appending index columns to the input ordering would satisfy
-		// the required ordering.
-		_, ok := getLookupOrdCols(lookupJoin, &remainingRequired, canProjectPrefixCols)
-		return ok
+		return true, false
 	}
-	return canProjectUsingOnlyInputCols
+
+	// It is not possible to serve the required ordering using only input
+	// columns. However, the lookup join may be able to satisfy the required
+	// ordering by appending index columns to the input ordering. See the
+	// getLookupOrdCols comment for more information.
+	//
+	// Iterate through the prefix of the required columns that can project input
+	// columns, and set up to test whether the input ordering can be extended
+	// with index columns.
+	var remainingRequired props.OrderingChoice
+	canProjectPrefixCols := required.Optional.Copy()
+	for i := range required.Columns {
+		if !required.Columns[i].Group.Intersects(inputCols) {
+			// We have reached the end of the prefix of the required ordering that
+			// can be projected by input columns. Keep track of the rest of the
+			// columns that cannot be satisfied by an ordering on the input.
+			remainingRequired.Columns = required.Columns[i:]
+			break
+		}
+		canProjectPrefixCols.UnionWith(required.Columns[i].Group)
+	}
+	// Check whether appending index columns to the input ordering would satisfy
+	// the required ordering.
+	_, reverse, ok := getLookupOrdCols(lookupJoin, &remainingRequired, canProjectPrefixCols)
+	return ok, reverse
+}
+
+func lookupJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
+	canProvide, _ := LookupJoinCanProvideOrdering(expr, required)
+	return canProvide
 }
 
 func lookupOrIndexJoinBuildChildReqOrdering(
@@ -145,13 +156,14 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) 
 	provided := lookupJoin.Input.ProvidedPhysical().Ordering
 
 	var toExtend *props.OrderingChoice
-	if provided, toExtend = trySatisfyRequired(required, provided); toExtend != nil {
+	provided, toExtend, _ = trySatisfyRequired(required, provided, eitherDirection)
+	if toExtend != nil {
 		// The input provided ordering cannot satisfy the required ordering. It may
 		// be possible to append lookup columns in order to do so. See the
 		// getLookupOrdColumns for more details.
 		inputOrderingCols := provided.ColSet()
 		inputOrderingCols.UnionWith(required.Optional)
-		if lookupProvided, ok := getLookupOrdCols(lookupJoin, toExtend, inputOrderingCols); ok {
+		if lookupProvided, _, ok := getLookupOrdCols(lookupJoin, toExtend, inputOrderingCols); ok {
 			newProvided := make(opt.Ordering, len(provided)+len(lookupProvided))
 			copy(newProvided, provided)
 			copy(newProvided[len(provided):], lookupProvided)
@@ -228,7 +240,7 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) 
 // mutate the inputOrderingCols argument.
 func getLookupOrdCols(
 	lookupJoin *memo.LookupJoinExpr, required *props.OrderingChoice, inputOrderingCols opt.ColSet,
-) (lookupOrdering opt.Ordering, ok bool) {
+) (lookupOrdering opt.Ordering, reverse, ok bool) {
 	if !lookupJoin.Input.Relational().FuncDeps.ColsAreStrictKey(inputOrderingCols) {
 		// Ensure that the ordering forms a key over the input columns. Lookup
 		// joins can only maintain the index ordering for each individual input
@@ -241,7 +253,7 @@ func getLookupOrdCols(
 		// However, in this case the addition of the index ordering columns would be
 		// trivial, since the ordering could be simplified to just include the input
 		// ordering columns (see OrderingChoice.Simplify).
-		return nil, false
+		return nil, false, false
 	}
 	// The columns from the prefix of the required ordering satisfied by the
 	// input are considered optional for the index ordering.
@@ -274,22 +286,46 @@ func getLookupOrdCols(
 		}
 		indexOrder = append(indexOrder, opt.MakeOrderingColumn(idxColID, idx.Column(i).Descending))
 	}
+	requiredDirection := eitherDirection
+	if lookupJoin.PerLookupLimit.IsSet() {
+		// When we have a limit, the limit forces a certain scan direction (because
+		// it affects the results, not just their ordering).
+		requiredDirection = fwdDirection
+		if lookupJoin.PerLookupLimit.Reverse() {
+			requiredDirection = revDirection
+		}
+	}
 	// Check if the index ordering satisfies the postfix of the required
 	// ordering that cannot be satisfied by the input.
-	indexOrder, remaining := trySatisfyRequired(required, indexOrder)
-	return indexOrder, remaining == nil
+	indexOrder, remaining, reverse := trySatisfyRequired(required, indexOrder, requiredDirection)
+	if reverse {
+		// Invert the directions of the ordering columns.
+		for i := range indexOrder {
+			indexOrder[i] = opt.MakeOrderingColumn(indexOrder[i].ID(), !indexOrder[i].Descending())
+		}
+	}
+	return indexOrder, reverse, remaining == nil
 }
 
-// trySatisfyRequired returns a prefix of the given provided Ordering that is
-// compatible with the required ordering (e.g. all columns either line up with
-// the required columns or are optional), as well as an OrderingChoice that
-// indicates how the prefix needs to be extended in order to imply the required
-// OrderingChoice. If the prefix satisfies the required props, toExtend will be
-// nil. The returned fields reference the slices of the inputs, so they are not
-// safe to mutate.
+// trySatisfyRequired returns the following:
+// * A prefix of the given provided ordering that is compatible with the
+// required ordering (e.g. all columns either line up with the required columns
+// or are optional).
+// * An OrderingChoice that indicates how the prefix needs to be extended in
+// order to imply the required ordering choice.
+// * A bool indicating whether the lookups must scan the index in reverse in
+// order to satisfy the ordering.
+//
+// If the prefix satisfies the required props, toExtend will be nil. The
+// returned fields reference the slices of the inputs, so they are not safe to
+// mutate.
+//
+// - requiredDirection is the direction in which the index must be scanned. Both
+// forward and reverse scans are allowed by default, but a per-lookup limit will
+// require one or the other.
 func trySatisfyRequired(
-	required *props.OrderingChoice, provided opt.Ordering,
-) (prefix opt.Ordering, toExtend *props.OrderingChoice) {
+	required *props.OrderingChoice, provided opt.Ordering, requiredDirection scanDirection,
+) (prefix opt.Ordering, toExtend *props.OrderingChoice, reverse bool) {
 	var requiredIdx, providedIdx int
 	for requiredIdx < len(required.Columns) && providedIdx < len(provided) {
 		requiredCol, providedCol := required.Columns[requiredIdx], provided[providedIdx]
@@ -302,8 +338,17 @@ func trySatisfyRequired(
 			requiredCol.Descending != providedCol.Descending() {
 			// The provided ordering columns must either line up with the
 			// OrderingChoice columns, or be part of the optional column set.
-			// Additionally, the provided ordering must have the same column
-			// directions as the OrderingChoice.
+			break
+		}
+		columnRequiredDirection := fwdDirection
+		if requiredCol.Descending != providedCol.Descending() {
+			columnRequiredDirection = revDirection
+		}
+		if requiredDirection == eitherDirection {
+			requiredDirection = columnRequiredDirection
+		} else if columnRequiredDirection != requiredDirection {
+			// We've determined the direction the index must be scanned, and this
+			// column doesn't match up.
 			break
 		}
 		// The current OrderingChoice and provided columns match up.
@@ -319,5 +364,5 @@ func trySatisfyRequired(
 			Columns:  required.Columns[requiredIdx:],
 		}
 	}
-	return prefix, toExtend
+	return prefix, toExtend, requiredDirection == revDirection
 }

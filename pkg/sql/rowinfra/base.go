@@ -19,7 +19,7 @@ import (
 
 // RowLimit represents a response limit expressed in terms of number of result
 // rows. RowLimits get ultimately converted to KeyLimits and are translated into
-// BatchRequest.MaxSpanRequestKeys.
+// BatchRequest.MaxSpanRequestKeys or BatchRequest.MaxPerScanRequestKeys.
 type RowLimit uint64
 
 // KeyLimit represents a response limit expressed in terms of number of keys.

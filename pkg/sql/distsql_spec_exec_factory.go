@@ -684,6 +684,8 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	locking opt.Locking,
 	limitHint int64,
 	remoteOnlyLookups bool,
+	perLookupLimit int64,
+	reverseScans bool,
 ) (exec.Node, error) {
 	// TODO (rohany): Implement production of system columns by the underlying scan here.
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: lookup join")

@@ -711,6 +711,8 @@ func (ef *execFactory) ConstructLookupJoin(
 	locking opt.Locking,
 	limitHint int64,
 	remoteOnlyLookups bool,
+	perLookupLimit int64,
+	reverseScans bool,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
 		return ef.constructVirtualTableLookupJoin(joinType, input, table, index, eqCols, lookupCols, onCond)
@@ -747,6 +749,8 @@ func (ef *execFactory) ConstructLookupJoin(
 		reqOrdering:                ReqOrdering(reqOrdering),
 		limitHint:                  limitHint,
 		remoteOnlyLookups:          remoteOnlyLookups,
+		perLookupLimit:             perLookupLimit,
+		reverseScans:               reverseScans,
 	}
 	n.eqCols = make([]int, len(eqCols))
 	for i, c := range eqCols {
