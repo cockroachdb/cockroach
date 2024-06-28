@@ -393,6 +393,10 @@ type NameResolver interface {
 	// ResolveTable retrieves a table by name and returns its elements.
 	ResolveTable(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet
 
+	// ResolvePhysicalTable retrieves a table, materialized view, or sequence
+	// by name and returns its elements.
+	ResolvePhysicalTable(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet
+
 	// ResolveSequence retrieves a sequence by name and returns its elements.
 	ResolveSequence(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet
 
