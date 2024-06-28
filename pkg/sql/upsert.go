@@ -114,7 +114,7 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
-			if err := n.run.tw.flushAndStartNewBatch(params.ctx); err != nil {
+			if err := n.run.tw.flushAndStartNewBatch(params.ctx, params.EvalContext()); err != nil {
 				return false, err
 			}
 		}

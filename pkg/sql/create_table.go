@@ -583,7 +583,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				// raft commands.
 				if ti.currentBatchSize >= ti.maxBatchSize ||
 					ti.b.ApproximateMutationBytes() >= ti.maxBatchByteSize {
-					if err := tw.flushAndStartNewBatch(params.ctx); err != nil {
+					if err := tw.flushAndStartNewBatch(params.ctx, params.EvalContext()); err != nil {
 						return err
 					}
 				}
