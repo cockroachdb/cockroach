@@ -44,3 +44,32 @@ message Restore {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonJobEventDetails job = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
+
+// StatusChange is recorded when a job changes statuses.
+message StatusChange {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The ID of the job that is changing statuses.
+  int64 job_id = 2 [(gogoproto.customname) = "JobID", (gogoproto.jsontag) = ",omitempty"];
+
+  // The type of the job that is changing statuses.
+  string job_type = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // A human parsable description of the status change
+  string description = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
+
+  // The status that the job is transitioning out of
+  string previous_status = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The status that the job has transitioned into
+  string new_status = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The run number of the job.
+  int32 run_num = 7 [(gogoproto.jsontag) = ",omitempty"];
+
+  // An error that may have occurred while the job was running.
+  string error = 8 [(gogoproto.jsontag) = ",omitempty"];
+
+  // An error that occurred that requires the job to be reverted.
+  string final_resume_err = 9 [(gogoproto.jsontag) = ",omitempty"];
+}

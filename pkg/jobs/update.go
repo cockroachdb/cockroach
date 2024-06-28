@@ -171,6 +171,29 @@ WHERE id = $1
 	if err := updateFn(u.txn, md, &ju); err != nil {
 		return err
 	}
+
+	// a job status is considered updated if:
+	//  1. the status of the updated metadata is not empty
+	//  2. the status of the updated metadata is not equal to old status
+	//  3. the status of the updated metadata and the old status is running
+	// #1 should be sufficient to determine whether a status change has happened
+	// as the status field of ju.md is not empty only when JobMetadata.UpdateStatus is
+	// called, and this is only called in places where a status change is happening.
+	// Since this may not be in the case in the future we add condition #2. #3 is
+	// required when a job starts because it may already have a "running" status.
+	//
+	if ju.md.Status != "" &&
+		(ju.md.Status != status || (ju.md.Status == StatusRunning && status == StatusRunning)) {
+		u.txn.KV().AddCommitTrigger(func(ctx context.Context) {
+			p := ju.md.Payload
+			// In some cases, ju.md.Payload may be nil, such as a cancel-requested status update.
+			// In this case, payload is used.
+			if p == nil {
+				p = payload
+			}
+			LogStatusChangeStructured(ctx, md.ID, p.Type().String(), p, md.RunStats, status, ju.md.Status)
+		})
+	}
 	if j.registry.knobs.BeforeUpdate != nil {
 		if err := j.registry.knobs.BeforeUpdate(md, ju.md); err != nil {
 			return err
