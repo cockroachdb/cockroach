@@ -1676,6 +1676,12 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 	// TODO(pav-kv): construct logSlice up the stack next to receiving the
 	// message, and validate it before taking any action (e.g. bumping term).
 	a := logSliceFromMsgApp(&m)
+	if err := a.valid(); err != nil {
+		// TODO(pav-kv): add a special kind of logger.Errorf that panics in tests,
+		// but logs an error in prod. We want to eliminate all such errors in tests.
+		r.logger.Errorf("%x received an invalid MsgApp: %v", r.id, err)
+		return
+	}
 
 	if a.prev.index < r.raftLog.committed {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed})

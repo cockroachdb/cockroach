@@ -563,7 +563,7 @@ func TestFollowerCheckMsgApp(t *testing.T) {
 		// unmatch with existing entry
 		{ents[0].Term, ents[1].Index, ents[1].Index, true, 1, 1},
 		// unexisting entry
-		{ents[1].Term + 1, ents[1].Index + 1, ents[1].Index + 1, true, 2, 2},
+		{ents[1].Term, ents[1].Index + 1, ents[1].Index + 1, true, 2, 2},
 	}
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2, 3))
@@ -623,7 +623,7 @@ func TestFollowerAppendEntries(t *testing.T) {
 		r := newTestRaft(1, 10, 1, storage)
 		r.becomeFollower(2, 2)
 
-		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 2, LogTerm: tt.term, Index: tt.index, Entries: tt.ents})
+		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 4, LogTerm: tt.term, Index: tt.index, Entries: tt.ents})
 
 		assert.Equal(t, tt.wents, r.raftLog.allEntries(), "#%d", i)
 		assert.Equal(t, tt.wunstable, r.raftLog.nextUnstableEnts(), "#%d", i)
