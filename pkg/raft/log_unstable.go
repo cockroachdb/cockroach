@@ -224,8 +224,10 @@ func (u *unstable) restore(s pb.Snapshot) {
 	u.snapshotInProgress = false
 }
 
-func (u *unstable) truncateAndAppend(ents []pb.Entry) {
-	fromIndex := ents[0].Index
+func (u *unstable) truncateAndAppend(a logSlice) {
+	// TODO(pav-kv): make unstable a logSlice itself, and do safety checks before
+	// updating it.
+	first := pbEntryID(&a.entries[0])
 
 	// We do not expect appends at or before the snapshot index.
 	//
@@ -233,30 +235,29 @@ func (u *unstable) truncateAndAppend(ents []pb.Entry) {
 	// the check here is redundant. But it's a defense-in-depth guarding the
 	// unstable struct invariant: entries begin at snapshot index + 1. The code
 	// below does not regress offset beyond the snapshot.
-	if u.snapshot != nil && fromIndex <= u.snapshot.Metadata.Index {
-		u.logger.Panicf("appending entry %+v before snapshot %s",
-			pbEntryID(&ents[0]), DescribeSnapshot(*u.snapshot))
+	if u.snapshot != nil && first.index <= u.snapshot.Metadata.Index {
+		u.logger.Panicf("appending entry %+v before snapshot %s", first, DescribeSnapshot(*u.snapshot))
 	}
 
 	switch {
-	case fromIndex == u.offset+uint64(len(u.entries)):
+	case first.index == u.offset+uint64(len(u.entries)):
 		// fromIndex is the next index in the u.entries, so append directly.
-		u.entries = append(u.entries, ents...)
-	case fromIndex <= u.offset:
-		u.logger.Infof("replace the unstable entries from index %d", fromIndex)
+		u.entries = append(u.entries, a.entries...)
+	case first.index <= u.offset:
+		u.logger.Infof("replace the unstable entries from index %d", first.index)
 		// The log is being truncated to before our current offset
 		// portion, so set the offset and replace the entries.
-		u.entries = ents
-		u.offset = fromIndex
+		u.entries = a.entries
+		u.offset = first.index
 		u.offsetInProgress = u.offset
 	default:
 		// Truncate to fromIndex (exclusive), and append the new entries.
-		u.logger.Infof("truncate the unstable entries before index %d", fromIndex)
-		keep := u.slice(u.offset, fromIndex) // NB: appending to this slice is safe,
-		u.entries = append(keep, ents...)    // and will reallocate/copy it
+		u.logger.Infof("truncate the unstable entries before index %d", first.index)
+		keep := u.slice(u.offset, first.index) // NB: appending to this slice is safe,
+		u.entries = append(keep, a.entries...) // and will reallocate/copy it
 		// Only in-progress entries before fromIndex are still considered to be
 		// in-progress.
-		u.offsetInProgress = min(u.offsetInProgress, fromIndex)
+		u.offsetInProgress = min(u.offsetInProgress, first.index)
 	}
 }
 
