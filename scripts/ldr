@@ -90,8 +90,10 @@ case $1 in
     "start")
       roachprod sql $A:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
       roachprod sql $B:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
-      roachprod sql $A:1 -- -e "USE ycsb; SELECT crdb_internal.start_logical_replication_job($(roachprod pgurl --database ycsb --insecure $B:1), ARRAY['usertable']);"
-      roachprod sql $B:1 -- -e "USE ycsb; SELECT crdb_internal.start_logical_replication_job($(roachprod pgurl --database ycsb --insecure $A:1), ARRAY['usertable']);"
+      roachprod sql $A:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS b AS $(roachprod pgurl --database ycsb --insecure $B:1)"
+      roachprod sql $B:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS a AS $(roachprod pgurl --database ycsb --insecure $A:1)"
+      roachprod sql $A:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://b' INTO TABLE ycsb.public.usertable;"
+      roachprod sql $B:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://a' INTO TABLE ycsb.public.usertable;"
       ;;
     "pause")
       roachprod sql $A:1 -- -e "PAUSE JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running');"
