@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 type replicationStreamManagerImpl struct {
@@ -58,6 +60,12 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 ) (streampb.ReplicationProducerSpec, error) {
 	if err := r.checkLicense(); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
+	}
+
+	execConfig := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+
+	if execConfig.Codec.IsSystem() && !kvserver.RangefeedEnabled.Get(&execConfig.Settings.SV) {
+		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be enabled on the source cluster for logical replication")
 	}
 
 	var replicationStartTime hlc.Timestamp
@@ -87,7 +95,6 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		tableDescs[name] = td.TableDescriptor
 	}
 
-	execConfig := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	registry := execConfig.JobRegistry
 	ptsID := uuid.MakeV4()
 	jr := makeProducerJobRecordForLogicalReplication(
