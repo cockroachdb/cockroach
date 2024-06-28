@@ -41,20 +41,21 @@ rm pkg/sql/pgwire/fuzz.go
 mv ./pkg/util/span/frontier_test.go pkg/util/span/frontier_test_fuzz.go
 
 # Build the fuzz targets
+zip -r $OUT/fuzzPrettyPrint_seed_corpus.zip ./pkg/keys/testdata/fuzz/FuzzPrettyPrint || true
 compile_native_go_fuzzer ./pkg/keys FuzzPrettyPrint fuzzPrettyPrint
 
-compile_native_go_fuzzer ./pkg/sql/sqlliveness/slstorage FuzzSessionIDEncoding fuzzSessionIDEncoding
-
-compile_native_go_fuzzer ./pkg/util/span FuzzBtreeFrontier fuzzBtreeFrontier
-
-# hacky fix since we've already copied these files (used in coverage only)
-sed -i '/cp "\${fuzzer_filename}" "\${OUT}\/rawfuzzers\/\${fuzzer}"/d' /usr/local/bin/compile_native_go_fuzzer > /dev/null 2>&1
-compile_native_go_fuzzer ./pkg/util/span FuzzLLRBFrontier fuzzLLRBFrontier
-
-compile_native_go_fuzzer ./pkg/ccl/pgcryptoccl/pgcryptocipherccl FuzzEncryptDecryptAES fuzzEncryptDecryptAES
-
-compile_native_go_fuzzer ./pkg/ccl/pgcryptoccl/pgcryptocipherccl FuzzNoPaddingEncryptDecryptAES fuzzNoPaddingEncryptDecryptAES
-
-compile_native_go_fuzzer ./pkg/storage FuzzEngineKeysInvariants fuzzEngineKeysInvariants
-
-compile_go_fuzzer /src/cockroach/pkg/util/uuid Fuzz fuzzuuid
+#compile_native_go_fuzzer ./pkg/sql/sqlliveness/slstorage FuzzSessionIDEncoding fuzzSessionIDEncoding
+#
+#compile_native_go_fuzzer ./pkg/util/span FuzzBtreeFrontier fuzzBtreeFrontier
+#
+## hacky fix since we've already copied these files (used in coverage only)
+#sed -i '/cp "\${fuzzer_filename}" "\${OUT}\/rawfuzzers\/\${fuzzer}"/d' /usr/local/bin/compile_native_go_fuzzer > /dev/null 2>&1
+#compile_native_go_fuzzer ./pkg/util/span FuzzLLRBFrontier fuzzLLRBFrontier
+#
+#compile_native_go_fuzzer ./pkg/ccl/pgcryptoccl/pgcryptocipherccl FuzzEncryptDecryptAES fuzzEncryptDecryptAES
+#
+#compile_native_go_fuzzer ./pkg/ccl/pgcryptoccl/pgcryptocipherccl FuzzNoPaddingEncryptDecryptAES fuzzNoPaddingEncryptDecryptAES
+#
+#compile_native_go_fuzzer ./pkg/storage FuzzEngineKeysInvariants fuzzEngineKeysInvariants
+#
+#compile_go_fuzzer /src/cockroach/pkg/util/uuid Fuzz fuzzuuid

@@ -129,3 +129,6 @@ func prettyPrintKey(buf *redact.StringBuilder, key roachpb.Key) {
 func init() {
 	keys.PrettyPrintTimeseriesKey = prettyPrintKey
 }
+func Initialize() {
+	keys.PrettyPrintTimeseriesKey = prettyPrintKey
+}

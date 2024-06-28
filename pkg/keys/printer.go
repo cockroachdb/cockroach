@@ -13,6 +13,7 @@ package keys
 import (
 	"bytes"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -596,6 +597,7 @@ func decodeKeyPrint(buf *redact.StringBuilder, valDirs []encoding.Direction, key
 }
 
 func timeseriesKeyPrint(buf *redact.StringBuilder, _ []encoding.Direction, key roachpb.Key) {
+	ts.Initialize()
 	PrettyPrintTimeseriesKey(buf, key)
 }
 
