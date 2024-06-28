@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -75,7 +76,7 @@ type tableWriter interface {
 
 	// flushAndStartNewBatch is called at the end of each batch but the last.
 	// This should flush the current batch.
-	flushAndStartNewBatch(context.Context) error
+	flushAndStartNewBatch(context.Context, *eval.Context) error
 
 	// finalize flushes out any remaining writes. It is called after all calls
 	// to row.
@@ -174,7 +175,7 @@ func (tb *tableWriterBase) init(
 		batchMaxBytes = int(maxBatchBytes.Get(&evalCtx.Settings.SV))
 	}
 	tb.maxBatchByteSize = mutations.MaxBatchByteSize(batchMaxBytes, tb.forceProductionBatchSizes)
-	tb.initNewBatch()
+	tb.initNewBatch(evalCtx)
 	return nil
 }
 
@@ -191,7 +192,7 @@ func (tb *tableWriterBase) setRowsWrittenLimit(sd *sessiondata.SessionData) {
 
 // flushAndStartNewBatch shares the common flushAndStartNewBatch() code between
 // tableWriters.
-func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
+func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context, evalCtx *eval.Context) error {
 	log.VEventf(ctx, 2, "writing batch with %d requests", len(tb.b.Requests()))
 	if err := tb.txn.Run(ctx, tb.b); err != nil {
 		return row.ConvertBatchError(ctx, tb.desc, tb.b)
@@ -199,7 +200,7 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	if err := tb.tryDoResponseAdmission(ctx); err != nil {
 		return err
 	}
-	tb.initNewBatch()
+	tb.initNewBatch(evalCtx)
 	tb.rowsWritten += int64(tb.currentBatchSize)
 	tb.lastBatchSize = tb.currentBatchSize
 	tb.currentBatchSize = 0
@@ -260,10 +261,15 @@ func (tb *tableWriterBase) enableAutoCommit() {
 	tb.autoCommit = autoCommitEnabled
 }
 
-func (tb *tableWriterBase) initNewBatch() {
+func (tb *tableWriterBase) initNewBatch(evalCtx *eval.Context) {
 	tb.b = tb.txn.NewBatch()
 	tb.putter.Batch = tb.b
 	tb.b.Header.LockTimeout = tb.lockTimeout
+	if evalCtx != nil && evalCtx.SessionData().OriginIDForLogicalDataReplication != 0 {
+		tb.b.Header.WriteOptions = &kvpb.WriteOptions{
+			OriginID: evalCtx.SessionData().OriginIDForLogicalDataReplication,
+		}
+	}
 }
 
 func (tb *tableWriterBase) clearLastBatch(ctx context.Context) {

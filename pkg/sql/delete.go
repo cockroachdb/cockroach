@@ -127,7 +127,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
-			if err := d.run.td.flushAndStartNewBatch(params.ctx); err != nil {
+			if err := d.run.td.flushAndStartNewBatch(params.ctx, params.EvalContext()); err != nil {
 				return false, err
 			}
 		}
