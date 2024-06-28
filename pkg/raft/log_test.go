@@ -204,16 +204,6 @@ func TestAppend(t *testing.T) {
 	}
 }
 
-// TestLogMaybeAppend ensures:
-// If the given (index, term) matches with the existing log:
-//  1. If an existing entry conflicts with a new one (same index
-//     but different terms), delete the existing entry and all that
-//     follow it
-//     2.Append any new entries not already in the log
-//
-// If the given (index, term) does not match with the existing log:
-//
-//	return false
 func TestLogMaybeAppend(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	lastindex := uint64(3)
@@ -222,87 +212,54 @@ func TestLogMaybeAppend(t *testing.T) {
 
 	// TODO(pav-kv): clean-up this test.
 	tests := []struct {
-		prev      entryID
-		committed uint64
-		ents      []pb.Entry
+		prev entryID
+		ents []pb.Entry
 
 		wappend bool
-		wcommit uint64
 		wpanic  bool
 	}{
 		// not match: term is different
 		{
-			entryID{term: lastterm - 1, index: lastindex}, lastindex,
+			entryID{term: lastterm - 1, index: lastindex},
 			index(lastindex + 1).terms(4),
-			false, commit, false,
+			false, false,
 		},
 		// not match: index out of bound
 		{
-			entryID{term: lastterm, index: lastindex + 1}, lastindex,
+			entryID{term: lastterm, index: lastindex + 1},
 			index(lastindex + 2).terms(4),
-			false, commit, false,
+			false, false,
 		},
 		// match with the last existing entry
 		{
-			entryID{term: lastterm, index: lastindex}, lastindex, nil,
-			true, lastindex, false,
+			entryID{term: lastterm, index: lastindex}, nil,
+			true, false,
 		},
 		{
-			entryID{term: lastterm, index: lastindex}, lastindex + 1, nil,
-			true, lastindex, false, // do not increase commit higher than lastnewi
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex - 1, nil,
-			true, lastindex - 1, false, // commit up to the commit in the message
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, 0, nil,
-			true, commit, false, // commit do not decrease
-		},
-		{
-			entryID{}, lastindex, nil,
-			true, commit, false, // commit do not decrease
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex,
+			entryID{term: lastterm, index: lastindex},
 			index(lastindex + 1).terms(4),
-			true, lastindex, false,
+			true, false,
+		},
+		// match with an entry before the last one
+		{
+			entryID{}, nil,
+			true, false,
 		},
 		{
-			entryID{term: lastterm, index: lastindex}, lastindex + 1,
-			index(lastindex + 1).terms(4),
-			true, lastindex + 1, false,
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex + 2,
-			index(lastindex + 1).terms(4),
-			true, lastindex + 1, false, // do not increase commit higher than lastnewi
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex + 2,
-			index(lastindex+1).terms(4, 4),
-			true, lastindex + 2, false,
-		},
-		// match with the entry in the middle
-		{
-			entryID{term: lastterm - 1, index: lastindex - 1}, lastindex,
+			entryID{term: lastterm - 1, index: lastindex - 1},
 			index(lastindex).terms(4),
-			true, lastindex, false,
+			true, false,
 		},
 		{
-			entryID{term: lastterm - 2, index: lastindex - 2}, lastindex,
+			entryID{term: lastterm - 2, index: lastindex - 2},
 			index(lastindex - 1).terms(4),
-			true, lastindex - 1, false,
+			true, false,
 		},
+		// panic
 		{
-			entryID{term: lastterm - 3, index: lastindex - 3}, lastindex,
+			entryID{term: lastterm - 3, index: lastindex - 3},
 			index(lastindex - 2).terms(4),
-			true, lastindex - 2, true, // conflict with existing committed entry
-		},
-		{
-			entryID{term: lastterm - 2, index: lastindex - 2}, lastindex,
-			index(lastindex-1).terms(4, 4),
-			true, lastindex, false,
+			true, true, // conflict with existing committed entry
 		},
 	}
 
@@ -329,10 +286,7 @@ func TestLogMaybeAppend(t *testing.T) {
 			}()
 			gappend := raftLog.maybeAppend(app)
 			require.Equal(t, tt.wappend, gappend)
-			if gappend {
-				raftLog.commitTo(min(app.lastIndex(), tt.committed))
-			}
-			require.Equal(t, tt.wcommit, raftLog.committed)
+			require.Equal(t, commit, raftLog.committed) // commit index did not change
 			if gappend && len(tt.ents) != 0 {
 				gents, err := raftLog.slice(raftLog.lastIndex()-uint64(len(tt.ents))+1, raftLog.lastIndex()+1, noLimit)
 				require.NoError(t, err)
