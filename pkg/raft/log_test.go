@@ -26,10 +26,10 @@ import (
 )
 
 func TestFindConflict(t *testing.T) {
-	previousEnts := index(1).terms(1, 2, 3)
-	ids := make([]entryID, 1, len(previousEnts)+1) // dummy (0, 0) at index 0
-	for i := range previousEnts {
-		ids = append(ids, pbEntryID(&previousEnts[i]))
+	initial := entryID{}.terms(1, 2, 3)
+	ids := make([]entryID, 1, len(initial.entries)+1) // dummy (0, 0) at index 0
+	for i := range initial.entries {
+		ids = append(ids, pbEntryID(&initial.entries[i]))
 	}
 	for _, tt := range []struct {
 		prev  entryID
@@ -63,7 +63,7 @@ func TestFindConflict(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			log := newLog(NewMemoryStorage(), discardLogger)
-			log.append(previousEnts...)
+			log.append(initial)
 			app := logSlice{term: 100, prev: tt.prev, entries: tt.ents}
 			require.NoError(t, app.valid())
 			match, ok := log.findConflict(app)
@@ -124,9 +124,9 @@ func TestFindConflictByTerm(t *testing.T) {
 }
 
 func TestIsUpToDate(t *testing.T) {
-	previousEnts := index(1).terms(1, 2, 3)
+	initial := entryID{}.terms(1, 2, 3)
 	raftLog := newLog(NewMemoryStorage(), raftLogger)
-	raftLog.append(previousEnts...)
+	raftLog.append(initial)
 	tests := []struct {
 		lastIndex uint64
 		term      uint64
@@ -251,7 +251,7 @@ func TestLogMaybeAppend(t *testing.T) {
 		require.NoError(t, app.valid())
 
 		raftLog := newLog(NewMemoryStorage(), discardLogger)
-		raftLog.append(init.entries...)
+		raftLog.append(init)
 		raftLog.committed = commit
 
 		t.Run("", func(t *testing.T) {
@@ -365,7 +365,8 @@ func TestNextCommittedEnts(t *testing.T) {
 	snap := pb.Snapshot{
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
-	ents := index(4).terms(1, 1, 1)
+	initial := entryID{term: 1, index: 3}.terms(1, 1, 1)
+	ents := initial.entries
 	tests := []struct {
 		applied       uint64
 		applying      uint64
@@ -399,7 +400,7 @@ func TestNextCommittedEnts(t *testing.T) {
 			require.NoError(t, storage.Append(ents[:1]))
 
 			raftLog := newLog(storage, raftLogger)
-			raftLog.append(ents...)
+			raftLog.append(initial)
 			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
@@ -420,7 +421,7 @@ func TestAcceptApplying(t *testing.T) {
 	snap := pb.Snapshot{
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
-	ents := index(4).terms(1, 1, 1)
+	initial := entryID{term: 1, index: 3}.terms(1, 1, 1)
 	tests := []struct {
 		index         uint64
 		allowUnstable bool
@@ -451,10 +452,10 @@ func TestAcceptApplying(t *testing.T) {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
-			require.NoError(t, storage.Append(ents[:1]))
+			require.NoError(t, storage.Append(initial.entries[:1]))
 
 			raftLog := newLogWithSize(storage, raftLogger, maxSize)
-			raftLog.append(ents...)
+			raftLog.append(initial)
 			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
@@ -471,7 +472,7 @@ func TestAppliedTo(t *testing.T) {
 	snap := pb.Snapshot{
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
-	ents := index(4).terms(1, 1, 1)
+	initial := entryID{term: 1, index: 3}.terms(1, 1, 1)
 	tests := []struct {
 		index         uint64
 		size          entryEncodingSize
@@ -496,10 +497,10 @@ func TestAppliedTo(t *testing.T) {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
-			require.NoError(t, storage.Append(ents[:1]))
+			require.NoError(t, storage.Append(initial.entries[:1]))
 
 			raftLog := newLogWithSize(storage, raftLogger, maxSize)
-			raftLog.append(ents...)
+			raftLog.append(initial)
 			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.maybeCommit(entryID{term: 1, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
@@ -517,20 +518,20 @@ func TestAppliedTo(t *testing.T) {
 // TestNextUnstableEnts ensures unstableEntries returns the unstable part of the
 // entries correctly.
 func TestNextUnstableEnts(t *testing.T) {
-	previousEnts := index(1).terms(1, 2)
+	initial := entryID{}.terms(1, 2)
 	tests := []struct {
 		unstable uint64
 		wents    []pb.Entry
 	}{
 		{3, nil},
-		{1, previousEnts},
+		{1, initial.entries},
 	}
 
 	for i, tt := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			// append stable entries to storage
 			storage := NewMemoryStorage()
-			require.NoError(t, storage.Append(previousEnts[:tt.unstable-1]))
+			require.NoError(t, storage.Append(initial.entries[:tt.unstable-1]))
 
 			// append unstable entries to raftlog
 			raftLog := newLog(storage, raftLogger)
@@ -547,7 +548,7 @@ func TestNextUnstableEnts(t *testing.T) {
 }
 
 func TestCommitTo(t *testing.T) {
-	previousEnts := index(1).terms(1, 2, 3)
+	initial := entryID{}.terms(1, 2, 3)
 	commit := uint64(2)
 	for _, tt := range []struct {
 		commit uint64
@@ -565,7 +566,7 @@ func TestCommitTo(t *testing.T) {
 				}
 			}()
 			raftLog := newLog(NewMemoryStorage(), discardLogger)
-			raftLog.append(previousEnts...)
+			raftLog.append(initial)
 			raftLog.committed = commit
 			raftLog.commitTo(tt.commit)
 			require.Equal(t, tt.want, raftLog.committed)
@@ -587,7 +588,7 @@ func TestStableTo(t *testing.T) {
 	for i, tt := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			raftLog := newLog(NewMemoryStorage(), raftLogger)
-			raftLog.append(index(1).terms(1, 2)...)
+			raftLog.append(entryID{}.terms(1, 2))
 			raftLog.stableTo(entryID{term: tt.stablet, index: tt.stablei})
 			require.Equal(t, tt.wunstable, raftLog.unstable.offset)
 		})
