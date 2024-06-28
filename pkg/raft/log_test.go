@@ -153,48 +153,47 @@ func TestIsUpToDate(t *testing.T) {
 	}
 }
 
-func TestAppend(t *testing.T) {
-	previousEnts := index(1).terms(1, 2)
-	tests := []struct {
-		ents      []pb.Entry
+// TODO(pav-kv): merge into TestLogMaybeAppend when the two method are merged.
+func TestLogAppend(t *testing.T) {
+	initial := logSlice{term: 2, entries: index(1).terms(1, 2)}
+	require.NoError(t, initial.valid())
+	last := initial.lastEntryID()
+
+	for _, tt := range []struct {
+		app       logSlice
 		windex    uint64
 		wents     []pb.Entry
 		wunstable uint64
 	}{
 		{
-			nil,
-			2,
-			index(1).terms(1, 2),
-			3,
+			app:       logSlice{},
+			windex:    2,
+			wents:     index(1).terms(1, 2),
+			wunstable: 3,
+		}, {
+			app:       last.terms(2),
+			windex:    3,
+			wents:     index(1).terms(1, 2, 2),
+			wunstable: 3,
+		}, { // conflicts with index 1
+			app:       entryID{}.terms(2),
+			windex:    1,
+			wents:     index(1).terms(2),
+			wunstable: 1,
+		}, { // conflicts with index 2
+			app:       entryID{term: 1, index: 1}.terms(3, 3),
+			windex:    3,
+			wents:     index(1).terms(1, 3, 3),
+			wunstable: 2,
 		},
-		{
-			index(3).terms(2),
-			3,
-			index(1).terms(1, 2, 2),
-			3,
-		},
-		// conflicts with index 1
-		{
-			index(1).terms(2),
-			1,
-			index(1).terms(2),
-			1,
-		},
-		// conflicts with index 2
-		{
-			index(2).terms(3, 3),
-			3,
-			index(1).terms(1, 3, 3),
-			2,
-		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
-			storage.Append(previousEnts)
-			raftLog := newLog(storage, raftLogger)
-			raftLog.append(tt.ents...)
+			storage.Append(initial.entries)
+			raftLog := newLog(storage, discardLogger)
+
+			require.NoError(t, tt.app.valid())
+			raftLog.append(tt.app.entries...) // TODO(pav-kv): pass the logSlice in
 			require.Equal(t, tt.windex, raftLog.lastIndex())
 			g, err := raftLog.entries(1, noLimit)
 			require.NoError(t, err)
