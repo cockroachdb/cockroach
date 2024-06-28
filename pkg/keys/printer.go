@@ -13,13 +13,13 @@ package keys
 import (
 	"bytes"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/ts"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
