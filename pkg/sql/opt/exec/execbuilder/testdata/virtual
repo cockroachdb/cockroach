@@ -143,12 +143,12 @@ vectorized: true
         └── • virtual table lookup join
             │ table: pg_attribute@pg_attribute_attrelid_idx
             │ equality: (oid) = (attrelid)
-            │ pred: column156 = attnum
+            │ pred: column158 = attnum
             │
             └── • render
                 │
                 └── • hash join
-                    │ equality: (attrelid, attnum) = (oid, column129)
+                    │ equality: (attrelid, attnum) = (oid, column130)
                     │
                     ├── • filter
                     │   │ filter: attrelid = 'b'::REGCLASS

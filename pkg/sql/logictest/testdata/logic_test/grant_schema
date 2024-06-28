@@ -220,3 +220,17 @@ database_name  schema_name   object_name  object_type  grantee  privilege_type  
 test           roachhouse    NULL         schema       roach    ALL             false
 test           roachlayer    NULL         schema       roach    ALL             false
 test           roachstation  NULL         schema       roach    ALL             false
+
+subtest has_*_privilege_works_for_public
+
+statement ok
+CREATE SCHEMA roachema;
+GRANT USAGE ON SCHEMA roachema TO public;
+
+query B colnames
+SELECT has_schema_privilege('public', 'roachema', 'USAGE');
+----
+has_schema_privilege
+true
+
+subtest end

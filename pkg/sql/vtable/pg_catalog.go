@@ -100,6 +100,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 	attfdwoptions STRING[],
 	atthasmissing BOOL,
 	attmissingval STRING[],
+	attishidden BOOL, -- CRDB only field to indicate if a column is NOT VISIBLE.
   INDEX(attrelid)
 )`
 
