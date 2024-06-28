@@ -194,6 +194,43 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	require.Equal(t, int64(expCPuts), numCPuts.Load())
 }
 
+func TestLogicalStreamIngestionErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	server := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer server.Stopper().Stop(ctx)
+	s := server.Server(0).ApplicationLayer()
+	url, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	urlA := url.String()
+
+	_, err := server.Conns[0].Exec("CREATE DATABASE a")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE B")
+	require.NoError(t, err)
+
+	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
+	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
+
+	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
+	dbA.Exec(t, createStmt)
+	dbB.Exec(t, createStmt)
+
+	createQ := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
+
+	dbB.ExpectErrWithHint(t, "currently require a .* DECIMAL column", "ADD COLUMN", createQ, urlA)
+
+	dbB.Exec(t, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp STRING")
+	dbB.ExpectErr(t, ".*column must be type DECIMAL for use by logical replication", createQ, urlA)
+
+	dbB.Exec(t, fmt.Sprintf("ALTER TABLE tab RENAME COLUMN %[1]s TO str_col, ADD COLUMN %[1]s DECIMAL", originTimestampColumnName))
+
+	dbB.Exec(t, createQ, urlA)
+}
+
 func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
