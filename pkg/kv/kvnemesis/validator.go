@@ -1114,8 +1114,17 @@ func (v *validator) checkAtomicCommitted(
 					panic(err)
 				}
 			}
+		case *observedRead:
+			// If v.observationFilter == observeLocking, this must be a locking read
+			// from a weak-isolation transaction. If this locking read is rolled back
+			// by a savepoint, there is no guarantee that the lock will be present
+			// after the savepoint rollback. Since the read is not part of a
+			// serializatble transaction and is no longer locking, it's valid at all
+			// times. Alternatively, we can remove the read from txnObservations.
+			if rollbackSp != nil && v.observationFilter == observeLocking {
+				o.ValidTimes = disjointTimeSpans{{Start: hlc.MinTimestamp, End: hlc.MaxTimestamp}}
+			}
 		case *observedSavepoint:
-
 			switch o.Type {
 			case create:
 				// Set rollbackSp to nil if this savepoint create matches the rolled
@@ -1187,7 +1196,11 @@ func (v *validator) checkAtomicCommitted(
 				}
 			}
 		case *observedRead:
-			o.ValidTimes = validReadTimes(batch, o.Key, o.Value.RawBytes, o.SkipLocked /* missingKeyValid */)
+			// For rolled back locking reads from weak-isolation transactions, the
+			// ValidTimes are already set above.
+			if len(o.ValidTimes) == 0 {
+				o.ValidTimes = validReadTimes(batch, o.Key, o.Value.RawBytes, o.SkipLocked /* missingKeyValid */)
+			}
 		case *observedScan:
 			// All kvs should be within scan boundary.
 			for _, kv := range o.KVs {
