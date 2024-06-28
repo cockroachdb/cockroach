@@ -1959,12 +1959,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 
 					colAttNums := make([]descpb.ColumnID, 0, index.NumKeyColumns())
 					exprs := make([]string, 0, index.NumKeyColumns())
-					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumKeyColumns(); i++ {
-						columnID := index.GetKeyColumnID(i)
-						col, err := catalog.MustFindColumnByID(table, columnID)
-						if err != nil {
-							return err
-						}
+					for i, col := range table.IndexKeyColumns(index) {
 						// The indkey for an expression element in an index
 						// should be 0.
 						if col.IsExpressionIndexColumn() {
