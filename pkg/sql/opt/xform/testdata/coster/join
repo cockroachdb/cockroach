@@ -991,34 +991,34 @@ WHERE
   a.attname IN ('descriptor_id', 'descriptor_name')
 ----
 project
- ├── columns: attname:3!null atttypid:4!null typbasetype:52 typtype:34
+ ├── columns: attname:3!null atttypid:4!null typbasetype:53 typtype:35
  ├── stats: [rows=198]
- ├── cost: 2918.13877
+ ├── cost: 2928.23877
  └── inner-join (merge)
-      ├── columns: attname:3!null atttypid:4!null oid:28!null typtype:34 typbasetype:52
-      ├── left ordering: +28
+      ├── columns: attname:3!null atttypid:4!null oid:29!null typtype:35 typbasetype:53
+      ├── left ordering: +29
       ├── right ordering: +4
-      ├── stats: [rows=198, distinct(4)=17.2927, null(4)=0, distinct(28)=17.2927, null(28)=0]
-      ├── cost: 2916.13877
-      ├── fd: (4)==(28), (28)==(4)
+      ├── stats: [rows=198, distinct(4)=17.2927, null(4)=0, distinct(29)=17.2927, null(29)=0]
+      ├── cost: 2926.23877
+      ├── fd: (4)==(29), (29)==(4)
       ├── scan pg_type@pg_type_oid_idx [as=t]
-      │    ├── columns: oid:28!null typtype:34 typbasetype:52
-      │    ├── stats: [rows=1000, distinct(28)=100, null(28)=0]
+      │    ├── columns: oid:29!null typtype:35 typbasetype:53
+      │    ├── stats: [rows=1000, distinct(29)=100, null(29)=0]
       │    ├── cost: 1481.52
-      │    └── ordering: +28
+      │    └── ordering: +29
       ├── sort
       │    ├── columns: attname:3!null atttypid:4
       │    ├── stats: [rows=20, distinct(3)=2, null(3)=0, distinct(4)=18.2927, null(4)=0.2]
-      │    ├── cost: 1423.39877
+      │    ├── cost: 1433.49877
       │    ├── ordering: +4
       │    └── select
       │         ├── columns: attname:3!null atttypid:4
       │         ├── stats: [rows=20, distinct(3)=2, null(3)=0, distinct(4)=18.2927, null(4)=0.2]
-      │         ├── cost: 1420.85
+      │         ├── cost: 1430.95
       │         ├── scan pg_attribute [as=a]
       │         │    ├── columns: attname:3 atttypid:4
       │         │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=10]
-      │         │    └── cost: 1410.82
+      │         │    └── cost: 1420.92
       │         └── filters
       │              └── attname:3 IN ('descriptor_id', 'descriptor_name') [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id'] [/'descriptor_name' - /'descriptor_name']; tight)]
       └── filters (true)
@@ -1039,25 +1039,25 @@ WHERE
   a.attname = 'descriptor_id'
 ----
 project
- ├── columns: attname:3!null atttypid:4!null typbasetype:52 typtype:34
+ ├── columns: attname:3!null atttypid:4!null typbasetype:53 typtype:35
  ├── stats: [rows=99]
- ├── cost: 2859.52001
+ ├── cost: 2869.62001
  ├── fd: ()-->(3)
  └── inner-join (lookup pg_type@pg_type_oid_idx [as=t])
-      ├── columns: attname:3!null atttypid:4!null oid:28!null typtype:34 typbasetype:52
-      ├── key columns: [4] = [28]
-      ├── stats: [rows=99, distinct(4)=8.56179, null(4)=0, distinct(28)=8.56179, null(28)=0]
-      ├── cost: 2858.51001
-      ├── fd: ()-->(3), (4)==(28), (28)==(4)
+      ├── columns: attname:3!null atttypid:4!null oid:29!null typtype:35 typbasetype:53
+      ├── key columns: [4] = [29]
+      ├── stats: [rows=99, distinct(4)=8.56179, null(4)=0, distinct(29)=8.56179, null(29)=0]
+      ├── cost: 2868.61001
+      ├── fd: ()-->(3), (4)==(29), (29)==(4)
       ├── select
       │    ├── columns: attname:3!null atttypid:4
       │    ├── stats: [rows=10, distinct(3)=1, null(3)=0, distinct(4)=9.56179, null(4)=0.1]
-      │    ├── cost: 1420.85
+      │    ├── cost: 1430.95
       │    ├── fd: ()-->(3)
       │    ├── scan pg_attribute [as=a]
       │    │    ├── columns: attname:3 atttypid:4
       │    │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=10]
-      │    │    └── cost: 1410.82
+      │    │    └── cost: 1420.92
       │    └── filters
       │         └── attname:3 = 'descriptor_id' [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id']; tight), fd=()-->(3)]
       └── filters (true)

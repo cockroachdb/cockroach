@@ -478,6 +478,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				tree.DNull, // atthasmissing
 				// These columns were automatically created by pg_catalog_test's missing column generator.
 				tree.DNull, // attmissingval
+				tree.MakeDBool(tree.DBool(column.IsHidden())), // attishidden
 			)
 		}
 
@@ -533,6 +534,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 					tree.DNull, // atthasmissing
 					// These columns were automatically created by pg_catalog_test's missing column generator.
 					tree.DNull, // attmissingval
+					tree.DNull, // attishidden
 				); err != nil {
 					return err
 				}
@@ -1959,12 +1961,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 
 					colAttNums := make([]descpb.ColumnID, 0, index.NumKeyColumns())
 					exprs := make([]string, 0, index.NumKeyColumns())
-					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumKeyColumns(); i++ {
-						columnID := index.GetKeyColumnID(i)
-						col, err := catalog.MustFindColumnByID(table, columnID)
-						if err != nil {
-							return err
-						}
+					for i, col := range table.IndexKeyColumns(index) {
 						// The indkey for an expression element in an index
 						// should be 0.
 						if col.IsExpressionIndexColumn() {
@@ -3545,7 +3542,8 @@ func addPGAttributeRowForCompositeType(
 			// These columns were automatically created by pg_catalog_test's missing column generator.
 			tree.DNull, // atthasmissing
 			// These columns were automatically created by pg_catalog_test's missing column generator.
-			tree.DNull, // attmissingval
+			tree.DNull,      // attmissingval
+			tree.DBoolFalse, // attishidden
 		); err != nil {
 			return err
 		}

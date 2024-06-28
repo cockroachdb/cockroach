@@ -204,140 +204,67 @@ func TestAppend(t *testing.T) {
 	}
 }
 
-// TestLogMaybeAppend ensures:
-// If the given (index, term) matches with the existing log:
-//  1. If an existing entry conflicts with a new one (same index
-//     but different terms), delete the existing entry and all that
-//     follow it
-//     2.Append any new entries not already in the log
-//
-// If the given (index, term) does not match with the existing log:
-//
-//	return false
+// TestLogMaybeAppend tests the behaviour of maybeAppend method:
+//  1. The request is rejected if the "previous entry" check fails, when the
+//     corresponding entry is missing or has a mismatching term.
+//  2. If the request is accepted, the slice is appended to the log, and all the
+//     entries at higher indices are truncated.
 func TestLogMaybeAppend(t *testing.T) {
-	previousEnts := index(1).terms(1, 2, 3)
-	lastindex := uint64(3)
-	lastterm := uint64(3)
+	init := logSlice{term: 3, entries: index(1).terms(1, 2, 3)}
+	require.NoError(t, init.valid())
+	last := init.lastEntryID()
 	commit := uint64(1)
 
-	// TODO(pav-kv): clean-up this test.
-	tests := []struct {
-		prev      entryID
-		committed uint64
-		ents      []pb.Entry
-
-		wappend bool
-		wcommit uint64
-		wpanic  bool
+	for _, tt := range []struct {
+		app   logSlice
+		want  []pb.Entry
+		notOk bool
+		panic bool
 	}{
-		// not match: term is different
+		// rejected appends
 		{
-			entryID{term: lastterm - 1, index: lastindex}, lastindex,
-			index(lastindex + 1).terms(4),
-			false, commit, false,
+			app: entryID{term: 2, index: 3}.terms(4), want: init.entries,
+			notOk: true, // term mismatch
+		}, {
+			app: entryID{term: 3, index: 4}.terms(4), want: init.entries,
+			notOk: true, // out of bounds
 		},
-		// not match: index out of bound
+		// appends at the end of the log
+		{app: last.terms(), want: init.entries},
+		{app: last.terms(4), want: index(1).terms(1, 2, 3, 4)},
+		{app: last.terms(4, 4), want: index(1).terms(1, 2, 3, 4, 4)},
+		// appends from before the end of the log
+		{app: logSlice{}, want: init.entries},
+		{app: entryID{term: 1, index: 1}.terms(4), want: index(1).terms(1, 4)},
+		{app: entryID{term: 1, index: 1}.terms(4, 4), want: index(1).terms(1, 4, 4)},
+		{app: entryID{term: 2, index: 2}.terms(4), want: index(1).terms(1, 2, 4)},
+		// panics
 		{
-			entryID{term: lastterm, index: lastindex + 1}, lastindex,
-			index(lastindex + 2).terms(4),
-			false, commit, false,
+			app:   entryID{}.terms(4),
+			panic: true, // conflict with existing committed entry
 		},
-		// match with the last existing entry
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex, nil,
-			true, lastindex, false,
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex + 1, nil,
-			true, lastindex, false, // do not increase commit higher than lastnewi
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex - 1, nil,
-			true, lastindex - 1, false, // commit up to the commit in the message
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, 0, nil,
-			true, commit, false, // commit do not decrease
-		},
-		{
-			entryID{}, lastindex, nil,
-			true, commit, false, // commit do not decrease
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex,
-			index(lastindex + 1).terms(4),
-			true, lastindex, false,
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex + 1,
-			index(lastindex + 1).terms(4),
-			true, lastindex + 1, false,
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex + 2,
-			index(lastindex + 1).terms(4),
-			true, lastindex + 1, false, // do not increase commit higher than lastnewi
-		},
-		{
-			entryID{term: lastterm, index: lastindex}, lastindex + 2,
-			index(lastindex+1).terms(4, 4),
-			true, lastindex + 2, false,
-		},
-		// match with the entry in the middle
-		{
-			entryID{term: lastterm - 1, index: lastindex - 1}, lastindex,
-			index(lastindex).terms(4),
-			true, lastindex, false,
-		},
-		{
-			entryID{term: lastterm - 2, index: lastindex - 2}, lastindex,
-			index(lastindex - 1).terms(4),
-			true, lastindex - 1, false,
-		},
-		{
-			entryID{term: lastterm - 3, index: lastindex - 3}, lastindex,
-			index(lastindex - 2).terms(4),
-			true, lastindex - 2, true, // conflict with existing committed entry
-		},
-		{
-			entryID{term: lastterm - 2, index: lastindex - 2}, lastindex,
-			index(lastindex-1).terms(4, 4),
-			true, lastindex, false,
-		},
-	}
-
-	for i, tt := range tests {
+	} {
 		// TODO(pav-kv): for now, we pick a high enough app.term so that it
 		// represents a valid append message. The maybeAppend currently ignores it,
 		// but it must check that the append does not regress the term.
-		app := logSlice{
-			term:    100,
-			prev:    tt.prev,
-			entries: tt.ents,
-		}
+		app := tt.app
+		app.term = 100
 		require.NoError(t, app.valid())
 
-		raftLog := newLog(NewMemoryStorage(), raftLogger)
-		raftLog.append(previousEnts...)
+		raftLog := newLog(NewMemoryStorage(), discardLogger)
+		raftLog.append(init.entries...)
 		raftLog.committed = commit
 
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
-					require.True(t, tt.wpanic)
+					require.True(t, tt.panic)
 				}
 			}()
-			gappend := raftLog.maybeAppend(app)
-			require.Equal(t, tt.wappend, gappend)
-			if gappend {
-				raftLog.commitTo(min(app.lastIndex(), tt.committed))
-			}
-			require.Equal(t, tt.wcommit, raftLog.committed)
-			if gappend && len(tt.ents) != 0 {
-				gents, err := raftLog.slice(raftLog.lastIndex()-uint64(len(tt.ents))+1, raftLog.lastIndex()+1, noLimit)
-				require.NoError(t, err)
-				require.Equal(t, tt.ents, gents)
-			}
+			ok := raftLog.maybeAppend(app)
+			require.Equal(t, !tt.notOk, ok)
+			require.Equal(t, commit, raftLog.committed) // commit index did not change
+			require.Equal(t, tt.want, raftLog.allEntries())
 		})
 	}
 }
@@ -623,27 +550,26 @@ func TestNextUnstableEnts(t *testing.T) {
 func TestCommitTo(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	commit := uint64(2)
-	tests := []struct {
-		commit  uint64
-		wcommit uint64
-		wpanic  bool
+	for _, tt := range []struct {
+		commit uint64
+		want   uint64
+		panic  bool
 	}{
-		{3, 3, false},
-		{1, 2, false}, // never decrease
-		{4, 0, true},  // commit out of range -> panic
-	}
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+		{commit: 3, want: 3},
+		{commit: 1, want: 2},     // commit does not regress
+		{commit: 4, panic: true}, // commit out of range -> panic
+	} {
+		t.Run("", func(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
-					require.True(t, tt.wpanic)
+					require.True(t, tt.panic)
 				}
 			}()
-			raftLog := newLog(NewMemoryStorage(), raftLogger)
+			raftLog := newLog(NewMemoryStorage(), discardLogger)
 			raftLog.append(previousEnts...)
 			raftLog.committed = commit
 			raftLog.commitTo(tt.commit)
-			require.Equal(t, tt.wcommit, raftLog.committed)
+			require.Equal(t, tt.want, raftLog.committed)
 		})
 	}
 }
@@ -1047,6 +973,9 @@ type index uint64
 // terms generates a slice of entries at indices [index, index+len(terms)), with
 // the given terms of each entry. Terms must be non-decreasing.
 func (i index) terms(terms ...uint64) []pb.Entry {
+	if len(terms) == 0 {
+		return nil
+	}
 	index := uint64(i)
 	entries := make([]pb.Entry, 0, len(terms))
 	for _, term := range terms {
@@ -1066,4 +995,19 @@ func (i index) termRange(from, to uint64) []pb.Entry {
 		index++
 	}
 	return entries
+}
+
+// terms generates a logSlice of entries appended after the given entry ID, at
+// indices [id.index+1, id.index+len(terms)], with the given terms of each
+// entry. Terms must be >= id.term, and non-decreasing.
+func (id entryID) terms(terms ...uint64) logSlice {
+	term := id.term
+	if ln := len(terms); ln != 0 {
+		term = terms[ln-1]
+	}
+	return logSlice{
+		term:    term,
+		prev:    id,
+		entries: index(id.index + 1).terms(terms...),
+	}
 }
