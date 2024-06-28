@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -77,6 +79,14 @@ func createLogicalReplicationStreamPlanHook(
 			return err
 		}
 
+		// TODO(dt): the global priv is a big hammer; should we be checking just on
+		// table(s) or database being replicated from and into?
+		if err := p.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATION,
+		); err != nil {
+			return err
+		}
+
 		if !stmt.Options.IsDefault() {
 			return errors.UnimplementedErrorf(issuelink.IssueLink{}, "logical replication stream options are not yet supported")
 		}
@@ -104,6 +114,28 @@ func createLogicalReplicationStreamPlanHook(
 			}
 
 			repPairs[i].DstDescriptorID = int32(td.GetID())
+
+			// TODO(dt): remove when we support this via KV metadata.
+			var foundTSCol bool
+			for _, col := range td.GetColumns() {
+				if col.Name == originTimestampColumnName {
+					foundTSCol = true
+					if col.Type.Family() != types.DecimalFamily {
+						return errors.Newf(
+							"%s column must be type DECIMAL for use by logical replication", originTimestampColumnName,
+						)
+					}
+					break
+				}
+			}
+			if !foundTSCol {
+				return errors.WithHintf(errors.Newf(
+					"tables written to by logical replication currently require a %q DECIMAL column",
+					originTimestampColumnName,
+				), "try 'ALTER %s ADD COLUMN %s DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL",
+					dstObjName.String(), originTimestampColumnName,
+				)
+			}
 
 			tbNameWithSchema := tree.MakeTableNameWithSchema(
 				tree.Name(prefix.Database.GetName()),
