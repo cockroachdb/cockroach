@@ -21,6 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// RangefeedMetricsRecorder is an interface for recording rangefeed metrics.
+type RangefeedMetricsRecorder interface {
+	UpdateMetricsOnRangefeedConnect()
+	UpdateMetricsOnRangefeedDisconnect()
+}
+
 // ServerStreamSender forwards MuxRangefeedEvents from StreamMuxer to underlying
 // stream.
 type ServerStreamSender interface {
@@ -89,6 +95,8 @@ type StreamMuxer struct {
 	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
 	// thread safety.
 	sender ServerStreamSender
+	// metrics is used to record rangefeed metrics for the node.
+	metrics RangefeedMetricsRecorder
 
 	// streamID -> context.CancelFunc for active rangefeeds
 	activeStreams sync.Map
@@ -108,9 +116,10 @@ type StreamMuxer struct {
 }
 
 // NewStreamMuxer creates a new StreamMuxer. There should only be one per node.
-func NewStreamMuxer(sender ServerStreamSender) *StreamMuxer {
+func NewStreamMuxer(sender ServerStreamSender, metrics RangefeedMetricsRecorder) *StreamMuxer {
 	return &StreamMuxer{
 		sender:         sender,
+		metrics:        metrics,
 		notifyMuxError: make(chan struct{}, 1),
 	}
 }
@@ -123,7 +132,7 @@ func (sm *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
 	if _, loaded := sm.activeStreams.LoadOrStore(streamID, cancel); loaded {
 		log.Fatalf(context.Background(), "stream %d already exists", streamID)
 	}
-
+	sm.metrics.UpdateMetricsOnRangefeedConnect()
 }
 
 // transformRangefeedErrToClientError converts a rangefeed error to a client
@@ -180,6 +189,7 @@ func (sm *StreamMuxer) DisconnectRangefeedWithError(
 			Error: *clientErrorEvent,
 		})
 		sm.appendMuxError(ev)
+		sm.metrics.UpdateMetricsOnRangefeedDisconnect()
 	}
 }
 

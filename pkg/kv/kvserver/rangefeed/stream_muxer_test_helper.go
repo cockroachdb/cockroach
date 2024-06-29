@@ -16,12 +16,38 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+// testRangefeedCounter mocks nodeMetrics for testing.
+type testRangefeedCounter struct {
+	count atomic.Int32
+}
+
+var _ RangefeedMetricsRecorder = &testRangefeedCounter{}
+
+func newTestRangefeedCounter() *testRangefeedCounter {
+	return &testRangefeedCounter{}
+}
+
+func (c *testRangefeedCounter) UpdateMetricsOnRangefeedConnect() {
+	c.count.Add(1)
+}
+
+func (c *testRangefeedCounter) UpdateMetricsOnRangefeedDisconnect() {
+	c.count.Add(-1)
+}
+
+func (c *testRangefeedCounter) get() int32 {
+	return c.count.Load()
+}
+
 // testServerStream mocks grpc server stream for testing.
 type testServerStream struct {
 	syncutil.Mutex
@@ -61,10 +87,11 @@ func (s *testServerStream) hasEvent(e *kvpb.MuxRangeFeedEvent) bool {
 
 // String returns a string representation of the events sent in the stream.
 func (s *testServerStream) String() string {
-	str := strings.Builder{}
+	var str strings.Builder
 	for streamID, eventList := range s.streamEvents {
-		str.WriteString(
-			fmt.Sprintf("StreamID:%d, Len:%d\n", streamID, len(eventList)))
+		if _, err := fmt.Fprintf(&str, "StreamID:%d, Len:%d\n", streamID, len(eventList)); err != nil {
+			log.Fatalf(context.Background(), "unexpected error: %v", err)
+		}
 	}
 	return str.String()
 }
@@ -83,7 +110,6 @@ func (s *testServerStream) BlockSend() func() {
 	s.Lock()
 	var once sync.Once
 	return func() {
-		// safe to call multiple times, e.g. defer and explicit
 		once.Do(s.Unlock) //nolint:deferunlockcheck
 	}
 }
@@ -97,9 +123,13 @@ func (s *testServerStream) BlockSend() func() {
 // defer cleanUp()
 // defer stopper.Stop(ctx) // or defer cancel() - important to stop the StreamMuxer before cleanUp()
 func NewTestStreamMuxer(
-	t *testing.T, ctx context.Context, stopper *stop.Stopper, sender ServerStreamSender,
+	t *testing.T,
+	ctx context.Context,
+	stopper *stop.Stopper,
+	sender ServerStreamSender,
+	metrics RangefeedMetricsRecorder,
 ) (muxer *StreamMuxer, cleanUp func()) {
-	muxer = NewStreamMuxer(sender)
+	muxer = NewStreamMuxer(sender, metrics)
 	var wg sync.WaitGroup
 	wg.Add(1)
 	if err := stopper.RunAsyncTask(ctx, "test-stream-muxer", func(ctx context.Context) {
