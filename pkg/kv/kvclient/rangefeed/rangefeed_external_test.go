@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1463,8 +1462,7 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 	}
 	eventC := make(chan *kvpb.RangeFeedEvent)
 	sink := newChannelSink(ctx, eventC)
-	fErr := future.MakeAwaitableFuture(s3.RangeFeed(&req, sink))
-	require.NoError(t, fErr.Get()) // check if we've errored yet
+	require.NoError(t, s3.RangeFeed(&req, sink)) // check if we've errored yet
 	t.Logf("started rangefeed on %s", repl3)
 
 	// Spawn a rangefeed monitor, which posts checkpoint updates to checkpointC.
@@ -1621,18 +1619,19 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 	}
 
 	// The rangefeed should still be running.
-	require.NoError(t, fErr.Get())
+	require.NoError(t, sink.GetError())
 }
 
 // channelSink is a rangefeed sink which posts events to a channel.
 type channelSink struct {
 	*kvpb.TestStream
-	ctx context.Context
-	ch  chan<- *kvpb.RangeFeedEvent
+	ctx  context.Context
+	ch   chan<- *kvpb.RangeFeedEvent
+	done chan *kvpb.Error
 }
 
 func newChannelSink(ctx context.Context, ch chan<- *kvpb.RangeFeedEvent) *channelSink {
-	return &channelSink{ctx: ctx, ch: ch}
+	return &channelSink{ctx: ctx, ch: ch, done: make(chan *kvpb.Error, 1)}
 }
 
 func (c *channelSink) Context() context.Context {
@@ -1646,6 +1645,19 @@ func (c *channelSink) Send(e *kvpb.RangeFeedEvent) error {
 	case <-c.ctx.Done():
 		return c.ctx.Err()
 	}
+}
+
+func (c *channelSink) GetError() error {
+	select {
+	case err := <-c.done:
+		return err.GoError()
+	default:
+		return nil
+	}
+}
+
+func (c *channelSink) Disconnect(err *kvpb.Error) {
+	c.done <- err
 }
 
 // TestRangeFeedMetadataManualSplit tests that a spawned rangefeed emits a

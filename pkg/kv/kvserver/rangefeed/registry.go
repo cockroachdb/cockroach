@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,7 +80,6 @@ type registration struct {
 
 	// Output.
 	stream Stream
-	done   *future.ErrorFuture
 	unreg  func()
 	// Internal.
 	id            int64
@@ -122,7 +120,6 @@ func newRegistration(
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
-	done *future.ErrorFuture,
 ) registration {
 	r := registration{
 		span:             span,
@@ -132,7 +129,6 @@ func newRegistration(
 		withOmitRemote:   withOmitRemote,
 		metrics:          metrics,
 		stream:           stream,
-		done:             done,
 		unreg:            unregisterFn,
 		buf:              make(chan *sharedEvent, bufferSz),
 		blockWhenFull:    blockWhenFull,
@@ -299,7 +295,7 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 			r.mu.outputLoopCancelFn()
 		}
 		r.mu.disconnected = true
-		r.done.Set(pErr.GoError())
+		r.stream.Disconnect(pErr)
 	}
 }
 
