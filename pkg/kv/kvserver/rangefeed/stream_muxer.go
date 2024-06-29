@@ -20,6 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+type rangefeedMetricsRecorder interface {
+	IncrementRangefeedCounter()
+	DecrementRangefeedCounter()
+}
+
 // sender wraps the underlying grpc server stream. Note that Send must be
 // thread safe to be called concurrently.
 type severStreamSender interface {
@@ -28,6 +33,7 @@ type severStreamSender interface {
 
 type StreamMuxer struct {
 	sender severStreamSender
+	metrics        rangefeedMetricsRecorder
 
 	// streamID -> streamInfo for active rangefeeds
 	activeStreams sync.Map
@@ -43,9 +49,10 @@ type StreamMuxer struct {
 	}
 }
 
-func NewStreamMuxer(sender severStreamSender) *StreamMuxer {
+func NewStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) *StreamMuxer {
 	return &StreamMuxer{
 		sender:         sender,
+		metrics:        metrics,
 		notifyMuxError: make(chan struct{}, 1),
 	}
 }
@@ -56,6 +63,7 @@ func NewStreamMuxer(sender severStreamSender) *StreamMuxer {
 // the old one first.
 func (sm *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
 	sm.activeStreams.Store(streamID, cancel)
+	sm.metrics.IncrementRangefeedCounter()
 }
 
 // transformRangefeedErrToClientError converts a rangefeed error to a client
@@ -107,6 +115,7 @@ func (sm *StreamMuxer) DisconnectRangefeedWithError(
 			Error: *clientErrorEvent,
 		})
 		sm.appendMuxError(ev)
+		sm.metrics.DecrementRangefeedCounter()
 	}
 }
 
