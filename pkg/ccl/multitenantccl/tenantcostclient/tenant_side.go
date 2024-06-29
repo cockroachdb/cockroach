@@ -157,10 +157,6 @@ func newTenantSideCostController(
 
 		cpuModel := tenantcostmodel.EstimatedCPUModelFromSettings(&st.SV)
 		c.cpuModel.Store(&cpuModel)
-
-		// Set default background CPU ratio. This can change depending on the
-		// rate of estimated CPU consumption.
-		c.setBackgroundCPUMultiplier(0)
 	}
 
 	// If any of the cost settings change, reload both models.
@@ -245,17 +241,11 @@ type tenantSideCostController struct {
 	// atomic. It is a Uint64-encoded float64 value.
 	avgSQLCPUPerSec atomic.Uint64
 
-	// writeQPS is the recent global rate of write batches per second for this
+	// globalWriteQPS is the recent global rate of write batches per second for this
 	// tenant, measured across all SQL pods. It is only written in the main loop,
 	// but can be read by multiple goroutines so is an atomic. It is a
 	// Uint64-encoded float64 value.
-	writeQPS atomic.Uint64
-
-	// cpuMultiplier increases CPU estimates to account for background KV CPU
-	// usage (e.g. heartbeats, GC, compactions). It is only written in the main
-	// loop, but can be read by multiple goroutines so is an atomic. It is a
-	// Uint64-encoded float64 value.
-	cpuMultiplier atomic.Uint64
+	globalWriteQPS atomic.Uint64
 
 	// lowTokensNotifyChan is used when the number of available tokens is running
 	// low and we need to send an early token bucket request.
@@ -277,6 +267,9 @@ type tenantSideCostController struct {
 		tickTokens float64
 		// tickBatches stores the total batches consumed as of the last tick.
 		tickBatches int64
+		// tickEstimatedCPUSecs stores the total estimated CPU consumed as of the
+		// last tick.
+		tickEstimatedCPUSecs float64
 		// targetPeriod stores the value of the TargetPeriodSetting setting at the
 		// last update.
 		targetPeriod time.Duration
@@ -306,6 +299,9 @@ type tenantSideCostController struct {
 		lastReportedConsumption kvpb.TenantConsumption
 		// lastRate is the token bucket fill rate that was last configured.
 		lastRate float64
+		// globalEstimatedCPURate is the global rate of estimated CPU usage, in
+		// CPU-seconds, as last reported by the token bucket server.
+		globalEstimatedCPURate float64
 
 		// When we obtain tokens that are throttled over a period of time, we
 		// will request more only when we get close to the end of that trickle.
@@ -366,33 +362,6 @@ func (c *tenantSideCostController) useRequestUnitModel() bool {
 	return EstimatedNodesSetting.Get(&c.settings.SV) == 0
 }
 
-// setBackgroundCPUMultiplier calculates the background CPU multiplier that is
-// used to increase estimated CPU to account for background CPU usage such as
-// GC, compactions, etc., that is not part of request costing.
-func (c *tenantSideCostController) setBackgroundCPUMultiplier(estimatedCPURate float64) {
-	multiplier := float64(1)
-	cpuModel := c.cpuModel.Load()
-	if cpuModel.BackgroundCPU.Amortization > 0 {
-		ratio := float64(cpuModel.BackgroundCPU.Amount) / cpuModel.BackgroundCPU.Amortization
-		if estimatedCPURate > cpuModel.BackgroundCPU.Amortization {
-			// There are more than enough vCPUs to fully amortize the fixed overhead,
-			// so reduce the ratio accordingly.
-			ratio *= cpuModel.BackgroundCPU.Amortization / estimatedCPURate
-		}
-		multiplier += ratio
-	}
-	c.cpuMultiplier.Store(math.Float64bits(multiplier))
-}
-
-// addBackgroundCPU increases the given CPU amount by a multiplier, in order to
-// account for background CPU usage.
-func (c *tenantSideCostController) addBackgroundCPU(
-	amount tenantcostmodel.EstimatedCPU,
-) tenantcostmodel.EstimatedCPU {
-	multiplier := math.Float64frombits(c.cpuMultiplier.Load())
-	return amount * tenantcostmodel.EstimatedCPU(multiplier)
-}
-
 func (c *tenantSideCostController) initRunState(ctx context.Context) {
 	c.run.targetPeriod = TargetPeriodSetting.Get(&c.settings.SV)
 
@@ -410,35 +379,35 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	newExternalUsage := c.externalUsageFn(ctx)
 
 	// Update CPU consumption.
-	deltaCPU := newExternalUsage.CPUSecs - c.run.externalUsage.CPUSecs
+	deltaCPUSecs := newExternalUsage.CPUSecs - c.run.externalUsage.CPUSecs
 	var totalBatches = c.metrics.TotalReadBatches.Count() + c.metrics.TotalWriteBatches.Count()
 
 	deltaTime := newTime.Sub(c.run.lastTick)
 	if deltaTime > 0 {
 		// Subtract any allowance that we consider free background usage.
 		allowance := CPUUsageAllowance.Get(&c.settings.SV).Seconds() * deltaTime.Seconds()
-		deltaCPU -= allowance
+		deltaCPUSecs -= allowance
 
 		// If total CPU usage is small (less than 3% of a single CPU by default)
 		// and there have been no recent read/write operations, then ignore the
 		// recent usage altogether. This is intended to minimize reported usage
 		// when the cluster is idle.
-		if deltaCPU < allowance*2 {
+		if deltaCPUSecs < allowance*2 {
 			if totalBatches == c.run.tickBatches {
 				// There have been no batches since the last tick.
-				deltaCPU = 0
+				deltaCPUSecs = 0
 			}
 		}
 
 		// Keep track of an exponential moving average of CPU usage.
-		avgCPU := deltaCPU / deltaTime.Seconds()
+		avgCPU := deltaCPUSecs / deltaTime.Seconds()
 		avgCPUPerSec := math.Float64frombits(c.avgSQLCPUPerSec.Load())
 		avgCPUPerSec *= 1 - movingAvgCPUPerSecFactor
 		avgCPUPerSec += avgCPU * movingAvgCPUPerSecFactor
 		c.avgSQLCPUPerSec.Store(math.Float64bits(avgCPUPerSec))
 	}
-	if deltaCPU < 0 {
-		deltaCPU = 0
+	if deltaCPUSecs < 0 {
+		deltaCPUSecs = 0
 	}
 
 	var deltaPGWireEgressBytes int64
@@ -449,22 +418,37 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 
 	// KV RUs and estimated KV CPU are not included here, since the CPU metric
 	// corresponds only to the SQL layer.
-	c.metrics.TotalSQLPodsCPUSeconds.Inc(deltaCPU)
+	c.metrics.TotalSQLPodsCPUSeconds.Inc(deltaCPUSecs)
 
 	var newTokens, totalTokens float64
 	if c.useRequestUnitModel() {
 		// Compute consumed RU.
 		ruModel := c.ruModel.Load()
-		newTokens = float64(ruModel.PodCPUCost(deltaCPU))
+		newTokens = float64(ruModel.PodCPUCost(deltaCPUSecs))
 		newTokens += float64(ruModel.PGWireEgressCost(deltaPGWireEgressBytes))
 		c.metrics.TotalRU.Inc(newTokens)
 		totalTokens = c.metrics.TotalRU.Count()
 	} else {
-		// Compute estimated CPU and convert CPU into tokens in order to adjust
-		// the token bucket.
-		estimatedCPU := c.addBackgroundCPU(tenantcostmodel.EstimatedCPU(deltaCPU))
-		c.metrics.TotalEstimatedCPUSeconds.Inc(float64(estimatedCPU))
-		newTokens = deltaCPU * tokensPerCPUSecond
+		// Account for background CPU usage.
+		cpuModel := c.cpuModel.Load()
+
+		// Determine how much eCPU was consumed by this SQL node during the
+		// last tick.
+		totalEstimatedCPUSecs := c.metrics.TotalEstimatedCPUSeconds.Count() + deltaCPUSecs
+		deltaEstimatedCPUSecs := totalEstimatedCPUSecs - c.run.tickEstimatedCPUSecs
+		if deltaEstimatedCPUSecs > 0 && cpuModel.BackgroundCPU.Amortization > 0 {
+			deltaCPUSecs += calculateBackgroundCPUSecs(
+				cpuModel, c.run.globalEstimatedCPURate, deltaTime, deltaEstimatedCPUSecs)
+		}
+
+		// Remember estimated CPU for next time. Include background CPU so that it
+		// won't be included in the background CPU calculation for the next tick
+		// (i.e. we don't want background CPU to be recursively calculated on itself).
+		c.run.tickEstimatedCPUSecs = totalEstimatedCPUSecs + deltaCPUSecs
+
+		// Convert CPU into tokens in order to adjust the token bucket.
+		c.metrics.TotalEstimatedCPUSeconds.Inc(deltaCPUSecs)
+		newTokens = deltaCPUSecs * tokensPerCPUSecond
 		totalTokens = c.metrics.TotalEstimatedCPUSeconds.Count() * tokensPerCPUSecond
 	}
 
@@ -689,11 +673,8 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 
 	if !c.useRequestUnitModel() {
 		// Store global write QPS for the tenant.
-		c.writeQPS.Store(math.Float64bits(resp.ConsumptionRates.WriteBatchRate))
-
-		// Calculate background CPU ratio based on the rate of CPU consumption
-		// across all clients, as calculated by the server.
-		c.setBackgroundCPUMultiplier(resp.ConsumptionRates.EstimatedCPURate)
+		c.globalWriteQPS.Store(math.Float64bits(resp.ConsumptionRates.WriteBatchRate))
+		c.run.globalEstimatedCPURate = resp.ConsumptionRates.EstimatedCPURate
 	}
 
 	c.limiter.Reconfigure(now, cfg)
@@ -842,10 +823,9 @@ func (c *tenantSideCostController) OnResponseWait(
 	} else {
 		// Estimate CPU usage for the operation.
 		cpuModel := c.cpuModel.Load()
-		writeQPS := math.Float64frombits(c.writeQPS.Load())
+		writeQPS := math.Float64frombits(c.globalWriteQPS.Load())
 		estimatedCPU := cpuModel.RequestCost(req, writeQPS/nodeCount)
 		estimatedCPU += cpuModel.ResponseCost(resp)
-		estimatedCPU = c.addBackgroundCPU(estimatedCPU)
 		tokens = float64(estimatedCPU) * tokensPerCPUSecond
 
 		c.metrics.TotalEstimatedKVCPUSeconds.Inc(float64(estimatedCPU))
@@ -941,4 +921,36 @@ func (c *tenantSideCostController) GetEstimatedCPUModel() *tenantcostmodel.Estim
 // Metrics returns a metric.Struct which holds metrics for the controller.
 func (c *tenantSideCostController) Metrics() metric.Struct {
 	return &c.metrics
+}
+
+// calculateBackgroundCPUSecs returns the number of CPU seconds estimated to
+// have been consumed by background work triggered by this node during the given
+// interval. This is proportional to the amount of estimated CPU consumed by
+// this node during that interval, and is capped to a maximum fixed amount, as
+// specified in the model.
+func calculateBackgroundCPUSecs(
+	cpuModel *tenantcostmodel.EstimatedCPUModel,
+	globalEstimatedCPURate float64,
+	deltaTime time.Duration,
+	localEstimatedCPUSecs float64,
+) float64 {
+	// Determine how much eCPU was consumed by all SQL nodes during the time
+	// interval. The global eCPU rate can be unavailable or stale, so use the
+	// local rate if it's larger.
+	elapsedSeconds := float64(deltaTime) / float64(time.Second)
+	globalEstimatedCPUSecs :=
+		math.Max(globalEstimatedCPURate*elapsedSeconds, localEstimatedCPUSecs)
+	globalEstimatedCPURate = globalEstimatedCPUSecs / elapsedSeconds
+
+	// Determine how much CPU was consumed by overhead during the last tick.
+	// If there was less than "Amortization" eCPUs of usage, then only add
+	// a portion of the overhead.
+	backgroundCPUSecs := float64(cpuModel.BackgroundCPU.Amount) * elapsedSeconds
+	if globalEstimatedCPURate < cpuModel.BackgroundCPU.Amortization {
+		backgroundCPUSecs *= globalEstimatedCPURate / cpuModel.BackgroundCPU.Amortization
+	}
+
+	// This node is responsible for its percentage share of background usage.
+	backgroundCPUSecs *= localEstimatedCPUSecs / globalEstimatedCPUSecs
+	return backgroundCPUSecs
 }
