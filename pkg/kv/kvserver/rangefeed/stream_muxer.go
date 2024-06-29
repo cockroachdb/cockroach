@@ -12,8 +12,10 @@ package rangefeed
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -24,6 +26,7 @@ type severStreamSender interface {
 
 type StreamMuxer struct {
 	sender         severStreamSender
+	activeStreams  sync.Map
 	notifyMuxError chan struct{}
 
 	mu struct {
@@ -39,7 +42,18 @@ func NewStreamMuxer(sender severStreamSender) *StreamMuxer {
 	}
 }
 
-func (sm *StreamMuxer) AppendMuxError(e *kvpb.MuxRangeFeedEvent) {
+func (sm *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
+	sm.activeStreams.Store(streamID, cancel)
+}
+
+func transformRangefeedErrToClientError(err *kvpb.Error) *kvpb.Error {
+	if err == nil {
+		return kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
+	}
+	return err
+}
+
+func (sm *StreamMuxer) appendMuxError(e *kvpb.MuxRangeFeedEvent) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.mu.muxErrors = append(sm.mu.muxErrors, e)
@@ -47,6 +61,26 @@ func (sm *StreamMuxer) AppendMuxError(e *kvpb.MuxRangeFeedEvent) {
 	select {
 	case sm.notifyMuxError <- struct{}{}:
 	default:
+	}
+}
+
+// Safe to call repeatedly for the same stream. Subsequent errors are ignored.
+func (sm *StreamMuxer) DisconnectRangefeedWithError(
+	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
+) {
+	if cancelFunc, ok := sm.activeStreams.LoadAndDelete(streamID); ok {
+		if f, ok := cancelFunc.(context.CancelFunc); ok {
+			f()
+		}
+		clientErrorEvent := transformRangefeedErrToClientError(err)
+		ev := &kvpb.MuxRangeFeedEvent{
+			StreamID: streamID,
+			RangeID:  rangeID,
+		}
+		ev.SetValue(&kvpb.RangeFeedError{
+			Error: *clientErrorEvent,
+		})
+		sm.appendMuxError(ev)
 	}
 }
 
@@ -62,7 +96,8 @@ func (sm *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 	for {
 		select {
 		case <-sm.notifyMuxError:
-			for _, clientErr := range sm.detachMuxErrors() {
+			toSend := sm.detachMuxErrors()
+			for _, clientErr := range toSend {
 				if err := sm.sender.Send(clientErr); err != nil {
 					return
 				}
