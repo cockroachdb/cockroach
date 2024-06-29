@@ -12,8 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -1012,79 +1010,4 @@ func (p *planner) StartHistoryRetentionJob(
 
 func (p *planner) ExtendHistoryRetention(ctx context.Context, jobID jobspb.JobID) error {
 	return ExtendHistoryRetention(ctx, p.EvalContext(), p.InternalSQLTxn(), jobID)
-}
-
-func (p *planner) StartLogicalReplicationJob(
-	ctx context.Context, targetConnStr string, tableNames []string,
-) (jobspb.JobID, error) {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V24_1) {
-		return 0, pgerror.New(pgcode.FeatureNotSupported,
-			"replication job not supported before V24.1")
-	}
-	evalCtx := p.EvalContext()
-	execConfig := evalCtx.Planner.ExecutorConfig().(*ExecutorConfig)
-	registry := execConfig.JobRegistry
-
-	// TODO(ssd): Name resolution needs to be thought through for
-	// the final syntax.
-	//
-	// Currently, the user passes some name and that name is
-	// resolved by both the source and the destination. The
-	// destination-side resolution is below and happens in the
-	// context of the session calling the built-in. The
-	// source-side resolution happens when creating the remote
-	// producer job and happens in the context of the session we
-	// get when connecting to the source using the user-provided
-	// URL.
-	fullyQualifiedTableNames := make([]string, 0, len(tableNames))
-	repPairs := make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(tableNames))
-	for i, t := range tableNames {
-		un := tree.MakeUnresolvedName(t)
-		uon, err := un.ToUnresolvedObjectName(tree.NoAnnotation)
-		if err != nil {
-			return 0, err
-		}
-		tn := uon.ToTableName()
-		prefix, td, err := resolver.ResolveMutableExistingTableObject(ctx, p, &tn, true, tree.ResolveRequireTableDesc)
-		if err != nil {
-			return 0, err
-		}
-
-		tbNameWithSchema := tree.MakeTableNameWithSchema(
-			tree.Name(prefix.Database.GetName()),
-			tree.Name(prefix.Schema.GetName()),
-			tree.Name(td.GetName()),
-		)
-		fullyQualifiedTableNames = append(fullyQualifiedTableNames, tbNameWithSchema.FQString())
-		repPairs[i].DstDescriptorID = int32(td.GetID())
-	}
-
-	spec, err := repstream.CreateRemoteProduceJobForLogicalReplication(ctx, targetConnStr, tableNames)
-	if err != nil {
-		return 0, err
-	}
-	for i, name := range tableNames {
-		repPairs[i].SrcDescriptorID = int32(spec.TableDescriptors[name].ID)
-	}
-
-	jr := jobs.Record{
-		Description: fmt.Sprintf("logical replication ingestion for %s",
-			strings.Join(fullyQualifiedTableNames, ",")),
-		Username: evalCtx.SessionData().User(),
-		Details: jobspb.LogicalReplicationDetails{
-			StreamID:             uint64(spec.StreamID),
-			SourceClusterID:      spec.SourceClusterID,
-			ReplicationStartTime: spec.ReplicationStartTime,
-			TargetClusterConnStr: targetConnStr,
-			ReplicationPairs:     repPairs,
-			TableNames:           tableNames},
-		Progress: jobspb.LogicalReplicationProgress{},
-		JobID:    registry.MakeJobID(),
-	}
-
-	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, p.InternalSQLTxn()); err != nil {
-		return 0, err
-	}
-	registry.NotifyToAdoptJobs()
-	return jr.JobID, nil
 }
