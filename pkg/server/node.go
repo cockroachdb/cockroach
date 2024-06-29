@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
@@ -1854,93 +1855,35 @@ type lockedMuxStream struct {
 	sendMu  syncutil.Mutex
 }
 
+func (s *lockedMuxStream) SendIsThreadSafe() {}
+
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
 	return s.wrapped.Send(e)
 }
 
-// newMuxRangeFeedCompletionWatcher returns 2 functions: one to forward mux
-// rangefeed completion events to the sender, and a cleanup function. Mux
-// rangefeed completion events can be triggered at any point, and we would like
-// to avoid blocking on IO (sender.Send) during potentially critical areas.
-// Thus, the forwarding should happen on a dedicated goroutine.
-func newMuxRangeFeedCompletionWatcher(
-	ctx context.Context, stopper *stop.Stopper, send func(e *kvpb.MuxRangeFeedEvent) error,
-) (doneFn func(event *kvpb.MuxRangeFeedEvent), cleanup func(), _ error) {
-	// structure to help coordination of event forwarding and shutdown.
-	var fin = struct {
-		syncutil.Mutex
-		completed []*kvpb.MuxRangeFeedEvent
-		signalC   chan struct{}
-	}{
-		// NB: a buffer of 1 ensures we can always send a signal when rangefeed completes.
-		signalC: make(chan struct{}, 1),
-	}
-
-	// forwardCompletion listens to completion notifications and forwards
-	// them to the sender.
-	forwardCompletion := func(ctx context.Context) {
-		for {
-			select {
-			case <-fin.signalC:
-				var toSend []*kvpb.MuxRangeFeedEvent
-				fin.Lock()
-				toSend, fin.completed = fin.completed, nil
-				fin.Unlock()
-				for _, e := range toSend {
-					if err := send(e); err != nil {
-						// If we failed to send, there is nothing else we can do.
-						// The stream is broken anyway.
-						return
-					}
-				}
-			case <-ctx.Done():
-				return
-			case <-stopper.ShouldQuiesce():
-				// There is nothing we can do here; stream cancellation is usually
-				// triggered by the client.  We don't have access to stream cancellation
-				// function; so, just let things proceed until the server shuts down.
-				return
-			}
-		}
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	if err := stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
-		defer wg.Done()
-		forwardCompletion(ctx)
-	}); err != nil {
-		return nil, nil, err
-	}
-
-	addCompleted := func(event *kvpb.MuxRangeFeedEvent) {
-		fin.Lock()
-		fin.completed = append(fin.completed, event)
-		fin.Unlock()
-		select {
-		case fin.signalC <- struct{}{}:
-		default:
-		}
-	}
-	return addCompleted, wg.Wait, nil
-}
-
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	muxStream := &lockedMuxStream{wrapped: stream}
 
+	var wg sync.WaitGroup
+	// Important to call cancel() to shutdown	streamMuxer before wg.Wait().
+	defer wg.Wait()
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
 
-	rangefeedCompleted, cleanup, err := newMuxRangeFeedCompletionWatcher(ctx, n.stopper, muxStream.Send)
-	if err != nil {
+	streamMuxer := rangefeed.NewStreamMuxer(muxStream)
+	wg.Add(1)
+	if err := n.stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
+		defer wg.Done()
+		streamMuxer.Run(ctx, n.stopper)
+	}); err != nil {
+		wg.Done()
 		return err
 	}
-	defer cleanup()
 
 	n.metrics.NumMuxRangeFeed.Inc(1)
 	n.metrics.ActiveMuxRangeFeed.Inc(1)
@@ -2022,7 +1965,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			// raftMu in processor) may be held. Issuing potentially blocking IO
 			// during that time is not a good idea. Thus, we shunt the notification to
 			// a dedicated goroutine.
-			rangefeedCompleted(e)
+			streamMuxer.AppendMuxError(e)
 		})
 	}
 }
