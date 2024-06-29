@@ -242,8 +242,8 @@ message StreamIngestionDataSpec {
   // ingesting data from the PreviousReplicatedTimestamp described above.
   optional util.hlc.Timestamp initial_scan_timestamp = 11 [(gogoproto.nullable) = false];
 
-  // StreamAddress locate the stream so that a stream client can be initialized.
-  optional string stream_address = 3 [(gogoproto.nullable) = false];
+  reserved 3; // this was `string stream_address` in case we want to resurrect it.
+
   // JobID is the job ID of the stream ingestion job.
   optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
 

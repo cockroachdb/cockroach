@@ -534,7 +534,6 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := constructStreamIngestionPlanSpecs(
 			ctx,
-			crosscluster.StreamAddress(details.StreamAddress),
 			topology,
 			destNodeLocalities,
 			initialScanTimestamp,
@@ -757,7 +756,6 @@ func GetDestNodeLocalities(
 
 func constructStreamIngestionPlanSpecs(
 	ctx context.Context,
-	streamAddress crosscluster.StreamAddress,
 	topology streamclient.Topology,
 	destSQLInstances []sql.InstanceLocality,
 	initialScanTimestamp hlc.Timestamp,
@@ -780,7 +778,6 @@ func constructStreamIngestionPlanSpecs(
 		PreviousReplicatedTimestamp: previousReplicatedTimestamp,
 		InitialScanTimestamp:        initialScanTimestamp,
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
-		StreamAddress:               string(streamAddress),
 		PartitionSpecs:              make(map[string]execinfrapb.StreamIngestionPartitionSpec),
 		TenantRekey: execinfrapb.TenantRekey{
 			OldID: sourceTenantID,
