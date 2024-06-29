@@ -263,6 +263,8 @@ type nodeMetrics struct {
 	ActiveMuxRangeFeed            *metric.Gauge
 }
 
+var _ rangefeed.RangefeedMetricsRecorder = &nodeMetrics{}
+
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeMetrics {
 	nm := &nodeMetrics{
 		Latency: metric.NewHistogram(metric.HistogramOptions{
@@ -342,6 +344,19 @@ func (nm *nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
 	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
 		nm.CrossZoneBatchResponseBytes.Inc(inc)
 	}
+}
+
+// UpdateOnRangefeedConnect increments rangefeed metrics when a new server
+// rangefeed is added.
+func (nm *nodeMetrics) UpdateMetricsOnRangefeedConnect() {
+	nm.NumMuxRangeFeed.Inc(1)
+	nm.ActiveMuxRangeFeed.Inc(1)
+}
+
+// UpdateOnRangefeedDisconnect decrements rangefeed metrics when a server
+// rangefeed is disconnected.
+func (nm *nodeMetrics) UpdateMetricsOnRangefeedDisconnect() {
+	nm.ActiveMuxRangeFeed.Dec(1)
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
@@ -1875,7 +1890,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
 
-	streamMuxer := rangefeed.NewStreamMuxer(muxStream)
+	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
 	wg.Add(1)
 	if err := n.stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
 		defer wg.Done()
@@ -1884,10 +1899,6 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		wg.Done()
 		return err
 	}
-
-	n.metrics.NumMuxRangeFeed.Inc(1)
-	n.metrics.ActiveMuxRangeFeed.Inc(1)
-	defer n.metrics.ActiveMuxRangeFeed.Inc(-1)
 
 	for {
 		req, err := stream.Recv()
@@ -1917,11 +1928,8 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		}
 		streamMuxer.AddStream(req.StreamID, cancel)
 
-		n.metrics.NumMuxRangeFeed.Inc(1)
-		n.metrics.ActiveMuxRangeFeed.Inc(1)
 		f := n.stores.RangeFeed(req, streamSink)
 		f.WhenReady(func(err error) {
-			n.metrics.ActiveMuxRangeFeed.Inc(-1)
 			streamMuxer.DisconnectRangefeedWithError(req.StreamID, req.RangeID, kvpb.NewError(err))
 		})
 	}
