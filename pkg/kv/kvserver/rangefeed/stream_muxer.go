@@ -54,6 +54,10 @@ func (sm *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
 	sm.metrics.IncrementRangefeedCounter()
 }
 
+func (sm *StreamMuxer) Send(e *kvpb.MuxRangeFeedEvent) error {
+	return sm.sender.Send(e)
+}
+
 func transformRangefeedErrToClientError(err *kvpb.Error) *kvpb.Error {
 	if err == nil {
 		return kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
