@@ -13,6 +13,7 @@ go_library(
         "resolved_timestamp.go",
         "scheduled_processor.go",
         "scheduler.go",
+        "stream_muxer.go",
         "task.go",
         "testutil.go",
     ],
