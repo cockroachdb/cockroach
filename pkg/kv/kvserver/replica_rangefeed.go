@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -121,24 +120,6 @@ const defaultEventChanCap = 4096
 // and slow consumers will backpressure writers up through Raft.
 var defaultEventChanTimeout = envutil.EnvOrDefaultDuration(
 	"COCKROACH_RANGEFEED_SEND_TIMEOUT", 50*time.Millisecond)
-
-// lockedRangefeedStream is an implementation of rangefeed.Stream which provides
-// support for concurrent calls to Send. Note that the default implementation of
-// grpc.Stream is not safe for concurrent calls to Send.
-type lockedRangefeedStream struct {
-	wrapped kvpb.RangeFeedEventSink
-	sendMu  syncutil.Mutex
-}
-
-func (s *lockedRangefeedStream) Context() context.Context {
-	return s.wrapped.Context()
-}
-
-func (s *lockedRangefeedStream) Send(e *kvpb.RangeFeedEvent) error {
-	s.sendMu.Lock()
-	defer s.sendMu.Unlock()
-	return s.wrapped.Send(e)
-}
 
 // rangefeedTxnPusher is a shim around intentResolver that implements the
 // rangefeed.TxnPusher interface.
@@ -294,8 +275,6 @@ func (r *Replica) RangeFeed(
 		checkTS = r.Clock().Now()
 	}
 
-	lockedStream := &lockedRangefeedStream{wrapped: stream}
-
 	// If we will be using a catch-up iterator, wait for the limiter here before
 	// locking raftMu.
 	usingCatchUpIter := false
@@ -352,7 +331,7 @@ func (r *Replica) RangeFeed(
 
 	var done future.ErrorFuture
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, lockedStream, &done,
+		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, stream, &done,
 	)
 	r.raftMu.Unlock()
 

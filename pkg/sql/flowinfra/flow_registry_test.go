@@ -717,6 +717,8 @@ type delayedErrorServerStream struct {
 	err         error
 }
 
+func (s *delayedErrorServerStream) SendIsThreadSafe() {}
+
 func (s *delayedErrorServerStream) Send(*execinfrapb.ConsumerSignal) error {
 	s.rpcCalledCh <- struct{}{}
 	<-s.delayCh

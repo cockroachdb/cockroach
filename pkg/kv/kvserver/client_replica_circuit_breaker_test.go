@@ -456,6 +456,8 @@ func (s *dummyStream) Context() context.Context {
 	return s.ctx
 }
 
+func (s *dummyStream) SendIsThreadSafe() {}
+
 func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 	if ev.Val == nil && ev.Error == nil {
 		return nil
