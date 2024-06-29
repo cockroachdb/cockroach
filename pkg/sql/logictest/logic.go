@@ -1492,18 +1492,19 @@ func (t *logicTest) newCluster(
 	setSQLTestingKnobs(&params.ServerArgs.Knobs)
 
 	cfg := t.cfg
-	if cfg.BootstrapVersion != clusterversion.Key(0) {
-		if params.ServerArgs.Knobs.Server == nil {
-			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
-		}
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).OverrideClusterVersion = cfg.BootstrapVersion.Version()
+	if params.ServerArgs.Knobs.Server == nil {
+		params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
+	}
+	if cfg.ClusterVersion != clusterversion.Key(0) {
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).OverrideClusterVersion = cfg.ClusterVersion.Version()
 	}
 	if cfg.DisableUpgrade {
-		if params.ServerArgs.Knobs.Server == nil {
-			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
-		}
 		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = make(chan struct{})
 	}
+	// We don't want to allow bootstrap version randomization in logic tests
+	// because that prevents the descriptor round-trip check at the end of each
+	// test.
+	params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableBootstrapVersionRandomization = true
 	for _, opt := range clusterOpts {
 		t.rootT.Logf("apply cluster opt %T", opt)
 		opt.apply(&params.ServerArgs)
@@ -1913,7 +1914,7 @@ func (t *logicTest) setup(
 			t.Fatal("cockroach-go testserver tests must use 3 nodes")
 		}
 
-		versionStr := clusterversion.RemoveDevOffset(cfg.BootstrapVersion.Version()).String()
+		versionStr := clusterversion.RemoveDevOffset(cfg.ClusterVersion.Version()).String()
 		bootstrapVersion, err := release.LatestPatch(versionStr)
 		if err != nil {
 			t.Fatal(err)
@@ -4029,7 +4030,7 @@ func (t *logicTest) validateAfterTestCompletion() error {
 		// tables which don't include the new fields in the protobuf, so they will
 		// fail to round-trip.
 		if !t.cfg.UseCockroachGoTestserver &&
-			!(t.cfg.DisableUpgrade && t.cfg.BootstrapVersion != clusterversion.Key(0)) {
+			!(t.cfg.DisableUpgrade && t.cfg.ClusterVersion != clusterversion.Key(0)) {
 			rows, err := t.db.Query(
 				`
 SELECT encode(descriptor, 'hex') AS descriptor

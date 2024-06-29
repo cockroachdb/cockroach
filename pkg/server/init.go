@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -493,7 +494,7 @@ func (s *initServer) attemptJoinTo(
 		_ = conn.Close() // nolint:grpcconnclose
 	}()
 
-	latestVersion := s.config.latestVersion
+	latestVersion := s.config.targetVersion
 	req := &kvpb.JoinNodeRequest{
 		BinaryVersion: &latestVersion,
 	}
@@ -561,7 +562,7 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 
 	return inspectEngines(
 		ctx, s.inspectedDiskState.uninitializedEngines,
-		s.config.latestVersion, s.config.minSupportedVersion,
+		s.config.targetVersion, s.config.minSupportedVersion,
 	)
 }
 
@@ -611,7 +612,8 @@ func assertEnginesEmpty(engines []storage.Engine) error {
 type initServerCfg struct {
 	advertiseAddr           string
 	minSupportedVersion     roachpb.Version
-	latestVersion           roachpb.Version // the version used during bootstrap
+	bootstrapVersion        roachpb.Version // the version used during bootstrap
+	targetVersion           roachpb.Version // the version we will upgrade the cluster to after bootstrap (if set).
 	defaultSystemZoneConfig zonepb.ZoneConfig
 	defaultZoneConfig       zonepb.ZoneConfig
 
@@ -639,39 +641,55 @@ func newInitServerConfig(
 	cfg Config,
 	getDialOpts func(context.Context, string, rpc.ConnectionClass) ([]grpc.DialOption, error),
 ) initServerCfg {
-	latestVersion := cfg.Settings.Version.LatestVersion()
+	// targetVersion is the target cluster version. bootstrapVersion is the
+	// version we will use to bootstrap the cluster (which we subsequently upgrade
+	// to targetVersion, if necessary). Normally, these are both the latest
+	// version but can be different during testing.
+	targetVersion := cfg.Settings.Version.LatestVersion()
+	bootstrapVersion := targetVersion
+
 	minSupportedVersion := cfg.Settings.Version.MinSupportedVersion()
-	if knobs := cfg.TestingKnobs.Server; knobs != nil {
-		if overrideVersion := knobs.(*TestingKnobs).OverrideClusterVersion; overrideVersion != (roachpb.Version{}) {
-			// We are customizing the cluster version. We can only bootstrap a fresh
-			// cluster at specific versions (specifically, the current version and
-			// previously released versions down to the minimum supported).
-			// We choose the closest version that's not newer than the target version.;
-			// later on, we will upgrade to `BinaryVersionOverride` (this happens
-			// separately when we Activate the server).
-			var bootstrapVersion roachpb.Version
-			for _, v := range bootstrap.VersionsWithInitialValues() {
-				if !overrideVersion.Less(v.Version()) {
-					bootstrapVersion = v.Version()
-					break
-				}
-			}
-			if bootstrapVersion == (roachpb.Version{}) {
-				panic(fmt.Sprintf("BinaryVersionOverride version %s too low", overrideVersion))
-			}
-			latestVersion = bootstrapVersion
-		}
-	}
-	if latestVersion.Less(minSupportedVersion) {
+	if targetVersion.Less(minSupportedVersion) {
 		log.Fatalf(ctx, "binary version (%s) less than min supported version (%s)",
-			latestVersion, minSupportedVersion)
+			targetVersion, minSupportedVersion)
+	}
+
+	// If the target version is overridden, we might have to bootstrap the cluster
+	// at an earlier version and subsequently upgrade it. To increase testing
+	// coverage, we randomly choose a bootstrap version and upgrade from there.
+	if cfg.TestingKnobs.Server != nil {
+		if overrideVersion := cfg.TestingKnobs.Server.(*TestingKnobs).OverrideClusterVersion; overrideVersion != (roachpb.Version{}) {
+			targetVersion = overrideVersion
+			// We are going to randomly choose the bootstrap version among those that
+			// are available.
+			versions := bootstrap.VersionsWithInitialValues()
+			// Exclude versions newer than the target version.
+			for len(versions) > 0 && targetVersion.Less(versions[0].Version()) {
+				versions = versions[1:]
+			}
+			// Exclude versions older than the minimum supported version.
+			for len(versions) > 0 && versions[len(versions)-1].Version().Less(minSupportedVersion) {
+				versions = versions[:len(versions)-1]
+			}
+
+			if len(versions) == 0 {
+				log.Fatalf(ctx, "no bootstrappable versions between %s and %s", minSupportedVersion, targetVersion)
+			}
+			if cfg.TestingKnobs.Server.(*TestingKnobs).DisableBootstrapVersionRandomization {
+				bootstrapVersion = versions[0].Version()
+			} else {
+				bootstrapVersion = versions[rand.Intn(len(versions))].Version()
+			}
+			log.Infof(ctx, "Target cluster version: %s  Bootstrap version: %s", targetVersion, bootstrapVersion)
+		}
 	}
 
 	bootstrapAddresses := cfg.FilterGossipBootstrapAddresses(context.Background())
 	return initServerCfg{
 		advertiseAddr:           cfg.AdvertiseAddr,
 		minSupportedVersion:     minSupportedVersion,
-		latestVersion:           latestVersion,
+		bootstrapVersion:        bootstrapVersion,
+		targetVersion:           targetVersion,
 		defaultSystemZoneConfig: cfg.DefaultSystemZoneConfig,
 		defaultZoneConfig:       cfg.DefaultZoneConfig,
 		getDialOpts:             getDialOpts,

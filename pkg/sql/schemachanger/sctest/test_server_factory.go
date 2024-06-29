@@ -85,6 +85,9 @@ func (f SingleNodeTestClusterFactory) Run(
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				UseTransactionalDescIDGenerator: true,
 			},
+			Server: &server.TestingKnobs{
+				DisableBootstrapVersionRandomization: true,
+			},
 		},
 		// TODO(postamar): remove this
 		DefaultTestTenant: base.TODOTestTenantDisabled,

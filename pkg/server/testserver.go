@@ -175,19 +175,30 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			cfg.InflightTraceDirName = params.TraceDir
 		}
 	}
-	if knobs := params.Knobs.Store; knobs != nil {
+	if knobs := cfg.TestingKnobs.Store; knobs != nil {
 		if mo := knobs.(*kvserver.StoreTestingKnobs).MaxOffset; mo != 0 {
 			cfg.MaxOffset = MaxOffsetType(mo)
 		}
 	}
-	if params.Knobs.Server != nil {
-		if zoneConfig := params.Knobs.Server.(*TestingKnobs).DefaultZoneConfigOverride; zoneConfig != nil {
-			cfg.DefaultZoneConfig = *zoneConfig
-		}
-		if systemZoneConfig := params.Knobs.Server.(*TestingKnobs).DefaultSystemZoneConfigOverride; systemZoneConfig != nil {
-			cfg.DefaultSystemZoneConfig = *systemZoneConfig
-		}
+	if cfg.TestingKnobs.Server == nil {
+		cfg.TestingKnobs.Server = &TestingKnobs{}
 	}
+
+	serverKnobs := cfg.TestingKnobs.Server.(*TestingKnobs)
+	if zoneConfig := serverKnobs.DefaultZoneConfigOverride; zoneConfig != nil {
+		cfg.DefaultZoneConfig = *zoneConfig
+	}
+	if systemZoneConfig := serverKnobs.DefaultSystemZoneConfigOverride; systemZoneConfig != nil {
+		cfg.DefaultSystemZoneConfig = *systemZoneConfig
+	}
+	// If OverrideClusterVersion is not set, we set it to the latest version some
+	// of the time. The end result should be the same, but by setting it we will
+	// bootstrap the cluster at a random version then upgrade to the latest
+	// version (increasing testing coverage of migrations).
+	if serverKnobs.OverrideClusterVersion == (roachpb.Version{}) && !serverKnobs.DisableBootstrapVersionRandomization { // && rand.Intn(2) == 0 {
+		serverKnobs.OverrideClusterVersion = cfg.Settings.Version.LatestVersion()
+	}
+
 	if params.ScanInterval != 0 {
 		cfg.ScanInterval = params.ScanInterval
 	}
@@ -298,11 +309,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck = true
 
-	if params.Knobs.SQLExecutor == nil {
+	if cfg.TestingKnobs.SQLExecutor == nil {
 		cfg.TestingKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
 	}
 
-	if params.Knobs.AdmissionControlOptions == nil {
+	if cfg.TestingKnobs.AdmissionControlOptions == nil {
 		cfg.TestingKnobs.AdmissionControlOptions = &admission.Options{}
 	}
 
@@ -806,7 +817,7 @@ func (ts *testServer) Activate(ctx context.Context) error {
 	}
 
 	maybeRunVersionUpgrade := func(layer serverutils.ApplicationLayerInterface) error {
-		if v := ts.BinaryVersionOverride(); v != (roachpb.Version{}) {
+		if v := ts.Cfg.TestingKnobs.Server.(*TestingKnobs).OverrideClusterVersion; v != (roachpb.Version{}) {
 			ie := layer.InternalExecutor().(isql.Executor)
 			if _, err := ie.Exec(context.Background(), "set-cluster-version", nil, /* txn */
 				`SET CLUSTER SETTING version = $1`, v.String()); err != nil {
@@ -2294,15 +2305,6 @@ func (ts *testServer) Codec() keys.SQLCodec {
 // RangeDescIteratorFactory is part of the serverutils.ApplicationLayerInterface.
 func (ts *testServer) RangeDescIteratorFactory() interface{} {
 	return ts.sqlServer.execCfg.RangeDescIteratorFactory
-}
-
-// BinaryVersionOverride is part of the serverutils.TestServerInterface.
-func (ts *testServer) BinaryVersionOverride() roachpb.Version {
-	knobs := ts.TestingKnobs().Server
-	if knobs == nil {
-		return roachpb.Version{}
-	}
-	return knobs.(*TestingKnobs).OverrideClusterVersion
 }
 
 // KvProber is part of the serverutils.StorageLayerInterface.

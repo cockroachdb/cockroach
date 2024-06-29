@@ -62,6 +62,9 @@ func (f MultiRegionTestClusterFactory) Run(
 		SQLExecutor: &sql.ExecutorTestingKnobs{
 			UseTransactionalDescIDGenerator: true,
 		},
+		Server: &server.TestingKnobs{
+			DisableBootstrapVersionRandomization: true,
+		},
 	}
 	if f.server != nil {
 		knobs.Server = f.server

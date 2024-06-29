@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -341,7 +343,6 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 						},
 					} {
 						t.Run(errorMode.desc, func(t *testing.T) {
-							var db *gosql.DB
 							// set backfill chunk to -chunksPerBackfill, to allow the ALTER TABLE ... ADD COLUMN
 							// to backfill successfully.
 							currentBackfillChunk := -(chunksPerBackfill + 1)
@@ -354,6 +355,7 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							// this test doesn't error when expected. More
 							// investigation is required. Tracked with #76378.
 							params.DefaultTestTenant = base.TODOTestTenantDisabled
+							var initialized atomic.Bool
 							var sqlDB *gosql.DB
 							params.Knobs = base.TestingKnobs{
 								SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -361,6 +363,9 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 								},
 								DistSQL: &execinfra.TestingKnobs{
 									RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+										if !initialized.Load() {
+											return nil
+										}
 										// Run a validate query on each chunk.
 										_, err := sqlDB.Exec(`SELECT crdb_internal.validate_multi_region_zone_configs()`)
 										if err != nil {
@@ -371,7 +376,7 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 										if currentBackfillChunk != alterState.cancelOnBackfillChunk {
 											return nil
 										}
-										return errorMode.runOnChunk(db)
+										return errorMode.runOnChunk(sqlDB)
 									},
 								},
 								// Decrease the adopt loop interval so that retries happen quickly.
@@ -380,8 +385,8 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							var s serverutils.TestServerInterface
 							var kvDB *kv.DB
 							s, sqlDB, kvDB = serverutils.StartServer(t, params)
-							db = sqlDB
 							defer s.Stopper().Stop(ctx)
+							initialized.Store(true)
 
 							// Disable strict GC TTL enforcement because we're going to shove a zero-value
 							// TTL into the system with AddImmediateGCZoneConfig.
@@ -492,7 +497,7 @@ USE t;
 							})
 
 							tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-							if _, err := sqltestutils.AddImmediateGCZoneConfig(db, tableDesc.GetID()); err != nil {
+							if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
 								t.Fatal(err)
 							}
 							// Ensure that the writes from the partial new indexes are cleaned up.
@@ -600,6 +605,10 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 				GCJob: &sql.GCJobTestingKnobs{
 					RunBeforeResume:      func(_ jobspb.JobID) error { <-blockGC; return nil },
 					SkipWaitingForMVCCGC: true,
+				},
+				Server: &server.TestingKnobs{
+					// The test relies on the specific jobs that run.
+					DisableBootstrapVersionRandomization: true,
 				},
 			}
 

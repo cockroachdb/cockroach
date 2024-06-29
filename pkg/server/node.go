@@ -471,7 +471,7 @@ func bootstrapCluster(
 	}
 
 	// We use our binary version to bootstrap the cluster.
-	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.latestVersion}
+	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.bootstrapVersion}
 	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, bootstrapVersion); err != nil {
 		return nil, err
 	}
@@ -502,20 +502,20 @@ func bootstrapCluster(
 				Codec:                   keys.SystemSQLCodec,
 			}
 			for _, v := range bootstrap.VersionsWithInitialValues() {
-				if initCfg.latestVersion == v.Version() {
+				if initCfg.bootstrapVersion == v.Version() {
 					initialValuesOpts.OverrideKey = v
 					break
 				}
 			}
 			if initialValuesOpts.OverrideKey == 0 {
-				if initCfg.latestVersion.Less(clusterversion.MinSupported.Version()) {
+				if initCfg.bootstrapVersion.Less(clusterversion.MinSupported.Version()) {
 					// As an exception, we tolerate tests creating older versions; we just
 					// use the minimum supported version.
 					// TODO(radu): should we make sure there are no upgrades for versions
 					// earlier than this still registered?
 					initialValuesOpts.OverrideKey = clusterversion.MinSupported
 				} else {
-					return nil, errors.AssertionFailedf("cannot bootstrap at version %s", initCfg.latestVersion)
+					return nil, errors.AssertionFailedf("cannot bootstrap at version %s", initCfg.bootstrapVersion)
 				}
 			}
 
@@ -543,9 +543,9 @@ func bootstrapCluster(
 		}
 	}
 
-	// Note that we wrote initcfg.binaryVersion, that will always be the version
+	// Note that we wrote initCfg.bootstrapVersion, that will always be the version
 	// that inspectEngines determines.
-	return inspectEngines(ctx, engines, initCfg.latestVersion, initCfg.minSupportedVersion)
+	return inspectEngines(ctx, engines, initCfg.bootstrapVersion, initCfg.minSupportedVersion)
 }
 
 // NewNode returns a new instance of Node.
