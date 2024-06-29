@@ -11,7 +11,6 @@ package logical
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -118,12 +117,13 @@ func (r *logicalReplicationResumer) ingest(
 		replicatedTimeAtStart = progress.ReplicatedTime
 	)
 
-	streamAddr, err := url.Parse(payload.TargetClusterConnStr)
-	if err != nil {
-		return err
-	}
+	client, err := streamclient.NewStreamClient(ctx,
+		crosscluster.StreamAddress(payload.TargetClusterConnStr),
+		jobExecCtx.ExecCfg().InternalDB,
+		streamclient.WithStreamID(streampb.StreamID(streamID)),
+		streamclient.WithLogical(),
+	)
 
-	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr, streamclient.WithStreamID(streampb.StreamID(streamID)), streamclient.WithLogical())
 	if err != nil {
 		return err
 	}
