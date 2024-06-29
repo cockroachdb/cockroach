@@ -1838,7 +1838,6 @@ func (n *Node) RangeLookup(
 // calls.
 type setRangeIDEventSink struct {
 	ctx      context.Context
-	cancel   context.CancelFunc
 	rangeID  roachpb.RangeID
 	streamID int64
 	wrapped  *lockedMuxStream
@@ -1921,7 +1920,6 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 
 			streamSink := &setRangeIDEventSink{
 				ctx:      streamCtx,
-				cancel:   cancel,
 				rangeID:  req.RangeID,
 				streamID: req.StreamID,
 				wrapped:  muxStream,
