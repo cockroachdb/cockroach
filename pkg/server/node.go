@@ -1833,19 +1833,24 @@ func (n *Node) RangeLookup(
 }
 
 // setRangeIDEventSink is an implementation of rangefeed.Stream which annotates
-// each response with rangeID and streamID. It is used by MuxRangeFeed. Note
-// that the wrapped stream is a locked mux stream, ensuring safe concurrent Send
-// calls.
+// each response with rangeID and streamID. It is used by MuxRangeFeed.
 type setRangeIDEventSink struct {
 	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  *lockedMuxStream
+	wrapped  *rangefeed.StreamMuxer
 }
+
+var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
 
 func (s *setRangeIDEventSink) Context() context.Context {
 	return s.ctx
 }
+
+// SendIsThreadSafe is a no-op declaration method. It is a contract that the
+// Send method is thread-safe. Note that Send wraps rangefeed.StreamMuxer which
+// declares its Send method to be thread-safe.
+func (s *setRangeIDEventSink) SendIsThreadSafe() {}
 
 func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
@@ -1855,11 +1860,6 @@ func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	}
 	return s.wrapped.Send(response)
 }
-
-// Wrapped stream is a locked mux stream, ensuring safe concurrent Send.
-func (s *setRangeIDEventSink) SendIsThreadSafe() {}
-
-var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
 
 // lockedMuxStream provides support for concurrent calls to Send. The underlying
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
@@ -1922,7 +1922,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 				ctx:      streamCtx,
 				rangeID:  req.RangeID,
 				streamID: req.StreamID,
-				wrapped:  muxStream,
+				wrapped:  streamMuxer,
 			}
 			streamMuxer.AddStream(req.StreamID, cancel)
 
