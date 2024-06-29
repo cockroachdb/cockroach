@@ -110,6 +110,23 @@ func (l *raftLog) String() string {
 		l.committed, l.applied, l.applying, l.unstable.prev.index+1, l.unstable.entryInProgress+1, len(l.unstable.entries))
 }
 
+// accTerm returns the term of the leader whose append was accepted into the log
+// last. Note that a rejected append does not update accTerm, by definition.
+//
+// Invariant: the log is a prefix of the accTerm's leader log
+// Invariant: lastEntryID().term <= accTerm <= raft.Term
+//
+// In steady state, accTerm == raft.Term. When someone campaigns, raft.Term
+// briefly overtakes the accTerm. However, accTerm catches up as soon as we
+// accept an append from the new leader.
+//
+// NB: the log can be partially or fully compacted. When we say "log" above, we
+// logically include all the entries that were the pre-image of a snapshot, as
+// well as the entries that are still physically in the log.
+func (l *raftLog) accTerm() uint64 {
+	return l.unstable.term
+}
+
 // maybeAppend conditionally appends the given log slice to the log, making it
 // consistent with the a.term leader log up to a.lastIndex(). A prefix of this
 // log slice may already be present in the log, in which case it is skipped, and
