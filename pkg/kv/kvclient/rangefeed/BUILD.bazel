@@ -87,7 +87,6 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
-        "//pkg/util/future",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
