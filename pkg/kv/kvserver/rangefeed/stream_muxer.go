@@ -20,12 +20,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+type rangefeedMetricsRecorder interface {
+	IncrementRangefeedCounter()
+	DecrementRangefeedCounter()
+}
+
 type severStreamSender interface {
 	Send(*kvpb.MuxRangeFeedEvent) error
 }
 
 type StreamMuxer struct {
 	sender         severStreamSender
+	metrics        rangefeedMetricsRecorder
 	activeStreams  sync.Map
 	notifyMuxError chan struct{}
 
@@ -35,15 +41,17 @@ type StreamMuxer struct {
 	}
 }
 
-func NewStreamMuxer(sender severStreamSender) *StreamMuxer {
+func NewStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) *StreamMuxer {
 	return &StreamMuxer{
 		sender:         sender,
+		metrics:        metrics,
 		notifyMuxError: make(chan struct{}, 1),
 	}
 }
 
 func (sm *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
 	sm.activeStreams.Store(streamID, cancel)
+	sm.metrics.IncrementRangefeedCounter()
 }
 
 func transformRangefeedErrToClientError(err *kvpb.Error) *kvpb.Error {
@@ -81,6 +89,7 @@ func (sm *StreamMuxer) DisconnectRangefeedWithError(
 			Error: *clientErrorEvent,
 		})
 		sm.appendMuxError(ev)
+		sm.metrics.DecrementRangefeedCounter()
 	}
 }
 
