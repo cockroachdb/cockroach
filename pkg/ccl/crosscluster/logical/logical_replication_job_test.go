@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -146,12 +144,10 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
 	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
 
-	dbAURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
-	dbAURL.Path = "a"
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
-	dbBURL, cleanupB := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
 	defer cleanupB()
-	dbBURL.Path = "b"
 
 	var (
 		jobAID jobspb.JobID
@@ -283,7 +279,7 @@ family f2(other_payload, v2))
 
 	serverASQL.Exec(t, "INSERT INTO tab(pk, payload, other_payload) VALUES (1, 'hello', 'ruroh1')")
 
-	serverAURL, cleanup := sqlutils.PGUrl(t, serverA.Server(0).ApplicationLayer().SQLAddr(), t.Name(), url.User(username.RootUser))
+	serverAURL, cleanup := serverA.Server(0).ApplicationLayer().PGUrl(t)
 	defer cleanup()
 
 	var jobBID jobspb.JobID
@@ -359,8 +355,7 @@ func TestRandomTables(t *testing.T) {
 	runnerA.Exec(t, addCol)
 	runnerB.Exec(t, addCol)
 
-	dbAURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
-	dbAURL.Path = "a"
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 
 	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
@@ -421,8 +416,7 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	baseTableName := "rand_table"
 	rng, _ := randutil.NewPseudoRand()
 	numInserts := 20
-	dbAURL, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
-	dbAURL.Path = "a"
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 	for i, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
