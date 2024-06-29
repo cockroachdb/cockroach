@@ -191,18 +191,6 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaActiveRangeFeed = metric.Metadata{
-		Name:        "rpc.streams.rangefeed.active",
-		Help:        `Number of currently running RangeFeed streams`,
-		Measurement: "Streams",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalRangeFeed = metric.Metadata{
-		Name:        "rpc.streams.rangefeed.recv",
-		Help:        `Total number of RangeFeed streams`,
-		Measurement: "Streams",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaActiveMuxRangeFeed = metric.Metadata{
 		Name:        "rpc.streams.mux_rangefeed.active",
 		Help:        `Number of currently running MuxRangeFeed streams`,
@@ -270,8 +258,6 @@ type nodeMetrics struct {
 	CrossRegionBatchResponseBytes *metric.Counter
 	CrossZoneBatchRequestBytes    *metric.Counter
 	CrossZoneBatchResponseBytes   *metric.Counter
-	NumRangeFeed                  *metric.Counter
-	ActiveRangeFeed               *metric.Gauge
 	NumMuxRangeFeed               *metric.Counter
 	ActiveMuxRangeFeed            *metric.Gauge
 }
@@ -293,8 +279,6 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 		CrossRegionBatchResponseBytes: metric.NewCounter(metaCrossRegionBatchResponse),
 		CrossZoneBatchRequestBytes:    metric.NewCounter(metaCrossZoneBatchRequest),
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
-		ActiveRangeFeed:               metric.NewGauge(metaActiveRangeFeed),
-		NumRangeFeed:                  metric.NewCounter(metaTotalRangeFeed),
 		ActiveMuxRangeFeed:            metric.NewGauge(metaActiveMuxRangeFeed),
 		NumMuxRangeFeed:               metric.NewCounter(metaTotalMuxRangeFeed),
 	}
