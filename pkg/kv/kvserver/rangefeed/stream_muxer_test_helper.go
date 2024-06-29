@@ -15,10 +15,34 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+// testRangefeedCounter mocks rangefeed metrics for testing.
+type testRangefeedCounter struct {
+	count atomic.Int32
+}
+
+var _ RangefeedMetricsRecorder = &testRangefeedCounter{}
+
+func newTestRangefeedCounter() *testRangefeedCounter {
+	return &testRangefeedCounter{}
+}
+
+func (c *testRangefeedCounter) UpdateMetricsOnRangefeedConnect() {
+	c.count.Add(1)
+}
+
+func (c *testRangefeedCounter) UpdateMetricsOnRangefeedDisconnect() {
+	c.count.Add(-1)
+}
+
+func (c *testRangefeedCounter) get() int32 {
+	return c.count.Load()
+}
 
 // testServerStream mocks grpc server stream for testing.
 type testServerStream struct {
