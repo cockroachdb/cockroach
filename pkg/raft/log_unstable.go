@@ -99,6 +99,21 @@ type unstable struct {
 }
 
 func newUnstable(last entryID, logger Logger) unstable {
+	// To initialize the last accepted term (logSlice.term) correctly, we make
+	// sure its invariant is true: the log is a prefix of the term's leader's log.
+	// This can be achieved by conservatively initializing to the term of the last
+	// log entry.
+	//
+	// We can't pick any lower term because the lower term's leader can't have
+	// last.term entries in it. We can't pick a higher term because we don't have
+	// any information about the higher-term leaders and their logs. So last.term
+	// is the only valid choice.
+	//
+	// TODO(pav-kv): persist the accepted term in HardState and load it. Our
+	// initialization is conservative. Before restart, the accepted term could
+	// have been higher. Setting a higher term (ideally, matching the current
+	// leader Term) gives us more information about the log, and then allows
+	// bumping its commit index sooner than when the next MsgApp arrives.
 	return unstable{
 		logSlice:        logSlice{term: last.term, prev: last},
 		entryInProgress: last.index,

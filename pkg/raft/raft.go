@@ -351,22 +351,6 @@ type raft struct {
 
 	// the leader id
 	lead pb.PeerID
-	// accTerm is the term of the leader whose append was accepted into the log
-	// last. Note that a rejected append does not update accTerm, by definition.
-	//
-	// Invariant: the log is a prefix of the accTerm's leader log
-	// Invariant: raftLog.lastEntryID().term <= accTerm <= Term
-	//
-	// In steady state, accTerm == Term. When someone campaigns, Term briefly
-	// overtakes the accTerm. However, accTerm catches up as soon as we accept a
-	// log append from the new leader.
-	//
-	// NB: the log can be partially or fully compacted. When we say "log" above,
-	// we logically include all the entries that were the pre-image of a snapshot,
-	// as well as the entries that are still physically in the log.
-	//
-	// TODO(pav-kv): move accTerm to raftLog.
-	accTerm uint64
 	// leadTransferee is id of the leader transfer target when its value is not zero.
 	// Follow the procedure defined in raft thesis 3.10.
 	leadTransferee pb.PeerID
@@ -443,22 +427,6 @@ func newRaft(c *Config) *raft {
 		storeLiveness:               c.StoreLiveness,
 	}
 	lastID := r.raftLog.lastEntryID()
-
-	// To initialize accTerm correctly, we make sure its invariant is true: the
-	// log is a prefix of the accTerm leader's log. This can be achieved by
-	// conservatively initializing accTerm to the term of the last log entry.
-	//
-	// We can't pick any lower term because the lower term's leader can't have
-	// lastID.term entries in it. We can't pick a higher term because we don't
-	// have any information about the higher-term leaders and their logs. So the
-	// lastID.term is the only valid choice.
-	//
-	// TODO(pav-kv): persist accTerm in HardState and load it. Our initialization
-	// is conservative. Before restart, accTerm could have been higher. Setting a
-	// higher accTerm (ideally, matching the current leader Term) gives us more
-	// information about the log, and then allows bumping its commit index sooner
-	// than when the next MsgApp arrives.
-	r.accTerm = lastID.term
 
 	cfg, trk, err := confchange.Restore(confchange.Changer{
 		Tracker:   r.trk,
@@ -943,8 +911,6 @@ func (r *raft) becomeLeader() {
 		// This won't happen because we just called reset() above.
 		r.logger.Panic("empty entry was dropped")
 	}
-	// The leader's log is consistent with itself.
-	r.accTerm = r.Term
 	// The payloadSize of an empty entry is 0 (see TestPayloadSizeOfEmptyEntry),
 	// so the preceding log append does not count against the uncommitted log
 	// quota of the new leader. In other words, after the call to appendEntry,
@@ -1717,9 +1683,8 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		return
 	}
 	if r.raftLog.maybeAppend(a) {
-		r.accTerm = m.Term // our log is now consistent with the m.Term leader
 		// TODO(pav-kv): make it possible to commit even if the append did not
-		// succeed or is stale. If r.accTerm >= m.Term, then our log contains all
+		// succeed or is stale. If accTerm >= m.Term, then our log contains all
 		// committed entries at m.Term (by raft invariants), so it is safe to bump
 		// the commit index even if the MsgApp is stale.
 		lastIndex := a.lastIndex()
@@ -1798,7 +1763,7 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 	// TODO(pav-kv): move this logic to raftLog.commitTo, once the accTerm has
 	// migrated to raftLog/unstable.
 	mark := logMark{term: m.Term, index: min(m.Commit, r.raftLog.lastIndex())}
-	if mark.term == r.accTerm {
+	if mark.term == r.raftLog.accTerm() {
 		r.raftLog.commitTo(mark)
 	}
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
@@ -1822,7 +1787,6 @@ func (r *raft) handleSnapshot(m pb.Message) {
 	if r.restore(s) {
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, id.index, id.term)
-		r.accTerm = m.Term // our log is now consistent with the leader
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex()})
 	} else {
 		r.logger.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
