@@ -36,11 +36,13 @@ func TestStreamMuxerOnContextCancel(t *testing.T) {
 	stopper := stop.NewStopper()
 
 	testServerStream := newTestServerStream()
-	muxer, cleanUp := NewTestStreamMuxer(t, ctx, stopper, testServerStream)
+	testRangefeedCounter := newTestRangefeedCounter()
+	muxer, cleanUp := NewTestStreamMuxer(t, ctx, stopper, testServerStream, testRangefeedCounter)
 	defer cleanUp()
 	defer stopper.Stop(ctx)
 
 	cancel()
+	time.Sleep(10 * time.Millisecond)
 	expectedErrEvent := &kvpb.MuxRangeFeedEvent{
 		StreamID: 0,
 		RangeID:  1,
@@ -64,7 +66,8 @@ func TestStreamMuxer(t *testing.T) {
 	stopper := stop.NewStopper()
 
 	testServerStream := newTestServerStream()
-	muxer, cleanUp := NewTestStreamMuxer(t, ctx, stopper, testServerStream)
+	testRangefeedCounter := newTestRangefeedCounter()
+	muxer, cleanUp := NewTestStreamMuxer(t, ctx, stopper, testServerStream, testRangefeedCounter)
 	defer cleanUp()
 
 	// Note that this also tests that the StreamMuxer stops when the stopper is
@@ -77,7 +80,9 @@ func TestStreamMuxer(t *testing.T) {
 		streamCtx, cancel := context.WithCancel(context.Background())
 		muxer.AddStream(0, cancel)
 		// Note that kvpb.NewError(nil) == nil.
+		require.Equal(t, testRangefeedCounter.get(), int32(1))
 		muxer.DisconnectRangefeedWithError(streamID, rangeID, kvpb.NewError(nil))
+		require.Equal(t, testRangefeedCounter.get(), int32(0))
 		require.Equal(t, context.Canceled, streamCtx.Err())
 		expectedErrEvent := &kvpb.MuxRangeFeedEvent{
 			StreamID: streamID,
@@ -108,9 +113,13 @@ func TestStreamMuxer(t *testing.T) {
 			{2, 2, &kvpb.NodeUnavailableError{}},
 		}
 
+		require.Equal(t, testRangefeedCounter.get(), int32(0))
+
 		for _, muxError := range testRangefeedCompletionErrors {
 			muxer.AddStream(muxError.streamID, func() {})
 		}
+
+		require.Equal(t, testRangefeedCounter.get(), int32(3))
 
 		var wg sync.WaitGroup
 		for _, muxError := range testRangefeedCompletionErrors {
@@ -137,6 +146,7 @@ func TestStreamMuxer(t *testing.T) {
 				return errors.Newf("expected error %v not found", muxError)
 			})
 		}
+		require.Equal(t, testRangefeedCounter.get(), int32(0))
 	})
 }
 
@@ -150,7 +160,8 @@ func TestStreamMuxerOnBlockingIO(t *testing.T) {
 	stopper := stop.NewStopper()
 
 	testServerStream := newTestServerStream()
-	muxer, cleanUp := NewTestStreamMuxer(t, ctx, stopper, testServerStream)
+	testRangefeedCounter := newTestRangefeedCounter()
+	muxer, cleanUp := NewTestStreamMuxer(t, ctx, stopper, testServerStream, testRangefeedCounter)
 	defer cleanUp()
 	defer stopper.Stop(ctx)
 
@@ -158,6 +169,7 @@ func TestStreamMuxerOnBlockingIO(t *testing.T) {
 	const rangeID = 1
 	ctx, cancel := context.WithCancel(context.Background())
 	muxer.AddStream(0, cancel)
+
 	ev := &kvpb.MuxRangeFeedEvent{
 		StreamID: streamID,
 		RangeID:  rangeID,
