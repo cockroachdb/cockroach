@@ -2516,6 +2516,14 @@ func (s *ScanStats) String() string {
 	return redact.StringWithoutMarkers(s)
 }
 
+// Every stream used in prod code implementing the RangeFeedEventSink interface
+// needs to ensure that the Send method is thread safe. However, for some test
+// streams, a thread-unsafe Send method may be used for simplicity if it is used
+// with care. In such cases, they can choose to wrap TestStream to opt in.
+type TestStream struct{}
+
+func (*TestStream) SendIsThreadSafe() {}
+
 // RangeFeedEventSink is an interface for sending a single rangefeed event.
 type RangeFeedEventSink interface {
 	// Context returns the context for this stream.
@@ -2523,6 +2531,9 @@ type RangeFeedEventSink interface {
 	// Send blocks until it sends m, the stream is done, or the stream breaks.
 	// Send must be safe to call on the same stream in different goroutines.
 	Send(*RangeFeedEvent) error
+	// SendIsThreadSafe is a no-op declaration method. It is a contract that the
+	// struct has a thread safe Send method.
+	SendIsThreadSafe()
 }
 
 // RangeFeedEventProducer is an adapter for receiving rangefeed events with either

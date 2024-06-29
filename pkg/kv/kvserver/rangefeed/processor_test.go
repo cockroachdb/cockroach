@@ -1791,6 +1791,7 @@ func requireBudgetDrainedSoon(t *testing.T, b *FeedBudget, stream *consumer) {
 }
 
 type consumer struct {
+	*kvpb.TestStream
 	ctx        context.Context
 	ctxDone    func()
 	sentValues int32

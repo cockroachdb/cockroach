@@ -52,6 +52,7 @@ import (
 
 // testStream is a mock implementation of kvpb.RangeFeedEventSink.
 type testStream struct {
+	*kvpb.TestStream
 	ctx    context.Context
 	cancel func()
 	mu     struct {

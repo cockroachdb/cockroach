@@ -1626,6 +1626,7 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 
 // channelSink is a rangefeed sink which posts events to a channel.
 type channelSink struct {
+	*kvpb.TestStream
 	ctx context.Context
 	ch  chan<- *kvpb.RangeFeedEvent
 }

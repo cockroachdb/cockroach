@@ -43,6 +43,7 @@ var (
 )
 
 type testStream struct {
+	*kvpb.TestStream
 	ctx     context.Context
 	ctxDone func()
 	mu      struct {

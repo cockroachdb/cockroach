@@ -195,6 +195,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 
 // noopStream is a stream that does nothing, except count events.
 type noopStream struct {
+	*kvpb.TestStream
 	ctx    context.Context
 	events int
 }

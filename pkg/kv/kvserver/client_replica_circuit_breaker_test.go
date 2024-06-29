@@ -447,6 +447,7 @@ func TestReplicaCircuitBreaker_ResolveIntent_QuorumLoss(t *testing.T) {
 }
 
 type dummyStream struct {
+	*kvpb.TestStream
 	name string
 	ctx  context.Context
 	recv chan *kvpb.RangeFeedEvent
