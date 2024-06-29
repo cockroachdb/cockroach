@@ -65,7 +65,7 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 				startLDR := func(targetDB *sqlutils.SQLRunner, sourceURL string) int {
 					targetDB.Exec(t, "USE kv")
 					r := targetDB.QueryRow(t,
-						"SELECT crdb_internal.start_logical_replication_job($1, ARRAY['kv'])",
+						"CREATE LOGICAL REPLICATION STREAM FROM TABLE kv ON $1 INTO TABLE kv",
 						sourceURL,
 					)
 					var jobID int
