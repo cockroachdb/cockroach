@@ -51,6 +51,7 @@ var (
 		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
+		"SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'",
 
 		// TODO(ssd): Duplicate these over to logical_replication as well.
 		"SET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency='100ms'",
@@ -118,7 +119,9 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	defer server.Stopper().Stop(ctx)
 	s := server.Server(0).ApplicationLayer()
 
-	_, err := server.Conns[0].Exec("CREATE DATABASE a")
+	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE a")
 	require.NoError(t, err)
 	_, err = server.Conns[0].Exec("CREATE DATABASE B")
 	require.NoError(t, err)
