@@ -60,7 +60,7 @@ type TestingKnobs struct {
 	// server fails to start.
 	RPCListener net.Listener
 
-	// BinaryVersionOverride overrides the binary version that the CRDB server
+	// OverrideClusterVersion overrides the binary version that the CRDB server
 	// will end up running. This value could also influence what version the
 	// cluster is bootstrapped at.
 	//
@@ -73,7 +73,7 @@ type TestingKnobs struct {
 	// `cluster.Settings.Version.MinSupportedVersion`, then the cluster will be
 	// bootstrapped at `minSupportedVersion`  (if this server is the one
 	// bootstrapping the cluster). After all the servers in the test cluster have
-	// been started, `SET CLUSTER SETTING version = BinaryVersionOverride` will be
+	// been started, `SET CLUSTER SETTING version = OverrideClusterVersion` will be
 	// run to step through the upgrades until the specified override.
 	//
 	// Case 2:
@@ -95,7 +95,7 @@ type TestingKnobs struct {
 	//
 	// NB: When setting this, you probably also want to set
 	// DisableAutomaticVersionUpgrade.
-	BinaryVersionOverride roachpb.Version
+	OverrideClusterVersion roachpb.Version
 	// An (additional) callback invoked whenever a
 	// node is permanently removed from the cluster.
 	OnDecommissionedCallback func(id roachpb.NodeID)
