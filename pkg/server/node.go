@@ -1842,6 +1842,7 @@ type perRangeEventSink struct {
 }
 
 var _ kvpb.RangeFeedEventSink = (*perRangeEventSink)(nil)
+var _ rangefeed.Stream = (*perRangeEventSink)(nil)
 
 func (s *perRangeEventSink) Context() context.Context {
 	return s.ctx
@@ -1859,6 +1860,13 @@ func (s *perRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
 		StreamID:       s.streamID,
 	}
 	return s.wrapped.Send(response)
+}
+
+// Disconnect implements the rangefeed.Stream interface. It disconnects the
+// stream from the StreamMuxer. The StreamMuxer is then responsible for
+// disconnecting the stream and cleaning up.
+func (s *perRangeEventSink) Disconnect(err *kvpb.Error) {
+	s.wrapped.DisconnectStreamWithError(s.streamID, s.rangeID, err)
 }
 
 // lockedMuxStream provides support for concurrent calls to Send. The underlying
@@ -1906,8 +1914,9 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			}
 
 			if req.CloseStream {
-				// Note that we will call disconnect again when future.Error returns,
-				// but DisconnectStreamWithError will ignore subsequent errors.
+				// Note that we will call DisconnectStreamWithError again when
+				// registration.disconnect happens, but DisconnectStreamWithError will
+				// ignore subsequent errors.
 				streamMuxer.DisconnectStreamWithError(req.StreamID, req.RangeID,
 					kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
 				continue
@@ -1926,10 +1935,9 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			}
 			streamMuxer.AddStream(req.StreamID, cancel)
 
-			f := n.stores.RangeFeed(req, streamSink)
-			f.WhenReady(func(err error) {
+			if err := n.stores.RangeFeed(req, streamSink); err != nil {
 				streamMuxer.DisconnectStreamWithError(req.StreamID, req.RangeID, kvpb.NewError(err))
-			})
+			}
 		}
 	}
 }
