@@ -1629,6 +1629,29 @@ var storageSnapshotCmd = &cobra.Command{
 	}),
 }
 
+var sideEyeRootCmd = &cobra.Command{
+	Use:   "side-eye",
+	Short: "interact with side-eye.io functionality",
+	Long: `Interact with side-eye.io functionality
+Side-Eye (app.side-eye.io) is a distributed debugger that can be used to capture
+snapshots of a CockroachDB cluster.
+`,
+	Args: cobra.MinimumNArgs(1),
+}
+var sideEyeSnapCmd = &cobra.Command{
+	Use:     "snapshot <cluster/Side-Eye environment>",
+	Aliases: []string{"snap"},
+	Short:   "capture a cluster snapshot",
+	Long: `Capture a cluster snapshot using Side-Eye
+The command will print an app.side-eye.io URL where the snapshot can be viewed.
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		roachprod.CaptureSideEyeSnapshot(context.Background(), config.Logger, args[0])
+		return nil
+	}),
+}
+
 // Before executing any command, validate and canonicalize args.
 func validateAndConfigure(cmd *cobra.Command, args []string) {
 	// Skip validation for commands that are self-sufficient.
@@ -1940,6 +1963,7 @@ func main() {
 		jaegerStartCmd,
 		jaegerStopCmd,
 		jaegerURLCmd,
+		sideEyeRootCmd,
 		fluentBitStartCmd,
 		fluentBitStopCmd,
 		opentelemetryStartCmd,
