@@ -1828,6 +1828,7 @@ func (n *Node) RangeLookup(
 
 type muxer interface {
 	Send(event *kvpb.MuxRangeFeedEvent) error
+	DisconnectRangefeedWithError(streamID int64, rangeID roachpb.RangeID, err *kvpb.Error)
 }
 
 var _ muxer = &rangefeed.StreamMuxer{}
@@ -1856,7 +1857,12 @@ func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	return s.wrapped.Send(response)
 }
 
+func (s *setRangeIDEventSink) Disconnect(err *kvpb.Error) {
+	s.wrapped.DisconnectRangefeedWithError(s.streamID, s.rangeID, err)
+}
+
 var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
+var _ rangefeed.Stream = (*setRangeIDEventSink)(nil)
 
 // lockedMuxStream provides support for concurrent calls to Send. The underlying
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
@@ -1921,10 +1927,9 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		}
 		streamMuxer.AddStream(req.StreamID, cancel)
 
-		f := n.stores.RangeFeed(req, streamSink)
-		f.WhenReady(func(err error) {
+		if err := n.stores.RangeFeed(req, streamSink); err != nil {
 			streamMuxer.DisconnectRangefeedWithError(req.StreamID, req.RangeID, kvpb.NewError(err))
-		})
+		}
 	}
 }
 
