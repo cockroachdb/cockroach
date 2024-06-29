@@ -66,6 +66,13 @@ func (sm *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
 	sm.metrics.IncrementRangefeedCounter()
 }
 
+// Send forwards events to client. Caller must ensure the stream remains active
+// as no checks will be performed. It returns an error when the underlying grpc
+// server stream is broken. Safe for concurrent calls to Send.
+func (sm *StreamMuxer) Send(e *kvpb.MuxRangeFeedEvent) error {
+	return sm.sender.Send(e)
+}
+
 // transformRangefeedErrToClientError converts a rangefeed error to a client
 // error to be sent back to client. This also handles nil values, preventing nil
 // pointer dereference.
