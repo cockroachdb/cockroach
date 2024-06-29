@@ -336,7 +336,7 @@ func runTPCC(
 	m.Wait()
 
 	if !opts.SkipPostRunCheck {
-		cmd := roachtestutil.NewCommand("%s workload check %s", opts.getWorkloadCmd(), test.DefaultCockroachPath).
+		cmd := roachtestutil.NewCommand("%s workload check %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
 			MaybeFlag(opts.DB != "", "db", opts.DB).
 			MaybeOption(opts.ExpensiveChecks, "expensive-checks").
 			Flag("warehouses", opts.Warehouses).
