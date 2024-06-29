@@ -207,3 +207,7 @@ func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
 	s.events++
 	return nil
 }
+
+// Note that Send itself is not thread-safe, but it is written to be used only
+// in a single threaded environment in this test, ensuring thread-safety.
+func (s *noopStream) SendIsThreadSafe() {}

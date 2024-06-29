@@ -2524,6 +2524,9 @@ type RangeFeedEventSink interface {
 	// stream breaks. Send must be safe to call on the same stream in different
 	// goroutines.
 	Send(*RangeFeedEvent) error
+	// SendIsThreadSafe is a no-op declaration method. It is a contract that the
+	// interface has a thread-safe Send method.
+	SendIsThreadSafe()
 }
 
 // RangeFeedEventProducer is an adapter for receiving rangefeed events with either

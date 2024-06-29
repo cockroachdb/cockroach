@@ -288,6 +288,11 @@ func (s *rangefeedEventSink) Context() context.Context {
 	return s.ctx
 }
 
+// Note that Send itself is not thread-safe (grpc stream is not thread-safe),
+// but tests were written in a way that sends sequentially, ensuring
+// thread-safety for Send.
+func (s *rangefeedEventSink) SendIsThreadSafe() {}
+
 func (s *rangefeedEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	return s.stream.Send(&kvpb.MuxRangeFeedEvent{RangeFeedEvent: *event})
 }
