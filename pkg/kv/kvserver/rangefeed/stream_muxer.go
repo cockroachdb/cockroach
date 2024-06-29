@@ -30,7 +30,7 @@ type RangefeedMetricsRecorder interface {
 // ServerStreamSender forwards MuxRangefeedEvents from StreamMuxer to the
 // underlying stream.
 type ServerStreamSender interface {
-	// Send must be thread safe to be called concurrently.
+	// Send must be thread-safe to be called concurrently.
 	Send(*kvpb.MuxRangeFeedEvent) error
 	// SendIsThreadSafe is a no-op declaration method. It is a contract that the
 	// interface has a thread-safe Send method.
@@ -151,6 +151,15 @@ func (sm *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
 		log.Fatalf(context.Background(), "stream %d already exists", streamID)
 	}
 	sm.metrics.UpdateMetricsOnRangefeedConnect()
+}
+
+// SendIsThreadSafe is a no-op declaration method. It is a contract that the
+// Send method is thread-safe. Note that Send wraps ServerStreamSender which
+// also declares its Send method to be thread-safe.
+func (sm *StreamMuxer) SendIsThreadSafe() {}
+
+func (sm *StreamMuxer) Send(e *kvpb.MuxRangeFeedEvent) error {
+	return sm.sender.Send(e)
 }
 
 // transformRangefeedErrToClientError converts a rangefeed error to a client

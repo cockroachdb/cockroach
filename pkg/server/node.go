@@ -1832,6 +1832,16 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
+// muxer abstracts methods of rangefeed.StreamMuxer used by a single rangefeed
+// event sink (setRangeIDEventSink). Currently, it is only used to forward
+// MuxRangefeedEvents to the underlying gRPC stream.
+type muxer interface {
+	Send(event *kvpb.MuxRangeFeedEvent) error
+	SendIsThreadSafe()
+}
+
+var _ muxer = &rangefeed.StreamMuxer{}
+
 // setRangeIDEventSink is an implementation of rangefeed.Stream which annotates
 // each response with rangeID and streamID. It is used by MuxRangeFeed. Note
 // that the wrapped stream is a locked mux stream, ensuring safe concurrent Send
@@ -1840,7 +1850,7 @@ type setRangeIDEventSink struct {
 	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  *lockedMuxStream
+	wrapped  muxer
 }
 
 func (s *setRangeIDEventSink) Context() context.Context {
@@ -1856,7 +1866,9 @@ func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	return s.wrapped.Send(response)
 }
 
-// Wrapped stream is a locked mux stream, ensuring safe concurrent Send.
+// SendIsThreadSafe is a no-op declaration method. It is a contract that the
+// Send method is thread-safe. Note that Send wraps muxer which also declares
+// its Send method to be thread-safe.
 func (s *setRangeIDEventSink) SendIsThreadSafe() {}
 
 var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
@@ -1922,7 +1934,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 				ctx:      streamCtx,
 				rangeID:  req.RangeID,
 				streamID: req.StreamID,
-				wrapped:  muxStream,
+				wrapped:  streamMuxer,
 			}
 			streamMuxer.AddStream(req.StreamID, cancel)
 
