@@ -344,6 +344,15 @@ func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
 	}
 }
 
+func (nm nodeMetrics) IncrementRangefeedCounter() {
+	nm.NumMuxRangeFeed.Inc(1)
+	nm.ActiveMuxRangeFeed.Inc(1)
+}
+
+func (nm nodeMetrics) DecrementRangefeedCounter() {
+	nm.ActiveMuxRangeFeed.Dec(1)
+}
+
 // A Node manages a map of stores (by store ID) for which it serves
 // traffic. A node is the top-level data structure. There is one node
 // instance per process. A node accepts incoming RPCs and services
@@ -1875,7 +1884,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
 
-	streamMuxer := rangefeed.NewStreamMuxer(muxStream)
+	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
 	wg.Add(1)
 	if err := n.stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
 		defer wg.Done()
@@ -1884,10 +1893,6 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		wg.Done()
 		return err
 	}
-
-	n.metrics.NumMuxRangeFeed.Inc(1)
-	n.metrics.ActiveMuxRangeFeed.Inc(1)
-	defer n.metrics.ActiveMuxRangeFeed.Inc(-1)
 
 	for {
 		req, err := stream.Recv()
@@ -1917,11 +1922,8 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 		}
 		streamMuxer.AddStream(req.StreamID, cancel)
 
-		n.metrics.NumMuxRangeFeed.Inc(1)
-		n.metrics.ActiveMuxRangeFeed.Inc(1)
 		f := n.stores.RangeFeed(req, streamSink)
 		f.WhenReady(func(err error) {
-			n.metrics.ActiveMuxRangeFeed.Inc(-1)
 			streamMuxer.DisconnectRangefeedWithError(req.StreamID, req.RangeID, kvpb.NewError(err))
 		})
 	}
