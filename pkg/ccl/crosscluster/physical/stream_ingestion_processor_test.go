@@ -713,7 +713,6 @@ func getStreamIngestionProcessor(
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
-	spec.StreamAddress = "http://unused"
 	spec.TenantRekey = tenantRekey
 	spec.PartitionSpecs = make(map[string]execinfrapb.StreamIngestionPartitionSpec)
 	for _, pa := range partitions.Partitions {
