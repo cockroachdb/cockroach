@@ -94,6 +94,13 @@ type StreamMuxer struct {
 	// there is only one task spawned by StreamMuxer.Start (StreamMuxer.run).
 	wg sync.WaitGroup
 
+	// errCh is used to signal errors from StreamMuxer.run back to the caller. If
+	// non-empty, the StreamMuxer.run is finished and error should be handled.
+	// Note that it is possible for StreamMuxer.run to be finished without sending
+	// an error to errCh. Other goroutines are expected to receive the same
+	// shutdown signal in this case and handle error appropriately.
+	errCh chan error
+
 	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
 	// thread safety.
 	sender ServerStreamSender
@@ -149,7 +156,7 @@ func (sm *StreamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 // to be called in a goroutine and will block until the context is done or the
 // stopper is quiesced. StreamMuxer will stop forward rangefeed completion
 // errors after run completes, and caller is responsible for handling shutdown.
-func (sm *StreamMuxer) run(ctx context.Context, stopper *stop.Stopper) {
+func (sm *StreamMuxer) run(ctx context.Context, stopper *stop.Stopper) error {
 	for {
 		select {
 		case <-sm.notifyMuxError:
@@ -157,15 +164,27 @@ func (sm *StreamMuxer) run(ctx context.Context, stopper *stop.Stopper) {
 				if err := sm.sender.Send(clientErr); err != nil {
 					log.Errorf(ctx,
 						"failed to send rangefeed completion error back to client due to broken stream: %v", err)
-					return
+					return err
 				}
 			}
 		case <-ctx.Done():
-			return
+			// Top level goroutine will receive the context cancellation and handle
+			// ctx.Err().
+			return nil
 		case <-stopper.ShouldQuiesce():
-			return
+			// Top level goroutine will receive the stopper quiesce signal and handle
+			// error.
+			return nil
 		}
 	}
+}
+
+// Error returns a channel that can be used to receive errors from
+// StreamMuxer.run. Only non-nil errors are sent on this channel. If non-empty,
+// streamMuxer.run is finished, and the caller is responsible for handling the
+// error.
+func (sm *StreamMuxer) Error() chan error {
+	return sm.errCh
 }
 
 // Stop cancels the StreamMuxer.run task and waits for it to complete. It does
@@ -177,8 +196,8 @@ func (sm *StreamMuxer) Stop() {
 	sm.wg.Wait()
 }
 
-// Start launches StreamMuxer.run in the background if no error is returned.
-// StreamMuxer.run continues running until it errors or StreamMuxer.Stop is
+// Start launches StreamMuxer.Run in the background if no error is returned.
+// StreamMuxer.Run continues running until it errors or StreamMuxer.Stop is
 // called. The caller is responsible for calling StreamMuxer.Stop and handle any
 // cleanups for any active streams. Example usage:
 //
@@ -188,11 +207,14 @@ func (sm *StreamMuxer) Stop() {
 //
 // defer streamMuxer.Stop()
 func (sm *StreamMuxer) Start(ctx context.Context, stopper *stop.Stopper) error {
+	sm.errCh = make(chan error, 1)
 	ctx, sm.taskCancel = context.WithCancel(ctx)
 	sm.wg.Add(1)
 	if err := stopper.RunAsyncTask(ctx, "test-stream-muxer", func(ctx context.Context) {
 		defer sm.wg.Done()
-		sm.run(ctx, stopper)
+		if err := sm.run(ctx, stopper); err != nil {
+			sm.errCh <- err
+		}
 	}); err != nil {
 		sm.taskCancel()
 		sm.wg.Done()
