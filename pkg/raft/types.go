@@ -129,3 +129,47 @@ func (s logSlice) valid() error {
 	}
 	return nil
 }
+
+// snapshot is a snapshot tied to a leader term who sent it.
+//
+// Semantically, this type is equivalent to a logSlice from 0 to lastEntryID(),
+// plus a commit logMark. All leaders at terms >= snapshot.term are consistent
+// with snapshot.mark(), by raft invariants.
+type snapshot struct {
+	// term is the term of the leader log with whom the snapshot is consistent.
+	//
+	// Invariant: term >= term[generated] >= term[committed], where:
+	//	- term[committed] is the term under which the lastEntryID was committed.
+	//	  By raft invariants, all leaders at terms >= term[committed] observe
+	//	  entries up through lastEntryID as committed.
+	//	- term[generated] is the term of the leader on whose behalf the snapshot
+	//	  was generated.
+	//
+	// Note that we don't simply say term == term[generated] == term[committed],
+	// for generality. It's possible that an entry is committed, and the leader
+	// goes offline. Any future leader will observe this committed state, and can
+	// disseminate it. The snapshot can also change hands / be delegated, so we
+	// don't strictly tie the term to the initiator.
+	term uint64
+	// snap is the content of the snapshot.
+	snap pb.Snapshot
+}
+
+// lastEntryID returns the ID of the last entry covered by this snapshot.
+func (s snapshot) lastEntryID() entryID {
+	return entryID{term: s.snap.Metadata.Term, index: s.snap.Metadata.Index}
+}
+
+// mark returns committed logMark of this snapshot, in the coordinate system of
+// the leader who observes this committed state.
+func (s snapshot) mark() logMark {
+	return logMark{term: s.term, index: s.snap.Metadata.Index}
+}
+
+// valid returns nil iff the snapshot is well-formed.
+func (s snapshot) valid() error {
+	if entryTerm := s.snap.Metadata.Term; entryTerm > s.term {
+		return fmt.Errorf("leader term %d: snap %+v has a newer term", s.term, s.lastEntryID())
+	}
+	return nil
+}
