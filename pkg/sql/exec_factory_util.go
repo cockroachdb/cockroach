@@ -259,9 +259,8 @@ func constructVirtualScan(
 	)
 
 	n, err := delayedNodeCallback(&delayedNode{
-		name:            fmt.Sprintf("%s@%s", table.Name(), index.Name()),
-		columns:         columns,
-		indexConstraint: params.IndexConstraint,
+		name:    fmt.Sprintf("%s@%s", table.Name(), index.Name()),
+		columns: columns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			return constructor(ctx, p, tn.Catalog())
 		},
