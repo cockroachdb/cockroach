@@ -70,45 +70,45 @@ func TestMatch(t *testing.T) {
 }
 
 func TestFindConflictByTerm(t *testing.T) {
+	snap10 := entryID{term: 3, index: 10}
 	for _, tt := range []struct {
-		ents  []pb.Entry // ents[0] contains the (index, term) of the snapshot
+		sl    logSlice
 		index uint64
 		term  uint64
 		want  uint64
 	}{
 		// Log starts from index 1.
-		{ents: index(0).terms(0, 2, 2, 5, 5, 5), index: 100, term: 2, want: 100}, // ErrUnavailable
-		{ents: index(0).terms(0, 2, 2, 5, 5, 5), index: 5, term: 6, want: 5},
-		{ents: index(0).terms(0, 2, 2, 5, 5, 5), index: 5, term: 5, want: 5},
-		{ents: index(0).terms(0, 2, 2, 5, 5, 5), index: 5, term: 4, want: 2},
-		{ents: index(0).terms(0, 2, 2, 5, 5, 5), index: 5, term: 2, want: 2},
-		{ents: index(0).terms(0, 2, 2, 5, 5, 5), index: 5, term: 1, want: 0},
-		{ents: index(0).terms(0, 2, 2, 5, 5, 5), index: 1, term: 2, want: 1},
-		{ents: index(0).terms(0, 2, 2, 5, 5, 5), index: 1, term: 1, want: 0},
-		{ents: index(0).terms(0, 2, 2, 5, 5, 5), index: 0, term: 0, want: 0},
+		{sl: entryID{}.append(2, 2, 5, 5, 5), index: 100, term: 2, want: 100}, // ErrUnavailable
+		{sl: entryID{}.append(2, 2, 5, 5, 5), index: 5, term: 6, want: 5},
+		{sl: entryID{}.append(2, 2, 5, 5, 5), index: 5, term: 5, want: 5},
+		{sl: entryID{}.append(2, 2, 5, 5, 5), index: 5, term: 4, want: 2},
+		{sl: entryID{}.append(2, 2, 5, 5, 5), index: 5, term: 2, want: 2},
+		{sl: entryID{}.append(2, 2, 5, 5, 5), index: 5, term: 1, want: 0},
+		{sl: entryID{}.append(2, 2, 5, 5, 5), index: 1, term: 2, want: 1},
+		{sl: entryID{}.append(2, 2, 5, 5, 5), index: 1, term: 1, want: 0},
+		{sl: entryID{}.append(2, 2, 5, 5, 5), index: 0, term: 0, want: 0},
 		// Log with compacted entries.
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 30, term: 3, want: 30}, // ErrUnavailable
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 14, term: 9, want: 14},
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 14, term: 4, want: 14},
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 14, term: 3, want: 12},
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 14, term: 2, want: 9},
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 11, term: 5, want: 11},
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 10, term: 5, want: 10},
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 10, term: 3, want: 10},
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 10, term: 2, want: 9},
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 9, term: 2, want: 9}, // ErrCompacted
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 4, term: 2, want: 4}, // ErrCompacted
-		{ents: index(10).terms(3, 3, 3, 4, 4, 4), index: 0, term: 0, want: 0}, // ErrCompacted
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 30, term: 3, want: 30}, // ErrUnavailable
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 14, term: 9, want: 14},
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 14, term: 4, want: 14},
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 14, term: 3, want: 12},
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 14, term: 2, want: 9},
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 11, term: 5, want: 11},
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 10, term: 5, want: 10},
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 10, term: 3, want: 10},
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 10, term: 2, want: 9},
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 9, term: 2, want: 9}, // ErrCompacted
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 4, term: 2, want: 4}, // ErrCompacted
+		{sl: snap10.append(3, 3, 4, 4, 4), index: 0, term: 0, want: 0}, // ErrCompacted
 	} {
 		t.Run("", func(t *testing.T) {
 			st := NewMemoryStorage()
-			require.NotEmpty(t, tt.ents)
 			st.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{
-				Index: tt.ents[0].Index,
-				Term:  tt.ents[0].Term,
+				Term:  tt.sl.prev.term,
+				Index: tt.sl.prev.index,
 			}})
 			l := newLog(st, discardLogger)
-			l.append(tt.ents[1:]...)
+			l.append(tt.sl.entries...)
 
 			index, term := l.findConflictByTerm(tt.index, tt.term)
 			require.Equal(t, tt.want, index)
