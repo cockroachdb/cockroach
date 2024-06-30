@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	kvserverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -1425,6 +1426,8 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 			},
 		},
 	})
+	muxer, cleanUp := kvserverrangefeed.NewTestCleanUpOnlyStreamMuxer(tc.Stopper())
+	defer cleanUp()
 	defer tc.Stopper().Stop(ctx)
 	defer cancel()
 
@@ -1461,7 +1464,7 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 		Span: desc.RSpan().AsRawSpanWithNoLocals(),
 	}
 	eventC := make(chan *kvpb.RangeFeedEvent)
-	sink := newChannelSink(ctx, eventC)
+	sink := newChannelSink(1, ctx, eventC, muxer)
 	require.NoError(t, s3.RangeFeed(&req, sink)) // check if we've errored yet
 	t.Logf("started rangefeed on %s", repl3)
 
@@ -1624,13 +1627,20 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 
 // channelSink is a rangefeed sink which posts events to a channel.
 type channelSink struct {
-	ctx  context.Context
-	ch   chan<- *kvpb.RangeFeedEvent
-	done chan *kvpb.Error
+	streamID int64
+	ctx      context.Context
+	ch       chan<- *kvpb.RangeFeedEvent
+	done     chan *kvpb.Error
+	muxer    *kvserverrangefeed.TestCleanUpOnlyStreamMuxer
 }
 
-func newChannelSink(ctx context.Context, ch chan<- *kvpb.RangeFeedEvent) *channelSink {
-	return &channelSink{ctx: ctx, ch: ch, done: make(chan *kvpb.Error, 1)}
+func newChannelSink(
+	streamID int64,
+	ctx context.Context,
+	ch chan<- *kvpb.RangeFeedEvent,
+	muxer *kvserverrangefeed.TestCleanUpOnlyStreamMuxer,
+) *channelSink {
+	return &channelSink{streamID: streamID, ctx: ctx, ch: ch, done: make(chan *kvpb.Error, 1), muxer: muxer}
 }
 
 func (c *channelSink) Context() context.Context {
@@ -1657,6 +1667,11 @@ func (c *channelSink) GetError() error {
 
 func (c *channelSink) Disconnect(err *kvpb.Error) {
 	c.done <- err
+	c.muxer.DisconnectRangefeedWithError(c.streamID)
+}
+
+func (c *channelSink) RegisterRangefeedCleanUp(f func()) {
+	c.muxer.RegisterRangefeedCleanUp(c.streamID, f)
 }
 
 // TestRangeFeedMetadataManualSplit tests that a spawned rangefeed emits a

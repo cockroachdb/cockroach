@@ -35,7 +35,7 @@ func TestStreamMuxerOnContextCancel(t *testing.T) {
 
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
-	muxer, cleanUp := NewTestStreamMuxer(t, ctx, stopper, testServerStream, testRangefeedCounter)
+	muxer, cleanUp := newTestStreamMuxerWithRangefeedCounter(t, ctx, stopper, testServerStream, testRangefeedCounter)
 	defer cleanUp()
 	defer stopper.Stop(ctx)
 
@@ -63,7 +63,7 @@ func TestStreamMuxer(t *testing.T) {
 
 	testServerStream := newTestServerStream()
 	testRangefeedCounter := newTestRangefeedCounter()
-	muxer, cleanUp := NewTestStreamMuxer(t, ctx, stopper, testServerStream, testRangefeedCounter)
+	muxer, cleanUp := newTestStreamMuxerWithRangefeedCounter(t, ctx, stopper, testServerStream, testRangefeedCounter)
 	defer cleanUp()
 
 	// Note that this also tests that the StreamMuxer stops when the stopper is
