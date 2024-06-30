@@ -90,6 +90,20 @@ type logicalReplicationWriterProcessor struct {
 	logBufferEvery log.EveryN
 
 	debug streampb.DebugLogicalConsumerStatus
+
+	// purgatory is an ordered list of purgatory levels, each consisting of some
+	// number of events that need to be durably processed to finish that level and
+	// an optional checkpoint that can be applied when it is fully processed. If
+	// purgatory is non-empty, incoming checkpoints must go to purgatory instead
+	// of being emitted, and will be emitted when the purgatory level is processed
+	// instead.
+	purgatory []purgatory
+}
+
+type purgatory struct {
+	events                  []streampb.StreamEvent_KV
+	willResolve             []jobspb.ResolvedSpan
+	closedAt, lastAttempted time.Time
 }
 
 var (
@@ -369,11 +383,18 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(
 
 	switch event.Type() {
 	case crosscluster.KVEvent:
-		if err := lrw.flushBuffer(ctx, event.GetKVs()); err != nil {
+		// If purgatory is full give it a chance to drain before processing the next
+		// incoming stream buffer.
+		if lrw.purgatoryFull() {
+			if err := lrw.maybeDrainPurgatory(ctx); err != nil {
+				return err
+			}
+		}
+		if err := lrw.handleStreamBuffer(ctx, event.GetKVs()); err != nil {
 			return err
 		}
 	case crosscluster.CheckpointEvent:
-		if err := lrw.checkpoint(ctx, event); err != nil {
+		if err := lrw.maybeCheckpoint(ctx, event.GetResolvedSpans()); err != nil {
 			return err
 		}
 	case crosscluster.SSTableEvent, crosscluster.DeleteRangeEvent:
@@ -390,8 +411,29 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(
 	return nil
 }
 
+func (lrw *logicalReplicationWriterProcessor) maybeCheckpoint(
+	ctx context.Context, resolvedSpans []jobspb.ResolvedSpan,
+) error {
+
+	// If purgatory is empty, just emit the checkpoint now.
+	if len(lrw.purgatory) == 0 {
+		return lrw.checkpoint(ctx, resolvedSpans)
+	}
+
+	// If the current purgatory level is already closed, make a new one.
+	if lrw.purgatory[len(lrw.purgatory)-1].willResolve != nil {
+		lrw.purgatory = append(lrw.purgatory, purgatory{})
+	}
+	// Close the current layer and mark it as resolving this checkpoint.
+	lrw.purgatory[len(lrw.purgatory)-1].willResolve = resolvedSpans
+	lrw.purgatory[len(lrw.purgatory)-1].closedAt = timeutil.Now()
+
+	// Attempt to drain purgatory.
+	return lrw.maybeDrainPurgatory(ctx)
+}
+
 func (lrw *logicalReplicationWriterProcessor) checkpoint(
-	ctx context.Context, event crosscluster.Event,
+	ctx context.Context, resolvedSpans []jobspb.ResolvedSpan,
 ) error {
 	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.ElideCheckpointEvent != nil {
@@ -401,7 +443,6 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 		}
 	}
 
-	resolvedSpans := event.GetResolvedSpans()
 	if resolvedSpans == nil {
 		return errors.New("checkpoint event expected to have resolved spans")
 	}
@@ -422,17 +463,50 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 	return nil
 }
 
+// flushBuffer flushes a buffer using many workers if needed.
+func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
+	ctx context.Context, kvs []streampb.StreamEvent_KV,
+) error {
+	unapplied, err := lrw.flushBuffer(ctx, kvs, false)
+	if err != nil {
+		return err
+	}
+	// Put any events that failed to apply into purgatory.
+	if len(unapplied) > 0 {
+		levels := len(lrw.purgatory)
+		// Open a new level if there is no level or the current level is closed.
+		if levels == 0 || lrw.purgatory[levels-1].willResolve != nil {
+			lrw.purgatory = append(lrw.purgatory, purgatory{})
+		}
+		lrw.purgatory[levels-1].events = unapplied
+	}
+
+	return nil
+}
+
+func filterRemaining(kvs []streampb.StreamEvent_KV) []streampb.StreamEvent_KV {
+	failures := kvs
+	var j int
+	for i := range kvs {
+		if len(kvs[i].KeyValue.Key) != 0 {
+			failures[j] = kvs[i]
+			j++
+		}
+	}
+	return failures[:j]
+}
+
 const maxWriterWorkers = 32
 
 // flushBuffer flushes a buffer using many workers if needed.
 func (lrw *logicalReplicationWriterProcessor) flushBuffer(
-	ctx context.Context, kvs []streampb.StreamEvent_KV,
-) error {
+	ctx context.Context, kvs []streampb.StreamEvent_KV, mustProcess bool,
+) (purgatory []streampb.StreamEvent_KV, _ error) {
 	ctx, sp := tracing.ChildSpan(ctx, "logical-replication-writer-flush")
 	defer sp.Finish()
 
 	if len(kvs) < 1 {
-		return nil
+		return nil, nil
 	}
 
 	// Ensure the batcher is always reset, even on early error returns.
@@ -457,7 +531,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
 
-	var flushByteSize atomic.Int64
+	var flushByteSize, notProcessed atomic.Int64
 
 	const minChunkSize = 64
 	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
@@ -477,18 +551,23 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		bh := lrw.bh[worker]
 
 		g.GoCtx(func(ctx context.Context) error {
-			s, err := lrw.flushChunk(ctx, bh, chunk)
+			s, err := lrw.flushChunk(ctx, bh, chunk, mustProcess)
 			if err != nil {
 				return err
 			}
 			flushByteSize.Add(s.byteSize)
+			notProcessed.Add(s.notProcessed)
 			lrw.metrics.OptimisticInsertConflictCount.Inc(s.optimisticInsertConflicts)
 			return nil
 		})
 	}
 
 	if err := g.Wait(); err != nil {
-		return err
+		return kvs, err
+	}
+
+	if notProcessed.Load() > 0 {
+		purgatory = filterRemaining(kvs)
 	}
 
 	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
@@ -502,11 +581,11 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
 	lrw.metrics.StreamBatchRowsHist.RecordValue(keyCount)
 	lrw.metrics.StreamBatchBytesHist.RecordValue(byteCount)
-	return nil
+	return purgatory, nil
 }
 
 func (lrw *logicalReplicationWriterProcessor) flushChunk(
-	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV,
+	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, mustProcess bool,
 ) (batchStats, error) {
 	batchSize := int(flushBatchSize.Get(&lrw.FlowCtx.Cfg.Settings.SV))
 	// TODO(yuzefovich): we should have a better heuristic for when to use the
@@ -525,13 +604,39 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 		batch := chunk[:min(batchSize, len(chunk))]
 		chunk = chunk[len(batch):]
 		preBatchTime := timeutil.Now()
-		s, err := bh.HandleBatch(ctx, batch)
-		if err != nil {
-			// TODO(ssd): Handle errors. We should perhaps split the batch and retry a portion of the batch.
-			// If that fails, send the failed application to the dead-letter-queue.
-			return batchStats{}, err
+
+		if s, err := bh.HandleBatch(ctx, batch); err != nil {
+			// If it already failed while applying on its own, handle the failure.
+			if len(batch) == 1 {
+				if mustProcess || !lrw.shouldPurgatory(err) {
+					if err := lrw.dlq(ctx, batch[0], err); err != nil {
+						return batchStats{}, err
+					}
+				}
+			} else {
+				// If there were multiple events in the batch, give each its own chance
+				// to apply on its own before switching to handle its failure.
+				for i := range batch {
+					if singleStats, err := bh.HandleBatch(ctx, batch[i:i+1]); err != nil {
+						if mustProcess || !lrw.shouldPurgatory(err) {
+							if err := lrw.dlq(ctx, batch[i], err); err != nil {
+								return batchStats{}, err
+							}
+						}
+					} else {
+						batch[i] = streampb.StreamEvent_KV{}
+						stats.Add(singleStats)
+					}
+				}
+			}
+		} else {
+			// Clear the event to indicate successful application.
+			for i := range batch {
+				batch[i] = streampb.StreamEvent_KV{}
+			}
+			stats.Add(s)
 		}
-		stats.Add(s)
+
 		batchTime := timeutil.Since(preBatchTime)
 		lrw.debug.RecordBatchApplied(batchTime, int64(len(batch)))
 		lrw.metrics.ApplyBatchNanosHist.RecordValue(batchTime.Nanoseconds())
@@ -539,7 +644,72 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	return stats, nil
 }
 
+// shouldPurgatory returns true if a given error encountered by an attempt to
+// process an event may be resolved if processing of that event is reattempted
+// again at a later time. This could be the case, for example, if that time is
+// after the parent side of an FK relationship is ingested by another processor.
+func (lrw *logicalReplicationWriterProcessor) shouldPurgatory(err error) bool {
+	// TODO(dt): maybe this should only be constraint violation errors?
+	return true
+}
+
+const logAllDLQs = true
+
+// dlq handles a row update that fails to apply by durably recording it in a DLQ
+// or returns an error if it cannot.
+//
+// TODO(dt): implement something here.
+// TODO(dt): plumb the cdcevent.Row to this.
+func (lrw *logicalReplicationWriterProcessor) dlq(
+	ctx context.Context, event streampb.StreamEvent_KV, applyErr error,
+) error {
+	if log.V(1) || logAllDLQs {
+		log.Infof(ctx, "sending KV to DLQ, %s due to %v", event.String(), applyErr)
+	}
+	// TODO(dt): try to DLQ it and don't return an error if successful.
+	return applyErr
+}
+
+func (lrw *logicalReplicationWriterProcessor) maybeDrainPurgatory(ctx context.Context) error {
+	var resolved int
+	for i := range lrw.purgatory {
+		// If we need to make space, or if the events have been in purgatory for a
+		// over a minute, then any events that still fail to apply must just DLQ.
+		mustProcess := (i == 0 && lrw.purgatoryFull()) ||
+			timeutil.Since(lrw.purgatory[i].closedAt) > time.Minute
+
+		// If tried to flush this purgatory recently and it isn't required to flush
+		// now, wait a until next time to try again.
+		if timeutil.Since(lrw.purgatory[i].lastAttempted) < time.Second*5 && !mustProcess {
+			break
+		}
+
+		lrw.purgatory[i].lastAttempted = timeutil.Now()
+		remaining, err := lrw.flushBuffer(ctx, lrw.purgatory[i].events, mustProcess)
+		if err != nil {
+			return err
+		}
+		lrw.purgatory[i].events = remaining
+		if len(remaining) > 0 || lrw.purgatory[i].willResolve == nil {
+			break
+		}
+		if err := lrw.checkpoint(ctx, lrw.purgatory[i].willResolve); err != nil {
+			return err
+		}
+		resolved++
+	}
+	// Remove all levels that were resolved.
+	lrw.purgatory = lrw.purgatory[resolved:]
+	return nil
+}
+
+func (lrw *logicalReplicationWriterProcessor) purgatoryFull() bool {
+	// TODO(dt): make this smarter.
+	return len(lrw.purgatory) >= 10
+}
+
 type batchStats struct {
+	notProcessed              int64
 	byteSize                  int64
 	optimisticInsertConflicts int64
 }
