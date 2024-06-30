@@ -585,37 +585,37 @@ func TestStableTo(t *testing.T) {
 }
 
 func TestStableToWithSnap(t *testing.T) {
-	snapi, snapt := uint64(5), uint64(2)
+	snapID := entryID{term: 2, index: 5}
+	snap := pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: snapID.term, Index: snapID.index}}
 	for _, tt := range []struct {
-		stablei uint64
-		stablet uint64
-		newEnts []pb.Entry
-
-		wunstable uint64
+		sl   logSlice
+		to   entryID
+		want uint64 // the unstable.offset
 	}{
-		{snapi + 1, snapt, nil, snapi + 1},
-		{snapi, snapt, nil, snapi + 1},
-		{snapi - 1, snapt, nil, snapi + 1},
-
-		{snapi + 1, snapt + 1, nil, snapi + 1},
-		{snapi, snapt + 1, nil, snapi + 1},
-		{snapi - 1, snapt + 1, nil, snapi + 1},
-
-		{snapi + 1, snapt, index(snapi + 1).terms(snapt), snapi + 2},
-		{snapi, snapt, index(snapi + 1).terms(snapt), snapi + 1},
-		{snapi - 1, snapt, index(snapi + 1).terms(snapt), snapi + 1},
-
-		{snapi + 1, snapt + 1, index(snapi + 1).terms(snapt), snapi + 1},
-		{snapi, snapt + 1, index(snapi + 1).terms(snapt), snapi + 1},
-		{snapi - 1, snapt + 1, index(snapi + 1).terms(snapt), snapi + 1},
+		// out of bounds
+		{sl: snapID.append(), to: entryID{term: 1, index: 2}, want: 6},
+		{sl: snapID.append(), to: entryID{term: 2, index: 6}, want: 6},
+		{sl: snapID.append(), to: entryID{term: 2, index: 7}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: entryID{term: 2, index: 4}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: entryID{term: 2, index: 10}, want: 6},
+		// successful acknowledgements
+		{sl: snapID.append(6, 6, 8), to: entryID{term: 2, index: 5}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: entryID{term: 6, index: 6}, want: 7},
+		{sl: snapID.append(6, 6, 8), to: entryID{term: 6, index: 7}, want: 8},
+		{sl: snapID.append(6, 6, 8), to: entryID{term: 8, index: 8}, want: 9},
+		// mismatching entry terms
+		{sl: snapID.append(6, 6, 8), to: entryID{term: 3, index: 6}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: entryID{term: 3, index: 7}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: entryID{term: 3, index: 8}, want: 6},
 	} {
 		t.Run("", func(t *testing.T) {
 			s := NewMemoryStorage()
-			require.NoError(t, s.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: snapi, Term: snapt}}))
+			require.NoError(t, s.SetHardState(pb.HardState{Term: snapID.term}))
+			require.NoError(t, s.ApplySnapshot(snap))
 			raftLog := newLog(s, discardLogger)
-			raftLog.append(tt.newEnts...)
-			raftLog.stableTo(entryID{term: tt.stablet, index: tt.stablei})
-			require.Equal(t, tt.wunstable, raftLog.unstable.offset)
+			raftLog.append(tt.sl.entries...)
+			raftLog.stableTo(tt.to)
+			require.Equal(t, tt.want, raftLog.unstable.offset)
 		})
 	}
 }
