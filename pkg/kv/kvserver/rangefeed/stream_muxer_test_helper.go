@@ -56,7 +56,7 @@ func newTestServerStream() *testServerStream {
 	}
 }
 
-func (s *testServerStream) eventsSentCount() int {
+func (s *testServerStream) totalEventsSent() int {
 	s.Lock()
 	defer s.Unlock()
 	return s.eventsSent

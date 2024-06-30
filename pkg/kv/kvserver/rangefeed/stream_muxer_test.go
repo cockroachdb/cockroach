@@ -51,7 +51,7 @@ func TestStreamMuxerOnContextCancel(t *testing.T) {
 	muxer.appendMuxError(expectedErrEvent)
 	time.Sleep(10 * time.Millisecond)
 	require.False(t, testServerStream.hasEvent(expectedErrEvent))
-	require.Equal(t, 0, testServerStream.eventsSent)
+	require.Equal(t, 0, testServerStream.totalEventsSent())
 }
 
 func TestStreamMuxer(t *testing.T) {
@@ -87,14 +87,14 @@ func TestStreamMuxer(t *testing.T) {
 			Error: *kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)),
 		})
 		time.Sleep(10 * time.Millisecond)
-		require.Equal(t, 1, testServerStream.eventsSent)
+		require.Equal(t, 1, testServerStream.totalEventsSent())
 		require.True(t, testServerStream.hasEvent(expectedErrEvent))
 
 		// Repeat closing the stream does nothing.
 		muxer.DisconnectRangefeedWithError(streamID, rangeID,
 			kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
 		time.Sleep(10 * time.Millisecond)
-		require.Equal(t, 1, testServerStream.eventsSent)
+		require.Equal(t, 1, testServerStream.totalEventsSent())
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
 	})
 
@@ -138,6 +138,6 @@ func TestStreamMuxer(t *testing.T) {
 				return errors.Newf("expected error %v not found", muxError)
 			})
 		}
-		require.Equal(t, testRangefeedCounter.get(), int32(0))
+		require.Equal(t, int32(0), testRangefeedCounter.get())
 	})
 }
