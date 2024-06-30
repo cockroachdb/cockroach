@@ -1925,7 +1925,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			streamID: req.StreamID,
 			wrapped:  streamMuxer,
 		}
-		streamMuxer.AddStream(req.StreamID, cancel)
+		streamMuxer.AddStream(req.StreamID, req.RangeID, cancel)
 
 		if err := n.stores.RangeFeed(req, streamSink); err != nil {
 			streamMuxer.DisconnectRangefeedWithError(req.StreamID, req.RangeID, kvpb.NewError(err))

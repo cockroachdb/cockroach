@@ -49,8 +49,18 @@ func NewStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) 
 	}
 }
 
-func (sm *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
-	sm.activeStreams.Store(streamID, cancel)
+type streamInfo struct {
+	rangeID roachpb.RangeID
+	cancel  context.CancelFunc
+}
+
+func (sm *StreamMuxer) AddStream(
+	streamID int64, rangeID roachpb.RangeID, cancel context.CancelFunc,
+) {
+	sm.activeStreams.Store(streamID, &streamInfo{
+		rangeID: rangeID,
+		cancel:  cancel,
+	})
 	sm.metrics.IncrementRangefeedCounter()
 }
 
@@ -80,9 +90,9 @@ func (sm *StreamMuxer) appendMuxError(e *kvpb.MuxRangeFeedEvent) {
 func (sm *StreamMuxer) DisconnectRangefeedWithError(
 	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
 ) {
-	if cancelFunc, ok := sm.activeStreams.LoadAndDelete(streamID); ok {
-		if f, ok := cancelFunc.(context.CancelFunc); ok {
-			f()
+	if stream, ok := sm.activeStreams.LoadAndDelete(streamID); ok {
+		if f, ok := stream.(*streamInfo); ok {
+			f.cancel()
 		}
 		clientErrorEvent := transformRangefeedErrToClientError(err)
 		ev := &kvpb.MuxRangeFeedEvent{
