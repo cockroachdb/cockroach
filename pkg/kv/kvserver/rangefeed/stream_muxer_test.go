@@ -75,7 +75,7 @@ func TestStreamMuxer(t *testing.T) {
 		const streamID = 0
 		const rangeID = 1
 		streamCtx, cancel := context.WithCancel(context.Background())
-		muxer.AddStream(0, cancel)
+		muxer.AddStream(streamID, rangeID, cancel)
 		require.Equal(t, testRangefeedCounter.get(), int32(1))
 		muxer.DisconnectRangefeedWithError(streamID, rangeID, kvpb.NewError(nil))
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
@@ -113,7 +113,7 @@ func TestStreamMuxer(t *testing.T) {
 		require.Equal(t, testRangefeedCounter.get(), int32(0))
 
 		for _, muxError := range testRangefeedCompletionErrors {
-			muxer.AddStream(muxError.streamID, func() {})
+			muxer.AddStream(muxError.streamID, muxError.rangeID, func() {})
 		}
 
 		require.Equal(t, testRangefeedCounter.get(), int32(3))
