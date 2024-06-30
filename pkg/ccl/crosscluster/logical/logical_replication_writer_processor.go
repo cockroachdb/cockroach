@@ -436,16 +436,9 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return nil
 	}
 
-	batchSize := int(flushBatchSize.Get(&lrw.FlowCtx.Cfg.Settings.SV))
-
 	// Ensure the batcher is always reset, even on early error returns.
 	preFlushTime := timeutil.Now()
 	lrw.debug.RecordFlushStart(preFlushTime, int64(len(kvs)))
-
-	// TODO: The batching here in production would need to be much
-	// smarter. Namely, we don't want to include updates to the
-	// same key in the same batch. Also, it's possible batching
-	// will make things much worse in practice.
 
 	k := func(kv streampb.StreamEvent_KV) roachpb.Key {
 		if p, err := keys.EnsureSafeSplitKey(kv.KeyValue.Key); err == nil {
@@ -465,48 +458,32 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	var flushByteSize atomic.Int64
 
-	chunkStart, chunkSize := 0, max((len(kvs)/len(lrw.bh))+1, batchSize)
+	const minChunkSize = 64
+	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
 
 	g := ctxgroup.WithContext(ctx)
 	for worker := range lrw.bh {
-		if chunkStart >= len(kvs) {
+		if len(kvs) == 0 {
 			break
 		}
-		bh := lrw.bh[worker]
-		batchStart := chunkStart
-
 		// The chunk should end after the first new key after chunk size.
-		chunkEnd := min(chunkStart+chunkSize, len(kvs))
+		chunkEnd := min(chunkSize, len(kvs))
 		for chunkEnd < len(kvs) && k(kvs[chunkEnd-1]).Equal(k(kvs[chunkEnd])) {
 			chunkEnd++
 		}
-		// Set the start for the next chunk to where this one ended.
-		chunkStart = chunkEnd
+		chunk := kvs[0:chunkEnd]
+		kvs = kvs[len(chunk):]
+		bh := lrw.bh[worker]
 
 		g.GoCtx(func(ctx context.Context) error {
-			for batchStart < chunkEnd {
-				batchEnd := min(batchStart+batchSize, chunkEnd)
-				preBatchTime := timeutil.Now()
-				batchStats, err := bh.HandleBatch(ctx, kvs[batchStart:batchEnd])
-				if err != nil {
-					// TODO(ssd): Handle errors. We should perhaps split the batch and retry a portion of the batch.
-					// If that fails, send the failed application to the dead-letter-queue.
-					return err
-				}
-				batchStart = batchEnd
-				batchTime := timeutil.Since(preBatchTime)
-
-				lrw.metrics.OptimisticInsertConflictCount.Inc(batchStats.optimisticInsertConflicts)
-				lrw.debug.RecordBatchApplied(batchTime, int64(batchEnd-batchStart))
-				lrw.metrics.ApplyBatchNanosHist.RecordValue(batchTime.Nanoseconds())
-				flushByteSize.Add(batchStats.byteSize)
+			s, err := lrw.flushChunk(ctx, bh, chunk)
+			if err != nil {
+				return err
 			}
+			flushByteSize.Add(s.byteSize)
+			lrw.metrics.OptimisticInsertConflictCount.Inc(s.optimisticInsertConflicts)
 			return nil
 		})
-	}
-
-	if chunkStart != len(kvs) {
-		panic(errors.AssertionFailedf("%d %d %d", len(lrw.bh)-1, chunkSize, len(kvs)))
 	}
 
 	if err := g.Wait(); err != nil {
@@ -527,6 +504,40 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	return nil
 }
 
+func (lrw *logicalReplicationWriterProcessor) flushChunk(
+	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV,
+) (batchStats, error) {
+	batchSize := int(flushBatchSize.Get(&lrw.FlowCtx.Cfg.Settings.SV))
+	// TODO(yuzefovich): we should have a better heuristic for when to use the
+	// implicit vs explicit txns (for example, depending on the presence of the
+	// secondary indexes).
+	if useImplicitTxns.Get(&lrw.FlowCtx.Cfg.Settings.SV) {
+		batchSize = 1
+	}
+
+	var stats batchStats
+	// TODO: The batching here in production would need to be much
+	// smarter. Namely, we don't want to include updates to the
+	// same key in the same batch. Also, it's possible batching
+	// will make things much worse in practice.
+	for len(chunk) > 0 {
+		batch := chunk[:min(batchSize, len(chunk))]
+		chunk = chunk[len(batch):]
+		preBatchTime := timeutil.Now()
+		s, err := bh.HandleBatch(ctx, batch)
+		if err != nil {
+			// TODO(ssd): Handle errors. We should perhaps split the batch and retry a portion of the batch.
+			// If that fails, send the failed application to the dead-letter-queue.
+			return batchStats{}, err
+		}
+		stats.Add(s)
+		batchTime := timeutil.Since(preBatchTime)
+		lrw.debug.RecordBatchApplied(batchTime, int64(len(batch)))
+		lrw.metrics.ApplyBatchNanosHist.RecordValue(batchTime.Nanoseconds())
+	}
+	return stats, nil
+}
+
 type batchStats struct {
 	byteSize                  int64
 	optimisticInsertConflicts int64
@@ -538,6 +549,10 @@ func (b *batchStats) Add(o batchStats) {
 }
 
 type BatchHandler interface {
+	// HandleBatch handles one batch, i.e. a set of 1 or more KVs, that should be
+	// decoded to rows and committed in a single txn, i.e. that all succeed to apply
+	// or are not applied as a group. If the batch is a single KV it may use an
+	// implicit txn.
 	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
 }
 
@@ -571,17 +586,12 @@ func (t *txnBatch) HandleBatch(
 
 	stats := batchStats{}
 	var err error
-	// TODO(yuzefovich): we should have a better heuristic for when to use the
-	// implicit vs explicit txns (for example, depending on the presence of the
-	// secondary indexes).
-	if useImplicitTxns.Get(&t.settings.SV) {
-		for _, kv := range batch {
-			rowStats, err := t.rp.ProcessRow(ctx, nil /* txn */, kv.KeyValue, kv.PrevValue)
-			if err != nil {
-				return stats, err
-			}
-			stats.Add(rowStats)
+	if len(batch) == 1 {
+		rowStats, err := t.rp.ProcessRow(ctx, nil /* txn */, batch[0].KeyValue, batch[0].PrevValue)
+		if err != nil {
+			return stats, err
 		}
+		stats.Add(rowStats)
 	} else {
 		var txnStats batchStats
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
