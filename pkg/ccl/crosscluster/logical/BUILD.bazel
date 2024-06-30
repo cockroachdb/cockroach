@@ -9,6 +9,7 @@ go_library(
         "logical_replication_writer_processor.go",
         "lww_row_processor.go",
         "metrics.go",
+        "purgatory.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/logical",
     visibility = ["//visibility:public"],
