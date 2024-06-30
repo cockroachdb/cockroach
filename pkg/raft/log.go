@@ -488,7 +488,7 @@ func (l *raftLog) maybeCommit(at entryID) bool {
 func (l *raftLog) restore(s snapshot) {
 	last := s.lastEntryID()
 	l.logger.Infof("log [%s] starts to restore snapshot [index: %d, term: %d]", l, last.index, last.term)
-	l.unstable.restore(s.snap) // TODO(pav-kv): pass the snapshot type down.
+	l.unstable.restore(s)
 	l.committed = last.index
 }
 
