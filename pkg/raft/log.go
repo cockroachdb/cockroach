@@ -121,11 +121,7 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 	}
 	// Fast-forward the appended log slice to the last matching entry.
 	// NB: a.prev.index <= match <= a.lastIndex(), so the call is safe.
-	a = a.forward(match)
-
-	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
-	// bookkeeping in the unstable structure.
-	return l.append(a.entries...)
+	return l.append(a.forward(match))
 }
 
 // append conditionally appends the given log slice to the log. Same as
@@ -134,14 +130,16 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 // TODO(pav-kv): do a clearer distinction between maybeAppend and append. The
 // append method should only append at the end of the log (and verify that it's
 // the case), and maybeAppend can truncate the log.
-func (l *raftLog) append(ents ...pb.Entry) bool {
-	if len(ents) == 0 {
+func (l *raftLog) append(a logSlice) bool {
+	if len(a.entries) == 0 {
 		return true
 	}
-	if first := ents[0].Index; first <= l.committed {
+	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
 	}
-	l.unstable.truncateAndAppend(ents)
+	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
+	// bookkeeping in the unstable structure.
+	l.unstable.truncateAndAppend(a.entries)
 	return true
 }
 

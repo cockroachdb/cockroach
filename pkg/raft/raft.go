@@ -781,10 +781,10 @@ func (r *raft) reset(term uint64) {
 }
 
 func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
-	li := r.raftLog.lastIndex()
+	last := r.raftLog.lastEntryID()
 	for i := range es {
 		es[i].Term = r.Term
-		es[i].Index = li + 1 + uint64(i)
+		es[i].Index = last.index + 1 + uint64(i)
 	}
 	// Track the size of this uncommitted proposal.
 	if !r.increaseUncommittedSize(es) {
@@ -795,7 +795,10 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 		// Drop the proposal.
 		return false
 	}
-	if !r.raftLog.append(es...) {
+	app := logSlice{term: r.Term, prev: last, entries: es}
+	if err := app.valid(); err != nil {
+		r.logger.Panicf("%x leader could not append to its log: %v", r.id, err)
+	} else if !r.raftLog.append(app) {
 		r.logger.Panicf("%x leader could not append to its log", r.id)
 	}
 	// The leader needs to self-ack the entries just appended once they have
