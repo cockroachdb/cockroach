@@ -218,7 +218,10 @@ type testSingleFeedStream struct {
 	wrapped *StreamMuxer
 
 	// For blocking send only.
-	mu syncutil.Mutex
+	mu struct {
+		syncutil.Mutex
+		sendErr error
+	}
 }
 
 // For simplication, usually streams do not use an actual muxer but only
@@ -247,15 +250,22 @@ func (s *testSingleFeedStream) Context() context.Context {
 
 func (s *testSingleFeedStream) Send(event *kvpb.RangeFeedEvent) error {
 	s.mu.Lock()
-	defer func() {
-		s.mu.Unlock()
-	}()
+	defer s.mu.Unlock()
+	if s.mu.sendErr != nil {
+		return s.mu.sendErr
+	}
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
 	return s.wrapped.Send(response)
+}
+
+func (s *testSingleFeedStream) SetSendErr(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.sendErr = err
 }
 
 func (s *testSingleFeedStream) Disconnect(err *kvpb.Error) {
@@ -281,6 +291,15 @@ func (s *testSingleFeedStream) WaitForErr(t *testing.T) error {
 		return err
 	case <-time.After(30 * time.Second):
 		t.Fatalf("time out waiting for rangefeed completion")
+		return nil
+	}
+}
+
+func (s *testSingleFeedStream) GetErrIfDone() error {
+	select {
+	case err := <-s.doneCh:
+		return err
+	default:
 		return nil
 	}
 }
