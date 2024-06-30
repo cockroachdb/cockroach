@@ -225,8 +225,8 @@ func TestUnstableRestore(t *testing.T) {
 	u.restore(s)
 	u.checkInvariants(t)
 
-	require.Equal(t, s.lastEntryID().index+1, u.offset)
-	require.Equal(t, s.lastEntryID().index+1, u.offsetInProgress)
+	require.Equal(t, s.lastIndex()+1, u.offset)
+	require.Equal(t, s.lastIndex()+1, u.offsetInProgress)
 	require.Zero(t, len(u.entries))
 	require.Equal(t, &s.snap, u.snapshot)
 	require.False(t, u.snapshotInProgress)
