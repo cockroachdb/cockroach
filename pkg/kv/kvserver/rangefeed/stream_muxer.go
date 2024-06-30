@@ -57,12 +57,22 @@ func NewStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) 
 	}
 }
 
+type streamInfo struct {
+	rangeID roachpb.RangeID
+	cancel  context.CancelFunc
+}
+
 // AddStream registers a server rangefeed stream with the muxer. It remains
 // active until DisconnectRangefeedWithError is called with the same streamID.
 // Caller must ensure no duplicate stream IDs are added without disconnecting
 // the old one first.
-func (sm *StreamMuxer) AddStream(streamID int64, cancel context.CancelFunc) {
-	sm.activeStreams.Store(streamID, cancel)
+func (sm *StreamMuxer) AddStream(
+	streamID int64, rangeID roachpb.RangeID, cancel context.CancelFunc,
+) {
+	sm.activeStreams.Store(streamID, &streamInfo{
+		rangeID: rangeID,
+		cancel:  cancel,
+	})
 	sm.metrics.IncrementRangefeedCounter()
 }
 
@@ -109,9 +119,9 @@ func (sm *StreamMuxer) appendMuxError(e *kvpb.MuxRangeFeedEvent) {
 func (sm *StreamMuxer) DisconnectRangefeedWithError(
 	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
 ) {
-	if cancelFunc, ok := sm.activeStreams.LoadAndDelete(streamID); ok {
-		if f, ok := cancelFunc.(context.CancelFunc); ok {
-			f()
+	if stream, ok := sm.activeStreams.LoadAndDelete(streamID); ok {
+		if f, ok := stream.(*streamInfo); ok {
+			f.cancel()
 		}
 		clientErrorEvent := transformRangefeedErrToClientError(err)
 		ev := &kvpb.MuxRangeFeedEvent{
