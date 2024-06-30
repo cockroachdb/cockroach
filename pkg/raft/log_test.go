@@ -150,50 +150,49 @@ func TestIsUpToDate(t *testing.T) {
 }
 
 func TestAppend(t *testing.T) {
-	previousEnts := index(1).terms(1, 2)
+	init := entryID{}.append(1, 2, 2)
+	commit := uint64(1)
 	for _, tt := range []struct {
-		ents      []pb.Entry
-		windex    uint64
-		wents     []pb.Entry
-		wunstable uint64
+		app   logSlice
+		want  logSlice
+		panic bool
 	}{
+		{app: logSlice{}, want: init},
 		{
-			nil,
-			2,
-			index(1).terms(1, 2),
-			3,
-		},
-		{
-			index(3).terms(2),
-			3,
-			index(1).terms(1, 2, 2),
-			3,
-		},
-		// conflicts with index 1
-		{
-			index(1).terms(2),
-			1,
-			index(1).terms(2),
-			1,
-		},
-		// conflicts with index 2
-		{
-			index(2).terms(3, 3),
-			3,
-			index(1).terms(1, 3, 3),
-			2,
+			app:  entryID{term: 2, index: 3}.append(2),
+			want: entryID{}.append(1, 2, 2, 2),
+		}, {
+			app:  entryID{term: 1, index: 1}.append(3),
+			want: entryID{}.append(1, 3), // overwrite from index 2
+		}, {
+			app:  entryID{term: 2, index: 2}.append(3, 4, 5),
+			want: entryID{}.append(1, 2, 3, 4, 5), // overwrite from index 3
+		}, {
+			app:   entryID{}.append(3, 4),
+			panic: true, // entry 1 is already committed
 		},
 	} {
 		t.Run("", func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					require.True(t, tt.panic)
+				}
+			}()
+
 			storage := NewMemoryStorage()
-			storage.Append(previousEnts)
+			require.NoError(t, storage.SetHardState(pb.HardState{Term: init.term}))
+			require.NoError(t, storage.Append(init.entries))
 			raftLog := newLog(storage, discardLogger)
-			raftLog.append(tt.ents...)
-			require.Equal(t, tt.windex, raftLog.lastIndex())
-			g, err := raftLog.entries(1, noLimit)
-			require.NoError(t, err)
-			require.Equal(t, tt.wents, g)
-			require.Equal(t, tt.wunstable, raftLog.unstable.offset)
+			raftLog.committed = commit
+
+			raftLog.append(tt.app.entries...)
+			require.False(t, tt.panic)
+			// TODO(pav-kv): check the term and prev too.
+			require.Equal(t, tt.want.entries, raftLog.allEntries())
+			if len(tt.app.entries) != 0 {
+				require.Equal(t, tt.app.lastIndex(), raftLog.lastIndex())
+				require.Equal(t, tt.app.prev.index+1, raftLog.unstable.offset)
+			}
 		})
 	}
 }
@@ -256,6 +255,7 @@ func TestLogMaybeAppend(t *testing.T) {
 			}()
 			ok := raftLog.maybeAppend(app)
 			require.Equal(t, !tt.notOk, ok)
+			require.False(t, tt.panic)
 			require.Equal(t, commit, raftLog.committed) // commit index did not change
 			require.Equal(t, tt.want, raftLog.allEntries())
 		})
