@@ -93,6 +93,7 @@ func TestLogSlice(t *testing.T) {
 			require.Equal(t, tt.last, last)
 			require.Equal(t, last.index, s.lastIndex())
 			require.Equal(t, tt.prev.term, s.termAt(tt.prev.index))
+			require.Equal(t, logMark{term: tt.term, index: last.index}, s.mark())
 			for _, e := range tt.entries {
 				require.Equal(t, e.Term, s.termAt(e.Index))
 			}
