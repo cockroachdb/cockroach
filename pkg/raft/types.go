@@ -138,3 +138,34 @@ func (s logSlice) valid() error {
 	}
 	return nil
 }
+
+// snapshot is a snapshot tied to a leader term who sent it.
+//
+// Semantically, this type is equivalent to a logSlice from 0 to lastEntryID(),
+// plus a commit logMark. All leaders at terms >= snapshot.term are consistent
+// with snapshot.mark(), by raft invariants.
+type snapshot struct {
+	// term is the term of the leader who generated the snapshot.
+	term uint64
+	// snap is the content of the snapshot.
+	snap pb.Snapshot
+}
+
+// lastEntryID returns the ID of the last entry covered by this snapshot.
+func (s snapshot) lastEntryID() entryID {
+	return entryID{term: s.snap.Metadata.Term, index: s.snap.Metadata.Index}
+}
+
+// mark returns committed logMark of this snapshot, in the coordinate system of
+// the leader who observes this committed state.
+func (s snapshot) mark() logMark {
+	return logMark{term: s.term, index: s.snap.Metadata.Index}
+}
+
+// valid returns nil iff the snapshot is well-formed.
+func (s snapshot) valid() error {
+	if entryTerm := s.snap.Metadata.Term; entryTerm > s.term {
+		return fmt.Errorf("leader term %d: snap %+v has a newer term", s.term, s.lastEntryID())
+	}
+	return nil
+}
