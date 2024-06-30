@@ -30,6 +30,18 @@ import (
 // Stream is a object capable of transmitting RangeFeedEvents.
 type Stream interface {
 	kvpb.RangeFeedEventSink
+
+	// Disconnect handles stream disconnection using the wrapped muxer. Safe to
+	// call repeatedly for the same stream, but subsequent errors are ignored. It
+	// ensures 1. cancel stream context 2. send error back to client 3. clean up
+	// function is called.
+	Disconnect(err *kvpb.Error)
+
+	// RegisterRangefeedCleanUp registers a cleanup function which is called when
+	// the stream disconnects via Disconnect. Caller must ensure that cleanUp is
+	// thread safe. Note that LeagcyProcessor doesn't need this since it uses the
+	// old code and has a dedicated goroutine for every registration.
+	RegisterRangefeedCleanUp(func())
 }
 
 // Shared event is an entry stored in registration channel. Each entry is
@@ -280,21 +292,29 @@ func (r *registration) maybeStripEvent(
 	return ret
 }
 
+func (r *registration) cleanUp() (alreadyDisconnected bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.disconnected {
+		return true
+	}
+
+	if r.mu.catchUpIter != nil {
+		r.mu.catchUpIter.Close()
+		r.mu.catchUpIter = nil
+	}
+	if r.mu.outputLoopCancelFn != nil {
+		r.mu.outputLoopCancelFn()
+	}
+	r.mu.disconnected = true
+	return false
+}
+
 // disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
 func (r *registration) disconnect(pErr *kvpb.Error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.mu.disconnected {
-		if r.mu.catchUpIter != nil {
-			r.mu.catchUpIter.Close()
-			r.mu.catchUpIter = nil
-		}
-		if r.mu.outputLoopCancelFn != nil {
-			r.mu.outputLoopCancelFn()
-		}
-		r.mu.disconnected = true
+	if alreadyDisconnected := r.cleanUp(); !alreadyDisconnected {
 		r.stream.Disconnect(pErr)
 	}
 }
