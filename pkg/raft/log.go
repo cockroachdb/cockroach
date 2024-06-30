@@ -339,17 +339,19 @@ func (l *raftLog) lastIndex() uint64 {
 
 // commitTo bumps the commit index to the given value if it is higher than the
 // current commit index.
-//
-// TODO(pav-kv): this method should accept the term of the leader on whose
-// behalf the commit index is bumped. It is only safe to update the commit index
-// if our log is consistent with this leader, i.e. accTerm >= term.
-func (l *raftLog) commitTo(tocommit uint64) {
+func (l *raftLog) commitTo(mark logMark) {
+	// TODO(pav-kv): it is only safe to update the commit index if our log is
+	// consistent with the mark.term leader. If the mark.term leader sees the
+	// mark.index entry as committed, all future leaders have it in the log. It is
+	// thus safe to bump the commit index to min(mark.index, lastIndex) if our
+	// accTerm >= mark.term. Do this once raftLog/unstable tracks the accTerm.
+
 	// never decrease commit
-	if l.committed < tocommit {
-		if l.lastIndex() < tocommit {
-			l.logger.Panicf("tocommit(%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?", tocommit, l.lastIndex())
+	if l.committed < mark.index {
+		if l.lastIndex() < mark.index {
+			l.logger.Panicf("tocommit(%d) is out of range [lastIndex(%d)]. Was the raft log corrupted, truncated, or lost?", mark.index, l.lastIndex())
 		}
-		l.committed = tocommit
+		l.committed = mark.index
 	}
 }
 

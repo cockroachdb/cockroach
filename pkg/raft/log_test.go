@@ -153,7 +153,7 @@ func TestIsUpToDate(t *testing.T) {
 
 func TestAppend(t *testing.T) {
 	init := entryID{}.append(1, 2, 2)
-	commit := uint64(1)
+	commit := logMark{term: init.term, index: 1}
 	for _, tt := range []struct {
 		app   logSlice
 		want  logSlice
@@ -277,7 +277,7 @@ func TestCompactionSideEffects(t *testing.T) {
 	raftLog := newLog(storage, discardLogger)
 	require.True(t, raftLog.append(unstable))
 
-	raftLog.commitTo(raftLog.lastIndex())
+	raftLog.commitTo(unstable.mark())
 	raftLog.appliedTo(raftLog.committed, 0 /* size */)
 
 	offset := uint64(500)
@@ -344,7 +344,7 @@ func TestHasNextCommittedEnts(t *testing.T) {
 			raftLog := newLog(storage, discardLogger)
 			require.True(t, raftLog.append(init))
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.commitTo(5)
+			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
 			raftLog.applyingEntsPaused = tt.paused
@@ -398,7 +398,7 @@ func TestNextCommittedEnts(t *testing.T) {
 			raftLog := newLog(storage, discardLogger)
 			require.True(t, raftLog.append(init))
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.commitTo(5)
+			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
 			raftLog.applyingEntsPaused = tt.paused
@@ -452,7 +452,7 @@ func TestAcceptApplying(t *testing.T) {
 			raftLog := newLogWithSize(storage, discardLogger, maxSize)
 			require.True(t, raftLog.append(init))
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.commitTo(5)
+			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
 
 			raftLog.acceptApplying(tt.index, tt.size, tt.allowUnstable)
@@ -496,7 +496,7 @@ func TestAppliedTo(t *testing.T) {
 			raftLog := newLogWithSize(storage, discardLogger, maxSize)
 			require.True(t, raftLog.append(init))
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.commitTo(5)
+			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
 			raftLog.acceptApplying(5, maxSize+overshoot, false /* allowUnstable */)
 
@@ -543,13 +543,14 @@ func TestCommitTo(t *testing.T) {
 	init := entryID{}.append(1, 2, 3)
 	commit := uint64(2)
 	for _, tt := range []struct {
-		commit uint64
+		commit logMark
 		want   uint64
 		panic  bool
 	}{
-		{commit: 3, want: 3},
-		{commit: 1, want: 2},     // commit does not regress
-		{commit: 4, panic: true}, // commit out of range -> panic
+		{commit: logMark{term: 3, index: 3}, want: 3},
+		{commit: logMark{term: 3, index: 2}, want: 2},     // commit does not regress
+		{commit: logMark{term: 3, index: 4}, panic: true}, // commit out of range -> panic
+		// TODO(pav-kv): add commit marks with a different term.
 	} {
 		t.Run("", func(t *testing.T) {
 			defer func() {
@@ -644,9 +645,10 @@ func TestCompaction(t *testing.T) {
 				}
 			}()
 			storage := NewMemoryStorage()
-			require.NoError(t, storage.Append(index(1).termRange(1, tt.lastIndex+1)))
+			init := entryID{}.append(intRange(1, tt.lastIndex+1)...)
+			require.NoError(t, storage.Append(init.entries))
 			raftLog := newLog(storage, discardLogger)
-			raftLog.commitTo(tt.lastIndex)
+			raftLog.commitTo(init.mark())
 
 			raftLog.appliedTo(raftLog.committed, 0 /* size */)
 			for j := 0; j < len(tt.compact); j++ {
