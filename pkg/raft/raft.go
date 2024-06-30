@@ -795,7 +795,9 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 		// Drop the proposal.
 		return false
 	}
-	r.raftLog.append(es...)
+	if !r.raftLog.append(es...) {
+		r.logger.Panicf("%x leader could not append to its log", r.id)
+	}
 	// The leader needs to self-ack the entries just appended once they have
 	// been durably persisted (since it doesn't send an MsgApp to itself). This
 	// response message will be added to msgsAfterAppend and delivered back to
