@@ -18,7 +18,6 @@
 package raft
 
 import (
-	"fmt"
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -127,7 +126,7 @@ func TestIsUpToDate(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	raftLog := newLog(NewMemoryStorage(), discardLogger)
 	raftLog.append(previousEnts...)
-	tests := []struct {
+	for _, tt := range []struct {
 		lastIndex uint64
 		term      uint64
 		wUpToDate bool
@@ -144,10 +143,8 @@ func TestIsUpToDate(t *testing.T) {
 		{raftLog.lastIndex() - 1, 3, false},
 		{raftLog.lastIndex(), 3, true},
 		{raftLog.lastIndex() + 1, 3, true},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			require.Equal(t, tt.wUpToDate, raftLog.isUpToDate(entryID{term: tt.term, index: tt.lastIndex}))
 		})
 	}
@@ -155,7 +152,7 @@ func TestIsUpToDate(t *testing.T) {
 
 func TestAppend(t *testing.T) {
 	previousEnts := index(1).terms(1, 2)
-	tests := []struct {
+	for _, tt := range []struct {
 		ents      []pb.Entry
 		windex    uint64
 		wents     []pb.Entry
@@ -187,10 +184,8 @@ func TestAppend(t *testing.T) {
 			index(1).terms(1, 3, 3),
 			2,
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			storage.Append(previousEnts)
 			raftLog := newLog(storage, discardLogger)
@@ -313,7 +308,7 @@ func TestHasNextCommittedEnts(t *testing.T) {
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
 	ents := index(4).terms(1, 1, 1)
-	tests := []struct {
+	for _, tt := range []struct {
 		applied       uint64
 		applying      uint64
 		allowUnstable bool
@@ -338,9 +333,8 @@ func TestHasNextCommittedEnts(t *testing.T) {
 		{applied: 3, applying: 3, allowUnstable: true, paused: true, whasNext: false},
 		// With snapshot.
 		{applied: 3, applying: 3, allowUnstable: true, snap: true, whasNext: false},
-	}
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
 			require.NoError(t, storage.Append(ents[:1]))
@@ -367,7 +361,7 @@ func TestNextCommittedEnts(t *testing.T) {
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
 	ents := index(4).terms(1, 1, 1)
-	tests := []struct {
+	for _, tt := range []struct {
 		applied       uint64
 		applying      uint64
 		allowUnstable bool
@@ -392,9 +386,8 @@ func TestNextCommittedEnts(t *testing.T) {
 		{applied: 3, applying: 3, allowUnstable: true, paused: true, wents: nil},
 		// With snapshot.
 		{applied: 3, applying: 3, allowUnstable: true, snap: true, wents: nil},
-	}
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
 			require.NoError(t, storage.Append(ents[:1]))
@@ -422,7 +415,7 @@ func TestAcceptApplying(t *testing.T) {
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
 	ents := index(4).terms(1, 1, 1)
-	tests := []struct {
+	for _, tt := range []struct {
 		index         uint64
 		allowUnstable bool
 		size          entryEncodingSize
@@ -447,9 +440,8 @@ func TestAcceptApplying(t *testing.T) {
 		{index: 5, allowUnstable: false, size: maxSize - 1, wpaused: false},
 		{index: 5, allowUnstable: false, size: maxSize, wpaused: true},
 		{index: 5, allowUnstable: false, size: maxSize + 1, wpaused: true},
-	}
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
 			require.NoError(t, storage.Append(ents[:1]))
@@ -473,7 +465,7 @@ func TestAppliedTo(t *testing.T) {
 		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
 	}
 	ents := index(4).terms(1, 1, 1)
-	tests := []struct {
+	for _, tt := range []struct {
 		index         uint64
 		size          entryEncodingSize
 		wapplyingSize entryEncodingSize
@@ -492,9 +484,8 @@ func TestAppliedTo(t *testing.T) {
 		// Apply more than outstanding bytes.
 		// Incorrect accounting doesn't underflow applyingSize.
 		{index: 4, size: maxSize + overshoot + 1, wapplyingSize: 0, wpaused: false},
-	}
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
 			require.NoError(t, storage.Append(ents[:1]))
@@ -519,16 +510,14 @@ func TestAppliedTo(t *testing.T) {
 // entries correctly.
 func TestNextUnstableEnts(t *testing.T) {
 	previousEnts := index(1).terms(1, 2)
-	tests := []struct {
+	for _, tt := range []struct {
 		unstable uint64
 		wents    []pb.Entry
 	}{
 		{3, nil},
 		{1, previousEnts},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			// append stable entries to storage
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.Append(previousEnts[:tt.unstable-1]))
@@ -575,7 +564,7 @@ func TestCommitTo(t *testing.T) {
 }
 
 func TestStableTo(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		stablei   uint64
 		stablet   uint64
 		wunstable uint64
@@ -584,9 +573,8 @@ func TestStableTo(t *testing.T) {
 		{2, 2, 3},
 		{2, 1, 1}, // bad term
 		{3, 1, 1}, // bad index
-	}
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			raftLog := newLog(NewMemoryStorage(), discardLogger)
 			raftLog.append(index(1).terms(1, 2)...)
 			raftLog.stableTo(entryID{term: tt.stablet, index: tt.stablei})
@@ -597,7 +585,7 @@ func TestStableTo(t *testing.T) {
 
 func TestStableToWithSnap(t *testing.T) {
 	snapi, snapt := uint64(5), uint64(2)
-	tests := []struct {
+	for _, tt := range []struct {
 		stablei uint64
 		stablet uint64
 		newEnts []pb.Entry
@@ -619,9 +607,8 @@ func TestStableToWithSnap(t *testing.T) {
 		{snapi + 1, snapt + 1, index(snapi + 1).terms(snapt), snapi + 1},
 		{snapi, snapt + 1, index(snapi + 1).terms(snapt), snapi + 1},
 		{snapi - 1, snapt + 1, index(snapi + 1).terms(snapt), snapi + 1},
-	}
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			s := NewMemoryStorage()
 			require.NoError(t, s.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: snapi, Term: snapt}}))
 			raftLog := newLog(s, discardLogger)
@@ -634,7 +621,7 @@ func TestStableToWithSnap(t *testing.T) {
 
 // TestCompaction ensures that the number of log entries is correct after compactions.
 func TestCompaction(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		lastIndex uint64
 		compact   []uint64
 		wleft     []int
@@ -645,10 +632,8 @@ func TestCompaction(t *testing.T) {
 		{1000, []uint64{300, 500, 800, 900}, []int{700, 500, 200, 100}, true},
 		// out of lower bound
 		{1000, []uint64{300, 299}, []int{700, -1}, false},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
 					require.False(t, tt.wallow)
@@ -696,7 +681,7 @@ func TestIsOutOfBounds(t *testing.T) {
 	l.append(index(offset+1).termRange(offset+1, offset+num+1)...)
 
 	first := offset + 1
-	tests := []struct {
+	for _, tt := range []struct {
 		lo, hi        uint64
 		wpanic        bool
 		wErrCompacted bool
@@ -741,10 +726,8 @@ func TestIsOutOfBounds(t *testing.T) {
 			true,
 			false,
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {
 					require.True(t, tt.wpanic)
@@ -767,7 +750,7 @@ func TestTerm(t *testing.T) {
 	l := newLog(storage, discardLogger)
 	l.append(index(offset+1).termRange(1, num)...)
 
-	for i, tt := range []struct {
+	for _, tt := range []struct {
 		idx  uint64
 		term uint64
 		err  error
@@ -778,7 +761,7 @@ func TestTerm(t *testing.T) {
 		{idx: offset + num - 1, term: num - 1},
 		{idx: offset + num, err: ErrUnavailable},
 	} {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			term, err := l.term(tt.idx)
 			require.Equal(t, tt.term, term)
 			require.Equal(t, tt.err, err)
@@ -795,7 +778,7 @@ func TestTermWithUnstableSnapshot(t *testing.T) {
 	l := newLog(storage, discardLogger)
 	l.restore(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: unstablesnapi, Term: 1}})
 
-	for i, tt := range []struct {
+	for _, tt := range []struct {
 		idx  uint64
 		term uint64
 		err  error
@@ -810,7 +793,7 @@ func TestTermWithUnstableSnapshot(t *testing.T) {
 		// the log beyond the unstable snapshot is empty
 		{idx: unstablesnapi + 1, err: ErrUnavailable},
 	} {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			term, err := l.term(tt.idx)
 			require.Equal(t, tt.term, term)
 			require.Equal(t, tt.err, err)
