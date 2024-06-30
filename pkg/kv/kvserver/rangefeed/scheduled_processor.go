@@ -342,16 +342,21 @@ func (p *ScheduledProcessor) Register(
 		// once they observe the first checkpoint event.
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
+		r.stream.RegisterRangefeedCleanUp(func() {
+			if alreadyDisconnected := r.cleanUp(); !alreadyDisconnected {
+				if p.unregisterClient(&r) {
+					// unreg callback is set by replica to tear down processors that have
+					// zero registrations left and to update event filters.
+					if r.unreg != nil {
+						r.unreg()
+					}
+				}
+			}
+		})
+
 		// Run an output loop for the registry.
 		runOutputLoop := func(ctx context.Context) {
 			r.runOutputLoop(ctx, p.RangeID)
-			if p.unregisterClient(&r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if r.unreg != nil {
-					r.unreg()
-				}
-			}
 		}
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {

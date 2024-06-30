@@ -35,9 +35,13 @@ type StreamMuxer struct {
 	activeStreams  sync.Map
 	notifyMuxError chan struct{}
 
+	rangefeedCleanUps sync.Map
+	notifyCleanUp     chan struct{}
+
 	mu struct {
 		syncutil.Mutex
-		muxErrors []*kvpb.MuxRangeFeedEvent
+		muxErrors  []*kvpb.MuxRangeFeedEvent
+		cleanUpIDs []int64
 	}
 }
 
@@ -86,6 +90,21 @@ func (sm *StreamMuxer) appendMuxError(e *kvpb.MuxRangeFeedEvent) {
 	}
 }
 
+func (sm *StreamMuxer) appendCleanUp(streamID int64) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.mu.cleanUpIDs = append(sm.mu.cleanUpIDs, streamID)
+
+	select {
+	case sm.notifyCleanUp <- struct{}{}:
+	default:
+	}
+}
+
+func (sm *StreamMuxer) RegisterRangefeedCleanUp(streamID int64, cleanUp func()) {
+	sm.rangefeedCleanUps.Store(streamID, cleanUp)
+}
+
 // Safe to call repeatedly for the same stream. Subsequent errors are ignored.
 func (sm *StreamMuxer) DisconnectRangefeedWithError(
 	streamID int64, rangeID roachpb.RangeID, err *kvpb.Error,
@@ -105,6 +124,44 @@ func (sm *StreamMuxer) DisconnectRangefeedWithError(
 		sm.appendMuxError(ev)
 		sm.metrics.DecrementRangefeedCounter()
 	}
+
+	// Note that we may repeatedly append clean up for the same id. We will rely
+	// on rangefeedCleanUps to dedup during Run.
+	if _, ok := sm.rangefeedCleanUps.Load(streamID); ok {
+		sm.appendCleanUp(streamID)
+	}
+}
+
+func (sm *StreamMuxer) DisconnectAllWithErr(err *kvpb.Error) {
+	sm.activeStreams.Range(func(k, v interface{}) bool {
+		if streamID, ok := k.(int64); ok {
+			if info, ok := v.(*streamInfo); ok {
+				info.cancel()
+				// If err is nil, we do not send an error to the stream since the stream
+				// is likely broken.
+				if err != nil {
+					ev := &kvpb.MuxRangeFeedEvent{
+						StreamID: streamID,
+						RangeID:  info.rangeID,
+					}
+					ev.SetValue(&kvpb.RangeFeedError{
+						Error: *err,
+					})
+					_ = sm.sender.Send(ev) // Shutting down anyway, ignore error.
+				}
+			}
+		}
+		sm.metrics.DecrementRangefeedCounter()
+		sm.activeStreams.Delete(k)
+		return true
+	})
+	sm.rangefeedCleanUps.Range(func(k, v interface{}) bool {
+		if cleanUp, ok := v.(func()); ok {
+			cleanUp()
+		}
+		sm.rangefeedCleanUps.Delete(k)
+		return true
+	})
 }
 
 func (sm *StreamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
@@ -115,6 +172,14 @@ func (sm *StreamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	return toSend
 }
 
+func (sm *StreamMuxer) detachCleanUpIDs() []int64 {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	toCleanUp := sm.mu.cleanUpIDs
+	sm.mu.cleanUpIDs = nil
+	return toCleanUp
+}
+
 func (sm *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 	for {
 		select {
@@ -122,12 +187,26 @@ func (sm *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 			toSend := sm.detachMuxErrors()
 			for _, clientErr := range toSend {
 				if err := sm.sender.Send(clientErr); err != nil {
+					sm.DisconnectAllWithErr(nil)
 					return
 				}
 			}
+		case <-sm.notifyCleanUp:
+			toCleanUp := sm.detachCleanUpIDs()
+			for _, streamID := range toCleanUp {
+				if cleanUp, ok := sm.rangefeedCleanUps.LoadAndDelete(streamID); ok {
+					if f, ok := cleanUp.(func()); ok {
+						f()
+					}
+				}
+			}
 		case <-ctx.Done():
+			// ctx should be canceled if the underlying stream is broken.
+			sm.DisconnectAllWithErr(kvpb.NewError(ctx.Err()))
 			return
 		case <-stopper.ShouldQuiesce():
+			// TODO(wenyihu6): should we cancel context here?
+			sm.DisconnectAllWithErr(nil)
 			return
 		}
 	}
