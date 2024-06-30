@@ -95,6 +95,8 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 
 	p, h, stopper := newTestProcessor(b, withSpan(span), withBudget(budget), withChanCap(b.N),
 		withEventTimeout(time.Hour), withProcType(opts.procType))
+	muxer, cleanUp := NewTestCleanUpOnlyStreamMuxer(stopper)
+	defer cleanUp()
 	defer stopper.Stop(ctx)
 
 	// Add registrations.
@@ -106,7 +108,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		// withFiltering does not matter for these benchmarks because doesn't fetch
 		// extra data.
 		const withFiltering = false
-		streams[i] = &noopStream{ctx: ctx, done: make(chan *kvpb.Error, 1)}
+		streams[i] = &noopStream{ctx: ctx, done: make(chan *kvpb.Error, 1), muxer: muxer, streamID: int64(i)}
 		ok, _ := p.Register(span, hlc.MinTimestamp, nil,
 			withDiff, withFiltering, false, /* withOmitRemote */
 			streams[i], nil)
@@ -192,9 +194,11 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 // noopStream is a stream that does nothing, except count events.
 type noopStream struct {
 	*kvpb.TestStream
-	ctx    context.Context
-	events int
-	done   chan *kvpb.Error
+	streamID int64
+	ctx      context.Context
+	events   int
+	done     chan *kvpb.Error
+	muxer    *TestCleanUpOnlyStreamMuxer
 }
 
 func (s *noopStream) Context() context.Context {
@@ -208,6 +212,11 @@ func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
 
 func (s *noopStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
+	s.muxer.DisconnectRangefeedWithError(s.streamID)
+}
+
+func (s *noopStream) RegisterRangefeedCleanUp(f func()) {
+	s.muxer.RegisterRangefeedCleanUp(s.streamID, f)
 }
 
 func (s *noopStream) WaitForErr(b *testing.B) error {

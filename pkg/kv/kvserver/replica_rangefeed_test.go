@@ -97,6 +97,9 @@ func (s *testStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
 }
 
+// Noop since this test doesn't care about cleanup.
+func (s *testStream) RegisterRangefeedCleanUp(func()) {}
+
 func (s *testStream) WaitForErr(t *testing.T) error {
 	select {
 	case err := <-s.done:

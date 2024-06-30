@@ -9,6 +9,7 @@ go_library(
         "filter.go",
         "metrics.go",
         "processor.go",
+        "processor_test_helper.go",
         "registry.go",
         "resolved_timestamp.go",
         "scheduled_processor.go",
@@ -49,6 +50,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
