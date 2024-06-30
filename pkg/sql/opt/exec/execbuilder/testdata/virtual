@@ -529,3 +529,15 @@ vectorized: true
 
 statement ok
 RESET disallow_full_table_scans;
+
+# Verify that we're not fooling ourselves by showing that we can use a virtual
+# index when we actually can't (#108317).
+query T
+EXPLAIN SELECT * FROM crdb_internal.system_jobs WHERE id > 100;
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  table: system_jobs@primary
+  virtual table filter
