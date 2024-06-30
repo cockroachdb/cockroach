@@ -114,30 +114,31 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 	if !ok {
 		return false
 	}
-
 	// Fast-forward to the first mismatching or missing entry.
 	// NB: prev.index <= match.index <= a.lastIndex(), so the sub-slicing is safe.
 	a.entries = a.entries[match.index-a.prev.index:]
 	a.prev = match
-
-	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
-	// bookkeeping in the unstable structure.
-	return l.append(a.entries...)
+	return l.append(a)
 }
 
 // append conditionally appends the given log slice to the log. The log is
 // truncated to end at a.lastIndex() if any entry is overwritten.
 //
-// TODO(pav-kv): return false if the slice can not be appended because it fails
-// the prev term check, or is out of bounds.
-func (l *raftLog) append(ents ...pb.Entry) bool {
-	if len(ents) == 0 {
+// Returns false if the slice can not be appended because it fails the prev term
+// check, or is out of bounds.
+func (l *raftLog) append(a logSlice) bool {
+	if !l.matchTerm(a.prev) {
+		return false
+	}
+	if len(a.entries) == 0 {
 		return true
 	}
-	if first := ents[0].Index; first <= l.committed {
+	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
 	}
-	l.unstable.truncateAndAppend(ents)
+	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
+	// bookkeeping in the unstable structure.
+	l.unstable.truncateAndAppend(a.entries)
 	return true
 }
 
