@@ -202,6 +202,7 @@ type peerMetrics struct {
 	// will continue to add to the parent!
 	//
 	// See TestMetricsRelease.
+	release func()
 
 	// 1 on first heartbeat success (via reportHealthy), reset after
 	// runHeartbeatUntilFailure returns.
@@ -242,7 +243,7 @@ type peerMetrics struct {
 
 func (m *Metrics) acquire(k peerKey) peerMetrics {
 	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String()}
-	return peerMetrics{
+	pm := peerMetrics{
 		ConnectionHealthy:      m.ConnectionHealthy.AddChild(labelVals...),
 		ConnectionUnhealthy:    m.ConnectionUnhealthy.AddChild(labelVals...),
 		ConnectionInactive:     m.ConnectionInactive.AddChild(labelVals...),
@@ -259,31 +260,32 @@ func (m *Metrics) acquire(k peerKey) peerMetrics {
 		// and operates on a ~60s decay rate.
 		roundTripLatency: &ThreadSafeMovingAverage{ma: &ewma.SimpleEWMA{}},
 	}
-}
+	pm.release = func() {
+		// All the gauges should be zero now, or the aggregate will be off forever.
+		// Note that this isn't true for counters, as the aggregate *should* track
+		// the count of all children that ever existed, even if they have been
+		// released. (Releasing a peer doesn't "undo" past heartbeats).
+		pm.ConnectionHealthy.Update(0)
+		pm.ConnectionUnhealthy.Update(0)
+		pm.ConnectionInactive.Update(0)
+		pm.ConnectionHealthyFor.Update(0)
+		pm.ConnectionUnhealthyFor.Update(0)
+		pm.AvgRoundTripLatency.Update(0)
+		pm.roundTripLatency.Set(0)
+		pm.ConnectionConnected.Update(0)
 
-func (pm *peerMetrics) release() {
-	// All the gauges should be zero now, or the aggregate will be off forever.
-	// Note that this isn't true for counters, as the aggregate *should* track
-	// the count of all children that ever existed, even if they have been
-	// released. (Releasing a peer doesn't "undo" past heartbeats).
-	pm.ConnectionHealthy.Update(0)
-	pm.ConnectionUnhealthy.Update(0)
-	pm.ConnectionInactive.Update(0)
-	pm.ConnectionHealthyFor.Update(0)
-	pm.ConnectionUnhealthyFor.Update(0)
-	pm.AvgRoundTripLatency.Update(0)
-	pm.roundTripLatency.Set(0)
-	pm.ConnectionConnected.Update(0)
+		pm.ConnectionHealthy.Unlink()
+		pm.ConnectionUnhealthy.Unlink()
+		pm.ConnectionInactive.Unlink()
+		pm.ConnectionHealthyFor.Unlink()
+		pm.ConnectionUnhealthyFor.Unlink()
+		pm.ConnectionHeartbeats.Unlink()
+		pm.ConnectionFailures.Unlink()
+		pm.AvgRoundTripLatency.Unlink()
+		pm.ConnectionConnected.Unlink()
+		pm.ConnectionBytesSent.Unlink()
+		pm.ConnectionBytesRecv.Unlink()
+	}
 
-	pm.ConnectionHealthy.Unlink()
-	pm.ConnectionUnhealthy.Unlink()
-	pm.ConnectionInactive.Unlink()
-	pm.ConnectionHealthyFor.Unlink()
-	pm.ConnectionUnhealthyFor.Unlink()
-	pm.ConnectionHeartbeats.Unlink()
-	pm.ConnectionFailures.Unlink()
-	pm.AvgRoundTripLatency.Unlink()
-	pm.ConnectionConnected.Unlink()
-	pm.ConnectionBytesSent.Unlink()
-	pm.ConnectionBytesRecv.Unlink()
+	return pm
 }
