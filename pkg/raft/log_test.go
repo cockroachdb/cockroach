@@ -205,7 +205,7 @@ func TestAppend(t *testing.T) {
 //  2. If the request is accepted, the slice is appended to the log, and all the
 //     entries at higher indices are truncated.
 func TestLogMaybeAppend(t *testing.T) {
-	init := entryID{}.terms(1, 2, 3)
+	init := entryID{}.append(1, 2, 3)
 	last := init.lastEntryID()
 	commit := uint64(1)
 
@@ -217,24 +217,24 @@ func TestLogMaybeAppend(t *testing.T) {
 	}{
 		// rejected appends
 		{
-			app: entryID{term: 2, index: 3}.terms(4), want: init.entries,
+			app: entryID{term: 2, index: 3}.append(4), want: init.entries,
 			notOk: true, // term mismatch
 		}, {
-			app: entryID{term: 3, index: 4}.terms(4), want: init.entries,
+			app: entryID{term: 3, index: 4}.append(4), want: init.entries,
 			notOk: true, // out of bounds
 		},
 		// appends at the end of the log
-		{app: last.terms(), want: init.entries},
-		{app: last.terms(4), want: index(1).terms(1, 2, 3, 4)},
-		{app: last.terms(4, 4), want: index(1).terms(1, 2, 3, 4, 4)},
+		{app: last.append(), want: init.entries},
+		{app: last.append(4), want: index(1).terms(1, 2, 3, 4)},
+		{app: last.append(4, 4), want: index(1).terms(1, 2, 3, 4, 4)},
 		// appends from before the end of the log
 		{app: logSlice{}, want: init.entries},
-		{app: entryID{term: 1, index: 1}.terms(4), want: index(1).terms(1, 4)},
-		{app: entryID{term: 1, index: 1}.terms(4, 4), want: index(1).terms(1, 4, 4)},
-		{app: entryID{term: 2, index: 2}.terms(4), want: index(1).terms(1, 2, 4)},
+		{app: entryID{term: 1, index: 1}.append(4), want: index(1).terms(1, 4)},
+		{app: entryID{term: 1, index: 1}.append(4, 4), want: index(1).terms(1, 4, 4)},
+		{app: entryID{term: 2, index: 2}.append(4), want: index(1).terms(1, 2, 4)},
 		// panics
 		{
-			app:   entryID{}.terms(4),
+			app:   entryID{}.append(4),
 			panic: true, // conflict with existing committed entry
 		},
 	} {
@@ -979,10 +979,10 @@ func (i index) termRange(from, to uint64) []pb.Entry {
 	return entries
 }
 
-// terms generates a valid logSlice of entries appended after the given entry
+// append generates a valid logSlice of entries appended after the given entry
 // ID, at indices [id.index+1, id.index+len(terms)], with the given terms of
 // each entry. Terms must be >= id.term, and non-decreasing.
-func (id entryID) terms(terms ...uint64) logSlice {
+func (id entryID) append(terms ...uint64) logSlice {
 	term := id.term
 	if ln := len(terms); ln != 0 {
 		term = terms[ln-1]
