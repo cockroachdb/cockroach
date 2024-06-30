@@ -1776,19 +1776,26 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 func (r *raft) handleSnapshot(m pb.Message) {
 	// MsgSnap messages should always carry a non-nil Snapshot, but err on the
 	// side of safety and treat a nil Snapshot as a zero-valued Snapshot.
-	var s pb.Snapshot
+	s := snapshot{term: m.Term}
 	if m.Snapshot != nil {
-		s = *m.Snapshot
+		s.snap = *m.Snapshot
 	}
-	sindex, sterm := s.Metadata.Index, s.Metadata.Term
+	if err := s.valid(); err != nil {
+		// TODO(pav-kv): add a special kind of logger.Errorf that panics in tests,
+		// but logs an error in prod. We want to eliminate all such errors in tests.
+		r.logger.Errorf("%x received an invalid MsgSnap: %v", r.id, err)
+		return
+	}
+
+	last := s.lastEntryID()
 	if r.restore(s) {
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
-			r.id, r.raftLog.committed, sindex, sterm)
+			r.id, r.raftLog.committed, last.index, last.term)
 		r.accTerm = m.Term // our log is now consistent with the leader
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex()})
 	} else {
 		r.logger.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
-			r.id, r.raftLog.committed, sindex, sterm)
+			r.id, r.raftLog.committed, last.index, last.term)
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed})
 	}
 }
@@ -1796,8 +1803,9 @@ func (r *raft) handleSnapshot(m pb.Message) {
 // restore recovers the state machine from a snapshot. It restores the log and the
 // configuration of state machine. If this method returns false, the snapshot was
 // ignored, either because it was obsolete or because of an error.
-func (r *raft) restore(s pb.Snapshot) bool {
-	if s.Metadata.Index <= r.raftLog.committed {
+func (r *raft) restore(s snapshot) bool {
+	id := s.lastEntryID()
+	if id.index <= r.raftLog.committed {
 		return false
 	}
 	if r.state != StateFollower {
@@ -1815,7 +1823,7 @@ func (r *raft) restore(s pb.Snapshot) bool {
 	// config. This shouldn't ever happen (at the time of writing) but lots of
 	// code here and there assumes that r.id is in the progress tracker.
 	found := false
-	cs := s.Metadata.ConfState
+	cs := s.snap.Metadata.ConfState
 
 	for _, set := range [][]uint64{
 		cs.Voters,
@@ -1844,17 +1852,16 @@ func (r *raft) restore(s pb.Snapshot) bool {
 
 	// Now go ahead and actually restore.
 
-	id := entryID{term: s.Metadata.Term, index: s.Metadata.Index}
 	if r.raftLog.matchTerm(id) {
 		// TODO(pav-kv): can print %+v of the id, but it will change the format.
 		last := r.raftLog.lastEntryID()
 		r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] fast-forwarded commit to snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, last.index, last.term, id.index, id.term)
-		r.raftLog.commitTo(s.Metadata.Index)
+		r.raftLog.commitTo(id.index) // TODO(pav-kv): this should use snapshot.mark().
 		return false
 	}
 
-	r.raftLog.restore(s)
+	r.raftLog.restore(s.snap) // TODO(pav-kv): pass the snapshot type down.
 
 	// Reset the configuration and add the (potentially updated) peers in anew.
 	r.trk = tracker.MakeProgressTracker(r.trk.MaxInflight, r.trk.MaxInflightBytes)
