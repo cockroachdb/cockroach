@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -28,9 +29,22 @@ import (
 
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
 // OutputBuilder flags are taken into account.
-func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
-	return emitInternal(ctx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
+func Emit(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	plan *Plan,
+	ob *OutputBuilder,
+	spanFormatFn SpanFormatFn,
+) error {
+	return emitInternal(ctx, evalCtx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
 }
+
+// MaybeAdjustVirtualIndexScan is injected from the sql package.
+//
+// This function clarifies usage of the virtual indexes for EXPLAIN purposes.
+var MaybeAdjustVirtualIndexScan func(
+	ctx context.Context, evalCtx *eval.Context, index cat.Index, params exec.ScanParams,
+) (_ cat.Index, _ exec.ScanParams, extraAttribute string)
 
 // joinIndexNames emits a string of index names on table 'table' as specified in
 // 'ords', with each name separated by 'sep'.
@@ -51,6 +65,7 @@ func joinIndexNames(table cat.Table, ords cat.IndexOrdinals, sep string) string 
 // "id" of the FK constraint that we construct as OriginTableID || Name.
 func emitInternal(
 	ctx context.Context,
+	evalCtx *eval.Context,
 	plan *Plan,
 	ob *OutputBuilder,
 	spanFormatFn SpanFormatFn,
@@ -73,7 +88,7 @@ func emitInternal(
 			return err
 		}
 		ob.EnterNode(name, columns, ordering)
-		if err := e.emitNodeAttributes(n); err != nil {
+		if err := e.emitNodeAttributes(ctx, evalCtx, n); err != nil {
 			return err
 		}
 		for _, c := range n.children {
@@ -153,7 +168,7 @@ func emitInternal(
 			} else {
 				visitedFKsByCascades[fkID] = struct{}{}
 				defer delete(visitedFKsByCascades, fkID)
-				if err = emitInternal(ctx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
+				if err = emitInternal(ctx, evalCtx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
 					return err
 				}
 			}
@@ -445,7 +460,7 @@ func omitStats(n *Node) bool {
 	return false
 }
 
-func (e *emitter) emitNodeAttributes(n *Node) error {
+func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context, n *Node) error {
 	var actualRowCount uint64
 	var hasActualRowCount bool
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
@@ -640,10 +655,17 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 					"consider running 'ANALYZE %[1]s'", a.Table.Name(),
 			))
 		}
+		var extraAttribute string
+		if a.Table.IsVirtualTable() && MaybeAdjustVirtualIndexScan != nil {
+			a.Index, a.Params, extraAttribute = MaybeAdjustVirtualIndexScan(ctx, evalCtx, a.Index, a.Params)
+		}
 		e.emitTableAndIndex("table", a.Table, a.Index, suffix)
 		// Omit spans for virtual tables, unless we actually have a constraint.
 		if a.Table != nil && !(a.Table.IsVirtualTable() && a.Params.IndexConstraint == nil) {
 			e.emitSpans("spans", a.Table, a.Index, a.Params)
+		}
+		if extraAttribute != "" {
+			ob.Attr(extraAttribute, "")
 		}
 
 		if a.Params.HardLimit > 0 {

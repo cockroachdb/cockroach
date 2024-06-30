@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -156,7 +157,7 @@ func (f *PlanGistFactory) PlanGist() PlanGist {
 
 // DecodePlanGistToRows converts a gist to a logical plan and returns the rows.
 func DecodePlanGistToRows(
-	ctx context.Context, gist string, catalog cat.Catalog,
+	ctx context.Context, evalCtx *eval.Context, gist string, catalog cat.Catalog,
 ) (_ []string, retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -180,7 +181,7 @@ func DecodePlanGistToRows(
 	if err != nil {
 		return nil, err
 	}
-	err = Emit(ctx, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
+	err = Emit(ctx, evalCtx, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
 	if err != nil {
 		return nil, err
 	}
