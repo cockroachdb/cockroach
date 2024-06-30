@@ -57,5 +57,6 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//constraints",
     ],
 )
