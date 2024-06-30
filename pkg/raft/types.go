@@ -38,6 +38,23 @@ func pbEntryID(entry *pb.Entry) entryID {
 	return entryID{term: entry.Term, index: entry.Index}
 }
 
+// logMark is a position in a log consistent with the leader at a specific term.
+//
+// This is different from entryID. The entryID ties an entry to the term of the
+// leader who proposed it, while the logMark identifies an entry in a particular
+// leader's coordinate system. Different leaders can have different entries at a
+// particular index.
+//
+// Generally, all entries in raft form a tree (branching when a new leader
+// starts proposing entries at its term). A logMark identifies a position in a
+// particular branch of this tree.
+type logMark struct {
+	// term is the term of the leader whose log is considered.
+	term uint64
+	// index is the position in this leader's log.
+	index uint64
+}
+
 // logSlice describes a correct slice of a raft log.
 //
 // Every log slice is considered in a context of a specific leader term. This
@@ -89,6 +106,11 @@ func (s logSlice) lastEntryID() entryID {
 		return pbEntryID(&s.entries[ln-1])
 	}
 	return s.prev
+}
+
+// mark returns the logMark identifying the end of this logSlice.
+func (s logSlice) mark() logMark {
+	return logMark{term: s.term, index: s.lastIndex()}
 }
 
 // termAt returns the term of the entry at the given index.
