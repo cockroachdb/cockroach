@@ -24,12 +24,13 @@ import (
 )
 
 var (
-	testingSnap = pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{
-			Index:     11, // magic number
-			Term:      11, // magic number
+	testingSnap = snapshot{
+		term: 11,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{
+			Index:     11,
+			Term:      11,
 			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
-		},
+		}},
 	}
 )
 
