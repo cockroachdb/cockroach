@@ -50,6 +50,7 @@ func NewStreamMuxer(sender severStreamSender, metrics rangefeedMetricsRecorder) 
 		sender:         sender,
 		metrics:        metrics,
 		notifyMuxError: make(chan struct{}, 1),
+		notifyCleanUp:  make(chan struct{}, 1),
 	}
 }
 

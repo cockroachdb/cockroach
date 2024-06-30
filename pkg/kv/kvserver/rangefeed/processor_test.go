@@ -1086,7 +1086,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 			for firstIdx := range firstC {
 				// For each index, create a new registration. The first
 				// operation is should see is firstIdx.
-				s := newTestSingleFeedStream(firstIdx, streamMuxer, serverStream)
+				s := newTestSingleFeedStream(id, streamMuxer, serverStream)
 				regs[id] = firstIdx
 				p.Register(h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, s, func() {})

@@ -293,7 +293,7 @@ func (r *registration) cleanUp() (alreadyDisconnected bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.disconnected {
-		return false
+		return true
 	}
 
 	if r.mu.catchUpIter != nil {
@@ -304,7 +304,7 @@ func (r *registration) cleanUp() (alreadyDisconnected bool) {
 		r.mu.outputLoopCancelFn()
 	}
 	r.mu.disconnected = true
-	return true
+	return false
 }
 
 // disconnect cancels the output loop context for the registration and passes an

@@ -74,7 +74,7 @@ func (s *testServerStream) eventsSentById(streamID int64) []*kvpb.RangeFeedEvent
 
 func (s *testServerStream) nonErrorEventsSentById(streamID int64) []*kvpb.RangeFeedEvent {
 	return s.filterEventsSentById(streamID, func(e *kvpb.MuxRangeFeedEvent) bool {
-		return e.Error != nil
+		return e.Error == nil
 	})
 }
 
