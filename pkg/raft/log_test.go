@@ -22,6 +22,7 @@ import (
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/constraints"
 )
 
 func TestMatch(t *testing.T) {
@@ -263,28 +264,29 @@ func TestLogMaybeAppend(t *testing.T) {
 	}
 }
 
-// TestCompactionSideEffects ensures that all the log related functionality works correctly after
-// a compaction.
+// TestCompactionSideEffects ensures that all the log related functionality
+// works correctly after a compaction.
 func TestCompactionSideEffects(t *testing.T) {
 	// Populate the log with 1000 entries; 750 in stable storage and 250 in unstable.
-	lastIndex := uint64(1000)
-	unstableIndex := uint64(750)
+	stable := entryID{}.append(intRange[uint64](1, 751)...)
+	unstable := stable.lastEntryID().append(intRange[uint64](751, 1001)...)
+
 	storage := NewMemoryStorage()
-	require.NoError(t, storage.Append(index(1).termRange(1, unstableIndex+1)))
+	require.NoError(t, storage.SetHardState(pb.HardState{Term: stable.term}))
+	require.NoError(t, storage.Append(stable.entries))
 	raftLog := newLog(storage, discardLogger)
-	raftLog.append(index(unstableIndex+1).termRange(unstableIndex+1, lastIndex+1)...)
+	raftLog.append(unstable.entries...)
 
 	require.True(t, raftLog.maybeCommit(raftLog.lastEntryID()))
 	raftLog.appliedTo(raftLog.committed, 0 /* size */)
 
 	offset := uint64(500)
 	require.NoError(t, storage.Compact(offset))
-	require.Equal(t, lastIndex, raftLog.lastIndex())
+	require.Equal(t, unstable.lastEntryID(), raftLog.lastEntryID())
 
 	for j := offset; j <= raftLog.lastIndex(); j++ {
 		require.Equal(t, j, mustTerm(raftLog.term(j)))
 	}
-
 	for j := offset; j <= raftLog.lastIndex(); j++ {
 		require.True(t, raftLog.matchTerm(entryID{term: j, index: j}))
 	}
@@ -293,13 +295,13 @@ func TestCompactionSideEffects(t *testing.T) {
 	require.Equal(t, 250, len(unstableEnts))
 	require.Equal(t, uint64(751), unstableEnts[0].Index)
 
-	prev := raftLog.lastIndex()
-	raftLog.append(pb.Entry{Index: raftLog.lastIndex() + 1, Term: raftLog.lastIndex() + 1})
-	require.Equal(t, prev+1, raftLog.lastIndex())
+	last := raftLog.lastEntryID()
+	raftLog.append(pb.Entry{Term: last.term + 1, Index: last.index + 1})
+	require.Equal(t, last.index+1, raftLog.lastIndex())
 
-	ents, err := raftLog.entries(raftLog.lastIndex(), noLimit)
-	require.NoError(t, err)
-	require.Equal(t, 1, len(ents))
+	want := append(stable.entries[offset:], unstable.entries...)
+	want = append(want, pb.Entry{Term: last.term + 1, Index: last.index + 1})
+	require.Equal(t, want, raftLog.allEntries())
 }
 
 func TestHasNextCommittedEnts(t *testing.T) {
@@ -969,14 +971,9 @@ func (i index) terms(terms ...uint64) []pb.Entry {
 
 // termRange generates a slice of to-from entries, at consecutive indices
 // starting from i, and consecutive terms in [from, to).
+// TODO(pav-kv): remove.
 func (i index) termRange(from, to uint64) []pb.Entry {
-	index := uint64(i)
-	entries := make([]pb.Entry, 0, to-from)
-	for term := from; term < to; term++ {
-		entries = append(entries, pb.Entry{Term: term, Index: index})
-		index++
-	}
-	return entries
+	return i.terms(intRange(from, to)...)
 }
 
 // append generates a valid logSlice of entries appended after the given entry
@@ -996,4 +993,13 @@ func (id entryID) append(terms ...uint64) logSlice {
 		panic(err)
 	}
 	return ls
+}
+
+// intRange returns a slice containing integers in [from, to) interval.
+func intRange[T constraints.Integer](from, to T) []T {
+	slice := make([]T, to-from)
+	for i := range slice {
+		slice[i] = from + T(i)
+	}
+	return slice
 }
