@@ -309,8 +309,9 @@ func TestCompactionSideEffects(t *testing.T) {
 }
 
 func TestHasNextCommittedEnts(t *testing.T) {
-	snap := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
+	snap := snapshot{
+		term: 1,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: 1, Index: 3}},
 	}
 	ents := index(4).terms(1, 1, 1)
 	tests := []struct {
@@ -342,7 +343,7 @@ func TestHasNextCommittedEnts(t *testing.T) {
 	for i, tt := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			storage := NewMemoryStorage()
-			require.NoError(t, storage.ApplySnapshot(snap))
+			require.NoError(t, storage.ApplySnapshot(snap.snap))
 			require.NoError(t, storage.Append(ents[:1]))
 
 			raftLog := newLog(storage, raftLogger)
@@ -354,7 +355,7 @@ func TestHasNextCommittedEnts(t *testing.T) {
 			raftLog.applyingEntsPaused = tt.paused
 			if tt.snap {
 				newSnap := snap
-				newSnap.Metadata.Index++
+				newSnap.snap.Metadata.Index++
 				raftLog.restore(newSnap)
 			}
 			require.Equal(t, tt.whasNext, raftLog.hasNextCommittedEnts(tt.allowUnstable))
@@ -363,8 +364,9 @@ func TestHasNextCommittedEnts(t *testing.T) {
 }
 
 func TestNextCommittedEnts(t *testing.T) {
-	snap := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
+	snap := snapshot{
+		term: 1,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: 1, Index: 3}},
 	}
 	ents := index(4).terms(1, 1, 1)
 	tests := []struct {
@@ -396,7 +398,7 @@ func TestNextCommittedEnts(t *testing.T) {
 	for i, tt := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			storage := NewMemoryStorage()
-			require.NoError(t, storage.ApplySnapshot(snap))
+			require.NoError(t, storage.ApplySnapshot(snap.snap))
 			require.NoError(t, storage.Append(ents[:1]))
 
 			raftLog := newLog(storage, raftLogger)
@@ -408,7 +410,7 @@ func TestNextCommittedEnts(t *testing.T) {
 			raftLog.applyingEntsPaused = tt.paused
 			if tt.snap {
 				newSnap := snap
-				newSnap.Metadata.Index++
+				newSnap.snap.Metadata.Index++
 				raftLog.restore(newSnap)
 			}
 			require.Equal(t, tt.wents, raftLog.nextCommittedEnts(tt.allowUnstable))
@@ -793,7 +795,10 @@ func TestTermWithUnstableSnapshot(t *testing.T) {
 	storage := NewMemoryStorage()
 	storage.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: storagesnapi, Term: 1}})
 	l := newLog(storage, raftLogger)
-	l.restore(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: unstablesnapi, Term: 1}})
+	l.restore(snapshot{
+		term: 1,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: unstablesnapi, Term: 1}},
+	})
 
 	for i, tt := range []struct {
 		idx  uint64
