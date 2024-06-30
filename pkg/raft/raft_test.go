@@ -1167,6 +1167,7 @@ func TestHandleHeartbeat(t *testing.T) {
 // TestHandleHeartbeatResp ensures that we re-send log entries when we get a heartbeat response.
 func TestHandleHeartbeatResp(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
+	require.NoError(t, storage.SetHardState(pb.HardState{Term: 3}))
 	require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
 	sm := newTestRaft(1, 5, 1, storage)
 	sm.becomeCandidate()
@@ -2027,7 +2028,7 @@ func TestRecvMsgBeat(t *testing.T) {
 }
 
 func TestLeaderIncreaseNext(t *testing.T) {
-	previousEnts := index(1).terms(1, 2, 3)
+	init := entryID{}.append(1, 2, 3)
 	tests := []struct {
 		// progress
 		state tracker.StateType
@@ -2037,14 +2038,15 @@ func TestLeaderIncreaseNext(t *testing.T) {
 	}{
 		// state replicate, optimistically increase next
 		// previous entries + noop entry + propose + 1
-		{tracker.StateReplicate, 2, uint64(len(previousEnts) + 1 + 1 + 1)},
+		{tracker.StateReplicate, 2, uint64(len(init.entries) + 1 + 1 + 1)},
 		// state probe, not optimistically increase next
 		{tracker.StateProbe, 2, 2},
 	}
 
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
-		require.True(t, sm.raftLog.append(previousEnts...))
+		sm.becomeFollower(init.term, None)
+		require.True(t, sm.raftLog.append(init))
 		sm.becomeCandidate()
 		sm.becomeLeader()
 		sm.trk.Progress[2].State = tt.state
@@ -2136,6 +2138,7 @@ func TestSendAppendForProgressSnapshot(t *testing.T) {
 func TestRecvMsgUnreachable(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	s := newTestMemoryStorage(withPeers(1, 2))
+	s.SetHardState(pb.HardState{Term: 3})
 	s.Append(previousEnts)
 	r := newTestRaft(1, 10, 1, s)
 	r.becomeCandidate()
@@ -2316,11 +2319,11 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 }
 
 func TestRestoreIgnoreSnapshot(t *testing.T) {
-	previousEnts := index(1).terms(1, 1, 1)
+	init := entryID{}.append(1, 1, 1)
 	commit := uint64(1)
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
-	require.True(t, sm.raftLog.append(previousEnts...))
+	require.True(t, sm.raftLog.append(init))
 	sm.raftLog.commitTo(commit)
 
 	s := pb.Snapshot{
@@ -2352,6 +2355,7 @@ func TestProvideSnap(t *testing.T) {
 	}
 	storage := newTestMemoryStorage(withPeers(1))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(s.Metadata.Term, None)
 	sm.restore(s)
 
 	sm.becomeCandidate()
@@ -2378,6 +2382,7 @@ func TestIgnoreProvidingSnap(t *testing.T) {
 	}
 	storage := newTestMemoryStorage(withPeers(1))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(s.Metadata.Term, None)
 	sm.restore(s)
 
 	sm.becomeCandidate()
