@@ -70,6 +70,7 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/rangefeed",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

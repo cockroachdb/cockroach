@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -446,18 +447,24 @@ func TestReplicaCircuitBreaker_ResolveIntent_QuorumLoss(t *testing.T) {
 }
 
 type dummyStream struct {
-	name string
-	ctx  context.Context
-	recv chan *kvpb.RangeFeedEvent
-	done chan *kvpb.Error
+	streamID int64
+	name     string
+	ctx      context.Context
+	recv     chan *kvpb.RangeFeedEvent
+	done     chan *kvpb.Error
+	muxer    *rangefeed.TestCleanUpOnlyStreamMuxer
 }
 
-func newDummyStream(ctx context.Context, name string) *dummyStream {
+func newDummyStream(
+	streamID int64, ctx context.Context, name string, muxer *rangefeed.TestCleanUpOnlyStreamMuxer,
+) *dummyStream {
 	return &dummyStream{
-		ctx:  ctx,
-		name: name,
-		recv: make(chan *kvpb.RangeFeedEvent),
-		done: make(chan *kvpb.Error, 1),
+		streamID: streamID,
+		ctx:      ctx,
+		name:     name,
+		recv:     make(chan *kvpb.RangeFeedEvent),
+		done:     make(chan *kvpb.Error, 1),
+		muxer:    muxer,
 	}
 }
 
@@ -480,6 +487,11 @@ func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 
 func (s *dummyStream) Disconnect(err *kvpb.Error) {
 	s.done <- err
+	s.muxer.DisconnectRangefeedWithError(s.streamID)
+}
+
+func (s *dummyStream) RegisterRangefeedCleanUp(f func()) {
+	s.muxer.RegisterRangefeedCleanUp(s.streamID, f)
 }
 
 func waitReplicaRangeFeed(
@@ -515,7 +527,6 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	tc := setupCircuitBreakerTest(t)
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
 
 	require.NoError(t, tc.Write(n1))
 	desc := tc.LookupRangeOrFatal(t, tc.ScratchRange(t))
@@ -524,8 +535,11 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
+	muxer, cleanUp := rangefeed.NewTestCleanUpOnlyStreamMuxer(tc.Stopper())
+	defer cleanUp()
+	defer tc.Stopper().Stop(ctx)
 	defer cancel()
-	stream1 := newDummyStream(ctx, "rangefeed1")
+	stream1 := newDummyStream(1, ctx, "rangefeed1", muxer)
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream1", func(ctx context.Context) {
 		err := waitReplicaRangeFeed(ctx, tc.repls[0].Replica, args, stream1)
 		if ctx.Err() != nil {
@@ -579,7 +593,7 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 
 	// Start another stream during the "outage" to make sure it isn't rejected by
 	// the breaker.
-	stream2 := newDummyStream(ctx, "rangefeed2")
+	stream2 := newDummyStream(2, ctx, "rangefeed2", muxer)
 	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream2", func(ctx context.Context) {
 		err := waitReplicaRangeFeed(ctx, tc.repls[0].Replica, args, stream2)
 		if ctx.Err() != nil {
