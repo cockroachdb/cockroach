@@ -86,11 +86,13 @@ func TestLogSlice(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			s := logSlice{term: tt.term, prev: tt.prev, entries: tt.entries}
 			require.Equal(t, tt.notOk, s.valid() != nil)
-			if !tt.notOk {
-				last := s.lastEntryID()
-				require.Equal(t, tt.last, last)
-				require.Equal(t, last.index, s.lastIndex())
+			if tt.notOk {
+				return
 			}
+			last := s.lastEntryID()
+			require.Equal(t, tt.last, last)
+			require.Equal(t, last.index, s.lastIndex())
+			require.Equal(t, logMark{term: tt.term, index: last.index}, s.mark())
 		})
 	}
 }
