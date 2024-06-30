@@ -507,32 +507,32 @@ func TestAppliedTo(t *testing.T) {
 	}
 }
 
-// TestNextUnstableEnts ensures unstableEntries returns the unstable part of the
-// entries correctly.
+// TestNextUnstableEnts ensures nextUnstableEnts returns the unstable part of
+// the entries correctly, before and after making them stable.
 func TestNextUnstableEnts(t *testing.T) {
-	previousEnts := index(1).terms(1, 2)
-	for _, tt := range []struct {
-		unstable uint64
-		wents    []pb.Entry
-	}{
-		{3, nil},
-		{1, previousEnts},
+	init := entryID{}.append(1, 2)
+	for _, tt := range []logSlice{
+		init.lastEntryID().append(),
+		init.lastEntryID().append(2, 2),
+		init.lastEntryID().append(3, 4, 5, 6),
 	} {
 		t.Run("", func(t *testing.T) {
 			// append stable entries to storage
 			storage := NewMemoryStorage()
-			require.NoError(t, storage.Append(previousEnts[:tt.unstable-1]))
+			require.NoError(t, storage.SetHardState(pb.HardState{Term: init.term}))
+			require.NoError(t, storage.Append(init.entries))
 
 			// append unstable entries to raftlog
 			raftLog := newLog(storage, discardLogger)
-			raftLog.append(previousEnts[tt.unstable-1:]...)
+			raftLog.append(tt.entries...)
+			require.Equal(t, tt.prev.index+1, raftLog.unstable.offset)
 
-			ents := raftLog.nextUnstableEnts()
-			if l := len(ents); l > 0 {
-				raftLog.stableTo(pbEntryID(&ents[l-1]))
+			require.Equal(t, len(tt.entries) != 0, raftLog.hasNextUnstableEnts())
+			require.Equal(t, tt.entries, raftLog.nextUnstableEnts())
+			if len(tt.entries) != 0 {
+				raftLog.stableTo(tt.lastEntryID())
 			}
-			require.Equal(t, tt.wents, ents)
-			require.Equal(t, previousEnts[len(previousEnts)-1].Index+1, raftLog.unstable.offset)
+			require.Equal(t, tt.lastIndex()+1, raftLog.unstable.offset)
 		})
 	}
 }
