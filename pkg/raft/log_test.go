@@ -205,8 +205,7 @@ func TestAppend(t *testing.T) {
 //  2. If the request is accepted, the slice is appended to the log, and all the
 //     entries at higher indices are truncated.
 func TestLogMaybeAppend(t *testing.T) {
-	init := logSlice{term: 3, entries: index(1).terms(1, 2, 3)}
-	require.NoError(t, init.valid())
+	init := entryID{}.terms(1, 2, 3)
 	last := init.lastEntryID()
 	commit := uint64(1)
 
@@ -980,17 +979,21 @@ func (i index) termRange(from, to uint64) []pb.Entry {
 	return entries
 }
 
-// terms generates a logSlice of entries appended after the given entry ID, at
-// indices [id.index+1, id.index+len(terms)], with the given terms of each
-// entry. Terms must be >= id.term, and non-decreasing.
+// terms generates a valid logSlice of entries appended after the given entry
+// ID, at indices [id.index+1, id.index+len(terms)], with the given terms of
+// each entry. Terms must be >= id.term, and non-decreasing.
 func (id entryID) terms(terms ...uint64) logSlice {
 	term := id.term
 	if ln := len(terms); ln != 0 {
 		term = terms[ln-1]
 	}
-	return logSlice{
+	ls := logSlice{
 		term:    term,
 		prev:    id,
 		entries: index(id.index + 1).terms(terms...),
 	}
+	if err := ls.valid(); err != nil {
+		panic(err)
+	}
+	return ls
 }
