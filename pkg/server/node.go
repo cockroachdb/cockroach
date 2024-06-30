@@ -2027,7 +2027,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 				streamID: req.StreamID,
 				wrapped:  streamMuxer,
 			}
-			streamMuxer.AddStream(req.StreamID, cancel)
+			streamMuxer.AddStream(req.StreamID, req.RangeID, cancel)
 
 			// Rangefeed attempts to register rangefeed a request over the specified
 			// span. If registration fails, it returns an error. Otherwise, it returns
