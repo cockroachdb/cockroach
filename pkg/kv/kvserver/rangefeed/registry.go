@@ -35,6 +35,10 @@ type Stream interface {
 	// Send must be safe to call on the same stream in different goroutines.
 	Send(*kvpb.RangeFeedEvent) error
 	Disconnect(err *kvpb.Error)
+
+	// LeagcyProcessor doesn't need this since it has a dedicated goroutine for
+	// every registration.
+	RegisterRangefeedCleanUp(func())
 }
 
 // Shared event is an entry stored in registration channel. Each entry is
@@ -285,21 +289,29 @@ func (r *registration) maybeStripEvent(
 	return ret
 }
 
+func (r *registration) cleanUp() (alreadyDisconnected bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.disconnected {
+		return true
+	}
+
+	if r.mu.catchUpIter != nil {
+		r.mu.catchUpIter.Close()
+		r.mu.catchUpIter = nil
+	}
+	if r.mu.outputLoopCancelFn != nil {
+		r.mu.outputLoopCancelFn()
+	}
+	r.mu.disconnected = true
+	return false
+}
+
 // disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
 func (r *registration) disconnect(pErr *kvpb.Error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.mu.disconnected {
-		if r.mu.catchUpIter != nil {
-			r.mu.catchUpIter.Close()
-			r.mu.catchUpIter = nil
-		}
-		if r.mu.outputLoopCancelFn != nil {
-			r.mu.outputLoopCancelFn()
-		}
-		r.mu.disconnected = true
+	if alreadyDisconnected := r.cleanUp(); !alreadyDisconnected {
 		r.stream.Disconnect(pErr)
 	}
 }
