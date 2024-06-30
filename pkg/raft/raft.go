@@ -747,7 +747,7 @@ func (r *raft) appliedSnap(snap *pb.Snapshot) {
 // index changed (in which case the caller should call r.bcastAppend). This can
 // only be called in StateLeader.
 func (r *raft) maybeCommit() bool {
-	return r.raftLog.maybeCommit(entryID{term: r.Term, index: r.trk.Committed()})
+	return r.raftLog.maybeCommit(logMark{term: r.Term, index: r.trk.Committed()})
 }
 
 func (r *raft) reset(term uint64) {
@@ -1702,7 +1702,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		// committed entries at m.Term (by raft invariants), so it is safe to bump
 		// the commit index even if the MsgApp is stale.
 		lastIndex := a.lastIndex()
-		r.raftLog.commitTo(min(m.Commit, lastIndex))
+		r.raftLog.commitTo(logMark{term: m.Term, index: min(m.Commit, lastIndex)})
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: lastIndex})
 		return
 	}
@@ -1753,6 +1753,7 @@ func (r *raft) checkMatch(match uint64) {
 
 func (r *raft) handleHeartbeat(m pb.Message) {
 	r.checkMatch(m.Match)
+
 	// The m.Term leader is indicating to us through this heartbeat message
 	// that indices <= m.Commit in its log are committed. If our log matches
 	// the leader's up to index M, then we can update our commit index to
@@ -1771,12 +1772,13 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 	// enables advancing the commit index. By this, we have the guarantee that our
 	// commit index converges to the leader's.
 	//
-	// TODO(pav-kv): move this logic to r.raftLog, which is more appropriate for
-	// handling safety. The raftLog can use accTerm for other safety checks too.
-	// For example, unstable.truncateAndAppend currently may override a suffix of
-	// the log unconditionally, but it can only be done if m.Term > accTerm.
-	if m.Term == r.accTerm {
-		r.raftLog.commitTo(min(m.Commit, r.raftLog.lastIndex()))
+	// TODO(pav-kv): the condition can be relaxed, it is actually safe to bump the
+	// commit index if accTerm >= m.Term.
+	// TODO(pav-kv): move this logic to raftLog.commitTo, once the accTerm has
+	// migrated to raftLog/unstable.
+	mark := logMark{term: m.Term, index: min(m.Commit, r.raftLog.lastIndex())}
+	if mark.term == r.accTerm {
+		r.raftLog.commitTo(mark)
 	}
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
 }
@@ -1865,7 +1867,7 @@ func (r *raft) restore(s snapshot) bool {
 		last := r.raftLog.lastEntryID()
 		r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] fast-forwarded commit to snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, last.index, last.term, id.index, id.term)
-		r.raftLog.commitTo(id.index) // TODO(pav-kv): this should use snapshot.mark().
+		r.raftLog.commitTo(s.mark())
 		return false
 	}
 
