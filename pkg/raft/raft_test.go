@@ -1152,10 +1152,11 @@ func TestHandleHeartbeat(t *testing.T) {
 
 	for i, tt := range tests {
 		storage := newTestMemoryStorage(withPeers(1, 2))
-		require.NoError(t, storage.Append([]pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}, {Index: 3, Term: tt.accTerm}}))
+		init := entryID{}.append(1, 1, tt.accTerm)
+		require.NoError(t, storage.Append(init.entries))
 		sm := newTestRaft(1, 5, 1, storage)
-		sm.becomeFollower(2, 2)
-		sm.raftLog.commitTo(commit)
+		sm.becomeFollower(init.term, 2)
+		sm.raftLog.commitTo(logMark{term: init.term, index: commit})
 		sm.handleHeartbeat(tt.m)
 		assert.Equal(t, tt.wCommit, sm.raftLog.committed, "#%d", i)
 		m := sm.readMessages()
@@ -1172,7 +1173,7 @@ func TestHandleHeartbeatResp(t *testing.T) {
 	sm := newTestRaft(1, 5, 1, storage)
 	sm.becomeCandidate()
 	sm.becomeLeader()
-	sm.raftLog.commitTo(sm.raftLog.lastIndex())
+	sm.raftLog.commitTo(logMark{term: 3, index: sm.raftLog.lastIndex()})
 
 	// A heartbeat response from a node that is behind; re-send MsgApp
 	sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp})
@@ -2327,7 +2328,7 @@ func TestRestoreIgnoreSnapshot(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
 	require.True(t, sm.raftLog.append(init))
-	sm.raftLog.commitTo(commit)
+	sm.raftLog.commitTo(logMark{term: init.term, index: commit})
 
 	s := snapshot{
 		term: 1,
