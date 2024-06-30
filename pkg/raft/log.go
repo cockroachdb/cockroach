@@ -485,10 +485,11 @@ func (l *raftLog) maybeCommit(at entryID) bool {
 	return false
 }
 
-func (l *raftLog) restore(s pb.Snapshot) {
-	l.logger.Infof("log [%s] starts to restore snapshot [index: %d, term: %d]", l, s.Metadata.Index, s.Metadata.Term)
-	l.committed = s.Metadata.Index
-	l.unstable.restore(s)
+func (l *raftLog) restore(s snapshot) {
+	last := s.lastEntryID()
+	l.logger.Infof("log [%s] starts to restore snapshot [index: %d, term: %d]", l, last.index, last.term)
+	l.unstable.restore(s.snap) // TODO(pav-kv): pass the snapshot type down.
+	l.committed = last.index
 }
 
 // scan visits all log entries in the [lo, hi) range, returning them via the

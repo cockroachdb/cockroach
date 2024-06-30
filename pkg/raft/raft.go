@@ -1869,7 +1869,7 @@ func (r *raft) restore(s snapshot) bool {
 		return false
 	}
 
-	r.raftLog.restore(s.snap) // TODO(pav-kv): pass the snapshot type down.
+	r.raftLog.restore(s)
 
 	// Reset the configuration and add the (potentially updated) peers in anew.
 	r.trk = tracker.MakeProgressTracker(r.trk.MaxInflight, r.trk.MaxInflightBytes)
