@@ -24,7 +24,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DataDog/datadog-go/statsd"
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/operations"
@@ -458,45 +459,123 @@ func maybeDumpSummaryMarkdown(r *testRunner) error {
 	return nil
 }
 
-// maybeEmitDatadogEvent emits a datadog event if a non-nil statsd client is passed in.
+// maybeEmitDatadogEvent sends an event to Datadog if the passed in ctx has the
+// necessary values to communicate with Datadog.
 func maybeEmitDatadogEvent(
-	client *statsd.Client,
+	ctx context.Context,
+	datadogEventsAPI *datadogV1.EventsApi,
 	opSpec *registry.OperationSpec,
 	clusterName string,
 	eventType ddEventType,
 	operationID uint64,
+	datadogTags []string,
 ) {
-	if client == nil {
+	// The passed in context is not configured to communicate with Datadog.
+	_, hasAPIKeys := ctx.Value(datadog.ContextAPIKeys).(map[string]datadog.APIKey)
+	_, hasServerVariables := ctx.Value(datadog.ContextServerVariables).(map[string]string)
+	if !hasAPIKeys || !hasServerVariables {
 		return
 	}
+
 	status := "started"
+	alertType := datadogV1.EVENTALERTTYPE_INFO
 
 	switch eventType {
 	case eventOpStarted:
 		status = "started"
+		alertType = datadogV1.EVENTALERTTYPE_INFO
 	case eventOpRan:
 		status = "finished running; waiting for cleanup"
+		alertType = datadogV1.EVENTALERTTYPE_SUCCESS
 	case eventOpFinishedCleanup:
 		status = "cleaned up its state"
+		alertType = datadogV1.EVENTALERTTYPE_INFO
 	case eventOpError:
 		status = "ran with an error"
-	}
-	details := fmt.Sprintf("cluster: %s\n", clusterName)
-	ev := statsd.NewEvent(fmt.Sprintf("op %s %s", opSpec.Name, status), details)
-
-	ev.AggregationKey = fmt.Sprintf("operation-%d", operationID)
-	switch eventType {
-	case eventOpStarted:
-		ev.AlertType = statsd.Info
-	case eventOpRan:
-		ev.AlertType = statsd.Success
-	case eventOpFinishedCleanup:
-		ev.AlertType = statsd.Info
-	case eventOpError:
-		ev.AlertType = statsd.Error
+		alertType = datadogV1.EVENTALERTTYPE_ERROR
 	}
 
-	_ = client.Event(ev)
+	title := fmt.Sprintf("op %s %s", opSpec.Name, status)
+	hostname, _ := os.Hostname()
+
+	// We're within a best effort function so we ignore return values.
+	_, _, _ = datadogEventsAPI.CreateEvent(ctx, datadogV1.EventCreateRequest{
+		AggregationKey: datadog.PtrString(fmt.Sprintf("operation-%d", operationID)),
+		AlertType:      &alertType,
+		DateHappened:   datadog.PtrInt64(time.Now().Unix()),
+		Host:           &hostname,
+		SourceTypeName: datadog.PtrString("roachtest"),
+		Tags:           datadogTags,
+		Text:           fmt.Sprintf("cluster: %s\n", clusterName),
+		Title:          title,
+	})
+}
+
+// newDatadogContext adds values to the passed in ctx to configure it to
+// communicate with Datadog. If the necessary values to communicate with
+// Datadog are not present the context is returned without values added to it.
+func newDatadogContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	datadogSite := roachtestflags.DatadogSite
+	if datadogSite == "" {
+		datadogSite = os.Getenv("DD_SITE")
+	}
+
+	datadogAPIKey := roachtestflags.DatadogAPIKey
+	if datadogAPIKey == "" {
+		datadogAPIKey = os.Getenv("DD_API_KEY")
+	}
+
+	datadogApplicationKey := roachtestflags.DatadogApplicationKey
+	if datadogApplicationKey == "" {
+		datadogApplicationKey = os.Getenv("DD_APP_KEY")
+	}
+
+	// There isn't enough information to configure the context to communicate
+	// with Datadog.
+	if datadogSite == "" || datadogAPIKey == "" || datadogApplicationKey == "" {
+		return ctx
+	}
+
+	ctx = context.WithValue(
+		ctx,
+		datadog.ContextAPIKeys,
+		map[string]datadog.APIKey{
+			"apiKeyAuth": {
+				Key: datadogAPIKey,
+			},
+			"appKeyAuth": {
+				Key: datadogApplicationKey,
+			},
+		},
+	)
+
+	ctx = context.WithValue(ctx,
+		datadog.ContextServerVariables,
+		map[string]string{
+			"site": datadogSite,
+		},
+	)
+
+	return ctx
+}
+
+// getDatadogTags retrieves the Datadog tags from the datadog-tags CLI
+// argument, falling back to the DD_TAGS environment variable if empty.
+func getDatadogTags() []string {
+	rawTags := roachtestflags.DatadogTags
+	if rawTags == "" {
+		rawTags = os.Getenv("DD_TAGS")
+	}
+
+	if rawTags == "" {
+		return []string{}
+	}
+
+	return strings.Split(rawTags, ",")
 }
 
 // runOperation sequentially runs one operation matched by the passed-in filter.
@@ -516,15 +595,10 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 
 	register(&r)
 	ctx := context.Background()
+	ctx = newDatadogContext(ctx)
 
-	var statsdClient *statsd.Client
-	if roachtestflags.DogstatsdAddr != "" {
-		var err error
-		statsdClient, err = statsd.New(roachtestflags.DogstatsdAddr)
-		if err != nil {
-			return errors.Wrap(err, "failed to create statsd client")
-		}
-	}
+	datadogEventsClient := datadogV1.NewEventsApi(datadog.NewAPIClient(datadog.NewConfiguration()))
+	datadogTags := getDatadogTags()
 
 	// TODO(bilal): This is excessive for just getting the number of nodes in the
 	// cluster. We should expose a roachprod.Nodes method or so.
@@ -586,7 +660,7 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 
 	// operationRunID is used for datadog event aggregation and logging.
 	operationRunID := rand.Uint64()
-	maybeEmitDatadogEvent(statsdClient, opSpec, clusterName, eventOpStarted, operationRunID)
+	maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpStarted, operationRunID, datadogTags)
 	op.Status(fmt.Sprintf("running operation %s with run id %d", opSpec.Name, operationRunID))
 	var cleanup registry.OperationCleanup
 	func() {
@@ -597,11 +671,11 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 	}()
 	if op.Failed() {
 		op.Status("operation failed")
-		maybeEmitDatadogEvent(statsdClient, opSpec, clusterName, eventOpError, operationRunID)
+		maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpError, operationRunID, datadogTags)
 		return op.mu.failures[0]
 	}
 
-	maybeEmitDatadogEvent(statsdClient, opSpec, clusterName, eventOpRan, operationRunID)
+	maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpRan, operationRunID, datadogTags)
 	if cleanup == nil {
 		op.Status("operation ran successfully")
 		return nil
@@ -624,10 +698,10 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 
 	if op.Failed() {
 		op.Status("operation cleanup failed")
-		maybeEmitDatadogEvent(statsdClient, opSpec, clusterName, eventOpError, operationRunID)
+		maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpError, operationRunID, datadogTags)
 		return op.mu.failures[0]
 	}
-	maybeEmitDatadogEvent(statsdClient, opSpec, clusterName, eventOpFinishedCleanup, operationRunID)
+	maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpFinishedCleanup, operationRunID, datadogTags)
 
 	return nil
 }

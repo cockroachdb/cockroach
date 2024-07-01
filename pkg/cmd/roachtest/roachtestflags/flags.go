@@ -301,10 +301,28 @@ var (
 		Usage: `The port on which to serve the HTTP interface`,
 	})
 
-	DogstatsdAddr string = ""
-	_                    = registerRunOpsFlag(&DogstatsdAddr, FlagInfo{
-		Name:  "dogstatsd-addr",
-		Usage: `The address to which to connect to dogstatsd, to send Datadog events.`,
+	DatadogSite string = "us5.datadoghq.com"
+	_                  = registerRunOpsFlag(&DatadogSite, FlagInfo{
+		Name:  "datadog-site",
+		Usage: `Datadog site to communicate with (e.g., us5.datadoghq.com).`,
+	})
+
+	DatadogAPIKey string = ""
+	_                    = registerRunOpsFlag(&DatadogAPIKey, FlagInfo{
+		Name:  "datadog-api-key",
+		Usage: `Datadog API key to emit telemetry data to Datadog.`,
+	})
+
+	DatadogApplicationKey string = ""
+	_                            = registerRunOpsFlag(&DatadogApplicationKey, FlagInfo{
+		Name:  "datadog-app-key",
+		Usage: `Datadog application key to read telemetry data from Datadog.`,
+	})
+
+	DatadogTags string = ""
+	_                  = registerRunOpsFlag(&DatadogTags, FlagInfo{
+		Name:  "datadog-tags",
+		Usage: `A comma-separated list of tags to attach to telemetry data (e.g., key1:val1,key2:val2).`,
 	})
 
 	PreferLocalSSD bool = true
