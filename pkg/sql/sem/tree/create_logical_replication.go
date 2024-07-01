@@ -30,7 +30,7 @@ type LogicalReplicationResources struct {
 
 type LogicalReplicationOptions struct {
 	// Mapping of table name to UDF name
-	UserFunctions   map[TablePattern]Expr
+	UserFunctions   map[*UnresolvedName]RoutineName
 	Cursor          Expr
 	Mode            Expr
 	DefaultFunction Expr
@@ -107,7 +107,7 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 
 		// In order to make tests deterministic, the ordering of map keys
 		// needs to be the same each time.
-		keys := make([]TablePattern, 0, len(lro.UserFunctions))
+		keys := make([]*UnresolvedName, 0, len(lro.UserFunctions))
 		for k := range lro.UserFunctions {
 			keys = append(keys, k)
 		}
@@ -118,7 +118,8 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 		for _, k := range keys {
 			maybeAddSep()
 			ctx.WriteString("FUNCTION ")
-			ctx.FormatNode(lro.UserFunctions[k])
+			r := lro.UserFunctions[k]
+			ctx.FormatNode(&r)
 			ctx.WriteString(" FOR TABLE ")
 			ctx.FormatNode(k)
 		}
@@ -156,7 +157,7 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 				return errors.Newf("multiple user functions specified for table %q", tbl)
 			}
 			if o.UserFunctions == nil {
-				o.UserFunctions = make(map[TablePattern]Expr)
+				o.UserFunctions = make(map[*UnresolvedName]RoutineName)
 			}
 			o.UserFunctions[tbl] = other.UserFunctions[tbl]
 		}
