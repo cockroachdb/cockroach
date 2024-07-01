@@ -37,6 +37,11 @@ type SinkClient interface {
 	FlushResolvedPayload(context.Context, []byte, func(func(topic string) error) error, retry.Options) error
 	Flush(context.Context, SinkPayload) error
 	Close() error
+	// CheckConnection checks if the sink can connect to its destination. It is
+	// optional. It will be called in batchingSink.Dial(), which will be called
+	// during evaluation of the CREATE CHANGEFEED statement, in order to give
+	// users quick feedback.
+	CheckConnection(ctx context.Context) error
 }
 
 // BatchBuffer is an interface to aggregate KVs into a payload that can be sent
@@ -228,7 +233,8 @@ func (s *batchingSink) Close() error {
 
 // Dial implements the Sink interface.
 func (s *batchingSink) Dial() error {
-	return nil
+	// I don't want to change the Sink interface just to give this a context, but it probably deserves one.
+	return s.client.CheckConnection(context.TODO())
 }
 
 // getConcreteType implements the Sink interface.
