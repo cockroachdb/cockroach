@@ -1675,12 +1675,13 @@ func registerCDC(r registry.Registry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNodes(1)),
-		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		RequiresLicense:  true,
+		Benchmark:                  true,
+		Cluster:                    r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNodes(1)),
+		Leases:                     registry.MetamorphicLeases,
+		CompatibleClouds:           registry.AllExceptAWS,
+		Suites:                     registry.Suites(registry.Nightly),
+		RequiresLicense:            true,
+		RequiresDeprecatedWorkload: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
