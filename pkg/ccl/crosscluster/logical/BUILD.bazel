@@ -4,6 +4,7 @@ go_library(
     name = "logical",
     srcs = [
         "create_logical_replication_stmt.go",
+        "dead_letter_queue.go",
         "logical_replication_dist.go",
         "logical_replication_job.go",
         "logical_replication_writer_processor.go",
@@ -77,6 +78,7 @@ go_library(
 go_test(
     name = "logical_test",
     srcs = [
+        "dead_letter_queue_test.go",
         "logical_replication_job_test.go",
         "lww_row_processor_test.go",
         "main_test.go",
@@ -86,6 +88,8 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
+        "//pkg/ccl/changefeedccl/cdcevent",
+        "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/ccl/crosscluster/replicationtestutils",
         "//pkg/ccl/storageccl",
         "//pkg/jobs",

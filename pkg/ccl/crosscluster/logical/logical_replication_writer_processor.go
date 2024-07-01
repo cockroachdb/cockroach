@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -90,6 +92,8 @@ type logicalReplicationWriterProcessor struct {
 	logBufferEvery log.EveryN
 
 	debug streampb.DebugLogicalConsumerStatus
+
+	dlqClient DeadLetterQueueClient
 }
 
 var (
@@ -147,6 +151,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
+		dlqClient: InitDeadLetterQueueClient(),
 	}
 	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -239,6 +244,11 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 		}
 		return nil
 	})
+
+	if err := lrw.dlqClient.Create(); err != nil {
+		lrw.sendError(errors.Wrap(err, "failed to create dead letter queue client"))
+	}
+
 	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(lrw.checkpointCh)
 		if err := lrw.consumeEvents(ctx); err != nil {
@@ -491,7 +501,16 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 				if err != nil {
 					// TODO(ssd): Handle errors. We should perhaps split the batch and retry a portion of the batch.
 					// If that fails, send the failed application to the dead-letter-queue.
-					return err
+
+					// TODO(azhu): Remove these nil variables once refactoring is done
+					// & we've implemented conflict handling logic.
+					var kv roachpb.KeyValue
+					var cdcEventRow cdcevent.Row
+					var writeTimestamp hlc.Timestamp
+					var conflictReason string
+					if err = lrw.dlqClient.Log(ctx, lrw.spec.JobID, kv, cdcEventRow, writeTimestamp, conflictReason); err != nil {
+						return err
+					}
 				}
 				batchStart = batchEnd
 				batchTime := timeutil.Since(preBatchTime)
