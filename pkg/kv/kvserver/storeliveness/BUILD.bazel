@@ -1,12 +1,49 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "storeliveness",
-    srcs = ["fabric.go"],
+    srcs = [
+        "fabric.go",
+        "transport.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
         "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_google_grpc//:go_default_library",
+    ],
+)
+
+go_test(
+    name = "storeliveness_test",
+    srcs = ["transport_test.go"],
+    embed = [":storeliveness"],
+    deps = [
+        "//pkg/gossip",
+        "//pkg/kv/kvserver/storeliveness/storelivenesspb",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/netutil",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
