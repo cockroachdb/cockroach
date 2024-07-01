@@ -192,7 +192,22 @@ type compressionAlgorithm int64
 const (
 	compressionAlgorithmSnappy compressionAlgorithm = 1
 	compressionAlgorithmZstd   compressionAlgorithm = 2
+	compressionAlgorithmNone   compressionAlgorithm = 3
 )
+
+var supportedCompressionAlgorithms = []compressionAlgorithm{
+	compressionAlgorithmSnappy,
+	compressionAlgorithmZstd,
+	compressionAlgorithmNone,
+}
+
+func supportedCompressionValues() string {
+	algS := make([]string, len(supportedCompressionAlgorithms))
+	for i, alg := range supportedCompressionAlgorithms {
+		algS[i] = fmt.Sprintf(`"%s"`, alg.String())
+	}
+	return strings.Join(algS, ", ")
+}
 
 // String implements fmt.Stringer for CompressionAlgorithm.
 func (c compressionAlgorithm) String() string {
@@ -201,6 +216,8 @@ func (c compressionAlgorithm) String() string {
 		return "snappy"
 	case compressionAlgorithmZstd:
 		return "zstd"
+	case compressionAlgorithmNone:
+		return "none"
 	default:
 		panic(errors.Errorf("unknown compression type: %d", c))
 	}
@@ -214,7 +231,8 @@ func RegisterCompressionAlgorithmClusterSetting(
 	return settings.RegisterEnumSetting(
 		// NB: We can't use settings.SystemOnly today because we may need to read the
 		// value from within a tenant building an sstable for AddSSTable.
-		settings.SystemVisible, name, desc,
+		settings.SystemVisible, name,
+		desc+` supported values: `+supportedCompressionValues(),
 		// TODO(jackson): Consider using a metamorphic constant here, but many tests
 		// will need to override it because they depend on a deterministic sstable
 		// size.
@@ -222,6 +240,7 @@ func RegisterCompressionAlgorithmClusterSetting(
 		map[compressionAlgorithm]string{
 			compressionAlgorithmSnappy: compressionAlgorithmSnappy.String(),
 			compressionAlgorithmZstd:   compressionAlgorithmZstd.String(),
+			compressionAlgorithmNone:   compressionAlgorithmNone.String(),
 		},
 		settings.WithPublic,
 	)
@@ -234,8 +253,7 @@ func RegisterCompressionAlgorithmClusterSetting(
 // than calling Get directly.
 var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm",
-	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`+
-		` supported values: "snappy", "zstd"`,
+	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`,
 	compressionAlgorithmSnappy, // Default.
 )
 
@@ -245,8 +263,7 @@ var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 // rather than calling Get directly.
 var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_storage",
-	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`+
-		` supported values: "snappy", "zstd"`,
+	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`,
 	compressionAlgorithmSnappy, // Default.
 )
 
@@ -259,8 +276,7 @@ var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetti
 // setting, rather than calling Get directly.
 var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_transport",
-	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`+
-		` supported values: "snappy", "zstd"`,
+	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`,
 	compressionAlgorithmSnappy, // Default.
 )
 
@@ -281,6 +297,8 @@ func getCompressionAlgorithm(
 			return pebble.ZstdCompression
 		}
 		return pebble.DefaultCompression
+	case compressionAlgorithmNone:
+		return pebble.NoCompression
 	default:
 		return pebble.DefaultCompression
 	}
