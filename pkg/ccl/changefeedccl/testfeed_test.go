@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	pubsubv1 "cloud.google.com/go/pubsub/apiv1"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -60,7 +62,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/golang/mock/gomock"
 	"github.com/jackc/pgx/v4"
+	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kgo"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -1640,6 +1645,7 @@ func (p *asyncIgnoreCloseProducer) Close() error {
 
 // sinkKnobs override behavior for the simulated sink.
 type sinkKnobs struct {
+	// Only valid for the v1 sink.
 	kafkaInterceptor func(m *sarama.ProducerMessage, client kafkaClient) error
 }
 
@@ -1716,9 +1722,74 @@ func (s *fakeKafkaSink) Topics() []string {
 	return nil
 }
 
+// fakeKafkaSinkV2 is a sink that arranges for fake kafka client and producer
+// to be used.
+type fakeKafkaSinkV2 struct {
+	Sink
+	// For compatibility with all the other fakeKafka test stuff, we convert kgo Records to sarama messages.
+	// TODO: clean this up when we remove the v1 sink.
+	feedCh      chan *sarama.ProducerMessage
+	t           *testing.T
+	ctrl        *gomock.Controller
+	client      *mocks.MockKafkaClientV2
+	adminClient *mocks.MockKafkaAdminClientV2
+}
+
+var _ Sink = (*fakeKafkaSinkV2)(nil)
+
+// Dial implements Sink interface
+func (s *fakeKafkaSinkV2) Dial() error {
+	bs := s.Sink.(*batchingSink)
+	kc := bs.client.(*kafkaSinkClientV2)
+	s.ctrl = gomock.NewController(s.t)
+	s.client = mocks.NewMockKafkaClientV2(s.ctrl)
+	s.client.EXPECT().ProduceSync(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, msgs ...*kgo.Record) kgo.ProduceResults {
+		for _, m := range msgs {
+			var key sarama.Encoder
+			if m.Key != nil {
+				key = sarama.ByteEncoder(m.Key)
+			}
+			s.feedCh <- &sarama.ProducerMessage{
+				Topic:     m.Topic,
+				Key:       key,
+				Value:     sarama.ByteEncoder(m.Value),
+				Partition: m.Partition,
+			}
+		}
+		return nil
+	}).AnyTimes()
+	s.client.EXPECT().Close().AnyTimes()
+
+	kc.client.Close()
+	kc.client = s.client
+
+	s.adminClient = mocks.NewMockKafkaAdminClientV2(s.ctrl)
+	s.adminClient.EXPECT().ListTopics(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, topics ...string) (kadm.TopicDetails, error) {
+		// Say each topic has one partition and one replica.
+		td := kadm.TopicDetails{}
+		for _, topic := range topics {
+			td[topic] = kadm.TopicDetail{
+				Topic: topic,
+				Partitions: map[int32]kadm.PartitionDetail{
+					0: {Topic: topic, Partition: 0, Leader: 0, Replicas: []int32{0}, ISR: []int32{0}},
+				},
+			}
+		}
+		return td, nil
+	}).AnyTimes()
+	kc.adminClient = s.adminClient
+
+	return bs.Dial()
+}
+
+func (s *fakeKafkaSinkV2) Topics() []string {
+	return s.Sink.(*batchingSink).topicNamer.DisplayNamesSlice()
+}
+
 type kafkaFeedFactory struct {
 	enterpriseFeedFactory
 	knobs *sinkKnobs
+	t     *testing.T
 }
 
 var _ cdctest.TestFeedFactory = (*kafkaFeedFactory)(nil)
@@ -1735,7 +1806,9 @@ func mustBeKafkaFeedFactory(f cdctest.TestFeedFactory) *kafkaFeedFactory {
 }
 
 // makeKafkaFeedFactory returns a TestFeedFactory implementation using the `kafka` uri.
-func makeKafkaFeedFactory(srvOrCluster interface{}, rootDB *gosql.DB) cdctest.TestFeedFactory {
+func makeKafkaFeedFactory(
+	t *testing.T, srvOrCluster interface{}, rootDB *gosql.DB,
+) cdctest.TestFeedFactory {
 	s, injectables := getInjectables(srvOrCluster)
 	return &kafkaFeedFactory{
 		knobs: &sinkKnobs{},
@@ -1745,6 +1818,7 @@ func makeKafkaFeedFactory(srvOrCluster interface{}, rootDB *gosql.DB) cdctest.Te
 			rootDB: rootDB,
 			di:     newDepInjector(injectables...),
 		},
+		t: t,
 	}
 }
 
@@ -1810,6 +1884,17 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 			tg:     tg,
 			feedCh: feedCh,
 			knobs:  k.knobs,
+		}
+	}
+
+	// Piggyback on the existing fakeKafka stuff. TODO: clean this up when we remove the v1 sink.
+	if KafkaV2Enabled.Get(&k.s.ClusterSettings().SV) {
+		wrapSink = func(s Sink) Sink {
+			return &fakeKafkaSinkV2{
+				Sink:   s,
+				feedCh: feedCh,
+				t:      k.t,
+			}
 		}
 	}
 

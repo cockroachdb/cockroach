@@ -100,7 +100,7 @@ func readNextMessages(
 			return nil, ctx.Err()
 		}
 		if log.V(1) {
-			log.Infof(context.Background(), "About to read a message (%d out of %d)", len(actual), numMessages)
+			log.Infof(context.Background(), `About to read a message (%d out of %d)`, len(actual), numMessages)
 		}
 		m, err := f.Next()
 		if log.V(1) {
@@ -965,7 +965,7 @@ func makeFeedFactoryWithOptions(
 	}
 	switch sinkType {
 	case "kafka":
-		f := makeKafkaFeedFactory(srvOrCluster, db)
+		f := makeKafkaFeedFactory(t, srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*kafkaFeedFactory).configureUserDB(userDB)
 		return f, func() { cleanup() }
