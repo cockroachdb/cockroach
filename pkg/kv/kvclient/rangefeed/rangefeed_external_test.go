@@ -1488,6 +1488,10 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 					case <-checkpointC:
 					default:
 					}
+					t.Logf("received checkpoint %s", e.Checkpoint)
+					if e.Checkpoint == nil {
+						t.Logf("still nil checkpoint")
+					}
 					checkpointC <- e.Checkpoint
 				case e.Val != nil && e.Val.Key.Equal(key):
 					select {
