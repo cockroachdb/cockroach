@@ -579,7 +579,7 @@ func TestUnstableTruncateAndAppend(t *testing.T) {
 			u.snapshotInProgress = u.snapshot != nil && u.offsetInProgress > u.offset
 			u.checkInvariants(t)
 
-			u.truncateAndAppend(tt.app.entries)
+			u.truncateAndAppend(tt.app)
 			u.checkInvariants(t)
 			require.Equal(t, tt.want.prev.index+1, u.offset)
 			require.Equal(t, tt.want.entries, u.entries)
