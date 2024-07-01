@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "storeliveness",
+    srcs = ["fabric.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/storeliveness/storelivenesspb",
+        "//pkg/util/hlc",
+    ],
+)
