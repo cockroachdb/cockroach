@@ -186,7 +186,11 @@ func (b *Builder) tryBuildFastPathInsert(
 		execFastPathCheck.ReferencedTable = md.Table(c.ReferencedTableID)
 		execFastPathCheck.ReferencedIndex = execFastPathCheck.ReferencedTable.Index(c.ReferencedIndexOrdinal)
 		execFastPathCheck.CheckOrdinal = c.CheckOrdinal
-		locking, err := b.buildLocking(ins.Table, c.Locking)
+
+		// If there is a unique index with a implicit partitioning columns, the fast path can write tombstones to lock the row in all
+		// partitions.
+		allowPredicateLocks := execFastPathCheck.ReferencedTable.Unique(execFastPathCheck.CheckOrdinal).HasIndexWithImplicitPartitioningColumn()
+		locking, err := b.buildLockingImpl(ins.Table, c.Locking, allowPredicateLocks)
 		if err != nil {
 			return execPlan{}, colOrdMap{}, false, err
 		}

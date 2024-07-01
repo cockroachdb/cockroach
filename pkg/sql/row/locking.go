@@ -11,8 +11,13 @@
 package row
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -71,4 +76,22 @@ func GetKeyLockingDurability(lockDurability descpb.ScanLockingDurability) lock.D
 	default:
 		panic(errors.AssertionFailedf("unknown lock durability %s", lockDurability))
 	}
+}
+
+func PutUniqLock(
+	ctx context.Context, b Putter, waitPolicy tree.LockingWaitPolicy, k roachpb.Key, traceKV bool,
+) error {
+	if waitPolicy != tree.LockWaitBlock {
+		return errors.Errorf("Non-blocking predicate locks are not implemented")
+	}
+
+	if traceKV {
+		log.VEventf(ctx, 2, "PredicateLock %s", k)
+	}
+
+	// CPut a tombstone to check for existance of the key and block writes. This will keep other writers
+	// from writing the key in other regions unitl we commit.
+	b.CPut(k, nil, nil)
+
+	return nil
 }

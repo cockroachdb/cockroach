@@ -984,7 +984,8 @@ func newOptTable(
 					predicate:    idx.GetPredicate(),
 					// TODO(rytaft): will we ever support an unvalidated unique constraint
 					// here?
-					validity: descpb.ConstraintValidity_Validated,
+					validity:                            descpb.ConstraintValidity_Validated,
+					hasIndexWithImplicitPartitioningCol: true,
 				})
 			} else if idx.IsSharded() {
 				// Add unique constraint for hash sharded indexes.
@@ -1958,7 +1959,8 @@ type optUniqueConstraint struct {
 	withoutIndex bool
 	validity     descpb.ConstraintValidity
 
-	uniquenessGuaranteedByAnotherIndex bool
+	uniquenessGuaranteedByAnotherIndex  bool
+	hasIndexWithImplicitPartitioningCol bool
 }
 
 var _ cat.UniqueConstraint = &optUniqueConstraint{}
@@ -2012,6 +2014,10 @@ func (u *optUniqueConstraint) Validated() bool {
 // `optUniqueConstraint` struct when dropping this hack.
 func (u *optUniqueConstraint) UniquenessGuaranteedByAnotherIndex() bool {
 	return u.uniquenessGuaranteedByAnotherIndex
+}
+
+func (u *optUniqueConstraint) HasIndexWithImplicitPartitioningColumn() bool {
+	return u.hasIndexWithImplicitPartitioningCol
 }
 
 // optForeignKeyConstraint implements cat.ForeignKeyConstraint and represents a
