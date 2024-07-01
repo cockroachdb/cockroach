@@ -260,7 +260,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 								// There is a special case for some functions when at
 								// least one argument is a tuple or an array of
 								// tuples.
-								// Such cases pass GetAggregateInfo check below,
+								// Such cases pass GetAggregateOutputType check below,
 								// but they are actually invalid, and during normal
 								// execution it is caught during type-checking.
 								// However, we don't want to do fully-fledged type
@@ -288,7 +288,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 								for _, typ := range aggFnInputTypes {
 									hasJSONColumn = hasJSONColumn || typ.Family() == types.JsonFamily
 								}
-								if _, outputType, err := execagg.GetAggregateInfo(aggFn, aggFnInputTypes...); err == nil {
+								if outputType, err := execagg.GetAggregateOutputType(aggFn, aggFnInputTypes); err == nil {
 									outputTypes[i] = outputType
 									break
 								}
