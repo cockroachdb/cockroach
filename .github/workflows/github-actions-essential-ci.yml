@@ -69,11 +69,6 @@ jobs:
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/upload-artifact@v4
-        if: ${{ failure() }}
-        with:
-          name: acceptance artifacts
-          path: artifacts
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
