@@ -768,7 +768,9 @@ func (s *Store) processRaft(ctx context.Context) {
 		s.cfg.Transport.StopOutgoingMessage(s.StoreID())
 	}))
 
-	s.syncWaiter.Start(ctx, s.stopper)
+	for _, w := range s.syncWaiters {
+		w.Start(ctx, s.stopper)
+	}
 
 	// We'll want to cancel all in-flight proposals. Proposals embed tracing
 	// spans in them, and we don't want to be leaking any.

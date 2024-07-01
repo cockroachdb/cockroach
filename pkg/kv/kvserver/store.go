@@ -892,7 +892,7 @@ type Store struct {
 	metrics             *StoreMetrics
 	intentResolver      *intentresolver.IntentResolver
 	recoveryMgr         txnrecovery.Manager
-	syncWaiter          *logstore.SyncWaiterLoop
+	syncWaiters         []*logstore.SyncWaiterLoop
 	raftEntryCache      *raftentry.Cache
 	limiters            batcheval.Limiters
 	txnWaitMetrics      *txnwait.Metrics
@@ -1524,7 +1524,16 @@ func NewStore(
 		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftSchedulerConcurrencyPriority,
 		cfg.RaftElectionTimeoutTicks)
 
-	s.syncWaiter = logstore.NewSyncWaiterLoop()
+	// Run a log SyncWaiter loop for every 32 raft scheduler goroutines.
+	// Experiments on c5d.12xlarge instances (48 vCPUs, the largest single-socket
+	// instance AWS offers) show that with fewer SyncWaiters, raft log callback
+	// processing can become a bottleneck for write heavy workloads, which can
+	// drive about 100k raft log appends per second, per store.
+	numSyncWaiters := (cfg.RaftSchedulerConcurrency-1)/32 + 1 // ceil division
+	s.syncWaiters = make([]*logstore.SyncWaiterLoop, numSyncWaiters)
+	for i := range s.syncWaiters {
+		s.syncWaiters[i] = logstore.NewSyncWaiterLoop()
+	}
 
 	s.raftEntryCache = raftentry.NewCache(cfg.RaftEntryCacheSize)
 	s.metrics.registry.AddMetricStruct(s.raftEntryCache.Metrics())
