@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // simplePaginate takes in an input slice, and returns a sub-slice of the next
@@ -292,7 +293,7 @@ type paginatedNodeResponse[T any] struct {
 type rpcNodePaginator[Client, Result any] struct {
 	limit        int
 	numNodes     int
-	errorCtx     string
+	errorCtx     redact.RedactableString
 	pagState     paginationState
 	responseChan chan paginatedNodeResponse[Result]
 	nodeStatuses map[serverID]livenesspb.NodeLivenessStatus
