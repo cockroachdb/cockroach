@@ -1,0 +1,325 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package storeliveness
+
+import (
+	"context"
+	"runtime/pprof"
+	"time"
+	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc"
+)
+
+const (
+	// Outgoing messages are queued per-node on a channel of this size.
+	sendBufferSize = 1000
+
+	// When no message has been queued for this duration, the corresponding
+	// instance of processQueue will shut down.
+	idleTimeout = time.Minute
+
+	// The duration for which messages are continuously pulled from the queue to
+	// be sent out as a batch.
+	batchDuration = 10 * time.Millisecond
+
+	// connClass is the rpc ConnectionClass used by Store Liveness traffic.
+	connClass = rpc.SystemClass
+)
+
+var logSendQueueFullEvery = log.Every(1 * time.Second)
+
+// MessageHandler is the interface that must be implemented by
+// arguments to Transport.ListenMessages.
+type MessageHandler interface {
+	// HandleMessage is called for each incoming Message. This function shouldn't
+	// block (e.g. do a synchronous disk write) to prevent a single store with a
+	// problem (e.g. a stalled disk) from affecting message receipt by other
+	// stores on the same node.
+	HandleMessage(ctx context.Context, msg *slpb.Message)
+}
+
+// sendQueue is a queue of outgoing Messages.
+type sendQueue struct {
+	messages chan slpb.Message
+}
+
+// Transport handles the RPC messages for Store Liveness.
+//
+// Each node maintains a single instance of Transport that handles sending and
+// receiving messages on behalf of all stores on the node.
+//
+// The transport is asynchronous with respect to the caller, and internally
+// multiplexes outbound messages by queuing them on a per-destination queue
+// before delivering them asynchronously.
+type Transport struct {
+	log.AmbientContext
+	clock   *hlc.Clock
+	stopper *stop.Stopper
+	dialer  *nodedialer.Dialer
+
+	// queues maintains a map[roachpb.NodeID]*sendQueue and stores the outgoing
+	// message queue for each node, keyed by the destination node ID.
+	queues syncutil.IntMap
+	// handlers maintain a map[roachpb.StoreID]*MessageHandler and stores the
+	// MessageHandler for each store on the node.
+	handlers syncutil.IntMap
+}
+
+// NewTransport creates a new Store Liveness Transport.
+func NewTransport(
+	ambient log.AmbientContext,
+	clock *hlc.Clock,
+	dialer *nodedialer.Dialer,
+	grpcServer *grpc.Server,
+	stopper *stop.Stopper,
+) *Transport {
+	t := &Transport{
+		AmbientContext: ambient,
+		clock:          clock,
+		stopper:        stopper,
+		dialer:         dialer,
+	}
+	if grpcServer != nil {
+		slpb.RegisterStoreLivenessServer(grpcServer, t)
+	}
+	return t
+}
+
+// ListenMessages registers a MessageHandler to receive proxied messages.
+func (t *Transport) ListenMessages(storeID roachpb.StoreID, handler MessageHandler) {
+	t.handlers.Store(int64(storeID), unsafe.Pointer(&handler))
+}
+
+// Stream proxies the incoming requests to the corresponding store's
+// MessageHandler.
+func (t *Transport) Stream(stream slpb.StoreLiveness_StreamServer) error {
+	errCh := make(chan error, 1)
+
+	// Node stopping error is caught below in the select.
+	taskCtx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
+	taskCtx = t.AnnotateCtx(taskCtx)
+	defer cancel()
+
+	if err := t.stopper.RunAsyncTaskEx(taskCtx, stop.TaskOpts{
+		TaskName: "storeliveness.Transport: processing incoming stream",
+		SpanOpt:  stop.ChildSpan,
+	}, func(ctx context.Context) {
+		errCh <- func() error {
+			// Infinite loop pulling incoming messages from the RPC service's stream.
+			for {
+				batch, err := stream.Recv()
+				if err != nil {
+					return err
+				}
+				if !batch.Now.IsEmpty() {
+					t.clock.Update(batch.Now)
+				}
+				for _, msg := range batch.Messages {
+					if err := t.handleMessage(ctx, msg); err != nil {
+						return err.GoError()
+					}
+				}
+			}
+		}()
+	}); err != nil {
+		return err
+	}
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-t.stopper.ShouldQuiesce():
+		return nil
+	}
+}
+
+// handleMessage proxies a request to the corresponding store's MessageHandler.
+func (t *Transport) handleMessage(ctx context.Context, msg slpb.Message) *kvpb.Error {
+	h, ok := t.getMessageHandler(msg.To.StoreID)
+	if !ok {
+		log.Warningf(ctx, "unable to accept message %+v from %+v: no handler registered for %+v",
+			msg, msg.From, msg.To)
+		return kvpb.NewError(kvpb.NewStoreNotFoundError(msg.To.StoreID))
+	}
+
+	h.HandleMessage(ctx, &msg)
+	return nil
+}
+
+// getMessageHandler returns the registered MessageHandler for the given
+// StoreID. If no handlers are registered for the StoreID, it returns (nil,
+// false).
+func (t *Transport) getMessageHandler(storeID roachpb.StoreID) (MessageHandler, bool) {
+	if value, ok := t.handlers.Load(int64(storeID)); ok {
+		return *(*MessageHandler)(value), true
+	}
+	return nil, false
+}
+
+// SendAsync sends a message to the recipient specified in the request. It
+// returns false if the outgoing queue is full or the node dialer's circuit
+// breaker has tripped.
+//
+// The returned bool may be a false positive but will never be a false negative;
+// if sent is true the message may or may not actually be sent but if it's false
+// the message definitely was not sent.
+func (t *Transport) SendAsync(msg slpb.Message) (sent bool) {
+	toNodeID := msg.To.NodeID
+	if b, ok := t.dialer.GetCircuitBreaker(toNodeID, connClass); ok && b.Signal().Err() != nil {
+		return false
+	}
+
+	q, existingQueue := t.getQueue(toNodeID)
+	if !existingQueue {
+		// Note that startProcessNewQueue is in charge of deleting the queue.
+		ctx := t.AnnotateCtx(context.Background())
+		if !t.startProcessNewQueue(ctx, toNodeID) {
+			return false
+		}
+	}
+
+	select {
+	case q.messages <- msg:
+		return true
+	default:
+		if logSendQueueFullEvery.ShouldLog() {
+			log.Warningf(t.AnnotateCtx(context.Background()),
+				"Store Liveness send queue to n%d is full", toNodeID)
+		}
+		return false
+	}
+}
+
+// getQueue returns the queue for the specified node ID and a boolean
+// indicating whether the queue already exists (true) or was created (false).
+func (t *Transport) getQueue(nodeID roachpb.NodeID) (*sendQueue, bool) {
+	value, ok := t.queues.Load(int64(nodeID))
+	if !ok {
+		q := sendQueue{messages: make(chan slpb.Message, sendBufferSize)}
+		value, ok = t.queues.LoadOrStore(int64(nodeID), unsafe.Pointer(&q))
+	}
+	return (*sendQueue)(value), ok
+}
+
+// startProcessNewQueue connects to the node and launches a worker goroutine
+// that processes the queue for the given node ID (which must exist) until
+// the underlying connection is closed or an error occurs. This method
+// takes on the responsibility of deleting the queue when the worker shuts down.
+//
+// Returns whether the worker was started (the queue is deleted either way).
+func (t *Transport) startProcessNewQueue(
+	ctx context.Context, toNodeID roachpb.NodeID,
+) (started bool) {
+	worker := func(ctx context.Context) {
+		q, existingQueue := t.getQueue(toNodeID)
+		if !existingQueue {
+			log.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
+		}
+		defer func() {
+			t.queues.Delete(int64(toNodeID))
+		}()
+		conn, err := t.dialer.Dial(ctx, toNodeID, connClass)
+		if err != nil {
+			// DialNode already logs sufficiently, so just return.
+			return
+		}
+
+		client := slpb.NewStoreLivenessClient(conn)
+		streamCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		stream, err := client.Stream(streamCtx) // closed via cancellation
+		if err != nil {
+			log.Warningf(ctx, "creating stream client for node %d failed: %s", toNodeID, err)
+			return
+		}
+
+		if err = t.processQueue(q, stream); err != nil {
+			log.Warningf(ctx, "processing outgoing queue to node %d failed: %s:", toNodeID, err)
+		}
+	}
+	err := t.stopper.RunAsyncTask(ctx, "storeliveness.Transport: sending messages",
+		func(ctx context.Context) {
+			pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
+		})
+	if err != nil {
+		t.queues.Delete(int64(toNodeID))
+		return false
+	}
+	return true
+}
+
+// processQueue opens a Store Liveness client stream and sends messages from the
+// designated queue via that stream, exiting when an error is received or when
+// it idles out. All messages remaining in the queue at that point are lost and
+// a new instance of processQueue will be started by the next message to be sent.
+func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamClient) (err error) {
+	defer func() {
+		_, closeErr := stream.CloseAndRecv()
+		err = errors.Join(err, closeErr)
+	}()
+
+	var idleTimer timeutil.Timer
+	defer idleTimer.Stop()
+	var batchTimer timeutil.Timer
+	defer batchTimer.Stop()
+	batch := &slpb.MessageBatch{}
+	for {
+		idleTimer.Reset(idleTimeout)
+		select {
+		case <-t.stopper.ShouldQuiesce():
+			return nil
+
+		case <-idleTimer.C:
+			idleTimer.Read = true
+			return nil
+
+		case msg := <-q.messages:
+			batch.Messages = append(batch.Messages, msg)
+
+			// Pull off as many queued requests as possible within batchDuration.
+			batchTimer.Reset(batchDuration)
+			for !batchTimer.Read {
+				select {
+				case msg = <-q.messages:
+					batch.Messages = append(batch.Messages, msg)
+				case <-batchTimer.C:
+					batchTimer.Read = true
+				}
+			}
+
+			batch.Now = t.clock.NowAsClockTimestamp()
+			if err = stream.Send(batch); err != nil {
+				return err
+			}
+
+			// Reuse the Messages slice, but zero out the contents to avoid delaying
+			// GC of memory referenced from within.
+			for i := range batch.Messages {
+				batch.Messages[i] = slpb.Message{}
+			}
+			batch.Messages = batch.Messages[:0]
+			batch.Now = hlc.ClockTimestamp{}
+		}
+	}
+}
