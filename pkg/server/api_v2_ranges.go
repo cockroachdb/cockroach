@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/redact"
 	"github.com/gorilla/mux"
 )
 
@@ -248,7 +248,7 @@ func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 
 	if err := a.status.iterateNodes(
 		ctx,
-		fmt.Sprintf("details about range %d", rangeID),
+		redact.Sprintf("details about range %d", rangeID),
 		noTimeout,
 		dialFn, nodeFn,
 		responseFn, errorFn,

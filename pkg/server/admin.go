@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingui"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	gwutil "github.com/grpc-ecosystem/grpc-gateway/utilities"
 	"golang.org/x/exp/slices"
@@ -3247,7 +3248,7 @@ func (s *systemAdminServer) EnqueueRange(
 
 	if err := timeutil.RunWithTimeout(ctx, "enqueue range", time.Minute, func(ctx context.Context) error {
 		return s.server.status.iterateNodes(
-			ctx, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
+			ctx, redact.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
 			noTimeout,
 			dialFn, nodeFn, responseFn, errorFn,
 		)

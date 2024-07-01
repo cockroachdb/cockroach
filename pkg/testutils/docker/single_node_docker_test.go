@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -234,7 +235,7 @@ func TestSingleNodeDocker(t *testing.T) {
 
 				if err := timeutil.RunWithTimeout(
 					ctx,
-					fmt.Sprintf("execute command \"%s\"", query),
+					redact.Sprintf("execute command \"%s\"", query),
 					defaultTimeout,
 					func(ctx context.Context) error {
 						resp, err := dn.execSQLQuery(ctx, query, test.sqlOpts)

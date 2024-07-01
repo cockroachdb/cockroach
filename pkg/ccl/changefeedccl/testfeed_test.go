@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgx/v4"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -913,8 +914,8 @@ func (c *tableFeed) Partitions() []string {
 	return []string{`0`, `1`, `2`}
 }
 
-func timeoutOp(op string, id jobspb.JobID) string {
-	return fmt.Sprintf("%s-%d", op, id)
+func timeoutOp(op string, id jobspb.JobID) redact.RedactableString {
+	return redact.Sprintf("%s-%d", op, id)
 }
 
 // Next implements the TestFeed interface.
