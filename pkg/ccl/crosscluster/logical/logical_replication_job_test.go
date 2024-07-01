@@ -57,7 +57,7 @@ var (
 
 		"SET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency = '100ms'",
 	}
-	lwwColumnAdd = "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
+	lwwColumnAdd = "ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
 )
 
 func TestLogicalStreamIngestionJob(t *testing.T) {
@@ -134,8 +134,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
 	dbA.Exec(t, createStmt)
 	dbB.Exec(t, createStmt)
-	dbA.Exec(t, lwwColumnAdd)
-	dbB.Exec(t, lwwColumnAdd)
+	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
 	keyPrefix = rowenc.MakeIndexKeyPrefix(s.Codec(), desc.GetID(), desc.GetPrimaryIndexID())
@@ -222,7 +222,7 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 
 	dbB.ExpectErrWithHint(t, "currently require a .* DECIMAL column", "ADD COLUMN", createQ, urlA)
 
-	dbB.Exec(t, "ALTER TABLE tab ADD COLUMN crdb_internal_origin_timestamp STRING")
+	dbB.Exec(t, "ALTER TABLE tab ADD COLUMN crdb_replication_origin_timestamp STRING")
 	dbB.ExpectErr(t, ".*column must be type DECIMAL for use by logical replication", createQ, urlA)
 
 	dbB.Exec(t, fmt.Sprintf("ALTER TABLE tab RENAME COLUMN %[1]s TO str_col, ADD COLUMN %[1]s DECIMAL", originTimestampColumnName))
@@ -274,8 +274,8 @@ family f2(other_payload, v2))
 `
 	serverASQL.Exec(t, createStmt)
 	serverBSQL.Exec(t, createStmt)
-	serverASQL.Exec(t, lwwColumnAdd)
-	serverBSQL.Exec(t, lwwColumnAdd)
+	serverASQL.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	serverBSQL.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
 
 	serverASQL.Exec(t, "INSERT INTO tab(pk, payload, other_payload) VALUES (1, 'hello', 'ruroh1')")
 
@@ -349,9 +349,7 @@ func TestRandomTables(t *testing.T) {
 		sqlA, tableName, numInserts, nil)
 	require.NoError(t, err)
 
-	addCol := fmt.Sprintf(
-		`ALTER TABLE %s ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL`,
-		tableName)
+	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
 	runnerA.Exec(t, addCol)
 	runnerB.Exec(t, addCol)
 
@@ -422,9 +420,7 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tableName := fmt.Sprintf("%s%d", baseTableName, i)
 			schemaStmt := strings.ReplaceAll(tc.schema, baseTableName, tableName)
-			addCol := fmt.Sprintf(
-				`ALTER TABLE %s ADD COLUMN crdb_internal_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL`,
-				tableName)
+			addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
 			runnerA.Exec(t, schemaStmt)
 			runnerB.Exec(t, schemaStmt)
 			runnerA.Exec(t, addCol)
