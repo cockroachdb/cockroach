@@ -204,220 +204,21 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		// data.
 		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
 	case webhookSink:
-		ct.t.Status("webhook install")
-		webhookNode := ct.webhookSinkNodes()
-		rootFolder := `/home/ubuntu`
-		nodeIPs, _ := ct.cluster.ExternalIP(ct.ctx, ct.logger, webhookNode)
-
-		// We use a different port every time to support multiple webhook sinks.
-		webhookPort := nextWebhookPort
-		nextWebhookPort++
-		serverSrcPath := filepath.Join(rootFolder, fmt.Sprintf(`webhook-server-%d.go`, webhookPort))
-		err := ct.cluster.PutString(ct.ctx, webhookServerScript(webhookPort), serverSrcPath, 0700, webhookNode)
-		if err != nil {
-			ct.t.Fatal(err)
+		wm := &webhookManager{
+			t:                ct.t,
+			cluster:          ct.cluster,
+			webhookSinkNodes: ct.webhookSinkNodes(),
+			workloadNode:     ct.workloadNode,
+			mon:              ct.mon,
+			ctx:              ct.ctx,
+			logger:           ct.logger,
+			doneCh:           ct.doneCh,
+			validateOrder:    args.chaosArgs.validateOrder,
+			chaos:            args.chaosArgs.chaos,
 		}
 
-		certs, err := makeTestCerts(nodeIPs[0])
-		if err != nil {
-			ct.t.Fatal(err)
-		}
-		err = ct.cluster.PutString(ct.ctx, certs.SinkKey, filepath.Join(rootFolder, "key.pem"), 0700, webhookNode)
-		if err != nil {
-			ct.t.Fatal(err)
-		}
-		err = ct.cluster.PutString(ct.ctx, certs.SinkCert, filepath.Join(rootFolder, "cert.pem"), 0700, webhookNode)
-		if err != nil {
-			ct.t.Fatal(err)
-		}
-
-		// Start the server in its own monitor to not block ct.mon.Wait()
-		serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, webhookPort)
-		m := ct.cluster.NewMonitor(ct.ctx, ct.workloadNode)
-		restartSink := make(chan struct{}, 1)
-		m.Go(func(ctx context.Context) error {
-			var err error
-			for ctx.Err() == nil {
-				ct.t.L().Printf("starting webhook server %v", webhookPort)
-				opts := option.WithNodes(webhookNode)
-				opts.ShouldRetryFn = func(*install.RunResultDetails) bool { return false }
-				if err = ct.cluster.RunE(ct.ctx, opts, serverExecCmd, rootFolder); err != nil {
-					fmt.Printf("webhook server died: %v\n", err)
-					ct.t.L().Printf("webhook server died: %v", err)
-				}
-				// Wait to be told to restart.
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-restartSink:
-				}
-				// TODO: maybe sleep
-			}
-			return err
-		})
-
-		var stdout, stderr io.ReadCloser
-		stdoutReady := make(chan struct{})
-		tail := func(ctx context.Context) (err error) {
-			stdout, stderr, _, err = ct.cluster.Tail(ctx, ct.t.L(), fmt.Sprintf("/mnt/data2/webhook-output-%d.jsonl", webhookPort), webhookNode)
-			if err != nil {
-				ct.t.L().Printf("error tailing webhook output: %v", err)
-				return err
-			}
-			ct.t.L().Printf("webhook tail started")
-			close(stdoutReady)
-
-			return nil
-		}
-
-		// discard stderr
-		m.Go(func(ctx context.Context) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-stdoutReady:
-			}
-			defer ct.t.L().Printf("webhook stderr discard finished")
-			_, _ = io.Copy(io.Discard, stderr)
-			return nil
-		})
-
-		if args.chaosArgs.validateOrder {
-			// start the tail
-			m.Go(func(ctx context.Context) (err error) {
-				defer ct.t.L().Printf("tail finished with %v", err)
-				if err = tail(ctx); err != nil {
-					return err
-				}
-				return nil
-			})
-
-			m.Go(func(ctx context.Context) error {
-				ct.t.L().Printf("waiting for webhook tail to be ready")
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-stdoutReady:
-				}
-				ct.t.L().Printf("starting webhook order validator")
-				validators := make(map[string]cdctest.Validator)
-				scanner := bufio.NewScanner(stdout)
-				buf := make([]byte, 0, 64*1024)
-				scanner.Buffer(buf, 10*1024*1024) // set max token size to 10MiB
-				var i int
-				// TODO: why does this just stop after we restart the webhook server the first time?
-				for scanner.Scan() {
-					type webhookPayload struct {
-						Payload []struct {
-							Key     json.RawMessage `json:"key"`
-							Topic   string          `json:"topic"`
-							Updated string          `json:"updated"`
-						} `json:"payload"`
-						Resolved string `json:"resolved"`
-					}
-					var payload webhookPayload
-					if err := json.Unmarshal(scanner.Bytes(), &payload); err != nil {
-						return err
-					}
-
-					if payload.Resolved != "" {
-						resolved, err := hlc.ParseHLC(payload.Resolved)
-						if err != nil {
-							return err
-						}
-						// TODO: i dont think we can distinguish which topic the resolved is for. should we? idk
-						_ = resolved
-						// validator.NoteResolved("0", resolved)
-						continue
-					}
-					for _, p := range payload.Payload {
-						updated, err := hlc.ParseHLC(p.Updated)
-						if err != nil {
-							return err
-						}
-						if _, ok := validators[p.Topic]; !ok {
-							validators[p.Topic] = cdctest.NewOrderValidator(p.Topic)
-						}
-						validators[p.Topic].NoteRow("0", string(p.Key), "value doesnt matter", updated)
-						if len(validators[p.Topic].Failures()) > 0 {
-							return errors.Newf("order validation failed for topic %v: %v", p.Topic, validators[p.Topic].Failures())
-						}
-						if i%100_000 == 0 {
-							ct.t.L().Printf("validated %d rows on %d topics", i, len(validators))
-						}
-						i++
-					}
-				}
-				ct.t.L().Printf("validation completed with %d (%v)", i, scanner.Err())
-				return scanner.Err()
-			})
-		}
-
-		if args.chaosArgs.chaos {
-			ct.mon.Go(func(ctx context.Context) error {
-				period, downTime := 2*time.Minute, 20*time.Second
-				// TODO: pull out into its own think like with kafka
-				stop := func(ctx context.Context) error {
-					deets, err := ct.cluster.RunWithDetails(ctx, ct.logger, option.WithNodes(webhookNode), `bash`, `-c`, `set -eo pipefail; ps aux | grep 'webhook-server' | grep -v grep | awk '{print $2}' | xargs kill`)
-					if err != nil {
-						return err
-					}
-					ct.t.L().Printf("webhooks chaos loop: killed server")
-					if len(deets) > 0 {
-						ct.t.L().Printf("output: %v", deets[0].Output(true))
-					}
-					return nil
-				}
-				restart := func(ctx context.Context) error {
-					restartSink <- struct{}{}
-					ct.t.L().Printf("webhooks chaos loop: restarting server")
-					return nil
-				}
-				return func() error {
-					t := time.NewTicker(period)
-					stopper := ct.doneCh
-					defer t.Stop()
-					for i := 0; ; i++ {
-						select {
-						case <-stopper:
-							return nil
-						case <-ctx.Done():
-							return ctx.Err()
-						case <-t.C:
-						}
-
-						ct.t.L().Printf("webhooks chaos loop iteration %d: stopping", i)
-						if err := stop(ctx); err != nil {
-							return err
-						}
-
-						select {
-						case <-stopper:
-							return nil
-						case <-ctx.Done():
-							return ctx.Err()
-						case <-time.After(downTime):
-						}
-
-						ct.t.L().Printf("webhooks chaos loop iteration %d: restarting", i)
-						if err := restart(ctx); err != nil {
-							return err
-						}
-					}
-				}()
-			})
-		}
-
-		sinkDestHost, err := url.Parse(fmt.Sprintf(`https://%s:%d`, nodeIPs[0], webhookPort))
-		if err != nil {
-			ct.t.Fatal(err)
-		}
-
-		params := sinkDestHost.Query()
-		params.Set(changefeedbase.SinkParamCACert, certs.CACertBase64())
-		params.Set(changefeedbase.SinkParamTLSEnabled, "true")
-		sinkDestHost.RawQuery = params.Encode()
-		sinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
+		sinkURL := wm.Start()
+		sinkURI = fmt.Sprintf("webhook-%s", sinkURL.String())
 	case pubsubSink:
 		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
 	case kafkaSink:
@@ -2683,41 +2484,6 @@ func randomSerial() (*big.Int, error) {
 	return ret, nil
 }
 
-var nextWebhookPort = 3001 // 3000 is used by grafana
-
-var webhookServerScript = func(port int) string {
-	return fmt.Sprintf(`
-package main
-
-import (
-	"log"
-	"strings"
-	"io"
-	"net/http"
-	"os"
-	"runtime"
-)
-
-func main() {
-	runtime.GOMAXPROCS(1)
-	out, err := os.OpenFile("/mnt/data2/webhook-output-%d.jsonl", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatalf("failed to create output file")
-	}
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		b := strings.Builder{}
-		if _, err := io.Copy(&b, r.Body); err != nil {
-			log.Fatalf("failed to read request body")
-		}
-		if _, err := out.WriteString(b.String() + "\n"); err != nil {
-			log.Fatalf("failed to write to output file")
-		}
-	})
-	log.Fatal(http.ListenAndServeTLS(":%d",  "/home/ubuntu/cert.pem",  "/home/ubuntu/key.pem", nil))
-}
-`, port, port)
-}
-
 var hydraServerStartScript = `
 export SECRETS_SYSTEM=arbitrarySystemSecret
 export OAUTH2_ISSUER_URL=http://localhost:4444
@@ -3591,6 +3357,258 @@ func (k kafkaManager) startTopicConsumers(
 	}
 
 	return nil
+}
+
+var nextWebhookPort = 3001 // 3000 is used by grafana
+
+var webhookServerScript = func(port int) string {
+	return fmt.Sprintf(`
+package main
+
+import (
+	"log"
+	"strings"
+	"io"
+	"net/http"
+	"os"
+	"runtime"
+)
+
+func main() {
+	runtime.GOMAXPROCS(1)
+	out, err := os.OpenFile("/mnt/data2/webhook-output-%d.jsonl", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("failed to create output file")
+	}
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		b := strings.Builder{}
+		if _, err := io.Copy(&b, r.Body); err != nil {
+			log.Fatalf("failed to read request body")
+		}
+		if _, err := out.WriteString(b.String() + "\n"); err != nil {
+			log.Fatalf("failed to write to output file")
+		}
+	})
+	log.Fatal(http.ListenAndServeTLS(":%d",  "/home/ubuntu/cert.pem",  "/home/ubuntu/key.pem", nil))
+}
+`, port, port)
+}
+
+type webhookManager struct {
+	t                test.Test
+	cluster          cluster.Cluster
+	webhookSinkNodes option.NodeListOption
+	workloadNode     option.NodeListOption
+	mon              cluster.Monitor
+	ctx              context.Context
+	logger           *logger.Logger
+	doneCh           chan struct{}
+
+	validateOrder bool
+	chaos         bool
+
+	// set by start et al
+	chosenPort  int
+	restartSink chan struct{}
+}
+
+func (m *webhookManager) Start() (dest *url.URL) {
+	m.restartSink = make(chan struct{}, 1)
+
+	m.t.Status("webhook install")
+	rootFolder := `/home/ubuntu`
+	nodeIPs, err := m.cluster.ExternalIP(m.ctx, m.logger, m.webhookSinkNodes)
+	require.NoError(m.t, err)
+
+	// We use a different port every time to support multiple webhook sinks.
+	m.chosenPort = nextWebhookPort
+	nextWebhookPort++
+	serverSrcPath := filepath.Join(rootFolder, fmt.Sprintf(`webhook-server-%d.go`, m.chosenPort))
+	err = m.cluster.PutString(m.ctx, webhookServerScript(m.chosenPort), serverSrcPath, 0700, m.webhookSinkNodes)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+
+	certs, err := makeTestCerts(nodeIPs[0])
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	err = m.cluster.PutString(m.ctx, certs.SinkKey, filepath.Join(rootFolder, "key.pem"), 0700, m.webhookSinkNodes)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	err = m.cluster.PutString(m.ctx, certs.SinkCert, filepath.Join(rootFolder, "cert.pem"), 0700, m.webhookSinkNodes)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+
+	// Start the server in its own monitor to not block m.mon.Wait() // TODO: why?
+	// mon := m.cluster.NewMonitor(m.ctx, m.workloadNode)
+	serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, m.chosenPort)
+	m.mon.Go(func(ctx context.Context) error {
+		var err error
+		for ctx.Err() == nil {
+			m.t.L().Printf("starting webhook server %v", m.chosenPort)
+			opts := option.WithNodes(m.webhookSinkNodes)
+			opts.ShouldRetryFn = func(*install.RunResultDetails) bool { return false }
+			if err = m.cluster.RunE(m.ctx, opts, serverExecCmd, rootFolder); err != nil {
+				fmt.Printf("webhook server died: %v\n", err)
+				m.t.L().Printf("webhook server died: %v", err)
+			}
+			// Wait to be told to restart.
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-m.restartSink:
+			}
+			// TODO: maybe sleep
+		}
+		return err
+	})
+
+	if m.validateOrder {
+		m.mon.Go(func(ctx context.Context) error {
+			stdout := m.tail()
+			m.runValidateOrder(stdout)
+			return nil
+		})
+	}
+	if m.chaos {
+		m.mon.Go(func(ctx context.Context) error {
+			m.runChaosLoop()
+			return nil
+		})
+	}
+
+	u, err := url.Parse(fmt.Sprintf("https://%s:%d", nodeIPs[0], m.chosenPort))
+	require.NoError(m.t, err)
+	params := u.Query()
+	params.Set(changefeedbase.SinkParamCACert, certs.CACertBase64())
+	params.Set(changefeedbase.SinkParamTLSEnabled, "true")
+	u.RawQuery = params.Encode()
+	return u
+}
+
+func (m *webhookManager) tail() io.Reader {
+	var stdout, stderr io.ReadCloser
+	var err error
+	stdoutReady := make(chan struct{})
+
+	stdout, stderr, _, err = m.cluster.Tail(m.ctx, m.t.L(), fmt.Sprintf("/mnt/data2/webhook-output-%d.jsonl", m.chosenPort), m.webhookSinkNodes)
+	if err != nil {
+		m.t.Fatalf("error tailing webhook output: %v", err)
+	}
+	m.t.L().Printf("webhook tail started")
+	close(stdoutReady)
+
+	// discard stderr
+	m.mon.Go(func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-stdoutReady:
+		}
+		defer m.t.L().Printf("webhook stderr discard finished")
+		_, _ = io.Copy(io.Discard, stderr)
+		return nil
+	})
+
+	m.t.L().Printf("waiting for webhook tail to be ready")
+
+	select {
+	case <-m.ctx.Done():
+		return nil
+	case <-stdoutReady:
+	}
+
+	return stdout
+}
+
+func (m *webhookManager) runValidateOrder(stdout io.Reader) {
+	m.t.L().Printf("starting webhook order validator")
+	validators := make(map[string]cdctest.Validator)
+	scanner := bufio.NewScanner(stdout)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 10*1024*1024) // set max token size to 10MiB
+	var i int
+	for scanner.Scan() {
+		type webhookPayload struct {
+			Payload []struct {
+				Key     json.RawMessage `json:"key"`
+				Topic   string          `json:"topic"`
+				Updated string          `json:"updated"`
+			} `json:"payload"`
+			Resolved string `json:"resolved"`
+		}
+		var payload webhookPayload
+		require.NoError(m.t, json.Unmarshal(scanner.Bytes(), &payload))
+
+		if payload.Resolved != "" {
+			resolved, err := hlc.ParseHLC(payload.Resolved)
+			require.NoError(m.t, err)
+			// TODO: i dont think we can distinguish which topic the resolved is for. should we? idk
+			_ = resolved
+			// validator.NoteResolved("0", resolved)
+			continue
+		}
+		for _, p := range payload.Payload {
+			updated, err := hlc.ParseHLC(p.Updated)
+			require.NoError(m.t, err)
+			if _, ok := validators[p.Topic]; !ok {
+				validators[p.Topic] = cdctest.NewOrderValidator(p.Topic)
+			}
+			validators[p.Topic].NoteRow("0", string(p.Key), "value doesnt matter", updated)
+			if len(validators[p.Topic].Failures()) > 0 {
+				m.t.Fatalf("order validation failed for topic %v: %v", p.Topic, validators[p.Topic].Failures())
+			}
+			if i%100_000 == 0 {
+				m.t.L().Printf("validated %d rows on %d topics", i, len(validators))
+			}
+			i++
+		}
+	}
+	m.t.L().Printf("validation completed with %d (%v)", i, scanner.Err())
+	require.NoError(m.t, scanner.Err())
+}
+
+func (m *webhookManager) runChaosLoop() {
+	period, downTime := 2*time.Minute, 20*time.Second
+	stop := func(ctx context.Context) {
+		_, err := m.cluster.RunWithDetails(ctx, m.logger, option.WithNodes(m.webhookSinkNodes), `bash`, `-c`, `set -eo pipefail; ps aux | grep 'webhook-server' | grep -v grep | awk '{print $2}' | xargs kill`)
+		require.NoError(m.t, err)
+		m.t.L().Printf("webhooks chaos loop: killed server")
+	}
+	restart := func(ctx context.Context) {
+		m.restartSink <- struct{}{}
+		m.t.L().Printf("webhooks chaos loop: restarting server")
+	}
+
+	t := time.NewTicker(period)
+	stopper := m.doneCh
+	defer t.Stop()
+	for i := 0; ; i++ {
+		select {
+		case <-stopper:
+			return
+		case <-m.ctx.Done():
+			return
+		case <-t.C:
+		}
+
+		m.t.L().Printf("webhooks chaos loop iteration %d: stopping", i)
+		stop(m.ctx)
+
+		select {
+		case <-stopper:
+			return
+		case <-m.ctx.Done():
+			return
+		case <-time.After(downTime):
+		}
+
+		m.t.L().Printf("webhooks chaos loop iteration %d: restarting", i)
+		restart(m.ctx)
+	}
 }
 
 type tpccWorkload struct {
