@@ -181,6 +181,23 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if err != nil {
 			panic(err)
 		}
+		if typ.Identical(types.Trigger) {
+			// TRIGGER is not allowed in this context.
+			if language == tree.RoutineLangPLpgSQL {
+				panic(pgerror.New(pgcode.FeatureNotSupported,
+					"PL/pgSQL functions cannot accept type trigger",
+				))
+			}
+			if param.IsOutParam() {
+				panic(pgerror.New(pgcode.InvalidFunctionDefinition,
+					"SQL functions cannot return type trigger",
+				))
+			} else {
+				panic(pgerror.New(pgcode.InvalidFunctionDefinition,
+					"SQL functions cannot have arguments of type trigger",
+				))
+			}
+		}
 		if param.Class == tree.RoutineParamInOut && param.Name == "" {
 			panic(unimplemented.NewWithIssue(121251, "unnamed INOUT parameters are not yet supported"))
 		}
@@ -342,6 +359,15 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		} else if language == tree.RoutineLangPLpgSQL {
 			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "PL/pgSQL functions cannot return type unknown"))
 		}
+	} else if funcReturnType.Identical(types.Trigger) {
+		if language == tree.RoutineLangSQL {
+			// Postgres does not allow SQL trigger functions.
+			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "SQL functions cannot return type trigger"))
+		}
+		if len(cf.Params) > 0 {
+			// Trigger functions cannot have parameters.
+			panic(pgerror.New(pgcode.InvalidFunctionDefinition, "trigger functions cannot have declared arguments"))
+		}
 	}
 	// Collect the user defined type dependency of the return type.
 	typedesc.GetTypeDescriptorClosure(funcReturnType).ForEach(func(id descpb.ID) {
@@ -394,6 +420,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 				"set-returning PL/pgSQL functions",
 				"set-returning PL/pgSQL functions are not yet supported",
 			))
+		}
+		if funcReturnType.Identical(types.Trigger) {
+			panic(unimplemented.NewWithIssue(126356, "trigger functions are not yet supported"))
 		}
 
 		// Parse the function body.
@@ -510,6 +539,11 @@ func validateReturnType(
 			),
 			pgcode.InvalidFunctionDefinition,
 		)
+	}
+
+	// Any column types are allowed when the return type is TRIGGER.
+	if expected.Identical(types.Trigger) {
+		return nil
 	}
 
 	// If return type is RECORD and the tuple content types unspecified by OUT

@@ -2602,6 +2602,20 @@ var builtinOidsArray = []string{
 	2634: `vector_dims(vector: vector) -> int`,
 	2635: `vector_norm(vector: vector) -> float`,
 	2636: `crdb_internal.log(msg: string) -> void`,
+	2637: `crdb_internal.start_logical_replication_job(conn_str: string, table_names: string[]) -> int`,
+	2638: `crdb_internal.plan_logical_replication(req: bytes) -> bytes`,
+	2639: `crdb_internal.start_replication_stream_for_tables(req: bytes) -> bytes`,
+	2640: `triggerin(input: anyelement) -> trigger`,
+	2641: `triggerout(trigger: trigger) -> bytes`,
+	2642: `triggersend(trigger: trigger) -> bytes`,
+	2643: `triggerrecv(input: anyelement) -> trigger`,
+	2644: `trigger(trigger: trigger) -> trigger`,
+	2645: `trigger(string: string) -> trigger`,
+	2646: `bpchar(trigger: trigger) -> char`,
+	2647: `char(trigger: trigger) -> "char"`,
+	2648: `name(trigger: trigger) -> name`,
+	2649: `text(trigger: trigger) -> string`,
+	2650: `varchar(trigger: trigger) -> varchar`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

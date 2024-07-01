@@ -570,6 +570,9 @@ test           pg_catalog          timetz                                       
 test           pg_catalog          timetz[]                                     type         admin    ALL             false
 test           pg_catalog          timetz[]                                     type         public   USAGE           false
 test           pg_catalog          timetz[]                                     type         root     ALL             false
+test           pg_catalog          trigger                                      type         admin    ALL             false
+test           pg_catalog          trigger                                      type         public   USAGE           false
+test           pg_catalog          trigger                                      type         root     ALL             false
 test           pg_catalog          tsquery                                      type         admin    ALL             false
 test           pg_catalog          tsquery                                      type         public   USAGE           false
 test           pg_catalog          tsquery                                      type         root     ALL             false
@@ -775,6 +778,8 @@ test           pg_catalog   timetz          type         admin    ALL           
 test           pg_catalog   timetz          type         root     ALL             false
 test           pg_catalog   timetz[]        type         admin    ALL             false
 test           pg_catalog   timetz[]        type         root     ALL             false
+test           pg_catalog   trigger         type         admin    ALL             false
+test           pg_catalog   trigger         type         root     ALL             false
 test           pg_catalog   tsquery         type         admin    ALL             false
 test           pg_catalog   tsquery         type         root     ALL             false
 test           pg_catalog   tsquery[]       type         admin    ALL             false
@@ -1393,6 +1398,8 @@ a              pg_catalog   timetz                           type         admin 
 a              pg_catalog   timetz                           type         root     ALL             false
 a              pg_catalog   timetz[]                         type         admin    ALL             false
 a              pg_catalog   timetz[]                         type         root     ALL             false
+a              pg_catalog   trigger                          type         admin    ALL             false
+a              pg_catalog   trigger                          type         root     ALL             false
 a              pg_catalog   tsquery                          type         admin    ALL             false
 a              pg_catalog   tsquery                          type         root     ALL             false
 a              pg_catalog   tsquery[]                        type         admin    ALL             false
@@ -1575,6 +1582,8 @@ defaultdb      pg_catalog   timetz                           type         admin 
 defaultdb      pg_catalog   timetz                           type         root     ALL             false
 defaultdb      pg_catalog   timetz[]                         type         admin    ALL             false
 defaultdb      pg_catalog   timetz[]                         type         root     ALL             false
+defaultdb      pg_catalog   trigger                          type         admin    ALL             false
+defaultdb      pg_catalog   trigger                          type         root     ALL             false
 defaultdb      pg_catalog   tsquery                          type         admin    ALL             false
 defaultdb      pg_catalog   tsquery                          type         root     ALL             false
 defaultdb      pg_catalog   tsquery[]                        type         admin    ALL             false
@@ -1757,6 +1766,8 @@ postgres       pg_catalog   timetz                           type         admin 
 postgres       pg_catalog   timetz                           type         root     ALL             false
 postgres       pg_catalog   timetz[]                         type         admin    ALL             false
 postgres       pg_catalog   timetz[]                         type         root     ALL             false
+postgres       pg_catalog   trigger                          type         admin    ALL             false
+postgres       pg_catalog   trigger                          type         root     ALL             false
 postgres       pg_catalog   tsquery                          type         admin    ALL             false
 postgres       pg_catalog   tsquery                          type         root     ALL             false
 postgres       pg_catalog   tsquery[]                        type         admin    ALL             false
@@ -1939,6 +1950,8 @@ system         pg_catalog   timetz                           type         admin 
 system         pg_catalog   timetz                           type         root     ALL             false
 system         pg_catalog   timetz[]                         type         admin    ALL             false
 system         pg_catalog   timetz[]                         type         root     ALL             false
+system         pg_catalog   trigger                          type         admin    ALL             false
+system         pg_catalog   trigger                          type         root     ALL             false
 system         pg_catalog   tsquery                          type         admin    ALL             false
 system         pg_catalog   tsquery                          type         root     ALL             false
 system         pg_catalog   tsquery[]                        type         admin    ALL             false
@@ -2502,6 +2515,8 @@ test           pg_catalog   timetz                           type         admin 
 test           pg_catalog   timetz                           type         root     ALL             false
 test           pg_catalog   timetz[]                         type         admin    ALL             false
 test           pg_catalog   timetz[]                         type         root     ALL             false
+test           pg_catalog   trigger                          type         admin    ALL             false
+test           pg_catalog   trigger                          type         root     ALL             false
 test           pg_catalog   tsquery                          type         admin    ALL             false
 test           pg_catalog   tsquery                          type         root     ALL             false
 test           pg_catalog   tsquery[]                        type         admin    ALL             false
