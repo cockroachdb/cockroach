@@ -1579,14 +1579,19 @@ func registerCDC(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
-		// TODO(#122372): Add this to the nightly test suite after we fix the Kafka restart bug.
-		Suites:          registry.ManualOnly,
-		RequiresLicense: true,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			_, err := ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
+			// Since this test fails with the v1 kafka sink, hardcode the v2 sink.
+			_, err := ct.DB().ExecContext(ctx, `SET CLUSTER SETTING changefeed.new_kafka_sink.enabled = true;`)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
 			if err != nil {
 				t.Fatal("failed to create table")
 			}
