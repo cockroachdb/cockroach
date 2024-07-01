@@ -61,6 +61,12 @@ type PreparedStatement struct {
 	// stable expressions. Otherwise, it is an unoptimized, normalized memo.
 	BaseMemo *memo.Memo
 
+	// GenericMemo, if present, is a fully-optimized memo that can be executed
+	// as-is.
+	// TODO(mgartner): Put all fully-optimized plans in the GenericMemo field to
+	// reduce confusion.
+	GenericMemo *memo.Memo
+
 	// refCount keeps track of the number of references to this PreparedStatement.
 	// New references are registered through incRef().
 	// Once refCount hits 0 (through calls to decRef()), the following memAcc is
@@ -87,6 +93,9 @@ func (p *PreparedStatement) MemoryEstimate() int64 {
 	size := p.PrepareMetadata.MemoryEstimate()
 	if p.BaseMemo != nil {
 		size += p.BaseMemo.MemoryEstimate()
+	}
+	if p.GenericMemo != nil {
+		size += p.GenericMemo.MemoryEstimate()
 	}
 	return size
 }

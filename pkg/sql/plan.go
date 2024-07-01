@@ -486,7 +486,11 @@ func (p *planTop) savePlanInfo() {
 		distribution = physicalplan.PartiallyDistributedPlan
 	}
 	containsMutation := p.flags.IsSet(planFlagContainsMutation)
-	p.instrumentation.RecordPlanInfo(distribution, vectorized, containsMutation)
+	generic := p.flags.IsSet(planFlagGeneric)
+	reoptimized := p.flags.IsSet(planFlagReoptimized)
+	p.instrumentation.RecordPlanInfo(
+		distribution, vectorized, containsMutation, generic, reoptimized,
+	)
 }
 
 // startExec calls startExec() on each planNode using a depth-first, post-order
@@ -631,6 +635,14 @@ const (
 	// planFlagSessionMigration is set if the plan is being created during
 	// a session migration.
 	planFlagSessionMigration
+
+	// planFlagGeneric is set if a generic query plan was used. A generic query
+	// plan is a plan that is fully-optimized once and can be reused without
+	// re-optimized.
+	planFlagGeneric
+
+	// planFlagReoptimized is set if the query was optimized or re-optimized.
+	planFlagReoptimized
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
