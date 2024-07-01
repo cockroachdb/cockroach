@@ -55,7 +55,7 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 //   - Columns
 //   - Types
 //   - AnonymizedStr
-//   - Memo (for reuse during exec, if appropriate).
+//   - BaseMemo (for reuse during exec, if appropriate).
 func (p *planner) prepareUsingOptimizer(
 	ctx context.Context, origin PreparedStatementOrigin,
 ) (planFlags, error) {
@@ -154,7 +154,7 @@ func (p *planner) prepareUsingOptimizer(
 					stmt.Prepared.StatementNoConstants = pm.StatementNoConstants
 					stmt.Prepared.Columns = pm.Columns
 					stmt.Prepared.Types = pm.Types
-					stmt.Prepared.Memo = cachedData.Memo
+					stmt.Prepared.BaseMemo = cachedData.Memo
 					return opc.flags, nil
 				}
 				opc.log(ctx, "query cache hit but memo is stale (prepare)")
@@ -217,7 +217,7 @@ func (p *planner) prepareUsingOptimizer(
 	stmt.Prepared.Columns = resultCols
 	stmt.Prepared.Types = p.semaCtx.Placeholders.Types
 	if opc.allowMemoReuse {
-		stmt.Prepared.Memo = memo
+		stmt.Prepared.BaseMemo = memo
 		if opc.useCache {
 			// execPrepare sets the PrepareMetadata.InferredTypes field after this
 			// point. However, once the PrepareMetadata goes into the cache, it
@@ -543,23 +543,23 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 
 	prepared := opc.p.stmt.Prepared
 	p := opc.p
-	if opc.allowMemoReuse && prepared != nil && prepared.Memo != nil {
+	if opc.allowMemoReuse && prepared != nil && prepared.BaseMemo != nil {
 		// We are executing a previously prepared statement and a reusable memo is
 		// available.
 
 		// If the prepared memo has been invalidated by schema or other changes,
 		// re-prepare it.
-		if isStale, err := prepared.Memo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
+		if isStale, err := prepared.BaseMemo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
 			return nil, err
 		} else if isStale {
 			opc.log(ctx, "rebuilding cached memo")
-			prepared.Memo, err = opc.buildReusableMemo(ctx)
+			prepared.BaseMemo, err = opc.buildReusableMemo(ctx)
 			if err != nil {
 				return nil, err
 			}
 		}
 		opc.log(ctx, "reusing cached memo")
-		return opc.reuseMemo(ctx, prepared.Memo)
+		return opc.reuseMemo(ctx, prepared.BaseMemo)
 	}
 
 	if opc.useCache {
