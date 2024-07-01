@@ -18,7 +18,6 @@
 package raft
 
 import (
-	"fmt"
 	"testing"
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -43,7 +42,7 @@ func (u *unstable) checkInvariants(t testing.TB) {
 }
 
 func TestUnstableMaybeFirstIndex(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		entries []pb.Entry
 		offset  uint64
 		snap    *pb.Snapshot
@@ -69,10 +68,8 @@ func TestUnstableMaybeFirstIndex(t *testing.T) {
 			[]pb.Entry{}, 5, &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}},
 			true, 5,
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			u := newUnstable(tt.offset, raftLogger)
 			u.snapshot = tt.snap
 			u.entries = tt.entries
@@ -86,7 +83,7 @@ func TestUnstableMaybeFirstIndex(t *testing.T) {
 }
 
 func TestMaybeLastIndex(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		entries []pb.Entry
 		offset  uint64
 		snap    *pb.Snapshot
@@ -113,10 +110,8 @@ func TestMaybeLastIndex(t *testing.T) {
 			[]pb.Entry{}, 0, nil,
 			false, 0,
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			u := newUnstable(tt.offset, raftLogger)
 			u.snapshot = tt.snap
 			u.entries = tt.entries
@@ -130,7 +125,7 @@ func TestMaybeLastIndex(t *testing.T) {
 }
 
 func TestUnstableMaybeTerm(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		entries []pb.Entry
 		offset  uint64
 		snap    *pb.Snapshot
@@ -191,10 +186,8 @@ func TestUnstableMaybeTerm(t *testing.T) {
 			5,
 			false, 0,
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			u := newUnstable(tt.offset, raftLogger)
 			u.snapshot = tt.snap
 			u.entries = tt.entries
@@ -233,7 +226,7 @@ func TestUnstableRestore(t *testing.T) {
 }
 
 func TestUnstableNextEntries(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		entries          []pb.Entry
 		offset           uint64
 		offsetInProgress uint64
@@ -255,10 +248,8 @@ func TestUnstableNextEntries(t *testing.T) {
 			index(5).terms(1, 1), 5, 7,
 			nil, // nil, not empty slice
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			u := newUnstable(tt.offset, raftLogger)
 			u.entries = tt.entries
 			u.offsetInProgress = tt.offsetInProgress
@@ -270,7 +261,7 @@ func TestUnstableNextEntries(t *testing.T) {
 
 func TestUnstableNextSnapshot(t *testing.T) {
 	s := &pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 4, Term: 1}}
-	tests := []struct {
+	for _, tt := range []struct {
 		offset             uint64
 		snapshot           *pb.Snapshot
 		snapshotInProgress bool
@@ -292,10 +283,8 @@ func TestUnstableNextSnapshot(t *testing.T) {
 			5, s, true,
 			nil,
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			u := newUnstable(tt.offset, raftLogger)
 			u.snapshot = tt.snapshot
 			u.snapshotInProgress = tt.snapshotInProgress
@@ -306,7 +295,7 @@ func TestUnstableNextSnapshot(t *testing.T) {
 }
 
 func TestUnstableAcceptInProgress(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		entries            []pb.Entry
 		snapshot           *pb.Snapshot
 		offset             uint64
@@ -395,10 +384,8 @@ func TestUnstableAcceptInProgress(t *testing.T) {
 			true, // snapshot already in progress
 			7, true,
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			u := newUnstable(tt.offset, raftLogger)
 			u.snapshot = tt.snapshot
 			u.entries = tt.entries
@@ -415,7 +402,7 @@ func TestUnstableAcceptInProgress(t *testing.T) {
 }
 
 func TestUnstableStableTo(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		entries          []pb.Entry
 		offset           uint64
 		offsetInProgress uint64
@@ -492,10 +479,8 @@ func TestUnstableStableTo(t *testing.T) {
 			4, 1, // stable to old entry
 			5, 6, 1,
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			u := newUnstable(tt.offset, raftLogger)
 			u.snapshot = tt.snap
 			u.entries = tt.entries
@@ -517,7 +502,7 @@ func TestUnstableStableTo(t *testing.T) {
 }
 
 func TestUnstableTruncateAndAppend(t *testing.T) {
-	tests := []struct {
+	for _, tt := range []struct {
 		entries          []pb.Entry
 		offset           uint64
 		offsetInProgress uint64
@@ -576,10 +561,8 @@ func TestUnstableTruncateAndAppend(t *testing.T) {
 			index(6).terms(2),
 			5, 6, index(5).terms(1, 2),
 		},
-	}
-
-	for i, tt := range tests {
-		t.Run(fmt.Sprint(i), func(t *testing.T) {
+	} {
+		t.Run("", func(t *testing.T) {
 			u := newUnstable(tt.offset, raftLogger)
 			u.snapshot = tt.snap
 			u.entries = tt.entries
