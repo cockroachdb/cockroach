@@ -1563,6 +1563,7 @@ GO_TARGETS = [
     "//pkg/raft/quorum:quorum_test",
     "//pkg/raft/raftpb:raftpb",
     "//pkg/raft/raftpb:raftpb_test",
+    "//pkg/raft/raftstoreliveness:raftstoreliveness",
     "//pkg/raft/rafttest:rafttest",
     "//pkg/raft/rafttest:rafttest_test",
     "//pkg/raft/tracker:tracker",
