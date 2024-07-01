@@ -143,6 +143,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
@@ -164,6 +165,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: custom
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
