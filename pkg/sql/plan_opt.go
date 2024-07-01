@@ -527,20 +527,10 @@ func (opc *optPlanningCtx) reuseMemo(
 	return f.Memo(), nil
 }
 
-// buildExecMemo creates a fully optimized memo, possibly reusing a previously
-// cached memo as a starting point.
-//
-// The returned memo is only safe to use in one thread, during execution of the
-// current statement.
-func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ error) {
-	if resumeProc := opc.p.storedProcTxnState.getResumeProc(); resumeProc != nil {
-		// We are executing a stored procedure which has paused to commit or
-		// rollback its transaction. Use resumeProc to resume execution in a new
-		// transaction where the control statement left off.
-		opc.log(ctx, "resuming stored procedure execution in a new transaction")
-		return opc.reuseMemo(ctx, resumeProc)
-	}
-
+// fetchPreparedMemoLegacy attempts to fetch a prepared memo. If a valid (i.e.,
+// non-stale) memo is found, it is used. Otherwise, a new statement will be
+// built. If memo reuse is not allowed, nil is returned.
+func (opc *optPlanningCtx) fetchPreparedMemoLegacy(ctx context.Context) (_ *memo.Memo, err error) {
 	prepared := opc.p.stmt.Prepared
 	p := opc.p
 	if opc.allowMemoReuse && prepared != nil && prepared.Memo != nil {
@@ -562,6 +552,32 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		return opc.reuseMemo(ctx, prepared.Memo)
 	}
 
+	return nil, nil
+}
+
+// buildExecMemo creates a fully optimized memo, possibly reusing a previously
+// cached memo as a starting point.
+//
+// The returned memo is only safe to use in one thread, during execution of the
+// current statement.
+func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ error) {
+	if resumeProc := opc.p.storedProcTxnState.getResumeProc(); resumeProc != nil {
+		// We are executing a stored procedure which has paused to commit or
+		// rollback its transaction. Use resumeProc to resume execution in a new
+		// transaction where the control statement left off.
+		opc.log(ctx, "resuming stored procedure execution in a new transaction")
+		return opc.reuseMemo(ctx, resumeProc)
+	}
+
+	m, err := opc.fetchPreparedMemoLegacy(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if m != nil {
+		return m, nil
+	}
+
+	p := opc.p
 	if opc.useCache {
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
