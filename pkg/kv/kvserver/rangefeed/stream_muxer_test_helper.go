@@ -120,6 +120,12 @@ func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 		if doneCh, ok := s.streamsDone[e.StreamID]; ok {
 			var t *kvpb.RangeFeedRetryError
 			if errors.As(e.Error.Error.GoError(), &t) && t.Reason == kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED {
+				// StreamMuxer converts nil errors to RANGEFEED_CLOSED when sending to
+				// the client. We revert it back to nil here to maintain expected
+				// behavior. Ideally, a testing knob should be added to disable this
+				// transformation, but we'll keep it simple for now. RANGEFEED_CLOSED is
+				// not expected to be sent directly to the client by the server since it
+				// is a special error sent for RangeFeedRequest.CloseStream.
 				doneCh <- nil
 			} else {
 				doneCh <- e.Error.Error.GoError()
