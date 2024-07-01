@@ -55,10 +55,11 @@ const (
 type PreparedStatement struct {
 	querycache.PrepareMetadata
 
-	// Memo is the memoized data structure constructed by the cost-based optimizer
-	// during prepare of a SQL statement. It can significantly speed up execution
-	// if it is used by the optimizer as a starting point.
-	Memo *memo.Memo
+	// BaseMemo is the memoized data structure constructed by the cost-based
+	// optimizer during prepare of a SQL statement. It may be a fully-optimized
+	// memo if the prepared statement has no placeholders and no fold-able
+	// stable expressions. Otherwise, it is an unoptimized, normalized memo.
+	BaseMemo *memo.Memo
 
 	// refCount keeps track of the number of references to this PreparedStatement.
 	// New references are registered through incRef().
@@ -84,8 +85,8 @@ func (p *PreparedStatement) MemoryEstimate() int64 {
 	//   1. Size of the prepare metadata.
 	//   2. Size of the prepared memo, if using the cost-based optimizer.
 	size := p.PrepareMetadata.MemoryEstimate()
-	if p.Memo != nil {
-		size += p.Memo.MemoryEstimate()
+	if p.BaseMemo != nil {
+		size += p.BaseMemo.MemoryEstimate()
 	}
 	return size
 }
