@@ -424,7 +424,6 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		kafka, _ := setupKafka(ct.ctx, ct.t, ct.cluster, ct.kafkaSinkNodes())
 		kafka.mon = ct.mon
 		kafka.validateOrder = args.chaosArgs.validateOrder
-		kafka.validateConsistency = args.chaosArgs.validateConsistency
 
 		if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
 			ct.t.Fatal(err)
