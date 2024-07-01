@@ -5998,6 +5998,9 @@ func PGWireTypeSize(t *types.T) int {
 	if tOid == oid.T_date {
 		return 4
 	}
+	if tOid == oid.T_trigger {
+		return 4
+	}
 	if sz, variable := DatumTypeSize(t); !variable {
 		return int(sz)
 	}
