@@ -248,6 +248,14 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	)
 }
 
+func (b *Builder) wrapBuiltinFunction(fnName string) (tree.ResolvableFunctionReference, error) {
+	fnDef, ok := tree.ResolvedBuiltinFuncDefs[fnName]
+	if !ok {
+		return tree.ResolvableFunctionReference{}, errors.Errorf("Could not resolve builtin function %s", fnName)
+	}
+	return tree.ResolvableFunctionReference{FunctionReference: fnDef}, nil
+}
+
 func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference, error) {
 	if b.evalCtx != nil && b.catalog != nil { // Some tests leave those unset.
 		unresolved := tree.MakeUnresolvedName(fnName)
