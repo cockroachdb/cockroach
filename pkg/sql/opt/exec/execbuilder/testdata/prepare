@@ -115,6 +115,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: generic, reused
 rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 maximum memory usage: <hidden>
 network usage: <hidden>
@@ -146,6 +147,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 vectorized: <hidden>
+plan type: generic, reused
 maximum memory usage: <hidden>
 network usage: <hidden>
 regions: <hidden>
