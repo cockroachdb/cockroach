@@ -315,6 +315,13 @@ func TestReadCommittedExecBuild_fk_read_committed(
 	runExecBuildLogicTest(t, "fk_read_committed")
 }
 
+func TestReadCommittedExecBuild_generic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "generic")
+}
+
 func TestReadCommittedExecBuild_geospatial(
 	t *testing.T,
 ) {
