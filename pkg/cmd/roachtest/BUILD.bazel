@@ -24,6 +24,7 @@ go_library(
         "//pkg/build",
         "//pkg/cmd/bazci/githubpost/issues",
         "//pkg/cmd/roachprod/grafana",
+        "//pkg/cmd/roachtest-selector/sfselector",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/operation",
         "//pkg/cmd/roachtest/operations",

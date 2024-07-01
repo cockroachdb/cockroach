@@ -75,4 +75,5 @@ build/teamcity-roachtest-invoke.sh \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --slack-token="${SLACK_TOKEN}" \
   --suite nightly \
+  --selective-tests="${SELECTIVE_TESTS:-false}" \
   "${TESTS}"

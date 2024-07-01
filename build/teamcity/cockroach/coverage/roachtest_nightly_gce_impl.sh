@@ -36,4 +36,5 @@ build/teamcity-roachtest-invoke.sh \
   --slack-token="${SLACK_TOKEN:-}" \
   --go-cover \
   --suite nightly \
+  --selective-tests="${SELECTIVE_TESTS:-false}" \
   ${TESTS:-}
