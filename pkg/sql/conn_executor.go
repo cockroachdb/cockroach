@@ -1080,7 +1080,10 @@ func (s *Server) newConnExecutor(
 			execTestingKnobs: s.GetExecutorConfig().TestingKnobs,
 		},
 		memMetrics: memMetrics,
-		planner:    planner{execCfg: s.cfg},
+		planner: planner{
+			execCfg:    s.cfg,
+			datumAlloc: &tree.DatumAlloc{},
+		},
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
