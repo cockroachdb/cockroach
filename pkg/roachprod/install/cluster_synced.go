@@ -1243,10 +1243,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	return res, nil
 }
 func (c *SyncedCluster) RunSingleNodeStream(
-	ctx context.Context,
-	l *logger.Logger,
-	options RunOptions,
-	title, cmd string,
+	ctx context.Context, l *logger.Logger, options RunOptions, title, cmd string,
 ) (stdout io.ReadCloser, stderr io.ReadCloser, errChan chan error) {
 	if len(options.Nodes) != 1 {
 		panic("expected exactly one node")

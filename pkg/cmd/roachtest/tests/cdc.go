@@ -3450,8 +3450,7 @@ func (m *webhookManager) Start() (dest *url.URL) {
 			opts := option.WithNodes(m.webhookSinkNodes)
 			opts.ShouldRetryFn = func(*install.RunResultDetails) bool { return false }
 			if err = m.cluster.RunE(m.ctx, opts, serverExecCmd, rootFolder); err != nil {
-				fmt.Printf("webhook server died: %v\n", err)
-				m.t.L().Printf("webhook server died: %v", err)
+				m.t.L().Printf("webhook server died (did chaos kill it?): %v", err)
 			}
 			// Wait to be told to restart.
 			select {
@@ -4018,17 +4017,4 @@ func (c *topicConsumer) close() {
 		}
 	}
 	_ = c.consumer.Close()
-}
-
-func transientError(err error) bool {
-	if err == nil {
-		return false
-	}
-	var transientErrStrs = []string{"connection error", "result is ambiguous", "bad connection"}
-	for _, s := range transientErrStrs {
-		if strings.Contains(err.Error(), s) {
-			return true
-		}
-	}
-	return false
 }
