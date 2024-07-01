@@ -44,8 +44,9 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			spec.AWSZones(strings.Join(awsGeoZones, ",")),
 		),
 		// TODO(radu): enable this test on AWS.
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
+		CompatibleClouds:           registry.OnlyGCE,
+		Suites:                     registry.Suites(registry.Nightly),
+		RequiresDeprecatedWorkload: true,
 		// Uses CONFIGURE ZONE USING ... COPY FROM PARENT syntax.
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			firstAZ := gceGeoZones[0]
