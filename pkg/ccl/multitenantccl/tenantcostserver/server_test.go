@@ -422,7 +422,7 @@ func TestPreMigration(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          (clusterversion.V24_2_TenantRates - 1).Version(),
+				OverrideClusterVersion:         (clusterversion.V24_2_TenantRates - 1).Version(),
 			},
 		},
 	})

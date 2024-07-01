@@ -70,7 +70,7 @@ func testTenantAutoUpgrade(t *testing.T, clusterSetting *autoUpgradeClusterSetti
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          v0.Version(),
+				OverrideClusterVersion:         v0.Version(),
 			},
 			SQLEvalContext: &eval.TestingKnobs{
 				// When the host binary version is not equal to its cluster version, tenant logical version is set
@@ -106,7 +106,7 @@ func testTenantAutoUpgrade(t *testing.T, clusterSetting *autoUpgradeClusterSetti
 				Server: &server.TestingKnobs{
 					TenantAutoUpgradeInfo:          upgradeInfoCh,
 					TenantAutoUpgradeLoopFrequency: time.Second,
-					BinaryVersionOverride:          v0.Version(),
+					OverrideClusterVersion:         v0.Version(),
 				},
 			},
 		}
@@ -242,7 +242,7 @@ func TestTenantUpgrade(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          v1,
+				OverrideClusterVersion:         v1,
 			},
 			// Make the upgrade faster by accelerating jobs.
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -378,7 +378,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          v0,
+				OverrideClusterVersion:         v0,
 			},
 		},
 	})

@@ -53,7 +53,7 @@ func TestCreateTenantSystemTables(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          v1,
+				OverrideClusterVersion:         v1,
 			},
 			// Make the upgrade faster by accelerating jobs.
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
