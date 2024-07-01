@@ -11,11 +11,9 @@
 package admission
 
 import (
-	"context"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 )
 
@@ -253,108 +251,109 @@ func makeDiskBandwidthLimiter() diskBandwidthLimiter {
 	}
 }
 
-// computeElasticTokens is called every adjustmentInterval.
-func (d *diskBandwidthLimiter) computeElasticTokens(
-	ctx context.Context, id intervalDiskLoadInfo, il intervalLSMInfo,
-) (elasticTokens int64) {
-	d.diskLoadWatcher.setIntervalInfo(id)
-	const alpha = 0.5
-	prev := d.state
-	smoothedIncomingBytes := alpha*float64(il.incomingBytes) + (1-alpha)*prev.smoothedIncomingBytes
-	smoothedElasticFraction := prev.smoothedElasticFraction
-	var intElasticFraction float64
-	if il.regularTokensUsed+il.elasticTokensUsed > 0 {
-		intElasticFraction =
-			float64(il.elasticTokensUsed) / float64(il.regularTokensUsed+il.elasticTokensUsed)
-		smoothedElasticFraction = alpha*intElasticFraction + (1-alpha)*prev.smoothedElasticFraction
-	}
-	intElasticBytes := int64(float64(il.incomingBytes) * intElasticFraction)
-	ll := d.diskLoadWatcher.getLoadLevel()
-
-	// The constants and other heuristics in the following logic can seem
-	// arbitrary: they were subject to some tuning and evolution based on the
-	// experiments in https://github.com/cockroachdb/cockroach/pull/82813 that
-	// used (a) an artificial provisioned bandwidth limit lower than the actual,
-	// to see how well the system stayed within that limit, (b) an actual
-	// provisioned bandwidth limit. The difficulty in general is that small
-	// changes can have outsize influence if a higher number of compactions
-	// start happening, or the compaction backlog is cleared.
-	//
-	// TODO(sumeer): experiment with a more sophisticated controller for the
-	// elastic token adjustment, e.g. a PID (Proportional-Integral-Derivative)
-	// controller.
-	doLog := true
-	switch ll {
-	case diskLoadLow:
-		elasticTokens = math.MaxInt64
-		if elasticTokens == prev.elasticTokens {
-			doLog = false
-		}
-		// else we stay in the common case of low bandwidth usage.
-	case diskLoadModerate:
-		tokensFullyUtilized :=
-			// elasticTokens == MaxInt64 is also considered fully utilized since we
-			// can never fully utilize unlimited tokens.
-			prev.elasticTokens == math.MaxInt64 ||
-				(prev.elasticTokens > 0 && float64(il.elasticTokensUsed)/float64(prev.elasticTokens) >= 0.8)
-
-		if tokensFullyUtilized {
-			// Smoothed elastic bytes plus 10% of smoothedIncomingBytes is given to
-			// elastic work. That is, we are increasing the total incoming bytes by
-			// 10% (not just the elastic bytes by 10%). Note that each token
-			// represents 1 incoming byte.
-			elasticBytes := (smoothedElasticFraction + 0.1) * smoothedIncomingBytes
-			// Sometimes we see the tokens not increasing even though we are staying
-			// for multiple intervals at moderate. This is because the smoothed
-			// fraction and incoming bytes can be decreasing. We do want to increase
-			// tokens since we know there is spare capacity, so we try many ways
-			// (that don't look at smoothed numbers only). Also, we sometimes come
-			// here due to an overload=>moderate transition because compaction
-			// bandwidth usage can be lumpy (high when there is a backlog and then
-			// dropping severely) -- in that case we want to start increasing
-			// immediately, since we have likely decreased too much.
-			intBasedElasticTokens := (smoothedElasticFraction + 0.1) * float64(il.incomingBytes)
-			elasticBytes = math.Max(elasticBytes, intBasedElasticTokens)
-			elasticBytes = math.Max(elasticBytes, 1.1*float64(il.elasticTokensUsed))
-			elasticTokens = int64(elasticBytes)
-			if elasticTokens == 0 {
-				// Don't get stuck in a situation where smoothedIncomingBytes are 0.
-				elasticTokens = math.MaxInt64
-			}
-		} else {
-			// No change.
-			elasticTokens = prev.elasticTokens
-		}
-	case diskLoadHigh:
-		// No change.
-		elasticTokens = prev.elasticTokens
-	case diskLoadOverload:
-		// Sometimes we come here after a low => overload transition. The
-		// intElasticBytes will be very high because tokens were unlimited. We
-		// don't want to use that as the starting point of the decrease if the
-		// smoothed value is lower. Hence, the min logic below, to try to dampen
-		// the increase quickly.
-		elasticTokens = int64(0.5 * math.Min(float64(intElasticBytes),
-			smoothedElasticFraction*smoothedIncomingBytes))
-	}
-	// We can end up with 0 elastic tokens here -- e.g. if intElasticBytes was 0
-	// but we were still overloaded because of compactions. The trouble with 0
-	// elastic tokens is that if we don't admit anything, we cannot correct an
-	// occasional poor estimate of the per-request bytes. So we decide to give
-	// out at least 1 token. A single elastic request should not be too big for
-	// this to matter.
-	elasticTokens = max(1, elasticTokens)
-	d.state = diskBandwidthLimiterState{
-		smoothedIncomingBytes:   smoothedIncomingBytes,
-		smoothedElasticFraction: smoothedElasticFraction,
-		elasticTokens:           elasticTokens,
-		prevElasticTokensUsed:   il.elasticTokensUsed,
-	}
-	if doLog {
-		log.Infof(ctx, "%v", d)
-	}
-	return elasticTokens
-}
+//// computeElasticTokens is called every adjustmentInterval.
+//func (d *diskBandwidthLimiter) computeElasticTokens(
+//	ctx context.Context, id intervalDiskLoadInfo, il intervalLSMInfo,
+//) (elasticTokens int64) {
+//
+//	d.diskLoadWatcher.setIntervalInfo(id)
+//	const alpha = 0.5
+//	prev := d.state
+//	smoothedIncomingBytes := alpha*float64(il.incomingBytes) + (1-alpha)*prev.smoothedIncomingBytes
+//	smoothedElasticFraction := prev.smoothedElasticFraction
+//	var intElasticFraction float64
+//	if il.regularTokensUsed+il.elasticTokensUsed > 0 {
+//		intElasticFraction =
+//			float64(il.elasticTokensUsed) / float64(il.regularTokensUsed+il.elasticTokensUsed)
+//		smoothedElasticFraction = alpha*intElasticFraction + (1-alpha)*prev.smoothedElasticFraction
+//	}
+//	intElasticBytes := int64(float64(il.incomingBytes) * intElasticFraction)
+//	ll := d.diskLoadWatcher.getLoadLevel()
+//
+//	// The constants and other heuristics in the following logic can seem
+//	// arbitrary: they were subject to some tuning and evolution based on the
+//	// experiments in https://github.com/cockroachdb/cockroach/pull/82813 that
+//	// used (a) an artificial provisioned bandwidth limit lower than the actual,
+//	// to see how well the system stayed within that limit, (b) an actual
+//	// provisioned bandwidth limit. The difficulty in general is that small
+//	// changes can have outsize influence if a higher number of compactions
+//	// start happening, or the compaction backlog is cleared.
+//	//
+//	// TODO(sumeer): experiment with a more sophisticated controller for the
+//	// elastic token adjustment, e.g. a PID (Proportional-Integral-Derivative)
+//	// controller.
+//	doLog := true
+//	switch ll {
+//	case diskLoadLow:
+//		elasticTokens = math.MaxInt64
+//		if elasticTokens == prev.elasticTokens {
+//			doLog = false
+//		}
+//		// else we stay in the common case of low bandwidth usage.
+//	case diskLoadModerate:
+//		tokensFullyUtilized :=
+//			// elasticTokens == MaxInt64 is also considered fully utilized since we
+//			// can never fully utilize unlimited tokens.
+//			prev.elasticTokens == math.MaxInt64 ||
+//				(prev.elasticTokens > 0 && float64(il.elasticTokensUsed)/float64(prev.elasticTokens) >= 0.8)
+//
+//		if tokensFullyUtilized {
+//			// Smoothed elastic bytes plus 10% of smoothedIncomingBytes is given to
+//			// elastic work. That is, we are increasing the total incoming bytes by
+//			// 10% (not just the elastic bytes by 10%). Note that each token
+//			// represents 1 incoming byte.
+//			elasticBytes := (smoothedElasticFraction + 0.1) * smoothedIncomingBytes
+//			// Sometimes we see the tokens not increasing even though we are staying
+//			// for multiple intervals at moderate. This is because the smoothed
+//			// fraction and incoming bytes can be decreasing. We do want to increase
+//			// tokens since we know there is spare capacity, so we try many ways
+//			// (that don't look at smoothed numbers only). Also, we sometimes come
+//			// here due to an overload=>moderate transition because compaction
+//			// bandwidth usage can be lumpy (high when there is a backlog and then
+//			// dropping severely) -- in that case we want to start increasing
+//			// immediately, since we have likely decreased too much.
+//			intBasedElasticTokens := (smoothedElasticFraction + 0.1) * float64(il.incomingBytes)
+//			elasticBytes = math.Max(elasticBytes, intBasedElasticTokens)
+//			elasticBytes = math.Max(elasticBytes, 1.1*float64(il.elasticTokensUsed))
+//			elasticTokens = int64(elasticBytes)
+//			if elasticTokens == 0 {
+//				// Don't get stuck in a situation where smoothedIncomingBytes are 0.
+//				elasticTokens = math.MaxInt64
+//			}
+//		} else {
+//			// No change.
+//			elasticTokens = prev.elasticTokens
+//		}
+//	case diskLoadHigh:
+//		// No change.
+//		elasticTokens = prev.elasticTokens
+//	case diskLoadOverload:
+//		// Sometimes we come here after a low => overload transition. The
+//		// intElasticBytes will be very high because tokens were unlimited. We
+//		// don't want to use that as the starting point of the decrease if the
+//		// smoothed value is lower. Hence, the min logic below, to try to dampen
+//		// the increase quickly.
+//		elasticTokens = int64(0.5 * math.Min(float64(intElasticBytes),
+//			smoothedElasticFraction*smoothedIncomingBytes))
+//	}
+//	// We can end up with 0 elastic tokens here -- e.g. if intElasticBytes was 0
+//	// but we were still overloaded because of compactions. The trouble with 0
+//	// elastic tokens is that if we don't admit anything, we cannot correct an
+//	// occasional poor estimate of the per-request bytes. So we decide to give
+//	// out at least 1 token. A single elastic request should not be too big for
+//	// this to matter.
+//	elasticTokens = max(1, elasticTokens)
+//	d.state = diskBandwidthLimiterState{
+//		smoothedIncomingBytes:   smoothedIncomingBytes,
+//		smoothedElasticFraction: smoothedElasticFraction,
+//		elasticTokens:           elasticTokens,
+//		prevElasticTokensUsed:   il.elasticTokensUsed,
+//	}
+//	if doLog {
+//		log.Infof(ctx, "%v", d)
+//	}
+//	return elasticTokens
+//}
 
 func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
