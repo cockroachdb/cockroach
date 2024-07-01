@@ -12,6 +12,7 @@ package acceptance
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -73,7 +74,16 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 
 	switch runMode {
 	case dockerTest:
-		logDir := *flagLogDir
+		var logDir string
+		isRemote := os.Getenv("REMOTE_EXEC")
+		if len(isRemote) > 0 {
+			logDir = os.Getenv("TEST_UNDECLARED_OUTPUTS_DIR")
+			if logDir != "" {
+				logDir = filepath.Join(logDir, "logs")
+			}
+		} else {
+			logDir = *flagLogDir
+		}
 		if logDir != "" {
 			logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
 		}
