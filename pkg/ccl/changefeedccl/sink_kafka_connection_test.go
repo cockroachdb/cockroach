@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -99,6 +100,11 @@ func TestChangefeedExternalConnections(t *testing.T) {
 	enableEnterprise()
 	unknownParams := func(sink string, params ...string) string {
 		return fmt.Sprintf(`unknown %s sink query parameters: [%s]`, sink, strings.Join(params, ", "))
+	}
+
+	// TODO(#127536): We disabled testing the Kafka V2 sink here, since it doesnt support MSK yet. Re-enable it.
+	if KafkaV2Enabled.Get(&s.Server.ClusterSettings().SV) {
+		skip.WithIssue(t, 127536, "Kafka V2 sink does not support MSK yet")
 	}
 
 	for _, tc := range []struct {
