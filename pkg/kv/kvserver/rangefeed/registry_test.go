@@ -173,7 +173,7 @@ func TestRegistrationBasic(t *testing.T) {
 	require.Equal(t, len(noCatchupReg.buf), 2)
 	go noCatchupReg.runOutputLoop(ctx, 0)
 	require.NoError(t, noCatchupReg.waitForCaughtUp(ctx))
-	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, serverStream.eventsSentById(streamID))
+	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, serverStream.nonErrorEventsSentById(streamID))
 	noCatchupReg.disconnect(nil)
 
 	// Registration with catchup scan.
@@ -190,7 +190,7 @@ func TestRegistrationBasic(t *testing.T) {
 	require.Equal(t, len(catchupReg.buf), 2)
 	go catchupReg.runOutputLoop(ctx, 0)
 	require.NoError(t, catchupReg.waitForCaughtUp(ctx))
-	events := serverStream.eventsSentById(streamID)
+	events := serverStream.nonErrorEventsSentById(streamID)
 	require.Equal(t, 5, len(events))
 	require.Equal(t, []*kvpb.RangeFeedEvent{ev1, ev2}, events[3:])
 	catchupReg.disconnect(nil)
@@ -207,7 +207,7 @@ func TestRegistrationBasic(t *testing.T) {
 	discErr := kvpb.NewError(fmt.Errorf("disconnection error"))
 	disconnectReg.disconnect(discErr)
 	require.Equal(t, discErr.GoError(), disconnectReg.WaitForErr(t))
-	require.Equal(t, 2, len(serverStream.eventsSentById(streamID)))
+	require.Equal(t, 2, len(serverStream.nonErrorEventsSentById(streamID)))
 
 	// External Disconnect before output loop.
 	streamID += 1
@@ -218,7 +218,7 @@ func TestRegistrationBasic(t *testing.T) {
 	disconnectEarlyReg.disconnect(discErr)
 	go disconnectEarlyReg.runOutputLoop(ctx, 0)
 	require.Equal(t, discErr.GoError(), disconnectEarlyReg.WaitForErr(t))
-	require.Equal(t, 0, len(serverStream.eventsSentById(streamID)))
+	require.Equal(t, 0, len(serverStream.nonErrorEventsSentById(streamID)))
 
 	// Overflow.
 	streamID += 1
@@ -229,7 +229,7 @@ func TestRegistrationBasic(t *testing.T) {
 	}
 	go overflowReg.runOutputLoop(ctx, 0)
 	require.Equal(t, newErrBufferCapacityExceeded().GoError(), overflowReg.WaitForErr(t))
-	require.Equal(t, cap(overflowReg.buf), len(serverStream.eventsSentById(streamID)))
+	require.Equal(t, cap(overflowReg.buf), len(serverStream.nonErrorEventsSentById(streamID)))
 
 	// Stream Error.
 	streamErrReg := newTestRegistration(streamID, streamMuxer, serverStream, spAB, hlc.Timestamp{}, nil, /* catchup */
@@ -377,7 +377,7 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 			// val2 as a previous value of the next event.
 			makeVal("valS2"),
 		))
-		require.Equal(t, expEvents, serverStream.eventsSentById(streamID))
+		require.Equal(t, expEvents, serverStream.nonErrorEventsSentById(streamID))
 	})
 }
 
@@ -423,8 +423,8 @@ func TestRegistryWithOmitOrigin(t *testing.T) {
 
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
 
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2)}, serverStream.eventsSentById(rACStreamID))
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1)}, serverStream.eventsSentById(originFilteringID))
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2)}, serverStream.nonErrorEventsSentById(rACStreamID))
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1)}, serverStream.nonErrorEventsSentById(originFilteringID))
 	require.Nil(t, rAC.GetErrIfDone())
 	require.Nil(t, originFiltering.GetErrIfDone())
 }
@@ -497,13 +497,13 @@ func TestRegistryBasic(t *testing.T) {
 	reg.PublishToOverlapping(ctx, spAC, ev5, logicalOpMetadata{omitInRangefeeds: true}, nil /* alloc */)
 
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev4), noPrev(ev5)}, serverStream.eventsSentById(rABStreamID))
-	require.Equal(t, []*kvpb.RangeFeedEvent{ev2, ev4, ev5}, serverStream.eventsSentById(rBCStreamID))
-	require.Equal(t, []*kvpb.RangeFeedEvent{ev3}, serverStream.eventsSentById(rCDStreamID))
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2), noPrev(ev4), noPrev(ev5)}, serverStream.eventsSentById(rACStreamID))
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev4), noPrev(ev5)}, serverStream.nonErrorEventsSentById(rABStreamID))
+	require.Equal(t, []*kvpb.RangeFeedEvent{ev2, ev4, ev5}, serverStream.nonErrorEventsSentById(rBCStreamID))
+	require.Equal(t, []*kvpb.RangeFeedEvent{ev3}, serverStream.nonErrorEventsSentById(rCDStreamID))
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2), noPrev(ev4), noPrev(ev5)}, serverStream.nonErrorEventsSentById(rACStreamID))
 	// Registration rACFiltering doesn't receive ev5 because both withFiltering
 	// (for the registration) and OmitInRangefeeds (for the event) are true.
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2), noPrev(ev4)}, serverStream.eventsSentById(rACFilteringStreamID))
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev1), noPrev(ev2), noPrev(ev4)}, serverStream.nonErrorEventsSentById(rACFilteringStreamID))
 	require.Nil(t, rAB.GetErrIfDone())
 	require.Nil(t, rBC.GetErrIfDone())
 	require.Nil(t, rCD.GetErrIfDone())
@@ -544,7 +544,7 @@ func TestRegistryBasic(t *testing.T) {
 	reg.PublishToOverlapping(ctx, spCD, ev2, logicalOpMetadata{}, nil /* alloc */)
 	reg.PublishToOverlapping(ctx, spAC, ev1, logicalOpMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
-	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev4), noPrev(ev1)}, serverStream.eventsSentById(rABStreamID))
+	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev4), noPrev(ev1)}, serverStream.nonErrorEventsSentById(rABStreamID))
 
 	// Disconnect from rAB without error.
 	reg.Disconnect(ctx, spAB)
@@ -605,7 +605,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	})
 	reg.PublishToOverlapping(ctx, spAB, ev, logicalOpMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
-	require.Nil(t, serverStream.eventsSentById(streamID))
+	require.Nil(t, serverStream.nonErrorEventsSentById(streamID))
 
 	// Publish a value with a timestamp equal to the registration's start
 	// timestamp. Should be ignored.
@@ -614,7 +614,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	})
 	reg.PublishToOverlapping(ctx, spAB, ev, logicalOpMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
-	require.Nil(t, serverStream.eventsSentById(streamID))
+	require.Nil(t, serverStream.nonErrorEventsSentById(streamID))
 
 	// Publish a checkpoint with a timestamp beneath the registration's. Should
 	// be delivered.
@@ -623,7 +623,7 @@ func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	})
 	reg.PublishToOverlapping(ctx, spAB, ev, logicalOpMetadata{}, nil /* alloc */)
 	require.NoError(t, reg.waitForCaughtUp(ctx, all))
-	require.Equal(t, []*kvpb.RangeFeedEvent{ev}, serverStream.eventsSentById(streamID))
+	require.Equal(t, []*kvpb.RangeFeedEvent{ev}, serverStream.nonErrorEventsSentById(streamID))
 
 	r.disconnect(nil)
 }
