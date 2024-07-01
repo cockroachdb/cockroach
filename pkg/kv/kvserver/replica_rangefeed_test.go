@@ -574,6 +574,146 @@ func TestReplicaRangefeed(t *testing.T) {
 	})
 }
 
+// setupSimpleRangefeed creates a range on a 3 node cluster starting at key "a",
+// and begins a test rangefeed from [a,d).
+func setupSimpleRangefeed(
+	ctx context.Context, t *testing.T, tc *testcluster.TestCluster,
+) (stream *testStream, streamErrC chan error) {
+	splitKey := roachpb.Key("a")
+	ts := tc.Servers[0]
+	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	tc.SplitRangeOrFatal(t, splitKey)
+	tc.AddVotersOrFatal(t, splitKey, tc.Target(1), tc.Target(2))
+	rangeID := store.LookupReplica(roachpb.RKey(splitKey)).RangeID
+
+	// Write to the RHS of the split and wait for all replicas to process it.
+	// This ensures that all replicas have seen the split before we move on.
+	incArgs := incrementArgs(splitKey, 9)
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), incArgs)
+	require.Nil(t, pErr)
+	tc.WaitForValues(t, splitKey, []int64{9, 9, 9})
+
+	// Set up a rangefeed across a-d.
+	stream = newTestStream()
+	streamErrC = make(chan error, 1)
+	go func() {
+		req := kvpb.RangeFeedRequest{
+			Header:                kvpb.Header{RangeID: rangeID},
+			Span:                  roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+			WithMatchingOriginIDs: []uint32{0},
+			WithDiff:              true,
+		}
+		timer := time.AfterFunc(10*time.Second, stream.Cancel)
+		defer timer.Stop()
+		streamErrC <- waitRangeFeed(store, &req, stream)
+	}()
+
+	// Wait for a checkpoint.
+	require.Eventually(t, func() bool {
+		if len(streamErrC) > 0 {
+			require.Fail(t, "unexpected rangefeed error", "%v", <-streamErrC)
+		}
+		events := stream.Events()
+		for _, event := range events {
+			require.NotNil(t, event.Checkpoint, "received non-checkpoint event: %v", event)
+		}
+		return len(events) > 0
+	}, 5*time.Second, 100*time.Millisecond)
+	return stream, streamErrC
+}
+
+// TestReplicaRangefeedOriginIDFiltering tests that a rangefeed configured to
+// emit events from OriginID 0 will filter remote events but include them as a
+// previous event.
+func TestReplicaRangefeedOriginIDFiltering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	stream, streamErrC := setupSimpleRangefeed(ctx, t, tc)
+
+	store := tc.GetFirstStoreFromServer(t, 0)
+	b1Args := putArgs(roachpb.Key("b"), []byte("b1"))
+	_, err := kv.SendWrapped(ctx, store.TestSender(), b1Args)
+	require.Nil(t, err)
+
+	b2Args := putArgs(roachpb.Key("b"), []byte("b2"))
+	_, err = kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{WriteOptions: &kvpb.WriteOptions{OriginID: 1}}, b2Args)
+	require.Nil(t, err)
+
+	// Send with Txn to exercise MVCCCommitIntent logical op path.
+	if err := store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		batch := txn.NewBatch()
+		batch.Put(roachpb.Key("c"), []byte("c3"))
+		batch.Header.WriteOptions = &kvpb.WriteOptions{OriginID: 1}
+		return txn.Run(ctx, batch)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Read to force intent resolution.
+	_, getErr := store.DB().Get(ctx, roachpb.Key("c"))
+	require.Nil(t, getErr)
+
+	c4Args := putArgs(roachpb.Key("c"), []byte("c4"))
+	_, err = kv.SendWrapped(ctx, store.TestSender(), c4Args)
+	require.Nil(t, err)
+
+	expCValue := roachpb.MakeValueFromBytes([]byte("c4"))
+
+	expPrevCValue := roachpb.MakeValueFromBytes([]byte("c3"))
+	expPrevCValue.InitChecksum([]byte("c"))
+
+	expEvents := []*kvpb.RangeFeedEvent{
+		{Val: &kvpb.RangeFeedValue{
+			Key:   roachpb.Key("b"),
+			Value: roachpb.MakeValueFromBytes([]byte("b1")),
+		}},
+		{Val: &kvpb.RangeFeedValue{
+			Key:       roachpb.Key("c"),
+			Value:     expCValue,
+			PrevValue: expPrevCValue,
+		}},
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		if len(streamErrC) > 0 {
+			// Break if the error channel is already populated.
+			return nil
+		}
+
+		events := stream.Events()
+		// Filter out checkpoints.
+		var filteredEvents []*kvpb.RangeFeedEvent
+		for _, e := range events {
+			if e.Checkpoint != nil {
+				continue
+			}
+			filteredEvents = append(filteredEvents, e)
+		}
+		events = filteredEvents
+		if len(events) < len(expEvents) {
+			return errors.Errorf("too few events: %v", events)
+		}
+		// Ensure the key and value are the same (dont worry about the timestamp).
+		for i, e := range events {
+			require.Equal(t, expEvents[i].Val.Key, e.Val.Key, "key mismatch")
+			require.Equal(t, expEvents[i].Val.Value.RawBytes, e.Val.Value.RawBytes, "value mismatch")
+			if e.Val.PrevValue.RawBytes != nil {
+				require.Equal(t, expEvents[i].Val.PrevValue.RawBytes, e.Val.PrevValue.RawBytes, "prev value mismatch")
+			}
+		}
+		return nil
+	})
+}
+
 func waitErrorFuture(f *future.ErrorFuture) error {
 	resultErr, _ := future.Wait(context.Background(), f)
 	return resultErr
@@ -1151,6 +1291,35 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		// Wait for the first checkpoint event.
 		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan)
 	})
+	t.Run("multiple-origin-ids", func(t *testing.T) {
+		tc, rangeID := setup(t, base.TestingKnobs{})
+		defer tc.Stopper().Stop(ctx)
+
+		stream := newTestStream()
+		streamErrC := make(chan error, 1)
+		rangefeedSpan := mkSpan("a", "z")
+		ts := tc.Servers[0]
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() {
+			req := kvpb.RangeFeedRequest{
+				Header: kvpb.Header{
+					RangeID: rangeID,
+				},
+				Span:                  rangefeedSpan,
+				WithMatchingOriginIDs: []uint32{0, 1},
+			}
+			timer := time.AfterFunc(10*time.Second, stream.Cancel)
+			defer timer.Stop()
+			streamErrC <- waitRangeFeed(store, &req, stream)
+		}()
+
+		// Check the error.
+		pErr := <-streamErrC
+		require.Equal(t, pErr.Error(), "multiple origin IDs and OriginID != 0 not supported yet")
+	})
 }
 
 // TestReplicaRangefeedMVCCHistoryMutationError tests that rangefeeds are
@@ -1160,57 +1329,22 @@ func TestReplicaRangefeedMVCCHistoryMutationError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	splitKey := roachpb.Key("a")
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer tc.Stopper().Stop(ctx)
-	ts := tc.Servers[0]
-	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
-	require.NoError(t, err)
-	tc.SplitRangeOrFatal(t, splitKey)
-	tc.AddVotersOrFatal(t, splitKey, tc.Target(1), tc.Target(2))
-	rangeID := store.LookupReplica(roachpb.RKey(splitKey)).RangeID
 
-	// Write to the RHS of the split and wait for all replicas to process it.
-	// This ensures that all replicas have seen the split before we move on.
-	incArgs := incrementArgs(splitKey, 9)
-	_, pErr := kv.SendWrapped(ctx, store.TestSender(), incArgs)
-	require.Nil(t, pErr)
-	tc.WaitForValues(t, splitKey, []int64{9, 9, 9})
-
-	// Set up a rangefeed across a-c.
-	stream := newTestStream()
-	streamErrC := make(chan error, 1)
-	go func() {
-		req := kvpb.RangeFeedRequest{
-			Header: kvpb.Header{RangeID: rangeID},
-			Span:   roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
-		}
-		timer := time.AfterFunc(10*time.Second, stream.Cancel)
-		defer timer.Stop()
-		streamErrC <- waitRangeFeed(store, &req, stream)
-	}()
-
-	// Wait for a checkpoint.
-	require.Eventually(t, func() bool {
-		if len(streamErrC) > 0 {
-			require.Fail(t, "unexpected rangefeed error", "%v", <-streamErrC)
-		}
-		events := stream.Events()
-		for _, event := range events {
-			require.NotNil(t, event.Checkpoint, "received non-checkpoint event: %v", event)
-		}
-		return len(events) > 0
-	}, 5*time.Second, 100*time.Millisecond)
+	_, streamErrC := setupSimpleRangefeed(ctx, t, tc)
+	store := tc.GetFirstStoreFromServer(t, 0)
 
 	// Apply a ClearRange command that mutates MVCC history across c-e.
 	// This does not overlap with the rangefeed registration, and should
 	// not disconnect it.
-	_, pErr = kv.SendWrapped(ctx, store.TestSender(), &kvpb.ClearRangeRequest{
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), &kvpb.ClearRangeRequest{
 		RequestHeader: kvpb.RequestHeader{
-			Key:    roachpb.Key("c"),
+			Key: roachpb.Key("d"),
+
 			EndKey: roachpb.Key("e"),
 		},
 	})
