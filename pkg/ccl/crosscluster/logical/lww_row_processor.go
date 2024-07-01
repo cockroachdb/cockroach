@@ -202,16 +202,24 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 var (
 	implicitTxnOverrides = sessiondata.InternalExecutorOverride{
 		AttributeToUser: true,
-		// TODO(ssd): we do this for now to prevent the data from being emitted back
-		// to the source. However, I don't think we want to do this in the long run.
-		// Rather, we want to store the inbound cluster ID and store that in a way
-		// that allows us to choose to filter it out from or not. Doing it this way
-		// means that you can't choose to run CDC just from one side and not the
-		// other.
-		DisableChangefeedReplication: true,
+
+		// The OriginIDForLogicalDataReplication session variable will bind the
+		// origin ID 1 to each per-statement batch request header sent by the
+		// internal executor. This metadata will be plumbed to the MVCCValueHeader
+		// of each written kv, and will be used by source side rangefeeds to filter
+		// these replicated events, preventing data looping.
+		//
+		// Note that a similar ingestion side plumbing strategy will be used for
+		// OriginTimestamp even though each ingested row may have a different
+		// timestamp. We can still bind the OriginTimestamp to the Internal Executor
+		// session before each query because 1) each IE query creates a new session;
+		// 2) we do not plan to use multi row insert statements during LDR ingestion
+		// via sql.
+		OriginIDForLogicalDataReplication: 1,
 	}
 	explicitTxnOverrides = sessiondata.InternalExecutorOverride{
-		AttributeToUser: true,
+		AttributeToUser:                   true,
+		OriginIDForLogicalDataReplication: 1,
 	}
 )
 
