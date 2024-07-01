@@ -157,6 +157,10 @@ func (sc *pubsubSinkClient) FlushResolvedPayload(
 	})
 }
 
+func (sc *pubsubSinkClient) CheckConnection(ctx context.Context) error {
+	return nil
+}
+
 func (sc *pubsubSinkClient) maybeCreateTopic(topic string) error {
 	sc.mu.RLock()
 	_, ok := sc.mu.topicCache[topic]

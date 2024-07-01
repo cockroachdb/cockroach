@@ -223,9 +223,7 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 	helperOrNoop(t)()
 	sr.succeedsWithin(t, func() error {
 		_, err := sr.DB.ExecContext(context.Background(), query, args...)
-		if !testutils.IsError(err, errRE) {
-			return errors.Newf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
-		}
+		sr.expectErr(t, query, err, errRE)
 		return nil
 	})
 }
@@ -241,9 +239,7 @@ func (sr *SQLRunner) ExpectErrWithTimeout(
 	}
 	err := timeutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
 		_, err := sr.DB.ExecContext(ctx, query, args...)
-		if !testutils.IsError(err, errRE) {
-			return errors.Newf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
-		}
+		sr.expectErr(t, query, err, errRE)
 		return nil
 	})
 

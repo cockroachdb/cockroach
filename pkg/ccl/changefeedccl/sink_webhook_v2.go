@@ -240,6 +240,10 @@ func (sc *webhookSinkClient) Close() error {
 	return nil
 }
 
+func (sc *webhookSinkClient) CheckConnection(ctx context.Context) error {
+	return nil
+}
+
 func validateWebhookOpts(
 	u sinkURL, encodingOpts changefeedbase.EncodingOptions, opts changefeedbase.WebhookSinkOptions,
 ) error {
