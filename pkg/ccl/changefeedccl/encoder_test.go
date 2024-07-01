@@ -1305,7 +1305,7 @@ func TestAvroWithRegionalTable(t *testing.T) {
 	confluent_schema_registry = "%s", schema_change_events = column_changes, schema_change_policy = nobackfill`,
 					test.envelope, schemaReg.URL())
 
-				f := makeKafkaFeedFactory(cluster, db)
+				f := makeKafkaFeedFactory(t, cluster, db)
 				testFeed := feed(t, f, stmt)
 				defer closeFeed(t, testFeed)
 
