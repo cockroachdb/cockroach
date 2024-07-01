@@ -111,6 +111,7 @@ var buildTargetMapping = map[string]string{
 	"staticcheck":          "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
 	"tests":                "//pkg:all_tests",
 	"workload":             "//pkg/cmd/workload:workload",
+	"cloudupload":          "//pkg/cmd/cloudupload:cloudupload",
 }
 
 // allBuildTargets is a sorted list of all the available build targets.
