@@ -75,6 +75,8 @@ func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
 	return nil
 }
 
+func (s *testStream) SendIsThreadSafe() bool { return true }
+
 func (s *testStream) SetSendErr(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

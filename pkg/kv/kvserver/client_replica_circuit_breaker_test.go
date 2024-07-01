@@ -469,6 +469,8 @@ func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 	}
 }
 
+func (s *dummyStream) SendIsThreadSafe() bool { return true }
+
 func waitReplicaRangeFeed(
 	ctx context.Context,
 	r *kvserver.Replica,

@@ -1827,6 +1827,8 @@ func (c *consumer) Send(e *kvpb.RangeFeedEvent) error {
 	return nil
 }
 
+func (c *consumer) SendIsThreadSafe() bool { return false }
+
 func (c *consumer) Context() context.Context {
 	return c.ctx
 }

@@ -1849,6 +1849,9 @@ func (s *setRangeIDEventSink) Context() context.Context {
 }
 
 func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
+	if !s.SendIsThreadSafe() {
+		log.Fatal(s.ctx, "send must be thread safe")
+	}
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,
@@ -1856,6 +1859,8 @@ func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	}
 	return s.wrapped.Send(response)
 }
+
+func (s *setRangeIDEventSink) SendIsThreadSafe() bool { return true }
 
 var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
 

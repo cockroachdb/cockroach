@@ -723,6 +723,8 @@ func (s *delayedErrorServerStream) Send(*execinfrapb.ConsumerSignal) error {
 	return s.err
 }
 
+func (s *delayedErrorServerStream) SendIsThreadSafe() bool { return true }
+
 // TestErrorOnSlowHandshake is a regression test for #94113. In particular, it
 // verifies that the flow infra is shut down correctly when the inbound stream
 // times out while the handshake message is being sent to the producer and later

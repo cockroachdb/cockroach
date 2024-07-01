@@ -70,6 +70,7 @@ func (s *testStream) RecvMsg(m interface{}) error  { panic("unimplemented") }
 func (s *testStream) SetHeader(metadata.MD) error  { panic("unimplemented") }
 func (s *testStream) SendHeader(metadata.MD) error { panic("unimplemented") }
 func (s *testStream) SetTrailer(metadata.MD)       { panic("unimplemented") }
+func (s *testStream) SendIsThreadSafe() bool       { return true }
 
 func (s *testStream) Context() context.Context {
 	return s.ctx

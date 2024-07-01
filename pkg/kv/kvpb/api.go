@@ -2520,6 +2520,7 @@ func (s *ScanStats) String() string {
 type RangeFeedEventSink interface {
 	Context() context.Context
 	Send(*RangeFeedEvent) error
+	SendIsThreadSafe() bool
 }
 
 // RangeFeedEventProducer is an adapter for receiving rangefeed events with either

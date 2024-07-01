@@ -207,3 +207,5 @@ func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
 	s.events++
 	return nil
 }
+
+func (s *noopStream) SendIsThreadSafe() bool { return false }

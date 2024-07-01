@@ -292,6 +292,8 @@ func (s *rangefeedEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	return s.stream.Send(&kvpb.MuxRangeFeedEvent{RangeFeedEvent: *event})
 }
 
+func (s *rangefeedEventSink) SendIsThreadSafe() bool { return false }
+
 func (s *internalServer) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	s.muxRfServerStream = stream
 	_, err := stream.Recv()
