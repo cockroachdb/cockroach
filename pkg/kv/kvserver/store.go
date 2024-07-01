@@ -1993,7 +1993,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 	// until they're all gone, up to the configured timeout.
 	transferTimeout := LeaseTransferPerIterationTimeout.Get(&s.cfg.Settings.SV)
 
-	drainLeasesOp := "transfer range leases"
+	const drainLeasesOp = "transfer range leases"
 	if err := timeutil.RunWithTimeout(ctx, drainLeasesOp, transferTimeout,
 		func(ctx context.Context) error {
 			opts := retry.Options{

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func init() {
@@ -175,14 +176,14 @@ func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 	p.ranges = p.ranges[1:]
 	p.curr = probeRangeRow{}
 
-	var opName string
+	var opName redact.RedactableString
 	if p.isWrite {
 		opName = "write probe"
 	} else {
 		opName = "read probe"
 	}
 	ctx, sp := tracing.EnsureChildSpan(
-		ctx, p.tracer, opName,
+		ctx, p.tracer, string(opName),
 		tracing.WithRecording(tracingpb.RecordingVerbose),
 	)
 	defer func() {
