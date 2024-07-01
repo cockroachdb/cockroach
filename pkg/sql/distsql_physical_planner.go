@@ -2372,6 +2372,9 @@ func (dsp *DistSQLPlanner) planAggregators(
 	}
 
 	inputTypes := p.GetResultTypes()
+	// argTypes will be lazily allocated whenever we need to fetch the output
+	// type of the aggregate function.
+	var argTypes []*types.T
 
 	groupCols := make([]uint32, len(info.groupCols))
 	for i, idx := range info.groupCols {
@@ -2661,13 +2664,12 @@ func (dsp *DistSQLPlanner) planAggregators(
 					relToAbsLocalIdx[i] = uint32(len(localAggs))
 					localAggs = append(localAggs, localAgg)
 
-					// Keep track of the new local
-					// aggregation's output type.
-					argTypes := make([]*types.T, len(e.ColIdx))
-					for j, c := range e.ColIdx {
-						argTypes[j] = inputTypes[c]
+					// Keep track of the new local aggregation's output type.
+					argTypes = argTypes[:0]
+					for _, c := range e.ColIdx {
+						argTypes = append(argTypes, inputTypes[c])
 					}
-					_, outputType, err := execagg.GetAggregateInfo(localFunc, argTypes...)
+					outputType, err := execagg.GetAggregateOutputType(localFunc, argTypes)
 					if err != nil {
 						return err
 					}
@@ -2712,14 +2714,13 @@ func (dsp *DistSQLPlanner) planAggregators(
 					finalAggs = append(finalAggs, finalAgg)
 
 					if needRender {
-						argTypes := make([]*types.T, len(finalInfo.LocalIdxs))
+						argTypes = argTypes[:0]
 						for i := range finalInfo.LocalIdxs {
-							// Map the corresponding local
-							// aggregation output types for
-							// the current aggregation e.
-							argTypes[i] = intermediateTypes[argIdxs[i]]
+							// Map the corresponding local aggregation output
+							// types for the current aggregation e.
+							argTypes = append(argTypes, intermediateTypes[argIdxs[i]])
 						}
-						_, outputType, err := execagg.GetAggregateInfo(finalInfo.Fn, argTypes...)
+						outputType, err := execagg.GetAggregateOutputType(finalInfo.Fn, argTypes)
 						if err != nil {
 							return err
 						}
@@ -2886,13 +2887,12 @@ func (dsp *DistSQLPlanner) planAggregators(
 
 	finalOutTypes := make([]*types.T, len(info.aggregations))
 	for i, agg := range info.aggregations {
-		argTypes := make([]*types.T, len(agg.ColIdx)+len(agg.Arguments))
-		for j, c := range agg.ColIdx {
-			argTypes[j] = inputTypes[c]
+		argTypes = argTypes[:0]
+		for _, c := range agg.ColIdx {
+			argTypes = append(argTypes, inputTypes[c])
 		}
-		copy(argTypes[len(agg.ColIdx):], info.argumentsColumnTypes[i])
-		var err error
-		_, returnTyp, err := execagg.GetAggregateInfo(agg.Func, argTypes...)
+		argTypes = append(argTypes, info.argumentsColumnTypes[i]...)
+		returnTyp, err := execagg.GetAggregateOutputType(agg.Func, argTypes)
 		if err != nil {
 			return err
 		}

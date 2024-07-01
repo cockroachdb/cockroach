@@ -190,8 +190,7 @@ func checkDistAggregationInfo(
 	// (e.g. DECIMAL instead of INT).
 	intermediaryTypes := make([]*types.T, numIntermediary)
 	for i, fn := range info.LocalStage {
-		var err error
-		_, returnTyp, err := execagg.GetAggregateInfo(fn, colTypes...)
+		returnTyp, err := execagg.GetAggregateOutputType(fn, colTypes)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -210,7 +209,7 @@ func checkDistAggregationInfo(
 			inputTypes[i] = intermediaryTypes[localIdx]
 		}
 		var err error
-		_, finalOutputTypes[i], err = execagg.GetAggregateInfo(finalInfo.Fn, inputTypes...)
+		finalOutputTypes[i], err = execagg.GetAggregateOutputType(finalInfo.Fn, inputTypes)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -512,7 +511,7 @@ func TestSingleArgumentDistAggregateFunctions(t *testing.T) {
 				continue
 			}
 			// See if this column works with this function.
-			_, _, err := execagg.GetAggregateInfo(fn, col.GetType())
+			_, err := execagg.GetAggregateOutputType(fn, []*types.T{col.GetType()})
 			if err != nil {
 				continue
 			}

@@ -147,9 +147,10 @@ func genAvgAgg(inputFileContents string, wr io.Writer) error {
 	for _, inputTypeFamily := range []types.Family{types.IntFamily, types.DecimalFamily, types.FloatFamily, types.IntervalFamily} {
 		tmplInfo := avgAggTypeTmplInfo{TypeFamily: familyToString(inputTypeFamily)}
 		for _, inputTypeWidth := range supportedWidthsByCanonicalTypeFamily[inputTypeFamily] {
-			// Note that we don't use execinfrapb.GetAggregateInfo because we don't
-			// want to bring in a dependency on that package to reduce the burden
-			// of regenerating execgen code when the protobufs get generated.
+			// Note that we don't use execinfrapb.GetAggregateOutputType because
+			// we don't want to bring in a dependency on that package to reduce
+			// the burden of regenerating execgen code when the protobufs get
+			// generated.
 			retTypeFamily, retTypeWidth := inputTypeFamily, inputTypeWidth
 			if inputTypeFamily == types.IntFamily {
 				// Average of integers is a decimal.
