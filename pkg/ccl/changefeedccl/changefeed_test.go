@@ -3685,9 +3685,16 @@ func TestChangefeedOutputTopics(t *testing.T) {
 
 		tg := newTeeGroup()
 		feedCh := make(chan *sarama.ProducerMessage, 1024)
-		wrapSink := func(s Sink) Sink {
+		wrapSink := func(snk Sink) Sink {
+			if KafkaV2Enabled.Get(&s.Server.ClusterSettings().SV) {
+				return &fakeKafkaSinkV2{
+					t:      t,
+					Sink:   snk,
+					feedCh: feedCh,
+				}
+			}
 			return &fakeKafkaSink{
-				Sink:   s,
+				Sink:   snk,
 				tg:     tg,
 				feedCh: feedCh,
 			}
@@ -3834,7 +3841,7 @@ func TestChangefeedRestartMultiNode(t *testing.T) {
 	db = cluster.ServerConn(feedServerID)
 	sqlDB = sqlutils.MakeSQLRunner(db)
 
-	f := makeKafkaFeedFactory(cluster, db)
+	f := makeKafkaFeedFactory(t, cluster, db)
 	feed := feed(t, f, "CREATE CHANGEFEED FOR test_tab WITH updated")
 	defer closeFeed(t, feed)
 	assertPayloadsStripTs(t, feed, []string{
@@ -3892,7 +3899,7 @@ func TestChangefeedStopPolicyMultiNode(t *testing.T) {
 	db = cluster.ServerConn(feedServerID)
 	sqlDB = sqlutils.MakeSQLRunner(db)
 
-	f := makeKafkaFeedFactory(cluster, db)
+	f := makeKafkaFeedFactory(t, cluster, db)
 	feed := feed(t, f, "CREATE CHANGEFEED FOR test_tab WITH schema_change_policy='stop'")
 	defer closeFeed(t, feed)
 	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (1)`)
@@ -4011,7 +4018,7 @@ func TestChangefeedRBRAvroAddRegion(t *testing.T) {
 	cluster, db, cleanup := startTestCluster(t)
 	defer cleanup()
 
-	f := makeKafkaFeedFactory(cluster, db)
+	f := makeKafkaFeedFactory(t, cluster, db)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY)`)
 	waitForSchemaChange(t, sqlDB, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
@@ -5015,6 +5022,10 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.SucceedsSoonDuration = 5 * time.Second
 
+	// Another SQLDB that has a longer "SucceedsSoonDuration", because some tests will take longer to fail due to DNS resolution retries.
+	longTimeoutSQLDB := sqlutils.MakeSQLRunner(db)
+	longTimeoutSQLDB.SucceedsSoonDuration = 30 * time.Second
+
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 
@@ -5164,15 +5175,26 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?confluent_schema_registry=foo&weird=bar`,
 	)
 
-	// Check unavailable kafka.
-	sqlDB.ExpectErrWithTimeout(
-		t, `client has run out of available brokers`,
+	badHostErrRE := "client has run out of available brokers"
+	if KafkaV2Enabled.Get(&s.ClusterSettings().SV) {
+		badHostErrRE = "(unable to dial|unable to open connection to broker|lookup .* on .*: server misbehaving|connection refused)"
+	}
+
+	// Check unavailable kafka - bad dns.
+	longTimeoutSQLDB.ExpectErrWithTimeout(
+		t, badHostErrRE,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope'`,
 	)
 
-	// Test that a well-formed URI gets as far as unavailable kafka error.
+	// Check unavailable kafka - not running.
 	sqlDB.ExpectErrWithTimeout(
-		t, `client has run out of available brokers`,
+		t, badHostErrRE,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://localhost:9999'`,
+	)
+
+	// Test that a well-formed URI gets as far as unavailable kafka error.
+	longTimeoutSQLDB.ExpectErrWithTimeout(
+		t, badHostErrRE,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true&topic_name=foo'`,
 	)
 
@@ -5287,7 +5309,7 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported`,
 	)
 	sqlDB.ExpectErrWithTimeout(
-		t, `client has run out of available brokers`,
+		t, badHostErrRE,
 		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 	)
 	sqlDB.ExpectErrWithTimeout(
@@ -7615,6 +7637,9 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 						if err != nil {
 							return err
 						}
+						if len(m.Resolved) > 0 {
+							continue
+						}
 						actualMessages = append(actualMessages, string(m.Value))
 					}
 				})
@@ -8520,6 +8545,11 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		if KafkaV2Enabled.Get(&s.Server.ClusterSettings().SV) {
+			// This is already covered for the v2 sink in another test: TestKafkaSinkClientV2_Resize
+			return
+		}
+
 		changefeedbase.BatchReductionRetryEnabled.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, true)
 
