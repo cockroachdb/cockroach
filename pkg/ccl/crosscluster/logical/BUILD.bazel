@@ -53,6 +53,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowexec",
+        "//pkg/sql/sem/asof",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
