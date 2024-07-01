@@ -2839,6 +2839,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`enable_create_stats_using_extremes_bool_enum`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_create_stats_using_extremes_bool_enum`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_create_stats_using_extremes_bool_enum", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableCreateStatsUsingExtremesBoolEnum(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableCreateStatsUsingExtremesBoolEnum), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`allow_role_memberships_to_change_during_transaction`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`allow_role_memberships_to_change_during_transaction`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
