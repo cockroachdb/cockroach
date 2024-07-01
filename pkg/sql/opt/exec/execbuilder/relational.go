@@ -3103,7 +3103,9 @@ func (b *Builder) buildZigzagJoin(
 	return b.applySimpleProject(res, outputCols, join, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
-func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
+func (b *Builder) buildLockingImpl(
+	toLock opt.TableID, locking opt.Locking, allowPredicateLocks bool,
+) (opt.Locking, error) {
 	if b.forceForUpdateLocking.Contains(int(toLock)) {
 		locking = locking.Max(forUpdateLocking)
 	}
@@ -3114,7 +3116,7 @@ func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Loc
 				"cannot execute SELECT %s in a read-only transaction", locking.Strength.String(),
 			)
 		}
-		if locking.Form == tree.LockPredicate {
+		if !allowPredicateLocks && locking.Form == tree.LockPredicate {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
 				110873, "explicit unique checks are not yet supported under read committed isolation",
 			)
@@ -3134,6 +3136,11 @@ func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Loc
 		b.flags.Set(exec.PlanFlagContainsLocking)
 	}
 	return locking, nil
+}
+
+// TODO: Delete this function once predicate locks are universally supported.
+func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
+	return b.buildLockingImpl(toLock, locking, false)
 }
 
 func (b *Builder) buildMax1Row(

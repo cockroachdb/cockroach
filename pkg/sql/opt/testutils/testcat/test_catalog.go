@@ -1574,6 +1574,10 @@ func (u *UniqueConstraint) UniquenessGuaranteedByAnotherIndex() bool {
 	return false
 }
 
+func (u *UniqueConstraint) HasIndexWithImplicitPartitioningColumn() bool {
+	return false
+}
+
 // Sequence implements the cat.Sequence interface for testing purposes.
 type Sequence struct {
 	SeqID      cat.StableID

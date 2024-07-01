@@ -375,6 +375,10 @@ type UniqueConstraint interface {
 	// satisfied when building functional dependencies for the table. This enables
 	// additional optimizations, such as omission of uniqueness checks.
 	UniquenessGuaranteedByAnotherIndex() bool
+
+	// Indices with implicit partitioning columns can be used to simulate row level
+	// predicate locks by writing tombstones to all partitions.
+	HasIndexWithImplicitPartitioningColumn() bool
 }
 
 // UniqueOrdinal identifies a unique constraint (in the context of a Table).
