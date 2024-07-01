@@ -154,7 +154,13 @@ func getAndDialSink(
 	if err != nil {
 		return nil, err
 	}
-	return sink, sink.Dial()
+	if err := sink.Dial(); err != nil {
+		if closeErr := sink.Close(); closeErr != nil {
+			return nil, errors.CombineErrors(err, errors.Wrap(closeErr, `failed to close sink`))
+		}
+		return nil, err
+	}
+	return sink, nil
 }
 
 // WebhookV2Enabled determines whether or not the refactored Webhook sink
