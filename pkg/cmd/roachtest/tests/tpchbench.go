@@ -85,7 +85,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 
 		// Run with only one worker to get best-case single-query performance.
 		cmd := fmt.Sprintf(
-			"./cockroach workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
+			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
 				"--num-runs=%d --max-ops=%d {pgurl%s} "+
 				"--histograms="+t.PerfArtifactsDir()+"/stats.json --histograms-max-latency=%s",
 			filename,
@@ -165,8 +165,9 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 		Cluster:   r.MakeClusterSpec(numNodes, spec.WorkloadNode()),
 		// Uses gs://cockroach-fixtures-us-east1. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968
-		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
-		Suites:           registry.Suites(registry.Nightly),
+		CompatibleClouds:           registry.Clouds(spec.GCE, spec.Local),
+		Suites:                     registry.Suites(registry.Nightly),
+		RequiresDeprecatedWorkload: true, // uses querybench
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)
 		},
