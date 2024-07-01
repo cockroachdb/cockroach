@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -66,12 +67,6 @@ func (s *testServerStream) totalEventsSent() int {
 	return s.eventsSent
 }
 
-func (s *testServerStream) eventsSentById(streamID int64) []*kvpb.RangeFeedEvent {
-	return s.filterEventsSentById(streamID, func(*kvpb.MuxRangeFeedEvent) bool {
-		return true
-	})
-}
-
 func (s *testServerStream) nonErrorEventsSentById(streamID int64) []*kvpb.RangeFeedEvent {
 	return s.filterEventsSentById(streamID, func(e *kvpb.MuxRangeFeedEvent) bool {
 		return e.Error == nil
@@ -123,7 +118,12 @@ func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	s.streamEvents[e.StreamID] = append(s.streamEvents[e.StreamID], e)
 	if e.Error != nil {
 		if doneCh, ok := s.streamsDone[e.StreamID]; ok {
-			doneCh <- e.Error.Error.GoError()
+			var t *kvpb.RangeFeedRetryError
+			if errors.As(e.Error.Error.GoError(), &t) && t.Reason == kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED {
+				doneCh <- nil
+			} else {
+				doneCh <- e.Error.Error.GoError()
+			}
 		}
 	}
 	return nil
