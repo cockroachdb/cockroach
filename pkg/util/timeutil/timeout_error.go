@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -25,7 +26,7 @@ import (
 // an operation didn't complete within its designated timeout.
 type TimeoutError struct {
 	// The operation that timed out.
-	operation string
+	operation redact.SafeString
 	// The configured timeout.
 	timeout time.Duration
 	// The duration of the operation. This is usually expected to be the same as
