@@ -248,10 +248,14 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 	)
 }
 
-func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference, error) {
-	if b.evalCtx != nil && b.catalog != nil { // Some tests leave those unset.
+type functionLookupHelper func(context.Context, tree.UnresolvedRoutineName, tree.SearchPath) (*tree.ResolvedFunctionDefinition, error)
+
+func (b *Builder) wrapFunctionImpl(
+	fnName string, lookup functionLookupHelper,
+) (tree.ResolvableFunctionReference, error) {
+	if lookup != nil {
 		unresolved := tree.MakeUnresolvedName(fnName)
-		fnDef, err := b.catalog.ResolveFunction(
+		fnDef, err := lookup(
 			context.Background(),
 			tree.MakeUnresolvedFunctionName(&unresolved),
 			&b.evalCtx.SessionData().SearchPath,
@@ -262,6 +266,26 @@ func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference,
 		return tree.ResolvableFunctionReference{FunctionReference: fnDef}, nil
 	}
 	return tree.WrapFunction(fnName), nil
+}
+
+func (b *Builder) wrapBuiltinFunction(fnName string) (tree.ResolvableFunctionReference, error) {
+	lookup := func(_ context.Context, fn tree.UnresolvedRoutineName, path tree.SearchPath) (*tree.ResolvedFunctionDefinition, error) {
+		uname, err := fn.UnresolvedName().ToRoutineName()
+		if err != nil {
+			return nil, err
+		}
+		return tree.GetBuiltinFuncDefinitionOrFail(uname, path)
+	}
+	return b.wrapFunctionImpl(fnName, lookup)
+}
+
+func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference, error) {
+	var lookup functionLookupHelper = nil
+	// Some tests leave those unset.
+	if b.evalCtx != nil && b.catalog != nil {
+		lookup = b.catalog.ResolveFunction
+	}
+	return b.wrapFunctionImpl(fnName, lookup)
 }
 
 func (b *Builder) build(e opt.Expr) (_ execPlan, outputCols colOrdMap, err error) {

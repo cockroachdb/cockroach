@@ -384,11 +384,10 @@ func (b *Builder) buildAssignmentCast(
 	}
 
 	const fnName = "crdb_internal.assignment_cast"
-	fn, ok := tree.ResolvedBuiltinFuncDefs[fnName]
-	if !ok {
-		panic(errors.AssertionFailedf("built-in function %s not found", fnName))
+	funcRef, err := b.wrapBuiltinFunction(fnName)
+	if err != nil {
+		return nil, err
 	}
-	funcRef := tree.ResolvableFunctionReference{FunctionReference: fn}
 	props, overloads := builtinsregistry.GetBuiltinProperties(fnName)
 	return tree.NewTypedFuncExpr(
 		funcRef,
