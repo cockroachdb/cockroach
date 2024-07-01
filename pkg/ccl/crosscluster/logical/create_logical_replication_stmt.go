@@ -27,9 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/issuelink"
@@ -86,8 +89,12 @@ func createLogicalReplicationStreamPlanHook(
 		); err != nil {
 			return err
 		}
-
 		if !stmt.Options.IsDefault() {
+			// TODO: update handling of the the returned options
+			_, err := evalLogicalReplicationOptions(ctx, stmt.Options, exprEval, &p.ExtendedEvalContext().Context, p.SemaCtx())
+			if err != nil {
+				return err
+			}
 			return errors.UnimplementedErrorf(issuelink.IssueLink{}, "logical replication stream options are not yet supported")
 		}
 		if stmt.From.Database != "" {
@@ -132,7 +139,7 @@ func createLogicalReplicationStreamPlanHook(
 				return errors.WithHintf(errors.Newf(
 					"tables written to by logical replication currently require a %q DECIMAL column",
 					originTimestampColumnName,
-				), "try 'ALTER %s ADD COLUMN %s DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL",
+				), "try 'ALTER TABLE %s ADD COLUMN %s DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL",
 					dstObjName.String(), originTimestampColumnName,
 				)
 			}
@@ -220,4 +227,89 @@ func createLogicalReplicationStreamTypeCheck(
 	}
 
 	return true, streamCreationHeader, nil
+}
+
+type resolvedLogicalReplicationOptions struct {
+	cursor          *hlc.Timestamp
+	mode            *string
+	defaultFunction *string
+	userFunctions   map[tree.TableName]tree.RoutineName
+}
+
+func evalLogicalReplicationOptions(
+	ctx context.Context,
+	options tree.LogicalReplicationOptions,
+	eval exprutil.Evaluator,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+) (*resolvedLogicalReplicationOptions, error) {
+	r := &resolvedLogicalReplicationOptions{}
+	if options.Mode != nil {
+		mode, err := eval.String(ctx, options.Mode)
+		if err != nil {
+			return nil, err
+		}
+		r.mode = &mode
+	}
+	if options.Cursor != nil {
+		cursor, err := eval.String(ctx, options.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
+		asOf, err := asof.Eval(ctx, asOfClause, semaCtx, evalCtx)
+		if err != nil {
+			return nil, err
+		}
+		r.cursor = &asOf.Timestamp
+	}
+	if options.DefaultFunction != nil {
+		defaultFnc, err := eval.String(ctx, options.DefaultFunction)
+		if err != nil {
+			return nil, err
+		}
+		r.defaultFunction = &defaultFnc
+	}
+	if options.UserFunctions != nil {
+		r.userFunctions = make(map[tree.TableName]tree.RoutineName)
+		for tb, fnc := range options.UserFunctions {
+			objName, err := tb.ToUnresolvedObjectName(tree.NoAnnotation)
+			if err != nil {
+				return nil, err
+			}
+			r.userFunctions[objName.ToTableName()] = fnc
+		}
+	}
+	return r, nil
+}
+
+func (r *resolvedLogicalReplicationOptions) GetCursor() (hlc.Timestamp, bool) {
+	if r == nil || r.cursor == nil {
+		return hlc.Timestamp{}, false
+	}
+	return *r.cursor, true
+}
+
+func (r *resolvedLogicalReplicationOptions) GetMode() (string, bool) {
+	if r == nil || r.mode == nil {
+		return "", false
+	}
+	return *r.mode, true
+}
+
+func (r *resolvedLogicalReplicationOptions) GetDefaultFunction() (string, bool) {
+	if r == nil || r.defaultFunction == nil {
+		return "", false
+	}
+	return *r.defaultFunction, true
+}
+
+func (r *resolvedLogicalReplicationOptions) GetUserFunctions() (
+	map[tree.TableName]tree.RoutineName,
+	bool,
+) {
+	if r == nil || r.userFunctions == nil {
+		return map[tree.TableName]tree.RoutineName{}, false
+	}
+	return r.userFunctions, true
 }
