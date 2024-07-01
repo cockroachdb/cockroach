@@ -1976,6 +1976,42 @@ func (c *clusterImpl) Get(
 	return errors.Wrap(roachprod.Get(ctx, l, c.MakeNodes(opts...), src, dest), "cluster.Get")
 }
 
+// Tail tails files from remote hosts asynchronously.
+func (c *clusterImpl) Tail(
+	ctx context.Context, l *logger.Logger, src string, opts ...option.Option,
+) (stdout io.ReadCloser, stderr io.ReadCloser, errChan chan error, err error) {
+	if ctx.Err() != nil {
+		return nil, nil, nil, errors.Wrap(ctx.Err(), "cluster.Get")
+	}
+	c.status(fmt.Sprintf("tailing %v", src))
+	defer c.status("")
+	errChan = make(chan error, 1)
+	stdoutRead, stdoutWrite := io.Pipe()
+	stderrRead, stderrWrite := io.Pipe()
+	// TODO: is this the best way to spawn a process? how do we kill it
+	go func() {
+		defer close(errChan)
+		defer stdoutWrite.Close()
+		defer stderrWrite.Close()
+		var err error
+		defer l.Printf("stopped tailing %v: %v", src, err)
+		err = roachprod.Run(ctx, l, c.MakeNodes(opts...), "", "", false, stdoutWrite, stderrWrite, []string{fmt.Sprintf("tail -F %s", src)}, install.RunOptions{})
+		if err != nil {
+			errChan <- err
+		}
+	}()
+
+	// Close the pipes when the context is canceled.
+	go func() {
+		<-ctx.Done()
+		_ = stdoutRead.Close()
+		_ = stderrRead.Close()
+	}()
+
+	c.status(fmt.Sprintf("spawned tail -F %v", src))
+	return stdoutRead, stderrRead, errChan, nil
+}
+
 // PutString into the specified file on the remote(s).
 func (c *clusterImpl) PutString(
 	ctx context.Context, content, dest string, mode os.FileMode, nodes ...option.Option,
@@ -2417,10 +2453,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 	defer l.Close()
 
 	cmd := strings.Join(args, " ")
-	c.f.L().Printf("running cmd `%s` on nodes [%v]", roachprod.TruncateString(cmd, 30), nodes)
-	if c.l.File != nil {
-		c.f.L().Printf("details in %s.log", logFile)
-	}
+	c.f.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
 	l.Printf("> %s", cmd)
 	if err := roachprod.Run(
 		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
@@ -2437,11 +2470,7 @@ func (c *clusterImpl) RunE(ctx context.Context, options install.RunOptions, args
 			logFileName = l.File.Name()
 		}
 		createFailedFile(logFileName)
-		if c.l.File != nil {
-			return errors.Wrapf(err, "full command output in %s.log", logFile)
-		} else {
-			return err
-		}
+		return errors.Wrapf(err, "full command output in %s.log", logFile)
 	}
 	l.Printf("> result: <ok>")
 	return nil
