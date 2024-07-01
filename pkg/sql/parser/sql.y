@@ -4692,9 +4692,9 @@ logical_replication_options:
   {
     $$.val = &tree.LogicalReplicationOptions{DefaultFunction: $4.expr()}
   } 
-| FUNCTION string_or_placeholder FOR TABLE db_object_name
+| FUNCTION db_object_name FOR TABLE db_object_name
   {
-     $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[tree.TablePattern]tree.Expr{$5.unresolvedObjectName().ToUnresolvedName():$2.expr()}}
+     $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[*tree.UnresolvedName]tree.RoutineName{$5.unresolvedObjectName().ToUnresolvedName():$2.unresolvedObjectName().ToRoutineName()}}
   }
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
