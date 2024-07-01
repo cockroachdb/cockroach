@@ -187,6 +187,17 @@ var PubsubV2Enabled = settings.RegisterBoolSetting(
 	settings.WithName("changefeed.new_pubsub_sink.enabled"),
 )
 
+// KafkaV2Enabled determines whether or not the refactored Kafka sink
+// or the deprecated sink should be used.
+var KafkaV2Enabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.new_kafka_sink_enabled",
+	"if enabled, this setting enables a new implementation of the kafka sink with improved reliability",
+	// TODO(#126991): delete the original kafka sink code
+	metamorphic.ConstantWithTestBool("changefeed.new_kafka_sink.enabled", false),
+	settings.WithName("changefeed.new_kafka_sink.enabled"),
+)
+
 func getSink(
 	ctx context.Context,
 	serverCfg *execinfra.ServerConfig,
@@ -241,7 +252,13 @@ func getSink(
 			return makeNullSink(sinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case isKafkaSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
+				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
+					return makeKafkaSinkV2(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
+						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
+				} else {
+					return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
+				}
 			})
 		case isPulsarSink(u):
 			var testingKnobs *TestingKnobs
