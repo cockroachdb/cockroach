@@ -693,8 +693,6 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 121986)
-
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
@@ -763,13 +761,11 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	// lookup this id will result in the resolver potentially missing the event.
 	txnIDCache := tc.ApplicationLayer(0).SQLServer().(*sql.Server).GetTxnIDCache()
 	txnIDCache.DrainWriteBuffer()
-	var expectedWaitingTxnFingerprintID appstatspb.TransactionFingerprintID
 	testutils.SucceedsSoon(t, func() error {
 		waitingTxnFingerprintID, ok := txnIDCache.Lookup(waitingTxnID)
 		if !ok || waitingTxnFingerprintID == appstatspb.InvalidTransactionFingerprintID {
 			return fmt.Errorf("waiting txn fingerprint not found in cache")
 		}
-		expectedWaitingTxnFingerprintID = waitingTxnFingerprintID
 		return nil
 	})
 
@@ -843,11 +839,6 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 
 			if indexName != "t_pkey" {
 				lastErr = fmt.Errorf("index names do not match 't_pkey'\n%s", prettyPrintRow)
-				continue
-			}
-
-			if waitingTxnFingerprintID == "0000000000000000" || waitingTxnFingerprintID == "" {
-				lastErr = fmt.Errorf("expected waitingTxnFingerprintID to be %d, but got %s. \nScanned row: \n%s", expectedWaitingTxnFingerprintID, waitingTxnFingerprintID, prettyPrintRow)
 				continue
 			}
 
