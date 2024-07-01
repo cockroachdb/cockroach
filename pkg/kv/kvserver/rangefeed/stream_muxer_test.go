@@ -12,6 +12,7 @@ package rangefeed
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -117,11 +118,15 @@ func TestStreamMuxer(t *testing.T) {
 
 		require.Equal(t, testRangefeedCounter.get(), int32(3))
 
+		var wg sync.WaitGroup
 		for _, muxError := range testRangefeedCompletionErrors {
-			go func(streamID int64, rangeID roachpb.RangeID, err error) {
+			wg.Add(1)
+			func(streamID int64, rangeID roachpb.RangeID, err error) {
 				muxer.DisconnectRangefeedWithError(streamID, rangeID, kvpb.NewError(err))
+				wg.Done()
 			}(muxError.streamID, muxError.rangeID, muxError.Error)
 		}
+		wg.Wait()
 
 		for _, muxError := range testRangefeedCompletionErrors {
 			testutils.SucceedsSoon(t, func() error {
@@ -138,6 +143,6 @@ func TestStreamMuxer(t *testing.T) {
 				return errors.Newf("expected error %v not found", muxError)
 			})
 		}
-		require.Equal(t, int32(0), testRangefeedCounter.get())
+		require.Equal(t, testRangefeedCounter.get(), int32(0))
 	})
 }

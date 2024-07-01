@@ -13,9 +13,7 @@ package rangefeed
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
-	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/keys" // hook up pretty printer
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -26,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -42,63 +39,6 @@ var (
 	spAC = roachpb.Span{Key: keyA, EndKey: keyC}
 	spXY = roachpb.Span{Key: keyX, EndKey: keyY}
 )
-
-type testStream struct {
-	ctx     context.Context
-	ctxDone func()
-	done    chan *kvpb.Error
-	mu      struct {
-		syncutil.Mutex
-		sendErr error
-		events  []*kvpb.RangeFeedEvent
-	}
-}
-
-func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.mu.sendErr != nil {
-		return s.mu.sendErr
-	}
-	s.mu.events = append(s.mu.events, e)
-	return nil
-}
-
-func (s *testStream) SetSendErr(err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.sendErr = err
-}
-
-func (s *testStream) Events() []*kvpb.RangeFeedEvent {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	es := s.mu.events
-	s.mu.events = nil
-	return es
-}
-
-func (s *testStream) BlockSend() func() {
-	s.mu.Lock()
-	var once sync.Once
-	return func() {
-		once.Do(s.mu.Unlock) // safe to call multiple times, e.g. defer and explicit
-	}
-}
-
-func (s *testStream) Disconnect(err *kvpb.Error) {
-	s.done <- err
-}
-
-func (s *testStream) WaitForErr(t *testing.T) error {
-	select {
-	case err := <-s.done:
-		return err.GoError()
-	case <-time.After(30 * time.Second):
-		t.Fatalf("time out waiting for rangefeed completion")
-		return nil
-	}
-}
 
 type testRegistration struct {
 	registration
