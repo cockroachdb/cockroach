@@ -11,6 +11,7 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+plan type: custom
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
 isolation level: serializable
@@ -46,6 +47,7 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+plan type: custom
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
 isolation level: serializable
@@ -81,6 +83,7 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+plan type: custom
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
 isolation level: serializable
@@ -162,6 +165,7 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+plan type: custom
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
 isolation level: serializable
@@ -197,6 +201,7 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+plan type: custom
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
 isolation level: serializable
@@ -289,6 +294,7 @@ planning time: 0µs
 execution time: 0µs
 distribution: local
 vectorized: false
+plan type: custom
 maximum memory usage: 0 B
 network usage: 0 B (0 messages)
 isolation level: serializable
