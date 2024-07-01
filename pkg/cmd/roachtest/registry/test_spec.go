@@ -92,6 +92,12 @@ type TestSpec struct {
 	// in the environment.
 	RequiresLicense bool
 
+	// RequiresDeprecatedWorkload indicates that the test requires
+	// the 'workload' binary to be present for the test to run. Use
+	// this to ensure tests will fail-early if a 'workload' binary
+	// does not exist.
+	RequiresDeprecatedWorkload bool
+
 	// EncryptionSupport encodes to what extent tests supports
 	// encryption-at-rest. See the EncryptionSupport type for details.
 	// Encryption support is opt-in -- i.e., if the TestSpec does not

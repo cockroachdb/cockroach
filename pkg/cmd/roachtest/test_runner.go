@@ -720,6 +720,11 @@ func (r *testRunner) runWorker(
 			return err
 		}
 
+		// Verify that the deprecated workload is available if needed.
+		if testToRun.spec.RequiresDeprecatedWorkload && workload[arch] == "" {
+			return errors.Errorf("Deprecated workload marked as required but not found.")
+		}
+
 		var clusterCreateErr error
 		var vmCreateOpts *vm.CreateOpts
 

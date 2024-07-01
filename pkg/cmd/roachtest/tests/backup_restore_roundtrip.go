@@ -86,9 +86,10 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			RequiresLicense:   true,
 			NativeLibs:        registry.LibGEOS,
 			// See https://github.com/cockroachdb/cockroach/issues/105968
-			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
-			Suites:           registry.Suites(registry.Nightly),
-			Skip:             sp.skip,
+			CompatibleClouds:           registry.Clouds(spec.GCE, spec.Local),
+			Suites:                     registry.Suites(registry.Nightly),
+			Skip:                       sp.skip,
+			RequiresDeprecatedWorkload: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				backupRestoreRoundTrip(ctx, t, c, sp)
 			},

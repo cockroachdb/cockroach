@@ -195,6 +195,11 @@ func (t *testImpl) StandardCockroach() string {
 }
 
 func (t *testImpl) DeprecatedWorkload() string {
+	// Give a hint that the test should set `RequiresDeprecatedWorkload` so
+	// we can validate the binary exists.
+	if !t.spec.RequiresDeprecatedWorkload {
+		t.l.Printf("WARNING: Using deprecated workload but `RequiresDeprecatedWorkload` is not set in test spec.")
+	}
 	return t.deprecatedWorkload
 }
 
