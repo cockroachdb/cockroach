@@ -3442,8 +3442,6 @@ func (m *webhookManager) Start() (dest *url.URL) {
 		m.t.Fatal(err)
 	}
 
-	// Start the server in its own monitor to not block m.mon.Wait() // TODO: why?
-	// mon := m.cluster.NewMonitor(m.ctx, m.workloadNode)
 	serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, m.chosenPort)
 	m.mon.Go(func(ctx context.Context) error {
 		var err error
@@ -3459,9 +3457,19 @@ func (m *webhookManager) Start() (dest *url.URL) {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
+			case <-m.doneCh:
+				return nil
 			case <-m.restartSink:
 			}
-			// TODO: maybe sleep
+
+			// Sleep.
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-m.doneCh:
+				return nil
+			case <-time.After(5 * time.Second):
+			}
 		}
 		return err
 	})
@@ -3501,7 +3509,7 @@ func (m *webhookManager) tail() io.Reader {
 	m.t.L().Printf("webhook tail started")
 	close(stdoutReady)
 
-	// discard stderr
+	// Discard stderr.
 	m.mon.Go(func(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
@@ -3514,9 +3522,10 @@ func (m *webhookManager) tail() io.Reader {
 	})
 
 	m.t.L().Printf("waiting for webhook tail to be ready")
-
 	select {
 	case <-m.ctx.Done():
+		return nil
+	case <-m.doneCh:
 		return nil
 	case <-stdoutReady:
 	}
@@ -3525,6 +3534,9 @@ func (m *webhookManager) tail() io.Reader {
 }
 
 func (m *webhookManager) runValidateOrder(stdout io.Reader) {
+	if stdout == nil { // Can happen if we're shutting down immediately.
+		return
+	}
 	m.t.L().Printf("starting webhook order validator")
 	validators := make(map[string]cdctest.Validator)
 	scanner := bufio.NewScanner(stdout)
@@ -3543,12 +3555,9 @@ func (m *webhookManager) runValidateOrder(stdout io.Reader) {
 		var payload webhookPayload
 		require.NoError(m.t, json.Unmarshal(scanner.Bytes(), &payload))
 
+		// NOTE: this does not validate resolved timestamps, since we don't know which topic they're for.
+		// TODO: is this possible in the webhook sink somehow?
 		if payload.Resolved != "" {
-			resolved, err := hlc.ParseHLC(payload.Resolved)
-			require.NoError(m.t, err)
-			// TODO: i dont think we can distinguish which topic the resolved is for. should we? idk
-			_ = resolved
-			// validator.NoteResolved("0", resolved)
 			continue
 		}
 		for _, p := range payload.Payload {
@@ -3557,7 +3566,8 @@ func (m *webhookManager) runValidateOrder(stdout io.Reader) {
 			if _, ok := validators[p.Topic]; !ok {
 				validators[p.Topic] = cdctest.NewOrderValidator(p.Topic)
 			}
-			validators[p.Topic].NoteRow("0", string(p.Key), "value doesnt matter", updated)
+			err = validators[p.Topic].NoteRow("0", string(p.Key), "value doesnt matter", updated)
+			require.NoError(m.t, err)
 			if len(validators[p.Topic].Failures()) > 0 {
 				m.t.Fatalf("order validation failed for topic %v: %v", p.Topic, validators[p.Topic].Failures())
 			}
@@ -3567,7 +3577,7 @@ func (m *webhookManager) runValidateOrder(stdout io.Reader) {
 			i++
 		}
 	}
-	m.t.L().Printf("validation completed with %d (%v)", i, scanner.Err())
+	m.t.L().Printf("validation on %d rows completed with (%v)", i, scanner.Err())
 	require.NoError(m.t, scanner.Err())
 }
 
