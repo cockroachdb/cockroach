@@ -115,7 +115,7 @@ EOF"
 
     case $cluster in
       "workload-chaos")
-        roachprod ssh ${cluster} -- "mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
+        roachprod ssh ${cluster} -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
 ---
 receivers:
   prometheus/workload:
@@ -192,7 +192,7 @@ EOF"
         ;;
 
       "workload-large")
-        roachprod ssh ${cluster} -- "mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
+        roachprod ssh ${cluster} -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
 ---
 receivers:
   prometheus/workload:
