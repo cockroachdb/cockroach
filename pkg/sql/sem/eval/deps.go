@@ -451,8 +451,6 @@ type Planner interface {
 	InsertTemporarySchema(
 		tempSchemaName string, databaseID descpb.ID, schemaID descpb.ID,
 	)
-
-	StartLogicalReplicationJob(ctx context.Context, targetConnStr string, tableNames []string) (jobspb.JobID, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
