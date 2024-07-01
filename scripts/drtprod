@@ -83,36 +83,6 @@ case $1 in
     shift
     cluster="${1}"
 
-    dd_api_key="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
-    if [ -z "${dd_api_key}" ]; then
-      echo "Missing Datadog API key!"
-      exit 1
-    fi
-
-    dd_site="us5.datadoghq.com"
-
-    # Single quotes around the shell expansion cause it to be processed on the
-    # remote host instead of the local host.
-    roachprod ssh ${cluster} -- DD_INSTALL_ONLY=true DD_API_KEY=${dd_api_key} bash -c '"$(curl -L https://s3.amazonaws.com/dd-agent/scripts/install_script_agent7.sh)"'
-
-    # Disable the default integrations for the Datadog agent in preparation for
-    # its removal.
-    roachprod ssh ${cluster} -- 'sudo bash -c "for file in $(find /etc/datadog-agent/conf.d -type f -name conf.yaml.default); do mv ${file} ${file}.bak; done"'
-
-    roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/datadog.yaml > /dev/null << EOF
----
-api_key: ${dd_api_key}
-site: ${dd_site}
-hostname: \$(hostname)
-tags:
-# Datadog reserved tags.
-- env:development
-
-# Custom tags.
-- cluster:${cluster%:*}
-- team:drt
-EOF"
-
     case $cluster in
       "workload-chaos")
         roachprod ssh ${cluster} -- "mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
@@ -240,7 +210,17 @@ EOF"
         ;;
     esac
 
-    roachprod ssh ${cluster} -- 'sudo systemctl enable datadog-agent && sudo systemctl restart datadog-agent'
+    dd_api_key="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
+    if [ -z "${dd_api_key}" ]; then
+      echo "Missing Datadog API key!"
+      exit 1
+    fi
+
+    roachprod ssh ${cluster} -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
+export DD_SITE=us5.datadoghq.com
+export DD_API_KEY=${dd_api_key}
+export DD_TAGS=env:development,cluster${cluster%:*},team:drt,service:drt-cockroachdb
+EOF"
 
     roachprod opentelemetry-start ${cluster} \
       --datadog-api-key "${dd_api_key}" \

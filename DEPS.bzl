@@ -2215,6 +2215,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_datadog_datadog_api_client_go_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/DataDog/datadog-api-client-go/v2",
+        sha256 = "1b719dab747449f279830dbb1a5920ec45ad041ea13ffde2ef7dc949c52a59f1",
+        strip_prefix = "github.com/DataDog/datadog-api-client-go/v2@v2.15.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataDog/datadog-api-client-go/v2/com_github_datadog_datadog_api_client_go_v2-v2.15.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_datadog_datadog_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/DataDog/datadog-go",
@@ -3623,10 +3633,10 @@ def go_deps():
         name = "com_github_goccy_go_json",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/goccy/go-json",
-        sha256 = "018970f0a0d7337bd2a6583f1b68bcc9f9f4830df14ca1ccf1f2020fff9b3adb",
-        strip_prefix = "github.com/goccy/go-json@v0.9.11",
+        sha256 = "ed9043ee01cc46557c74bcecc625db37ffe3a5c7af219f390a287f44a40c2520",
+        strip_prefix = "github.com/goccy/go-json@v0.10.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/goccy/go-json/com_github_goccy_go_json-v0.9.11.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/goccy/go-json/com_github_goccy_go_json-v0.10.2.zip",
         ],
     )
     go_repository(
