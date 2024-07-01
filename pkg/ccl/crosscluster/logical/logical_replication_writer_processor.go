@@ -596,17 +596,6 @@ func (t *txnBatch) HandleBatch(
 	} else {
 		var txnStats batchStats
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			// Note that we cannot use the DisableChangefeedReplication override
-			// option in LWW row processor because it only affects new txns, and
-			// we already have one.
-			// TODO(ssd): For now, we SetOmitInRangefeeds to
-			// prevent the data from being emitted back to the source.
-			// However, I don't think we want to do this in the long run.
-			// Rather, we want to store the inbound cluster ID and store that
-			// in a way that allows us to choose to filter it out from or not.
-			// Doing it this way means that you can't choose to run CDC just from
-			// one side and not the other.
-			txn.KV().SetOmitInRangefeeds()
 			txnStats = batchStats{}
 			for _, kv := range batch {
 				rowStats, err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue)
