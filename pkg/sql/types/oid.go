@@ -97,6 +97,7 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_timetz:       TimeTZ,
 	oid.T_timestamp:    Timestamp,
 	oid.T_timestamptz:  TimestampTZ,
+	oid.T_trigger:      Trigger,
 	oid.T_tsquery:      TSQuery,
 	oid.T_tsvector:     TSVector,
 	oid.T_unknown:      Unknown,

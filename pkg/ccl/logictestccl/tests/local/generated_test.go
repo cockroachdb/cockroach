@@ -351,6 +351,13 @@ func TestCCLLogic_tenant_usage(
 	runCCLLogicTest(t, "tenant_usage")
 }
 
+func TestCCLLogic_triggers(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "triggers")
+}
+
 func TestCCLLogic_udf_params(
 	t *testing.T,
 ) {
