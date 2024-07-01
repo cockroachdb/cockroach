@@ -82,6 +82,7 @@ func validateExternalConnectionSinkURI(
 	if err != nil {
 		return errors.Wrap(err, "invalid changefeed sink URI")
 	}
+	// TODO: Call Dial() here as well / use getAndDialSink() for parity with what the non-external-connection stuff does.
 	if err := s.Close(); err != nil {
 		return errors.Wrap(err, "failed to close canary sink")
 	}
