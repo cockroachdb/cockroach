@@ -7736,6 +7736,37 @@ active for the current transaction.`,
 		},
 	),
 
+	"crdb_internal.is_column_active": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}, {Name: "column_name", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tableName := tree.MustBeDString(args[0])
+				columnName := tree.MustBeDString(args[1])
+				dOid, err := eval.ParseDOid(ctx, evalCtx, string(tableName), types.RegClass)
+				if err != nil {
+					return nil, err
+				}
+				active, err := evalCtx.Planner.IsColumnActive(
+					ctx, int(dOid.Oid), string(columnName),
+				)
+				if err != nil {
+					return nil, err
+				}
+				if active {
+					return tree.DBoolTrue, nil
+				}
+				return tree.DBoolFalse, nil
+			},
+			Info: `This function is used to determine if a given column is currently.
+active for the current transaction.`,
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.kv_set_queue_active": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemRepair,

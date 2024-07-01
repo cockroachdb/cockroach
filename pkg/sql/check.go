@@ -535,6 +535,19 @@ func (p *planner) IsConstraintActive(
 	return constraint != nil && constraint.IsEnforced(), nil
 }
 
+// IsColumnActive returns if a given column is currently active,
+// for the current transaction.
+func (p *planner) IsColumnActive(
+	ctx context.Context, tableID int, columnName string,
+) (bool, error) {
+	tableDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
+	if err != nil {
+		return false, err
+	}
+	col := catalog.FindColumnByName(tableDesc, columnName)
+	return col != nil && !col.IsMutation(), nil
+}
+
 // HasVirtualUniqueConstraints returns true if the table has one or more
 // constraints that are validated by RevalidateUniqueConstraintsInTable.
 func HasVirtualUniqueConstraints(tableDesc catalog.TableDescriptor) bool {

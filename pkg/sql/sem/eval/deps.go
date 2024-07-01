@@ -349,6 +349,10 @@ type Planner interface {
 	// for the current transaction.
 	IsConstraintActive(ctx context.Context, tableID int, constraintName string) (bool, error)
 
+	// IsColumnActive returns if a given column is currently active,
+	// for the current transaction.
+	IsColumnActive(ctx context.Context, tableID int, columnName string) (bool, error)
+
 	// ValidateTTLScheduledJobsInCurrentDB checks scheduled jobs for each table
 	// in the database maps to a scheduled job.
 	ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error

@@ -58,16 +58,35 @@ func (og *operationGenerator) sequenceExists(
    )`, seqName.Schema(), seqName.Object())
 }
 
+func (og *operationGenerator) quoteIdentName(
+	ctx context.Context, tx pgx.Tx, columnName string,
+) (string, error) {
+	col, err := og.scanString(ctx, tx, `SELECT quote_ident($1)`, columnName)
+	if err != nil {
+		return "", err
+	}
+	return col, nil
+}
+
 func (og *operationGenerator) columnExistsOnTable(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
-	return og.scanBool(ctx, tx, `SELECT EXISTS (
+	exists, err := og.scanBool(ctx, tx, `SELECT EXISTS (
 	SELECT column_name
     FROM information_schema.columns 
    WHERE table_schema = $1
      AND table_name = $2
      AND column_name = $3
    )`, tableName.Schema(), tableName.Object(), columnName)
+	if err != nil {
+		return false, err
+	}
+	if !exists {
+		return false, nil
+	}
+	active, err := og.scanBool(ctx, tx,
+		`SELECT crdb_internal.is_column_active($1, $2)`, tableName.String(), columnName)
+	return active, err
 }
 
 func (og *operationGenerator) tableHasRows(
@@ -86,6 +105,12 @@ func (og *operationGenerator) scanBool(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) (b bool, err error) {
 	return Scan[bool](ctx, og, tx, query, args...)
+}
+
+func (og *operationGenerator) scanString(
+	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
+) (s string, err error) {
+	return Scan[string](ctx, og, tx, query, args...)
 }
 
 func (og *operationGenerator) schemaExists(
@@ -180,36 +205,50 @@ func (og *operationGenerator) columnIsDependedOn(
 )`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
 }
 
+// colIsRefByComputed determines if a column is referenced by a computed column.
+func (og *operationGenerator) colIsRefByComputed(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `SELECT EXISTS(
+    SELECT 
+       attrelid::REGCLASS AS table_name, 
+       attname AS column_name, 
+       pg_get_expr(adbin, adrelid) AS computed_formula
+    FROM 
+       pg_attribute 
+    JOIN 
+       pg_attrdef ON attrelid = adrelid AND attnum = adnum
+    WHERE 
+       atthasdef 
+       AND attrelid = $1::REGCLASS
+       AND pg_get_expr(adbin, adrelid) ILIKE '%%' || $2 || '%%'
+)`, tableName.String(), columnName)
+}
+
 func (og *operationGenerator) colIsPrimaryKey(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
-	primaryColumns, err := og.scanStringArray(ctx, tx,
+	isPrimaryKey, err := og.scanBool(ctx, tx,
 		`
-SELECT array_agg(column_name)
-  FROM (
+SELECT EXISTS(
         SELECT DISTINCT column_name
-          FROM information_schema.statistics
-         WHERE index_name
-               IN (
-                  SELECT index_name
-                    FROM crdb_internal.table_indexes
-                   WHERE index_type = 'primary' AND descriptor_id = $3::REGCLASS
-                )
-               AND table_schema = $1
-               AND table_name = $2
-               AND storing = 'NO'
+        FROM information_schema.statistics
+        WHERE index_name IN (
+            SELECT index_name
+            FROM crdb_internal.table_indexes
+            WHERE index_type = 'primary' AND descriptor_id = $3::REGCLASS
+        )
+        AND table_schema = $1
+        AND table_name = $2
+        AND column_name = $4
+        AND storing = 'NO'
        );
-	`, tableName.Schema(), tableName.Object(), tableName.String())
+	`, tableName.Schema(), tableName.Object(), tableName.String(), columnName)
 	if err != nil {
 		return false, err
 	}
 
-	for _, primaryColumn := range primaryColumns {
-		if primaryColumn == columnName {
-			return true, nil
-		}
-	}
-	return false, nil
+	return isPrimaryKey, nil
 }
 
 // exprColumnCollector collects all the columns observed inside
@@ -462,7 +501,7 @@ func (og *operationGenerator) valuesViolateUniqueConstraints(
 
 // ErrSchemaChangesDisallowedDueToPkSwap is generated when schema changes are
 // disallowed on a table because PK swap is already in progress.
-var ErrSchemaChangesDisallowedDueToPkSwap = errors.New("not schema changes allowed on selected table due to PK swap")
+var ErrSchemaChangesDisallowedDueToPkSwap = errors.New("no schema changes allowed on selected table due to PK swap")
 
 func (og *operationGenerator) tableHasPrimaryKeySwapActive(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
@@ -488,7 +527,7 @@ WHERE
 		return err
 	}
 
-	allowed, err := og.scanBool(
+	notAllowed, err := og.scanBool(
 		ctx,
 		tx,
 		`
@@ -505,7 +544,7 @@ SELECT count(*) > 0
 	if err != nil {
 		return err
 	}
-	if !allowed {
+	if notAllowed {
 		return ErrSchemaChangesDisallowedDueToPkSwap
 	}
 	return nil
@@ -889,15 +928,15 @@ func (og *operationGenerator) columnContainsNull(
 func (og *operationGenerator) constraintIsPrimary(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, constraintName string,
 ) (bool, error) {
-	return og.scanBool(ctx, tx, fmt.Sprintf(`
+	return og.scanBool(ctx, tx, `
 	SELECT EXISTS(
 	        SELECT *
 	          FROM pg_catalog.pg_constraint
-	         WHERE conrelid = '%s'::REGCLASS::INT
-	           AND conname = '%s'
+	         WHERE conrelid = $1::REGCLASS::INT
+	           AND conname = $2
 	           AND (contype = 'p')
 	       );
-	`, tableName.String(), constraintName))
+	`, tableName.String(), constraintName)
 }
 
 // Checks if a column has a single unique constraint.

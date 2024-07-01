@@ -92,3 +92,12 @@ func (c codesWithConditions) append(code pgcode.Code) codesWithConditions {
 		},
 	}...)
 }
+
+func (c codesWithConditions) addAll(otherC codesWithConditions) codesWithConditions {
+	for _, cc := range otherC {
+		if cc.condition {
+			c = c.append(cc.code)
+		}
+	}
+	return c
+}
