@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFindConflict(t *testing.T) {
+func TestMatch(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	ids := make([]entryID, 1, len(previousEnts)+1) // dummy (0, 0) at index 0
 	for i := range previousEnts {
@@ -35,27 +35,27 @@ func TestFindConflict(t *testing.T) {
 		prev  entryID
 		ents  []pb.Entry
 		notOk bool
-		want  entryID
+		want  uint64
 	}{
 		// prev does not match the log
 		{prev: entryID{term: 10, index: 1}, notOk: true},
 		{prev: entryID{term: 4, index: 1}, ents: index(2).terms(4, 4), notOk: true},
 		{prev: entryID{term: 5, index: 2}, ents: index(3).terms(5, 6), notOk: true},
 		// no conflict, empty entries
-		{ents: nil, want: ids[0]},
+		{ents: nil, want: 0},
 		// no conflict
-		{prev: ids[0], ents: index(1).terms(1, 2, 3), want: ids[3]},
-		{prev: ids[1], ents: index(2).terms(2, 3), want: ids[3]},
-		{prev: ids[2], ents: index(3).terms(3), want: ids[3]},
+		{prev: ids[0], ents: index(1).terms(1, 2, 3), want: 3},
+		{prev: ids[1], ents: index(2).terms(2, 3), want: 3},
+		{prev: ids[2], ents: index(3).terms(3), want: 3},
 		// no conflict, but has new entries
-		{prev: ids[0], ents: index(1).terms(1, 2, 3, 4, 4), want: ids[3]},
-		{prev: ids[1], ents: index(2).terms(2, 3, 4, 4), want: ids[3]},
-		{prev: ids[2], ents: index(3).terms(3, 4, 4), want: ids[3]},
-		{prev: ids[3], ents: index(4).terms(4, 4), want: ids[3]},
+		{prev: ids[0], ents: index(1).terms(1, 2, 3, 4, 4), want: 3},
+		{prev: ids[1], ents: index(2).terms(2, 3, 4, 4), want: 3},
+		{prev: ids[2], ents: index(3).terms(3, 4, 4), want: 3},
+		{prev: ids[3], ents: index(4).terms(4, 4), want: 3},
 		// passes prev check, but conflicts with existing entries
-		{prev: ids[0], ents: index(1).terms(4, 4), want: ids[0]},
-		{prev: ids[1], ents: index(2).terms(1, 4, 4), want: ids[1]},
-		{prev: ids[2], ents: index(3).terms(2, 2, 4, 4), want: ids[2]},
+		{prev: ids[0], ents: index(1).terms(4, 4), want: 0},
+		{prev: ids[1], ents: index(2).terms(1, 4, 4), want: 1},
+		{prev: ids[2], ents: index(3).terms(2, 2, 4, 4), want: 2},
 		// out of bounds
 		{prev: entryID{term: 3, index: 10}, ents: index(11).terms(3), notOk: true},
 		// just touching the right bound, but still out of bounds
@@ -66,7 +66,7 @@ func TestFindConflict(t *testing.T) {
 			log.append(previousEnts...)
 			app := logSlice{term: 100, prev: tt.prev, entries: tt.ents}
 			require.NoError(t, app.valid())
-			match, ok := log.findConflict(app)
+			match, ok := log.match(app)
 			require.Equal(t, !tt.notOk, ok)
 			require.Equal(t, tt.want, match)
 		})
