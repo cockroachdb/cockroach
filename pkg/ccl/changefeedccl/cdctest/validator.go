@@ -266,7 +266,7 @@ func (vt IntegrityValidationType) startEachKeySequentialWorkload(ctx context.Con
 			for i := 0; i < numVals*chunkSize; i++ {
 				key := offset + i%chunkSize
 				// Retry connections because we might do crdb chaos too.
-				for attempt := 0; ctx.Err() == nil; attempt++ {
+				for attempt := 0; attempt < 10 && ctx.Err() == nil; attempt++ {
 					if conn == nil {
 						conn, err = db.Conn(ctx)
 						if err != nil {
