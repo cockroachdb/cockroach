@@ -235,6 +235,30 @@ func (tpcc replicateTPCC) runDriver(
 	return defaultWorkloadDriver(workloadCtx, setup, c, tpcc)
 }
 
+// replicateImportKV is a kv workload that runs the kv init step after the
+// replication stream has started, inducing a bulk import catchup scan workload.
+type replicateImportKV struct {
+	replicateKV
+	replicateSplits bool
+}
+
+func (ikv replicateImportKV) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
+	return ""
+}
+
+func (ikv replicateImportKV) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
+	return ikv.replicateKV.sourceInitCmd(tenantName, nodes)
+}
+
+func (ikv replicateImportKV) runDriver(
+	workloadCtx context.Context, c cluster.Cluster, t test.Test, setup *c2cSetup,
+) error {
+	if ikv.replicateSplits {
+		setup.dst.sysSQL.Exec(t, "SET CLUSTER SETTING physical_replication.consumer.ingest_split_event.enabled = true")
+	}
+	return defaultWorkloadDriver(workloadCtx, setup, c, ikv)
+}
+
 type replicateKV struct {
 	readPercent int
 
@@ -1167,6 +1191,65 @@ func registerClusterToCluster(r registry.Registry) {
 			suites:             registry.Suites(registry.Nightly),
 		},
 		{
+			// Catchup scan perf test on 7tb bulk import.
+			name:      "c2c/import/7tb/kv0",
+			benchmark: true,
+			srcNodes:  10,
+			dstNodes:  10,
+			cpus:      8,
+			pdSize:    1100,
+			// Write ~7TB data to disk via Import -- takes a little over 1 hour.
+			workload: replicateImportKV{
+				replicateSplits: true,
+				replicateKV:     replicateKV{readPercent: 0, initRows: 5000000000, maxBlockBytes: 1024}},
+			timeout: 3 * time.Hour,
+			// While replicating a bulk op, expect the max latency to be the runtime
+			// of the bulk op.
+			maxAcceptedLatency: 2 * time.Hour,
+			// Cutover to one second after the import completes.
+			cutover: -1 * time.Second,
+			// After the cutover command begins, the destination cluster still needs
+			// to catch up. Since we allow a max lag of 2 hours, it may take some time
+			// to actually catch up after the bulk op succeeds. That being said, once
+			// the import completes, we expect the replication stream to catch up
+			// fairly quickly.
+			cutoverTimeout: 30 * time.Minute,
+			// Because PCR begins on a nearly empty cluster, skip the node distribution check.
+			skipNodeDistributionCheck: true,
+			clouds:                    registry.OnlyGCE,
+			suites:                    registry.Suites(registry.Weekly),
+		},
+		{
+			// Catchup scan perf test on bulk import.
+			name:      "c2c/import/kv0",
+			benchmark: true,
+			srcNodes:  5,
+			dstNodes:  5,
+			cpus:      8,
+			pdSize:    500,
+			// Write ~1.2TB data to disk,takes a about 40 minutes.
+			workload: replicateImportKV{
+				replicateSplits: true,
+				replicateKV:     replicateKV{readPercent: 0, initRows: 1000000000, maxBlockBytes: 1024}},
+			timeout: 90 * time.Minute,
+			// While replicating a bulk op, expect the max latency to be the runtime
+			// of the bulk op.
+			maxAcceptedLatency: 1 * time.Hour,
+			// Cutover to one second after the import completes.
+			cutover: -1 * time.Second,
+			// After the cutover command begins, the destination cluster still needs
+			// to catch up. Since we allow a max lag of 1 hour, it may take some time
+			// to actually catch up after the bulk op succeeds. That being said, once
+			// the import completes, we expect the replication stream to catch up
+			// fairly quickly.
+			cutoverTimeout: 20 * time.Minute,
+			// Because PCR begins on a nearly empty cluster, skip the node
+			// distribution check.
+			skipNodeDistributionCheck: true,
+			clouds:                    registry.OnlyGCE,
+			suites:                    registry.Suites(registry.Weekly),
+		},
+		{
 			// Large workload to test our 23.2 perf goals.
 			name:      "c2c/weekly/kv50",
 			benchmark: true,
@@ -1239,19 +1322,19 @@ func registerClusterToCluster(r registry.Registry) {
 			suites:                    registry.Suites(registry.Nightly),
 		},
 		{
-			name:               "c2c/BulkOps/short",
+			name:               "c2c/BulkOps",
 			srcNodes:           4,
 			dstNodes:           4,
 			cpus:               8,
 			pdSize:             100,
-			workload:           replicateBulkOps{short: true},
+			workload:           replicateBulkOps{},
 			timeout:            2 * time.Hour,
 			additionalDuration: 0,
 			// Cutover currently takes around 4 minutes, perhaps because we need to
 			// revert 10 GB of replicated data.
 			//
 			// TODO(msbutler): investigate further if cutover can be sped up.
-			cutoverTimeout: 10 * time.Minute,
+			cutoverTimeout: 20 * time.Minute,
 			cutover:        5 * time.Minute,
 			// In a few ad hoc runs, the max latency hikes up to 27 minutes before lag
 			// replanning and distributed catch up scans fix the poor initial plan. If
@@ -1763,7 +1846,7 @@ func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration
 	db.ExecMultiple(t,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
 		`SET CLUSTER SETTING stream_replication.replan_flow_threshold = 0.1;`,
-		`SET CLUSTER SETTING physical_replication.consumer.node_lag_replanning_threshold = '5m';`)
+	)
 
 	if additionalDuration != 0 {
 		replanFrequency := additionalDuration / 2
