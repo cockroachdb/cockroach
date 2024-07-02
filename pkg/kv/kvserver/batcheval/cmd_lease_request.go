@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -66,6 +67,15 @@ func RequestLease(
 	rErr := &kvpb.LeaseRejectedError{
 		Existing:  prevLease,
 		Requested: args.Lease,
+	}
+
+	// However, we verify that the current lease's sequence number and proposed
+	// timestamp match the provided PrevLease. This ensures that the validation
+	// here is consistent with the validation that was performed when the lease
+	// request was constructed.
+	if prevLease.Sequence != args.PrevLease.Sequence || !prevLease.ProposedTS.Equal(args.PrevLease.ProposedTS) {
+		rErr.Message = fmt.Sprintf("expected previous lease %s, found %s", args.PrevLease, prevLease)
+		return newFailedLeaseTrigger(false /* isTransfer */), rErr
 	}
 
 	// MIGRATION(tschottdorf): needed to apply Raft commands which got proposed

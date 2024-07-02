@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1635,4 +1636,85 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 		require.NotZero(t, liveness)
 		require.Greater(t, liveness.Epoch, prevLease.Epoch)
 	})
+}
+
+// TestLeaseRequestFromExpirationToEpochDoesNotRegressExpiration tests that a
+// promotion from an expiration-based lease to an epoch-based lease does not
+// permit the expiration time of the lease to regress. This is enforced by
+// detecting cases where the leaseholder's liveness record's expiration trails
+// its expiration-based lease's expiration and synchronously heartbeating the
+// leaseholder's liveness record before promoting the lease.
+func TestLeaseRequestFromExpirationToEpochDoesNotRegressExpiration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true) // override metamorphism
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create scratch range.
+	key := tc.ScratchRange(t)
+	desc := tc.LookupRangeOrFatal(t, key)
+
+	// Pause n1's node liveness heartbeats, to allow its liveness expiration to
+	// fall behind.
+	l0 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
+	l0.PauseHeartbeatLoopForTest()
+	l, ok := l0.GetLiveness(tc.Server(0).NodeID())
+	require.True(t, ok)
+
+	// Make sure n1 has an expiration-based lease.
+	s0 := tc.GetFirstStoreFromServer(t, 0)
+	repl := s0.LookupReplica(desc.StartKey)
+	require.NotNil(t, repl)
+	expLease := repl.CurrentLeaseStatus(ctx)
+	require.True(t, expLease.IsValid())
+	require.Equal(t, roachpb.LeaseExpiration, expLease.Lease.Type())
+
+	// Wait for the expiration-based lease to have a later expiration than the
+	// expiration timestamp in n1's liveness record.
+	testutils.SucceedsSoon(t, func() error {
+		expLease = repl.CurrentLeaseStatus(ctx)
+		if expLease.Expiration().Less(l.Expiration.ToTimestamp()) {
+			return errors.Errorf("lease %v not extended beyond liveness %v", expLease, l)
+		}
+		return nil
+	})
+
+	// Enable epoch-based leases. This will cause automatic lease renewal to try
+	// to promote the expiration-based lease to an epoch-based lease.
+	//
+	// Since we have disabled the background node liveness heartbeat loop, it is
+	// critical that this lease promotion synchronously heartbeats node liveness
+	// before acquiring the epoch-based lease.
+	kvserver.ExpirationLeasesOnly.Override(ctx, &s0.ClusterSettings().SV, false)
+
+	// Wait for that lease promotion to occur.
+	var epochLease kvserverpb.LeaseStatus
+	testutils.SucceedsSoon(t, func() error {
+		epochLease = repl.CurrentLeaseStatus(ctx)
+		if epochLease.Lease.Type() != roachpb.LeaseEpoch {
+			return errors.Errorf("lease %v not upgraded to epoch-based", epochLease)
+		}
+		return nil
+	})
+
+	// Once the lease has been promoted to an epoch-based lease, the effective
+	// expiration (maintained indirectly in the liveness record) must be greater
+	// than that in the preceding expiration-based lease. If this were to regress,
+	// a non-cooperative lease failover to a third lease held by a different node
+	// could overlap in MVCC time with the first lease (i.e. its start time could
+	// precede expLease.Expiration), violating the lease disjointness property.
+	//
+	// If we disable the `expToEpochPromo` branch in replica_range_lease.go, this
+	// assertion fails.
+	require.True(t, expLease.Expiration().Less(epochLease.Expiration()))
 }
