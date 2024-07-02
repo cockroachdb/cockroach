@@ -113,11 +113,9 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 	if !ok {
 		return false
 	}
-
 	// Fast-forward to the first mismatching or missing entry.
-	// NB: prev.index <= match.index <= a.lastIndex(), so the sub-slicing is safe.
-	a.entries = a.entries[match.index-a.prev.index:]
-	a.prev = match
+	// NB: a.prev.index <= match.index <= a.lastIndex(), so the call is safe.
+	a = a.forward(match.index)
 
 	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
 	// bookkeeping in the unstable structure.
