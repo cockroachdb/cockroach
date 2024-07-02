@@ -125,7 +125,7 @@ func registerCDCBench(r registry.Registry) {
 				RequiresLicense:  true,
 				Timeout:          time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "")
+					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "", nullSink)
 				},
 			})
 
@@ -144,7 +144,23 @@ func registerCDCBench(r registry.Registry) {
 					RequiresLicense:  true,
 					Timeout:          time.Hour,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format)
+						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, nullSink)
+					},
+				})
+
+				r.Add(registry.TestSpec{
+					Name: fmt.Sprintf(
+						"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=kafka",
+						readPercent, nodes, cpus, formatSI(ranges), server, format),
+					Owner:            registry.OwnerCDC,
+					Benchmark:        true,
+					Cluster:          r.MakeClusterSpec(nodes+3, spec.CPU(cpus)),
+					CompatibleClouds: registry.AllExceptAWS,
+					Suites:           registry.Suites(registry.Nightly),
+					RequiresLicense:  true,
+					Timeout:          time.Hour,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, kafkaSink)
 					},
 				})
 			}
@@ -359,9 +375,10 @@ func runCDCBenchWorkload(
 	readPercent int,
 	server cdcBenchServer,
 	format string,
+	sinkType sinkType,
 ) {
-	const sink = "null://"
 	var (
+		sinkURI   string
 		numNodes  = c.Spec().NodeCount
 		nData     = c.Range(1, numNodes-2)
 		nCoord    = c.Node(numNodes - 1)
@@ -373,6 +390,23 @@ func runCDCBenchWorkload(
 		insertCount  = int64(0)
 		cdcEnabled   = format != ""
 	)
+
+	switch sinkType {
+	case kafkaSink:
+		nData = c.Range(1, numNodes-3)
+		nCoord = c.Node(numNodes - 1)
+		nWorkload = c.Node(numNodes - 2)
+		nKafka := c.Node(numNodes)
+
+		kafka, cleanup := setupKafka(ctx, t, c, nKafka)
+		defer cleanup()
+		sinkURI = kafka.sinkURL(ctx)
+	case nullSink, "":
+		sinkURI = "null://"
+	default:
+		t.Fatalf("unsupported sink type %q", sinkType)
+	}
+
 	if readPercent == 100 {
 		insertCount = 1_000_000 // ingest some data to read
 	}
@@ -387,6 +421,7 @@ func runCDCBenchWorkload(
 	// coordinator later, since we don't want any data on it.
 	opts, settings := makeCDCBenchOptions(c)
 	settings.ClusterSettings["kv.rangefeed.enabled"] = strconv.FormatBool(cdcEnabled)
+	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
 
 	switch server {
 	case cdcBenchProcessorServer:
@@ -457,7 +492,7 @@ func runCDCBenchWorkload(
 
 		require.NoError(t, conn.QueryRowContext(ctx, fmt.Sprintf(
 			`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH format = '%s', initial_scan = 'no'`,
-			sink, format)).
+			sinkURI, format)).
 			Scan(&jobID))
 
 		// Monitor the changefeed for failures. When the workload finishes, it will
