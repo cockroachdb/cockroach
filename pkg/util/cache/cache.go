@@ -13,14 +13,10 @@
 package cache
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/biogo/store/llrb"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 )
 
 // EvictionPolicy is the cache eviction policy enum.
@@ -96,19 +92,6 @@ func (e Entry) String() string {
 // that keys used with that cache implement llrb.Comparable.
 func (e *Entry) Compare(b llrb.Comparable) int {
 	return e.Key.(llrb.Comparable).Compare(b.(*Entry).Key.(llrb.Comparable))
-}
-
-// The following methods implement the interval.Interface for entry by casting
-// the entry key to an interval key and calling the appropriate accessers.
-
-// ID implements interval.Interface
-func (e *Entry) ID() uintptr {
-	return e.Key.(*IntervalKey).id
-}
-
-// Range implements interval.Interface
-func (e *Entry) Range() interval.Range {
-	return e.Key.(*IntervalKey).Range
 }
 
 // entryList is a double-linked circular list of *Entry elements. The code is
@@ -524,134 +507,4 @@ func (oc *OrderedCache) DoRange(f func(k, v interface{}) bool, from, to interfac
 	return oc.DoRangeEntry(func(e *Entry) bool {
 		return f(e.Key, e.Value)
 	}, from, to)
-}
-
-// IntervalCache is a cache which supports querying of intervals which
-// match a key or range of keys. It is backed by an interval tree. See
-// comments in UnorderedCache for more details on cache functionality.
-//
-// Note that the IntervalCache allow multiple identical segments, as
-// specified by start and end keys.
-//
-// Keys supplied to the IntervalCache's Get, Add & Del methods must be
-// constructed from IntervalCache.NewKey().
-//
-// IntervalCache is not safe for concurrent access.
-type IntervalCache struct {
-	baseCache
-	tree      interval.Tree
-	logErrorf IntervalCacheLogErrorf
-
-	// The fields below are used to avoid allocations during get, del and
-	// GetOverlaps.
-	getID      uintptr
-	getEntry   *Entry
-	overlapKey IntervalKey
-	overlaps   []*Entry
-}
-
-// IntervalCacheLogErrorf is a hook that is called on certain errors in the IntervalCache.
-// This is used to prevent an import to util/log.
-type IntervalCacheLogErrorf func(ctx context.Context, format string, args ...interface{})
-
-// IntervalKey provides uniqueness as well as key interval.
-type IntervalKey struct {
-	interval.Range
-	id uintptr
-}
-
-var intervalAlloc int64
-
-func (ik IntervalKey) String() string {
-	return fmt.Sprintf("%d: %q-%q", ik.id, ik.Start, ik.End)
-}
-
-// NewIntervalCache creates a new Cache backed by an interval tree.
-// See NewCache() for details on parameters.
-func NewIntervalCache(config Config, logErrorf IntervalCacheLogErrorf) *IntervalCache {
-	ic := &IntervalCache{
-		baseCache: newBaseCache(config),
-		logErrorf: logErrorf,
-	}
-	ic.baseCache.init(ic)
-	return ic
-}
-
-// NewKey creates a new interval key defined by start and end values.
-func (ic *IntervalCache) NewKey(start, end []byte) *IntervalKey {
-	k := ic.MakeKey(start, end)
-	return &k
-}
-
-// MakeKey creates a new interval key defined by start and end values.
-func (ic *IntervalCache) MakeKey(start, end []byte) IntervalKey {
-	if bytes.Compare(start, end) >= 0 {
-		panic(fmt.Sprintf("start key greater than or equal to end key %q >= %q", start, end))
-	}
-	return IntervalKey{
-		Range: interval.Range{
-			Start: interval.Comparable(start),
-			End:   interval.Comparable(end),
-		},
-		id: uintptr(atomic.AddInt64(&intervalAlloc, 1)),
-	}
-}
-
-// Implementation of cacheStore interface.
-func (ic *IntervalCache) init() {
-	ic.tree = interval.NewTree(interval.ExclusiveOverlapper)
-}
-
-func (ic *IntervalCache) get(key interface{}) *Entry {
-	ik := key.(*IntervalKey)
-	ic.getID = ik.id
-	ic.tree.DoMatching(ic.doGet, ik.Range)
-	e := ic.getEntry
-	ic.getEntry = nil
-	return e
-}
-
-func (ic *IntervalCache) doGet(i interval.Interface) bool {
-	e := i.(*Entry)
-	if e.ID() == ic.getID {
-		ic.getEntry = e
-		return true
-	}
-	return false
-}
-
-func (ic *IntervalCache) add(e *Entry) {
-	if err := ic.tree.Insert(e, false); err != nil {
-		ic.logErrorf(context.TODO(), "%v", err)
-	}
-}
-
-func (ic *IntervalCache) del(e *Entry) {
-	if err := ic.tree.Delete(e, false); err != nil {
-		ic.logErrorf(context.TODO(), "%v", err)
-	}
-}
-
-func (ic *IntervalCache) length() int {
-	return ic.tree.Len()
-}
-
-// GetOverlaps returns a slice of values which overlap the specified
-// interval. The slice is only valid until the next call to GetOverlaps.
-func (ic *IntervalCache) GetOverlaps(start, end []byte) []*Entry {
-	ic.overlapKey.Range = interval.Range{
-		Start: interval.Comparable(start),
-		End:   interval.Comparable(end),
-	}
-	ic.tree.DoMatching(ic.doOverlaps, ic.overlapKey.Range)
-	overlaps := ic.overlaps
-	ic.overlaps = ic.overlaps[:0]
-	return overlaps
-}
-
-func (ic *IntervalCache) doOverlaps(i interval.Interface) bool {
-	e := i.(*Entry)
-	ic.access(e) // maintain cache eviction ordering
-	ic.overlaps = append(ic.overlaps, e)
-	return false
 }

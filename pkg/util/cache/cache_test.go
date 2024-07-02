@@ -14,7 +14,6 @@ package cache
 
 import (
 	"bytes"
-	"context"
 	"reflect"
 	"testing"
 
@@ -27,12 +26,6 @@ type testKey string
 // Compare implements llrb.Comparable.
 func (tk testKey) Compare(b llrb.Comparable) int {
 	return bytes.Compare([]byte(tk), []byte(b.(testKey)))
-}
-
-func intervalLogErrorf(t testing.TB) IntervalCacheLogErrorf {
-	return func(_ context.Context, f string, args ...interface{}) {
-		t.Logf(f, args...)
-	}
 }
 
 var getTests = []struct {
@@ -267,99 +260,6 @@ func TestOrderedCacheClear(t *testing.T) {
 	}
 }
 
-func TestIntervalCache(t *testing.T) {
-	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction}, intervalLogErrorf(t))
-	key1 := ic.NewKey([]byte("a"), []byte("b"))
-	key2 := ic.NewKey([]byte("a"), []byte("c"))
-	key3 := ic.NewKey([]byte("d"), []byte("d\x00"))
-	ic.Add(key1, 1)
-	ic.Add(key2, 2)
-	ic.Add(key3, 3)
-
-	// Verify hit & miss.
-	if v, ok := ic.Get(key1); !ok || v.(int) != 1 {
-		t.Error("failed to fetch value for key \"a\"-\"b\"")
-	}
-	if v, ok := ic.Get(key2); !ok || v.(int) != 2 {
-		t.Error("failed to fetch value for key \"a\"-\"c\"")
-	}
-	if v, ok := ic.Get(key3); !ok || v.(int) != 3 {
-		t.Error("failed to fetch value for key \"d\"")
-	}
-	if _, ok := ic.Get(ic.NewKey([]byte("a"), []byte("a\x00"))); ok {
-		t.Error("unexpected success fetching \"a\"")
-	}
-
-	// Verify replacement on adding identical key.
-	ic.Add(key1, 3)
-	if v, ok := ic.Get(key1); !ok || v.(int) != 3 {
-		t.Error("failed to fetch value for key \"a\"-\"b\"")
-	}
-}
-
-func TestIntervalCacheOverlap(t *testing.T) {
-	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction}, intervalLogErrorf(t))
-	ic.Add(ic.NewKey([]byte("a"), []byte("c")), 1)
-	ic.Add(ic.NewKey([]byte("c"), []byte("e")), 2)
-	ic.Add(ic.NewKey([]byte("b"), []byte("g")), 3)
-	ic.Add(ic.NewKey([]byte("d"), []byte("e")), 4)
-	ic.Add(ic.NewKey([]byte("b"), []byte("d")), 5)
-	ic.Add(ic.NewKey([]byte("e"), []byte("g")), 6)
-	ic.Add(ic.NewKey([]byte("f"), []byte("i")), 7)
-	ic.Add(ic.NewKey([]byte("g"), []byte("i")), 8)
-	ic.Add(ic.NewKey([]byte("f"), []byte("h")), 9)
-	ic.Add(ic.NewKey([]byte("i"), []byte("j")), 10)
-
-	expValues := []interface{}{3, 2, 4, 6, 7, 9}
-	values := []interface{}{}
-	for _, o := range ic.GetOverlaps([]byte("d"), []byte("g")) {
-		values = append(values, o.Value)
-	}
-	if !reflect.DeepEqual(expValues, values) {
-		t.Errorf("expected overlap values %+v, got %+v", expValues, values)
-	}
-}
-
-func TestIntervalCacheClear(t *testing.T) {
-	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction}, intervalLogErrorf(t))
-	key1 := ic.NewKey([]byte("a"), []byte("c"))
-	key2 := ic.NewKey([]byte("c"), []byte("e"))
-	ic.Add(key1, 1)
-	ic.Add(key2, 2)
-	ic.Clear()
-	if _, ok := ic.Get(key1); ok {
-		t.Error("expected cache cleared")
-	}
-	if _, ok := ic.Get(key2); ok {
-		t.Error("expected cache cleared")
-	}
-	if l := ic.Len(); l != 0 {
-		t.Errorf("expected cleared cache to have len 0, found %d", l)
-	}
-	ic.Add(key1, 1)
-	if _, ok := ic.Get(key1); !ok {
-		t.Error("expected reinsert to succeed")
-	}
-}
-
-func TestIntervalCacheClearWithAdjustedBounds(t *testing.T) {
-	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction}, intervalLogErrorf(t))
-	entry1 := &Entry{Key: ic.NewKey([]byte("a"), []byte("bb")), Value: 1}
-	ic.AddEntry(entry1)
-	entry1.Key.(*IntervalKey).End = []byte("b")
-	entry2 := &Entry{Key: ic.NewKey([]byte("b"), []byte("e")), Value: 2}
-	ic.AddEntry(entry2)
-	entry2.Key.(*IntervalKey).End = []byte("c")
-	entry2Right := &Entry{Key: ic.NewKey([]byte("c\x00"), []byte("e")), Value: 3}
-	ic.AddEntry(entry2Right)
-	entry3 := &Entry{Key: ic.NewKey([]byte("c"), []byte("c\x00")), Value: 4}
-	ic.AddEntry(entry3)
-	ic.Clear()
-	if l := ic.Len(); l != 0 {
-		t.Errorf("expected cleared cache to have len 0, found %d", l)
-	}
-}
-
 func benchmarkCache(b *testing.B, c *baseCache, keys []interface{}) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -392,16 +292,4 @@ func BenchmarkOrderedCache(b *testing.B) {
 		testKey("e"),
 	}
 	benchmarkCache(b, &oc.baseCache, testKeys)
-}
-
-func BenchmarkIntervalCache(b *testing.B) {
-	ic := NewIntervalCache(Config{Policy: CacheLRU, ShouldEvict: noEviction}, intervalLogErrorf(b))
-	testKeys := []interface{}{
-		ic.NewKey([]byte("a"), []byte("c")),
-		ic.NewKey([]byte("b"), []byte("d")),
-		ic.NewKey([]byte("c"), []byte("e")),
-		ic.NewKey([]byte("d"), []byte("f")),
-		ic.NewKey([]byte("e"), []byte("g")),
-	}
-	benchmarkCache(b, &ic.baseCache, testKeys)
 }

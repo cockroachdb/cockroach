@@ -36,24 +36,21 @@ import (
 var ctx = context.Background()
 
 var cacheImplConstrs = []func(clock *hlc.Clock) Cache{
-	func(clock *hlc.Clock) Cache { return newTreeImpl(clock) },
 	func(clock *hlc.Clock) Cache { return newSklImpl(clock) },
 }
 
 func forEachCacheImpl(
 	t *testing.T, fn func(t *testing.T, tc Cache, clock *hlc.Clock, manual *timeutil.ManualTime),
 ) {
-	for _, constr := range cacheImplConstrs {
-		const baseTS = 100
-		manual := timeutil.NewManualTime(timeutil.Unix(0, baseTS))
-		clock := hlc.NewClockForTesting(manual)
+	const baseTS = 100
+	manual := timeutil.NewManualTime(timeutil.Unix(0, baseTS))
+	clock := hlc.NewClockForTesting(manual)
 
-		tc := constr(clock)
-		tcName := reflect.TypeOf(tc).Elem().Name()
-		t.Run(tcName, func(t *testing.T) {
-			fn(t, tc, clock, manual)
-		})
-	}
+	tc := newSklImpl(clock)
+	tcName := reflect.TypeOf(tc).Elem().Name()
+	t.Run(tcName, func(t *testing.T) {
+		fn(t, tc, clock, manual)
+	})
 }
 
 func TestTimestampCache(t *testing.T) {
@@ -462,10 +459,10 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 	// collisions.
 	testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
 		clock := hlc.NewClockForTesting(nil)
-		caches := make([]Cache, len(cacheImplConstrs))
+		caches := make([]Cache, 1)
 		start := clock.Now()
-		for i, constr := range cacheImplConstrs {
-			tc := constr(clock)
+		for i := range caches {
+			tc := newSklImpl(clock)
 			tc.clear(start) // set low water mark
 			caches[i] = tc
 		}
@@ -899,19 +896,6 @@ func TestTimestampCacheSerializeRoundTrip(t *testing.T) {
 			tc.clear(seg.LowWater)
 			for _, sp := range seg.ReadSpans {
 				tc.Add(ctx, sp.Key, sp.EndKey, sp.Timestamp, sp.TxnID)
-			}
-
-			// Before comparing, normalize the ends keys of point keys when testing
-			// the treeImpl. This is necessary because the treeImpl will normalize the
-			// end key of point keys that were in the cache, but not point keys that
-			// were created by truncating read spans to the serialize boundaries. This
-			// is an unimportant implementation detail, so paper over it in testing.
-			if _, ok := tc.(*treeImpl); ok {
-				for i, sp := range seg.ReadSpans {
-					if roachpb.Key(sp.Key).IsPrev(sp.EndKey) {
-						seg.ReadSpans[i].EndKey = nil
-					}
-				}
 			}
 
 			// Serialize the cache again and verify that the serialized spans are
