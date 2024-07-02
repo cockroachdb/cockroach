@@ -94,7 +94,6 @@
             "pkg/kv/kvserver/rangefeed/scheduler.go": "flagged by linter, should be evaluated",
             "pkg/kv/kvserver/replica.go": "flagged by linter, should be evaluated",
             "pkg/kv/kvserver/replica_app_batch.go": "flagged by linter, should be evaluated",
-            "pkg/kv/kvserver/replica_raft.go": "flagged by linter, should be evaluated",
             "pkg/kv/kvserver/replica_raft_quiesce.go": "flagged by linter, should be evaluated",
             "pkg/kv/kvserver/replica_raftstorage.go": "flagged by linter, should be evaluated",
             "pkg/kv/kvserver/replica_rangefeed.go": "flagged by linter, should be evaluated",

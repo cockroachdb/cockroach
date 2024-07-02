@@ -431,6 +431,9 @@ type Replica struct {
 	// timestamp, independent of the source.
 	sideTransportClosedTimestamp sidetransportAccess
 
+	// Counts Raft messages refused due to queue congestion.
+	droppedMessages atomic.Uint64
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		ReplicaMutex
@@ -805,9 +808,6 @@ type Replica struct {
 
 		// lastProposalAtTicks tracks the time of the last proposal, in ticks.
 		lastProposalAtTicks int
-
-		// Counts Raft messages refused due to queue congestion.
-		droppedMessages int
 
 		// Note that there are two replicaStateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
@@ -1650,7 +1650,7 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
 	ri.RaftLogSize = r.mu.raftLogSize
 	ri.RaftLogSizeTrusted = r.mu.raftLogSizeTrusted
-	ri.NumDropped = uint64(r.mu.droppedMessages)
+	ri.NumDropped = r.droppedMessages.Load()
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = int64(r.mu.proposalQuota.ApproximateQuota())
 		ri.ProposalQuotaBaseIndex = int64(r.mu.proposalQuotaBaseIndex)
