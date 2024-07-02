@@ -12,6 +12,7 @@ package metric
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"sync/atomic"
 	"time"
@@ -752,7 +753,7 @@ func (c *Counter) Inc(v int64) {
 // maintained elsewhere.
 func (c *Counter) Update(val int64) {
 	if buildutil.CrdbTestBuild && val < c.count.Load() {
-		panic("Counters should not decrease")
+		panic(fmt.Sprintf("Counters should not decrease, prev: %d, new: %d.", c.count.Load(), val))
 	}
 	c.count.Store(val)
 }
@@ -840,7 +841,7 @@ func (c *CounterFloat64) Inc(i float64) {
 // maintained elsewhere.
 func (c *CounterFloat64) Update(val float64) {
 	if buildutil.CrdbTestBuild && val < c.count.Load() {
-		panic("Counters should not decrease")
+		panic(fmt.Sprintf("Counters should not decrease, prev: %f, new: %f.", c.count.Load(), val))
 	}
 	c.count.Store(val)
 }
