@@ -33,9 +33,21 @@ func TestPrettyScanner(t *testing.T) {
 			},
 		},
 		{
+			prettyKey: "/Table/100",
+			expKey: func(tenantID roachpb.TenantID) roachpb.Key {
+				return keys.MakeSQLCodec(tenantID).TablePrefix(100)
+			},
+		},
+		{
 			prettyKey: "/Table/t1/pk",
 			expKey: func(tenantID roachpb.TenantID) roachpb.Key {
 				return keys.MakeSQLCodec(tenantID).IndexPrefix(50, 1)
+			},
+		},
+		{
+			prettyKey: "/Table/100/7",
+			expKey: func(tenantID roachpb.TenantID) roachpb.Key {
+				return keys.MakeSQLCodec(tenantID).IndexPrefix(100, 7)
 			},
 		},
 		{
@@ -49,11 +61,24 @@ func TestPrettyScanner(t *testing.T) {
 			},
 		},
 		{
-			prettyKey:    "/Table/t1/pk/1/2/3/foo",
-			expKey:       nil,
-			expRemainder: "/foo",
+			prettyKey: `/Table/101/1/"foo"`,
+			expKey: func(tenantID roachpb.TenantID) roachpb.Key {
+				k := keys.MakeSQLCodec(tenantID).IndexPrefix(101, 1)
+				k = encoding.EncodeStringAscending(k, "foo")
+				return k
+			},
 		},
 		{
+			prettyKey: `/Table/101/1/5/"a"/"str \" quote"/2`,
+			expKey: func(tenantID roachpb.TenantID) roachpb.Key {
+				k := keys.MakeSQLCodec(tenantID).IndexPrefix(101, 1)
+				k = encoding.EncodeVarintAscending(k, 5)
+				k = encoding.EncodeStringAscending(k, "a")
+				k = encoding.EncodeStringAscending(k, `str " quote`)
+				k = encoding.EncodeVarintAscending(k, 2)
+				return k
+			},
+		}, {
 			prettyKey: "/Table/t1/idx1/1/2/3",
 			expKey: func(tenantID roachpb.TenantID) roachpb.Key {
 				k := keys.MakeSQLCodec(tenantID).IndexPrefix(50, 5)
@@ -96,7 +121,7 @@ func TestPrettyScanner(t *testing.T) {
 				}
 				expKey := test.expKey(tenantID)
 				if !k.Equal(expKey) {
-					t.Fatalf("expected: %+v, got %+v", []byte(expKey), []byte(k))
+					t.Fatalf("expected: %+v, got %+v (pretty: %q vs %q)", []byte(expKey), []byte(k), expKey.String(), k.String())
 				}
 			})
 		}
