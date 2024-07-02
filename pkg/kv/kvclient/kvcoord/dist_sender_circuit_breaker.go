@@ -1146,3 +1146,9 @@ func (r *ReplicaCircuitBreaker) OnProbeDone(b *circuit.Breaker) {
 	log.VEventf(ctx, 2, "stopping circuit breaker probe for %s (tripped=%t lastRequest=%s)",
 		r.id(), tripped, lastRequest)
 }
+
+// TestingCancelInflight...
+// TODO(arul): comment.
+func (r *ReplicaCircuitBreaker) TestingCancelInflight() {
+
+}
