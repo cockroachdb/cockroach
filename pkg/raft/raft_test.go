@@ -1169,6 +1169,7 @@ func TestHandleHeartbeatResp(t *testing.T) {
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	require.NoError(t, storage.Append(index(1).terms(1, 2, 3)))
 	sm := newTestRaft(1, 5, 1, storage)
+	sm.becomeFollower(3, None)
 	sm.becomeCandidate()
 	sm.becomeLeader()
 	sm.raftLog.commitTo(sm.raftLog.lastIndex())
@@ -2044,7 +2045,8 @@ func TestLeaderIncreaseNext(t *testing.T) {
 
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
-		sm.raftLog.append(previousEnts...)
+		sm.becomeFollower(3, None)
+		sm.raftLog.bootstrap(t, previousEnts)
 		sm.becomeCandidate()
 		sm.becomeLeader()
 		sm.trk.Progress[2].State = tt.state
@@ -2138,6 +2140,7 @@ func TestRecvMsgUnreachable(t *testing.T) {
 	s := newTestMemoryStorage(withPeers(1, 2))
 	s.Append(previousEnts)
 	r := newTestRaft(1, 10, 1, s)
+	r.becomeFollower(3, None)
 	r.becomeCandidate()
 	r.becomeLeader()
 	r.readMessages()
@@ -2296,6 +2299,7 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 	store := newTestMemoryStorage(withPeers(1), withLearners(2))
 	store.SetHardState(pb.HardState{Term: 11})
 	n1 := newTestLearnerRaft(1, 10, 1, store)
+	n1.becomeFollower(s.Metadata.Term, None)
 	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
 
 	n1.restore(s)
@@ -2320,7 +2324,7 @@ func TestRestoreIgnoreSnapshot(t *testing.T) {
 	commit := uint64(1)
 	storage := newTestMemoryStorage(withPeers(1, 2))
 	sm := newTestRaft(1, 10, 1, storage)
-	sm.raftLog.append(previousEnts...)
+	sm.raftLog.bootstrap(t, previousEnts)
 	sm.raftLog.commitTo(commit)
 
 	s := pb.Snapshot{
@@ -2352,6 +2356,7 @@ func TestProvideSnap(t *testing.T) {
 	}
 	storage := newTestMemoryStorage(withPeers(1))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(s.Metadata.Term, None)
 	sm.restore(s)
 
 	sm.becomeCandidate()
@@ -2378,6 +2383,7 @@ func TestIgnoreProvidingSnap(t *testing.T) {
 	}
 	storage := newTestMemoryStorage(withPeers(1))
 	sm := newTestRaft(1, 10, 1, storage)
+	sm.becomeFollower(s.Metadata.Term, None)
 	sm.restore(s)
 
 	sm.becomeCandidate()
