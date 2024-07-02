@@ -14,22 +14,23 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type unsupportedTypeChecker struct {
-	// Uncomment this when a new type is introduced.
-	// version clusterversion.Handle
+	// Uncomment this when a new type is introduced, or comment it out if there
+	// are no types in the checker.
+	version clusterversion.Handle
 }
 
 // NewUnsupportedTypeChecker returns a new tree.UnsupportedTypeChecker that can
 // be used to check whether a type is allowed by the current cluster version.
-func NewUnsupportedTypeChecker(clusterversion.Handle) tree.UnsupportedTypeChecker {
-	// Right now we don't have any unsupported types, so there is no benefit in
-	// returning a type checker that never errors, so we just return nil. (The
-	// infrastructure is already set up to handle such case gracefully.)
-	return nil
+func NewUnsupportedTypeChecker(handle clusterversion.Handle) tree.UnsupportedTypeChecker {
+	// If there are no types in the checker, change this code to return nil.
+	return &unsupportedTypeChecker{version: handle}
 }
 
 var _ tree.UnsupportedTypeChecker = &unsupportedTypeChecker{}
@@ -38,5 +39,16 @@ var _ tree.UnsupportedTypeChecker = &unsupportedTypeChecker{}
 func (tc *unsupportedTypeChecker) CheckType(ctx context.Context, typ *types.T) error {
 	// NB: when adding an unsupported type here, change the constructor to not
 	// return nil.
+	var errorTypeString string
+	switch typ.Family() {
+	case types.PGVectorFamily:
+		errorTypeString = "vector"
+	}
+	if errorTypeString != "" && !tc.version.IsActive(ctx, clusterversion.V24_2) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"%s not supported until version 24.2", errorTypeString,
+		)
+	}
+
 	return nil
 }

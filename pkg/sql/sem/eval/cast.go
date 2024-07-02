@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -502,6 +504,8 @@ func performCastWithoutPrecisionTruncation(
 			s = t.TSQuery.String()
 		case *tree.DTSVector:
 			s = t.TSVector.String()
+		case *tree.DPGVector:
+			s = t.T.String()
 		case *tree.DEnum:
 			s = t.LogicalRep
 		case *tree.DVoid:
@@ -598,6 +602,38 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DCollatedString:
 			return tree.ParseDPGLSN(d.Contents)
 		case *tree.DPGLSN:
+			return d, nil
+		}
+
+	case types.PGVectorFamily:
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V24_2) {
+			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+				"version %v must be finalized to use vector",
+				clusterversion.V24_2.Version())
+		}
+		switch d := d.(type) {
+		case *tree.DString:
+			return tree.ParseDPGVector(string(*d))
+		case *tree.DCollatedString:
+			return tree.ParseDPGVector(d.Contents)
+		case *tree.DArray:
+			switch d.ParamTyp.Family() {
+			case types.FloatFamily, types.IntFamily, types.DecimalFamily:
+				v := make(vector.T, len(d.Array))
+				for i, elem := range d.Array {
+					if elem == tree.DNull {
+						return nil, pgerror.Newf(pgcode.NullValueNotAllowed,
+							"array must not contain nulls")
+					}
+					datum, err := performCast(ctx, evalCtx, elem, types.Float4, false)
+					if err != nil {
+						return nil, err
+					}
+					v[i] = float32(*datum.(*tree.DFloat))
+				}
+				return tree.NewDPGVector(v), nil
+			}
+		case *tree.DPGVector:
 			return d, nil
 		}
 
@@ -921,6 +957,14 @@ func performCastWithoutPrecisionTruncation(
 				}
 
 				if err := dcast.Append(ecast); err != nil {
+					return nil, err
+				}
+			}
+			return dcast, nil
+		case *tree.DPGVector:
+			dcast := tree.NewDArray(t.ArrayContents())
+			for i := range v.T {
+				if err := dcast.Append(tree.NewDFloat(tree.DFloat(v.T[i]))); err != nil {
 					return nil, err
 				}
 			}

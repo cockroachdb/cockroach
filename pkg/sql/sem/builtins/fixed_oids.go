@@ -2583,6 +2583,23 @@ var builtinOidsArray = []string{
 	2615: `crdb_internal.scatter(key: bytes, end_key: bytes) -> void`,
 	2616: `crdb_internal.plan_logical_replication(req: bytes) -> bytes`,
 	2617: `crdb_internal.start_replication_stream_for_tables(req: bytes) -> bytes`,
+	2618: `vectorsend(vector: vector) -> bytes`,
+	2619: `vectorrecv(input: anyelement) -> vector`,
+	2620: `vectorout(vector: vector) -> bytes`,
+	2621: `vectorin(input: anyelement) -> vector`,
+	2622: `char(vector: vector) -> "char"`,
+	2623: `name(vector: vector) -> name`,
+	2624: `text(vector: vector) -> string`,
+	2625: `varchar(vector: vector) -> varchar`,
+	2626: `bpchar(vector: vector) -> char`,
+	2627: `vector(string: string) -> vector`,
+	2628: `vector(vector: vector) -> vector`,
+	2629: `cosine_distance(v1: vector, v2: vector) -> float`,
+	2630: `l1_distance(v1: vector, v2: vector) -> float`,
+	2631: `l2_distance(v1: vector, v2: vector) -> float`,
+	2632: `inner_product(v1: vector, v2: vector) -> float`,
+	2633: `vector_dims(vector: vector) -> int`,
+	2634: `vector_norm(vector: vector) -> float`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

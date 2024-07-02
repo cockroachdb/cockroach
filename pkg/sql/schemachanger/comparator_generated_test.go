@@ -1018,6 +1018,11 @@ func TestSchemaChangeComparator_mixed_version_can_login(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_can_login"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_mixed_version_pgvector(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_pgvector"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_mixed_version_sequence_per_node_cache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_sequence_per_node_cache"
@@ -2046,6 +2051,11 @@ func TestSchemaChangeComparator_uuid(t *testing.T) {
 func TestSchemaChangeComparator_values(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/values"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_vector(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/vector"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_vectorize(t *testing.T) {

@@ -2430,6 +2430,13 @@ func TestLogic_values(
 	runLogicTest(t, "values")
 }
 
+func TestLogic_vector(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector")
+}
+
 func TestLogic_vectorize(
 	t *testing.T,
 ) {

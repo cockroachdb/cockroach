@@ -328,6 +328,14 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				return tree.NewDFloat(tree.DFloat(x.(float64))), nil
 			},
 		)
+	case types.PGVectorFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DPGVector).String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) { return tree.ParseDPGVector(x.(string)) },
+		)
 	case types.PGLSNFamily:
 		setNullable(
 			avroSchemaString,
