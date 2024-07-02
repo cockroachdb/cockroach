@@ -173,4 +173,5 @@ func (m *metrics) getConsumption(consumption *kvpb.TenantConsumption) {
 	consumption.ExternalIOEgressBytes = uint64(m.TotalExternalIOEgressBytes.Count())
 	consumption.ExternalIOIngressBytes = uint64(m.TotalExternalIOIngressBytes.Count())
 	consumption.CrossRegionNetworkRU = m.TotalCrossRegionNetworkRU.Count()
+	consumption.EstimatedCPUSeconds = m.TotalEstimatedCPUSeconds.Count()
 }
