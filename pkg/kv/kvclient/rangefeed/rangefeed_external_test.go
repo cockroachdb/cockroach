@@ -1638,6 +1638,8 @@ func (c *channelSink) Context() context.Context {
 	return c.ctx
 }
 
+func (c *channelSink) SendIsThreadSafe() {}
+
 func (c *channelSink) Send(e *kvpb.RangeFeedEvent) error {
 	select {
 	case c.ch <- e:

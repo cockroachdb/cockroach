@@ -64,7 +64,9 @@ type StoreLiveness interface {
 	// active or not, which is what prompts the "SupportFrom" prefix.
 	SupportFromEnabled() bool
 
-	// SupportInPast returns whether the supplied timestamp is before the current
-	// time.
-	SupportInPast(ts hlc.Timestamp) bool
+	// SupportExpired returns whether the supplied expiration timestamp is before
+	// the present time and has therefore expired. If the method returns false,
+	// the timestamp is still in the future and still provides support up to that
+	// point in time.
+	SupportExpired(ts hlc.Timestamp) bool
 }
