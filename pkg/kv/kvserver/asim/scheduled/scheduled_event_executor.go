@@ -40,7 +40,9 @@ type EventExecutor interface {
 	// PrintEventsExecuted returns a detailed string representation of executed
 	// events including details of mutation events, assertion checks, and assertion
 	// results.
-	PrintEventsExecuted() string
+	PrintEventsExecuted(history.History, []state.Region, bool) string
+	// ScheduledEvents returns the list of scheduled events.
+	ScheduledEvents() ScheduledEventList
 }
 
 // eventExecutor is the private implementation of the EventExecutor interface,
@@ -69,6 +71,11 @@ func newExecutorWithNoEvents() *eventExecutor {
 	return &eventExecutor{
 		scheduledEvents: ScheduledEventList{},
 	}
+}
+
+// ScheduledEvents returns the list of scheduled events.
+func (e *eventExecutor) ScheduledEvents() ScheduledEventList {
+	return e.scheduledEvents
 }
 
 // PrintEventSummary returns a string summarizing the executed mutation and
@@ -100,7 +107,9 @@ func (e *eventExecutor) PrintEventSummary() string {
 //			result=
 //			2.assertion=
 //			result
-func (e *eventExecutor) PrintEventsExecuted() string {
+func (e *eventExecutor) PrintEventsExecuted(
+	history history.History, regions []state.Region, withValidator bool,
+) string {
 	if e.scheduledEvents == nil {
 		panic("unexpected")
 	}
@@ -109,8 +118,23 @@ func (e *eventExecutor) PrintEventsExecuted() string {
 	} else {
 		buf := strings.Builder{}
 		buf.WriteString(fmt.Sprintf("%d events executed:\n", len(e.scheduledEvents)))
-		for _, event := range e.scheduledEvents {
-			buf.WriteString(fmt.Sprintln(event.String()))
+		validator := NewValidator(regions)
+		for _, ev := range e.scheduledEvents {
+			buf.WriteString(fmt.Sprintln(ev.String()))
+			if withValidator {
+				satisfiable, err := validator.ValidateEvent(ev)
+				if satisfiable {
+					buf.WriteString("\t\t\tsatisfiable\n")
+				} else {
+					buf.WriteString(fmt.Sprintf("\t\t\tunsatisfiable: %s\n", err))
+				}
+				// todo: wenyi make this logic back by adding 1 to 1 correspondance to assertion
+				//if !satisfiable && !history.AssertionResults[i] {
+				//	buf.WriteString(fmt.Sprintf("\t\t\texpected: unsatisfiable and didn't conform to %s\n", err))
+				//} else if satisfiable && !history.AssertionResults[i] {
+				//	buf.WriteString("\t\t\tFAILEDDDD: satisfiable but didn't conform\n")
+				//} else
+			}
 		}
 		return buf.String()
 	}

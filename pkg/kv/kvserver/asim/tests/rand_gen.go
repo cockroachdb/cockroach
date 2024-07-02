@@ -279,6 +279,7 @@ const (
 	// Cycle through randomly generated region and zone survival configurations.
 	// Note that only cluster_gen_type=multi_region can execute this event.
 	cycleViaRandomSurvivalGoals
+	cycleViaInterestingCases
 )
 
 type eventGenSettings struct {
@@ -297,6 +298,8 @@ func (e eventSeriesType) String() string {
 		return "cycle_via_hardcoded_survival_goals"
 	case cycleViaRandomSurvivalGoals:
 		return "cycle_via_random_survival_goals"
+	case cycleViaInterestingCases:
+		return "cycle_via_interesting_cases"
 	default:
 		panic("unknown event series type")
 	}
@@ -308,6 +311,8 @@ func getEventSeriesType(s string) eventSeriesType {
 		return cycleViaHardcodedSurvivalGoals
 	case "cycle_via_random_survival_goals":
 		return cycleViaRandomSurvivalGoals
+	case "cycle_via_interesting_cases":
+		return cycleViaInterestingCases
 	default:
 		panic(fmt.Sprintf("unknown event series type: %s", s))
 	}
@@ -319,12 +324,12 @@ func (e eventGenSettings) String() string {
 }
 
 func constructSetZoneConfigEventWithConformanceAssertion(
-	span roachpb.Span, config zonepb.ZoneConfig, durationToAssert time.Duration,
+	span roachpb.Span, zoneConfig zonepb.ZoneConfig, durationToAssert time.Duration,
 ) event.MutationWithAssertionEvent {
 	return event.MutationWithAssertionEvent{
 		MutationEvent: event.SetSpanConfigEvent{
 			Span:   span,
-			Config: config.AsSpanConfig(),
+			Config: zoneConfig.AsSpanConfig(),
 		},
 		AssertionEvent: event.NewAssertionEvent([]assertion.SimulationAssertion{
 			assertion.ConformanceAssertion{
@@ -404,7 +409,8 @@ func randomlySelectDataPlacement(randSource *rand.Rand) descpb.DataPlacement {
 // intervals defined by durationToAssert from the start time. These events apply
 // a randomly generated zone configuration followed by an assertion event. Note
 // that these random configurations might be unsatisfiable under the cluster
-// setup.
+// setup. To validate whether the configurations generated are satisfiable,
+// please use "eval" [verbose=validate].
 func generateRandomSurvivalGoalsEvents(
 	regions []state.Region,
 	startTime time.Time,
