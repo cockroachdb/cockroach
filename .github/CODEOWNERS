@@ -460,7 +460,6 @@
 /pkg/cmd/roachprod-microbench/ @cockroachdb/test-eng
 /pkg/cmd/roachprod-stress/   @cockroachdb/test-eng
 /pkg/cmd/roachtest/          @cockroachdb/test-eng
-/pkg/cmd/roachtest-selector/              @cockroachdb/test-eng
 /pkg/cmd/roachtest/tests/activerecord.go  @cockroachdb/test-eng @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/asyncpg.go       @cockroachdb/test-eng @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/django.go        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
