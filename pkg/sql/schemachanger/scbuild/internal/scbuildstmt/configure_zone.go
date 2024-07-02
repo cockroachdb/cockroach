@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,7 +92,7 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		panic(err)
 	}
 
-	_, copyFromParentList, setters, err := evaluateZoneOptions(b, options)
+	optionsStr, copyFromParentList, setters, err := evaluateZoneOptions(b, options)
 	if err != nil {
 		panic(err)
 	}
@@ -111,7 +112,14 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		resolvePhysicalTableName(b, n)
 	}
 
-	addZoneConfigToBuildCtx(b, n, zc, seqNum, objectType)
+	elem := addZoneConfigToBuildCtx(b, n, zc, seqNum, objectType)
+	// Record that the change has occurred for auditing.
+	eventDetails := eventpb.CommonZoneConfigDetails{
+		Target:  tree.AsString(&n.ZoneSpecifier),
+		Options: optionsStr,
+	}
+	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails}
+	b.LogEventForExistingPayload(elem, info)
 }
 
 // resolvePhysicalTableName resolves the table name for a physical table
@@ -1012,14 +1020,15 @@ func fallBackIfNotSupportedZoneConfig(n *tree.SetZoneConfig) (zoneConfigObjType,
 	return unspecifiedObj, scerrors.NotImplementedErrorf(n, "unsupported CONFIGURE ZONE target")
 }
 
-// addZoneConfigToBuildCtx adds the zone config to the build context.
+// addZoneConfigToBuildCtx adds the zone config to the build context and returns
+// the added element for logging.
 func addZoneConfigToBuildCtx(
 	b BuildCtx,
 	n *tree.SetZoneConfig,
 	zc *zonepb.ZoneConfig,
 	seqNum uint32,
 	objType zoneConfigObjType,
-) {
+) scpb.Element {
 	var elem scpb.Element
 	// Increment the value of seqNum to ensure a new zone config is being
 	// updated with a different seqNum.
@@ -1045,7 +1054,7 @@ func addZoneConfigToBuildCtx(
 		panic(errors.AssertionFailedf("programming error: unsupported object type for CONFIGURE ZONE"))
 	}
 	b.Add(elem)
-	b.LogEventForExistingTarget(elem)
+	return elem
 }
 
 func retrievePhysicalTableElem(b BuildCtx, tableID catid.DescID) scpb.Element {

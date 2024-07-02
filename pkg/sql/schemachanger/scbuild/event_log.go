@@ -57,7 +57,7 @@ func (e *eventLogState) EventLogStateWithNewSourceElementID() scbuildstmt.EventL
 // makeEventLogCallback makes a callback that will generate event log
 // entries based on the builder targets (elements and target state).
 func makeEventLogCallback(
-	b buildCtx, ts scpb.TargetState, loggedTargets []scpb.Target,
+	b buildCtx, ts scpb.TargetState, loggedTargets []loggedTarget,
 ) LogSchemaChangerEventsFn {
 	if len(loggedTargets) == 0 {
 		return stubLogSchemaChangerEventsFn
@@ -66,13 +66,13 @@ func makeEventLogCallback(
 	defer scerrors.StartEventf(
 		b.Context,
 		"event logging for declarative schema change targets built for %s",
-		redact.Safe(ts.Statements[loggedTargets[0].Metadata.StatementID].StatementTag),
+		redact.Safe(ts.Statements[loggedTargets[0].target.Metadata.StatementID].StatementTag),
 	).HandlePanicAndLogError(b.Context, &swallowedError)
 	detailSlice := make([]eventpb.CommonSQLEventDetails, 0, len(loggedTargets))
 	payLoadsSlice := make([]logpb.EventPayload, 0, len(loggedTargets))
 	for _, lt := range loggedTargets {
-		descID := screl.GetDescID(lt.Element())
-		stmtID := lt.Metadata.StatementID
+		descID := screl.GetDescID(lt.target.Element())
+		stmtID := lt.target.Metadata.StatementID
 		details := eventpb.CommonSQLEventDetails{
 			Statement:       redact.RedactableString(ts.Statements[stmtID].RedactedStatement),
 			Tag:             ts.Statements[stmtID].StatementTag,
@@ -81,11 +81,12 @@ func makeEventLogCallback(
 			ApplicationName: ts.Authorization.AppName,
 		}
 		pb := payloadBuilder{
-			Target:         lt,
+			Target:         lt.target,
 			relatedTargets: make([]scpb.Target, 0, len(ts.Targets)),
+			maybePayload:   lt.maybeInfo,
 		}
 		for _, t := range ts.Targets {
-			if t.Metadata.StatementID != stmtID || t.Metadata.SubWorkID != lt.Metadata.SubWorkID {
+			if t.Metadata.StatementID != stmtID || t.Metadata.SubWorkID != lt.target.Metadata.SubWorkID {
 				continue
 			}
 			pb.relatedTargets = append(pb.relatedTargets, t)
@@ -111,6 +112,7 @@ func makeEventLogCallback(
 type payloadBuilder struct {
 	relatedTargets []scpb.Target
 	scpb.Target
+	maybePayload logpb.EventPayload
 }
 
 func namespace(b buildCtx, id descpb.ID) (ns *scpb.Namespace) {
@@ -433,6 +435,20 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 		} else {
 			return &eventpb.DropFunction{
 				FunctionName: functionName(b, e),
+			}
+		}
+	case *scpb.DatabaseZoneConfig, *scpb.TableZoneConfig:
+		if pb.TargetStatus == scpb.Status_PUBLIC {
+			var zcDetails eventpb.CommonZoneConfigDetails
+			if pb.maybePayload != nil {
+				payload := pb.maybePayload.(*eventpb.SetZoneConfig)
+				zcDetails = eventpb.CommonZoneConfigDetails{
+					Target:  payload.Target,
+					Options: payload.Options,
+				}
+			}
+			return &eventpb.SetZoneConfig{
+				CommonZoneConfigDetails: zcDetails,
 			}
 		}
 	}
