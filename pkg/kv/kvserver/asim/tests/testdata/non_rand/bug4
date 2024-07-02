@@ -1,0 +1,17 @@
+load_cluster config=complex
+----
+
+set_span_config delay=2m
+[0,9999999999): num_replicas=2 num_voters=2 constraints={'+zone=US_West_1':2}
+----
+
+set_span_config delay=10m
+[0,9999999999): num_replicas=27 num_voters=16 voter_constraints={'+region=US_East':16}
+----
+
+assertion type=conformance under=0 over=0 unavailable=0 violating=0
+----
+
+eval duration=30m
+----
+OK
