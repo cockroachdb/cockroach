@@ -165,14 +165,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.22.3.darwin-amd64.tar.gz", "92752bd0df1bfa558eae2df9aea0ab407a8ad3c34d36fae492964773862b8a09"),
-        "darwin_arm64": ("go1.22.3.darwin-arm64.tar.gz", "8c3d3c150017399d98417428f6518797a79a3f2a08efa218e671c2e173abd37d"),
-        "linux_amd64": ("go1.22.3.linux-amd64.tar.gz", "4c39e619f3e44f27b7c28ee15dc5a43a2ddf5b2668582c533867f3ce279c45cb"),
-        "linux_arm64": ("go1.22.3.linux-arm64.tar.gz", "72ba46a7be72bba7596a43f3b64d212b483ff03ea3daef115aaa551f34d44b27"),
-        "windows_amd64": ("go1.22.3.windows-amd64.tar.gz", "3d8a88ebbd070c9d172473f32b50ed21bc0f6cd57b60ed4f4bb5264b53194a3a"),
+        "darwin_amd64": ("go1.22.5.darwin-amd64.tar.gz", "0eca73b33e9fc3b8eae28c4873b979f5ebd4b7dc8771b9b13ba2d70517309a4d"),
+        "darwin_arm64": ("go1.22.5.darwin-arm64.tar.gz", "2d72a9301bf73f5429cbc40ba08b6602b1af91a5d5eed302fef2b92ae53b0b56"),
+        "linux_amd64": ("go1.22.5.linux-amd64.tar.gz", "477ec7b6f76e6c38d83fbd808af0729299b40a8e99796ac3b2fec50d62e20938"),
+        "linux_arm64": ("go1.22.5.linux-arm64.tar.gz", "fbaf48b411d434aad694fddc8a036ce7374f2d8459518a25fec4f58f3bca0c20"),
+        "windows_amd64": ("go1.22.5.windows-amd64.tar.gz", "8fc3ccf439e93521faa0411702ef4e598c80ded514bada5fedc11846c284d3d2"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240507-210302/{}"],
-    version = "1.22.3",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240708-162411/{}"],
+    version = "1.22.5",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -246,7 +246,7 @@ ts_http_archive(
 
 # NOTE: The version is expected to match up to what version we use in db-console.
 # TODO(ricky): We should add a lint check to ensure it does match.
-load("@aspect_rules_js//npm:repositories.bzl", "npm_import")
+load("@aspect_rules_js//npm:repositories.bzl", "npm_import", "npm_translate_lock")
 
 npm_import(
     name = "pnpm",
@@ -265,8 +265,6 @@ npm_import(
 load("@aspect_rules_js//js:repositories.bzl", "rules_js_dependencies")
 
 rules_js_dependencies()
-
-load("@aspect_rules_js//npm:repositories.bzl", "npm_translate_lock")
 
 npm_translate_lock(
     name = "npm",
@@ -507,8 +505,6 @@ rules_foreign_cc_dependencies(
 # begin rules_pkg dependencies #
 ################################
 
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-
 http_archive(
     name = "rules_pkg",
     sha256 = "8a298e832762eda1830597d64fe7db58178aa84cd5926d76d5b744d6558941c2",
@@ -660,8 +656,8 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-        "linux_amd64": ("go1.22.3fips.linux-amd64.tar.gz", "24f45195f5649ae07e16a72b8d16418a68a6f69369e399e3a8f5b2fdecde9b95"),
+        "linux_amd64": ("go1.22.5fips.linux-amd64.tar.gz", "d2a40c2e78e2cf1560cafa304593e194e094c3e4dbd404666dda9cf5cc12b7f1"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240507-210302/{}"],
-    version = "1.22.3fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20240708-162411/{}"],
+    version = "1.22.5fips",
 )
