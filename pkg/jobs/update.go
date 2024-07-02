@@ -171,6 +171,17 @@ WHERE id = $1
 	if err := updateFn(u.txn, md, &ju); err != nil {
 		return err
 	}
+	if ju.md.Status != "" {
+		u.txn.KV().AddCommitTrigger(func(ctx context.Context) {
+			p := ju.md.Payload
+			// In some cases, ju.md.Payload may be nil, such as a cancel-requested status update.
+			// In this case, payload is used.
+			if p == nil {
+				p = payload
+			}
+			LogStateChangeStructured(ctx, md.ID, p, md.RunStats, status, ju.md.Status)
+		})
+	}
 	if j.registry.knobs.BeforeUpdate != nil {
 		if err := j.registry.knobs.BeforeUpdate(md, ju.md); err != nil {
 			return err

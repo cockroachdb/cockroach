@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/redact/interfaces"
@@ -94,7 +95,67 @@ func Structured(ctx context.Context, meta StructuredLogMeta, payload any) {
 	// TODO(abarganier): Once redaction is in place, we shouldn't need to cast to RedactableString here.
 	entry.payload = makeRedactablePayload(ctx, redact.RedactableString(payloadBytes))
 
+	outputLogEntry(ctx, entry)
+	logging.processStructured(ctx, meta.EventType, payload)
+}
+
+// InfoE logs a structured event at severity.INFO before sending
+// it to be processed by a StructuredLogProcessor
+func InfoE(ctx context.Context, event logpb.EventPayload) {
+	logStructuredEvent(ctx, severity.INFO, event, 1)
+}
+
+// WarnE logs a structured event at severity.WARNING before sending
+// it to be processed by a StructuredLogProcessor
+func WarnE(ctx context.Context, event logpb.EventPayload) {
+	logStructuredEvent(ctx, severity.WARNING, event, 1)
+}
+
+// ErrorE logs a structured event at severity.ERROR before sending
+// it to be processed by a StructuredLogProcessor
+func ErrorE(ctx context.Context, event logpb.EventPayload) {
+	logStructuredEvent(ctx, severity.ERROR, event, 1)
+}
+
+// FatalE logs a structured event at severity.FATAL before sending
+// it to be processed by a StructuredLogProcessor
+func FatalE(ctx context.Context, event logpb.EventPayload) {
+	logStructuredEvent(ctx, severity.FATAL, event, 1)
+}
+
+// structuredEvent logs a logpb.EventPayload as a structured entry at a provided
+// logpb.Severity. Once it is logged, it is sent to be processed by a StructuredLogProcessor.
+func logStructuredEvent(
+	ctx context.Context, sev logpb.Severity, event logpb.EventPayload, depth int,
+) {
+	// Populate the missing common fields.
+	common := event.CommonDetails()
+	if common.Timestamp == 0 {
+		common.Timestamp = timeutil.Now().UnixNano()
+	}
+	if len(common.EventType) == 0 {
+		common.EventType = logpb.GetEventTypeName(event)
+	}
+
+	entry := makeStructuredEntry(ctx,
+		sev,
+		event.LoggingChannel(),
+		depth+1,
+		event)
+
+	outputLogEntry(ctx, entry)
+	eventType := EventType(event.CommonDetails().EventType)
+	logging.processStructured(ctx, eventType, event)
+}
+
+func outputLogEntry(ctx context.Context, entry logEntry) {
+
+	if sp := getSpan(ctx); sp != nil {
+		// Prevent `entry` from moving to the heap when this branch is not taken.
+		heapEntry := entry
+		eventInternal(sp, entry.sev >= severity.ERROR, &heapEntry)
+	}
+
 	logger := logging.getLogger(entry.ch)
 	logger.outputLogEntry(entry)
-	logging.processStructured(ctx, meta.EventType, payload)
 }
