@@ -2518,7 +2518,10 @@ func (s *ScanStats) String() string {
 
 // RangeFeedEventSink is an interface for sending a single rangefeed event.
 type RangeFeedEventSink interface {
+	// Context returns the context for this stream.
 	Context() context.Context
+	// Send blocks until it sends m, the stream is done, or the stream breaks.
+	// Send must be safe to call on the same stream in different goroutines.
 	Send(*RangeFeedEvent) error
 }
 
