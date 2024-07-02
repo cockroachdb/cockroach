@@ -14,6 +14,7 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 var (
@@ -150,6 +151,29 @@ func makeMetrics() Metrics {
 	}
 }
 
+type ThreadSafeMovingAverage struct {
+	syncutil.Mutex
+	ma ewma.MovingAverage
+}
+
+func (t *ThreadSafeMovingAverage) Set(v float64) {
+	t.Lock()
+	defer t.Unlock()
+	t.ma.Set(v)
+}
+
+func (t *ThreadSafeMovingAverage) Add(v float64) {
+	t.Lock()
+	defer t.Unlock()
+	t.ma.Add(v)
+}
+
+func (t *ThreadSafeMovingAverage) Value() float64 {
+	t.Lock()
+	defer t.Unlock()
+	return t.ma.Value()
+}
+
 // Metrics is a metrics struct for Context metrics.
 // Field X is documented in metaX.
 type Metrics struct {
@@ -202,7 +226,7 @@ type peerMetrics struct {
 	// roundTripLatency is the source for the AvgRoundTripLatency gauge. We don't
 	// want to maintain a full histogram per peer, so instead on each heartbeat we
 	// update roundTripLatency and flush the result into AvgRoundTripLatency.
-	roundTripLatency ewma.MovingAverage // *not* thread safe
+	roundTripLatency ewma.MovingAverage
 
 	// Counters.
 
@@ -233,9 +257,7 @@ func (m *Metrics) acquire(k peerKey) peerMetrics {
 
 		// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
 		// and operates on a ~60s decay rate.
-		//
-		// Note that this is *not* thread safe.
-		roundTripLatency: &ewma.SimpleEWMA{},
+		roundTripLatency: &ThreadSafeMovingAverage{ma: &ewma.SimpleEWMA{}},
 	}
 }
 
