@@ -12,9 +12,9 @@ package option
 
 // NodeLister is a helper to create `option.NodeListOption`s.
 type NodeLister struct {
-	NodeCount               int
-	WorkloadNodeProvisioned bool
-	Fatalf                  func(string, ...interface{})
+	NodeCount                int
+	WorkloadNodesProvisioned int
+	Fatalf                   func(string, ...interface{})
 }
 
 // All returns a list of all nodes.
@@ -24,8 +24,8 @@ func (l NodeLister) All() NodeListOption {
 
 // CRDBNodes returns a list of all CRDB nodes, i.e, non workload nodes.
 func (l NodeLister) CRDBNodes() NodeListOption {
-	if l.WorkloadNodeProvisioned {
-		return l.Range(1, l.NodeCount-1)
+	if l.WorkloadNodesProvisioned > 0 {
+		return l.Range(1, l.NodeCount-l.WorkloadNodesProvisioned)
 	}
 	return l.Range(1, l.NodeCount)
 }
@@ -61,8 +61,11 @@ func (l NodeLister) Node(n int) NodeListOption {
 	return l.Nodes(n)
 }
 
-// WorkloadNode returns the workload node—it assumes that one has
-// been created through the cluster spec WorkloadNode option.
-func (l NodeLister) WorkloadNode() NodeListOption {
-	return l.Nodes(l.NodeCount)
+// WorkloadNodes returns the workload nodes—it assumes that at least
+// one has been created through the cluster spec WorkloadNodes option.
+func (l NodeLister) WorkloadNodes() NodeListOption {
+	if l.WorkloadNodesProvisioned == 0 {
+		l.Fatalf("workload node specified but no workload nodes were provisioned by the cluster")
+	}
+	return l.Range(l.NodeCount-l.WorkloadNodesProvisioned+1, l.NodeCount)
 }

@@ -38,7 +38,7 @@ type Cluster interface {
 	Range(begin, end int) option.NodeListOption
 	Nodes(ns ...int) option.NodeListOption
 	Node(i int) option.NodeListOption
-	WorkloadNode() option.NodeListOption
+	WorkloadNodes() option.NodeListOption
 
 	// Uploading and downloading from/to nodes.
 
