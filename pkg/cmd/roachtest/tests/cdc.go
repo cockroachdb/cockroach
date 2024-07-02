@@ -62,7 +62,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -637,83 +636,6 @@ func (ct *cdcTester) runFeedLatencyVerifier(
 		select {
 		case <-ct.ctx.Done():
 		case <-finished:
-		}
-	}
-}
-
-// This is very coupled both to the CREATE TABLE required (`CREATE TABLE t (id INT PRIMARY KEY, x INT);`) and the validator itself in cdctest.
-// TODO: reorganize this to make more sense
-func (ct *cdcTester) runIntegrityWorkload(ivt cdctest.IntegrityValidationType) (wait func()) {
-	switch ivt {
-	case cdctest.IntegrityValidationNone:
-		return
-	case cdctest.IntegrityValidationEachKeySequential:
-	default:
-		ct.t.Fatalf("unknown integrity validation type: %v", ivt)
-	}
-
-	ct.t.L().Printf("running each-key-sequential integrity workload")
-
-	const (
-		parallelism = 8
-		numKeys     = 1000
-		numVals     = 10_000
-		chunkSize   = numKeys / parallelism
-	)
-
-	finished := make(chan struct{}, parallelism)
-	for wi := 0; wi < parallelism; wi++ {
-		wi := wi
-		ct.mon.Go(func(ctx context.Context) error {
-			defer func() { finished <- struct{}{} }()
-			defer ct.t.L().Printf("worker %d done", wi)
-			var err error
-			var conn *gosql.Conn
-			conn, err = ct.DB().Conn(ctx)
-			require.NoError(ct.t, err)
-			defer func() {
-				if conn != nil {
-					_ = conn.Close()
-				}
-			}()
-
-			// Run workload: update keys sequentially. Split key space into par parts and each goroutine updates its own part.
-			offset := wi * chunkSize
-			for i := 0; i < numVals*chunkSize; i++ {
-				key := offset + i%chunkSize
-				// Retry connections because we might do crdb chaos too.
-				for attempt := 0; ctx.Err() == nil; attempt++ {
-					if conn == nil {
-						conn, err = ct.DB().Conn(ctx)
-						if err != nil {
-							time.Sleep(time.Duration(attempt*10) * time.Millisecond)
-							continue
-						}
-					}
-					_, err := conn.ExecContext(ctx, "INSERT INTO t (id, x) VALUES ($1, 1) ON CONFLICT(id) DO UPDATE SET x = t.x + 1", key)
-					if err == nil {
-						break
-					}
-					if strings.Contains(err.Error(), "connection is already closed") {
-						if conn != nil {
-							_ = conn.Close()
-							conn = nil
-						}
-					}
-					ct.t.L().Printf("worker %d retrying insert %d: %s", wi, key, err)
-					time.Sleep(time.Duration(attempt*10) * time.Millisecond)
-				}
-			}
-			return nil
-		})
-	}
-
-	return func() {
-		for i := 0; i < parallelism; i++ {
-			select {
-			case <-ct.ctx.Done():
-			case <-finished:
-			}
 		}
 	}
 }
@@ -1667,16 +1589,9 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			var err error
+			vt := cdctest.IntegrityValidationEachKeySequential
 
-			_, err = ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
-			if err != nil {
-				t.Fatal("failed to create table")
-			}
-			_, err = ct.DB().ExecContext(ctx, `INSERT INTO t VALUES (1, -1);`)
-			if err != nil {
-				t.Fatal("failed to insert row into table")
-			}
+			vt.SetupWorkload(ctx, ct.t, ct.DB())
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
@@ -1684,7 +1599,7 @@ func registerCDC(r registry.Registry) {
 				kafkaArgs: kafkaFeedArgs{
 					kafkaChaos:        true,
 					validateOrder:     true,
-					validateIntegrity: cdctest.IntegrityValidationEachKeySequential,
+					validateIntegrity: vt,
 				},
 				opts: map[string]string{
 					"updated":                       "",
@@ -1699,9 +1614,9 @@ func registerCDC(r registry.Registry) {
 				steadyLatency: 5 * time.Minute,
 			})
 
-			wait := ct.runIntegrityWorkload(cdctest.IntegrityValidationEachKeySequential)
+			wait := vt.StartWorkload(ctx, ct.t, ct.DB(), ct.mon.Go)
 
-			// ct.startCRDBChaos()
+			// TODO: consider calling ct.startCRDBChaos() too
 
 			wait()
 		},

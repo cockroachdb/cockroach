@@ -10,16 +10,20 @@ package cdctest
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest/gapcheck"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // Validator checks for violations of our changefeed ordering and delivery
@@ -196,6 +200,7 @@ const (
 	IntegrityValidationEachKeySequential IntegrityValidationType = "each_key_sequential"
 )
 
+// TODO: consider adding to nemesis test and other places validators are used
 func NewIntegrityValidator(ct IntegrityValidationType, topic string, inner Validator) Validator {
 	switch ct {
 	case IntegrityValidationNone:
@@ -207,6 +212,104 @@ func NewIntegrityValidator(ct IntegrityValidationType, topic string, inner Valid
 		return &eachKeySequentialIntegrityValidator{ct: ct, topic: topic, inner: inner, gapcheckers: make(map[string]*gapcheck.GapChecker)}
 	default:
 		panic(fmt.Sprintf("unknown integrity validation type: %s", ct))
+	}
+}
+
+func (vt IntegrityValidationType) StartWorkload(ctx context.Context, t test.Test, db *gosql.DB, monGo func(func(context.Context) error)) (wait func()) {
+	switch vt {
+	case IntegrityValidationNone:
+		return func() {}
+	case IntegrityValidationEachKeySequential:
+		return vt.startEachKeySequentialWorkload(ctx, t, db, monGo)
+	default:
+		t.Fatalf("unknown integrity validation type: %v", vt)
+		return nil // unreachable
+	}
+}
+
+func (vt IntegrityValidationType) startEachKeySequentialWorkload(ctx context.Context, t test.Test, db *gosql.DB, monGo func(func(context.Context) error)) (wait func()) {
+	t.L().Printf("running each-key-sequential integrity workload")
+
+	const (
+		parallelism = 8
+		numKeys     = 1000
+		numVals     = 10_000
+		chunkSize   = numKeys / parallelism
+	)
+
+	finished := make(chan struct{}, parallelism)
+	for wi := 0; wi < parallelism; wi++ {
+		wi := wi
+		monGo(func(ctx context.Context) error {
+			defer func() { finished <- struct{}{} }()
+			defer t.L().Printf("worker %d done", wi)
+
+			sleep := func(attempt int) {
+				select {
+				case <-ctx.Done():
+				case <-time.After(time.Duration(attempt*10) * time.Millisecond):
+				}
+			}
+
+			var err error
+			var conn *gosql.Conn
+			conn, err = db.Conn(ctx)
+			require.NoError(t, err)
+			defer func() {
+				if conn != nil {
+					_ = conn.Close()
+				}
+			}()
+
+			// Run workload: update keys sequentially. Split key space into par parts and each goroutine updates its own part.
+			offset := wi * chunkSize
+			for i := 0; i < numVals*chunkSize; i++ {
+				key := offset + i%chunkSize
+				// Retry connections because we might do crdb chaos too.
+				for attempt := 0; ctx.Err() == nil; attempt++ {
+					if conn == nil {
+						conn, err = db.Conn(ctx)
+						if err != nil {
+							sleep(attempt)
+							continue
+						}
+					}
+					_, err := conn.ExecContext(ctx, "INSERT INTO t (id, x) VALUES ($1, 1) ON CONFLICT(id) DO UPDATE SET x = t.x + 1", key)
+					if err == nil {
+						break
+					}
+					if strings.Contains(err.Error(), "connection is already closed") {
+						if conn != nil {
+							_ = conn.Close()
+							conn = nil
+						}
+					}
+					t.L().Printf("worker %d retrying insert %d: %s", wi, key, err)
+					sleep(attempt)
+				}
+			}
+			return nil
+		})
+	}
+
+	return func() {
+		for i := 0; i < parallelism; i++ {
+			select {
+			case <-ctx.Done():
+			case <-finished:
+			}
+		}
+	}
+}
+
+func (vt IntegrityValidationType) SetupWorkload(ctx context.Context, t test.Test, db *gosql.DB) {
+	switch vt {
+	case IntegrityValidationNone:
+	case IntegrityValidationEachKeySequential:
+		_, err := db.Exec(`CREATE TABLE t (id INT PRIMARY KEY, x INT)`)
+		require.NoError(t, err)
+	default:
+		t.Fatalf("unknown integrity validation type: %v", vt)
 	}
 }
 
