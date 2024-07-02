@@ -108,6 +108,10 @@ sed -i'~' 's/enabled=1/enabled=0/' /etc/default/apport
 sed -i'~' '/.*kernel\\.core_pattern.*/c\\' /etc/sysctl.conf
 echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 sysctl --system  # reload sysctl settings
+
+sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
+sudo service ssh restart
+
 touch {{ .DisksInitializedFile }}
 `
 
