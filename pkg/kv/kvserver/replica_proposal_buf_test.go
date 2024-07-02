@@ -347,10 +347,13 @@ func TestProposalBuffer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	r := &testProposerRaft{}
-	p := testProposer{
-		raftGroup: r,
-	}
+	var raftStatus raft.Status
+	raftStatus.ID = 1
+	raftStatus.RaftState = raft.StateLeader
+	raftStatus.Lead = 1
+	r := &testProposerRaft{status: raftStatus}
+	p := testProposer{raftGroup: r}
+
 	var b propBuf
 	var pc proposalCreator
 	clock := hlc.NewClockForTesting(nil)
@@ -599,9 +602,9 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			state: raft.StateFollower,
 			// Unknown leader.
 			leader: raft.None,
-			// No rejection if the leader is unknown. See comments in
+			// Reject if the leader is unknown. See comments in
 			// FlushLockedWithRaftGroup().
-			expRejection: false,
+			expRejection: true,
 		},
 		{
 			name:  "follower, known eligible non-live leader",
@@ -1095,6 +1098,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &testProposerRaft{}
 			r.status.RaftState = raft.StateLeader
+			r.status.Lead = 1
 			r.status.Progress = map[uint64]rafttracker.Progress{
 				1: {State: rafttracker.StateReplicate},
 			}
