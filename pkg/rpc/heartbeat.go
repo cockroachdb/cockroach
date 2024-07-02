@@ -117,7 +117,7 @@ func checkVersion(
 // with the requester's address.
 func (hs *HeartbeatService) Ping(ctx context.Context, request *PingRequest) (*PingResponse, error) {
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Dev.Infof(ctx, "received heartbeat: %+v vs local cluster %+v node %+v", request, hs.clusterID, hs.nodeID)
+		log.Dev.VInfof(ctx, 2, "received heartbeat: %+v vs local cluster %+v node %+v", request, hs.clusterID, hs.nodeID)
 	}
 	// Check that cluster IDs match.
 	clusterID := hs.clusterID.Get()
