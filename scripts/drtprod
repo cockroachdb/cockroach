@@ -456,6 +456,143 @@ WantedBy=multi-user.target
 EOF"
         roachprod ssh workload-ua -- "sudo systemctl daemon-reload; sudo systemctl enable tpcc.service; sudo systemctl start tpcc.service"
         ;;
+      "ldr")
+        roachprod create drt-ldr1 \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="5" \
+          --gce-machine-type="n2-standard-8" \
+          --local-ssd="true"  \
+          --gce-local-ssd-count="2" \
+          --username="drt" \
+          --lifetime="8760h"
+
+        roachprod create drt-ldr2 \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="5" \
+          --gce-machine-type="n2-standard-8" \
+          --local-ssd="true"  \
+          --gce-local-ssd-count="2" \
+          --username="drt" \
+          --lifetime="8760h"
+
+        # setup dns
+        $0 dns drt-ldr1 create || $0 dns drt-ldr1 || (echo "dns setup failed -- run dns manually"; true)
+        $0 dns drt-ldr2 create || $0 dns drt-ldr2 || (echo "dns setup failed -- run dns manually"; true)
+
+        # start cockroach
+        $0 stage drt-ldr1 cockroach
+        $0 stage drt-ldr2 cockroach
+        $0 start drt-ldr1 --restart=false
+        $0 start drt-ldr2 --restart=false
+
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+
+        # import the workload
+        $0 sql drt-ldr1:1 -- -e "CREATE DATABASE kv"
+        $0 sql drt-ldr2:1 -- -e "CREATE DATABASE kv"
+        
+        $0 ssh drt-ldr1:1 "./cockroach workload init kv --insert-count=1000 {pgurl:1}"
+        $0 ssh drt-ldr2:1 "./cockroach workload init kv --insert-count=1000 {pgurl:1}"
+
+        # tell the clusters about eachother.
+        ldr2="$(roachprod ssh drt-ldr2:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
+        ldr1="$(roachprod ssh drt-ldr1:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1:system} | sed 's,postgresql://postgres://,postgres://,')"
+        $0 sql drt-ldr1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr2' AS '${ldr2}'"
+        $0 sql drt-ldr2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr1' AS '${ldr1}'"
+        roachprod sql drt-ldr1:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE kv.kv ON 'external://drt-ldr2' INTO TABLE kv.public.kv;"
+        roachprod sql drt-ldr2:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE kv.kv ON 'external://drt-ldr1' INTO TABLE kv.public.kv;"
+
+        echo
+        echo "Completed setup of ldr1 and ldr2, with logical data replication between them on table kv.kv."
+        echo
+        echo "Run 'drtprod create workload-ldr' after the restore completes to start the workload."
+        echo
+        ;;
+      "workload-ldr")
+        set -x
+        roachprod create workload-ldr \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="1" \
+          --gce-machine-type="n2-standard-8" \
+          --os-volume-size 100 \
+          --username workload \
+          --lifetime 8760h \
+          --gce-image "ubuntu-2204-jammy-v20240319"
+        # setup dns
+        $0 dns workload-ldr create || $0 dns workload-ldr
+
+        # push cockroach to the worker to run its built-in workloads
+        roachprod stage workload-ldr:1 cockroach
+        roachprod stage workload-ldr:1 workload
+
+        # Push certs for both clusters to the worker.
+        roachprod get drt-ldr1:1 certs certs.ldr1
+        roachprod put workload-ldr:1 certs.ldr1
+        roachprod get drt-ldr2:1 certs certs.ldr2
+        roachprod put workload-ldr:1 certs.ldr2
+        roachprod ssh workload-ldr:1 -- "chmod 0600 certs.ldr1/* certs.ldr2/*"
+        rm -rf certs.ldr1 certs.ldr2
+
+        # Setup pgurls for worklooads to use.
+        roachprod ssh workload-ldr:1 -- "
+        echo \"$(roachprod pgurl drt-ldr1 --secure | sed 's/=certs/=certs.ldr1/g' | sed "s/'//g" )\" > pgurls.ldr1.txt;
+        echo \"$(roachprod pgurl drt-ldr2 --secure | sed 's/=certs/=certs.ldr2/g' | sed "s/'//g" )\" > pgurls.ldr2.txt;
+        ln -sf pgurls.ldr1.txt pgurls.txt"
+
+        # Setup the tpcc workload runner as a script invoked by systemd.
+        roachprod ssh workload-ldr:1 -- 'cat - > kv50_run_1.sh << EOF
+#!/usr/bin/env bash
+
+exec ./cockroach workload run kv \\
+  --concurrency=32
+  --read-percent=50 \\
+  \$(cat /home/ubuntu/pgurls.ldr1.txt)
+EOF'
+        roachprod ssh workload-ldr:1 -- 'cat - > kv50_run_2.sh << EOF
+#!/usr/bin/env bash
+
+exec ./cockroach workload run kv \\
+  --concurrency=32
+  --read-percent=50 \\
+  \$(cat /home/ubuntu/pgurls.ldr2.txt)
+EOF'
+        roachprod ssh workload-ldr:1 -- "chmod +x ./kv50_run_1.sh;
+sudo tee /etc/systemd/system/kv1.service > /dev/null << EOF
+[Unit]
+Description=kv load generator 1
+
+[Service]
+WorkingDirectory=/home/ubuntu
+User=ubuntu
+ExecStart=/home/ubuntu/kv50_run_1.sh
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+        roachprod ssh workload-ldr:1 -- "chmod +x ./kv50_run_2.sh;
+sudo tee /etc/systemd/system/kv2.service > /dev/null << EOF
+[Unit]
+Description=kv load generator 2
+
+[Service]
+WorkingDirectory=/home/ubuntu
+User=ubuntu
+ExecStart=/home/ubuntu/kv50_run_2.sh
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+        roachprod ssh workload-ldr -- "sudo systemctl daemon-reload; sudo systemctl enable kv1.service; sudo systemctl start kv1.service"
+        roachprod ssh workload-ldr -- "sudo systemctl enable kv2.service; sudo systemctl start kv2.service"
+        ;;
       *)
         echo
         echo "ATN: If $2 is intended to be long-lived, please define it by name in drtprod instead."
