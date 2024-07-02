@@ -234,7 +234,7 @@ func (fd *ResolvedFunctionDefinition) String() string { return AsString(fd) }
 
 // MergeWith is used to merge two UDF definitions with same name.
 func (fd *ResolvedFunctionDefinition) MergeWith(
-	another *ResolvedFunctionDefinition,
+	another *ResolvedFunctionDefinition, path SearchPath,
 ) (*ResolvedFunctionDefinition, error) {
 	if fd == nil {
 		return another, nil
@@ -249,7 +249,7 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 
 	return &ResolvedFunctionDefinition{
 		Name:      fd.Name,
-		Overloads: combineOverloads(fd.Overloads, another.Overloads),
+		Overloads: combineOverloads(fd.Overloads, another.Overloads, path),
 	}, nil
 }
 
@@ -437,8 +437,61 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	return ret[0], nil
 }
 
-func combineOverloads(a, b []QualifiedOverload) []QualifiedOverload {
-	return append(append(make([]QualifiedOverload, 0, len(a)+len(b)), a...), b...)
+func combineOverloads(a, b []QualifiedOverload, path SearchPath) []QualifiedOverload {
+	// Corner case: if the path is empty, we can just append a and b.
+	if path == nil || path.NumElements() == 0 {
+		return append(append(make([]QualifiedOverload, 0, len(a)+len(b)), a...), b...)
+	}
+
+	result := make([]QualifiedOverload, 0, len(a)+len(b))
+
+	// Append overloads to the result according to the schema order in the path.
+	isSchemaInSearchPath := make(map[string]bool, path.NumElements())
+	for i := range path.NumElements() {
+		schema := path.GetSchema(i)
+		isSchemaInSearchPath[schema] = true
+
+		for _, overload := range a {
+			if overload.Schema == schema {
+				result = append(result, overload)
+			}
+		}
+
+		for _, overload := range b {
+			if overload.Schema == schema {
+				result = append(result, overload)
+			}
+		}
+	}
+
+	// Append any remaining overloads that are not in the path.
+	for _, overload := range a {
+		if _, ok := isSchemaInSearchPath[overload.Schema]; !ok {
+			result = append(result, overload)
+		}
+	}
+
+	for _, overload := range b {
+		if _, ok := isSchemaInSearchPath[overload.Schema]; !ok {
+			result = append(result, overload)
+		}
+	}
+
+	foundUDFOverload := false
+	for _, overload := range result {
+		if overload.Type == UDFRoutine {
+			foundUDFOverload = true
+		}
+	}
+	// When a UDF overload is found, reset the "prefered" attribute.
+	if foundUDFOverload {
+		for i, overload := range result {
+			overload.PreferredOverload = false
+			result[i] = overload
+		}
+	}
+
+	return result
 }
 
 // GetClass returns function class by checking each overload's Class and returns
