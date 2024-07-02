@@ -1121,6 +1121,22 @@ func TestLeaseStringAndSafeFormat(t *testing.T) {
 			},
 			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 epo=4 min-exp=0.000000002,1 pro=0.000000001,0",
 		},
+		{
+			name: "leader",
+			lease: Lease{
+				Replica: ReplicaDescriptor{
+					NodeID:    1,
+					StoreID:   1,
+					ReplicaID: 1,
+				},
+				Start:         makeClockTS(1, 1),
+				ProposedTS:    makeClockTS(1, 0),
+				Sequence:      3,
+				MinExpiration: makeTS(2, 1),
+				Term:          5,
+			},
+			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 term=5 min-exp=0.000000002,1 pro=0.000000001,0",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// String.
@@ -1131,6 +1147,13 @@ func TestLeaseStringAndSafeFormat(t *testing.T) {
 			require.EqualValues(t, tc.exp, redact.Sprint(tc.lease).Redact())
 		})
 	}
+}
+
+func TestLeaseType(t *testing.T) {
+	require.Equal(t, LeaseExpiration, Lease{}.Type())
+	require.Equal(t, LeaseEpoch, Lease{Epoch: 1}.Type())
+	require.Equal(t, LeaseLeader, Lease{Term: 1}.Type())
+	require.Panics(t, func() { Lease{Epoch: 1, Term: 1}.Type() })
 }
 
 func TestLeaseEquivalence(t *testing.T) {
@@ -1150,6 +1173,11 @@ func TestLeaseEquivalence(t *testing.T) {
 	expire1TS2 := Lease{Replica: r1, Start: ts2, Expiration: ts2.ToTimestamp().Clone()}
 	expire2 := Lease{Replica: r1, Start: ts1, Expiration: ts3.ToTimestamp().Clone()}
 	expire2R2TS2 := Lease{Replica: r2, Start: ts2, Expiration: ts3.ToTimestamp().Clone()}
+	leader1 := Lease{Replica: r1, Start: ts1, Term: 1}
+	leader1R2 := Lease{Replica: r2, Start: ts1, Term: 1}
+	leader1TS2 := Lease{Replica: r1, Start: ts2, Term: 1}
+	leader2 := Lease{Replica: r1, Start: ts1, Term: 2}
+	leader2R2TS2 := Lease{Replica: r2, Start: ts2, Term: 2}
 
 	proposed1 := Lease{Replica: r1, Start: ts1, Epoch: 1, ProposedTS: ts1}
 	proposed2 := Lease{Replica: r1, Start: ts1, Epoch: 2, ProposedTS: ts1}
@@ -1167,6 +1195,9 @@ func TestLeaseEquivalence(t *testing.T) {
 	epoch1MinExp2 := Lease{Replica: r1, Start: ts1, Epoch: 1, MinExpiration: ts2.ToTimestamp()}
 	epoch1MinExp3 := Lease{Replica: r1, Start: ts1, Epoch: 1, MinExpiration: ts3.ToTimestamp()}
 	epoch2MinExp2 := Lease{Replica: r1, Start: ts1, Epoch: 2, MinExpiration: ts2.ToTimestamp()}
+	leader1MinExp2 := Lease{Replica: r1, Start: ts1, Term: 1, MinExpiration: ts2.ToTimestamp()}
+	leader1MinExp3 := Lease{Replica: r1, Start: ts1, Term: 1, MinExpiration: ts3.ToTimestamp()}
+	leader2MinExp2 := Lease{Replica: r1, Start: ts1, Term: 2, MinExpiration: ts2.ToTimestamp()}
 
 	testCases := []struct {
 		l, ol      Lease
@@ -1174,6 +1205,7 @@ func TestLeaseEquivalence(t *testing.T) {
 	}{
 		{epoch1, epoch1, true},             // same epoch lease
 		{expire1, expire1, true},           // same expiration lease
+		{leader1, leader1, true},           // same leader lease
 		{epoch1, epoch1R2, false},          // different epoch leases
 		{epoch1, epoch1TS2, false},         // different epoch leases
 		{epoch1, epoch2, false},            // different epoch leases
@@ -1183,12 +1215,20 @@ func TestLeaseEquivalence(t *testing.T) {
 		{expire1, expire2R2TS2, false},     // different expiration leases
 		{expire1, expire2, true},           // same expiration lease, extended
 		{expire2, expire1, false},          // same expiration lease, extended but backwards
+		{leader1, leader1R2, false},        // different leader leases
+		{leader1, leader1TS2, false},       // different leader leases
+		{leader1, leader2, false},          // different leader leases
+		{leader1, leader2R2TS2, false},     // different leader leases
 		{epoch1, expire1, false},           // epoch and expiration leases, same replica and start time
 		{epoch1, expire1R2, false},         // epoch and expiration leases, different replica
 		{epoch1, expire1TS2, false},        // epoch and expiration leases, different start time
 		{expire1, epoch1, true},            // expiration and epoch leases, same replica and start time
 		{expire1, epoch1R2, false},         // expiration and epoch leases, different replica
 		{expire1, epoch1TS2, false},        // expiration and epoch leases, different start time
+		{epoch1, leader1, false},           // epoch and leader leases, same replica and start time
+		{leader1, epoch1, false},           // leader and epoch leases, same replica and start time
+		{expire1, leader1, true},           // expiration and leader leases, same replica and start time
+		{leader1, expire1, false},          // leader and expiration leases, same replica and start time
 		{proposed1, proposed1, true},       // exact leases with identical timestamps
 		{proposed1, proposed2, false},      // same proposed timestamps, but diff epochs
 		{proposed1, proposed3, true},       // different proposed timestamps, same lease
@@ -1196,7 +1236,7 @@ func TestLeaseEquivalence(t *testing.T) {
 		{epoch1, epoch1Voter, true},        // same epoch lease, different replica type
 		{epoch1, epoch1Learner, true},      // same epoch lease, different replica type
 		{epoch1Voter, epoch1Learner, true}, // same epoch lease, different replica type
-		// Test minimum expiration.
+		// Test minimum expiration with epoch leases.
 		{epoch1, epoch1MinExp2, true},         // different epoch leases, newer min expiration
 		{epoch1, epoch1MinExp3, true},         // different epoch leases, newer min expiration
 		{epoch1MinExp2, epoch1, false},        // different epoch leases, older min expiration
@@ -1206,6 +1246,16 @@ func TestLeaseEquivalence(t *testing.T) {
 		{epoch1MinExp3, epoch1MinExp2, false}, // different epoch leases, older min expiration
 		{epoch1MinExp3, epoch1MinExp3, true},  // same epoch leases, same min expiration
 		{epoch1MinExp2, epoch2MinExp2, false}, // different epoch leases
+		// Test minimum expiration with leader leases.
+		{leader1, leader1MinExp2, true},         // different leader leases, newer min expiration
+		{leader1, leader1MinExp3, true},         // different leader leases, newer min expiration
+		{leader1MinExp2, leader1, false},        // different leader leases, older min expiration
+		{leader1MinExp2, leader1MinExp2, true},  // same leader leases, same min expiration
+		{leader1MinExp2, leader1MinExp3, true},  // different leader leases, newer min expiration
+		{leader1MinExp3, leader1, false},        // different leader leases, older min expiration
+		{leader1MinExp3, leader1MinExp2, false}, // different leader leases, older min expiration
+		{leader1MinExp3, leader1MinExp3, true},  // same leader leases, same min expiration
+		{leader1MinExp2, leader2MinExp2, false}, // different leader leases
 	}
 
 	for i, tc := range testCases {
@@ -1257,6 +1307,7 @@ func TestLeaseEqual(t *testing.T) {
 		Sequence              LeaseSequence
 		AcquisitionType       LeaseAcquisitionType
 		MinExpiration         hlc.Timestamp
+		Term                  uint64
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease
@@ -1312,6 +1363,7 @@ func TestLeaseEqual(t *testing.T) {
 		{Sequence: 1},
 		{AcquisitionType: 1},
 		{MinExpiration: ts},
+		{Term: 1},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
