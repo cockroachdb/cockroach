@@ -47,6 +47,9 @@ case $1 in
         set -- start "--binary" "./cockroach" --args="--log=\"file-defaults: {dir: 'logs', max-group-size: 1GiB}\"" --store-count=16 --restart=false "$@"
         roachprod run $cluster -- "\"sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh\""
         ;;
+      "drt-ldr1"|"drt-ldr2")
+        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --restart=false "$@"
+        ;;
       *)
         ;;
     esac
@@ -479,6 +482,192 @@ RestartSec=30
 WantedBy=multi-user.target
 EOF"
         roachprod ssh workload-ua -- "sudo systemctl daemon-reload; sudo systemctl enable tpcc.service; sudo systemctl start tpcc.service"
+        ;;
+      "ldr")
+        roachprod create drt-ldr1 \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="5" \
+          --gce-machine-type="n2-standard-16" \
+          --local-ssd="false"  \
+          --gce-pd-volume-size="500" \
+          --gce-pd-volume-type="pd-balanced" \
+          --username="drt" \
+          --lifetime="8760h"
+
+        roachprod create drt-ldr2 \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="5" \
+          --gce-machine-type="n2-standard-16" \
+          --local-ssd="false"  \
+          --gce-pd-volume-size="500" \
+          --gce-pd-volume-type="pd-balanced" \
+          --username="drt" \
+          --lifetime="8760h"
+
+        # setup dns
+        $0 dns drt-ldr1 create || $0 dns drt-ldr1 || (echo "dns setup failed -- run dns manually"; true)
+        $0 dns drt-ldr2 create || $0 dns drt-ldr2 || (echo "dns setup failed -- run dns manually"; true)
+
+        # start cockroach
+        $0 stage drt-ldr1 cockroach
+        $0 stage drt-ldr2 cockroach
+        $0 start drt-ldr1 --restart=false
+        $0 start drt-ldr2 --restart=false
+
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+
+        # import the workload
+        $0 sql drt-ldr1:1 -- -e "CREATE DATABASE ycsb"
+        $0 sql drt-ldr2:1 -- -e "CREATE DATABASE ycsb"
+        
+        $0 ssh drt-ldr1:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 {pgurl:1}"
+        $0 ssh drt-ldr2:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 {pgurl:1}"
+
+        # tell the clusters about eachother.
+        ldr2="$(roachprod ssh drt-ldr2:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1} | sed 's,postgresql://postgres://,postgres://,')"
+        ldr1="$(roachprod ssh drt-ldr1:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1} | sed 's,postgresql://postgres://,postgres://,')"
+        $0 sql drt-ldr1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr2' AS '${ldr2}'"
+        $0 sql drt-ldr2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr1' AS '${ldr1}'"
+        roachprod sql drt-ldr1:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE ycsb.usertable ON 'external://drt-ldr2' INTO TABLE ycsb.public.usertable;"
+        roachprod sql drt-ldr2:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE ycsb.usertable ON 'external://drt-ldr1' INTO TABLE ycsb.public.usertable;"
+
+        echo
+        echo "Completed setup of ldr1 and ldr2, with logical data replication between them on table ycsb.usertable."
+        echo
+        echo "Run 'drtprod create workload-ldr' to create the workload node and start the workload."
+        echo
+        ;;
+      "workload-ldr")
+        set -x
+        roachprod create workload-ldr \
+          --clouds="gce" \
+          --gce-zones="us-east1-c" \
+          --nodes="1" \
+          --gce-machine-type="n2-standard-16" \
+          --os-volume-size 100 \
+          --username workload \
+          --lifetime 8760h \
+        # setup dns
+        $0 dns workload-ldr create || $0 dns workload-ldr
+
+        # push cockroach to the worker to run its built-in workloads
+        roachprod stage workload-ldr:1 cockroach
+        roachprod stage workload-ldr:1 workload
+
+        # Push certs for both clusters to the worker.
+        roachprod get drt-ldr1:1 certs certs.ldr1
+        roachprod put workload-ldr:1 certs.ldr1
+        roachprod get drt-ldr2:1 certs certs.ldr2
+        roachprod put workload-ldr:1 certs.ldr2
+        roachprod ssh workload-ldr:1 -- "chmod 0600 certs.ldr1/* certs.ldr2/*"
+        rm -rf certs.ldr1 certs.ldr2
+
+        # Setup pgurls for worklooads to use.
+        roachprod ssh workload-ldr:1 -- "
+        echo \"$(roachprod pgurl drt-ldr1 --secure | sed 's/=certs/=certs.ldr1/g' | sed "s/'//g" )\" > pgurls.ldr1.txt;
+        echo \"$(roachprod pgurl drt-ldr2 --secure | sed 's/=certs/=certs.ldr2/g' | sed "s/'//g" )\" > pgurls.ldr2.txt;
+        ln -sf pgurls.ldr1.txt pgurls.txt"
+
+        # Set up a changefeed in one of the two clusters.
+        $0 sql drt-ldr1:1 -- -e "CREATE CHANGEFEED FOR TABLE ycsb.usertable INTO 'null://' WITH OPTIONS (initial_scan = 'no', resolved, updated)"
+
+        # Setup the ycsb workload runner as a script invoked by systemd.
+        # The runner cycles through all lettered ycsb workloads in a
+        # round-robin fashion, plus an insert-only workload.
+        roachprod ssh workload-ldr:1 -- 'cat - > ycsb_run_ldr1.sh << EOF
+#!/usr/bin/env bash
+
+while true; do
+  exec ./cockroach workload run ycsb \\
+    --concurrency=32 \\
+    --duration=2h \\
+    --max-rate 1000 \\
+    --tolerate-errors \\
+    --workload='custom' --insert-freq=1.0 \\
+    \$(cat /home/ubuntu/pgurls.ldr1.txt)
+
+  exec ./cockroach workload run ycsb \\
+    --concurrency=32 \\
+    --duration=2h \\
+    --max-rate 1000 \\
+    --tolerate-errors \\
+    --workload=A \\
+    \$(cat /home/ubuntu/pgurls.ldr1.txt)
+
+  exec ./cockroach workload run ycsb \\
+    --concurrency=32 \\
+    --duration=2h \\
+    --max-rate 1000 \\
+    --tolerate-errors \\
+    --workload='custom' --read-freq=0.4 --read-modify-write-freq 0.1 --insert-freq 0.2 --scan-freq 0.1 --update-freq 0.2 \\
+    \$(cat /home/ubuntu/pgurls.ldr1.txt)
+done
+EOF'
+        roachprod ssh workload-ldr:1 -- 'cat - > ycsb_run_ldr2.sh << EOF
+#!/usr/bin/env bash
+
+while true; do
+
+  exec ./cockroach workload run ycsb \\
+    --concurrency=32 \\
+    --duration=2h \\
+    --max-rate 1000 \\
+    --tolerate-errors \\
+    --workload='custom' --insert-freq=1.0 \\
+    \$(cat /home/ubuntu/pgurls.ldr2.txt)
+
+  exec ./cockroach workload run ycsb \\
+    --concurrency=32 \\
+    --duration=2h \\
+    --max-rate 1000 \\
+    --tolerate-errors \\
+    --workload=A \\
+    \$(cat /home/ubuntu/pgurls.ldr2.txt)
+
+  exec ./cockroach workload run ycsb \\
+    --concurrency=32 \\
+    --duration=2h \\
+    --max-rate 1000 \\
+    --tolerate-errors \\
+    --workload='custom' --read-freq=0.4 --read-modify-write-freq 0.1 --insert-freq 0.2 --scan-freq 0.1 --update-freq 0.2 \\
+    \$(cat /home/ubuntu/pgurls.ldr2.txt)
+done
+EOF'
+        roachprod ssh workload-ldr:1 -- "chmod +x ./ycsb_run_ldr1.sh;
+sudo tee /etc/systemd/system/ycsb_ldr1.service > /dev/null << EOF
+[Unit]
+Description=ycsb load generator for ldr1
+
+[Service]
+WorkingDirectory=/home/ubuntu
+User=ubuntu
+ExecStart=/home/ubuntu/ycsb_run_ldr1.sh
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+        roachprod ssh workload-ldr:1 -- "chmod +x ./ycsb_run_ldr2.sh;
+sudo tee /etc/systemd/system/ycsb_ldr2.service > /dev/null << EOF
+[Unit]
+Description=ycsb load generator for ldr2
+
+[Service]
+WorkingDirectory=/home/ubuntu
+User=ubuntu
+ExecStart=/home/ubuntu/ycsb_run_ldr2.sh
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+        roachprod ssh workload-ldr -- "sudo systemctl daemon-reload; sudo systemctl enable ycsb_ldr1.service; sudo systemctl start ycsb_ldr1.service"
+        roachprod ssh workload-ldr -- "sudo systemctl enable ycsb_ldr2.service; sudo systemctl start ycsb_ldr2.service"
         ;;
       *)
         echo
