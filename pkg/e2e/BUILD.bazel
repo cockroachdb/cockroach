@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "e2e_test",
+    srcs = ["e2e_test.go"],
+    data = ["//pkg/cmd/cockroach"],
+    tags = [
+        "no-cache",
+        "no-remote",
+        "no-sandbox",
+        "requires-network",
+    ],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_go_rod_rod//:rod",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -46,6 +46,7 @@ go_test(
     name = "ui_test",
     srcs = ["ui_test.go"],
     embed = [":ui"],
+    tags = ["requires-network"],
     deps = [
         "//pkg/base",
         "//pkg/util/leaktest",
