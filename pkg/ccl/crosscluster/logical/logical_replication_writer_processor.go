@@ -116,12 +116,19 @@ func newLogicalReplicationWriterProcessor(
 		}
 	}
 
+	const udfName = "defaultdb.public.resolve"
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
-		rp, err := makeSQLLastWriteWinsHandler(
-			ctx, flowCtx.Cfg.Settings, spec.TableDescriptors,
-			// Initialize the executor with a fresh session data - this will
-			// avoid creating a new copy on each executor usage.
+		// rp, err := makeSQLLastWriteWinsHandler(
+		// 	ctx, flowCtx.Cfg.Settings, spec.TableDescriptors,
+		// 	// Initialize the executor with the copy of the current session's
+		// 	// variables in order to avoid creating a fresh copy on each usage.
+		// 	flowCtx.Cfg.DB.Executor(isql.WithSessionData(flowCtx.EvalCtx.SessionData().Clone())),
+		// )
+		rp, err := makeSQLUDFProcessor(
+			ctx, flowCtx.Cfg.Settings, udfName, spec.TableDescriptors,
+			// Initialize the executor with the copy of the current session's
+			// variables in order to avoid creating a fresh copy on each usage.
 			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
 		)
 		if err != nil {
