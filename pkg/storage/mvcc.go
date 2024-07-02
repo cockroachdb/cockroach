@@ -1246,6 +1246,8 @@ type MVCCGetOptions struct {
 	// ReadCategory is used to map to a user-understandable category string, for
 	// stats aggregation and metrics, and a Pebble-understandable QoS.
 	ReadCategory fs.ReadCategory
+	GetIter      func() MVCCIterator
+	KeepIter     func(MVCCIterator)
 }
 
 // MVCCGetResult bundles return values for the MVCCGet family of functions.
@@ -1465,18 +1467,29 @@ func MVCCGetWithValueHeader(
 		}
 		return result, enginepb.MVCCValueHeader{}, nil
 	}
-	iter, err := newMVCCIterator(
-		ctx, reader, timestamp, false /* rangeKeyMasking */, opts.DontInterleaveIntents,
-		IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
-			Prefix:       true,
-			ReadCategory: opts.ReadCategory,
-		},
-	)
-	if err != nil {
-		return result, enginepb.MVCCValueHeader{}, err
+	var iter MVCCIterator
+	if opts.GetIter != nil {
+		iter = opts.GetIter()
 	}
-	defer iter.Close()
+	if iter == nil {
+		var err error
+		iter, err = newMVCCIterator(
+			ctx, reader, timestamp, false /* rangeKeyMasking */, opts.DontInterleaveIntents,
+			IterOptions{
+				KeyTypes:     IterKeyTypePointsAndRanges,
+				Prefix:       true,
+				ReadCategory: opts.ReadCategory,
+			},
+		)
+		if err != nil {
+			return result, enginepb.MVCCValueHeader{}, err
+		}
+		if opts.KeepIter != nil {
+			opts.KeepIter(iter)
+		} else {
+			defer iter.Close()
+		}
+	}
 	value, intent, vh, err := mvccGetWithValueHeader(ctx, iter, key, timestamp, opts)
 	val := value.ToPointer()
 	if err == nil && val != nil {
