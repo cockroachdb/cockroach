@@ -661,8 +661,8 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 			log.Infof(ctx, "sending KV to DLQ, %s due to %v", event.String(), applyErr)
 		}
 	}
-	// TODO(dt): try to DLQ it and don't return an error if successful.
-	return applyErr
+
+	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, applyErr)
 }
 
 type batchStats struct {
