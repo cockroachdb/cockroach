@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFindConflict(t *testing.T) {
+func TestMatch(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	ids := make([]entryID, 1, len(previousEnts)+1) // dummy (0, 0) at index 0
 	for i := range previousEnts {
@@ -66,7 +66,7 @@ func TestFindConflict(t *testing.T) {
 			log.append(previousEnts...)
 			app := logSlice{term: 100, prev: tt.prev, entries: tt.ents}
 			require.NoError(t, app.valid())
-			match, ok := log.findConflict(app)
+			match, ok := log.match(app)
 			require.Equal(t, !tt.notOk, ok)
 			require.Equal(t, tt.want, match)
 		})
