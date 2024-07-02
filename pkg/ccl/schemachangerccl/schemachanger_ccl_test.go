@@ -46,7 +46,7 @@ func (f MultiRegionTestClusterFactory) WithSchemaChangerKnobs(
 // WithMixedVersion implements the sctest.TestServerFactory interface.
 func (f MultiRegionTestClusterFactory) WithMixedVersion() sctest.TestServerFactory {
 	f.server = &server.TestingKnobs{
-		BinaryVersionOverride:          sctest.OldVersionKey.Version(),
+		OverrideClusterVersion:         sctest.OldVersionKey.Version(),
 		DisableAutomaticVersionUpgrade: make(chan struct{}),
 	}
 	return f
@@ -61,6 +61,9 @@ func (f MultiRegionTestClusterFactory) Run(
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		SQLExecutor: &sql.ExecutorTestingKnobs{
 			UseTransactionalDescIDGenerator: true,
+		},
+		Server: &server.TestingKnobs{
+			DisableBootstrapVersionRandomization: true,
 		},
 	}
 	if f.server != nil {

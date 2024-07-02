@@ -105,7 +105,7 @@ func TestValidateTargetClusterVersion(t *testing.T) {
 			Settings: st,
 			Knobs: base.TestingKnobs{
 				Server: &TestingKnobs{
-					BinaryVersionOverride: test.latestVersion,
+					OverrideClusterVersion: test.latestVersion,
 				},
 			},
 		})
@@ -141,8 +141,8 @@ func TestSyncAllEngines(t *testing.T) {
 		StoreSpecs: []base.StoreSpec{storeSpec},
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
-				BinaryVersionOverride: clusterversion.PreviousRelease.Version(),
-				StickyVFSRegistry:     vfsRegistry,
+				OverrideClusterVersion: clusterversion.PreviousRelease.Version(),
+				StickyVFSRegistry:      vfsRegistry,
 			},
 		},
 	}
@@ -258,7 +258,7 @@ func TestBumpClusterVersion(t *testing.T) {
 						// cluster version, so we can actually bump the cluster
 						// version to the binary version. Think a cluster with
 						// active cluster version v20.1, but running v20.2 binaries.
-						BinaryVersionOverride: test.activeClusterVersion,
+						OverrideClusterVersion: test.activeClusterVersion,
 						// We're bumping cluster versions manually ourselves. We
 						// want avoid racing with the auto-upgrade process.
 						DisableAutomaticVersionUpgrade: make(chan struct{}),
@@ -358,7 +358,7 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
 				DisableAutomaticVersionUpgrade: automaticUpgrade,
-				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+				OverrideClusterVersion:         clusterversion.MinSupported.Version(),
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
 				AfterRunPermanentUpgrades: func() {

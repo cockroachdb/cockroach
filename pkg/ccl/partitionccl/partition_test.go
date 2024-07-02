@@ -11,6 +11,7 @@ package partitionccl
 import (
 	"context"
 	gosql "database/sql"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
@@ -93,6 +94,7 @@ func TestDropEnumValueWithConcurrentPartitionedIndexDrop(t *testing.T) {
 
 	var s serverutils.TestServerInterface
 	var sqlDB *gosql.DB
+	var initialized atomic.Bool
 
 	// Use the dropCh to block any DROP INDEX job until the channel is closed.
 	dropCh := make(chan chan struct{})
@@ -101,6 +103,9 @@ func TestDropEnumValueWithConcurrentPartitionedIndexDrop(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeResume: func(jobID jobspb.JobID) error {
+					if !initialized.Load() {
+						return nil
+					}
 					var isDropJob bool
 					if err := sqlDB.QueryRow(`
 SELECT count(*) > 0
@@ -130,6 +135,7 @@ SELECT count(*) > 0
 	})
 	defer s.Stopper().Stop(context.Background())
 	defer cancel()
+	initialized.Store(true)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Set up the table to have an index which is partitioned by the enum value

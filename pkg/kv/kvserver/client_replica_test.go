@@ -4110,7 +4110,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 		testCache = true
 		args.ServerArgs.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          (clusterversion.V24_1_MigrateOldStylePTSRecords - 1).Version(),
+			OverrideClusterVersion:         (clusterversion.V24_1_MigrateOldStylePTSRecords - 1).Version(),
 		}
 	}
 
@@ -4924,7 +4924,7 @@ func TestRangeMigration(t *testing.T) {
 			Settings: cluster.MakeTestingClusterSettingsWithVersions(endV, startV, false),
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          startV,
+					OverrideClusterVersion:         startV,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 			},

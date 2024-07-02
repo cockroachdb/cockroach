@@ -53,9 +53,9 @@ type TestClusterConfig struct {
 	SQLExecUseDisk bool
 	// if set and the -test.short flag is passed, skip this config.
 	SkipShort bool
-	// If not empty, bootstrapVersion controls what version the cluster will be
-	// bootstrapped at.
-	BootstrapVersion clusterversion.Key
+	// If not empty, ClusterVersion controls what version the cluster will be when
+	// the test starts.
+	ClusterVersion clusterversion.Key
 	// DisableUpgrade prevents the cluster from automatically upgrading to the
 	// latest version.
 	DisableUpgrade bool
@@ -486,7 +486,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		Name:                        "local-mixed-23.2",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V23_2,
+		ClusterVersion:              clusterversion.V23_2,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},
@@ -496,7 +496,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		Name:                        "local-mixed-24.1",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V24_1,
+		ClusterVersion:              clusterversion.V24_1,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},
@@ -505,7 +505,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// node. The nodes initially start on v23.2.
 		Name:                     "cockroach-go-testserver-23.2",
 		UseCockroachGoTestserver: true,
-		BootstrapVersion:         clusterversion.V23_2,
+		ClusterVersion:           clusterversion.V23_2,
 		NumNodes:                 3,
 	},
 	{
@@ -513,7 +513,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// node. The nodes initially start on v24.1.
 		Name:                     "cockroach-go-testserver-24.1",
 		UseCockroachGoTestserver: true,
-		BootstrapVersion:         clusterversion.V24_1,
+		ClusterVersion:           clusterversion.V24_1,
 		NumNodes:                 3,
 	},
 }

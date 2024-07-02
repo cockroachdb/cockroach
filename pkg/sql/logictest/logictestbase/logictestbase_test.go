@@ -21,7 +21,7 @@ func TestLogicTestMixedVersionConfigs(t *testing.T) {
 	for _, v := range clusterversion.SupportedPreviousReleases() {
 		t.Run(v.String(), func(t *testing.T) {
 			for _, c := range LogicTestConfigs {
-				if c.DisableUpgrade && c.BootstrapVersion == v {
+				if c.DisableUpgrade && c.ClusterVersion == v {
 					return
 				}
 			}

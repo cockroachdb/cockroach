@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -135,6 +136,11 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 				// investigation is required. Tracked with #76378.
 				DefaultTestTenant: base.TODOTestTenantDisabled,
 				ExternalIODir:     externalDir,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						DisableBootstrapVersionRandomization: true,
+					},
+				},
 			},
 		})
 		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
