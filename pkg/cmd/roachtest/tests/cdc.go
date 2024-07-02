@@ -683,10 +683,9 @@ func (cj *changefeedJob) waitForCompletion() {
 	}
 }
 
-// 1 2 3 4 5 / 2
-// 1 2 [3] [4 5]
 type opt func(ct *cdcTester)
 
+// withNumSinkNodes sets the number of nodes to use for sink nodes. Only Kafka has been tested currently.
 func withNumSinkNodes(num int) opt {
 	return func(ct *cdcTester) {
 		ct.numSinkNodes = num
@@ -1573,6 +1572,38 @@ func registerCDC(r registry.Registry) {
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				kafkaArgs: kafkaFeedArgs{
+					kafkaChaos:    true,
+					validateOrder: true,
+				},
+				opts: map[string]string{"initial_scan": "'no'"},
+			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      5 * time.Minute,
+			})
+			ct.waitForWorkload()
+		},
+	})
+	// An example usage of having multiple sink nodes.
+	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-chaos-multiple-sink-nodes",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(6, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c, withNumSinkNodes(2))
 			defer ct.Close()
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
@@ -3427,15 +3458,16 @@ func setupKafka(
 		// runner, so kafka needs to advertise the external address. Better
 		// would be a binary we could run on one of the roachprod machines.
 		urls := kafka.advertiseURLs(ctx)
+		// Setup multiple kafkas.
 		for i, url := range urls {
-			// hax
 			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "advertised.listeners=PLAINTEXT://`+url+`" >> `+
 				filepath.Join(kafka.configDir(), "server.properties"))
 			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "broker.id=`+strconv.Itoa(i)+`" >> `+
 				filepath.Join(kafka.configDir(), "server.properties"))
+			// Default num partitions = num nodes.
 			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "num.partitions=`+strconv.Itoa(len(urls))+`" >> `+
 				filepath.Join(kafka.configDir(), "server.properties"))
-			// use zookeeper on first kafka node
+			// Use the zookeeper on first kafka node, and ignore the rest of them (if any).
 			if i > 0 {
 				zkUrl := strings.Replace(urls[0], ":9092", ":2181", 1)
 				c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "zookeeper.connect=`+zkUrl+`" >> `+
