@@ -34,6 +34,7 @@ go_library(
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
         "//pkg/cmd/roachtest/tests",
+        "//pkg/cmd/roachtest/testselector",
         "//pkg/internal/team",
         "//pkg/roachprod",
         "//pkg/roachprod/cloud",
