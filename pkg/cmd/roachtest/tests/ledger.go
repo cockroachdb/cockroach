@@ -28,24 +28,25 @@ func registerLedger(r registry.Registry) {
 	// https://github.com/cockroachdb/cockroach/issues/66184
 	const azs = "us-central1-f,us-central1-b,us-central1-c"
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
-		Owner:            registry.OwnerKV,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.Geo(), spec.GCEZones(azs)),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
+		Name:                       fmt.Sprintf("ledger/nodes=%d/multi-az", nodes),
+		Owner:                      registry.OwnerKV,
+		Benchmark:                  true,
+		Cluster:                    r.MakeClusterSpec(nodes+1, spec.CPU(16), spec.WorkloadNode(), spec.WorkloadNodeCPU(16), spec.Geo(), spec.GCEZones(azs)),
+		CompatibleClouds:           registry.OnlyGCE,
+		Suites:                     registry.Suites(registry.Nightly),
+		RequiresDeprecatedWorkload: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			roachNodes := c.Range(1, nodes)
 			gatewayNodes := c.Range(1, nodes/3)
-			loadNode := c.Node(nodes + 1)
 
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
+			// The ledger workload is not available in the cockroach binary,
+			// so we must use the deprecated workload.
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
 
 			// Don't start a scheduled backup on this perf sensitive roachtest that reports to roachperf.
-			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), roachNodes)
+			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, roachNodes)
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*32))
 				duration := " --duration=" + ifLocal(c, "10s", "10m")
@@ -53,7 +54,7 @@ func registerLedger(r registry.Registry) {
 				// See https://github.com/cockroachdb/cockroach/issues/94062 for the --data-loader.
 				cmd := fmt.Sprintf("./workload run ledger --init --data-loader=INSERT --histograms="+t.PerfArtifactsDir()+"/stats.json"+
 					concurrency+duration+" {pgurl%s}", gatewayNodes)
-				c.Run(ctx, option.WithNodes(loadNode), cmd)
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil
 			})
 			m.Wait()

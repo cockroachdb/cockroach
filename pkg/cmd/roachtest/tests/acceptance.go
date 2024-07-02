@@ -24,17 +24,18 @@ import (
 
 func registerAcceptance(r registry.Registry) {
 	testCases := map[registry.Owner][]struct {
-		name               string
-		fn                 func(ctx context.Context, t test.Test, c cluster.Cluster)
-		skip               string
-		numNodes           int
-		nodeRegions        []string
-		timeout            time.Duration
-		encryptionSupport  registry.EncryptionSupport
-		defaultLeases      bool
-		requiresLicense    bool
-		nativeLibs         []string
-		incompatibleClouds []string // Already assumes AWS is incompatible.
+		name                       string
+		fn                         func(ctx context.Context, t test.Test, c cluster.Cluster)
+		skip                       string
+		numNodes                   int
+		nodeRegions                []string
+		timeout                    time.Duration
+		encryptionSupport          registry.EncryptionSupport
+		defaultLeases              bool
+		requiresLicense            bool
+		nativeLibs                 []string
+		incompatibleClouds         []string // Already assumes AWS is incompatible.
+		requiresDeprecatedWorkload bool
 	}{
 		registry.OwnerReleaseEng: {},
 		registry.OwnerKV: {
@@ -65,11 +66,12 @@ func registerAcceptance(r registry.Registry) {
 		},
 		registry.OwnerTestEng: {
 			{
-				name:          "version-upgrade",
-				fn:            runVersionUpgrade,
-				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
-				defaultLeases: true,
-				nativeLibs:    registry.LibGEOS,
+				name:                       "version-upgrade",
+				fn:                         runVersionUpgrade,
+				timeout:                    2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
+				defaultLeases:              true,
+				nativeLibs:                 registry.LibGEOS,
+				requiresDeprecatedWorkload: true,
 			},
 		},
 		registry.OwnerDisasterRecovery: {
@@ -130,15 +132,16 @@ func registerAcceptance(r registry.Registry) {
 			}
 
 			testSpec := registry.TestSpec{
-				Name:              "acceptance/" + tc.name,
-				Owner:             owner,
-				Cluster:           r.MakeClusterSpec(numNodes, extraOptions...),
-				Skip:              tc.skip,
-				EncryptionSupport: tc.encryptionSupport,
-				Timeout:           10 * time.Minute,
-				CompatibleClouds:  registry.AllExceptAWS.Remove(tc.incompatibleClouds...),
-				Suites:            registry.Suites(registry.Nightly, registry.Quick, registry.Acceptance),
-				RequiresLicense:   tc.requiresLicense,
+				Name:                       "acceptance/" + tc.name,
+				Owner:                      owner,
+				Cluster:                    r.MakeClusterSpec(numNodes, extraOptions...),
+				Skip:                       tc.skip,
+				EncryptionSupport:          tc.encryptionSupport,
+				Timeout:                    10 * time.Minute,
+				CompatibleClouds:           registry.AllExceptAWS.Remove(tc.incompatibleClouds...),
+				Suites:                     registry.Suites(registry.Nightly, registry.Quick, registry.Acceptance),
+				RequiresLicense:            tc.requiresLicense,
+				RequiresDeprecatedWorkload: tc.requiresDeprecatedWorkload,
 			}
 
 			if tc.timeout != 0 {

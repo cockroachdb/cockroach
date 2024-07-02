@@ -47,7 +47,6 @@ func registerCopy(r registry.Registry) {
 		const rowOverheadEstimate = 160
 		const rowEstimate = rowOverheadEstimate + payload
 
-		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 		// We run this without metamorphic constants as kv-batch-size = 1 makes
 		// this test take far too long to complete.
 		// TODO(DarrylWong): Use a metamorphic constants exclusion list instead.
@@ -77,14 +76,14 @@ func registerCopy(r registry.Registry) {
 
 			t.Status("importing Bank fixture")
 			c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf(
-				"./workload fixtures load bank --rows=%d --payload-bytes=%d --seed %d {pgurl:1}",
+				"./cockroach workload fixtures load bank --rows=%d --payload-bytes=%d --seed %d {pgurl:1}",
 				rows, payload, fixturesRandomSeed))
 			if _, err := db.Exec("ALTER TABLE bank.bank RENAME TO bank.bank_orig"); err != nil {
 				t.Fatalf("failed to rename table: %v", err)
 			}
 
 			t.Status("create copy of Bank schema")
-			c.Run(ctx, option.WithNodes(c.Node(1)), "./workload init bank --rows=0 --ranges=0 {pgurl:1}")
+			c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach workload init bank --rows=0 --ranges=0 {pgurl:1}")
 
 			rangeCount := func() int {
 				var count int
