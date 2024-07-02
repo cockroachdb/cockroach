@@ -77,12 +77,15 @@ CREATE TABLE river (
 )
 LOCALITY REGIONAL BY ROW AS region
 
+statement ok
+GRANT INSERT ON TABLE university TO testuser
+
 # Test non-conflicting INSERT.
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement ok
 INSERT INTO university (name, mascot, postal_code) VALUES ('Western Oregon', 'wolves', '97361')
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement ok
 INSERT INTO volcano
 VALUES ('Mount Hood', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.695833 45.373611)', 'ca-central-1')
 
@@ -94,10 +97,10 @@ INSERT INTO river VALUES ('ap-southeast-2', 'Skykomish', 'Snohomish')
 
 # Test conflicting INSERT.
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "university_mascot_key"
 INSERT INTO university (name, mascot, postal_code) VALUES ('Thompson Rivers', 'wolves', 'V2C 0C8')
 
-statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "volcano_origin_key"
 INSERT INTO volcano VALUES
 ('Mount Adams', 'Fought over Loowit and was transformed by Saghalie.', 'POINT(-121.490895 46.202412)', 'ap-southeast-2')
 
@@ -117,6 +120,7 @@ ON CONFLICT (mascot) DO NOTHING
 query TTT
 SELECT name, mascot, postal_code FROM university ORDER BY name
 ----
+Western Oregon  wolves  97361
 
 statement error pgcode 0A000 explicit unique checks are not yet supported under read committed isolation
 INSERT INTO volcano VALUES
@@ -127,6 +131,7 @@ ON CONFLICT (origin) DO NOTHING
 query TTT
 SELECT name, origin, location FROM volcano ORDER BY name
 ----
+Mount Hood  Fought over Loowit and was transformed by Saghalie.  0101000020E6100000909E2287886C5EC08236397CD2AF4640
 
 statement ok
 INSERT INTO city VALUES ('Vancouver', 'The Big Smoke', 'BC'), ('Salem', 'Cherry City', 'OR')
@@ -197,3 +202,35 @@ ON CONFLICT (name, state_or_province) DO UPDATE SET name = 'Vancouver', nickname
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "river_pkey"\nDETAIL: Key \(region, name\)=\('ap-southeast-2', 'Skykomish'\) already exists\.
 INSERT INTO river VALUES ('us-east-1', 'Squamish', 'Salish Sea'), ('ca-central-1', 'Rogue', 'Pacific Ocean')
 ON CONFLICT (region, outlet) DO UPDATE SET region = 'ap-southeast-2', name = 'Skykomish', outlet = 'Puget Sound'
+
+# Test predicate locks by writing into multiple regions concurrently
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO university VALUES ('CMU', 'Scottie Dog', '15213');
+
+user testuser newsession
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+USE multi_region_test_db
+
+statement async conflict error pgcode 23505 pq: duplicate key value violates unique constraint "university_pkey"
+INSERT INTO university VALUES ('CMU', 'Chippewas', '97858');
+
+user root
+
+statement ok
+COMMIT
+
+awaitstatement conflict
+
+query TTT
+SELECT name, mascot, postal_code FROM university ORDER BY name
+----
+CMU             Scottie Dog  15213
+Western Oregon  wolves       97361
