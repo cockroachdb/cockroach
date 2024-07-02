@@ -260,6 +260,10 @@ const (
 	// `next_rates` consumption rate columns to the system.tenant_usage table.
 	V24_2_TenantRates
 
+	// V24_2_LeaseMinTimestamp is the earlier version which supports the lease
+	// minimum timestamp field.
+	V24_2_LeaseMinTimestamp
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -321,8 +325,8 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V24_2_StmtDiagRedacted:   {Major: 24, Minor: 1, Internal: 4},
 	V24_2_TenantSystemTables: {Major: 24, Minor: 1, Internal: 6},
-
-	V24_2_TenantRates: {Major: 24, Minor: 1, Internal: 8},
+	V24_2_TenantRates:        {Major: 24, Minor: 1, Internal: 8},
+	V24_2_LeaseMinTimestamp:  {Major: 24, Minor: 1, Internal: 10},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
