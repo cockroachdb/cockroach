@@ -48,6 +48,7 @@ func assertValidatorFailures(t *testing.T, v Validator, expected ...string) {
 	}
 }
 
+// TODO(yang): Update this test.
 func TestOrderValidator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const ignored = `ignored`
