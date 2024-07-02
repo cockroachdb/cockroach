@@ -48,6 +48,9 @@ func TestStatus(t *testing.T) {
 		Epoch:      5,
 		ProposedTS: expLease.ProposedTS,
 	}
+	epoLeaseMinExp1, epoLeaseMinExp2 := epoLease, epoLease
+	epoLeaseMinExp1.MinExpiration = ts[3].ToTimestamp()
+	epoLeaseMinExp2.MinExpiration = ts[5].ToTimestamp()
 
 	oldLiveness := livenesspb.Liveness{
 		NodeID: 1, Epoch: 4, Expiration: hlc.LegacyTimestamp{WallTime: ts[1].WallTime},
@@ -87,6 +90,9 @@ func TestStatus(t *testing.T) {
 		{lease: epoLease, now: ts[5], liveness: curLiveness, want: kvserverpb.LeaseState_EXPIRED},
 		{lease: epoLease, now: ts[4], liveness: curLiveness, want: kvserverpb.LeaseState_EXPIRED},
 		{lease: epoLease, now: ts[2], liveness: expLiveness, want: kvserverpb.LeaseState_EXPIRED},
+		{lease: epoLeaseMinExp1, now: ts[5], liveness: curLiveness, want: kvserverpb.LeaseState_EXPIRED},
+		{lease: epoLeaseMinExp1, now: ts[4], liveness: curLiveness, want: kvserverpb.LeaseState_EXPIRED},
+		{lease: epoLeaseMinExp2, now: ts[5], liveness: curLiveness, want: kvserverpb.LeaseState_EXPIRED},
 		// Epoch-based lease, PROSCRIBED.
 		{lease: epoLease, now: ts[3], liveness: curLiveness, minProposedTS: ts[1],
 			want: kvserverpb.LeaseState_PROSCRIBED},
@@ -97,7 +103,9 @@ func TestStatus(t *testing.T) {
 			want: kvserverpb.LeaseState_UNUSABLE},
 		// Epoch-based lease, VALID.
 		{lease: epoLease, now: ts[2], liveness: curLiveness, want: kvserverpb.LeaseState_VALID},
-
+		{lease: epoLeaseMinExp1, now: ts[2], liveness: expLiveness, want: kvserverpb.LeaseState_VALID},
+		{lease: epoLeaseMinExp2, now: ts[2], liveness: expLiveness, want: kvserverpb.LeaseState_VALID},
+		{lease: epoLeaseMinExp2, now: ts[4], liveness: curLiveness, want: kvserverpb.LeaseState_VALID},
 		// Epoch-based lease, ERROR.
 		{lease: epoLease, now: ts[2], want: kvserverpb.LeaseState_ERROR,
 			wantErr: "liveness record not found"},
