@@ -293,11 +293,12 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 	ctx := r.AnnotateCtx(context.Background())
 	rg, err := raft.NewRawNode(newRaftConfig(
 		ctx,
-		raft.Storage((*replicaRaftStorage)(r)),
+		(*replicaRaftStorage)(r),
 		uint64(r.replicaID),
 		r.mu.state.RaftAppliedIndex,
 		r.store.cfg,
 		&raftLogger{ctx: ctx},
+		(*replicaRLockedStoreLiveness)(r),
 	))
 	if err != nil {
 		return err
