@@ -227,7 +227,6 @@ func TestScanPlaceholder(t *testing.T) {
 		expected string
 	}{
 		{`$1`, "1"},
-		{`$1a`, "1"},
 		{`$123`, "123"},
 	}
 	for _, d := range testData {
@@ -354,6 +353,7 @@ func TestScanError(t *testing.T) {
 		{`X'beef\x41\x41'`, "invalid hexadecimal bytes literal"},
 		{`x'a'`, "invalid hexadecimal bytes literal"},
 		{`$0`, "placeholder index must be between 1 and 65536"},
+		{`$1foo`, "trailing junk after parameter at or near \"\\$1f\""},
 		{`$9223372036854775809`, "placeholder index must be between 1 and 65536"},
 		{`B'123'`, `"2" is not a valid binary digit`},
 		{`123foo`, "trailing junk after numeric literal at or near \"123f\""},
