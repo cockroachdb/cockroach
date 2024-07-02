@@ -55,11 +55,7 @@ func TestAlterTenantCompleteToTime(t *testing.T) {
 
 	var cutoverTime time.Time
 	c.DestSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-
-	var cutoverStr string
-	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
-		args.DestTenantName, cutoverTime).Scan(&cutoverStr)
-	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	cutoverOutput := c.Cutover(ctx, producerJobID, ingestionJobID, cutoverTime, false)
 	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 }
@@ -84,9 +80,7 @@ func TestAlterTenantCompleteToLatest(t *testing.T) {
 	c.WaitUntilReplicatedTime(targetReplicatedTime, jobspb.JobID(ingestionJobID))
 
 	var emptyCutoverTime time.Time
-	cutoverStr := c.Cutover(ctx, producerJobID, ingestionJobID, emptyCutoverTime, false)
-
-	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	cutoverOutput := c.Cutover(ctx, producerJobID, ingestionJobID, emptyCutoverTime, false)
 	require.GreaterOrEqual(t, cutoverOutput.GoTime(), targetReplicatedTime.GoTime())
 	require.LessOrEqual(t, cutoverOutput.GoTime(), c.SrcCluster.Server(0).Clock().Now().GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
