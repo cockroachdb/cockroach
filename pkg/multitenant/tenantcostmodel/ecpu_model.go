@@ -65,6 +65,17 @@ type EstimatedCPUModel struct {
 		PayloadSize []float64
 		CPUPerByte  []EstimatedCPU
 	}
+	// BackgroundCPU is the amount of fixed CPU overhead for a cluster, due to
+	// the cost of heartbeats, background GC, storage compaction, etc. This
+	// overhead is smoothly amortized across N vCPUs of usage by the cluster.
+	// For example, say fixed overhead of 1/2 vCPU is amortized across the first
+	// 5 vCPUs of usage. Therefore, estimated usage of 1 vCPU would be increased
+	// to 1.1, usage of 4 vCPUs would be increased to 4.4, and usage of 8 vCPUs
+	// would be increased to 8.5.
+	BackgroundCPU struct {
+		Amount       EstimatedCPU
+		Amortization float64
+	}
 }
 
 // DefaultEstimatedCPUModel is the default model that is used if the
@@ -115,6 +126,13 @@ var DefaultEstimatedCPUModel = EstimatedCPUModel{
 			1.0 / 14 / 1024 / 1024,
 			1.0 / 18.5 / 1024 / 1024,
 		},
+	},
+	BackgroundCPU: struct {
+		Amount       EstimatedCPU
+		Amortization float64
+	}{
+		Amount:       0.65,
+		Amortization: 6,
 	},
 }
 

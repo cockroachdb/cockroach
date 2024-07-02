@@ -3505,6 +3505,7 @@ message TenantConsumption {
   uint64 external_io_ingress_bytes = 9 [(gogoproto.customname) = "ExternalIOIngressBytes"];
   uint64 external_io_egress_bytes = 10 [(gogoproto.customname) = "ExternalIOEgressBytes"];
   double cross_region_network_r_u = 13;
+  double estimated_cpu_seconds = 14 [(gogoproto.customname) = "EstimatedCPUSeconds"];
   // Note: if any fields are changed, the Sub and Add methods must be updated.
 }
 
@@ -3512,6 +3513,7 @@ message TenantConsumption {
 // are used in the cost model.
 message TenantConsumptionRates {
   double write_batch_rate = 1;
+  double estimated_cpu_rate = 2 [(gogoproto.customname) = "EstimatedCPURate"];
 }
 
 // TokenBucketRequest is used by tenants to obtain Request Units and report
