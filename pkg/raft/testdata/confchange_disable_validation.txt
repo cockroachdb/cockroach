@@ -10,13 +10,13 @@
 add-nodes 1 voters=(1) index=2 max-committed-size-per-ready=1 disable-conf-change-validation=true
 ----
 INFO 1 switched to configuration voters=(1)
-INFO 1 became follower at term 0
-INFO newRaft 1 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
+INFO 1 became follower at term 1
+INFO newRaft 1 [peers: [1], term: 1, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
 
 campaign 1
 ----
-INFO 1 is starting a new election at term 0
-INFO 1 became candidate at term 1
+INFO 1 is starting a new election at term 1
+INFO 1 became candidate at term 2
 
 stabilize log-level=none
 ----
@@ -38,23 +38,23 @@ stabilize 1
 > 1 handling Ready
   Ready MustSync=true:
   Entries:
-  1/4 EntryNormal "foo"
-  1/5 EntryConfChangeV2 l2 l3
+  2/4 EntryNormal "foo"
+  2/5 EntryConfChangeV2 l2 l3
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:5
+  HardState Term:2 Vote:1 Commit:5
   CommittedEntries:
-  1/4 EntryNormal "foo"
+  2/4 EntryNormal "foo"
 > 1 handling Ready
   Ready MustSync=false:
   CommittedEntries:
-  1/5 EntryConfChangeV2 l2 l3
+  2/5 EntryConfChangeV2 l2 l3
   INFO 1 switched to configuration voters=(1)&&(1) learners=(2 3)
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
-  1->2 MsgApp Term:1 Log:1/4 Commit:5 Entries:[1/5 EntryConfChangeV2 l2 l3]
-  1->3 MsgApp Term:1 Log:1/4 Commit:5 Entries:[1/5 EntryConfChangeV2 l2 l3]
+  1->2 MsgApp Term:2 Log:2/4 Commit:5 Entries:[2/5 EntryConfChangeV2 l2 l3]
+  1->3 MsgApp Term:2 Log:2/4 Commit:5 Entries:[2/5 EntryConfChangeV2 l2 l3]
 
 # Propose new config change. Note how it isn't rejected,
 # which is due to DisableConfChangeValidation=true.
@@ -68,7 +68,7 @@ process-ready 1
 ----
 Ready MustSync=true:
 Entries:
-1/6 EntryConfChangeV2 l4
+2/6 EntryConfChangeV2 l4
 
 # If we process-ready on node 1 now, the second config change will come up for
 # application, and the node will panic with "config is already joint". The state

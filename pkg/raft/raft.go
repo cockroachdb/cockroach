@@ -33,6 +33,7 @@ import (
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 )
 
 const (
@@ -422,6 +423,12 @@ func newRaft(c *Config) *raft {
 		panic(err) // TODO(bdarnell)
 	}
 
+	// Check term correctness invariant.
+	lastID := raftlog.lastEntryID()
+	if hs.Term < lastID.term {
+		c.Logger.Panicf("%x: Storage: HardState.Term < Term(LastIndex): %d < %d", c.ID, hs.Term, lastID.term)
+	}
+
 	r := &raft{
 		id:                          c.ID,
 		lead:                        None,
@@ -440,7 +447,6 @@ func newRaft(c *Config) *raft {
 		stepDownOnRemoval:           c.StepDownOnRemoval,
 		storeLiveness:               c.StoreLiveness,
 	}
-	lastID := r.raftLog.lastEntryID()
 
 	// To initialize accTerm correctly, we make sure its invariant is true: the
 	// log is a prefix of the accTerm leader's log. This can be achieved by
@@ -484,6 +490,16 @@ func newRaft(c *Config) *raft {
 	r.logger.Infof("newRaft %x [peers: [%s], term: %d, commit: %d, applied: %d, lastindex: %d, lastterm: %d]",
 		r.id, strings.Join(nodesStrs, ","), r.Term, r.raftLog.committed, r.raftLog.applied, lastID.index, lastID.term)
 	return r
+}
+
+// checkInvariants checks the raft node invariants. For testing.
+func (r *raft) checkInvariants() error {
+	last := r.raftLog.lastEntryID()
+	if r.accTerm < last.term || r.Term < r.accTerm {
+		return fmt.Errorf("lastTerm, accTerm, Term not ordered: %d, %d, %d", last.term, r.accTerm, r.Term)
+	}
+	// TODO(pav-kv): add more invariants.
+	return nil
 }
 
 func (r *raft) hasLeader() bool { return r.lead != None }
@@ -1044,6 +1060,14 @@ func (r *raft) poll(
 }
 
 func (r *raft) Step(m pb.Message) error {
+	if buildutil.CrdbTestBuild {
+		defer func() {
+			if err := r.checkInvariants(); err != nil {
+				r.logger.Panicf("%x: invariant check failed: %v", r.id, err)
+			}
+		}()
+	}
+
 	// Handle the message term, which may result in our stepping down to a follower.
 	switch {
 	case m.Term == 0:

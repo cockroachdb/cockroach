@@ -26,10 +26,10 @@ ok
 # If 3 attempts to campaign, 2 rejects it because it has a leader.
 campaign 3
 ----
-INFO 3 is starting a new election at term 1
-INFO 3 became pre-candidate at term 1
-INFO 3 [logterm: 1, index: 11] sent MsgPreVote request to 1 at term 1
-INFO 3 [logterm: 1, index: 11] sent MsgPreVote request to 2 at term 1
+INFO 3 is starting a new election at term 2
+INFO 3 became pre-candidate at term 2
+INFO 3 [logterm: 2, index: 11] sent MsgPreVote request to 1 at term 2
+INFO 3 [logterm: 2, index: 11] sent MsgPreVote request to 2 at term 2
 
 stabilize 3
 ----
@@ -37,17 +37,17 @@ stabilize 3
   Ready MustSync=false:
   Lead:0 State:StatePreCandidate
   Messages:
-  3->1 MsgPreVote Term:2 Log:1/11
-  3->2 MsgPreVote Term:2 Log:1/11
-  INFO 3 received MsgPreVoteResp from 3 at term 1
+  3->1 MsgPreVote Term:3 Log:2/11
+  3->2 MsgPreVote Term:3 Log:2/11
+  INFO 3 received MsgPreVoteResp from 3 at term 2
   INFO 3 has received 1 MsgPreVoteResp votes and 0 vote rejections
 
 deliver-msgs 1 2
 ----
-3->1 MsgPreVote Term:2 Log:1/11
-INFO 1 [logterm: 1, index: 11, vote: 1] ignored MsgPreVote from 3 [logterm: 1, index: 11] at term 1: lease is not expired (remaining ticks: 3)
-3->2 MsgPreVote Term:2 Log:1/11
-INFO 2 [logterm: 1, index: 11, vote: 1] ignored MsgPreVote from 3 [logterm: 1, index: 11] at term 1: lease is not expired (remaining ticks: 3)
+3->1 MsgPreVote Term:3 Log:2/11
+INFO 1 [logterm: 2, index: 11, vote: 1] ignored MsgPreVote from 3 [logterm: 2, index: 11] at term 2: lease is not expired (remaining ticks: 3)
+3->2 MsgPreVote Term:3 Log:2/11
+INFO 2 [logterm: 2, index: 11, vote: 1] ignored MsgPreVote from 3 [logterm: 2, index: 11] at term 2: lease is not expired (remaining ticks: 3)
 
 # Make 1 assert leadership over 3 again.
 tick-heartbeat 1
@@ -59,50 +59,50 @@ stabilize
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
-  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
-  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->2 MsgHeartbeat Term:2 Log:0/0 Commit:11
+  1->3 MsgHeartbeat Term:2 Log:0/0 Commit:11
 > 2 receiving messages
-  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->2 MsgHeartbeat Term:2 Log:0/0 Commit:11
 > 3 receiving messages
-  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
-  INFO 3 became follower at term 1
+  1->3 MsgHeartbeat Term:2 Log:0/0 Commit:11
+  INFO 3 became follower at term 2
 > 2 handling Ready
   Ready MustSync=false:
   Messages:
-  2->1 MsgHeartbeatResp Term:1 Log:0/0
+  2->1 MsgHeartbeatResp Term:2 Log:0/0
 > 3 handling Ready
   Ready MustSync=false:
   Lead:1 State:StateFollower
   Messages:
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
+  3->1 MsgHeartbeatResp Term:2 Log:0/0
 > 1 receiving messages
-  2->1 MsgHeartbeatResp Term:1 Log:0/0
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
+  2->1 MsgHeartbeatResp Term:2 Log:0/0
+  3->1 MsgHeartbeatResp Term:2 Log:0/0
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1
-2: StateFollower (Voter) Term:1 Lead:1
-3: StateFollower (Voter) Term:1 Lead:1
+1: StateLeader (Voter) Term:2 Lead:1
+2: StateFollower (Voter) Term:2 Lead:1
+3: StateFollower (Voter) Term:2 Lead:1
 
 # If 2 forgets the leader, then 3 can obtain prevotes and hold an election
 # despite 2 having heard from the leader recently.
 forget-leader 2
 ----
-INFO 2 forgetting leader 1 at term 1
+INFO 2 forgetting leader 1 at term 2
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1
-2: StateFollower (Voter) Term:1 Lead:0
-3: StateFollower (Voter) Term:1 Lead:1
+1: StateLeader (Voter) Term:2 Lead:1
+2: StateFollower (Voter) Term:2 Lead:0
+3: StateFollower (Voter) Term:2 Lead:1
 
 campaign 3
 ----
-INFO 3 is starting a new election at term 1
-INFO 3 became pre-candidate at term 1
-INFO 3 [logterm: 1, index: 11] sent MsgPreVote request to 1 at term 1
-INFO 3 [logterm: 1, index: 11] sent MsgPreVote request to 2 at term 1
+INFO 3 is starting a new election at term 2
+INFO 3 became pre-candidate at term 2
+INFO 3 [logterm: 2, index: 11] sent MsgPreVote request to 1 at term 2
+INFO 3 [logterm: 2, index: 11] sent MsgPreVote request to 2 at term 2
 
 stabilize 3
 ----
@@ -110,9 +110,9 @@ stabilize 3
   Ready MustSync=false:
   Lead:0 State:StatePreCandidate
   Messages:
-  3->1 MsgPreVote Term:2 Log:1/11
-  3->2 MsgPreVote Term:2 Log:1/11
-  INFO 3 received MsgPreVoteResp from 3 at term 1
+  3->1 MsgPreVote Term:3 Log:2/11
+  3->2 MsgPreVote Term:3 Log:2/11
+  INFO 3 received MsgPreVoteResp from 3 at term 2
   INFO 3 has received 1 MsgPreVoteResp votes and 0 vote rejections
 
 stabilize 2
@@ -121,30 +121,30 @@ stabilize 2
   Ready MustSync=false:
   Lead:0 State:StateFollower
 > 2 receiving messages
-  3->2 MsgPreVote Term:2 Log:1/11
-  INFO 2 [logterm: 1, index: 11, vote: 1] cast MsgPreVote for 3 [logterm: 1, index: 11] at term 1
+  3->2 MsgPreVote Term:3 Log:2/11
+  INFO 2 [logterm: 2, index: 11, vote: 1] cast MsgPreVote for 3 [logterm: 2, index: 11] at term 2
 > 2 handling Ready
   Ready MustSync=false:
   Messages:
-  2->3 MsgPreVoteResp Term:2 Log:0/0
+  2->3 MsgPreVoteResp Term:3 Log:0/0
 
 stabilize 3
 ----
 > 3 receiving messages
-  2->3 MsgPreVoteResp Term:2 Log:0/0
-  INFO 3 received MsgPreVoteResp from 2 at term 1
+  2->3 MsgPreVoteResp Term:3 Log:0/0
+  INFO 3 received MsgPreVoteResp from 2 at term 2
   INFO 3 has received 2 MsgPreVoteResp votes and 0 vote rejections
-  INFO 3 became candidate at term 2
-  INFO 3 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
-  INFO 3 [logterm: 1, index: 11] sent MsgVote request to 2 at term 2
+  INFO 3 became candidate at term 3
+  INFO 3 [logterm: 2, index: 11] sent MsgVote request to 1 at term 3
+  INFO 3 [logterm: 2, index: 11] sent MsgVote request to 2 at term 3
 > 3 handling Ready
   Ready MustSync=true:
   Lead:0 State:StateCandidate
-  HardState Term:2 Vote:3 Commit:11
+  HardState Term:3 Vote:3 Commit:11
   Messages:
-  3->1 MsgVote Term:2 Log:1/11
-  3->2 MsgVote Term:2 Log:1/11
-  INFO 3 received MsgVoteResp from 3 at term 2
+  3->1 MsgVote Term:3 Log:2/11
+  3->2 MsgVote Term:3 Log:2/11
+  INFO 3 received MsgVoteResp from 3 at term 3
   INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
 
 stabilize log-level=none
@@ -153,9 +153,9 @@ ok
 
 raft-state
 ----
-1: StateFollower (Voter) Term:2 Lead:3
-2: StateFollower (Voter) Term:2 Lead:3
-3: StateLeader (Voter) Term:2 Lead:3
+1: StateFollower (Voter) Term:3 Lead:3
+2: StateFollower (Voter) Term:3 Lead:3
+3: StateLeader (Voter) Term:3 Lead:3
 
 # Test that forgetting the leader still won't grant prevotes if the candidate
 # isn't up-to-date. We first replicate a proposal on 3 and 2.
@@ -168,47 +168,47 @@ stabilize 3
 > 3 handling Ready
   Ready MustSync=true:
   Entries:
-  2/13 EntryNormal "prop_1"
+  3/13 EntryNormal "prop_1"
   Messages:
-  3->1 MsgApp Term:2 Log:2/12 Commit:12 Entries:[2/13 EntryNormal "prop_1"]
-  3->2 MsgApp Term:2 Log:2/12 Commit:12 Entries:[2/13 EntryNormal "prop_1"]
+  3->1 MsgApp Term:3 Log:3/12 Commit:12 Entries:[3/13 EntryNormal "prop_1"]
+  3->2 MsgApp Term:3 Log:3/12 Commit:12 Entries:[3/13 EntryNormal "prop_1"]
 
 stabilize 2
 ----
 > 2 receiving messages
-  3->2 MsgApp Term:2 Log:2/12 Commit:12 Entries:[2/13 EntryNormal "prop_1"]
+  3->2 MsgApp Term:3 Log:3/12 Commit:12 Entries:[3/13 EntryNormal "prop_1"]
 > 2 handling Ready
   Ready MustSync=true:
   Entries:
-  2/13 EntryNormal "prop_1"
+  3/13 EntryNormal "prop_1"
   Messages:
-  2->3 MsgAppResp Term:2 Log:0/13
+  2->3 MsgAppResp Term:3 Log:0/13
 
 forget-leader 2
 ----
-INFO 2 forgetting leader 3 at term 2
+INFO 2 forgetting leader 3 at term 3
 
 # 1 is now behind on its log. It tries to campaign, but fails.
 raft-log 1
 ----
-1/11 EntryNormal ""
-2/12 EntryNormal ""
+2/11 EntryNormal ""
+3/12 EntryNormal ""
 
 campaign 1
 ----
-INFO 1 is starting a new election at term 2
-INFO 1 became pre-candidate at term 2
-INFO 1 [logterm: 2, index: 12] sent MsgPreVote request to 2 at term 2
-INFO 1 [logterm: 2, index: 12] sent MsgPreVote request to 3 at term 2
+INFO 1 is starting a new election at term 3
+INFO 1 became pre-candidate at term 3
+INFO 1 [logterm: 3, index: 12] sent MsgPreVote request to 2 at term 3
+INFO 1 [logterm: 3, index: 12] sent MsgPreVote request to 3 at term 3
 
 process-ready 1
 ----
 Ready MustSync=false:
 Lead:0 State:StatePreCandidate
 Messages:
-1->2 MsgPreVote Term:3 Log:2/12
-1->3 MsgPreVote Term:3 Log:2/12
-INFO 1 received MsgPreVoteResp from 1 at term 2
+1->2 MsgPreVote Term:4 Log:3/12
+1->3 MsgPreVote Term:4 Log:3/12
+INFO 1 received MsgPreVoteResp from 1 at term 3
 INFO 1 has received 1 MsgPreVoteResp votes and 0 vote rejections
 
 stabilize 2
@@ -217,12 +217,12 @@ stabilize 2
   Ready MustSync=false:
   Lead:0 State:StateFollower
 > 2 receiving messages
-  1->2 MsgPreVote Term:3 Log:2/12
-  INFO 2 [logterm: 2, index: 13, vote: 3] rejected MsgPreVote from 1 [logterm: 2, index: 12] at term 2
+  1->2 MsgPreVote Term:4 Log:3/12
+  INFO 2 [logterm: 3, index: 13, vote: 3] rejected MsgPreVote from 1 [logterm: 3, index: 12] at term 3
 > 2 handling Ready
   Ready MustSync=false:
   Messages:
-  2->1 MsgPreVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
+  2->1 MsgPreVoteResp Term:3 Log:0/0 Rejected (Hint: 0)
 
 stabilize log-level=none
 ----
@@ -230,6 +230,6 @@ ok
 
 raft-state
 ----
-1: StateFollower (Voter) Term:2 Lead:3
-2: StateFollower (Voter) Term:2 Lead:3
-3: StateLeader (Voter) Term:2 Lead:3
+1: StateFollower (Voter) Term:3 Lead:3
+2: StateFollower (Voter) Term:3 Lead:3
+3: StateLeader (Voter) Term:3 Lead:3
