@@ -356,7 +356,17 @@ func (p *planner) CheckGrantOptionsForUser(
 	if isAdmin {
 		return true, nil
 	}
-	return p.checkRolePredicate(ctx, user, func(role username.SQLUsername) (bool, error) {
+
+	// Normally, we check the user and its ancestors. But if
+	// enableGrantOptionInheritance is false, then we only check the user.
+	runPredicateFn := p.checkRolePredicate
+	if !enableGrantOptionInheritance.Get(&p.ExecCfg().Settings.SV) {
+		runPredicateFn = func(ctx context.Context, user username.SQLUsername, predicate func(role username.SQLUsername) (bool, error)) (bool, error) {
+			return predicate(user)
+		}
+	}
+
+	return runPredicateFn(ctx, user, func(role username.SQLUsername) (bool, error) {
 		isOwner, err := isOwner(ctx, p, privilegeObject, role)
 		return privs.CheckGrantOptions(role, privList) || isOwner, err
 	})
@@ -681,6 +691,14 @@ var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
 	"determines whether to populate the role membership cache with a single scan",
 	defaultSingleQueryForRoleMembershipCache,
 	settings.WithPublic)
+
+var enableGrantOptionInheritance = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.grant_option_inheritance.enabled",
+	"determines whether the GRANT OPTION for privileges is inherited through role membership",
+	true,
+	settings.WithPublic,
+)
 
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
 func resolveMemberOfWithAdminOption(
