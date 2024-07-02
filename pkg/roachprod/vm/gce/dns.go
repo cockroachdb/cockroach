@@ -88,19 +88,16 @@ type dnsProvider struct {
 		mu      syncutil.Mutex
 		records map[string][]vm.DNSRecord
 	}
+	recordLock struct {
+		mu    syncutil.Mutex
+		locks map[string]*syncutil.Mutex
+	}
 	execFn    ExecFn
 	resolvers []*net.Resolver
 }
 
 func NewDNSProvider() *dnsProvider {
-	var gcloudMu syncutil.Mutex
 	return NewDNSProviderWithExec(func(cmd *exec.Cmd) ([]byte, error) {
-		// Limit to one gcloud command at a time. At this time we are unsure if it's
-		// safe to make concurrent calls to the `gcloud` CLI to mutate DNS records
-		// in the same zone. We don't mutate the same record in parallel, but we do
-		// mutate different records in the same zone. See: #122180 for more details.
-		gcloudMu.Lock()
-		defer gcloudMu.Unlock()
 		return cmd.CombinedOutput()
 	})
 }
@@ -116,6 +113,10 @@ func NewDNSProviderWithExec(execFn ExecFn) *dnsProvider {
 			mu      syncutil.Mutex
 			records map[string][]vm.DNSRecord
 		}{records: make(map[string][]vm.DNSRecord)},
+		recordLock: struct {
+			mu    syncutil.Mutex
+			locks map[string]*syncutil.Mutex
+		}{locks: make(map[string]*syncutil.Mutex)},
 		execFn:    execFn,
 		resolvers: googleDNSResolvers(),
 	}
@@ -130,7 +131,9 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 		recordsByName[record.Name] = append(recordsByName[record.Name], record)
 	}
 
-	for name, recordGroup := range recordsByName {
+	updateRecord := func(name string, recordGroup []vm.DNSRecord) error {
+		unlockRecord := n.lockRecordByName(name)
+		defer unlockRecord()
 		existingRecords, err := n.lookupSRVRecords(ctx, name)
 		if err != nil {
 			return err
@@ -178,12 +181,21 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 			}
 		}
 		n.updateCache(name, maps.Values(combinedRecords))
+		return err
+	}
+
+	for name, recordGroup := range recordsByName {
+		if err := updateRecord(name, recordGroup); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // LookupSRVRecords implements the vm.DNSProvider interface.
 func (n *dnsProvider) LookupSRVRecords(ctx context.Context, name string) ([]vm.DNSRecord, error) {
+	unlockRecord := n.lockRecordByName(name)
+	defer unlockRecord()
 	if config.FastDNS {
 		rIdx := randutil.FastUint32() % uint32(len(n.resolvers))
 		return n.fastLookupSRVRecords(ctx, n.resolvers[rIdx], name, true)
@@ -198,7 +210,9 @@ func (n *dnsProvider) ListRecords(ctx context.Context) ([]vm.DNSRecord, error) {
 
 // DeleteRecordsByName implements the vm.DNSProvider interface.
 func (n *dnsProvider) DeleteRecordsByName(ctx context.Context, names ...string) error {
-	for _, name := range names {
+	deleteRecord := func(name string) error {
+		unlockRecord := n.lockRecordByName(name)
+		defer unlockRecord()
 		args := []string{"--project", n.dnsProject, "dns", "record-sets", "delete", name,
 			"--type", string(vm.SRV),
 			"--zone", n.managedZone,
@@ -210,6 +224,12 @@ func (n *dnsProvider) DeleteRecordsByName(ctx context.Context, names ...string) 
 		n.clearCacheEntry(name)
 		if err != nil {
 			return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
+		}
+		return nil
+	}
+	for _, name := range names {
+		if err := deleteRecord(name); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -321,6 +341,27 @@ func (n *dnsProvider) listSRVRecords(
 		}
 	}
 	return records, nil
+}
+
+// lockRecordByName locks the record with the given name and returns a function
+// that can be used to unlock it. The lock is used to prevent concurrent
+// operations on the same record.
+func (n *dnsProvider) lockRecordByName(name string) func() {
+	n.recordLock.mu.Lock()
+	defer n.recordLock.mu.Unlock()
+	normalisedName := n.normaliseName(name)
+	mutex, ok := n.recordLock.locks[normalisedName]
+	if !ok {
+		mutex = new(syncutil.Mutex)
+		n.recordLock.locks[normalisedName] = mutex
+	}
+	if !mutex.TryLock() {
+		fmt.Println("REMOVE THIS (DEBUG): mutex is locked")
+		mutex.Lock()
+	}
+	return func() {
+		mutex.Unlock()
+	}
 }
 
 func (n *dnsProvider) updateCache(name string, records []vm.DNSRecord) {
