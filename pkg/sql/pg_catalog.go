@@ -1176,7 +1176,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 		indexes: []virtualIndex{
 			{
 				incomplete: includesIndexEntries,
-				populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
+				populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, dbContext catalog.DatabaseDescriptor,
 					addRow func(...tree.Datum) error) (bool, error) {
 					var id descpb.ID
 					switch t := unwrappedConstraint.(type) {
@@ -1210,7 +1210,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					// Don't include tables that aren't in the current database unless
 					// they're virtual, dropped tables, or ones that the user can't see.
-					canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, db, true /*allowAdding*/)
+					canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, dbContext, true /*allowAdding*/)
 					if err != nil {
 						return false, err
 					}
@@ -1218,7 +1218,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					// or are dropped. From a virtual index viewpoint, we will consider
 					// this result set as populated, since the underlying full table will
 					// also skip the same descriptors.
-					if (!table.IsVirtualTable() && table.GetParentID() != db.GetID()) ||
+					if (!table.IsVirtualTable() && dbContext != nil && table.GetParentID() != dbContext.GetID()) ||
 						table.Dropped() || !canSeeDescriptor {
 						return true, nil
 					}
@@ -1230,7 +1230,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 						// Ideally, the catalog API would be able to return the temporary
 						// schemas from other sessions, but it cannot right now. See
 						// https://github.com/cockroachdb/cockroach/issues/97822.
-						if err := forEachSchema(ctx, p, db, false /* requiresPrivileges*/, func(schema catalog.SchemaDescriptor) error {
+						if err := forEachSchema(ctx, p, dbContext, false /* requiresPrivileges*/, func(schema catalog.SchemaDescriptor) error {
 							if schema.GetID() == table.GetParentSchemaID() {
 								sc = schema
 							}
@@ -1241,6 +1241,13 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					if sc == nil {
 						sc, err = p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, table.GetParentSchemaID())
+						if err != nil {
+							return false, err
+						}
+					}
+					db := dbContext
+					if db == nil {
+						db, err = p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Database(ctx, table.GetParentID())
 						if err != nil {
 							return false, err
 						}
