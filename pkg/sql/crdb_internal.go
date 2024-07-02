@@ -7700,15 +7700,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 
 				waitingStmtId := tree.NewDString(hex.EncodeToString(resp.Events[i].WaitingStmtID.GetBytes()))
 
-				// getContentionEventInfo needs to handle both the time and type of
-				// possible descriptors. It just logs the error and uses empty string
-				// for the values if an error occurs.
-				// https://github.com/cockroachdb/cockroach/issues/101826
-				schemaName, dbName, tableName, indexName, err := getContentionEventInfo(ctx, p, resp.Events[i])
-				if err != nil {
-					log.Errorf(ctx, "getContentionEventInfo failed to decode key: %v", err)
-				}
-
+				dbName, schemaName, tableName, indexName := getContentionEventInfo(ctx, p, resp.Events[i])
 				row = append(row[:0],
 					collectionTs, // collection_ts
 					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].BlockingEvent.TxnMeta.ID}), // blocking_txn_id
@@ -8545,54 +8537,64 @@ func populateStmtInsights(
 	return
 }
 
+// getContentionEventInfo performs a best-effort decoding of the key on which
+// the contention occurred into the corresponding db, schema, table, and index
+// names. If the key doesn't belong to the SQL data, then returned strings will
+// contain a hint about that.
+// TODO(#101826): we should teach this function to properly handle non-SQL keys.
 func getContentionEventInfo(
 	ctx context.Context, p *planner, contentionEvent contentionpb.ExtendedContentionEvent,
-) (schemaName, dbName, tableName, indexName string, err error) {
-
-	_, tableID, err := p.ExecCfg().Codec.DecodeTablePrefix(contentionEvent.BlockingEvent.Key)
+) (dbName, schemaName, tableName, indexName string) {
+	// Strip the tenant prefix right away if present.
+	key, err := p.ExecCfg().Codec.StripTenantPrefix(contentionEvent.BlockingEvent.Key)
 	if err != nil {
-		return "", "", "", "", err
+		// We really don't want to return errors, so we'll include the error
+		// details as the table name.
+		tableName = err.Error()
+		return "", "", tableName, ""
 	}
-	_, _, indexID, err := p.ExecCfg().Codec.DecodeIndexPrefix(contentionEvent.BlockingEvent.Key)
+	if keys.TableDataMin.Compare(key) > 0 || keys.TableDataMax.Compare(key) < 0 {
+		// Non-SQL keys are handled separately.
+		tableName = fmt.Sprintf("%q", key)
+		return "", "", tableName, ""
+	}
+	_, tableID, indexID, err := keys.DecodeTableIDIndexID(key)
 	if err != nil {
-		return "", "", "", "", err
+		// We really don't want to return errors, so we'll include the error
+		// details in the table name.
+		tableName = err.Error()
+		return "", "", tableName, ""
 	}
 
 	desc := p.Descriptors()
 	var tableDesc catalog.TableDescriptor
 	tableDesc, err = desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
 	if err != nil {
-		return "", "", fmt.Sprintf("[dropped table id: %d]", tableID), "[dropped index]", nil //nolint:returnerrcheck
+		return "", "", fmt.Sprintf("[dropped table id: %d]", tableID), "[dropped index]" //nolint:returnerrcheck
 	}
 
-	var idxName string
 	idxDesc, err := catalog.MustFindIndexByID(tableDesc, descpb.IndexID(indexID))
 	if err != nil {
-		idxName = fmt.Sprintf("[dropped index id: %d]", indexID)
-	}
-	if idxDesc != nil {
-		idxName = idxDesc.GetName()
+		indexName = fmt.Sprintf("[dropped index id: %d]", indexID)
+	} else if idxDesc != nil {
+		indexName = idxDesc.GetName()
 	}
 
-	var databaseName string
 	dbDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
 	if err != nil {
-		databaseName = "[dropped database]"
-	}
-	if dbDesc != nil {
-		databaseName = dbDesc.GetName()
+		dbName = "[dropped database]"
+	} else if dbDesc != nil {
+		dbName = dbDesc.GetName()
 	}
 
-	var schName string
 	schemaDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
 	if err != nil {
-		schName = "[dropped schema]"
-	}
-	if schemaDesc != nil {
-		schName = schemaDesc.GetName()
+		schemaName = "[dropped schema]"
+	} else if schemaDesc != nil {
+		schemaName = schemaDesc.GetName()
 	}
 
-	return schName, databaseName, tableDesc.GetName(), idxName, nil
+	return dbName, schemaName, tableDesc.GetName(), indexName
 }
 
 var crdbInternalNodeMemoryMonitors = virtualSchemaTable{
