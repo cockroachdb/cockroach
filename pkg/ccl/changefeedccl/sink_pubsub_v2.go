@@ -105,7 +105,7 @@ func makePubsubSinkClient(
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	pubsubURL := sinkURL{URL: u, q: u.Query()}
+	pubsubURL := sinkURL{URL: u}
 
 	projectID := pubsubURL.Host
 	if projectID == "" {
@@ -374,7 +374,7 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, err
 	case authDefault:
 		fallthrough
 	default:
-		if u.q.Get(credentialsParam) == "" {
+		if !u.contains(credentialsParam) {
 			return nil, errors.New("missing credentials parameter")
 		}
 		err := u.decodeBase64(credentialsParam, &credsJSON)
@@ -436,7 +436,7 @@ func makePubsubSink(
 		return nil, err
 	}
 
-	pubsubURL := sinkURL{URL: u, q: u.Query()}
+	pubsubURL := sinkURL{URL: u}
 	var includeTableNameAttribute bool
 	_, err = pubsubURL.consumeBool(changefeedbase.SinkParamTableNameAttribute, &includeTableNameAttribute)
 	if err != nil {
