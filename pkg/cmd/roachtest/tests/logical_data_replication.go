@@ -35,7 +35,7 @@ import (
 func registerLogicalDataReplicationTests(r registry.Registry) {
 	for _, sp := range []ldrTestSpec{
 		{
-			name: "ldr/kv0/workload=left/ingestion=both",
+			name: "ldr/kv0/workload=both/ingestion=both",
 			clusterSpec: multiClusterSpec{
 				leftNodes:  3,
 				rightNodes: 3,
@@ -122,7 +122,7 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 
 				monitor.Go(func(ctx context.Context) error {
 					defer close(workloadDoneCh)
-					return c.RunE(ctx, option.WithNodes(setup.workloadNode), kvWorkload.sourceRunCmd("system", setup.left.nodes))
+					return c.RunE(ctx, option.WithNodes(setup.workloadNode), kvWorkload.sourceRunCmd("system", setup.CRDBNodes()))
 				})
 
 				monitor.Wait()
