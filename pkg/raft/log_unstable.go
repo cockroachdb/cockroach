@@ -244,6 +244,19 @@ func (u *unstable) restore(s snapshot) bool {
 	return true
 }
 
+// append adds the given log slice to the end of the log. Returns false if this
+// can not be done.
+func (u *unstable) append(a logSlice) bool {
+	if a.term < u.term {
+		return false // append from an outdated log
+	} else if a.prev != u.lastEntryID() {
+		return false // not a valid append at the end of the log
+	}
+	u.term = a.term // update the last accepted term
+	u.entries = append(u.entries, a.entries...)
+	return true
+}
+
 func (u *unstable) truncateAndAppend(a logSlice) bool {
 	if a.term < u.term {
 		return false // append from an outdated log
