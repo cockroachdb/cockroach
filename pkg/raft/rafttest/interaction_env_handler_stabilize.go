@@ -117,7 +117,7 @@ func (env *InteractionEnv) Stabilize(idxs ...int) error {
 // splitMsgs extracts messages for the given recipient of the given type (-1 for
 // all types) from msgs, and returns them along with the remainder of msgs.
 func splitMsgs(
-	msgs []raftpb.Message, to uint64, typ raftpb.MessageType, drop bool,
+	msgs []raftpb.Message, to raftpb.PeerID, typ raftpb.MessageType, drop bool,
 ) (toMsgs []raftpb.Message, rmdr []raftpb.Message) {
 	// NB: this method does not reorder messages.
 	for _, msg := range msgs {

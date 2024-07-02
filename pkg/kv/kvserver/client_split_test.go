@@ -2571,8 +2571,8 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 					FromReplica: replicas[1],
 					Message: raftpb.Message{
 						Type: raftpb.MsgVote,
-						To:   uint64(replicas[0].ReplicaID),
-						From: uint64(replicas[1].ReplicaID),
+						To:   raftpb.PeerID(replicas[0].ReplicaID),
+						From: raftpb.PeerID(replicas[1].ReplicaID),
 						Term: term,
 					},
 				}, rpc.DefaultClass); !sent {

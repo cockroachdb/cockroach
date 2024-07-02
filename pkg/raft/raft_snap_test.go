@@ -28,7 +28,7 @@ var (
 		Metadata: pb.SnapshotMetadata{
 			Index:     11, // magic number
 			Term:      11, // magic number
-			ConfState: pb.ConfState{Voters: []uint64{1, 2}},
+			ConfState: pb.ConfState{Voters: []pb.PeerID{1, 2}},
 		},
 	}
 )

@@ -36,14 +36,14 @@ type iface interface {
 type raftNetwork struct {
 	rand         *rand.Rand
 	mu           sync.Mutex
-	disconnected map[uint64]bool
+	disconnected map[raftpb.PeerID]bool
 	dropmap      map[conn]float64
 	delaymap     map[conn]delay
-	recvQueues   map[uint64]chan raftpb.Message
+	recvQueues   map[raftpb.PeerID]chan raftpb.Message
 }
 
 type conn struct {
-	from, to uint64
+	from, to raftpb.PeerID
 }
 
 type delay struct {
@@ -51,13 +51,13 @@ type delay struct {
 	rate float64
 }
 
-func newRaftNetwork(nodes ...uint64) *raftNetwork {
+func newRaftNetwork(nodes ...raftpb.PeerID) *raftNetwork {
 	pn := &raftNetwork{
 		rand:         rand.New(rand.NewSource(1)),
-		recvQueues:   make(map[uint64]chan raftpb.Message),
+		recvQueues:   make(map[raftpb.PeerID]chan raftpb.Message),
 		dropmap:      make(map[conn]float64),
 		delaymap:     make(map[conn]delay),
-		disconnected: make(map[uint64]bool),
+		disconnected: make(map[raftpb.PeerID]bool),
 	}
 
 	for _, n := range nodes {
@@ -66,7 +66,7 @@ func newRaftNetwork(nodes ...uint64) *raftNetwork {
 	return pn
 }
 
-func (rn *raftNetwork) nodeNetwork(id uint64) iface {
+func (rn *raftNetwork) nodeNetwork(id raftpb.PeerID) iface {
 	return &nodeNetwork{id: id, raftNetwork: rn}
 }
 
@@ -111,7 +111,7 @@ func (rn *raftNetwork) send(m raftpb.Message) {
 	}
 }
 
-func (rn *raftNetwork) recvFrom(from uint64) chan raftpb.Message {
+func (rn *raftNetwork) recvFrom(from raftpb.PeerID) chan raftpb.Message {
 	rn.mu.Lock()
 	fromc := rn.recvQueues[from]
 	if rn.disconnected[from] {
@@ -122,32 +122,32 @@ func (rn *raftNetwork) recvFrom(from uint64) chan raftpb.Message {
 	return fromc
 }
 
-func (rn *raftNetwork) drop(from, to uint64, rate float64) {
+func (rn *raftNetwork) drop(from, to raftpb.PeerID, rate float64) {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
 	rn.dropmap[conn{from, to}] = rate
 }
 
-func (rn *raftNetwork) delay(from, to uint64, d time.Duration, rate float64) {
+func (rn *raftNetwork) delay(from, to raftpb.PeerID, d time.Duration, rate float64) {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
 	rn.delaymap[conn{from, to}] = delay{d, rate}
 }
 
-func (rn *raftNetwork) disconnect(id uint64) {
+func (rn *raftNetwork) disconnect(id raftpb.PeerID) {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
 	rn.disconnected[id] = true
 }
 
-func (rn *raftNetwork) connect(id uint64) {
+func (rn *raftNetwork) connect(id raftpb.PeerID) {
 	rn.mu.Lock()
 	defer rn.mu.Unlock()
 	rn.disconnected[id] = false
 }
 
 type nodeNetwork struct {
-	id uint64
+	id raftpb.PeerID
 	*raftNetwork
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -107,10 +108,10 @@ func rangeRaftProgress(
 			buf.Printf(", ")
 		}
 		buf.Print(r.ReplicaID)
-		if uint64(r.ReplicaID) == raftStatus.Lead {
+		if raftpb.PeerID(r.ReplicaID) == raftStatus.Lead {
 			buf.SafeRune('*')
 		}
-		if progress, ok := raftStatus.Progress[uint64(r.ReplicaID)]; ok {
+		if progress, ok := raftStatus.Progress[raftpb.PeerID(r.ReplicaID)]; ok {
 			buf.Printf(":%d", progress.Match)
 		} else {
 			buf.Printf(":?")

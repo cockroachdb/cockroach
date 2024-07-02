@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1192,7 +1193,7 @@ func (s *state) LoadSplitterFor(storeID StoreID) LoadSplitter {
 // with ID RangeID, on the store with ID StoreID.
 func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) *raft.Status {
 	status := &raft.Status{
-		Progress: make(map[uint64]tracker.Progress),
+		Progress: make(map[raftpb.PeerID]tracker.Progress),
 	}
 
 	leader, ok := s.LeaseHolderReplica(rangeID)
@@ -1206,14 +1207,14 @@ func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) *raft.Status {
 
 	// TODO(kvoli): The raft leader will always be the current leaseholder
 	// here. This should change to enable testing this scenario.
-	status.Lead = uint64(leader.ReplicaID())
+	status.Lead = raftpb.PeerID(leader.ReplicaID())
 	status.RaftState = raft.StateLeader
 	status.Commit = 2
 	// TODO(kvoli): A replica is never behind on their raft log, this should
 	// change to enable testing this scenario where replicas fall behind. e.g.
 	// FirstIndex on all replicas will return 2.
 	for _, replica := range rng.replicas {
-		status.Progress[uint64(replica.ReplicaID())] = tracker.Progress{
+		status.Progress[raftpb.PeerID(replica.ReplicaID())] = tracker.Progress{
 			Match: 2,
 			State: tracker.StateReplicate,
 		}

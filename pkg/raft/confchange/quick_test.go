@@ -145,7 +145,9 @@ func TestConfChangeQuick(t *testing.T) {
 
 type confChanges []pb.ConfChangeSingle
 
-func genCC(num func() int, id func() uint64, typ func() pb.ConfChangeType) []pb.ConfChangeSingle {
+func genCC(
+	num func() int, id func() pb.PeerID, typ func() pb.ConfChangeType,
+) []pb.ConfChangeSingle {
 	var ccs []pb.ConfChangeSingle
 	n := num()
 	for i := 0; i < n; i++ {
@@ -158,11 +160,11 @@ func (confChanges) Generate(rand *rand.Rand, _ int) reflect.Value {
 	num := func() int {
 		return 1 + rand.Intn(9)
 	}
-	id := func() uint64 {
+	id := func() pb.PeerID {
 		// Note that num() >= 1, so we're never returning 1 from this method,
 		// meaning that we'll never touch NodeID one, which is special to avoid
 		// voterless configs altogether in this test.
-		return 1 + uint64(num())
+		return pb.PeerID(1 + num())
 	}
 	typ := func() pb.ConfChangeType {
 		return pb.ConfChangeType(rand.Intn(len(pb.ConfChangeType_name)))
@@ -176,7 +178,7 @@ func (initialChanges) Generate(rand *rand.Rand, _ int) reflect.Value {
 	num := func() int {
 		return 1 + rand.Intn(5)
 	}
-	id := func() uint64 { return uint64(num()) }
+	id := func() pb.PeerID { return pb.PeerID(num()) }
 	typ := func() pb.ConfChangeType {
 		return pb.ConfChangeAddNode
 	}

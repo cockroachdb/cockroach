@@ -182,7 +182,7 @@ func (c Changer) apply(
 
 // makeVoter adds or promotes the given ID to be a voter in the incoming
 // majority config.
-func (c Changer) makeVoter(cfg *tracker.Config, trk tracker.ProgressMap, id uint64) {
+func (c Changer) makeVoter(cfg *tracker.Config, trk tracker.ProgressMap, id pb.PeerID) {
 	pr := trk[id]
 	if pr == nil {
 		c.initProgress(cfg, trk, id, false /* isLearner */)
@@ -208,7 +208,7 @@ func (c Changer) makeVoter(cfg *tracker.Config, trk tracker.ProgressMap, id uint
 // simultaneously. Instead, we add the learner to LearnersNext, so that it will
 // be added to Learners the moment the outgoing config is removed by
 // LeaveJoint().
-func (c Changer) makeLearner(cfg *tracker.Config, trk tracker.ProgressMap, id uint64) {
+func (c Changer) makeLearner(cfg *tracker.Config, trk tracker.ProgressMap, id pb.PeerID) {
 	pr := trk[id]
 	if pr == nil {
 		c.initProgress(cfg, trk, id, true /* isLearner */)
@@ -235,7 +235,7 @@ func (c Changer) makeLearner(cfg *tracker.Config, trk tracker.ProgressMap, id ui
 }
 
 // remove this peer as a voter or learner from the incoming config.
-func (c Changer) remove(cfg *tracker.Config, trk tracker.ProgressMap, id uint64) {
+func (c Changer) remove(cfg *tracker.Config, trk tracker.ProgressMap, id pb.PeerID) {
 	if _, ok := trk[id]; !ok {
 		return
 	}
@@ -252,7 +252,7 @@ func (c Changer) remove(cfg *tracker.Config, trk tracker.ProgressMap, id uint64)
 
 // initProgress initializes a new progress for the given node or learner.
 func (c Changer) initProgress(
-	cfg *tracker.Config, trk tracker.ProgressMap, id uint64, isLearner bool,
+	cfg *tracker.Config, trk tracker.ProgressMap, id pb.PeerID, isLearner bool,
 ) {
 	if !isLearner {
 		incoming(cfg.Voters)[id] = struct{}{}
@@ -289,7 +289,7 @@ func checkInvariants(cfg tracker.Config, trk tracker.ProgressMap) error {
 	// during tests). Instead of having to hand-code this, we allow
 	// transitioning from an empty config into any other legal and non-empty
 	// config.
-	for _, ids := range []map[uint64]struct{}{
+	for _, ids := range []map[pb.PeerID]struct{}{
 		cfg.Voters.IDs(),
 		cfg.Learners,
 		cfg.LearnersNext,
@@ -372,15 +372,15 @@ func (c Changer) err(err error) (tracker.Config, tracker.ProgressMap, error) {
 }
 
 // nilAwareAdd populates a map entry, creating the map if necessary.
-func nilAwareAdd(m *map[uint64]struct{}, id uint64) {
+func nilAwareAdd(m *map[pb.PeerID]struct{}, id pb.PeerID) {
 	if *m == nil {
-		*m = map[uint64]struct{}{}
+		*m = map[pb.PeerID]struct{}{}
 	}
 	(*m)[id] = struct{}{}
 }
 
 // nilAwareDelete deletes from a map, nil'ing the map itself if it is empty after.
-func nilAwareDelete(m *map[uint64]struct{}, id uint64) {
+func nilAwareDelete(m *map[pb.PeerID]struct{}, id pb.PeerID) {
 	if *m == nil {
 		return
 	}
@@ -391,8 +391,8 @@ func nilAwareDelete(m *map[uint64]struct{}, id uint64) {
 }
 
 // symdiff returns the count of the symmetric difference between the sets of
-// uint64s, i.e. len( (l - r) \union (r - l)).
-func symdiff(l, r map[uint64]struct{}) int {
+// PeerIDs, i.e. len( (l - r) \union (r - l)).
+func symdiff(l, r map[pb.PeerID]struct{}) int {
 	var n int
 	pairs := [][2]quorum.MajorityConfig{
 		{l, r}, // count elems in l but not in r

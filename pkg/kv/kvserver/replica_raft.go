@@ -605,7 +605,7 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 		if r.mu.quiescent {
 			st := r.raftBasicStatusRLocked()
 			hasLeader := st.RaftState == raft.StateFollower && st.Lead != 0
-			fromLeader := uint64(req.FromReplica.ReplicaID) == st.Lead
+			fromLeader := raftpb.PeerID(req.FromReplica.ReplicaID) == st.Lead
 			wakeLeader := hasLeader && !fromLeader
 			r.maybeUnquiesceLocked(wakeLeader, false /* mayCampaign */)
 		}
@@ -989,7 +989,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			for _, msg := range msgStorageAppend.Responses {
 				// The caller would like to see the MsgAppResp that usually results from
 				// applying the snapshot synchronously, so fish it out.
-				if msg.To == uint64(inSnap.FromReplica.ReplicaID) &&
+				if msg.To == raftpb.PeerID(inSnap.FromReplica.ReplicaID) &&
 					msg.Type == raftpb.MsgAppResp &&
 					!msg.Reject &&
 					msg.Index == snap.Metadata.Index {
@@ -1297,7 +1297,7 @@ func (r *Replica) tick(
 	r.unreachablesMu.remotes = nil
 	r.unreachablesMu.Unlock()
 	for remoteReplica := range remotes {
-		r.mu.internalRaftGroup.ReportUnreachable(uint64(remoteReplica))
+		r.mu.internalRaftGroup.ReportUnreachable(raftpb.PeerID(remoteReplica))
 	}
 
 	r.updatePausedFollowersLocked(ctx, ioThresholdMap)
@@ -1649,7 +1649,7 @@ func (r *Replica) sendRaftMessages(
 			// Instead, we handle messages to LocalAppendThread inline on the raft
 			// scheduler goroutine, so this code path is unused.
 			panic("unsupported, currently processed inline on raft scheduler goroutine")
-		case uint64(r.ReplicaID()):
+		case raftpb.PeerID(r.ReplicaID()):
 			// To local raft state machine, from local storage append and apply work.
 			// NOTE: For async Raft log appends, these messages come from calls to
 			// replicaSyncCallback.OnLogSync. For other local storage work (log
@@ -1736,7 +1736,7 @@ func (r *Replica) sendRaftMessages(
 
 // sendLocalRaftMsg sends a message to the local raft state machine.
 func (r *Replica) sendLocalRaftMsg(msg raftpb.Message, willDeliverLocal bool) {
-	if msg.To != uint64(r.ReplicaID()) {
+	if msg.To != raftpb.PeerID(r.ReplicaID()) {
 		panic("incorrect message target")
 	}
 	r.localMsgs.Lock()
@@ -1807,7 +1807,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		// below for more context:
 		_ = maybeDropMsgApp
 		// NB: this code is allocation free.
-		r.mu.internalRaftGroup.WithProgress(func(id uint64, _ raft.ProgressType, pr tracker.Progress) {
+		r.mu.internalRaftGroup.WithProgress(func(id raftpb.PeerID, _ raft.ProgressType, pr tracker.Progress) {
 			if id == msg.To && pr.State == tracker.StateProbe {
 				// It is moderately expensive to attach a full key to the message, but note that
 				// a probing follower will only be appended to once per heartbeat interval (i.e.
@@ -1900,7 +1900,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 	// which typically moves the follower to StateReplicate when (if) received
 	// by the leader, which as of #106793 we do synchronously.
 	if err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
-		raftGroup.ReportSnapshot(uint64(to), snapStatus)
+		raftGroup.ReportSnapshot(raftpb.PeerID(to), snapStatus)
 		return true, nil
 	}); err != nil && !errors.Is(err, errRemoved) {
 		log.Fatalf(ctx, "%v", err)
@@ -2357,7 +2357,7 @@ func (r *Replica) campaignLocked(ctx context.Context) {
 // simply partitioned away from it and/or liveness.
 func (r *Replica) forceCampaignLocked(ctx context.Context) {
 	log.VEventf(ctx, 3, "force campaigning")
-	msg := raftpb.Message{To: uint64(r.replicaID), Type: raftpb.MsgTimeoutNow}
+	msg := raftpb.Message{To: raftpb.PeerID(r.replicaID), Type: raftpb.MsgTimeoutNow}
 	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
 		log.VEventf(ctx, 1, "failed to campaign: %s", err)
 	}
@@ -2395,7 +2395,7 @@ func (r *Replica) forceCampaignLocked(ctx context.Context) {
 // lead to persistent unavailability.
 func (r *Replica) forgetLeaderLocked(ctx context.Context) {
 	log.VEventf(ctx, 3, "forgetting leader")
-	msg := raftpb.Message{To: uint64(r.replicaID), Type: raftpb.MsgForgetLeader}
+	msg := raftpb.Message{To: raftpb.PeerID(r.replicaID), Type: raftpb.MsgForgetLeader}
 	if err := r.mu.internalRaftGroup.Step(msg); err != nil {
 		log.VEventf(ctx, 1, "failed to forget leader: %s", err)
 	}
@@ -2422,10 +2422,10 @@ func (m lastUpdateTimesMap) update(replicaID roachpb.ReplicaID, now time.Time) {
 // a suitable pattern of quiesce and unquiesce operations (and this in turn
 // can interfere with Raft log truncations).
 func (m lastUpdateTimesMap) updateOnUnquiesce(
-	descs []roachpb.ReplicaDescriptor, prs map[uint64]tracker.Progress, now time.Time,
+	descs []roachpb.ReplicaDescriptor, prs map[raftpb.PeerID]tracker.Progress, now time.Time,
 ) {
 	for _, desc := range descs {
-		if prs[uint64(desc.ReplicaID)].State == tracker.StateReplicate {
+		if prs[raftpb.PeerID(desc.ReplicaID)].State == tracker.StateReplicate {
 			m.update(desc.ReplicaID, now)
 		}
 	}
