@@ -2253,7 +2253,8 @@ func (p *deprecatedFakePubsubClient) init() error {
 	return nil
 }
 
-func (p *deprecatedFakePubsubClient) closeTopics() {
+func (p *deprecatedFakePubsubClient) close() error {
+	return nil
 }
 
 // sendMessage sends a message to the topic
