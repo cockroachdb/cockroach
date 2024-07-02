@@ -19,7 +19,7 @@ usage: $0 <command>
       ldr run -- whoami
 
   * 'setup'
-    Shortand to run 'create', 'start', 'workload init', 'jobs start', and then 'workload run' to
+    Shorthand to run 'create', 'start', 'workload init', 'jobs start', and then 'workload run' to
     get LDR up and running in one command. Any extra arguments are passed along to 'create'.
 
   * 'go'
@@ -36,7 +36,7 @@ usage: $0 <command>
       'start'   will start the ycsb workload on first node of each cluster and any optional extra args
       passed, e.g. --duration or --concurrency, are passed through to workload.
 
-  * 'jobs <start|pause|resume|stop|stats>'
+  * 'jobs <start|pause|resume|cancel|producer-stats|stats>'
     manages the ldr jobs on both clusters.
       NB: 'workload init' must run before 'jobs start'
 
@@ -116,7 +116,7 @@ case $1 in
       roachprod sql $B -- -e "select * from crdb_internal.logical_replication_node_processors;"  --format=table
       ;;
     *)
-      echo "unknown command '$1'; useage: $0 {start|pause|resume|cancel|stats}"
+      echo "unknown command '$1'; usage: $0 {start|pause|resume|cancel|producer-stats|stats}"
       exit 1
       ;;
     esac
