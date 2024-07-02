@@ -144,7 +144,7 @@ func (c *Context) checkInteractive() {
 	// and we'll also assume that there is no human if the standard
 	// input is not terminal-like -- likely redirected from a file,
 	// etc.
-	c.CliCtx.IsInteractive = len(c.ShellCtx.ExecStmts) == 0 && isatty.IsTerminal(c.cmdIn.Fd())
+	c.CliCtx.IsInteractive = isatty.IsTerminal(c.cmdIn.Fd())
 }
 
 // MakeConn provides a shorthand interface to ConnCtx.MakeConn.
