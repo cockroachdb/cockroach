@@ -28,6 +28,7 @@ type Settings struct {
 	UseExpirationLeases      bool
 	TransferExpirationLeases bool
 	ExpToEpochEquiv          bool
+	MinExpirationSupported   bool
 	RangeLeaseDuration       time.Duration
 }
 
@@ -93,12 +94,6 @@ func (i BuildInput) Remote() bool { return !i.PrevLocal() && !i.NextLocal() }
 
 // PrevLeaseExpiration returns the expiration time of the previous lease.
 func (i BuildInput) PrevLeaseExpiration() hlc.Timestamp {
-	if i.PrevLease.Type() == roachpb.LeaseEpoch && i.PrevLeaseNodeLiveness.Epoch != i.PrevLease.Epoch {
-		// For epoch-based leases, we only consider the liveness expiration if it
-		// matches the lease epoch. If the liveness epoch is greater than the lease
-		// epoch, we consider the lease expired.
-		return hlc.Timestamp{}
-	}
 	return kvserverpb.LeaseStatus{
 		Lease:    i.PrevLease,
 		Liveness: i.PrevLeaseNodeLiveness,
@@ -220,6 +215,8 @@ func Build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
 		}
 		nextLease.Epoch = l.Epoch
 		nextLeaseLiveness = &l.Liveness
+
+		nextLease.MinExpiration = leaseMinTimestamp(st, i, nextLeaseType)
 	default:
 		panic("unexpected")
 	}
@@ -235,7 +232,7 @@ func Build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
 	// Construct the output and determine whether any node liveness manipulation
 	// is necessary before the lease can be requested.
 	o := Output{NextLease: nextLease}
-	o.NodeLivenessManipulation = nodeLivenessManipulation(i, nextLease, nextLeaseLiveness)
+	o.NodeLivenessManipulation = nodeLivenessManipulation(st, i, nextLease, nextLeaseLiveness)
 
 	// Validate the output.
 	if err := o.validate(i); err != nil {
@@ -345,6 +342,25 @@ func leaseEpoch(
 	return l, nil
 }
 
+func leaseMinTimestamp(st Settings, i BuildInput, nextType roachpb.LeaseType) hlc.Timestamp {
+	if nextType != roachpb.LeaseEpoch {
+		panic("leaseMinTimestamp called for non-epoch lease")
+	}
+	if !st.MinExpirationSupported {
+		return hlc.Timestamp{}
+	}
+	// If we are promoting an expiration-based lease to an epoch-based lease, we
+	// must make sure the expiration does not regress. Do so by assigning a
+	// minimum expiration time to the new lease, which sets a lower bound for the
+	// lease's expiration, independent of the expiration stored indirectly in the
+	// liveness record.
+	expPromo := i.Extension() && i.PrevLease.Type() == roachpb.LeaseExpiration
+	if expPromo {
+		return *i.PrevLease.Expiration
+	}
+	return hlc.Timestamp{}
+}
+
 func leaseDeprecatedStartStasis(i BuildInput, nextExpiration *hlc.Timestamp) *hlc.Timestamp {
 	if i.Transfer() {
 		// We don't set StartStasis for lease transfers. It's not clear why this was
@@ -381,7 +397,7 @@ func leaseSequence(st Settings, i BuildInput, nextLease roachpb.Lease) roachpb.L
 }
 
 func nodeLivenessManipulation(
-	i BuildInput, nextLease roachpb.Lease, nextLeaseLiveness *livenesspb.Liveness,
+	st Settings, i BuildInput, nextLease roachpb.Lease, nextLeaseLiveness *livenesspb.Liveness,
 ) NodeLivenessManipulation {
 	// If we are promoting an expiration-based lease to an epoch-based lease, we
 	// must make sure the expiration does not regress. We do this here because the
@@ -390,12 +406,21 @@ func nodeLivenessManipulation(
 	// manually heartbeat our liveness record if necessary. This is expected to
 	// work because the liveness record interval and the expiration-based lease
 	// interval are the same.
-	expToEpochPromo := i.Extension() &&
-		i.PrevLease.Type() == roachpb.LeaseExpiration && nextLease.Type() == roachpb.LeaseEpoch
-	if expToEpochPromo && nextLeaseLiveness.Expiration.ToTimestamp().Less(i.PrevLeaseExpiration()) {
-		return NodeLivenessManipulation{
-			Heartbeat:              nextLeaseLiveness,
-			HeartbeatMinExpiration: i.PrevLeaseExpiration(),
+	//
+	// We only need to perform this check if the minimum expiration field is not
+	// supported by the current cluster version. Otherwise, that field will be
+	// used to enforce the minimum expiration time.
+	//
+	// TODO(nvanbenschoten): remove this logic when we no longer support clusters
+	// that do not support the minimum expiration field.
+	if !st.MinExpirationSupported {
+		expToEpochPromo := i.Extension() &&
+			i.PrevLease.Type() == roachpb.LeaseExpiration && nextLease.Type() == roachpb.LeaseEpoch
+		if expToEpochPromo && nextLeaseLiveness.Expiration.ToTimestamp().Less(i.PrevLeaseExpiration()) {
+			return NodeLivenessManipulation{
+				Heartbeat:              nextLeaseLiveness,
+				HeartbeatMinExpiration: i.PrevLeaseExpiration(),
+			}
 		}
 	}
 
