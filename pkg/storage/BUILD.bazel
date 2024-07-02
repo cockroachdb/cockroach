@@ -12,6 +12,7 @@ go_library(
         "doc.go",
         "engine.go",
         "engine_key.go",
+        "engine_key_fuzz.go",
         "fingerprint_writer.go",
         "in_mem.go",
         "intent_interleaving_iter.go",

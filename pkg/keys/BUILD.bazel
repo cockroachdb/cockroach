@@ -8,6 +8,7 @@ go_library(
         "errors.go",
         "keys.go",
         "printer.go",
+        "printer_fuzz.go",
         "spans.go",
         "sql.go",
     ],
