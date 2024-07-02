@@ -178,7 +178,11 @@ export function getEventDescription(e: clusterUiApi.EventColumns): string {
     case eventTypes.DROP_ROLE:
       return `Role Dropped: User ${info.User} dropped role ${info.RoleName}`;
     case eventTypes.ALTER_ROLE:
-      return `Role Altered: User ${info.User} altered role ${info.RoleName} with options ${info.Options}`;
+      if (info.Options && info.Options.length > 0) {
+        return `Role Altered: User ${info.User} altered role ${info.RoleName} with options ${info.Options}`;
+      } else {
+        return `Role Altered: User ${info.User} altered role ${info.RoleName}`;
+      }
     case eventTypes.IMPORT:
       return `Import Job: User ${info.User} has a job ${info.JobID} running with status ${info.Status}`;
     case eventTypes.RESTORE:
