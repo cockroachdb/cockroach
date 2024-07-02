@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -235,12 +236,12 @@ func importJobDescription(
 	stmt := *orig
 	stmt.Files = nil
 	for _, file := range files {
-		clean, err := cloud.SanitizeExternalStorageURI(file, nil /* extraParams */)
+		clean, err := uris.SanitizeExternalStorageURI(file, nil /* extraParams */)
 		if err != nil {
 			return "", err
 		}
 		logSanitizedImportDestination(ctx, clean)
-		stmt.Files = append(stmt.Files, tree.NewDString(clean))
+		stmt.Files = append(stmt.Files, tree.NewSanitizedURI(clean))
 	}
 	stmt.Options = nil
 	for k, v := range opts {
@@ -340,7 +341,7 @@ func importTypeCheck(
 			KVOptions: importStmt.Options, Validation: importOptionExpectValues,
 		},
 		exprutil.StringArrays{
-			importStmt.Files,
+			importStmt.Files.Exprs(),
 		},
 	); err != nil {
 		return false, nil, err
@@ -398,7 +399,7 @@ func importPlanHook(
 		isDetached = true
 	}
 
-	filenamePatterns, err := exprEval.StringArray(ctx, importStmt.Files)
+	filenamePatterns, err := exprEval.StringArray(ctx, importStmt.Files.Exprs())
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -442,7 +443,7 @@ func importPlanHook(
 					files = append(files, file)
 					continue
 				}
-				prefix := cloud.GetPrefixBeforeWildcard(uri.Path)
+				prefix := uris.GetPrefixBeforeWildcard(uri.Path)
 				if len(prefix) < len(uri.Path) {
 					pattern := uri.Path[len(prefix):]
 					uri.Path = prefix

@@ -215,6 +215,7 @@ go_library(
         "//pkg/cloud",
         "//pkg/cloud/amazon",
         "//pkg/cloud/gcp",
+        "//pkg/cloud/uris",
         "//pkg/cmd/cmpconn",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/clusterstats",

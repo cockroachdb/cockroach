@@ -117,7 +117,7 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 
 	return &tree.Backup{
 		Targets: &targets,
-		To:      tree.StringOrPlaceholderOptList{tree.NewStrVal(name)},
+		To:      tree.URIs{tree.NewURI(tree.NewStrVal(name))},
 		AsOf:    makeAsOf(s),
 		Options: tree.BackupOptions{CaptureRevisionHistory: coinD},
 	}, true
@@ -153,7 +153,7 @@ func makeRestore(s *Smither) (tree.Statement, bool) {
 
 	return &tree.Restore{
 		Targets: targets,
-		From:    []tree.StringOrPlaceholderOptList{{tree.NewStrVal(name)}},
+		From:    []tree.URIs{{tree.NewURI(tree.NewStrVal(name))}},
 		AsOf:    makeAsOf(s),
 		Options: tree.RestoreOptions{
 			IntoDB: tree.NewStrVal("into_db"),
@@ -204,7 +204,7 @@ func makeExport(s *Smither) (tree.Statement, bool) {
 	return &tree.Export{
 		Query:      stmt,
 		FileFormat: "CSV",
-		File:       tree.NewStrVal(name),
+		File:       tree.NewURI(tree.NewStrVal(name)),
 	}, true
 }
 
@@ -216,11 +216,11 @@ func makeImport(s *Smither) (tree.Statement, bool) {
 	}
 
 	// Find all CSV files created by the EXPORT.
-	files, exp := func() (tree.Exprs, string) {
+	files, exp := func() (tree.URIs, string) {
 		s.lock.Lock()
 		defer s.lock.Unlock()
 		if len(s.bulkExports) == 0 {
-			return tree.Exprs{}, ""
+			return tree.URIs{}, ""
 		}
 		expr := s.bulkExports[0]
 		s.bulkExports = s.bulkExports[1:]
@@ -231,9 +231,9 @@ func makeImport(s *Smither) (tree.Statement, bool) {
 			}
 		}
 		sort.Strings(fileNames)
-		var f tree.Exprs
+		var f tree.URIs
 		for _, name := range fileNames {
-			f = append(f, tree.NewStrVal(s.bulkSrv.URL+name))
+			f = append(f, tree.NewURI(tree.NewStrVal(s.bulkSrv.URL+name)))
 		}
 		return f, expr
 	}()

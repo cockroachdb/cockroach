@@ -19,11 +19,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // import External Connection providers.
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -92,7 +92,7 @@ func TestS3ExternalConnection(t *testing.T) {
 
 		// Set the AUTH to implicit.
 		params := make(url.Values)
-		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+		params.Add(uris.AuthParam, uris.AuthParamImplicit)
 
 		s3URI := fmt.Sprintf("s3://%s/backup-ec-test-default-%d?%s", bucket, testID, params.Encode())
 		ecName := "auth-implicit-s3"
@@ -106,7 +106,7 @@ func TestS3ExternalConnection(t *testing.T) {
 				AccessKey: creds.AccessKeyID,
 				Secret:    creds.SecretAccessKey,
 				Region:    "us-east-1",
-				Auth:      cloud.AuthParamSpecified,
+				Auth:      uris.AuthParamSpecified,
 			},
 		)
 		ecName := "auth-specified-s3"
@@ -129,7 +129,7 @@ func TestS3ExternalConnection(t *testing.T) {
 
 		s3URI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
-			Auth:          cloud.AuthParamImplicit,
+			Auth:          uris.AuthParamImplicit,
 			ServerEncMode: "AES256",
 		})
 		ecName := "server-side-encryption-s3"
@@ -142,7 +142,7 @@ func TestS3ExternalConnection(t *testing.T) {
 		}
 		s3KMSURI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-kms-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
-			Auth:          cloud.AuthParamImplicit,
+			Auth:          uris.AuthParamImplicit,
 			ServerEncMode: "aws:kms",
 			ServerKMSID:   v,
 		})
@@ -166,7 +166,7 @@ func TestS3ExternalConnection(t *testing.T) {
 		// Unsupported server side encryption option.
 		invalidS3URI := amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
-			Auth:          cloud.AuthParamImplicit,
+			Auth:          uris.AuthParamImplicit,
 			ServerEncMode: "unsupported-algorithm",
 		})
 		sqlDB.ExpectErr(t,
@@ -175,7 +175,7 @@ func TestS3ExternalConnection(t *testing.T) {
 
 		invalidS3URI = amazon.S3URI(bucket, fmt.Sprintf("backup-ec-test-sse-256-%d", testID), &cloudpb.ExternalStorage_S3{
 			Region:        "us-east-1",
-			Auth:          cloud.AuthParamImplicit,
+			Auth:          uris.AuthParamImplicit,
 			ServerEncMode: "aws:kms",
 		})
 
@@ -258,14 +258,14 @@ func TestAWSKMSExternalConnection(t *testing.T) {
 	testID := cloudtestutils.NewTestID()
 	// Create an external connection where we will write the backup.
 	backupURI := fmt.Sprintf("s3://%s/backup-%d?%s=%s", bucket, testID,
-		cloud.AuthParam, cloud.AuthParamImplicit)
+		uris.AuthParam, uris.AuthParamImplicit)
 	backupExternalConnectionName := "backup"
 	createExternalConnection(backupExternalConnectionName, backupURI)
 
 	t.Run("auth-implicit", func(t *testing.T) {
 		// Set the AUTH to implicit.
 		params := make(url.Values)
-		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+		params.Add(uris.AuthParam, uris.AuthParamImplicit)
 		params.Add(amazon.KMSRegionParam, kmsRegion)
 
 		kmsURI := fmt.Sprintf("aws-kms:///%s?%s", keyID, params.Encode())
@@ -355,7 +355,7 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_KMS_REGION env var must be set")
 	}
 	q.Add(amazon.KMSRegionParam, kmsRegion)
-	q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+	q.Set(uris.AuthParam, uris.AuthParamSpecified)
 
 	// Get AWS Key identifier from env variable.
 	keyID := os.Getenv("AWS_KMS_KEY_ARN")
@@ -371,7 +371,7 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 	testID := cloudtestutils.NewTestID()
 	// Create an external connection where we will write the backup.
 	backupURI := fmt.Sprintf("s3://%s/backup-%d?%s=%s", bucket, testID,
-		cloud.AuthParam, cloud.AuthParamImplicit)
+		uris.AuthParam, uris.AuthParamImplicit)
 	backupExternalConnectionName := "backup"
 	createExternalConnection(backupExternalConnectionName, backupURI)
 
@@ -388,7 +388,7 @@ func TestAWSKMSExternalConnectionAssumeRole(t *testing.T) {
 
 		// Create params for implicit user.
 		params := make(url.Values)
-		params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+		params.Add(uris.AuthParam, uris.AuthParamImplicit)
 		params.Add(amazon.AssumeRoleParam, q.Get(amazon.AssumeRoleParam))
 		params.Add(amazon.KMSRegionParam, kmsRegion)
 

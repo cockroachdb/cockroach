@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -240,7 +241,7 @@ func runUserFileGet(cmd *cobra.Command, args []string) (resErr error) {
 	}
 
 	fullPath := conf.Path
-	conf.Path = cloud.GetPrefixBeforeWildcard(fullPath)
+	conf.Path = uris.GetPrefixBeforeWildcard(fullPath)
 	pattern := fullPath[len(conf.Path):]
 	displayPath := strings.TrimPrefix(conf.Path, "/")
 
@@ -434,7 +435,7 @@ func listUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]s
 	}
 
 	fullPath := conf.Path
-	conf.Path = cloud.GetPrefixBeforeWildcard(fullPath)
+	conf.Path = uris.GetPrefixBeforeWildcard(fullPath)
 	pattern := fullPath[len(conf.Path):]
 
 	f, err := userfile.MakeSQLConnFileTableStorage(ctx, conf, conn.GetDriverConn())
@@ -511,7 +512,7 @@ func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([
 	// with our actual pattern, then pass the found names to delete them using the
 	// same store.
 	fullPath := userFileTableConf.FileTableConfig.Path
-	userFileTableConf.FileTableConfig.Path = cloud.GetPrefixBeforeWildcard(fullPath)
+	userFileTableConf.FileTableConfig.Path = uris.GetPrefixBeforeWildcard(fullPath)
 	pattern := fullPath[len(userFileTableConf.FileTableConfig.Path):]
 
 	f, err := userfile.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig, conn.GetDriverConn())

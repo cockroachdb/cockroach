@@ -16,7 +16,7 @@ type Import struct {
 	Into       bool
 	IntoCols   NameList
 	FileFormat string
-	Files      Exprs
+	Files      URIs
 	Bundle     bool
 	Options    KVOptions
 }
@@ -52,9 +52,14 @@ func (node *Import) Format(ctx *FmtCtx) {
 			ctx.FormatNode(node.Table)
 		}
 		ctx.WriteString(node.FileFormat)
-		ctx.WriteString(" DATA (")
+		ctx.WriteString(" DATA ")
+		if len(node.Files) == 1 {
+			ctx.WriteString("(")
+		}
 		ctx.FormatNode(&node.Files)
-		ctx.WriteString(")")
+		if len(node.Files) == 1 {
+			ctx.WriteString(")")
+		}
 	}
 
 	if node.Options != nil {

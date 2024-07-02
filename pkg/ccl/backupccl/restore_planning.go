@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1097,19 +1098,19 @@ func resolveOptionsForRestoreJobDescription(
 	}
 
 	for _, uri := range kmsURIs {
-		redactedURI, err := cloud.RedactKMSURI(uri)
+		redactedURI, err := uris.RedactKMSURI(uri)
 		if err != nil {
 			return tree.RestoreOptions{}, err
 		}
-		newOpts.DecryptionKMSURI = append(newOpts.DecryptionKMSURI, tree.NewDString(redactedURI))
+		newOpts.DecryptionKMSURI = append(newOpts.DecryptionKMSURI, tree.NewSanitizedKMSURI(redactedURI))
 		logSanitizedKmsURI(ctx, redactedURI)
 	}
 
 	if opts.IncrementalStorage != nil {
 		var err error
-		newOpts.IncrementalStorage, err = sanitizeURIList(incFrom)
+		newOpts.IncrementalStorage, err = sanitizeURIList(incFrom, false /* kms */)
 		for _, uri := range newOpts.IncrementalStorage {
-			logSanitizedRestoreDestination(ctx, uri.String())
+			logSanitizedRestoreDestination(ctx, uri.Expr.String())
 		}
 		if err != nil {
 			return tree.RestoreOptions{}, err
@@ -1134,7 +1135,7 @@ func restoreJobDescription(
 		DescriptorCoverage: restore.DescriptorCoverage,
 		AsOf:               restore.AsOf,
 		Targets:            restore.Targets,
-		From:               make([]tree.StringOrPlaceholderOptList, len(restore.From)),
+		From:               make([]tree.URIs, len(restore.From)),
 	}
 
 	var options tree.RestoreOptions
@@ -1146,10 +1147,10 @@ func restoreJobDescription(
 	r.Options = options
 
 	for i, backup := range from {
-		r.From[i] = make(tree.StringOrPlaceholderOptList, len(backup))
-		r.From[i], err = sanitizeURIList(backup)
+		r.From[i] = make(tree.URIs, len(backup))
+		r.From[i], err = sanitizeURIList(backup, false /* kms */)
 		for _, uri := range r.From[i] {
-			logSanitizedRestoreDestination(ctx, uri.String())
+			logSanitizedRestoreDestination(ctx, uri.Expr.String())
 		}
 		if err != nil {
 			return "", err
@@ -1170,9 +1171,9 @@ func restoreTypeCheck(
 	if err := exprutil.TypeCheck(
 		ctx, "RESTORE", p.SemaCtx(),
 		append(
-			exprutil.MakeStringArraysFromOptList(restoreStmt.From),
-			tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
-			tree.Exprs(restoreStmt.Options.IncrementalStorage),
+			exprutil.MakeStringArraysFromURIsList(restoreStmt.From),
+			restoreStmt.Options.DecryptionKMSURI.Exprs(),
+			restoreStmt.Options.IncrementalStorage.Exprs(),
 		),
 		exprutil.Strings{
 			restoreStmt.Subdir,
@@ -1231,7 +1232,7 @@ func restorePlanHook(
 
 	from := make([][]string, len(restoreStmt.From))
 	for i, expr := range restoreStmt.From {
-		v, err := exprEval.StringArray(ctx, tree.Exprs(expr))
+		v, err := exprEval.StringArray(ctx, expr.Exprs())
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
@@ -1254,7 +1255,7 @@ func restorePlanHook(
 		}
 		var err error
 		kms, err = exprEval.StringArray(
-			ctx, tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
+			ctx, restoreStmt.Options.DecryptionKMSURI.Exprs(),
 		)
 		if err != nil {
 			return nil, nil, nil, false, err
@@ -1298,7 +1299,7 @@ func restorePlanHook(
 		}
 		var err error
 		incStorage, err = exprEval.StringArray(
-			ctx, tree.Exprs(restoreStmt.Options.IncrementalStorage),
+			ctx, restoreStmt.Options.IncrementalStorage.Exprs(),
 		)
 		if err != nil {
 			return nil, nil, nil, false, err

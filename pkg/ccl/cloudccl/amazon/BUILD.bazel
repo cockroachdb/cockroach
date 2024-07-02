@@ -9,11 +9,11 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/cloud",
         "//pkg/cloud/amazon",
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/cloudtestutils",
         "//pkg/cloud/externalconn/providers",
+        "//pkg/cloud/uris",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

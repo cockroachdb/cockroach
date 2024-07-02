@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -116,7 +116,7 @@ func changefeedTypeCheck(
 		return false, nil, nil
 	}
 	if err := exprutil.TypeCheck(ctx, `CREATE CHANGEFEED`, p.SemaCtx(),
-		exprutil.Strings{changefeedStmt.SinkURI},
+		exprutil.Strings{changefeedStmt.SinkURI.Expr},
 		&exprutil.KVOptions{
 			KVOptions:  changefeedStmt.Options,
 			Validation: changefeedvalidators.CreateOptionValidations,
@@ -124,7 +124,7 @@ func changefeedTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
-	unspecifiedSink := changefeedStmt.SinkURI == nil
+	unspecifiedSink := changefeedStmt.SinkURI.Expr == nil
 	if unspecifiedSink {
 		return true, sinklessHeader, nil
 	}
@@ -142,7 +142,7 @@ func changefeedPlanHook(
 
 	exprEval := p.ExprEvaluator("CREATE CHANGEFEED")
 	var sinkURI string
-	unspecifiedSink := changefeedStmt.SinkURI == nil
+	unspecifiedSink := changefeedStmt.SinkURI.Expr == nil
 	avoidBuffering := unspecifiedSink
 	var header colinfo.ResultColumns
 	if unspecifiedSink {
@@ -157,7 +157,7 @@ func changefeedPlanHook(
 		header = sinklessHeader
 	} else {
 		var err error
-		sinkURI, err = exprEval.String(ctx, changefeedStmt.SinkURI)
+		sinkURI, err = exprEval.String(ctx, changefeedStmt.SinkURI.Expr)
 		if err != nil {
 			return nil, nil, nil, false, changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
 		}
@@ -373,7 +373,7 @@ func createChangefeedJobRecord(
 	jobID jobspb.JobID,
 	telemetryPath string,
 ) (*jobs.Record, error) {
-	unspecifiedSink := changefeedStmt.SinkURI == nil
+	unspecifiedSink := changefeedStmt.SinkURI.Expr == nil
 
 	for _, warning := range opts.DeprecationWarnings() {
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
@@ -971,7 +971,7 @@ func changefeedJobDescription(
 	opts changefeedbase.StatementOptions,
 ) (string, error) {
 	// Redacts user sensitive information from job description.
-	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, nil)
+	cleanedSinkURI, err := uris.SanitizeExternalStorageURI(sinkURI, nil)
 	if err != nil {
 		return "", err
 	}
@@ -985,7 +985,7 @@ func changefeedJobDescription(
 
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
-		SinkURI: tree.NewDString(cleanedSinkURI),
+		SinkURI: tree.NewSanitizedURI(cleanedSinkURI),
 		Select:  changefeed.Select,
 	}
 	if err = opts.ForEachWithRedaction(func(k string, v string) {

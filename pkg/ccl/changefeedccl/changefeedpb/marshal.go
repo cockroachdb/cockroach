@@ -11,7 +11,7 @@ package changefeedpb
 import (
 	"encoding/json"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -30,15 +30,15 @@ func (m ScheduledChangefeedExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]
 		return nil, errors.Errorf("unexpected %T statement in backup schedule: %v", export, export)
 	}
 
-	rawURI, ok := export.SinkURI.(*tree.StrVal)
+	rawURI, ok := export.SinkURI.Expr.(*tree.StrVal)
 	if !ok {
 		return nil, errors.Errorf("unexpected %T arg in export schedule: %v", rawURI, rawURI)
 	}
-	sinkURI, err := cloud.SanitizeExternalStorageURI(rawURI.RawString(), nil /* extraParams */)
+	sinkURI, err := uris.SanitizeExternalStorageURI(rawURI.RawString(), nil /* extraParams */)
 	if err != nil {
 		return nil, err
 	}
-	export.SinkURI = tree.NewDString(sinkURI)
+	export.SinkURI = tree.NewSanitizedURI(sinkURI)
 
 	m.ChangefeedStatement = export.String()
 	return json.Marshal(m)

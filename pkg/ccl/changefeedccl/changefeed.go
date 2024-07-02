@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -108,7 +108,7 @@ func init() {
 		if protoreflect.ShouldRedact(marshaller) {
 			var err error
 			// Redacts user sensitive information from sinkURI.
-			m.SinkURI, err = cloud.SanitizeExternalStorageURI(m.SinkURI, []string{
+			m.SinkURI, err = uris.SanitizeExternalStorageURI(m.SinkURI, []string{
 				changefeedbase.SinkParamSASLPassword,
 				changefeedbase.SinkParamCACert,
 				changefeedbase.SinkParamClientKey,

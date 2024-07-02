@@ -55,7 +55,7 @@ func (node *CopyTo) Format(ctx *FmtCtx) {
 
 // CopyOptions describes options for COPY execution.
 type CopyOptions struct {
-	Destination Expr
+	Destination URI
 	CopyFormat  CopyFormat
 	Delimiter   Expr
 	Null        Expr
@@ -130,7 +130,7 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.Null)
 		addSep = true
 	}
-	if o.Destination != nil {
+	if o.Destination.Expr != nil {
 		maybeAddSep()
 		// Lowercase because that's what has historically been produced
 		// by copy_file_upload.go, so this will provide backward
@@ -169,8 +169,8 @@ func (o CopyOptions) IsDefault() bool {
 // CombineWith merges other options into this struct. An error is returned if
 // the same option merged multiple times.
 func (o *CopyOptions) CombineWith(other *CopyOptions) error {
-	if other.Destination != nil {
-		if o.Destination != nil {
+	if other.Destination.Expr != nil {
+		if o.Destination.Expr != nil {
 			return pgerror.Newf(pgcode.Syntax, "destination option specified multiple times")
 		}
 		o.Destination = other.Destination

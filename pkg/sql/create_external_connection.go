@@ -14,8 +14,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -58,7 +58,7 @@ func (p *planner) parseExternalConnection(
 	); err != nil {
 		return externalConnection{}, errors.Wrap(err, "failed to resolve External Connection name")
 	}
-	if ec.endpoint, err = exprEval.String(ctx, n.As); err != nil {
+	if ec.endpoint, err = exprEval.String(ctx, n.As.Expr); err != nil {
 		return externalConnection{}, errors.Wrap(err, "failed to resolve External Connection endpoint")
 	}
 	return ec, nil
@@ -164,7 +164,7 @@ func (p *planner) createExternalConnection(
 }
 
 func logAndSanitizeExternalConnectionURI(ctx context.Context, externalConnectionURI string) error {
-	clean, err := cloud.SanitizeExternalStorageURI(externalConnectionURI, nil)
+	clean, err := uris.SanitizeExternalStorageURI(externalConnectionURI, nil)
 	if err != nil {
 		return err
 	}

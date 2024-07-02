@@ -2177,7 +2177,11 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 		items = append(items, node.AsOf.docRow(p))
 	}
 	if node.IncrementalFrom != nil {
-		items = append(items, p.row("INCREMENTAL FROM", p.Doc(&node.IncrementalFrom)))
+		exprs := make(Exprs, len(node.IncrementalFrom))
+		for i, from := range node.IncrementalFrom {
+			exprs[i] = from.Expr
+		}
+		items = append(items, p.row("INCREMENTAL FROM", p.Doc(&exprs)))
 	}
 	if !node.Options.IsDefault() {
 		items = append(items, p.row("WITH", p.Doc(&node.Options)))
@@ -2274,12 +2278,17 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 	items := make([]pretty.TableRow, 0, 5)
 	items = append(items, p.row("IMPORT", pretty.Nil))
 
+	fileExprs := make(Exprs, len(node.Files))
+	for i, file := range node.Files {
+		fileExprs[i] = file.Expr
+	}
+
 	if node.Bundle {
 		if node.Table != nil {
 			items = append(items, p.row("TABLE", p.Doc(node.Table)))
 			items = append(items, p.row("FROM", pretty.Nil))
 		}
-		items = append(items, p.row(node.FileFormat, p.Doc(&node.Files)))
+		items = append(items, p.row(node.FileFormat, p.Doc(&fileExprs)))
 	} else if node.Into {
 		into := p.Doc(node.Table)
 		if node.IntoCols != nil {
@@ -2288,7 +2297,7 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 		items = append(items, p.row("INTO", into))
 		data := p.bracketKeyword(
 			"DATA", " (",
-			p.Doc(&node.Files),
+			p.Doc(&fileExprs),
 			")", "",
 		)
 		items = append(items, p.row(node.FileFormat, data))

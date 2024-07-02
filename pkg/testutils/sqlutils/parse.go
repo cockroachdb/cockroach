@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -99,7 +100,8 @@ func VerifyParseFormat(t *testing.T, input string, plpgsql bool) string {
 	}
 
 	fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAnonymize), "-- identifiers removed")
-	if strings.Contains(ref, tree.PasswordSubstitution) {
+	if strings.Contains(ref, tree.PasswordSubstitution) ||
+		strings.Contains(ref, uris.RedactionMarker) {
 		fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtShowPasswords), "-- passwords exposed")
 	}
 

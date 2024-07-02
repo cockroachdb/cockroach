@@ -14,7 +14,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	_ "github.com/cockroachdb/cockroach/pkg/jobs/jobspb" // required for backup.proto
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -109,53 +109,53 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 	}
 
 	for i := range backup.To {
-		raw, ok := backup.To[i].(*tree.StrVal)
+		raw, ok := backup.To[i].Expr.(*tree.StrVal)
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		clean, err := uris.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
-		backup.To[i] = tree.NewDString(clean)
+		backup.To[i] = tree.NewSanitizedURI(clean)
 	}
 
 	// NB: this will never be non-nil with current schedule syntax but is here for
 	// completeness.
 	for i := range backup.IncrementalFrom {
-		raw, ok := backup.IncrementalFrom[i].(*tree.StrVal)
+		raw, ok := backup.IncrementalFrom[i].Expr.(*tree.StrVal)
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		clean, err := uris.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
-		backup.IncrementalFrom[i] = tree.NewDString(clean)
+		backup.IncrementalFrom[i] = tree.NewSanitizedURI(clean)
 	}
 
 	for i := range backup.Options.IncrementalStorage {
-		raw, ok := backup.Options.IncrementalStorage[i].(*tree.StrVal)
+		raw, ok := backup.Options.IncrementalStorage[i].Expr.(*tree.StrVal)
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		clean, err := uris.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
 		if err != nil {
 			return nil, err
 		}
-		backup.Options.IncrementalStorage[i] = tree.NewDString(clean)
+		backup.Options.IncrementalStorage[i] = tree.NewSanitizedURI(clean)
 	}
 
 	for i := range backup.Options.EncryptionKMSURI {
-		raw, ok := backup.Options.EncryptionKMSURI[i].(*tree.StrVal)
+		raw, ok := backup.Options.EncryptionKMSURI[i].Expr.(*tree.StrVal)
 		if !ok {
 			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
 		}
-		clean, err := cloud.RedactKMSURI(raw.RawString())
+		clean, err := uris.RedactKMSURI(raw.RawString())
 		if err != nil {
 			return nil, err
 		}
-		backup.Options.EncryptionKMSURI[i] = tree.NewDString(clean)
+		backup.Options.EncryptionKMSURI[i] = tree.NewSanitizedKMSURI(clean)
 	}
 
 	if backup.Options.EncryptionPassphrase != nil {

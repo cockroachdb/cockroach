@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/uris"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -105,25 +106,25 @@ const (
 	deprecatedExternalConnectionScheme = "azure-storage"
 )
 
-func azureAuthMethod(uri *url.URL, consumeURI *cloud.ConsumeURL) (cloudpb.AzureAuth, error) {
-	authParam := consumeURI.ConsumeParam(cloud.AuthParam)
+func azureAuthMethod(uri *url.URL, consumeURI *uris.ConsumeURL) (cloudpb.AzureAuth, error) {
+	authParam := consumeURI.ConsumeParam(uris.AuthParam)
 	switch authParam {
-	case "", cloud.AuthParamSpecified:
+	case "", uris.AuthParamSpecified:
 		if uri.Query().Get(AzureAccountKeyParam) != "" {
 			return cloudpb.AzureAuth_LEGACY, nil
 		}
 		return cloudpb.AzureAuth_EXPLICIT, nil
-	case cloud.AuthParamImplicit:
+	case uris.AuthParamImplicit:
 		return cloudpb.AzureAuth_IMPLICIT, nil
 	default:
 		return 0, errors.Errorf("unsupported value %s for %s",
-			authParam, cloud.AuthParam)
+			authParam, uris.AuthParam)
 	}
 
 }
 
 func parseAzureURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
-	azureURL := cloud.ConsumeURL{URL: uri}
+	azureURL := uris.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
 	auth, err := azureAuthMethod(uri, &azureURL)
@@ -271,7 +272,7 @@ func makeAzureStorage(
 		}
 
 	default:
-		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
+		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, uris.AuthParam)
 	}
 
 	return &azureStorage{
@@ -359,7 +360,7 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 	ctx, sp := tracing.ChildSpan(ctx, "azure.List")
 	defer sp.Finish()
 
-	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
+	dest := uris.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
 
 	pager := s.container.NewListBlobsHierarchyPager(delim, &container.ListBlobsHierarchyOptions{Prefix: &dest})

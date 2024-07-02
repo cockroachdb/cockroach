@@ -118,10 +118,10 @@ func newFileUploadMachine(
 		}
 	}
 
-	if n.Options.Destination == nil {
+	if n.Options.Destination.Expr == nil {
 		return nil, errors.Newf("destination required")
 	}
-	dest, err := f.c.p.ExprEvaluator("COPY").String(ctx, n.Options.Destination)
+	dest, err := f.c.p.ExprEvaluator("COPY").String(ctx, n.Options.Destination.Expr)
 	if err != nil {
 		return nil, err
 	}
