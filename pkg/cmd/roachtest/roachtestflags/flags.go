@@ -307,6 +307,16 @@ var (
 		Usage: `The address to which to connect to dogstatsd, to send Datadog events.`,
 	})
 
+	SideEyeApiToken string = ""
+	_                      = registerRunFlag(&SideEyeApiToken, FlagInfo{
+		Name: "side-eye-token",
+		Usage: `The API token to use for configuring the Side-Eye agents running on the
+						created clusters. If empty, the Side-Eye agents will not be started.
+						If set to "secret", the API token will be read from ` + "`gcloud secrets`" + `.
+						When set, app.side-eye.io can be used to monitor running clusters and also
+						timing out tests will get a snapshot before their clusters are destroyed.`,
+	})
+
 	PreferLocalSSD bool = true
 	_                   = registerRunFlag(&PreferLocalSSD, FlagInfo{
 		Name:  "local-ssd",
