@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,11 +29,19 @@ import (
 
 // Stream is a object capable of transmitting RangeFeedEvents.
 type Stream interface {
-	// Context returns the context for this stream.
-	Context() context.Context
-	// Send blocks until it sends m, the stream is done, or the stream breaks.
-	// Send must be safe to call on the same stream in different goroutines.
-	Send(*kvpb.RangeFeedEvent) error
+	kvpb.RangeFeedEventSink
+
+	// Disconnect handles stream disconnection using the wrapped muxer. Safe to
+	// call repeatedly for the same stream, but subsequent errors are ignored. It
+	// ensures 1. cancel stream context 2. send error back to client 3. clean up
+	// function is called.
+	Disconnect(err *kvpb.Error)
+
+	// RegisterRangefeedCleanUp registers a cleanup function which is called when
+	// the stream disconnects via Disconnect. Caller must ensure that cleanUp is
+	// thread safe. Note that LeagcyProcessor doesn't need this since it uses the
+	// old code and has a dedicated goroutine for every registration.
+	RegisterRangefeedCleanUp(func())
 }
 
 // Shared event is an entry stored in registration channel. Each entry is
@@ -85,7 +92,6 @@ type registration struct {
 
 	// Output.
 	stream Stream
-	done   *future.ErrorFuture
 	unreg  func()
 	// Internal.
 	id            int64
@@ -126,7 +132,6 @@ func newRegistration(
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
-	done *future.ErrorFuture,
 ) registration {
 	r := registration{
 		span:             span,
@@ -136,7 +141,6 @@ func newRegistration(
 		withOmitRemote:   withOmitRemote,
 		metrics:          metrics,
 		stream:           stream,
-		done:             done,
 		unreg:            unregisterFn,
 		buf:              make(chan *sharedEvent, bufferSz),
 		blockWhenFull:    blockWhenFull,
@@ -288,22 +292,30 @@ func (r *registration) maybeStripEvent(
 	return ret
 }
 
+func (r *registration) cleanUp() (alreadyDisconnected bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.disconnected {
+		return true
+	}
+
+	if r.mu.catchUpIter != nil {
+		r.mu.catchUpIter.Close()
+		r.mu.catchUpIter = nil
+	}
+	if r.mu.outputLoopCancelFn != nil {
+		r.mu.outputLoopCancelFn()
+	}
+	r.mu.disconnected = true
+	return false
+}
+
 // disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
 func (r *registration) disconnect(pErr *kvpb.Error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.mu.disconnected {
-		if r.mu.catchUpIter != nil {
-			r.mu.catchUpIter.Close()
-			r.mu.catchUpIter = nil
-		}
-		if r.mu.outputLoopCancelFn != nil {
-			r.mu.outputLoopCancelFn()
-		}
-		r.mu.disconnected = true
-		r.done.Set(pErr.GoError())
+	if alreadyDisconnected := r.cleanUp(); !alreadyDisconnected {
+		r.stream.Disconnect(pErr)
 	}
 }
 

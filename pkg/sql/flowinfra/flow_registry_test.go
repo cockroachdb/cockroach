@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -710,6 +711,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 // allows to block (on delayCh) Send() calls which always result in the
 // provided error.
 type delayedErrorServerStream struct {
+	*kvpb.TestStream
 	execinfrapb.DistSQL_FlowStreamServer
 	// rpcCalledCh is sent on in the very beginning of every Send() call.
 	rpcCalledCh chan<- struct{}

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	kvserverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1426,6 +1426,8 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 			},
 		},
 	})
+	muxer, cleanUp := kvserverrangefeed.NewTestCleanUpOnlyStreamMuxer(tc.Stopper())
+	defer cleanUp()
 	defer tc.Stopper().Stop(ctx)
 	defer cancel()
 
@@ -1462,9 +1464,8 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 		Span: desc.RSpan().AsRawSpanWithNoLocals(),
 	}
 	eventC := make(chan *kvpb.RangeFeedEvent)
-	sink := newChannelSink(ctx, eventC)
-	fErr := future.MakeAwaitableFuture(s3.RangeFeed(&req, sink))
-	require.NoError(t, fErr.Get()) // check if we've errored yet
+	sink := newChannelSink(1, ctx, eventC, muxer)
+	require.NoError(t, s3.RangeFeed(&req, sink)) // check if we've errored yet
 	t.Logf("started rangefeed on %s", repl3)
 
 	// Spawn a rangefeed monitor, which posts checkpoint updates to checkpointC.
@@ -1621,17 +1622,26 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 	}
 
 	// The rangefeed should still be running.
-	require.NoError(t, fErr.Get())
+	require.NoError(t, sink.GetError())
 }
 
 // channelSink is a rangefeed sink which posts events to a channel.
 type channelSink struct {
-	ctx context.Context
-	ch  chan<- *kvpb.RangeFeedEvent
+	*kvpb.TestStream
+	streamID int64
+	ctx      context.Context
+	ch       chan<- *kvpb.RangeFeedEvent
+	done     chan *kvpb.Error
+	muxer    *kvserverrangefeed.TestCleanUpOnlyStreamMuxer
 }
 
-func newChannelSink(ctx context.Context, ch chan<- *kvpb.RangeFeedEvent) *channelSink {
-	return &channelSink{ctx: ctx, ch: ch}
+func newChannelSink(
+	streamID int64,
+	ctx context.Context,
+	ch chan<- *kvpb.RangeFeedEvent,
+	muxer *kvserverrangefeed.TestCleanUpOnlyStreamMuxer,
+) *channelSink {
+	return &channelSink{streamID: streamID, ctx: ctx, ch: ch, done: make(chan *kvpb.Error, 1), muxer: muxer}
 }
 
 func (c *channelSink) Context() context.Context {
@@ -1645,6 +1655,24 @@ func (c *channelSink) Send(e *kvpb.RangeFeedEvent) error {
 	case <-c.ctx.Done():
 		return c.ctx.Err()
 	}
+}
+
+func (c *channelSink) GetError() error {
+	select {
+	case err := <-c.done:
+		return err.GoError()
+	default:
+		return nil
+	}
+}
+
+func (c *channelSink) Disconnect(err *kvpb.Error) {
+	c.done <- err
+	c.muxer.DisconnectRangefeedWithError(c.streamID)
+}
+
+func (c *channelSink) RegisterRangefeedCleanUp(f func()) {
+	c.muxer.RegisterRangefeedCleanUp(c.streamID, f)
 }
 
 // TestRangeFeedMetadataManualSplit tests that a spawned rangefeed emits a

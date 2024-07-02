@@ -278,6 +278,7 @@ type internalServer struct {
 }
 
 type rangefeedEventSink struct {
+	*kvpb.TestStream
 	ctx    context.Context
 	stream kvpb.Internal_MuxRangeFeedServer
 }

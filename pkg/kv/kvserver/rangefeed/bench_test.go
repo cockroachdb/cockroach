@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -96,11 +95,12 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 
 	p, h, stopper := newTestProcessor(b, withSpan(span), withBudget(budget), withChanCap(b.N),
 		withEventTimeout(time.Hour), withProcType(opts.procType))
+	muxer, cleanUp := NewTestCleanUpOnlyStreamMuxer(stopper)
+	defer cleanUp()
 	defer stopper.Stop(ctx)
 
 	// Add registrations.
 	streams := make([]*noopStream, opts.numRegistrations)
-	futures := make([]*future.ErrorFuture, opts.numRegistrations)
 	for i := 0; i < opts.numRegistrations; i++ {
 		// withDiff does not matter for these benchmarks, since the previous value
 		// is fetched and populated during Raft application.
@@ -108,11 +108,10 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		// withFiltering does not matter for these benchmarks because doesn't fetch
 		// extra data.
 		const withFiltering = false
-		streams[i] = &noopStream{ctx: ctx}
-		futures[i] = &future.ErrorFuture{}
+		streams[i] = &noopStream{ctx: ctx, done: make(chan *kvpb.Error, 1), muxer: muxer, streamID: int64(i)}
 		ok, _ := p.Register(span, hlc.MinTimestamp, nil,
 			withDiff, withFiltering, false, /* withOmitRemote */
-			streams[i], nil, futures[i])
+			streams[i], nil)
 		require.True(b, ok)
 	}
 
@@ -185,18 +184,21 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	b.StopTimer()
 	p.Stop()
 
-	for i, f := range futures {
-		regErr, err := future.Wait(ctx, f)
-		require.NoError(b, err)
-		require.NoError(b, regErr)
+	for i, s := range streams {
+		// p.Stop() sends a nil error to all streams to signal completion.
+		require.NoError(b, s.WaitForErr(b))
 		require.Equal(b, b.N, streams[i].events-1) // ignore checkpoint after catchup
 	}
 }
 
 // noopStream is a stream that does nothing, except count events.
 type noopStream struct {
-	ctx    context.Context
-	events int
+	*kvpb.TestStream
+	streamID int64
+	ctx      context.Context
+	events   int
+	done     chan *kvpb.Error
+	muxer    *TestCleanUpOnlyStreamMuxer
 }
 
 func (s *noopStream) Context() context.Context {
@@ -206,4 +208,23 @@ func (s *noopStream) Context() context.Context {
 func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
 	s.events++
 	return nil
+}
+
+func (s *noopStream) Disconnect(error *kvpb.Error) {
+	s.done <- error
+	s.muxer.DisconnectRangefeedWithError(s.streamID)
+}
+
+func (s *noopStream) RegisterRangefeedCleanUp(f func()) {
+	s.muxer.RegisterRangefeedCleanUp(s.streamID, f)
+}
+
+func (s *noopStream) WaitForErr(b *testing.B) error {
+	select {
+	case err := <-s.done:
+		return err.GoError()
+	case <-time.After(30 * time.Second):
+		b.Fatalf("time out waiting for rangefeed completion")
+		return nil
+	}
 }
