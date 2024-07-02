@@ -81,7 +81,14 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &ExecutorTestingKnobs{
+				DeterministicExplain: true,
+			},
+		},
+		Insecure: true,
+	})
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
 	r.Exec(t, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE);
@@ -302,6 +309,33 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		}
 	})
 
+	// getBundleThroughBuiltin is a helper function that returns an url to
+	// download a stmt bundle that was collected in response to a diagnostics
+	// request inserted by the builtin.
+	getBundleThroughBuiltin := func(fprint, query, planGist string, redacted bool) string {
+		// Delete all old diagnostics to make this test easier.
+		r.Exec(t, "DELETE FROM system.statement_diagnostics WHERE true")
+
+		// Insert the diagnostics request via the builtin function.
+		row := r.QueryRow(t, `SELECT crdb_internal.request_statement_bundle($1, $2, 0::FLOAT, 0::INTERVAL, 0::INTERVAL, $3);`, fprint, planGist, redacted)
+		var inserted bool
+		row.Scan(&inserted)
+		require.True(t, inserted)
+
+		// Now actually execute the query so that the bundle is collected.
+		r.Exec(t, query)
+
+		// Get ID of our bundle.
+		var id int
+		var bundleFingerprint string
+		row = r.QueryRow(t, "SELECT id, statement_fingerprint FROM system.statement_diagnostics LIMIT 1")
+		row.Scan(&id, &bundleFingerprint)
+		require.Equal(t, fprint, bundleFingerprint)
+
+		// We need to come up with the url to download the bundle from.
+		return findBundleDownloadURL(t, r, id)
+	}
+
 	t.Run("redact", func(t *testing.T) {
 		r.Exec(t, "CREATE TYPE plesiosaur AS ENUM ('pterodactyl', '5555555555554444');")
 		r.Exec(t, "CREATE TABLE pterosaur (cardholder STRING PRIMARY KEY, cardno INT, INDEX (cardno));")
@@ -312,30 +346,11 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			t.Run(fmt.Sprintf("viaBuiltin=%t", viaBuiltin), func(t *testing.T) {
 				var url string
 				if viaBuiltin {
-					// Delete all old diagnostics to make this test easier.
-					r.Exec(t, "DELETE FROM system.statement_diagnostics WHERE true")
-
-					// Insert the diagnostics request via the builtin function.
-					fingerprint := "SELECT max(cardno), test_redact() FROM pterosaur WHERE cardholder = _"
-					row := r.QueryRow(t, `SELECT crdb_internal.request_statement_bundle($1, 0::FLOAT, 0::INTERVAL, 0::INTERVAL, true);`, fingerprint)
-					var inserted bool
-					row.Scan(&inserted)
-					require.True(t, inserted)
-
-					// Now actually execute the query so that the bundle is
-					// collected.
-					r.Exec(t, "SELECT max(cardno), test_redact() FROM pterosaur WHERE cardholder = 'pterodactyl';")
-
-					// Get ID of our bundle.
-					var id int
-					var bundleFingerprint string
-					row = r.QueryRow(t, "SELECT id, statement_fingerprint FROM system.statement_diagnostics LIMIT 1")
-					row.Scan(&id, &bundleFingerprint)
-					require.Equal(t, fingerprint, bundleFingerprint)
-
-					// We need to come up with the url to download the bundle
-					// from.
-					url = findBundleDownloadURL(t, r, id)
+					fprint := "SELECT max(cardno), test_redact() FROM pterosaur WHERE cardholder = _"
+					query := "SELECT max(cardno), test_redact() FROM pterosaur WHERE cardholder = 'pterodactyl';"
+					// Collect a bundle in response to a diagnostics request
+					// inserted by the builtin.
+					url = getBundleThroughBuiltin(fprint, query, "" /* planGist */, true /* redacted */)
 				} else {
 					rows := r.QueryStr(t,
 						"EXPLAIN ANALYZE (DEBUG, REDACT) SELECT max(cardno), test_redact() FROM pterosaur WHERE cardholder = 'pterodactyl'",
@@ -487,6 +502,59 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		checkBundle(
 			t, fmt.Sprint(rows), "db2.s2.t2", nil, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
+		)
+	})
+
+	t.Run("plan-gist matching", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE gist (k INT PRIMARY KEY);")
+		r.Exec(t, "ANALYZE gist")
+		const fprint = `SELECT * FROM gist`
+
+		// Come up with a target gist.
+		row := r.QueryRow(t, "EXPLAIN (GIST) "+fprint)
+		var gist string
+		row.Scan(&gist)
+
+		url := getBundleThroughBuiltin(fprint, fprint, gist, false /* redacted */)
+		checkBundleContents(
+			t, url, "gist", func(name, contents string) error {
+				if name != "plan.txt" {
+					return nil
+				}
+				// Add a new line at the beginning for cleaner formatting in the
+				// test.
+				contents = "\n" + contents
+				expected := `
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+maximum memory usage: <hidden>
+network usage: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+
+• scan
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
+  KV rows decoded: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+  table: gist@gist_pkey
+  spans: FULL SCAN
+`
+				if contents != expected {
+					return errors.Newf("unexpected contents of plan.txn\nexpected:\n%s\ngot:\n%s", expected, contents)
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.gist.sql",
 		)
 	})
 }
