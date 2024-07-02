@@ -1175,7 +1175,7 @@ func registerClusterToCluster(r registry.Registry) {
 			srcNodes:  10,
 			dstNodes:  10,
 			cpus:      8,
-			pdSize:    1100,
+			pdSize:    2000,
 			// Write ~7TB data to disk via Import -- takes a little over 1 hour.
 			workload: replicateImportKV{
 				replicateSplits: true,
