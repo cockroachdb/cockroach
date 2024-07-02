@@ -2397,6 +2397,9 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		uint64(columnBackfillUpdateChunkSizeThresholdBytes.Get(&sc.settings.SV)),
 		backfill.ColumnMutationFilter,
 	); err != nil {
+		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+		}
 		return err
 	}
 	log.Info(ctx, "finished clearing and backfilling columns")
