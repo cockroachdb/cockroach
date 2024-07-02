@@ -2086,6 +2086,12 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		return false, err
 	}
 	defer iter.Close()
+	if log.ExpensiveLogEnabled(ctx, 3) {
+		defer func() {
+			ss := iter.Stats().Stats
+			log.VEventf(ctx, 3, "lock table scan stats: %s", ss.String())
+		}()
+	}
 
 	var meta enginepb.MVCCMetadata
 	var ok bool
