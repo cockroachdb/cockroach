@@ -11,6 +11,8 @@
 package kvflowcontrolpb
 
 import (
+	math "math"
+
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/redact"
 )
@@ -60,4 +62,101 @@ func (a AdmittedForRangeRACv2) String() string {
 
 func (a AdmittedForRangeRACv2) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("admitted-entries (r%s %+v)", a.RangeID, a.Msg)
+}
+
+type RaftPriority uint8
+
+const (
+	RaftLowPri RaftPriority = iota
+	RaftNormalPri
+	RaftAboveNormalPri
+	RaftHighPri
+	NumRaftPriorities
+
+	// The following are not real priorities, but will be encoded in
+	// RaftMessageRequest.InheritedRaftPriority. This should actually be a
+	// separate enum in that proto instead of trying to overload the priority.
+	// The reason we were trying to fit this into the same byte earlier was that
+	// we were planning to reencode this override into the Entry, but we are no
+	// longer doing that. This is ok-ish for the sake of the prototype.
+	//
+	// TODO: move these elsewhere.
+
+	NotSubjectToACForFlowControl       RaftPriority = math.MaxUint8 - 2
+	PriorityNotInheritedForFlowControl RaftPriority = math.MaxUint8 - 1
+)
+
+func (p RaftPriority) String() string {
+	switch p {
+	case RaftLowPri:
+		return "LowPri"
+	case RaftNormalPri:
+		return "NormalPri"
+	case RaftAboveNormalPri:
+		return "AboveNormalPri"
+	case RaftHighPri:
+		return "HighPri"
+	default:
+		panic("invalid raft priority")
+	}
+}
+
+func RaftPriorityConversionForUnusedZero(pri RaftPriority) uint8 {
+	return uint8(pri + 1)
+}
+
+// UndoRaftPriorityConversionForUnusedZero ...
+// REQUIRES: pri > 0
+func UndoRaftPriorityConversionForUnusedZero(pri uint8) RaftPriority {
+	return RaftPriority(pri - 1)
+}
+
+// AdmissionPriorityToRaftPriority maps the larger set of values in admissionpb.WorkPriority
+// to the smaller set of raft priorities.
+func AdmissionPriorityToRaftPriority(pri admissionpb.WorkPriority) (rp RaftPriority) {
+	if pri < admissionpb.NormalPri {
+		return RaftLowPri
+	} else if pri < admissionpb.LockingNormalPri {
+		return RaftNormalPri
+	} else if pri < admissionpb.UserHighPri {
+		return RaftAboveNormalPri
+	} else if pri <= admissionpb.HighPri {
+		return RaftHighPri
+	} else {
+		panic("unknown priority")
+	}
+}
+
+// RaftPriorityToAdmissionPriority maps a RaftPriority to the highest
+// admissionpb.WorkPriority that could map to it. This is needed before
+// calling into the admission package, since it is possible for a mix of RACv2
+// entries and other entries to be competing in the same admission WorkQueue.
+func RaftPriorityToAdmissionPriority(rp RaftPriority) (pri admissionpb.WorkPriority) {
+	if rp < RaftNormalPri {
+		return admissionpb.LowPri
+	} else if rp < RaftAboveNormalPri {
+		return admissionpb.NormalPri
+	} else if rp < RaftHighPri {
+		return admissionpb.UserHighPri
+	} else if rp < NumRaftPriorities {
+		return admissionpb.HighPri
+	} else {
+		panic("unknown priority")
+	}
+}
+
+// Used for deciding what kind of flow tokens are needed. The result here
+// should be equivalent to
+// admissionpb.WorkClassFromPri(admissionpb.RaftPriorityToAdmissionPriority(pri)),
+// though that is not necessary for correctness since this computation is used
+// only locally in the leader and within the RACv2 sub-system.
+func WorkClassFromRaftPriority(pri RaftPriority) admissionpb.WorkClass {
+	switch pri {
+	case RaftLowPri:
+		return admissionpb.ElasticWorkClass
+	case RaftNormalPri, RaftAboveNormalPri, RaftHighPri:
+		return admissionpb.RegularWorkClass
+	default:
+		panic("")
+	}
 }

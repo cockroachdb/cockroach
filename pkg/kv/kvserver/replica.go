@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
@@ -2549,7 +2550,7 @@ func (r *Replica) processRACv2PiggybackedAdmitted() bool {
 var _ kvflowconnectedstream.MessageSender = &Replica{}
 
 func (r *Replica) SendRaftMessage(
-	ctx context.Context, priorityInherited kvflowconnectedstream.RaftPriority, msg raftpb.Message,
+	ctx context.Context, priorityInherited kvflowcontrolpb.RaftPriority, msg raftpb.Message,
 ) {
-	r.sendRaftMessage(ctx, msg, kvflowconnectedstream.RaftPriorityConversionForUnusedZero(priorityInherited))
+	r.sendRaftMessage(ctx, msg, kvflowcontrolpb.RaftPriorityConversionForUnusedZero(priorityInherited))
 }

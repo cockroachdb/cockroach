@@ -18,12 +18,14 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -612,7 +614,7 @@ type FollowerStateInfo struct {
 	Match uint64
 	Next  uint64
 	// Invariant: Admitted[i] <= Match.
-	Admitted [NumRaftPriorities]uint64
+	Admitted [kvflowcontrolpb.NumRaftPriorities]uint64
 }
 
 func (f FollowerStateInfo) String() string {
@@ -631,58 +633,11 @@ func (f FollowerStateInfo) String() string {
 		if i > 0 {
 			fmt.Fprintf(&buf, ",")
 		}
-		fmt.Fprintf(&buf, "%v=%d", RaftPriority(pri), a)
+		fmt.Fprintf(&buf, "%v=%d", kvflowcontrolpb.RaftPriority(pri), a)
 		i++
 	}
 	buf.WriteString("]")
 	return buf.String()
-}
-
-type RaftPriority uint8
-
-const (
-	RaftLowPri RaftPriority = iota
-	RaftNormalPri
-	RaftAboveNormalPri
-	RaftHighPri
-	NumRaftPriorities
-
-	// The following are not real priorities, but will be encoded in
-	// RaftMessageRequest.InheritedRaftPriority. This should actually be a
-	// separate enum in that proto instead of trying to overload the priority.
-	// The reason we were trying to fit this into the same byte earlier was that
-	// we were planning to reencode this override into the Entry, but we are no
-	// longer doing that. This is ok-ish for the sake of the prototype.
-	//
-	// TODO: move these elsewhere.
-
-	NotSubjectToACForFlowControl       RaftPriority = math.MaxUint8 - 2
-	PriorityNotInheritedForFlowControl RaftPriority = math.MaxUint8 - 1
-)
-
-func (p RaftPriority) String() string {
-	switch p {
-	case RaftLowPri:
-		return "LowPri"
-	case RaftNormalPri:
-		return "NormalPri"
-	case RaftAboveNormalPri:
-		return "AboveNormalPri"
-	case RaftHighPri:
-		return "HighPri"
-	default:
-		return fmt.Sprintf("Invalid(%d)", p)
-	}
-}
-
-func RaftPriorityConversionForUnusedZero(pri RaftPriority) uint8 {
-	return uint8(pri + 1)
-}
-
-// UndoRaftPriorityConversionForUnusedZero ...
-// REQUIRES: pri > 0
-func UndoRaftPriorityConversionForUnusedZero(pri uint8) RaftPriority {
-	return RaftPriority(pri - 1)
 }
 
 // RaftAdmittedInterface is used to interact with Raft on all replicas, for
@@ -712,7 +667,7 @@ type RaftAdmittedInterface interface {
 	// and an entry at the same index can change. It is easy to make a bug if
 	// there is no explicit coupling with the leader term, because a term change
 	// can slip through in between Get/SetAdmitted calls, by virtue of any Step().
-	GetAdmitted() [NumRaftPriorities]uint64
+	GetAdmitted() [kvflowcontrolpb.NumRaftPriorities]uint64
 	// SetAdmitted sets the new value of admitted.
 	// REQUIRES:
 	//  The admitted[i] values in the parameter are >= the corresponding
@@ -721,57 +676,7 @@ type RaftAdmittedInterface interface {
 	//  admitted[i] <= stableIndex.
 	//
 	// Returns a MsgAppResp that contains these latest admitted values.
-	SetAdmitted(admitted [NumRaftPriorities]uint64) raftpb.Message
-}
-
-// AdmissionPriorityToRaftPriority maps the larger set of values in admissionpb.WorkPriority
-// to the smaller set of raft priorities.
-func AdmissionPriorityToRaftPriority(pri admissionpb.WorkPriority) (rp RaftPriority) {
-	if pri < admissionpb.NormalPri {
-		return RaftLowPri
-	} else if pri < admissionpb.LockingNormalPri {
-		return RaftNormalPri
-	} else if pri < admissionpb.UserHighPri {
-		return RaftAboveNormalPri
-	} else if pri <= admissionpb.HighPri {
-		return RaftHighPri
-	} else {
-		panic("unknown priority")
-	}
-}
-
-// RaftPriorityToAdmissionPriority maps a RaftPriority to the highest
-// admissionpb.WorkPriority that could map to it. This is needed before
-// calling into the admission package, since it is possible for a mix of RACv2
-// entries and other entries to be competing in the same admission WorkQueue.
-func RaftPriorityToAdmissionPriority(rp RaftPriority) (pri admissionpb.WorkPriority) {
-	if rp < RaftNormalPri {
-		return admissionpb.LowPri
-	} else if rp < RaftAboveNormalPri {
-		return admissionpb.NormalPri
-	} else if rp < RaftHighPri {
-		return admissionpb.UserHighPri
-	} else if rp < NumRaftPriorities {
-		return admissionpb.HighPri
-	} else {
-		panic("unknown priority")
-	}
-}
-
-// Used for deciding what kind of flow tokens are needed. The result here
-// should be equivalent to
-// admissionpb.WorkClassFromPri(admissionpb.RaftPriorityToAdmissionPriority(pri)),
-// though that is not necessary for correctness since this computation is used
-// only locally in the leader and within the RACv2 sub-system.
-func workClassFromRaftPriority(pri RaftPriority) admissionpb.WorkClass {
-	switch pri {
-	case RaftLowPri:
-		return admissionpb.ElasticWorkClass
-	case RaftNormalPri, RaftAboveNormalPri, RaftHighPri:
-		return admissionpb.RegularWorkClass
-	default:
-		panic("")
-	}
+	SetAdmitted(admitted [kvflowcontrolpb.NumRaftPriorities]uint64) raftpb.Message
 }
 
 // MessageSender abstracts Replica.sendRaftMessage. The context used is always
@@ -801,7 +706,7 @@ type MessageSender interface {
 	// differ, but it does not matter. See discussion about priority
 	// inheritance in "Design for robust flow token return in RACv2".
 	SendRaftMessage(
-		ctx context.Context, priorityInherited RaftPriority, msg raftpb.Message)
+		ctx context.Context, priorityInherited kvflowcontrolpb.RaftPriority, msg raftpb.Message)
 }
 
 type RangeControllerOptions struct {
@@ -1165,7 +1070,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 				if !entryFCState.usesFlowControl {
 					continue
 				}
-				wc := workClassFromRaftPriority(entryFCState.originalPri)
+				wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
 				rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
 				rs.replicaSendStream.advanceNextRaftIndexAndSent(entryFCState)
 			}
@@ -1196,7 +1101,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 					continue
 				}
 				// INVARIANT: !toIsFinalized.
-				wc := workClassFromRaftPriority(entryFCState.originalPri)
+				wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
 				send := false
 				if isLeaseholder {
 					if entryFCState.usesFlowControl {
@@ -1236,7 +1141,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 					panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
 				}
 				rc.opts.MessageSender.SendRaftMessage(
-					context.TODO(), PriorityNotInheritedForFlowControl, msg)
+					context.TODO(), kvflowcontrolpb.PriorityNotInheritedForFlowControl, msg)
 			}
 			// Else nothing to send.
 		} else {
@@ -1257,7 +1162,7 @@ type entryFlowControlState struct {
 	// for conf changes. In the former case the send-queue will also be
 	// disabled (i.e., equivalent to RACv1).
 	usesFlowControl bool
-	originalPri     RaftPriority
+	originalPri     kvflowcontrolpb.RaftPriority
 	tokens          kvflowcontrol.Tokens
 }
 
@@ -1266,36 +1171,70 @@ func (e entryFlowControlState) String() string {
 		e.index, e.usesFlowControl, e.originalPri, kvflowcontrol.Tokens(e.tokens))
 }
 
-func encodeRaftFlowControlState(
-	index uint64, usesFlowControl bool, pri RaftPriority, tokens uint64,
+// testingEncodeRaftFlowControlState encodes the flow control state into a Raft entry,
+// used only in testing.
+func testingEncodeRaftFlowControlState(
+	index uint64,
+	usesFlowControl bool,
+	pri kvflowcontrolpb.RaftPriority,
+	tokens uint64,
+	originNodeID roachpb.NodeID,
 ) raftpb.Entry {
+
+	cmd := &kvserverpb.RaftCommand{
+		WriteBatch:        &kvserverpb.WriteBatch{},
+		LogicalOpLog:      &kvserverpb.LogicalOpLog{},
+		AdmissionPriority: int32(pri),
+		ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
+			AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{},
+		},
+	}
+	idKey := raftlog.MakeCmdIDKey()
+	admissionMeta := &kvflowcontrolpb.RaftAdmissionMeta{
+		AdmissionPriority:   int32(pri),
+		AdmissionOriginNode: originNodeID,
+	}
+	cmd.ReplicatedEvalResult.AddSSTable.Data = []byte(strings.Repeat("x", raftlog.RaftCommandIDLen))
+	data, err := raftlog.EncodeCommand(context.Background(), cmd, idKey, admissionMeta, usesFlowControl)
+	if err != nil {
+		panic(err)
+	}
+
 	entry := raftpb.Entry{
 		Index: index,
+		Data:  data,
 	}
-	entry.Data = append(entry.Data, byte(pri))
-	entry.Data = encoding.EncodeUint64Ascending(entry.Data, uint64(tokens))
 	return entry
 }
 
 func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
-	// TODO: change the payload encoding and parsing, and delegate the priority
-	// parsing to that.
-	//
-	// TODO(austen): as a temporary stop-gap, for unit-testing
-	// RangeControllerImpl and all the supporting classes, can hack this to be
-	// some arbitrary trivial encoding.
-	pri := RaftPriority(entry.Data[0])
-	_, tokens, err := encoding.DecodeUint64Ascending(entry.Data[1:])
+	typ, priBits, err := raftlog.EncodingOf(entry)
 	if err != nil {
-		panic(fmt.Sprintf("%v: %v @ idx=%d", err, entry.Data, entry.Index))
+		panic(errors.AssertionFailedf("unable to determine raft command encoding: %v", err))
 	}
 
-	return entryFlowControlState{
+	entryFCState := entryFlowControlState{
 		index:           entry.Index,
-		usesFlowControl: true,
-		originalPri:     pri,
-		tokens:          kvflowcontrol.Tokens(tokens),
+		usesFlowControl: typ.UsesAdmissionControl(),
 	}
+
+	if typ.UsesAdmissionControl() {
+		if typ != raftlog.EntryEncodingStandardWithRaftPriority &&
+			typ != raftlog.EntryEncodingSideloadedWithRaftPriority {
+			panic("expected a RACv2 encoding")
+		}
+		meta, err := raftlog.DecodeRaftAdmissionMeta(entry.Data)
+		if err != nil {
+			panic(errors.AssertionFailedf("unable to decode raft command admission data: %v", err))
+		}
+		if kvflowcontrolpb.RaftPriority(meta.AdmissionPriority) != priBits {
+			panic("inconsistent priorities")
+		}
+		entryFCState.originalPri = kvflowcontrolpb.RaftPriority(meta.AdmissionPriority)
+		entryFCState.tokens = kvflowcontrol.Tokens(len(entry.Data))
+	}
+
+	return entryFCState
 }
 
 func (rc *RangeControllerImpl) HandleControllerSchedulerEvent() error {
@@ -1476,7 +1415,7 @@ type replicaSendStream struct {
 		approxMeanSizeBytes kvflowcontrol.Tokens
 
 		// Precise stats for send-queue. For indices >= nextRaftIndexInitial.
-		priorityCount [NumRaftPriorities]int64
+		priorityCount [kvflowcontrolpb.NumRaftPriorities]int64
 		// sizeSum is only for entries subject to AC.
 		sizeSum kvflowcontrol.Tokens
 
@@ -1587,7 +1526,7 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndSent(state entryFlowControl
 	// queued.
 	rss.tracker.Track(context.TODO(), state.index, state.originalPri, state.originalPri, state.tokens)
 	rss.parent.evalTokenCounter.Deduct(
-		context.TODO(), workClassFromRaftPriority(state.originalPri), state.tokens)
+		context.TODO(), kvflowcontrolpb.WorkClassFromRaftPriority(state.originalPri), state.tokens)
 }
 
 func (rss *replicaSendStream) scheduleForceFlush() {
@@ -1673,18 +1612,18 @@ func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
 	} else {
 		pri := rss.queuePriority()
 		rss.sendQueue.watcherHandleID = rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
-			rss.parent.sendTokenCounter, workClassFromRaftPriority(pri), rss)
+			rss.parent.sendTokenCounter, kvflowcontrolpb.WorkClassFromRaftPriority(pri), rss)
 		return false
 	}
 }
 
 func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
-	inheritedPri := PriorityNotInheritedForFlowControl
+	inheritedPri := kvflowcontrolpb.PriorityNotInheritedForFlowControl
 	// These are the remaining send tokens, that we may want to return. Can be
 	// negative, in which case we need to deduct some more.
 	var remainingTokens [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
 	if rss.sendQueue.forceFlushScheduled {
-		inheritedPri = NotSubjectToACForFlowControl
+		inheritedPri = kvflowcontrolpb.NotSubjectToACForFlowControl
 	} else {
 		// Only inherit the priority if have regular tokens. If have elastic
 		// tokens, will not inherit.
@@ -1693,7 +1632,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 			// Best guess at the inheritedPri based on the stats. We will correct
 			// this before.
 			inheritedPri = rss.queuePriority()
-			if workClassFromRaftPriority(inheritedPri) == admissionpb.ElasticWorkClass {
+			if kvflowcontrolpb.WorkClassFromRaftPriority(inheritedPri) == admissionpb.ElasticWorkClass {
 				panic("")
 			}
 			remainingTokens[admissionpb.RegularWorkClass] = rss.sendQueue.deductedForScheduler.tokens
@@ -1717,9 +1656,9 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 		// Fix the stats since this is no longer in the send-queue.
 		rss.sendQueue.sizeSum -= entryFCState.tokens
 		rss.sendQueue.priorityCount[entryFCState.originalPri]--
-		originalEntryWC := workClassFromRaftPriority(entryFCState.originalPri)
+		originalEntryWC := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
 		switch inheritedPri {
-		case NotSubjectToACForFlowControl:
+		case kvflowcontrolpb.NotSubjectToACForFlowControl:
 			// Don't touch remaining tokens, and return the eval tokens.
 			if entryFCState.index >= rss.nextRaftIndexInitial {
 				rss.eval.tokensDeducted[originalEntryWC] -=
@@ -1727,7 +1666,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 				rss.parent.evalTokenCounter.Return(
 					context.TODO(), originalEntryWC, entryFCState.tokens)
 			}
-		case PriorityNotInheritedForFlowControl:
+		case kvflowcontrolpb.PriorityNotInheritedForFlowControl:
 			remainingTokens[originalEntryWC] -= entryFCState.tokens
 			rss.tracker.Track(
 				context.TODO(), entryFCState.index, entryFCState.originalPri, entryFCState.originalPri, entryFCState.tokens)
@@ -1770,7 +1709,7 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowContr
 		var existingSendQWC admissionpb.WorkClass
 		if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
 			// May need to update it.
-			existingSendQWC = workClassFromRaftPriority(rss.queuePriority())
+			existingSendQWC = kvflowcontrolpb.WorkClassFromRaftPriority(rss.queuePriority())
 		}
 		rss.sendQueue.priorityCount[entry.originalPri]++
 		if rss.connectedState == snapshot {
@@ -1780,7 +1719,7 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowContr
 			// short-lived.
 			return
 		}
-		entryWC := workClassFromRaftPriority(entry.originalPri)
+		entryWC := kvflowcontrolpb.WorkClassFromRaftPriority(entry.originalPri)
 		rss.eval.tokensDeducted[entryWC] += entry.tokens
 		rss.parent.evalTokenCounter.Deduct(context.TODO(), entryWC, entry.tokens)
 		if wasEmpty {
@@ -1803,7 +1742,7 @@ func (rss *replicaSendStream) Notify() {
 		return
 	}
 	pri := rss.queuePriority()
-	wc := workClassFromRaftPriority(pri)
+	wc := kvflowcontrolpb.WorkClassFromRaftPriority(pri)
 	queueSize := rss.queueSize()
 	tokens := rss.parent.sendTokenCounter.TryDeduct(context.TODO(), wc, queueSize)
 	if tokens > 0 {
@@ -1824,9 +1763,9 @@ func (rss *replicaSendStream) isEmptySendQueue() bool {
 }
 
 // REQUIRES: send-queue is not empty.
-func (rss *replicaSendStream) queuePriority() RaftPriority {
-	maxPri := RaftLowPri
-	for pri := RaftLowPri + 1; pri < NumRaftPriorities; pri++ {
+func (rss *replicaSendStream) queuePriority() kvflowcontrolpb.RaftPriority {
+	maxPri := kvflowcontrolpb.RaftLowPri
+	for pri := kvflowcontrolpb.RaftLowPri + 1; pri < kvflowcontrolpb.NumRaftPriorities; pri++ {
 		if rss.sendQueue.priorityCount[pri] > 0 {
 			maxPri = pri
 		}
@@ -1854,9 +1793,9 @@ func (rss *replicaSendStream) changeToStateSnapshot() {
 	// when these tokens will be returned, and therefore we return all tokens
 	// in the tracker.
 	rss.tracker.UntrackAll(func(
-		index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens) {
+		index uint64, inheritedPri kvflowcontrolpb.RaftPriority, originalPri kvflowcontrolpb.RaftPriority, tokens kvflowcontrol.Tokens) {
 		rss.parent.sendTokenCounter.Return(
-			context.TODO(), workClassFromRaftPriority(inheritedPri), tokens)
+			context.TODO(), kvflowcontrolpb.WorkClassFromRaftPriority(inheritedPri), tokens)
 	})
 	// For the same reason, return all eval tokens deducted.
 	for wc := range rss.eval.tokensDeducted {
@@ -1989,11 +1928,11 @@ func (rss *replicaSendStream) makeConsistentWhenProbeToReplicate(indexToSend uin
 	// are returning these send tokens, all of them are now in the send-queue,
 	// and the eval.tokensDeducted includes the send-queue.
 	rss.tracker.UntrackGE(indexToSend,
-		func(index uint64, inheritedPri RaftPriority, originalPri RaftPriority,
+		func(index uint64, inheritedPri kvflowcontrolpb.RaftPriority, originalPri kvflowcontrolpb.RaftPriority,
 			tokens kvflowcontrol.Tokens) {
 			rss.sendQueue.priorityCount[originalPri]++
 			rss.sendQueue.sizeSum += tokens
-			inheritedWC := workClassFromRaftPriority(inheritedPri)
+			inheritedWC := kvflowcontrolpb.WorkClassFromRaftPriority(inheritedPri)
 			rss.parent.sendTokenCounter.Return(context.TODO(), inheritedWC, tokens)
 
 		})
@@ -2071,17 +2010,21 @@ func (rss *replicaSendStream) startProcessingSendQueue() {
 	}
 }
 
-func (rss *replicaSendStream) returnTokensUsingAdmitted(admitted [NumRaftPriorities]uint64) {
+func (rss *replicaSendStream) returnTokensUsingAdmitted(
+	admitted [kvflowcontrolpb.NumRaftPriorities]uint64,
+) {
 	for pri, uptoIndex := range admitted {
-		rss.returnTokensForPri(RaftPriority(pri), uptoIndex)
+		rss.returnTokensForPri(kvflowcontrolpb.RaftPriority(pri), uptoIndex)
 	}
 }
 
-func (rss *replicaSendStream) returnTokensForPri(pri RaftPriority, uptoIndex uint64) {
+func (rss *replicaSendStream) returnTokensForPri(
+	pri kvflowcontrolpb.RaftPriority, uptoIndex uint64,
+) {
 	rss.tracker.Untrack(pri, uptoIndex,
-		func(index uint64, originalPri RaftPriority, tokens kvflowcontrol.Tokens) {
-			wc := workClassFromRaftPriority(pri)
-			originalWC := workClassFromRaftPriority(originalPri)
+		func(index uint64, originalPri kvflowcontrolpb.RaftPriority, tokens kvflowcontrol.Tokens) {
+			wc := kvflowcontrolpb.WorkClassFromRaftPriority(pri)
+			originalWC := kvflowcontrolpb.WorkClassFromRaftPriority(originalPri)
 			if index >= rss.nextRaftIndexInitial {
 				rss.eval.tokensDeducted[originalWC] -= tokens
 				rss.parent.evalTokenCounter.Return(context.TODO(), originalWC, tokens)

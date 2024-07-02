@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -305,7 +304,7 @@ func (ss *storesForRACv2) AdmittedLogEntry(
 ) {
 	rr := ss.lookup(rangeID)
 	if rr != nil {
-		rr.admittedLogEntry(ctx, kvflowconnectedstream.RaftPriority(pri), pos.Index)
+		rr.admittedLogEntry(ctx, kvflowcontrolpb.RaftPriority(pri), pos.Index)
 	}
 	// Else range does not have a replica on this store, so ignore.
 }

@@ -13,6 +13,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/raftlog",
         "//pkg/raft",
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
@@ -21,7 +25,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
-        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/stop",
