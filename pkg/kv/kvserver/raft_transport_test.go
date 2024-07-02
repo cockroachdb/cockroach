@@ -234,8 +234,8 @@ func (rttc *raftTransportTestContext) ListenStore(
 func (rttc *raftTransportTestContext) Send(
 	from, to roachpb.ReplicaDescriptor, rangeID roachpb.RangeID, msg raftpb.Message,
 ) bool {
-	msg.To = uint64(to.ReplicaID)
-	msg.From = uint64(from.ReplicaID)
+	msg.To = raftpb.PeerID(to.ReplicaID)
+	msg.From = raftpb.PeerID(from.ReplicaID)
 	req := &kvserverpb.RaftMessageRequest{
 		RangeID:     rangeID,
 		Message:     msg,
@@ -308,8 +308,8 @@ func TestSendAndReceive(t *testing.T) {
 			baseReq := kvserverpb.RaftMessageRequest{
 				RangeID: 1,
 				Message: raftpb.Message{
-					From: uint64(fromStoreID),
-					To:   uint64(toStoreID),
+					From: raftpb.PeerID(fromStoreID),
+					To:   raftpb.PeerID(toStoreID),
 				},
 				FromReplica: roachpb.ReplicaDescriptor{
 					NodeID:  fromNodeID,
@@ -340,7 +340,7 @@ func TestSendAndReceive(t *testing.T) {
 	for toStoreID := range storeNodes {
 		for len(messageTypeCounts[toStoreID]) > 0 {
 			req := <-channels[toStoreID].ch
-			if req.Message.To != uint64(toStoreID) {
+			if req.Message.To != raftpb.PeerID(toStoreID) {
 				t.Errorf("got unexpected message %v on channel %d", req, toStoreID)
 			}
 
@@ -379,8 +379,8 @@ func TestSendAndReceive(t *testing.T) {
 		RangeID: 1,
 		Message: raftpb.Message{
 			Type: raftpb.MsgApp,
-			From: uint64(replicaIDs[fromStoreID]),
-			To:   uint64(replicaIDs[toStoreID]),
+			From: raftpb.PeerID(replicaIDs[fromStoreID]),
+			To:   raftpb.PeerID(replicaIDs[toStoreID]),
 		},
 		FromReplica: roachpb.ReplicaDescriptor{
 			NodeID:    storeNodes[fromStoreID],

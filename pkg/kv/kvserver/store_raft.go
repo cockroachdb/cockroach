@@ -243,8 +243,8 @@ func (s *Store) uncoalesceBeats(
 	for i, beat := range beats {
 		msg := raftpb.Message{
 			Type:   msgT,
-			From:   uint64(beat.FromReplicaID),
-			To:     uint64(beat.ToReplicaID),
+			From:   raftpb.PeerID(beat.FromReplicaID),
+			To:     raftpb.PeerID(beat.ToReplicaID),
 			Term:   uint64(beat.Term),
 			Commit: uint64(beat.Commit),
 		}

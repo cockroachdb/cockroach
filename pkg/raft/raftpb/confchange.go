@@ -1,3 +1,6 @@
+// This code has been modified from its original form by Cockroach Labs, Inc.
+// All modifications are Copyright 2024 Cockroach Labs, Inc.
+//
 // Copyright 2019 The etcd Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -145,7 +148,7 @@ func ConfChangesFromString(s string) ([]ConfChangeSingle, error) {
 		if err != nil {
 			return nil, err
 		}
-		cc.NodeID = id
+		cc.NodeID = PeerID(id)
 		ccs = append(ccs, cc)
 	}
 	return ccs, nil

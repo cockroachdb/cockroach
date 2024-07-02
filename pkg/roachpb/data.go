@@ -1611,7 +1611,7 @@ func confChangeImpl(
 	for _, rDesc := range removed {
 		sl = append(sl, raftpb.ConfChangeSingle{
 			Type:   raftpb.ConfChangeRemoveNode,
-			NodeID: uint64(rDesc.ReplicaID),
+			NodeID: raftpb.PeerID(rDesc.ReplicaID),
 		})
 
 		switch rDesc.Type {
@@ -1630,7 +1630,7 @@ func confChangeImpl(
 			// It's being re-added as a learner, not only removed.
 			sl = append(sl, raftpb.ConfChangeSingle{
 				Type:   raftpb.ConfChangeAddLearnerNode,
-				NodeID: uint64(rDesc.ReplicaID),
+				NodeID: raftpb.PeerID(rDesc.ReplicaID),
 			})
 		case LEARNER:
 			// A learner could in theory show up in the descriptor if the removal was
@@ -1690,7 +1690,7 @@ func confChangeImpl(
 		}
 		sl = append(sl, raftpb.ConfChangeSingle{
 			Type:   changeType,
-			NodeID: uint64(rDesc.ReplicaID),
+			NodeID: raftpb.PeerID(rDesc.ReplicaID),
 		})
 	}
 

@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -174,13 +173,6 @@ func (c *atomicConnectionClass) get() rpc.ConnectionClass {
 // set updates the current value of the ConnectionClass.
 func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 	atomic.StoreUint32((*uint32)(c), uint32(cc))
-}
-
-// raftSparseStatus is a variant of raft.Status without Config and
-// Progress.Inflights, which are expensive to copy.
-type raftSparseStatus struct {
-	raft.BasicStatus
-	Progress map[uint64]tracker.Progress
 }
 
 // ReplicaMutex is an RWMutex. It has its own type to make it easier to look for
@@ -1604,21 +1596,13 @@ func (r *Replica) raftStatusRLocked() *raft.Status {
 // raftSparseStatusRLocked returns a sparse Raft status without Config and
 // Progress.Inflights which are expensive to copy, or nil if the Raft group has
 // not been initialized yet. Progress is only populated on the leader.
-func (r *Replica) raftSparseStatusRLocked() *raftSparseStatus {
+func (r *Replica) raftSparseStatusRLocked() *raft.SparseStatus {
 	rg := r.mu.internalRaftGroup
 	if rg == nil {
 		return nil
 	}
-	status := &raftSparseStatus{
-		BasicStatus: rg.BasicStatus(),
-	}
-	if status.RaftState == raft.StateLeader {
-		status.Progress = map[uint64]tracker.Progress{}
-		rg.WithProgress(func(id uint64, _ raft.ProgressType, pr tracker.Progress) {
-			status.Progress[id] = pr
-		})
-	}
-	return status
+	status := rg.SparseStatus()
+	return &status
 }
 
 func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
@@ -2367,7 +2351,7 @@ func (r *Replica) maybeTransferRaftLeadershipToLeaseholderLocked(
 	if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
 		return
 	}
-	lhReplicaID := uint64(status.Lease.Replica.ReplicaID)
+	lhReplicaID := raftpb.PeerID(status.Lease.Replica.ReplicaID)
 	lhProgress, ok := raftStatus.Progress[lhReplicaID]
 	if (ok && lhProgress.Match >= raftStatus.Commit) || r.store.IsDraining() {
 		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)

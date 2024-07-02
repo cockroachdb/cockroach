@@ -472,7 +472,7 @@ func (rn *RawNode) Advance(_ Ready) {
 }
 
 // Status returns the current status of the given group. This allocates, see
-// BasicStatus and WithProgress for allocation-friendlier choices.
+// SparseStatus, BasicStatus and WithProgress for allocation-friendlier choices.
 func (rn *RawNode) Status() Status {
 	status := getStatus(rn.raft)
 	return status
@@ -482,6 +482,12 @@ func (rn *RawNode) Status() Status {
 // Progress map; see WithProgress for an allocation-free way to inspect it.
 func (rn *RawNode) BasicStatus() BasicStatus {
 	return getBasicStatus(rn.raft)
+}
+
+// SparseStatus returns a SparseStatus. Notably, it doesn't include Config and
+// Progress.Inflights, which are expensive to copy.
+func (rn *RawNode) SparseStatus() SparseStatus {
+	return getSparseStatus(rn.raft)
 }
 
 // ProgressType indicates the type of replica a Progress corresponds to.
@@ -496,32 +502,24 @@ const (
 
 // WithProgress is a helper to introspect the Progress for this node and its
 // peers.
-func (rn *RawNode) WithProgress(visitor func(id uint64, typ ProgressType, pr tracker.Progress)) {
-	rn.raft.trk.Visit(func(id uint64, pr *tracker.Progress) {
-		typ := ProgressTypePeer
-		if pr.IsLearner {
-			typ = ProgressTypeLearner
-		}
-		p := *pr
-		p.Inflights = nil
-		visitor(id, typ, p)
-	})
+func (rn *RawNode) WithProgress(visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
+	withProgress(rn.raft, visitor)
 }
 
 // ReportUnreachable reports the given node is not reachable for the last send.
-func (rn *RawNode) ReportUnreachable(id uint64) {
+func (rn *RawNode) ReportUnreachable(id pb.PeerID) {
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgUnreachable, From: id})
 }
 
 // ReportSnapshot reports the status of the sent snapshot.
-func (rn *RawNode) ReportSnapshot(id uint64, status SnapshotStatus) {
+func (rn *RawNode) ReportSnapshot(id pb.PeerID, status SnapshotStatus) {
 	rej := status == SnapshotFailure
 
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgSnapStatus, From: id, Reject: rej})
 }
 
 // TransferLeader tries to transfer leadership to the given transferee.
-func (rn *RawNode) TransferLeader(transferee uint64) {
+func (rn *RawNode) TransferLeader(transferee pb.PeerID) {
 	_ = rn.raft.Step(pb.Message{Type: pb.MsgTransferLeader, From: transferee})
 }
 

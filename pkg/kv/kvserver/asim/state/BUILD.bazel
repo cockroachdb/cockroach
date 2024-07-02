@@ -30,6 +30,7 @@ go_library(
         "//pkg/kv/kvserver/load",
         "//pkg/kv/kvserver/split",
         "//pkg/raft",
+        "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

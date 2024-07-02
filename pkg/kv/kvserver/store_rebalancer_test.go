@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	rload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -1560,12 +1561,12 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		storeID roachpb.StoreID,
 	) *raft.Status {
 		status := &raft.Status{
-			Progress: make(map[uint64]tracker.Progress),
+			Progress: make(map[raftpb.PeerID]tracker.Progress),
 		}
 		replDesc, ok := desc.GetReplicaDescriptor(storeID)
 		require.True(t, ok, "Could not find replica descriptor for replica on store with id %d", storeID)
 
-		status.Lead = uint64(replDesc.ReplicaID)
+		status.Lead = raftpb.PeerID(replDesc.ReplicaID)
 		status.RaftState = raft.StateLeader
 		status.Commit = 2
 		for _, replica := range desc.InternalReplicas {
@@ -1573,7 +1574,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 			if replica.StoreID == roachpb.StoreID(5) {
 				match = 0
 			}
-			status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
+			status.Progress[raftpb.PeerID(replica.ReplicaID)] = tracker.Progress{
 				Match: match,
 				State: tracker.StateReplicate,
 			}
@@ -1846,18 +1847,18 @@ func TestStoreRebalancerHotRangesLogging(t *testing.T) {
 // testing.
 func TestingRaftStatusFn(desc *roachpb.RangeDescriptor, storeID roachpb.StoreID) *raft.Status {
 	status := &raft.Status{
-		Progress: make(map[uint64]tracker.Progress),
+		Progress: make(map[raftpb.PeerID]tracker.Progress),
 	}
 	replDesc, ok := desc.GetReplicaDescriptor(storeID)
 	if !ok {
 		return status
 	}
 
-	status.Lead = uint64(replDesc.ReplicaID)
+	status.Lead = raftpb.PeerID(replDesc.ReplicaID)
 	status.RaftState = raft.StateLeader
 	status.Commit = 2
 	for _, replica := range desc.InternalReplicas {
-		status.Progress[uint64(replica.ReplicaID)] = tracker.Progress{
+		status.Progress[raftpb.PeerID(replica.ReplicaID)] = tracker.Progress{
 			Match: 2,
 			State: tracker.StateReplicate,
 		}

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -294,7 +295,7 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 	rg, err := raft.NewRawNode(newRaftConfig(
 		ctx,
 		raft.Storage((*replicaRaftStorage)(r)),
-		uint64(r.replicaID),
+		raftpb.PeerID(r.replicaID),
 		r.mu.state.RaftAppliedIndex,
 		r.store.cfg,
 		&raftLogger{ctx: ctx},

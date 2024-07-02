@@ -2411,7 +2411,7 @@ func (s *systemStatusServer) rangesHelper(
 		}
 
 		state := serverpb.RaftState{
-			ReplicaID:      raftStatus.ID,
+			ReplicaID:      uint64(raftStatus.ID),
 			HardState:      raftStatus.HardState,
 			Applied:        raftStatus.Applied,
 			Lead:           raftStatus.Lead,
@@ -2421,7 +2421,7 @@ func (s *systemStatusServer) rangesHelper(
 		}
 
 		for id, progress := range raftStatus.Progress {
-			state.Progress[id] = serverpb.RaftState_Progress{
+			state.Progress[uint64(id)] = serverpb.RaftState_Progress{
 				Match:           progress.Match,
 				Next:            progress.Next,
 				Paused:          progress.IsPaused(),
