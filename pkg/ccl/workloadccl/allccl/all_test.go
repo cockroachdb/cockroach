@@ -242,6 +242,13 @@ func hashTableInitialData(
 				for i := 0; i < b.Length(); i++ {
 					_, _ = h.Write(colBytes.Get(i))
 				}
+			case types.TimestampFamily, types.TimestampTZFamily:
+				colTime := col.Timestamp()
+
+				for i := 0; i < b.Length(); i++ {
+					binary.LittleEndian.PutUint64(scratch[:8], uint64(colTime[i].UnixNano()))
+					_, _ = h.Write(scratch[:8])
+				}
 			default:
 				return errors.Errorf(`unhandled type %s`, col.Type())
 			}

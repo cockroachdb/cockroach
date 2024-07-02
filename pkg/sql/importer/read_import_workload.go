@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
 )
@@ -120,10 +121,26 @@ func makeDatumFromColOffset(
 			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
 			return alloc.NewDString(tree.DString(str)), nil
+		case types.UuidFamily:
+			u, err := uuid.FromBytes(col.Bytes().Get(rowIdx))
+			return alloc.NewDUuid(tree.DUuid{UUID: u}), err
+
 		default:
 			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
 			return rowenc.ParseDatumStringAs(ctx, hint, str, evalCtx, semaCtx)
+		}
+	case types.TimestampFamily, types.TimestampTZFamily:
+		switch hint.Family() {
+		case types.TimestampFamily:
+			// workloads are responsible for rounding their timestamp(s) so skip
+			// MakeDTimestamp here and just directly construct it.
+			return alloc.NewDTimestamp(tree.DTimestamp{Time: col.Timestamp()[rowIdx]}), nil
+
+		case types.TimestampTZFamily:
+			// workloads are responsible for rounding their timestamp(s) so skip
+			// MakeDTimestamp here and just directly construct it.
+			return alloc.NewDTimestampTZ(tree.DTimestampTZ{Time: col.Timestamp()[rowIdx]}), nil
 		}
 	}
 	return nil, errors.Errorf(
