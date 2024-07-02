@@ -18,7 +18,7 @@ package raftlog
 import (
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -30,7 +30,7 @@ import (
 )
 
 // EncodingOf determines the EntryEncoding for a given Entry.
-func EncodingOf(ent raftpb.Entry) (EntryEncoding, kvflowconnectedstream.RaftPriority, error) {
+func EncodingOf(ent raftpb.Entry) (EntryEncoding, kvflowcontrolpb.RaftPriority, error) {
 	if len(ent.Data) == 0 {
 		// An empty command.
 		return EntryEncodingEmpty, 0, nil
@@ -46,7 +46,7 @@ func EncodingOf(ent raftpb.Entry) (EntryEncoding, kvflowconnectedstream.RaftPrio
 		return 0, 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
 	}
 
-	pri := kvflowconnectedstream.RaftPriority(ent.Data[0] & priMask)
+	pri := kvflowcontrolpb.RaftPriority(ent.Data[0] & priMask)
 	encoding := ent.Data[0] & encodingMask
 
 	switch encoding {

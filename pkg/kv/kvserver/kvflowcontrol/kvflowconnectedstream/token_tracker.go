@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -23,7 +24,7 @@ import (
 // deducted for an in-flight log entry (identified by raft index position),
 // with a given RaftPriority.
 type Tracker struct {
-	tracked [NumRaftPriorities][]tracked
+	tracked [kvflowcontrolpb.NumRaftPriorities][]tracked
 
 	stream kvflowcontrol.Stream // used for logging only
 }
@@ -39,7 +40,7 @@ func (dt *Tracker) String() string {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		fmt.Fprintf(&buf, "%v=%v", RaftPriority(pri), tracked)
+		fmt.Fprintf(&buf, "%v=%v", kvflowcontrolpb.RaftPriority(pri), tracked)
 		i++
 	}
 	buf.WriteString("]")
@@ -51,7 +52,7 @@ func (dt *Tracker) String() string {
 // up).
 type tracked struct {
 	tokens                    kvflowcontrol.Tokens
-	originalPri, inheritedPri RaftPriority
+	originalPri, inheritedPri kvflowcontrolpb.RaftPriority
 	index                     uint64
 }
 
@@ -64,7 +65,7 @@ func (t tracked) String() string {
 // (below which we're not allowed to deduct tokens).
 func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
 	*dt = Tracker{
-		tracked: [NumRaftPriorities][]tracked{},
+		tracked: [int(kvflowcontrolpb.NumRaftPriorities)][]tracked{},
 		stream:  stream,
 	}
 }
@@ -75,8 +76,8 @@ func (dt *Tracker) Init(stream kvflowcontrol.Stream) {
 func (dt *Tracker) Track(
 	ctx context.Context,
 	index uint64,
-	inheritedPri RaftPriority,
-	originalPri RaftPriority,
+	inheritedPri kvflowcontrolpb.RaftPriority,
+	originalPri kvflowcontrolpb.RaftPriority,
 	tokens kvflowcontrol.Tokens,
 ) bool {
 	if len(dt.tracked[inheritedPri]) >= 1 {
@@ -105,9 +106,9 @@ func (dt *Tracker) Track(
 // Untrack all token deductions of the given priority that have indexes less
 // than or equal to the one provided.
 func (dt *Tracker) Untrack(
-	inheritedPri RaftPriority,
+	inheritedPri kvflowcontrolpb.RaftPriority,
 	uptoIndex uint64,
-	f func(index uint64, originalPri RaftPriority, tokens kvflowcontrol.Tokens),
+	f func(index uint64, originalPri kvflowcontrolpb.RaftPriority, tokens kvflowcontrol.Tokens),
 ) {
 	log.VInfof(context.TODO(), 1, "untracking uptoIndex=%d for inheritedPri=%v dt=%v", uptoIndex, inheritedPri, dt)
 	if dt == nil {
@@ -136,7 +137,7 @@ func (dt *Tracker) Untrack(
 
 func (dt *Tracker) UntrackGE(
 	index uint64,
-	f func(index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens),
+	f func(index uint64, inheritedPri kvflowcontrolpb.RaftPriority, originalPri kvflowcontrolpb.RaftPriority, tokens kvflowcontrol.Tokens),
 ) {
 	log.VInfof(context.TODO(), 1, "untracking >=%d dt=%v", index, dt)
 	for i := range dt.tracked {
@@ -157,7 +158,7 @@ func (dt *Tracker) UntrackGE(
 // UntrackAll iterates through all tracked token deductions, invoking the
 // provided callback each deduction and untracking.
 func (dt *Tracker) UntrackAll(
-	f func(index uint64, inheritedPri RaftPriority, originalPri RaftPriority, tokens kvflowcontrol.Tokens),
+	f func(index uint64, inheritedPri kvflowcontrolpb.RaftPriority, originalPri kvflowcontrolpb.RaftPriority, tokens kvflowcontrol.Tokens),
 ) {
 	log.VInfof(context.TODO(), 1, "untracking all dt=%v", dt)
 	for _, deductions := range dt.tracked {
@@ -165,5 +166,5 @@ func (dt *Tracker) UntrackAll(
 			f(deduction.index, deduction.inheritedPri, deduction.originalPri, deduction.tokens)
 		}
 	}
-	dt.tracked = [NumRaftPriorities][]tracked{}
+	dt.tracked = [kvflowcontrolpb.NumRaftPriorities][]tracked{}
 }

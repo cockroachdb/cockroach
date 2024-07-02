@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -371,7 +372,7 @@ func TestRangeController(t *testing.T) {
 					require.NoError(t, err)
 
 					log.Infof(context.Background(), "rangeID: %d, prio: %v, size: %v", rangeID, workPriority, size)
-					raftImpls[roachpb.RangeID(rangeID)].prop(AdmissionPriorityToRaftPriority(workPriority), uint64(size))
+					raftImpls[roachpb.RangeID(rangeID)].prop(kvflowcontrolpb.AdmissionPriorityToRaftPriority(workPriority), uint64(size))
 				}
 			}
 			return stateString()
@@ -417,11 +418,12 @@ func (t testingRange) replicas() ReplicaSet {
 	return replicas
 }
 
-func (t *testingRaft) prop(pri RaftPriority, size uint64) {
+func (t *testingRaft) prop(pri kvflowcontrolpb.RaftPriority, size uint64) {
 	t.lastEntryIndex++
 	index := t.lastEntryIndex
 
-	entry := encodeRaftFlowControlState(index, true /* usesFlowControl */, pri, size)
+	entry := testingEncodeRaftFlowControlState(
+		index, true /* usesFlowControl */, pri, size, t.replicas[t.localReplicaID].desc.NodeID)
 	t.entries = append(t.entries, entry)
 	log.Infof(context.Background(), "prop %v", getFlowControlState(entry))
 	t.controller.HandleRaftEvent(t.ready())
@@ -448,8 +450,8 @@ func (t *testingRaft) admit(storeID roachpb.StoreID, to uint64, pri admissionpb.
 
 	// We admit everything at or above the given priority.
 	replica := t.replicas[replicaID]
-	raftPrio := AdmissionPriorityToRaftPriority(pri)
-	for rp := raftPrio; rp < NumRaftPriorities; rp++ {
+	raftPrio := kvflowcontrolpb.AdmissionPriorityToRaftPriority(pri)
+	for rp := raftPrio; rp < kvflowcontrolpb.NumRaftPriorities; rp++ {
 		replica.info.Admitted[rp] = to
 	}
 	t.replicas[replicaID] = replica
@@ -474,7 +476,7 @@ func (t *testingRaft) setReplicas(r testingRange) {
 		repl.info.Next = t.lastEntryIndex + 1
 		repl.info.Match = t.lastEntryIndex
 
-		for admitIdx := RaftPriority(0); admitIdx < NumRaftPriorities; admitIdx++ {
+		for admitIdx := kvflowcontrolpb.RaftPriority(0); admitIdx < kvflowcontrolpb.NumRaftPriorities; admitIdx++ {
 			repl.info.Admitted[admitIdx] = t.lastEntryIndex
 		}
 		// If the replica (with ID replicaID) already exists, we are updating the
@@ -538,7 +540,7 @@ func (t *testingRaft) MakeMsgApp(
 }
 
 func (t *testingRaft) SendRaftMessage(
-	ctx context.Context, priorityInherited RaftPriority, msg raftpb.Message,
+	ctx context.Context, priorityInherited kvflowcontrolpb.RaftPriority, msg raftpb.Message,
 ) {
 	recvReplica := t.replicas[roachpb.ReplicaID(msg.To)]
 	recvReplica.info.Match = msg.Index

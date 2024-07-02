@@ -736,12 +736,12 @@ func (rr2 *replicaRACv2Integration) sideChannelForInheritedPriority(
 	if inheritedPri == 0 {
 		return
 	}
-	pri := kvflowconnectedstream.UndoRaftPriorityConversionForUnusedZero(inheritedPri)
+	pri := kvflowcontrolpb.UndoRaftPriorityConversionForUnusedZero(inheritedPri)
 	rr2.mu.priorityInheritanceState.sideChannelForInheritedPriority(first, last, pri)
 }
 
 func (rr2 *replicaRACv2Integration) admittedLogEntry(
-	ctx context.Context, pri kvflowconnectedstream.RaftPriority, index uint64,
+	ctx context.Context, pri kvflowcontrolpb.RaftPriority, index uint64,
 ) {
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
@@ -808,7 +808,7 @@ func (rr2 *replicaRACv2Integration) admitRaftEntry(
 	if err != nil {
 		panic(errors.AssertionFailedf("unable to decode raft command admission data: %v", err))
 	}
-	if kvflowconnectedstream.RaftPriority(meta.AdmissionPriority) != priBits {
+	if kvflowcontrolpb.RaftPriority(meta.AdmissionPriority) != priBits {
 		panic("inconsistent priorities")
 	}
 	func() {
@@ -819,7 +819,7 @@ func (rr2 *replicaRACv2Integration) admitRaftEntry(
 		if !doAC {
 			return
 		}
-		meta.AdmissionPriority = int32(kvflowconnectedstream.RaftPriorityToAdmissionPriority(pri))
+		meta.AdmissionPriority = int32(kvflowcontrolpb.RaftPriorityToAdmissionPriority(pri))
 		rr2.mu.waitingForAdmissionState.add(entry.Index, pri)
 	}()
 
@@ -842,7 +842,7 @@ type priorityInheritanceState struct {
 type indexInterval struct {
 	first uint64
 	last  uint64
-	pri   kvflowconnectedstream.RaftPriority
+	pri   kvflowcontrolpb.RaftPriority
 }
 
 // sideChannelForInheritedPriority is called on follower replicas, and is used
@@ -851,7 +851,7 @@ type indexInterval struct {
 // NOTE: This should only be called while holding
 // replicaFlowControlIntegrationImpl.mu.
 func (p *priorityInheritanceState) sideChannelForInheritedPriority(
-	first, last uint64, inheritedPri kvflowconnectedstream.RaftPriority,
+	first, last uint64, inheritedPri kvflowcontrolpb.RaftPriority,
 ) {
 	// Overwrite the existing state for [first, last] with interval. Also, drop
 	// anything from before that corresponds to indices >= first.
@@ -877,17 +877,17 @@ func (p *priorityInheritanceState) sideChannelForInheritedPriority(
 }
 
 func (p *priorityInheritanceState) getEffectivePriority(
-	index uint64, pri kvflowconnectedstream.RaftPriority,
-) (effectivePri kvflowconnectedstream.RaftPriority, doAC bool) {
+	index uint64, pri kvflowcontrolpb.RaftPriority,
+) (effectivePri kvflowcontrolpb.RaftPriority, doAC bool) {
 	// Also garbage collects any intervals that precede index.
 	i := 0
 	for ; i < len(p.intervals); i++ {
 		if p.intervals[i].first <= index {
 			if p.intervals[i].last >= index {
 				switch p.intervals[i].pri {
-				case kvflowconnectedstream.NotSubjectToACForFlowControl:
+				case kvflowcontrolpb.NotSubjectToACForFlowControl:
 					return 0, false
-				case kvflowconnectedstream.PriorityNotInheritedForFlowControl:
+				case kvflowcontrolpb.PriorityNotInheritedForFlowControl:
 					return pri, true
 				default:
 					return p.intervals[i].pri, true
@@ -913,11 +913,11 @@ type waitingForAdmissionState struct {
 	// to 5. When 6 is popped, admitted can advance to 9. We should never have a
 	// situation where indices are popped out of order, but we tolerate that by
 	// popping the prefix upto the index being popped.
-	waiting [kvflowconnectedstream.NumRaftPriorities][]uint64
+	waiting [kvflowcontrolpb.NumRaftPriorities][]uint64
 }
 
 func (w *waitingForAdmissionState) remove(
-	index uint64, pri kvflowconnectedstream.RaftPriority,
+	index uint64, pri kvflowcontrolpb.RaftPriority,
 ) (admittedMayAdvance bool) {
 	pos, found := slices.BinarySearch(w.waiting[pri], index)
 	if !found {
@@ -927,7 +927,7 @@ func (w *waitingForAdmissionState) remove(
 	return true
 }
 
-func (w *waitingForAdmissionState) add(index uint64, pri kvflowconnectedstream.RaftPriority) {
+func (w *waitingForAdmissionState) add(index uint64, pri kvflowcontrolpb.RaftPriority) {
 	pos, found := slices.BinarySearch(w.waiting[pri], index)
 	if found {
 		return
@@ -937,8 +937,8 @@ func (w *waitingForAdmissionState) add(index uint64, pri kvflowconnectedstream.R
 
 func (w *waitingForAdmissionState) computeAdmitted(
 	stableIndex uint64,
-) [kvflowconnectedstream.NumRaftPriorities]uint64 {
-	var admitted [kvflowconnectedstream.NumRaftPriorities]uint64
+) [kvflowcontrolpb.NumRaftPriorities]uint64 {
+	var admitted [kvflowcontrolpb.NumRaftPriorities]uint64
 	for i := range w.waiting {
 		admitted[i] = stableIndex
 		if len(w.waiting) > 0 {
@@ -951,7 +951,7 @@ func (w *waitingForAdmissionState) computeAdmitted(
 	return admitted
 }
 
-func admittedIncreased(prev, next [kvflowconnectedstream.NumRaftPriorities]uint64) bool {
+func admittedIncreased(prev, next [kvflowcontrolpb.NumRaftPriorities]uint64) bool {
 	for i := range prev {
 		if prev[i] < next[i] {
 			return true

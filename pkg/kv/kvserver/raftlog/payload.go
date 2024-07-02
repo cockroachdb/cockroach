@@ -13,7 +13,6 @@ package raftlog
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -41,11 +40,11 @@ func EncodeCommand(
 	// Determine the encoding style for the Raft command.
 	prefix := true
 	entryEncoding := EntryEncodingStandardWithoutAC
-	var rpri kvflowconnectedstream.RaftPriority
+	var rpri kvflowcontrolpb.RaftPriority
 	if raftAdmissionMeta != nil {
 		if useRACv2 {
 			entryEncoding = EntryEncodingStandardWithRaftPriority
-			rpri = kvflowconnectedstream.RaftPriority(raftAdmissionMeta.AdmissionPriority)
+			rpri = kvflowcontrolpb.RaftPriority(raftAdmissionMeta.AdmissionPriority)
 		} else {
 			entryEncoding = EntryEncodingStandardWithAC
 		}
@@ -66,7 +65,7 @@ func EncodeCommand(
 		if raftAdmissionMeta != nil {
 			if useRACv2 {
 				entryEncoding = EntryEncodingSideloadedWithRaftPriority
-				rpri = kvflowconnectedstream.RaftPriority(raftAdmissionMeta.AdmissionPriority)
+				rpri = kvflowcontrolpb.RaftPriority(raftAdmissionMeta.AdmissionPriority)
 			} else {
 				entryEncoding = EntryEncodingSideloadedWithAC
 			}
@@ -131,6 +130,9 @@ func EncodeCommand(
 		command.AdmissionOriginNode = 0
 	}
 
+	// TODO(rac-v2): currently, this may try to encode a command that is too
+	// small for the sized buffer. It is likely the sizing calculation is off.
+	//
 	// Encode the rest of the command.
 	if _, err := protoutil.MarshalToSizedBuffer(command, data[preLen+admissionMetaLen:]); err != nil {
 		return nil, err

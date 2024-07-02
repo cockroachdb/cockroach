@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -103,7 +102,7 @@ func (enc EntryEncoding) UsesAdmissionControl() bool {
 
 // prefixByte returns the prefix byte used during encoding, applicable only to
 // EntryEncoding{Standard,Sideloaded}With{,out}AC.
-func (enc EntryEncoding) prefixByte(pri kvflowconnectedstream.RaftPriority) byte {
+func (enc EntryEncoding) prefixByte(pri kvflowcontrolpb.RaftPriority) byte {
 	if pri > 3 {
 		panic("")
 	}
@@ -172,7 +171,7 @@ func EncodeCommandBytes(
 	enc EntryEncoding,
 	commandID kvserverbase.CmdIDKey,
 	command []byte,
-	pri kvflowconnectedstream.RaftPriority,
+	pri kvflowcontrolpb.RaftPriority,
 ) []byte {
 	b := make([]byte, RaftCommandPrefixLen+len(command))
 	EncodeRaftCommandPrefix(b[:RaftCommandPrefixLen], enc, commandID, pri)
@@ -183,10 +182,7 @@ func EncodeCommandBytes(
 // EncodeRaftCommandPrefix encodes the prefix for a Raft command, using the
 // given encoding (one of EntryEncoding{Standard,Sideloaded}With{,out}AC).
 func EncodeRaftCommandPrefix(
-	b []byte,
-	enc EntryEncoding,
-	commandID kvserverbase.CmdIDKey,
-	pri kvflowconnectedstream.RaftPriority,
+	b []byte, enc EntryEncoding, commandID kvserverbase.CmdIDKey, pri kvflowcontrolpb.RaftPriority,
 ) {
 	if len(commandID) != RaftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), RaftCommandIDLen))
@@ -201,7 +197,7 @@ func EncodeRaftCommandPrefix(
 // DecodeRaftAdmissionMeta decodes admission control metadata from a
 // raftpb.Entry.Data. Expects an EntryEncoding{Standard,Sideloaded}WithAC
 // encoding.
-// 
+//
 // TODO(rac-v2): Unit test this function and the corresponding construction.
 func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, error) {
 	prefix := data[0] & encodingMask
@@ -222,9 +218,11 @@ func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, er
 	pri := data[0] & priMask
 	switch prefix {
 	case entryEncodingStandardWithRaftPriorityPrefixByte, entryEncodingSideloadedWithRaftPriorityPrefixByte:
-		if kvflowconnectedstream.RaftPriority(pri) !=
-			kvflowconnectedstream.RaftPriority(raftAdmissionMeta.AdmissionPriority) {
-			panic("")
+		if kvflowcontrolpb.RaftPriority(pri) !=
+			kvflowcontrolpb.RaftPriority(raftAdmissionMeta.AdmissionPriority) {
+			panic(fmt.Sprintf("mismatched priority in encoding (%d) and admission metadata (%d)",
+				kvflowcontrolpb.RaftPriority(pri),
+				kvflowcontrolpb.RaftPriority(raftAdmissionMeta.AdmissionPriority)))
 		}
 	}
 	return raftAdmissionMeta, nil
