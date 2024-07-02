@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -63,7 +62,7 @@ type StoreGrantCoordinators struct {
 	// These metrics are shared by WorkQueues across stores.
 	workQueueMetrics [admissionpb.NumWorkClasses]*WorkQueueMetrics
 
-	gcMap syncutil.IntMap // map[int64(StoreID)]*GrantCoordinator
+	gcMap syncutil.Map[roachpb.StoreID, GrantCoordinator]
 	// numStores is used to track the number of stores which have been added
 	// to the gcMap. This is used because the IntMap doesn't expose a size
 	// api.
@@ -92,7 +91,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 		// Defensive call to LoadAndStore even though Store ought to be sufficient
 		// since SetPebbleMetricsProvider can only be called once. This code
 		// guards against duplication of stores returned by GetPebbleMetrics.
-		_, loaded := sgc.gcMap.LoadOrStore(int64(m.StoreID), unsafe.Pointer(gc))
+		_, loaded := sgc.gcMap.LoadOrStore(m.StoreID, gc)
 		if !loaded {
 			sgc.numStores++
 		}
@@ -122,9 +121,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 							"expected %d store metrics and found %d metrics", sgc.numStores, len(metrics))
 					}
 					for _, m := range metrics {
-						if unsafeGc, ok := sgc.gcMap.Load(int64(m.StoreID)); ok {
-							gc := (*GrantCoordinator)(unsafeGc)
-
+						if gc, ok := sgc.gcMap.Load(m.StoreID); ok {
 							// We say that the system has load if at least one store is loaded.
 							storeLoaded := gc.pebbleMetricsTick(ctx, m)
 							systemLoaded = systemLoaded || storeLoaded
@@ -141,8 +138,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					remainingTicks = ticker.remainingTicks()
 				}
 
-				sgc.gcMap.Range(func(_ int64, unsafeGc unsafe.Pointer) bool {
-					gc := (*GrantCoordinator)(unsafeGc)
+				sgc.gcMap.Range(func(_ roachpb.StoreID, gc *GrantCoordinator) bool {
 					gc.allocateIOTokensTick(int64(remainingTicks))
 					// true indicates that iteration should continue after the
 					// current entry has been processed.
@@ -226,9 +222,8 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 
 // TryGetQueueForStore returns a WorkQueue for the given storeID, or nil if
 // the storeID is not known.
-func (sgc *StoreGrantCoordinators) TryGetQueueForStore(storeID int32) *StoreWorkQueue {
-	if unsafeGranter, ok := sgc.gcMap.Load(int64(storeID)); ok {
-		granter := (*GrantCoordinator)(unsafeGranter)
+func (sgc *StoreGrantCoordinators) TryGetQueueForStore(storeID roachpb.StoreID) *StoreWorkQueue {
+	if granter, ok := sgc.gcMap.Load(storeID); ok {
 		return granter.queues[KVWork].(*StoreWorkQueue)
 	}
 	return nil
@@ -240,8 +235,7 @@ func (sgc *StoreGrantCoordinators) close() {
 		close(sgc.closeCh)
 	}
 
-	sgc.gcMap.Range(func(_ int64, unsafeGc unsafe.Pointer) bool {
-		gc := (*GrantCoordinator)(unsafeGc)
+	sgc.gcMap.Range(func(_ roachpb.StoreID, gc *GrantCoordinator) bool {
 		gc.Close()
 		// true indicates that iteration should continue after the
 		// current entry has been processed.
