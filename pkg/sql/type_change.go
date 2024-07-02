@@ -807,7 +807,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromTable(
 	}
 
 	var query strings.Builder
-	colSelectors := tabledesc.ColumnsSelectors(desc.PublicColumns())
+	colSelectors := tabledesc.ColumnsSelectors(desc.AccessibleColumns())
 	columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
 	query.WriteString(fmt.Sprintf("SELECT %s FROM [%d as t] WHERE", columns, ID))
 	firstClause := true
