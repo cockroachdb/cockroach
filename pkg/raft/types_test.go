@@ -99,3 +99,34 @@ func TestLogSlice(t *testing.T) {
 		})
 	}
 }
+
+func TestLogSliceForward(t *testing.T) {
+	id := func(index, term uint64) entryID {
+		return entryID{term: term, index: index}
+	}
+	ls := func(prev entryID, terms ...uint64) logSlice {
+		empty := make([]pb.Entry, 0) // hack to canonicalize empty slices
+		return logSlice{
+			term:    8,
+			prev:    prev,
+			entries: append(empty, index(prev.index+1).terms(terms...)...),
+		}
+	}
+	for _, tt := range []struct {
+		ls   logSlice
+		to   uint64
+		want logSlice
+	}{
+		{ls: logSlice{}, to: 0, want: logSlice{}},
+		{ls: ls(id(5, 1)), to: 5, want: ls(id(5, 1))},
+		{ls: ls(id(10, 3), 3, 4, 5), to: 10, want: ls(id(10, 3), 3, 4, 5)},
+		{ls: ls(id(10, 3), 3, 4, 5), to: 11, want: ls(id(11, 3), 4, 5)},
+		{ls: ls(id(10, 3), 3, 4, 5), to: 12, want: ls(id(12, 4), 5)},
+		{ls: ls(id(10, 3), 3, 4, 5), to: 13, want: ls(id(13, 5))},
+	} {
+		t.Run("", func(t *testing.T) {
+			require.NoError(t, tt.ls.valid())
+			require.Equal(t, tt.want, tt.ls.forward(tt.to))
+		})
+	}
+}
