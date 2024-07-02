@@ -20,6 +20,7 @@ package kvprober
 import (
 	"context"
 	"math/rand"
+	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -306,11 +308,42 @@ func (p *Prober) Metrics() Metrics {
 	return p.metrics
 }
 
+// LogLeaseholderInfo searches through the given tracing recording for log messages
+// indicating updated range information, extracts range IDs and leaseholder node IDs,
+// and logs this information only if the leaseholder for a range has been updated.
+func (p *Prober) LogLeaseholderInfo(ctx context.Context, recording tracingpb.Recording) {
+	// Find the log message containing information about updated ranges
+	informationLog, isValid := recording.FindLogMessage("received updated range")
+
+	if isValid {
+		// Regular expressions to extract range IDs and leaseholder node IDs
+		rangeRegex := regexp.MustCompile(`desc: r(\d+)`)
+		leaseRegex := regexp.MustCompile(`repl=\(n(\d+)`)
+
+		// Extract all occurrences of range IDs and leaseholder node IDs from the log message
+		ranges := rangeRegex.FindAllStringSubmatch(informationLog, -1)
+		leaseholders := leaseRegex.FindAllStringSubmatch(informationLog, -1)
+
+		for i := 0; i < len(ranges); i++ {
+			// Create a new context with tags for the current range ID and leaseholder node ID
+			newCtx := logtags.AddTag(ctx, "range", ranges[i][1])
+			newCtx = logtags.AddTag(newCtx, "leaseholder", leaseholders[i][1])
+
+			// Log the range and leaseholder information using the new context
+			log.Health.Infof(newCtx, "range %s has leaseholder %s", ranges[i][1], leaseholders[i][1])
+		}
+	}
+}
+
 // Start causes kvprober to start probing KV. Start returns immediately. Start
 // returns an error only if stopper.RunAsyncTask returns an error.
 func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = logtags.AddTag(ctx, "kvprober", nil /* value */)
-	startLoop := func(ctx context.Context, opName string, probe func(context.Context, planner), pl planner, interval *settings.DurationSetting) error {
+
+	// Interval to limit trace logging frequency.
+	traceDumpLimiter := log.Every(10 * time.Second)
+
+	startLoop := func(ctx context.Context, opName string, probe func(context.Context, planner) bool, pl planner, interval *settings.DurationSetting) error {
 		return stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: opName, SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 			defer logcrash.RecoverAndReportNonfatalPanic(ctx, &p.settings.SV)
 
@@ -335,9 +368,21 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 					return
 				}
 
-				probeCtx, sp := tracing.EnsureChildSpan(ctx, p.tracer, opName+" - probe")
-				probe(probeCtx, pl)
-				sp.Finish()
+				func() {
+					// trace kv prober requests
+					probeCtx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, p.tracer, opName)
+
+					defer collectAndFinish()
+					if probe(probeCtx, pl) {
+						recording := collectAndFinish()
+
+						if traceDumpLimiter.ShouldLog() {
+							log.Health.Infof(ctx, "%v", recording)
+						}
+
+						p.LogLeaseholderInfo(ctx, recording)
+					}
+				}()
 			}
 		})
 	}
@@ -357,20 +402,23 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 // Doesn't return an error. Instead, increments error type specific metrics.
 //
 // TODO(tbg): db parameter is unused, remove it.
-func (p *Prober) readProbe(ctx context.Context, pl planner) {
-	p.readProbeImpl(ctx, &ProberOps{}, &proberTxnImpl{db: p.db}, pl)
+
+// Returns true if a probe was actually attempted. Returns false if no probe
+// was attempted, since the probe type was disabled.
+func (p *Prober) readProbe(ctx context.Context, pl planner) bool {
+	return p.readProbeImpl(ctx, &ProberOps{}, &proberTxnImpl{db: p.db}, pl)
 }
 
-func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberTxn, pl planner) {
+func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberTxn, pl planner) bool {
 	if !readEnabled.Get(&p.settings.SV) {
-		return
+		return false
 	}
 
 	p.metrics.ProbePlanAttempts.Inc(1)
 
 	step, err := pl.next(ctx)
 	if err == nil && step.RangeID == 0 {
-		return
+		return true
 	}
 	if err != nil {
 		if errorIsExpectedDuringNormalOperation(err) {
@@ -379,7 +427,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 			log.Health.Errorf(ctx, "can't make a plan: %v", err)
 			p.metrics.ProbePlanFailures.Inc(1)
 		}
-		return
+		return true
 	}
 
 	// If errors above the KV scan, then this counter won't be incremented.
@@ -415,7 +463,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 			log.Health.Errorf(ctx, "kv.Get(%s), r=%v failed with: %v", step.Key, step.RangeID, err)
 			p.metrics.ReadProbeFailures.Inc(1)
 		}
-		return
+		return true
 	}
 
 	d := timeutil.Since(start)
@@ -423,16 +471,19 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 
 	// Latency of failures is not recorded. They are counted as failures tho.
 	p.metrics.ReadProbeLatency.RecordValue(d.Nanoseconds())
+	return true
 }
 
 // Doesn't return an error. Instead increments error type specific metrics.
-func (p *Prober) writeProbe(ctx context.Context, pl planner) {
-	p.writeProbeImpl(ctx, &ProberOps{}, &proberTxnImpl{db: p.db}, pl)
+// Returns true if a probe was actually attempted. Returns false if no probe
+// was attempted, since the probe type was disabled.
+func (p *Prober) writeProbe(ctx context.Context, pl planner) bool {
+	return p.writeProbeImpl(ctx, &ProberOps{}, &proberTxnImpl{db: p.db}, pl)
 }
 
-func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns proberTxn, pl planner) {
+func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns proberTxn, pl planner) bool {
 	if !writeEnabled.Get(&p.settings.SV) {
-		return
+		return false
 	}
 
 	p.metrics.ProbePlanAttempts.Inc(1)
@@ -441,7 +492,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 	// In the case where the quarantine pool is empty don't record a planning failure since
 	// it isn't an actual plan failure.
 	if err == nil && step.RangeID == 0 {
-		return
+		return true
 	}
 	if err != nil {
 		if errorIsExpectedDuringNormalOperation(err) {
@@ -450,7 +501,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 			log.Health.Errorf(ctx, "can't make a plan: %v", err)
 			p.metrics.ProbePlanFailures.Inc(1)
 		}
-		return
+		return true
 	}
 
 	p.metrics.WriteProbeAttempts.Inc(1)
@@ -479,7 +530,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 			)
 			p.metrics.WriteProbeFailures.Inc(1)
 		}
-		return
+		return true
 	}
 	// This will no-op if not in the quarantine pool.
 	p.quarantineWritePool.maybeRemove(ctx, step)
@@ -489,15 +540,19 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 
 	// Latency of failures is not recorded. They are counted as failures tho.
 	p.metrics.WriteProbeLatency.RecordValue(d.Nanoseconds())
+	return true
 }
 
 // Wrapper function for probing the quarantine pool.
-func (p *Prober) quarantineProbe(ctx context.Context, pl planner) {
+// Returns true if a probe was actually attempted. Returns false if no probe
+// was attempted, since the probe type was disabled.
+func (p *Prober) quarantineProbe(ctx context.Context, pl planner) bool {
 	if !quarantineWriteEnabled.Get(&p.settings.SV) {
-		return
+		return false
 	}
 
 	p.writeProbe(ctx, pl)
+	return true
 }
 
 // Returns a random duration pulled from the uniform distribution given below:
