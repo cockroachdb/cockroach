@@ -153,42 +153,35 @@ func TestIsUpToDate(t *testing.T) {
 
 func TestAppend(t *testing.T) {
 	init := entryID{}.append(1, 2, 2)
-	commit := logMark{term: init.term, index: 1}
 	for _, tt := range []struct {
 		app   logSlice
 		want  logSlice
-		panic bool
+		notOk bool
 	}{
-		{app: logSlice{}, want: init},
+		// appends not at the end of the log
+		{app: logSlice{}, notOk: true},
+		{app: entryID{term: 1, index: 1}.append(3), notOk: true},
+		{app: entryID{term: 2, index: 4}.append(3), notOk: true},
+		// appends at the end of the log
 		{
 			app:  entryID{term: 2, index: 3}.append(2),
 			want: entryID{}.append(1, 2, 2, 2),
 		}, {
-			app:  entryID{term: 1, index: 1}.append(3),
-			want: entryID{}.append(1, 3), // overwrite from index 2
-		}, {
-			app:  entryID{term: 2, index: 2}.append(3, 4, 5),
-			want: entryID{}.append(1, 2, 3, 4, 5), // overwrite from index 3
-		}, {
-			app:   entryID{}.append(3, 4),
-			panic: true, // entry 1 is already committed
+			app:  entryID{term: 2, index: 3}.append(),
+			want: entryID{}.append(1, 2, 2),
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			defer func() {
-				if r := recover(); r != nil {
-					require.True(t, tt.panic)
-				}
-			}()
-
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.SetHardState(pb.HardState{Term: init.term}))
 			require.NoError(t, storage.Append(init.entries))
 			raftLog := newLog(storage, discardLogger)
-			raftLog.commitTo(commit)
 
-			require.True(t, raftLog.append(tt.app))
-			require.False(t, tt.panic)
+			require.Equal(t, !tt.notOk, raftLog.append(tt.app))
+			if tt.notOk {
+				require.Equal(t, init.entries, raftLog.allEntries())
+				return
+			}
 			// TODO(pav-kv): check the term and prev too.
 			require.Equal(t, tt.want.entries, raftLog.allEntries())
 			if len(tt.app.entries) != 0 {
@@ -339,10 +332,10 @@ func TestHasNextCommittedEnts(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap.snap))
-			require.NoError(t, storage.Append(init.entries[:1]))
-
 			raftLog := newLog(storage, discardLogger)
 			require.True(t, raftLog.append(init))
+			require.NoError(t, storage.Append(init.entries[:1]))
+
 			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
@@ -393,10 +386,10 @@ func TestNextCommittedEnts(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap.snap))
-			require.NoError(t, storage.Append(init.entries[:1]))
-
 			raftLog := newLog(storage, discardLogger)
 			require.True(t, raftLog.append(init))
+			require.NoError(t, storage.Append(init.entries[:1]))
+
 			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
@@ -447,10 +440,10 @@ func TestAcceptApplying(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
-			require.NoError(t, storage.Append(init.entries[:1]))
-
 			raftLog := newLogWithSize(storage, discardLogger, maxSize)
 			require.True(t, raftLog.append(init))
+			require.NoError(t, storage.Append(init.entries[:1]))
+
 			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
@@ -491,10 +484,10 @@ func TestAppliedTo(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.ApplySnapshot(snap))
-			require.NoError(t, storage.Append(init.entries[:1]))
-
 			raftLog := newLogWithSize(storage, discardLogger, maxSize)
 			require.True(t, raftLog.append(init))
+			require.NoError(t, storage.Append(init.entries[:1]))
+
 			raftLog.stableTo(entryID{term: 1, index: 4})
 			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)

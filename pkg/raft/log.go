@@ -113,7 +113,8 @@ func (l *raftLog) String() string {
 //
 // Returns false if the operation can not be done: entry a.prev does not match
 // the log (so this log slice is insufficient to make our log consistent with
-// the leader log), or is out of bounds (appending it would introduce a gap).
+// the leader log), the slice is out of bounds (appending it would introduce a
+// gap), or a.term is outdated.
 func (l *raftLog) maybeAppend(a logSlice) bool {
 	match, ok := l.match(a)
 	if !ok {
@@ -121,22 +122,33 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 	}
 	// Fast-forward the appended log slice to the last matching entry.
 	// NB: a.prev.index <= match <= a.lastIndex(), so the call is safe.
-	return l.append(a.forward(match))
-}
+	a = a.forward(match)
 
-// append conditionally appends the given log slice to the log. Same as
-// maybeAppend, but does not skip the already present entries.
-//
-// TODO(pav-kv): do a clearer distinction between maybeAppend and append. The
-// append method should only append at the end of the log (and verify that it's
-// the case), and maybeAppend can truncate the log.
-func (l *raftLog) append(a logSlice) bool {
 	if len(a.entries) == 0 {
+		// TODO(pav-kv): remove this clause and handle it in unstable. The log slice
+		// can carry a newer a.term, which should update our accTerm.
 		return true
 	}
 	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
 	}
+	return l.unstable.truncateAndAppend(a)
+}
+
+// append adds the given log slice to the end of the log.
+//
+// Returns false if the operation can not be done: entry a.prev does not match
+// the lastEntryID of this log, or a.term is outdated.
+func (l *raftLog) append(a logSlice) bool {
+	if a.prev != l.lastEntryID() {
+		return false
+	}
+	if len(a.entries) == 0 {
+		// TODO(pav-kv): remove this clause and handle it in unstable. The log slice
+		// can carry a newer a.term, which should update our accTerm.
+		return true
+	}
+	// TODO(pav-kv): add unstable.append method which never truncates the log.
 	return l.unstable.truncateAndAppend(a)
 }
 
