@@ -38,7 +38,11 @@ func (st LeaseStatus) Expiration() hlc.Timestamp {
 	case roachpb.LeaseExpiration:
 		return st.Lease.GetExpiration()
 	case roachpb.LeaseEpoch:
-		return st.Liveness.Expiration.ToTimestamp()
+		exp := st.Lease.MinExpiration
+		if st.Lease.Epoch == st.Liveness.Epoch {
+			exp.Forward(st.Liveness.Expiration.ToTimestamp())
+		}
+		return exp
 	default:
 		panic("unexpected")
 	}

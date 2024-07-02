@@ -161,6 +161,7 @@ func defaultSettings() Settings {
 		UseExpirationLeases:      false,
 		TransferExpirationLeases: true,
 		ExpToEpochEquiv:          true,
+		MinExpirationSupported:   true,
 		RangeLeaseDuration:       20,
 	}
 }
@@ -440,6 +441,7 @@ func TestBuild(t *testing.T) {
 						Epoch:           3,
 						Sequence:        7, // sequence not changed
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
+						MinExpiration:   ts30,
 					},
 				},
 			},
@@ -448,6 +450,7 @@ func TestBuild(t *testing.T) {
 				st: func() Settings {
 					st := defaultSettings()
 					st.ExpToEpochEquiv = false
+					st.MinExpirationSupported = false
 					return st
 				}(),
 				input: expirationInput,
@@ -464,6 +467,30 @@ func TestBuild(t *testing.T) {
 			},
 			{
 				name: "promote expiration to epoch, needs liveness heartbeat",
+				input: func() BuildInput {
+					i := expirationInput
+					i.PrevLease.Expiration = &ts40
+					return i
+				}(),
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:         repl1,
+						Start:           cts10,
+						ProposedTS:      cts20,
+						Epoch:           3,
+						Sequence:        7, // sequence not changed
+						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
+						MinExpiration:   ts40,
+					},
+				},
+			},
+			{
+				name: "promote expiration to epoch, needs liveness heartbeat, pre-24.2",
+				st: func() Settings {
+					st := defaultSettings()
+					st.MinExpirationSupported = false
+					return st
+				}(),
 				input: func() BuildInput {
 					i := expirationInput
 					i.PrevLease.Expiration = &ts40
