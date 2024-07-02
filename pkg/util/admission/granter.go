@@ -303,10 +303,13 @@ type kvStoreTokenGranter struct {
 		// blocks if availableElasticIOTokens <= 0.
 		availableIOTokens            [admissionpb.NumWorkClasses]int64
 		elasticIOTokensUsedByElastic int64
+
 		// Disk bandwidth tokens.
 		elasticDiskBWTokensAvailable int64
-
-		diskBWTokensUsed [admissionpb.NumWorkClasses]int64
+		diskBWTokensUsed             [admissionpb.NumWorkClasses]int64
+		// estimatedWriteAmp is used to scale up token deduction for KV writes into
+		// the LSM.
+		estimatedWriteAmp float64
 	}
 
 	ioTokensExhaustedDurationMetric [admissionpb.NumWorkClasses]*metric.Counter
@@ -390,6 +393,7 @@ func (sg *kvStoreTokenGranter) tryGet(workClass admissionpb.WorkClass, count int
 // tryGetLocked implements granterWithLockedCalls.
 func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grantResult {
 	wc := admissionpb.WorkClass(demuxHandle)
+	bwTokens := int64(float64(count) * sg.coordMu.estimatedWriteAmp)
 	// NB: ideally if regularRequester.hasWaitingRequests() returns true and
 	// wc==elasticWorkClass we should reject this request, since it means that
 	// more important regular work is waiting. However, we rely on the
@@ -401,17 +405,17 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 	case admissionpb.RegularWorkClass:
 		if sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] > 0 {
 			sg.subtractTokensLocked(count, count, false)
-			sg.coordMu.diskBWTokensUsed[wc] += count
+			sg.coordMu.diskBWTokensUsed[wc] += bwTokens
 			return grantSuccess
 		}
 	case admissionpb.ElasticWorkClass:
 		if sg.coordMu.elasticDiskBWTokensAvailable > 0 &&
 			sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] > 0 &&
 			sg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass] > 0 {
-			sg.coordMu.elasticDiskBWTokensAvailable -= count
+			sg.coordMu.elasticDiskBWTokensAvailable -= bwTokens
 			sg.subtractTokensLocked(count, count, false)
 			sg.coordMu.elasticIOTokensUsedByElastic += count
-			sg.coordMu.diskBWTokensUsed[wc] += count
+			sg.coordMu.diskBWTokensUsed[wc] += bwTokens
 			return grantSuccess
 		}
 	}
@@ -455,6 +459,7 @@ func (sg *kvStoreTokenGranter) tookWithoutPermissionLocked(count int64, demuxHan
 func (sg *kvStoreTokenGranter) subtractTokensLocked(
 	count int64, elasticCount int64, settingAvailableTokens bool,
 ) {
+	// TODO(aaditya): we need disk bw / IOPS exhausted metric
 	sg.subtractTokensLockedForWorkClass(admissionpb.RegularWorkClass, count, settingAvailableTokens)
 	sg.subtractTokensLockedForWorkClass(admissionpb.ElasticWorkClass, elasticCount, settingAvailableTokens)
 	if !settingAvailableTokens {

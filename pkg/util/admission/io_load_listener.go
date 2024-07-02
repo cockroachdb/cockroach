@@ -646,8 +646,8 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 			elasticTokensUsed: diskTokensUsed[admissionpb.ElasticWorkClass],
 		}
 		if metrics.DiskStats.ProvisionedBandwidth > 0 {
-			io.elasticDiskBWTokens = io.diskBandwidthLimiter.computeElasticTokens(ctx,
-				io.aux.diskBW.intervalDiskLoadInfo, io.aux.diskBW.intervalLSMInfo)
+			// TODO(aaditya) handle the seperate read + write bandwidth case
+			io.elasticDiskBWTokens = metrics.DiskStats.ProvisionedBandwidth
 			io.elasticDiskBWTokensAllocated = 0
 		}
 		if metrics.DiskStats.ProvisionedBandwidth == 0 ||
