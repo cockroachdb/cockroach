@@ -109,15 +109,13 @@ func (l *raftLog) String() string {
 //
 // TODO(pav-kv): merge maybeAppend and append into one method.
 func (l *raftLog) maybeAppend(a logSlice) bool {
-	match, ok := l.findConflict(a)
+	match, ok := l.match(a)
 	if !ok {
 		return false
 	}
-
-	// Fast-forward to the first mismatching or missing entry.
-	// NB: prev.index <= match.index <= a.lastIndex(), so the sub-slicing is safe.
-	a.entries = a.entries[match.index-a.prev.index:]
-	a.prev = match
+	// Fast-forward the appended log slice to the last matching entry.
+	// NB: a.prev.index <= match <= a.lastIndex(), so the call is safe.
+	a = a.forward(match)
 
 	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
 	// bookkeeping in the unstable structure.
@@ -135,24 +133,18 @@ func (l *raftLog) append(ents ...pb.Entry) {
 	l.unstable.truncateAndAppend(ents)
 }
 
-// findConflict finds the last entry in the given log slice that matches the
-// log. The next entry either mismatches, or is missing.
+// match finds the longest prefix of the given log slice that matches the log.
 //
-// If the slice partially/fully matches, this method returns true. The returned
-// entryID is the ID of the last matching entry. It can be s.prev if it is the
-// only matching entry. It is guaranteed that the returned entryID.index is in
-// the [s.prev.index, s.lastIndex()] range.
+// Returns the index of the last matching entry, in [s.prev.index, s.lastIndex]
+// interval. The next entry either mismatches, or is missing. Returns false if
+// the s.prev entry doesn't match, or is missing.
 //
-// All the entries up to the returned entryID are already present in the log,
-// and do not need to be appended again. The caller can safely fast-forward an
-// append request to the next entry after it.
-//
-// Returns false if the given slice mismatches the log entirely, i.e. the s.prev
-// entry has a mismatching entryID.term. In this case an append request can not
-// proceed.
-func (l *raftLog) findConflict(s logSlice) (entryID, bool) {
+// All the entries up to the returned index are already present in the log, and
+// do not need to be rewritten. The caller can safely fast-forward the appended
+// logSlice to this index.
+func (l *raftLog) match(s logSlice) (uint64, bool) {
 	if !l.matchTerm(s.prev) {
-		return entryID{}, false
+		return 0, false
 	}
 
 	// TODO(pav-kv): add a fast-path here using the Log Matching property of raft.
@@ -165,11 +157,11 @@ func (l *raftLog) findConflict(s logSlice) (entryID, bool) {
 	// to fetching an entry from storage. This is inefficient, we can improve it.
 	// Logs that don't match at one index, don't match at all indices above. So we
 	// can use binary search to find the fork.
-	match := s.prev
+	match := s.prev.index
 	for i := range s.entries {
 		id := pbEntryID(&s.entries[i])
 		if l.matchTerm(id) {
-			match = id
+			match = id.index
 			continue
 		}
 		if id.index <= l.lastIndex() {
