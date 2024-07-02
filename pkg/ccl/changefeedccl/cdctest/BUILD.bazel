@@ -14,7 +14,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/cdctest/gapcheck",
         "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/cmd/roachtest/test",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvclient/rangefeed",
