@@ -103,36 +103,44 @@ func (l *raftLog) String() string {
 		l.committed, l.applied, l.applying, l.unstable.offset, l.unstable.offsetInProgress, len(l.unstable.entries))
 }
 
-// maybeAppend appends the given log slice to the log. Returns false if the
-// slice can not be appended (because it is out of bounds, or a.prev does not
-// match the log).
+// maybeAppend conditionally appends the given log slice to the log. The log is
+// truncated to end at a.lastIndex() if any entry is overwritten. Entries that
+// are already present in the log are skipped.
 //
-// TODO(pav-kv): merge maybeAppend and append into one method.
+// Returns false if the slice can not be appended because it fails the prev term
+// check, or is out of bounds.
 func (l *raftLog) maybeAppend(a logSlice) bool {
 	match, ok := l.findConflict(a)
 	if !ok {
 		return false
 	}
-
 	// Fast-forward to the first mismatching or missing entry.
 	// NB: prev.index <= match.index <= a.lastIndex(), so the sub-slicing is safe.
 	a.entries = a.entries[match.index-a.prev.index:]
 	a.prev = match
-
-	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
-	// bookkeeping in the unstable structure.
-	l.append(a.entries...)
-	return true
+	return l.append(a)
 }
 
-func (l *raftLog) append(ents ...pb.Entry) {
-	if len(ents) == 0 {
-		return
+// append conditionally appends the given log slice to the log. The log is
+// truncated to end at a.lastIndex() if any entry is overwritten.
+//
+// Returns false if the slice can not be appended because it fails the prev term
+// check, or is out of bounds.
+//
+// TODO(pav-kv): do a clearer distinction between maybeAppend and append. The
+// append method should append at the end of the log (and verify that it's the
+// case), and maybeAppend can truncate the log.
+func (l *raftLog) append(a logSlice) bool {
+	if len(a.entries) == 0 {
+		return true
 	}
-	if first := ents[0].Index; first <= l.committed {
+	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
 	}
-	l.unstable.truncateAndAppend(ents)
+	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
+	// bookkeeping in the unstable structure.
+	l.unstable.truncateAndAppend(a.entries)
+	return true
 }
 
 // findConflict finds the last entry in the given log slice that matches the
