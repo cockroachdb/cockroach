@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,11 +54,10 @@ func TestLoggingDLQClient(t *testing.T) {
 		name           string
 		expectedErrMsg string
 
-		jobID          int64
-		kv             streampb.StreamEvent_KV
-		cdcEventRow    cdcevent.Row
-		writeTimestamp hlc.Timestamp
-		conflictReason string
+		jobID       int64
+		kv          streampb.StreamEvent_KV
+		cdcEventRow cdcevent.Row
+		reason      error
 	}
 
 	testCases := []testCase{
@@ -73,7 +73,10 @@ func TestLoggingDLQClient(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := dlqClient.Log(ctx, tc.jobID, tc.kv, tc.cdcEventRow, tc.writeTimestamp, tc.conflictReason)
+			if tc.reason == nil {
+				tc.reason = errors.New("some error")
+			}
+			err := dlqClient.Log(ctx, tc.jobID, tc.kv, tc.cdcEventRow, tc.reason)
 			if tc.expectedErrMsg == "" {
 				require.NoError(t, err)
 			} else {

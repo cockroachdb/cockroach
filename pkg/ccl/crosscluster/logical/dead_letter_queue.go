@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -55,8 +54,7 @@ type DeadLetterQueueClient interface {
 		ingestionJobID int64,
 		kv streampb.StreamEvent_KV,
 		cdcEventRow cdcevent.Row,
-		writeTimestamp hlc.Timestamp,
-		conflictReason string,
+		reason error,
 	) error
 }
 
@@ -75,8 +73,7 @@ func (dlq *loggingDeadLetterQueueClient) Log(
 	ingestionJobID int64,
 	kv streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
-	writeTimestamp hlc.Timestamp,
-	conflictReason string,
+	reason error,
 ) error {
 	if !dlq.exists() {
 		return errors.New("dead letter queue table needs to be created before logs can be appended")
@@ -95,10 +92,10 @@ func (dlq *loggingDeadLetterQueueClient) Log(
 		writeType = Insert
 	}
 
-	// TODO(azhu): once we have the actual conflictReason passed in, replace DebugString() with conflictReason
+	// TODO(azhu): once we have the actual reason passed in, replace DebugString() with reason
 	log.Infof(ctx,
-		`ingestion_job_id: %d, \ntable_id: %d, \nwrite_timestamp: %d, \nwrite_type: %s,\nconflict_reason: %s`,
-		ingestionJobID, tableID, writeTimestamp, writeType, cdcEventRow.DebugString())
+		`ingestion_job_id: %d,\n table_id: %d,\n write_type: %s,\n row: %s, \n reason: %s`,
+		ingestionJobID, tableID, writeType, cdcEventRow.DebugString(), reason.Error())
 	return nil
 }
 
