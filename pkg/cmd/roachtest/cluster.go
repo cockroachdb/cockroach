@@ -1976,6 +1976,38 @@ func (c *clusterImpl) Get(
 	return errors.Wrap(roachprod.Get(ctx, l, c.MakeNodes(opts...), src, dest), "cluster.Get")
 }
 
+// Tail tails files from remote hosts asynchronously.
+func (c *clusterImpl) Tail(
+	ctx context.Context, l *logger.Logger, src string, opts ...option.Option,
+) (stdout io.ReadCloser, errChan chan error, err error) {
+	if ctx.Err() != nil {
+		return nil, nil, errors.Wrap(ctx.Err(), "cluster.Get")
+	}
+	c.status(fmt.Sprintf("tailing %v", src))
+	defer c.status("")
+	errChan = make(chan error, 1)
+	stdoutRead, stdoutWrite := io.Pipe()
+	go func() {
+		defer close(errChan)
+		defer func() { _ = stdoutWrite.Close() }()
+		var err error
+		defer l.Printf("stopped tailing %v: %v", src, err)
+		err = roachprod.Run(ctx, l, c.MakeNodes(opts...), "", "", false, stdoutWrite, io.Discard, []string{fmt.Sprintf("tail -F %s", src)}, install.RunOptions{})
+		if err != nil {
+			errChan <- err
+		}
+	}()
+
+	// Close the pipe when the context is canceled.
+	go func() {
+		<-ctx.Done()
+		_ = stdoutRead.Close()
+	}()
+
+	c.status(fmt.Sprintf("spawned tail -F %v", src))
+	return stdoutRead, errChan, nil
+}
+
 // PutString into the specified file on the remote(s).
 func (c *clusterImpl) PutString(
 	ctx context.Context, content, dest string, mode os.FileMode, nodes ...option.Option,
