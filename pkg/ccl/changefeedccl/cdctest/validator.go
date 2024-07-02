@@ -10,15 +10,20 @@ package cdctest
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest/gapcheck"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // Validator checks for violations of our changefeed ordering and delivery
@@ -149,17 +154,19 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 	if len(timestampValueTuples) > 0 &&
 		updated.Less(timestampValueTuples[len(timestampValueTuples)-1].ts) {
 		v.failures = append(v.failures, fmt.Sprintf(
-			`topic %s partition %s: saw new row timestamp %s after %s was seen`,
+			`topic %s partition %s: saw new row timestamp %s after %s was seen (key %s)`,
 			v.topic, partition,
 			updated.AsOfSystemTime(),
 			timestampValueTuples[len(timestampValueTuples)-1].ts.AsOfSystemTime(),
+			key,
 		))
 	}
 	latestResolved := v.resolved[partition]
 	if updated.Less(latestResolved) {
 		v.failures = append(v.failures, fmt.Sprintf(
-			`topic %s partition %s: saw new row timestamp %s after %s was resolved`,
+			`topic %s partition %s: saw new row timestamp %s after %s was resolved (key %s)`,
 			v.topic, partition, updated.AsOfSystemTime(), latestResolved.AsOfSystemTime(),
+			key,
 		))
 	}
 
@@ -185,6 +192,172 @@ func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 func (v *orderValidator) Failures() []string {
 	return v.failures
 }
+
+type IntegrityValidationType string
+
+const (
+	IntegrityValidationNone              IntegrityValidationType = ""
+	IntegrityValidationEachKeySequential IntegrityValidationType = "each_key_sequential"
+)
+
+// TODO: consider adding to nemesis test and other places validators are used
+func NewIntegrityValidator(ct IntegrityValidationType, topic string, inner Validator) Validator {
+	switch ct {
+	case IntegrityValidationNone:
+		return NoOpValidator
+	case IntegrityValidationEachKeySequential:
+		if inner == nil {
+			inner = NoOpValidator
+		}
+		return &eachKeySequentialIntegrityValidator{ct: ct, topic: topic, inner: inner, gapcheckers: make(map[string]*gapcheck.GapChecker)}
+	default:
+		panic(fmt.Sprintf("unknown integrity validation type: %s", ct))
+	}
+}
+
+func (vt IntegrityValidationType) StartWorkload(ctx context.Context, t test.Test, db *gosql.DB, monGo func(func(context.Context) error)) (wait func()) {
+	switch vt {
+	case IntegrityValidationNone:
+		return func() {}
+	case IntegrityValidationEachKeySequential:
+		return vt.startEachKeySequentialWorkload(ctx, t, db, monGo)
+	default:
+		t.Fatalf("unknown integrity validation type: %v", vt)
+		return nil // unreachable
+	}
+}
+
+func (vt IntegrityValidationType) startEachKeySequentialWorkload(ctx context.Context, t test.Test, db *gosql.DB, monGo func(func(context.Context) error)) (wait func()) {
+	t.L().Printf("running each-key-sequential integrity workload")
+
+	const (
+		parallelism = 8
+		numKeys     = 1000
+		numVals     = 10_000
+		chunkSize   = numKeys / parallelism
+	)
+
+	finished := make(chan struct{}, parallelism)
+	for wi := 0; wi < parallelism; wi++ {
+		wi := wi
+		monGo(func(ctx context.Context) error {
+			defer func() { finished <- struct{}{} }()
+			defer t.L().Printf("worker %d done", wi)
+
+			sleep := func(attempt int) {
+				select {
+				case <-ctx.Done():
+				case <-time.After(time.Duration(attempt*10) * time.Millisecond):
+				}
+			}
+
+			var err error
+			var conn *gosql.Conn
+			conn, err = db.Conn(ctx)
+			require.NoError(t, err)
+			defer func() {
+				if conn != nil {
+					_ = conn.Close()
+				}
+			}()
+
+			// Run workload: update keys sequentially. Split key space into par parts and each goroutine updates its own part.
+			offset := wi * chunkSize
+			for i := 0; i < numVals*chunkSize; i++ {
+				key := offset + i%chunkSize
+				// Retry connections because we might do crdb chaos too.
+				for attempt := 0; attempt < 10 && ctx.Err() == nil; attempt++ {
+					if conn == nil {
+						conn, err = db.Conn(ctx)
+						if err != nil {
+							sleep(attempt)
+							continue
+						}
+					}
+					_, err := conn.ExecContext(ctx, "INSERT INTO t (id, x) VALUES ($1, 1) ON CONFLICT(id) DO UPDATE SET x = t.x + 1", key)
+					if err == nil {
+						break
+					}
+					if strings.Contains(err.Error(), "connection is already closed") {
+						if conn != nil {
+							_ = conn.Close()
+							conn = nil
+						}
+					}
+					t.L().Printf("worker %d retrying insert %d: %s", wi, key, err)
+					sleep(attempt)
+				}
+			}
+			return nil
+		})
+	}
+
+	return func() {
+		for i := 0; i < parallelism; i++ {
+			select {
+			case <-ctx.Done():
+			case <-finished:
+			}
+		}
+	}
+}
+
+func (vt IntegrityValidationType) SetupWorkload(ctx context.Context, t test.Test, db *gosql.DB) {
+	switch vt {
+	case IntegrityValidationNone:
+	case IntegrityValidationEachKeySequential:
+		_, err := db.Exec(`CREATE TABLE t (id INT PRIMARY KEY, x INT)`)
+		require.NoError(t, err)
+	default:
+		t.Fatalf("unknown integrity validation type: %v", vt)
+	}
+}
+
+type eachKeySequentialIntegrityValidator struct {
+	inner       Validator
+	ct          IntegrityValidationType
+	topic       string
+	gapcheckers map[string]*gapcheck.GapChecker
+}
+
+// NOTE: Row reordering issues can manifest as integrity violations too if we're checking integrity after each row.
+// If we want to ignore reordering issues here, we must call this method only at the end of the workload.
+// Since row reordering is also bad I think it's fine to leave it like this though.
+func (c *eachKeySequentialIntegrityValidator) Failures() []string {
+	var failures []string
+	for key, gc := range c.gapcheckers {
+		if err := gc.Check(); err != nil {
+			failures = append(failures, fmt.Sprintf("integrity: key=%v: %v", key, err.Error()))
+		}
+	}
+	return append(failures, c.inner.Failures()...)
+}
+
+func (c *eachKeySequentialIntegrityValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	return c.inner.NoteResolved(partition, resolved)
+}
+
+func (c *eachKeySequentialIntegrityValidator) NoteRow(partition string, key string, value string, updated hlc.Timestamp) error {
+	type val struct {
+		After struct {
+			ID int `json:"id"`
+			X  int `json:"x"`
+		} `json:"after"`
+		Updated string `json:"updated"`
+	}
+	var v val
+	if err := gojson.Unmarshal([]byte(value), &v); err != nil {
+		return fmt.Errorf("failed to parse value %q: %w", value, err)
+	}
+	x := v.After.X
+	if _, ok := c.gapcheckers[key]; !ok {
+		c.gapcheckers[key] = gapcheck.NewGapChecker()
+	}
+	c.gapcheckers[key].Add(x)
+	return c.inner.NoteRow(partition, key, value, updated)
+}
+
+var _ Validator = &eachKeySequentialIntegrityValidator{}
 
 type beforeAfterValidator struct {
 	sqlDB          *gosql.DB
