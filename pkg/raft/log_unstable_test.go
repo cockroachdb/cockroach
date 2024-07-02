@@ -218,14 +218,17 @@ func TestUnstableRestore(t *testing.T) {
 	}
 	u.checkInvariants(t)
 
-	s := pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 6, Term: 2}}
+	s := snapshot{
+		term: 2,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 6, Term: 2}},
+	}
 	u.restore(s)
 	u.checkInvariants(t)
 
-	require.Equal(t, s.Metadata.Index+1, u.offset)
-	require.Equal(t, s.Metadata.Index+1, u.offsetInProgress)
+	require.Equal(t, s.lastEntryID().index+1, u.offset)
+	require.Equal(t, s.lastEntryID().index+1, u.offsetInProgress)
 	require.Zero(t, len(u.entries))
-	require.Equal(t, &s, u.snapshot)
+	require.Equal(t, &s.snap, u.snapshot)
 	require.False(t, u.snapshotInProgress)
 }
 

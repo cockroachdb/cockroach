@@ -280,7 +280,7 @@ func TestCompactionSideEffects(t *testing.T) {
 	raftLog := newLog(storage, raftLogger)
 	raftLog.append(index(unstableIndex+1).termRange(unstableIndex+1, lastIndex+1)...)
 
-	require.True(t, raftLog.maybeCommit(raftLog.lastEntryID()))
+	require.True(t, raftLog.maybeCommit(logMark(raftLog.lastEntryID())))
 	raftLog.appliedTo(raftLog.committed, 0 /* size */)
 
 	offset := uint64(500)
@@ -309,8 +309,9 @@ func TestCompactionSideEffects(t *testing.T) {
 }
 
 func TestHasNextCommittedEnts(t *testing.T) {
-	snap := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
+	snap := snapshot{
+		term: 1,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: 1, Index: 3}},
 	}
 	ents := index(4).terms(1, 1, 1)
 	tests := []struct {
@@ -342,19 +343,19 @@ func TestHasNextCommittedEnts(t *testing.T) {
 	for i, tt := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			storage := NewMemoryStorage()
-			require.NoError(t, storage.ApplySnapshot(snap))
+			require.NoError(t, storage.ApplySnapshot(snap.snap))
 			require.NoError(t, storage.Append(ents[:1]))
 
 			raftLog := newLog(storage, raftLogger)
 			raftLog.append(ents...)
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(entryID{term: 1, index: 5})
+			raftLog.maybeCommit(logMark{term: 1, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
 			raftLog.applyingEntsPaused = tt.paused
 			if tt.snap {
 				newSnap := snap
-				newSnap.Metadata.Index++
+				newSnap.snap.Metadata.Index++
 				raftLog.restore(newSnap)
 			}
 			require.Equal(t, tt.whasNext, raftLog.hasNextCommittedEnts(tt.allowUnstable))
@@ -363,8 +364,9 @@ func TestHasNextCommittedEnts(t *testing.T) {
 }
 
 func TestNextCommittedEnts(t *testing.T) {
-	snap := pb.Snapshot{
-		Metadata: pb.SnapshotMetadata{Term: 1, Index: 3},
+	snap := snapshot{
+		term: 1,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: 1, Index: 3}},
 	}
 	ents := index(4).terms(1, 1, 1)
 	tests := []struct {
@@ -396,19 +398,19 @@ func TestNextCommittedEnts(t *testing.T) {
 	for i, tt := range tests {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			storage := NewMemoryStorage()
-			require.NoError(t, storage.ApplySnapshot(snap))
+			require.NoError(t, storage.ApplySnapshot(snap.snap))
 			require.NoError(t, storage.Append(ents[:1]))
 
 			raftLog := newLog(storage, raftLogger)
 			raftLog.append(ents...)
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(entryID{term: 1, index: 5})
+			raftLog.maybeCommit(logMark{term: 1, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
 			raftLog.applyingEntsPaused = tt.paused
 			if tt.snap {
 				newSnap := snap
-				newSnap.Metadata.Index++
+				newSnap.snap.Metadata.Index++
 				raftLog.restore(newSnap)
 			}
 			require.Equal(t, tt.wents, raftLog.nextCommittedEnts(tt.allowUnstable))
@@ -457,7 +459,7 @@ func TestAcceptApplying(t *testing.T) {
 			raftLog := newLogWithSize(storage, raftLogger, maxSize)
 			raftLog.append(ents...)
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(entryID{term: 1, index: 5})
+			raftLog.maybeCommit(logMark{term: 1, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
 
 			raftLog.acceptApplying(tt.index, tt.size, tt.allowUnstable)
@@ -502,7 +504,7 @@ func TestAppliedTo(t *testing.T) {
 			raftLog := newLogWithSize(storage, raftLogger, maxSize)
 			raftLog.append(ents...)
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(entryID{term: 1, index: 5})
+			raftLog.maybeCommit(logMark{term: 1, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
 			raftLog.acceptApplying(5, maxSize+overshoot, false /* allowUnstable */)
 
@@ -551,13 +553,14 @@ func TestCommitTo(t *testing.T) {
 	previousEnts := index(1).terms(1, 2, 3)
 	commit := uint64(2)
 	for _, tt := range []struct {
-		commit uint64
+		commit logMark
 		want   uint64
 		panic  bool
 	}{
-		{commit: 3, want: 3},
-		{commit: 1, want: 2},     // commit does not regress
-		{commit: 4, panic: true}, // commit out of range -> panic
+		{commit: logMark{term: 3, index: 3}, want: 3},
+		{commit: logMark{term: 3, index: 2}, want: 2},     // commit does not regress
+		{commit: logMark{term: 3, index: 4}, panic: true}, // commit out of range -> panic
+		// TODO(pav-kv): add commit marks with a different term.
 	} {
 		t.Run("", func(t *testing.T) {
 			defer func() {
@@ -657,7 +660,7 @@ func TestCompaction(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.Append(index(1).termRange(1, tt.lastIndex+1)))
 			raftLog := newLog(storage, raftLogger)
-			raftLog.maybeCommit(entryID{term: 0, index: tt.lastIndex}) // TODO(pav-kv): this is a no-op
+			raftLog.maybeCommit(logMark{term: 0, index: tt.lastIndex}) // TODO(pav-kv): this is a no-op
 
 			raftLog.appliedTo(raftLog.committed, 0 /* size */)
 			for j := 0; j < len(tt.compact); j++ {
@@ -793,7 +796,10 @@ func TestTermWithUnstableSnapshot(t *testing.T) {
 	storage := NewMemoryStorage()
 	storage.ApplySnapshot(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: storagesnapi, Term: 1}})
 	l := newLog(storage, raftLogger)
-	l.restore(pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: unstablesnapi, Term: 1}})
+	l.restore(snapshot{
+		term: 1,
+		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: unstablesnapi, Term: 1}},
+	})
 
 	for i, tt := range []struct {
 		idx  uint64

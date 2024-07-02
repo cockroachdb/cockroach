@@ -216,11 +216,11 @@ func (u *unstable) stableSnapTo(i uint64) {
 	}
 }
 
-func (u *unstable) restore(s pb.Snapshot) {
-	u.offset = s.Metadata.Index + 1
+func (u *unstable) restore(s snapshot) {
+	u.offset = s.lastEntryID().index + 1
 	u.offsetInProgress = u.offset
 	u.entries = nil
-	u.snapshot = &s
+	u.snapshot = &s.snap
 	u.snapshotInProgress = false
 }
 

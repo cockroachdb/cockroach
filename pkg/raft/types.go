@@ -38,6 +38,23 @@ func pbEntryID(entry *pb.Entry) entryID {
 	return entryID{term: entry.Term, index: entry.Index}
 }
 
+// logMark is a position in a log consistent with the leader at a specific term.
+//
+// This is different from entryID. The entryID ties an entry to the term of the
+// leader who proposed it, while the logMark identifies an entry in a particular
+// leader's coordinate system. Different leaders can have different entries at a
+// particular index.
+//
+// Generally, all entries in raft form a tree (branching when a new leader
+// starts proposing entries at its term). A logMark identifies a position in a
+// particular branch of this tree.
+type logMark struct {
+	// term is the term of the leader whose log is considered.
+	term uint64
+	// index is the position in this leader's log.
+	index uint64
+}
+
 // logSlice describes a correct slice of a raft log.
 //
 // Every log slice is considered in a context of a specific leader term. This
@@ -91,6 +108,11 @@ func (s logSlice) lastEntryID() entryID {
 	return s.prev
 }
 
+// mark returns the logMark identifying the end of this logSlice.
+func (s logSlice) mark() logMark {
+	return logMark{term: s.term, index: s.lastIndex()}
+}
+
 // valid returns nil iff the logSlice is a well-formed log slice. See logSlice
 // comment for details on what constitutes a valid raft log slice.
 func (s logSlice) valid() error {
@@ -104,6 +126,50 @@ func (s logSlice) valid() error {
 	}
 	if s.term < prev.term {
 		return fmt.Errorf("leader term %d: entry %+v has a newer term", s.term, prev)
+	}
+	return nil
+}
+
+// snapshot is a snapshot tied to a leader term who sent it.
+//
+// Semantically, this type is equivalent to a logSlice from 0 to lastEntryID(),
+// plus a commit logMark. All leaders at terms >= snapshot.term are consistent
+// with snapshot.mark(), by raft invariants.
+type snapshot struct {
+	// term is the term of the leader log with whom the snapshot is consistent.
+	//
+	// Invariant: term >= term[generated] >= term[committed], where:
+	//	- term[committed] is the term under which the lastEntryID was committed.
+	//	  By raft invariants, all leaders at terms >= term[committed] observe
+	//	  entries up through lastEntryID as committed.
+	//	- term[generated] is the term of the leader on whose behalf the snapshot
+	//	  was generated.
+	//
+	// Note that we don't simply say term == term[generated] == term[committed],
+	// for generality. It's possible that an entry is committed, and the leader
+	// goes offline. Any future leader will observe this committed state, and can
+	// disseminate it. The snapshot can also change hands / be delegated, so we
+	// don't strictly tie the term to the initiator.
+	term uint64
+	// snap is the content of the snapshot.
+	snap pb.Snapshot
+}
+
+// lastEntryID returns the ID of the last entry covered by this snapshot.
+func (s snapshot) lastEntryID() entryID {
+	return entryID{term: s.snap.Metadata.Term, index: s.snap.Metadata.Index}
+}
+
+// mark returns committed logMark of this snapshot, in the coordinate system of
+// the leader who observes this committed state.
+func (s snapshot) mark() logMark {
+	return logMark{term: s.term, index: s.snap.Metadata.Index}
+}
+
+// valid returns nil iff the snapshot is well-formed.
+func (s snapshot) valid() error {
+	if entryTerm := s.snap.Metadata.Term; entryTerm > s.term {
+		return fmt.Errorf("leader term %d: snap %+v has a newer term", s.term, s.lastEntryID())
 	}
 	return nil
 }
