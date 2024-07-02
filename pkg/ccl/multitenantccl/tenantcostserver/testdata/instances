@@ -18,8 +18,8 @@ instance_id: 10
 inspect tenant=5
 ----
 Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
-Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
-Rates: write-batches=0,0
+Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 0 secs
+Rates: write-batches=0,0  estimated-cpu=0,0
 Last update: 00:00:00.000
 First active instance: 10
   Instance 10:  lease="foo"  seq=1  next-instance=0  last-update=00:00:00.000
@@ -31,8 +31,8 @@ instance_id: 10
 inspect tenant=5
 ----
 Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
-Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
-Rates: write-batches=0,0
+Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 0 secs
+Rates: write-batches=0,0  estimated-cpu=0,0
 Last update: 00:00:00.000
 First active instance: 10
   Instance 10:  lease="foo"  seq=2  next-instance=0  last-update=00:00:00.000
@@ -44,8 +44,8 @@ instance_id: 20
 inspect tenant=5
 ----
 Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
-Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
-Rates: write-batches=0,0
+Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 0 secs
+Rates: write-batches=0,0  estimated-cpu=0,0
 Last update: 00:00:00.000
 First active instance: 10
   Instance 10:  lease="foo"  seq=2  next-instance=20  last-update=00:00:00.000
@@ -58,8 +58,8 @@ instance_id: 15
 inspect tenant=5
 ----
 Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
-Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
-Rates: write-batches=0,0
+Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 0 secs
+Rates: write-batches=0,0  estimated-cpu=0,0
 Last update: 00:00:00.000
 First active instance: 10
   Instance 10:  lease="foo"  seq=2  next-instance=15  last-update=00:00:00.000
@@ -73,8 +73,8 @@ instance_id: 1
 inspect tenant=5
 ----
 Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
-Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes
-Rates: write-batches=0,0
+Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 0 secs
+Rates: write-batches=0,0  estimated-cpu=0,0
 Last update: 00:00:00.000
 First active instance: 1
   Instance 1:  lease="foo"  seq=5  next-instance=10  last-update=00:00:00.000
