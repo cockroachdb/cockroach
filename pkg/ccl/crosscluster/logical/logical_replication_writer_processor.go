@@ -469,6 +469,10 @@ func filterRemaining(kvs []streampb.StreamEvent_KV) []streampb.StreamEvent_KV {
 			j++
 		}
 	}
+	// If remaining shrunk by half or more, reallocate it to avoid aliasing.
+	if j < len(kvs)/2 {
+		return append(remaining[:0:0], remaining[:j]...)
+	}
 	return remaining[:j]
 }
 
