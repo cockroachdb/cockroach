@@ -38,11 +38,11 @@ func CPU(n int) Option {
 	}
 }
 
-// WorkloadNode indicates that the last node is a workload node.
+// WorkloadNodes indicates that the last n nodes are workload nodes.
 // Defaults to a VM with 4 CPUs if not specified by WorkloadNodeCPUs.
-func WorkloadNode() Option {
+func WorkloadNodes(n int) Option {
 	return func(spec *ClusterSpec) {
-		spec.WorkloadNode = true
+		spec.WorkloadNodes = n
 	}
 }
 
