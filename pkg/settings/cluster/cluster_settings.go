@@ -45,6 +45,8 @@ type Settings struct {
 	// is useful.
 	cpuProfiling int32 // atomic
 
+	traceProfiling int32 // atomic
+
 	// Version provides the interface through which callers read/write to the
 	// active cluster version, and access this binary's version details. Setting
 	// the active cluster version has a very specific, intended usage pattern.
@@ -109,6 +111,19 @@ func (s *Settings) SetCPUProfiling(to CPUProfileType) error {
 	}
 	if log.V(1) {
 		log.Infof(context.Background(), "active CPU profile type set to: %d", to)
+	}
+	return nil
+}
+
+func (s *Settings) ExecutionTraceEnabled() bool {
+	return atomic.LoadInt32(&s.traceProfiling) == 1
+}
+
+func (s *Settings) SetTraceProfiling(to int32) error {
+	if to == 0 {
+		atomic.StoreInt32(&s.traceProfiling, to)
+	} else if !atomic.CompareAndSwapInt32(&s.traceProfiling, 0, to) {
+		return errors.New("an execution trace profile is already in process, try again later")
 	}
 	return nil
 }
