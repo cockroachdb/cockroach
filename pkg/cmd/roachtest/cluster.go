@@ -2022,6 +2022,25 @@ func (c *clusterImpl) PutString(
 	return errors.Wrap(c.PutE(ctx, c.l, src, dest, nodes...), "cluster.PutString")
 }
 
+// GetString returns the contents of the specified file from the nodes.
+func (c *clusterImpl) GetString(
+	ctx context.Context, src string, nodes option.NodeListOption,
+) ([]string, error) {
+	results, err := c.RunWithDetails(
+		ctx, c.l, option.WithNodes(nodes), "cat", src)
+	if err != nil {
+		return nil, err
+	}
+	contents := make([]string, len(results))
+	for _, result := range results {
+		if result.Err != nil {
+			return nil, result.Err
+		}
+		contents[result.Node-1] = result.Stdout
+	}
+	return contents, nil
+}
+
 // GitClone clones a git repo from src into dest and checks out origin's
 // version of the given branch. The src, dest, and branch arguments must not
 // contain shell special characters.
@@ -2102,6 +2121,26 @@ func (c *clusterImpl) configureClusterSettingOptions(
 		defaultClusterSettings,
 		install.ClusterSettingsOption(settings.ClusterSettings),
 	}
+}
+
+// Grow adds nodes to the cluster.
+func (c *clusterImpl) Grow(ctx context.Context, l *logger.Logger, nodeCount int) error {
+	err := roachprod.Grow(ctx, l, c.name, c.IsSecure(), nodeCount)
+	if err != nil {
+		return err
+	}
+	c.spec.NodeCount += nodeCount
+	return nil
+}
+
+// Shrink removes nodes from the cluster.
+func (c *clusterImpl) Shrink(ctx context.Context, l *logger.Logger, nodeCount int) error {
+	err := roachprod.Shrink(ctx, l, c.name, nodeCount)
+	if err != nil {
+		return err
+	}
+	c.spec.NodeCount -= nodeCount
+	return nil
 }
 
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
@@ -2801,6 +2840,25 @@ func (c *clusterImpl) ExternalIP(
 
 // Silence unused warning.
 var _ = (&clusterImpl{}).ExternalIP
+
+// Localities returns the localities for the specified nodes.
+func (c *clusterImpl) Localities(
+	_ context.Context, _ *logger.Logger, nodes option.NodeListOption,
+) ([]string, error) {
+	cachedCluster, err := getCachedCluster(c.name)
+	if err != nil {
+		return nil, err
+	}
+	localities := make([]string, 0, len(cachedCluster.VMs))
+	for _, cVM := range cachedCluster.VMs {
+		locality, err := cVM.Locality()
+		if err != nil {
+			return nil, err
+		}
+		localities = append(localities, locality)
+	}
+	return localities, nil
+}
 
 // Conn returns a SQL connection to the specified node.
 func (c *clusterImpl) Conn(

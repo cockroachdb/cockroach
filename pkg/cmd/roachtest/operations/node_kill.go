@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -64,38 +63,19 @@ func runNodeKill(
 	ctx context.Context, o operation.Operation, c cluster.Cluster, signal int, drain bool,
 ) registry.OperationCleanup {
 	rng, _ := randutil.NewPseudoRand()
-
 	node := c.All().SeededRandNode(rng)
 
 	if drain {
-		o.Status(fmt.Sprintf("draining node %s", node.NodeIDsString()))
-		addr, err := c.ExternalAddr(ctx, o.L(), node)
-		if err != nil {
-			o.Fatal(err)
-		}
-		args := []string{
-			fmt.Sprintf("./%s", o.ClusterCockroach()),
-			"node", "drain", "--logtostderr=INFO", "--self",
-			fmt.Sprintf("--host=%s", addr[0]),
-		}
-		if c.IsSecure() {
-			args = append(args, "--certs-dir", install.CockroachNodeCertsDir)
-		} else {
-			args = append(args, "--insecure")
-		}
-		err = c.RunE(ctx, option.WithNodes(node), args...)
-		if err != nil {
-			o.Fatal(err)
-		}
+		drainNode(ctx, o, c, node, node)
 	}
-	o.Status(fmt.Sprintf("killing node %s with signal %d", node.NodeIDsString(), signal))
 
+	o.Status(fmt.Sprintf("killing node %s with signal %d", node.NodeIDsString(), signal))
 	err := c.RunE(ctx, option.WithNodes(node), "pkill", fmt.Sprintf("-%d", signal), "-f", "cockroach\\ start")
 	if err != nil {
 		o.Fatal(err)
 	}
-	o.Status(fmt.Sprintf("sent signal %d to node %s, waiting for process to exit", signal, node.NodeIDsString()))
 
+	o.Status(fmt.Sprintf("sent signal %d to node %s, waiting for process to exit", signal, node.NodeIDsString()))
 	for {
 		if err := ctx.Err(); err != nil {
 			o.Fatal(err)
@@ -104,15 +84,13 @@ func runNodeKill(
 		if err != nil {
 			if strings.Contains(err.Error(), "status 1") {
 				// pgrep returns error code 1 if no processes are found.
+				o.Status(fmt.Sprintf("killed node %s with signal %d", node.NodeIDsString(), signal))
 				break
 			}
 			o.Fatal(err)
 		}
-
 		time.Sleep(1 * time.Second)
 	}
-
-	o.Status(fmt.Sprintf("killed node %s with signal %d", node.NodeIDsString(), signal))
 
 	return &cleanupNodeKill{
 		nodes: node,

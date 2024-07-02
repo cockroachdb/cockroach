@@ -1631,7 +1631,9 @@ func Create(
 	return SetupSSH(ctx, l, clusterName)
 }
 
-func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes int) error {
+func Grow(
+	ctx context.Context, l *logger.Logger, clusterName string, secure bool, numNodes int,
+) error {
 	if numNodes <= 0 || numNodes >= 1000 {
 		// Upper limit is just for safety.
 		return fmt.Errorf("number of nodes must be in [1..999]")
@@ -1646,7 +1648,24 @@ func Grow(ctx context.Context, l *logger.Logger, clusterName string, numNodes in
 	if err != nil {
 		return err
 	}
-	return SetupSSH(ctx, l, clusterName)
+	err = SetupSSH(ctx, l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if secure {
+		// Grab the cluster from the cache again to ensure we have the latest
+		// information.
+		c, err = getClusterFromCache(l, clusterName)
+		if err != nil {
+			return err
+		}
+		err = c.RedistributeNodeCert(ctx, l)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func Shrink(ctx context.Context, l *logger.Logger, clusterName string, numNodes int) error {

@@ -40,6 +40,11 @@ type Cluster interface {
 	Node(i int) option.NodeListOption
 	WorkloadNode() option.NodeListOption
 
+	// Resize cluster.
+
+	Grow(ctx context.Context, l *logger.Logger, nodeCount int) error
+	Shrink(ctx context.Context, l *logger.Logger, nodeCount int) error
+
 	// Uploading and downloading from/to nodes.
 
 	Get(ctx context.Context, l *logger.Logger, src, dest string, opts ...option.Option) error
@@ -52,6 +57,7 @@ type Cluster interface {
 	PutString(
 		ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option,
 	) error
+	GetString(ctx context.Context, src string, nodes option.NodeListOption) ([]string, error)
 
 	// SetRandomSeed allows tests to set their own random seed to be
 	// used by builds with runtime assertions enabled.
@@ -85,6 +91,7 @@ type Cluster interface {
 	ExternalAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	ExternalIP(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 	SQLPorts(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]int, error)
+	Localities(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
 
 	// SQL connection strings.
 
