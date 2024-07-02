@@ -810,8 +810,6 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 		log.Infof(ctx, "updateStoreMap called on %q with desc %+v", key, desc)
 	}
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
 	g.storeDescs.Store(int64(desc.StoreID), unsafe.Pointer(&desc))
 }
 
