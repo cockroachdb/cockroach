@@ -2034,6 +2034,55 @@ func (c *clusterImpl) Get(
 	return errors.Wrap(roachprod.Get(ctx, l, c.MakeNodes(opts...), src, dest), "cluster.Get")
 }
 
+func (c *clusterImpl) SpawnE(ctx context.Context, options install.RunOptions, logger *logger.Logger, args ...string) (stdouts []io.Reader, errs chan error, err error) {
+	if ctx.Err() != nil {
+		return nil, nil, ctx.Err()
+	}
+	c.status(fmt.Sprintf("running %v on %v", args, options.Nodes))
+	defer c.status("")
+
+	errs = make(chan error, len(options.Nodes))
+
+	var (
+		stdoutReaders []io.Reader
+		stdoutWriters []io.WriteCloser
+	)
+
+	errWg := &sync.WaitGroup{}
+	errWg.Add(len(options.Nodes))
+
+	// Close errs once all commands have finished.
+	go func() {
+		errWg.Wait()
+		close(errs)
+	}()
+
+	for range options.Nodes {
+		stdoutReader, stdoutWriter := io.Pipe()
+		stdoutReaders = append(stdoutReaders, stdoutReader)
+		stdoutWriters = append(stdoutWriters, stdoutWriter)
+
+		go func(stdout io.WriteCloser) {
+			defer errWg.Done()
+			defer func() { _ = stdout.Close() }()
+			err := roachprod.Run(ctx, logger, c.MakeNodes(option.FromInstallNodes(options.Nodes)),
+				"", "", false, stdout, io.Discard, args, options)
+			if err != nil && ctx.Err() == nil {
+				// This should never block since we allocate enough space in errs for each one.
+				errs <- err
+			}
+		}(stdoutWriter)
+
+		// Close the pipe when the context is canceled. This will cause the process to fail with SIGPIPE.
+		go func(stdout io.Closer) {
+			<-ctx.Done()
+			_ = stdout.Close()
+		}(stdoutReader)
+	}
+
+	return stdoutReaders, errs, nil
+}
+
 // PutString into the specified file on the remote(s).
 func (c *clusterImpl) PutString(
 	ctx context.Context, content, dest string, mode os.FileMode, nodes ...option.Option,
