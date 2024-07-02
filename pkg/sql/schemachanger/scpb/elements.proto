@@ -652,6 +652,12 @@ message DatabaseZoneConfig {
 
 message TableZoneConfig {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.config.zonepb.ZoneConfig zone_config = 2;
+  // `seq_num` is used to differentiate different zone config elements tied to
+  // the same table. E.g. If we attempt to update a table's zone config,
+  // our solution is to drop the existing element and add a new element, with
+  // different `seq_num`.
+  uint32 seq_num = 3;
 }
 
 message IndexZoneConfig {
