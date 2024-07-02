@@ -77,10 +77,14 @@ func validateExternalConnectionSinkURI(
 	//
 	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
 	// to accept JSONConfig we should validate that here too.
-	_, err := getSink(ctx, serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, env.Username,
+	s, err := getSink(ctx, serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, env.Username,
 		jobspb.JobID(0), (*sliMetrics)(nil))
 	if err != nil {
 		return errors.Wrap(err, "invalid changefeed sink URI")
+	}
+	// TODO: Call Dial() here as well / use getAndDialSink() for parity with what the non-external-connection stuff does.
+	if err := s.Close(); err != nil {
+		return errors.Wrap(err, "failed to close canary sink")
 	}
 
 	return nil

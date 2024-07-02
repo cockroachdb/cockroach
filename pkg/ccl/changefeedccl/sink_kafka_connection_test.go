@@ -32,7 +32,8 @@ import (
 // resource it is Dial()ing is a kafka sink. This is used to test that External
 // Connections route to the correct sink.
 type externalConnectionKafkaSink struct {
-	sink Sink
+	sink            Sink
+	ignoreDialError bool
 }
 
 func (e *externalConnectionKafkaSink) getConcreteType() sinkType {
@@ -41,7 +42,16 @@ func (e *externalConnectionKafkaSink) getConcreteType() sinkType {
 
 // Dial implements the Sink interface.
 func (e *externalConnectionKafkaSink) Dial() error {
-	if _, ok := e.sink.(*kafkaSink); !ok {
+	switch sink := e.sink.(type) {
+	case *kafkaSink:
+		if err := sink.Dial(); err != nil && !e.ignoreDialError {
+			return err
+		}
+	case *batchingSink:
+		if err := sink.Dial(); err != nil && !e.ignoreDialError {
+			return err
+		}
+	default:
 		return errors.Newf("unexpected sink type %T; expected a kafka sink", e.sink)
 	}
 	return nil
@@ -49,7 +59,7 @@ func (e *externalConnectionKafkaSink) Dial() error {
 
 // Close implements the Sink interface.
 func (e *externalConnectionKafkaSink) Close() error {
-	return nil
+	return e.sink.Close()
 }
 
 // EmitRow implements the Sink interface.
@@ -90,7 +100,7 @@ func TestChangefeedExternalConnections(t *testing.T) {
 		if _, ok := s.(*externalConnectionKafkaSink); ok {
 			return s
 		}
-		return &externalConnectionKafkaSink{sink: s}
+		return &externalConnectionKafkaSink{sink: s, ignoreDialError: true}
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)

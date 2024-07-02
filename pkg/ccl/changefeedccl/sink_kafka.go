@@ -120,6 +120,7 @@ type kafkaClient interface {
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
 // calls to Emit and Flush should be from the same goroutine.
+// Deprecated: use kafkaSinkClientV2 in sink_kafka_v2.go instead.
 type kafkaSink struct {
 	ctx            context.Context
 	bootstrapAddrs string
@@ -1271,6 +1272,7 @@ func buildKafkaConfig(
 	return config, nil
 }
 
+// Deprecated: use makeKafkaSinkV2 instead.
 func makeKafkaSink(
 	ctx context.Context,
 	u sinkURL,
