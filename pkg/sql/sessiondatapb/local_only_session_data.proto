@@ -534,6 +534,9 @@ message LocalOnlySessionData {
   // write of unspecified origin, and 2+ are reserved to identify remote writes
   // from specific clusters.
   uint32 origin_id_for_logical_data_replication = 135 [(gogoproto.customname) = "OriginIDForLogicalDataReplication"];
+  // EnableCreateStatsUsingExtremesBoolEnum, when true, allows the use of CREATE
+  // STATISTICS .. USING EXTREMES on bool and enum columns.
+  bool enable_create_stats_using_extremes_bool_enum = 136;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -3702,6 +3702,10 @@ func (m *sessionDataMutator) SetEnableCreateStatsUsingExtremes(val bool) {
 	m.data.EnableCreateStatsUsingExtremes = val
 }
 
+func (m *sessionDataMutator) SetEnableCreateStatsUsingExtremesBoolEnum(val bool) {
+	m.data.EnableCreateStatsUsingExtremesBoolEnum = val
+}
+
 func (m *sessionDataMutator) SetAllowRoleMembershipsToChangeDuringTransaction(val bool) {
 	m.data.AllowRoleMembershipsToChangeDuringTransaction = val
 }
