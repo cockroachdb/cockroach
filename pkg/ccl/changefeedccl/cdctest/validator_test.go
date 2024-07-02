@@ -98,6 +98,45 @@ func TestOrderValidator(t *testing.T) {
 	})
 }
 
+func TestEachKeySequentialIntegrityValidator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run(`empty`, func(t *testing.T) {
+		v := NewIntegrityValidator(IntegrityValidationEachKeySequential, `t1`, nil)
+		require.Empty(t, v.Failures())
+	})
+
+	t.Run(`okay`, func(t *testing.T) {
+		v := NewIntegrityValidator(IntegrityValidationEachKeySequential, `t1`, nil)
+		keys := []string{`k1`, `k2`, `k3`}
+		for _, key := range keys {
+			for i := range 10 {
+				noteRow(t, v, `p1`, key, fmt.Sprintf(`{"after": {"x": %d}}`, i), ts(int64(i)))
+				require.Empty(t, v.Failures())
+			}
+		}
+		require.Empty(t, v.Failures())
+	})
+
+	t.Run(`missing one`, func(t *testing.T) {
+		v := NewIntegrityValidator(IntegrityValidationEachKeySequential, `t1`, nil)
+		keys := []string{`k1`, `k2`, `k3`}
+		sawErr := false
+		for _, key := range keys {
+			for _, i := range []int{0, 1, 2, 3, 5, 6} {
+				noteRow(t, v, `p1`, key, fmt.Sprintf(`{"after": {"x": %d}}`, i), ts(int64(i)))
+				if sawErr || i >= 5 {
+					require.NotEmpty(t, v.Failures(), "key %s, i %d", key, i)
+					sawErr = true
+				} else {
+					require.Empty(t, v.Failures(), "key %s, i %d", key, i)
+				}
+			}
+		}
+		require.NotEmpty(t, v.Failures())
+	})
+}
+
 func TestBeforeAfterValidator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

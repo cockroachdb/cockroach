@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -246,6 +247,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		kafka, _ := setupKafka(ct.ctx, ct.t, ct.cluster, ct.kafkaSinkNode())
 		kafka.mon = ct.mon
 		kafka.validateOrder = args.kafkaArgs.validateOrder
+		kafka.validateIntegrity = args.kafkaArgs.validateIntegrity
 
 		if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
 			ct.t.Fatal(err)
@@ -527,6 +529,8 @@ type kafkaFeedArgs struct {
 	// If validateOrder is set to true, order validators will be created
 	// for each topic to validate the changefeed's ordering guarantees.
 	validateOrder bool
+
+	validateIntegrity cdctest.IntegrityValidationType
 }
 
 func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
@@ -633,6 +637,79 @@ func (ct *cdcTester) runFeedLatencyVerifier(
 		select {
 		case <-ct.ctx.Done():
 		case <-finished:
+		}
+	}
+}
+
+func (ct *cdcTester) runIntegrityWorkload(ivt cdctest.IntegrityValidationType) (wait func()) {
+	switch ivt {
+	case cdctest.IntegrityValidationNone:
+		return
+	case cdctest.IntegrityValidationEachKeySequential:
+	default:
+		ct.t.Fatalf("unknown integrity validation type: %v", ivt)
+	}
+
+	const (
+		parallelism = 8
+		numKeys     = 1000
+		numVals     = 10_000
+		chunkSize   = numKeys / parallelism
+	)
+
+	finished := make(chan struct{}, parallelism)
+	for wi := 0; wi < parallelism; wi++ {
+		wi := wi
+		ct.mon.Go(func(ctx context.Context) error {
+			defer func() { finished <- struct{}{} }()
+			defer ct.t.L().Printf("worker %d done", wi)
+			var err error
+			var conn *gosql.Conn
+			conn, err = ct.DB().Conn(ctx)
+			require.NoError(ct.t, err)
+			defer func() {
+				if conn != nil {
+					_ = conn.Close()
+				}
+			}()
+
+			// Run workload: update keys sequentially. Split key space into par parts and each goroutine updates its own part.
+			offset := wi * chunkSize
+			for i := 0; i < numVals*chunkSize; i++ {
+				key := offset + i%chunkSize
+				// Retry connections because we might do crdb chaos too.
+				for attempt := 0; ctx.Err() == nil; attempt++ {
+					if conn == nil {
+						conn, err = ct.DB().Conn(ctx)
+						if err != nil {
+							time.Sleep(time.Duration(attempt*10) * time.Millisecond)
+							continue
+						}
+					}
+					_, err := conn.ExecContext(ctx, "INSERT INTO t (id, x) VALUES ($1, 1) ON CONFLICT(id) DO UPDATE SET x = t.x + 1", key)
+					if err == nil {
+						break
+					}
+					if strings.Contains(err.Error(), "connection is already closed") {
+						if conn != nil {
+							_ = conn.Close()
+							conn = nil
+						}
+					}
+					ct.t.L().Printf("worker %d retrying insert %d: %s", wi, key, err)
+					time.Sleep(time.Duration(attempt*10) * time.Millisecond)
+				}
+			}
+			return nil
+		})
+	}
+
+	return func() {
+		for i := 0; i < parallelism; i++ {
+			select {
+			case <-ct.ctx.Done():
+			case <-finished:
+			}
 		}
 	}
 }
@@ -1573,6 +1650,59 @@ func registerCDC(r registry.Registry) {
 			ct.waitForWorkload()
 		},
 	})
+
+	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-chaos-integrity",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(6, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			var err error
+
+			_, err = ct.DB().ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY, x INT);`)
+			if err != nil {
+				t.Fatal("failed to create table")
+			}
+			_, err = ct.DB().ExecContext(ctx, `INSERT INTO t VALUES (1, -1);`)
+			if err != nil {
+				t.Fatal("failed to insert row into table")
+			}
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  []string{"t"},
+				kafkaArgs: kafkaFeedArgs{
+					kafkaChaos:        true,
+					validateOrder:     true,
+					validateIntegrity: cdctest.IntegrityValidationEachKeySequential,
+				},
+				opts: map[string]string{
+					"updated":                       "",
+					"initial_scan":                  "'no'",
+					"min_checkpoint_frequency":      "'3s'",
+					"protect_data_from_gc_on_pause": "",
+					"on_error":                      "pause",
+					"kafka_sink_config":             `'{"Flush": {"MaxMessages": 100, "Frequency": "1s","Messages": 100 }, "Version": "2.7.2", "RequiredAcks": "ALL","Compression": "GZIP"}'`,
+				},
+			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				steadyLatency: 5 * time.Minute,
+			})
+
+			wait := ct.runIntegrityWorkload(cdctest.IntegrityValidationEachKeySequential)
+
+			// ct.startCRDBChaos()
+
+			wait()
+		},
+	})
+
 	r.Add(registry.TestSpec{
 		Name:             "cdc/kafka-chaos-single-row",
 		Owner:            `cdc`,
@@ -2463,6 +2593,8 @@ type kafkaManager struct {
 	// validateOrder specifies whether consumers created by the
 	// kafkaManager should create and use order validators.
 	validateOrder bool
+
+	validateIntegrity cdctest.IntegrityValidationType
 }
 
 func (k kafkaManager) basePath() string {
@@ -3114,9 +3246,16 @@ func (k kafkaManager) newConsumer(
 	if err != nil {
 		return nil, err
 	}
-	var validator cdctest.Validator
+	var (
+		orderValidator cdctest.Validator
+		validator      cdctest.Validator
+	)
 	if k.validateOrder {
-		validator = cdctest.NewOrderValidator(topic)
+		orderValidator = cdctest.NewOrderValidator(topic)
+		validator = orderValidator
+	}
+	if k.validateIntegrity != cdctest.IntegrityValidationNone {
+		validator = cdctest.NewIntegrityValidator(k.validateIntegrity, topic, orderValidator)
 	}
 	tc, err := newTopicConsumer(k.t, consumer, topic, validator, stopper)
 	if err != nil {
@@ -3150,6 +3289,10 @@ func (k kafkaManager) startTopicConsumers(
 			for {
 				select {
 				case <-stopper:
+					// Do one last validation.
+					if err := topicConsumer.validate(); err != nil {
+						return err
+					}
 					return nil
 				case <-ctx.Done():
 					return ctx.Err()
@@ -3451,6 +3594,13 @@ func newTopicConsumer(
 		validator:          countValidator,
 		stopper:            stopper,
 	}, nil
+}
+
+func (c *topicConsumer) validate() error {
+	if fs := c.validator.Failures(); len(fs) > 0 {
+		return errors.Errorf("validator failed with errors: %s", strings.Join(fs, ", "))
+	}
+	return nil
 }
 
 func (c *topicConsumer) tryNextMessage(ctx context.Context) (*sarama.ConsumerMessage, error) {

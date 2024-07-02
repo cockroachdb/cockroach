@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest/gapcheck"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -149,17 +150,19 @@ func (v *orderValidator) NoteRow(partition string, key, value string, updated hl
 	if len(timestampValueTuples) > 0 &&
 		updated.Less(timestampValueTuples[len(timestampValueTuples)-1].ts) {
 		v.failures = append(v.failures, fmt.Sprintf(
-			`topic %s partition %s: saw new row timestamp %s after %s was seen`,
+			`topic %s partition %s: saw new row timestamp %s after %s was seen (key %s)`,
 			v.topic, partition,
 			updated.AsOfSystemTime(),
 			timestampValueTuples[len(timestampValueTuples)-1].ts.AsOfSystemTime(),
+			key,
 		))
 	}
 	latestResolved := v.resolved[partition]
 	if updated.Less(latestResolved) {
 		v.failures = append(v.failures, fmt.Sprintf(
-			`topic %s partition %s: saw new row timestamp %s after %s was resolved`,
+			`topic %s partition %s: saw new row timestamp %s after %s was resolved (key %s)`,
 			v.topic, partition, updated.AsOfSystemTime(), latestResolved.AsOfSystemTime(),
+			key,
 		))
 	}
 
@@ -185,6 +188,73 @@ func (v *orderValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 func (v *orderValidator) Failures() []string {
 	return v.failures
 }
+
+type IntegrityValidationType string
+
+const (
+	IntegrityValidationNone              IntegrityValidationType = ""
+	IntegrityValidationEachKeySequential IntegrityValidationType = "each_key_sequential"
+)
+
+func NewIntegrityValidator(ct IntegrityValidationType, topic string, inner Validator) Validator {
+	switch ct {
+	case IntegrityValidationNone:
+		return NoOpValidator
+	case IntegrityValidationEachKeySequential:
+		if inner == nil {
+			inner = NoOpValidator
+		}
+		return &eachKeySequentialIntegrityValidator{ct: ct, topic: topic, inner: inner, gapcheckers: make(map[string]*gapcheck.GapChecker)}
+	default:
+		panic(fmt.Sprintf("unknown integrity validation type: %s", ct))
+	}
+}
+
+type eachKeySequentialIntegrityValidator struct {
+	inner       Validator
+	ct          IntegrityValidationType
+	topic       string
+	gapcheckers map[string]*gapcheck.GapChecker
+}
+
+// NOTE: Row reordering issues can manifest as integrity violations too if we're checking integrity after each row.
+// If we want to ignore reordering issues here, we must call this method only at the end of the workload.
+// Since row reordering is also bad I think it's fine to leave it like this though.
+func (c *eachKeySequentialIntegrityValidator) Failures() []string {
+	var failures []string
+	for key, gc := range c.gapcheckers {
+		if err := gc.Check(); err != nil {
+			failures = append(failures, fmt.Sprintf("integrity: key=%v: %v", key, err.Error()))
+		}
+	}
+	return append(failures, c.inner.Failures()...)
+}
+
+func (c *eachKeySequentialIntegrityValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	return c.inner.NoteResolved(partition, resolved)
+}
+
+func (c *eachKeySequentialIntegrityValidator) NoteRow(partition string, key string, value string, updated hlc.Timestamp) error {
+	type val struct {
+		After struct {
+			ID int `json:"id"`
+			X  int `json:"x"`
+		} `json:"after"`
+		Updated string `json:"updated"`
+	}
+	var v val
+	if err := gojson.Unmarshal([]byte(value), &v); err != nil {
+		return fmt.Errorf("failed to parse value %q: %w", value, err)
+	}
+	x := v.After.X
+	if _, ok := c.gapcheckers[key]; !ok {
+		c.gapcheckers[key] = gapcheck.NewGapChecker()
+	}
+	c.gapcheckers[key].Add(x)
+	return c.inner.NoteRow(partition, key, value, updated)
+}
+
+var _ Validator = &eachKeySequentialIntegrityValidator{}
 
 type beforeAfterValidator struct {
 	sqlDB          *gosql.DB
