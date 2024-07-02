@@ -246,7 +246,6 @@ func TestIterator(t *testing.T) {
 					li = math.MaxUint64 - 1
 				}
 				for hi := lo - 1; hi-3 < li; hi++ {
-					hi := hi // allow mutating in the next line w/o clobbering loop var
 					if hi-2 == li {
 						// As the last case, make `hi` unlimited.
 						hi = 0

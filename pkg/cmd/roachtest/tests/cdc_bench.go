@@ -77,7 +77,6 @@ func registerCDCBench(r registry.Registry) {
 	// Initial/catchup scan benchmarks.
 	for _, scanType := range cdcBenchScanTypes {
 		for _, ranges := range []int64{100, 100000} {
-			scanType, ranges := scanType, ranges // pin loop variables
 			const (
 				nodes  = 5 // excluding coordinator/workload node
 				cpus   = 16
@@ -105,7 +104,6 @@ func registerCDCBench(r registry.Registry) {
 	// Workload impact benchmarks.
 	for _, readPercent := range []int{0, 100} {
 		for _, ranges := range []int64{100, 100000} {
-			readPercent, ranges := readPercent, ranges // pin loop variables
 			const (
 				nodes  = 5 // excluding coordinator and workload nodes
 				cpus   = 16
@@ -131,7 +129,6 @@ func registerCDCBench(r registry.Registry) {
 
 			// Workloads with a concurrent changefeed running.
 			for _, server := range cdcBenchServers {
-				server := server // pin loop variable
 				r.Add(registry.TestSpec{
 					Name: fmt.Sprintf(
 						"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=null",

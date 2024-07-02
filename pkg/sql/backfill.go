@@ -1682,9 +1682,6 @@ func ValidateInvertedIndexes(
 	}()
 
 	for i, idx := range indexes {
-		// Shadow i and idx to prevent the values from changing within each
-		// gorountine.
-		i, idx := i, idx
 		countReady[i] = make(chan struct{})
 
 		grp.GoCtx(func(ctx context.Context) error {

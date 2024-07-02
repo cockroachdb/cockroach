@@ -31,10 +31,6 @@ func TestSparse(t *testing.T) {
 			if maxVal <= minVal {
 				continue
 			}
-			// We are using Parallel, we need to make local instances of the
-			// loop variables.
-			minVal := minVal
-			maxVal := maxVal
 			t.Run(fmt.Sprintf("%d_%d", minVal, maxVal), func(t *testing.T) {
 				t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 				rng, _ := randutil.NewTestRand()
@@ -80,10 +76,6 @@ func TestSparseSetOps(t *testing.T) {
 			if maxVal <= minVal {
 				continue
 			}
-			// We are using Parallel, we need to make local instances of the
-			// loop variables.
-			minVal := minVal
-			maxVal := maxVal
 			t.Run(fmt.Sprintf("%d_%d", minVal, maxVal), func(t *testing.T) {
 				t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 				rng, _ := randutil.NewTestRand()

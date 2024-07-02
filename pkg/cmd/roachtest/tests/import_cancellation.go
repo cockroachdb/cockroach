@@ -114,7 +114,6 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	var wg sync.WaitGroup
 	wg.Add(len(tablesToNumFiles))
 	for tableName, numFiles := range tablesToNumFiles {
-		tableName, numFiles := tableName, numFiles // bind to iteration scope
 		rng := rand.New(rand.NewSource(test.rootRng.Int63()))
 		m.Go(func(ctx context.Context) error {
 			defer wg.Done()

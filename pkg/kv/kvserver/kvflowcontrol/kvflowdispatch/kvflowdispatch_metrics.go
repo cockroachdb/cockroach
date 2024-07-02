@@ -70,7 +70,6 @@ func newMetrics() *metrics {
 		admissionpb.RegularWorkClass,
 		admissionpb.ElasticWorkClass,
 	} {
-		wc := wc // copy loop variable
 		m.PendingDispatches[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClass(wc, pendingDispatches),
 		)

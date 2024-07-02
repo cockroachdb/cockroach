@@ -248,11 +248,8 @@ func newSchedulerShard(
 func (s *Scheduler) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Start each shard.
 	for shardID, shard := range s.shards {
-		shardID, shard := shardID, shard // pin loop variables
-
 		// Start the shard's workers.
 		for workerID := 0; workerID < shard.numWorkers; workerID++ {
-			workerID := workerID // pin loop variable
 			s.wg.Add(1)
 
 			if err := stopper.RunAsyncTask(ctx,
