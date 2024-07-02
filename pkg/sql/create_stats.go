@@ -272,6 +272,11 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 						"on virtual columns",
 				)
 			}
+			if typFam := columns[i].GetType().Family(); n.Options.UsingExtremes &&
+				(typFam == types.BoolFamily || typFam == types.EnumFamily) &&
+				!n.p.SessionData().EnableCreateStatsUsingExtremesBoolEnum {
+				return nil, pgerror.Newf(pgcode.FeatureNotSupported, "creating partial statistics at extremes on bool and enum columns is disabled")
+			}
 			columnIDs[i] = columns[i].GetID()
 		}
 		col, err := catalog.MustFindColumnByID(tableDesc, columnIDs[0])

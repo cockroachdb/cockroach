@@ -2836,6 +2836,7 @@ distsql                                                    off                 N
 distsql_plan_gateway_bias                                  2                   NULL      NULL        NULL        string
 enable_auto_rehoming                                       off                 NULL      NULL        NULL        string
 enable_create_stats_using_extremes                         off                 NULL      NULL        NULL        string
+enable_create_stats_using_extremes_bool_enum               off                 NULL      NULL        NULL        string
 enable_durable_locking_for_serializable                    off                 NULL      NULL        NULL        string
 enable_experimental_alter_column_type_general              off                 NULL      NULL        NULL        string
 enable_implicit_fk_locking_for_serializable                off                 NULL      NULL        NULL        string
@@ -3023,6 +3024,7 @@ distsql                                                    off                 N
 distsql_plan_gateway_bias                                  2                   NULL  user     NULL      2                   2
 enable_auto_rehoming                                       off                 NULL  user     NULL      off                 off
 enable_create_stats_using_extremes                         off                 NULL  user     NULL      off                 off
+enable_create_stats_using_extremes_bool_enum               off                 NULL  user     NULL      off                 off
 enable_durable_locking_for_serializable                    off                 NULL  user     NULL      off                 off
 enable_experimental_alter_column_type_general              off                 NULL  user     NULL      off                 off
 enable_implicit_fk_locking_for_serializable                off                 NULL  user     NULL      off                 off
@@ -3207,6 +3209,7 @@ distsql_plan_gateway_bias                                  NULL    NULL     NULL
 distsql_workmem                                            NULL    NULL     NULL     NULL        NULL
 enable_auto_rehoming                                       NULL    NULL     NULL     NULL        NULL
 enable_create_stats_using_extremes                         NULL    NULL     NULL     NULL        NULL
+enable_create_stats_using_extremes_bool_enum               NULL    NULL     NULL     NULL        NULL
 enable_durable_locking_for_serializable                    NULL    NULL     NULL     NULL        NULL
 enable_experimental_alter_column_type_general              NULL    NULL     NULL     NULL        NULL
 enable_implicit_fk_locking_for_serializable                NULL    NULL     NULL     NULL        NULL

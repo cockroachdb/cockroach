@@ -3080,6 +3080,44 @@ WHERE statistics_name = 'timestamp_outer_buckets_partial'
 statistics_name                  partial_predicate                                                                                    row_count  null_count
 timestamp_outer_buckets_partial  (a IS NULL) OR ((a < '2024-06-26 01:00:00':::TIMESTAMP) OR (a > '2024-06-27 02:30:00':::TIMESTAMP))  3          0
 
+# Verify that we can't create partial stats using extremes on bool/enums columns
+# by default.
+statement ok
+CREATE TABLE bool_table (a bool PRIMARY KEY)
+
+statement ok
+INSERT INTO bool_table VALUES (true), (false)
+
+statement ok
+CREATE STATISTICS bool_table_full ON a FROM bool_table
+
+statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
+CREATE STATISTICS bool_table_partial ON a FROM bool_table USING EXTREMES;
+
+statement ok
+CREATE TABLE enum_table (a e PRIMARY KEY)
+
+statement ok
+INSERT INTO enum_table VALUES ('hello'), ('howdy'), ('hi')
+
+statement ok
+CREATE STATISTICS enum_table_full ON a FROM enum_table
+
+statement error pgcode 0A000 creating partial statistics at extremes on bool and enum columns is disabled
+CREATE STATISTICS enum_table_full ON a FROM enum_table USING EXTREMES
+
+statement ok
+SET enable_create_stats_using_extremes_bool_enum = on
+
+statement ok
+CREATE STATISTICS bool_table_full ON a FROM bool_table USING EXTREMES
+
+statement ok
+CREATE STATISTICS enum_table_partial ON a FROM bool_table USING EXTREMES
+
+statement ok
+RESET enable_create_stats_using_extremes_bool_enum
+
 statement ok
 RESET enable_create_stats_using_extremes
 
