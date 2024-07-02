@@ -90,6 +90,8 @@ type logicalReplicationWriterProcessor struct {
 	logBufferEvery log.EveryN
 
 	debug streampb.DebugLogicalConsumerStatus
+
+	dlqClient DeadLetterQueueClient
 }
 
 var (
@@ -147,6 +149,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
+		dlqClient: InitDeadLetterQueueClient(),
 	}
 	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{

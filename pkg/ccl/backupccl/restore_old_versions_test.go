@@ -63,6 +63,7 @@ func TestRestoreOldVersions(t *testing.T) {
 		systemPrivilegesDirs           = testdataBase + "/system-privileges-restore"
 		systemDatabaseRoleSettingsDirs = testdataBase + "/system-database-role-settings-restore"
 		systemExternalConnectionsDirs  = testdataBase + "/system-external-connections-restore"
+		systemTenantSettingsDirs       = testdataBase + "/system-tenant-settings-version-override"
 	)
 
 	t.Run("cluster-restore", func(t *testing.T) {
@@ -121,6 +122,17 @@ func TestRestoreOldVersions(t *testing.T) {
 			exportDir, err := filepath.Abs(filepath.Join(systemExternalConnectionsDirs, dir.Name()))
 			require.NoError(t, err)
 			t.Run(dir.Name(), fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir))
+		}
+	})
+
+	t.Run("full cluster restore all-tenants version override is ignored", func(t *testing.T) {
+		dirs, err := os.ReadDir(systemTenantSettingsDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(systemTenantSettingsDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), fullClusterRestoreSystemTenantSettingsSkipVersionOverride(exportDir))
 		}
 	})
 }
@@ -449,6 +461,46 @@ func fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir string) fun
 				"\b\u0005\u0012\u0019\n\u0017userfile:///connection1", "testuser1", "100"},
 			{"connection2", "2023-03-20 01:26:51.223986 +0000 +0000", "2023-03-20 01:26:51.223986 +0000 +0000", "STORAGE",
 				"\b\u0005\u0012\u0019\n\u0017userfile:///connection2", "testuser2", "101"},
+		})
+	}
+}
+
+func fullClusterRestoreSystemTenantSettingsSkipVersionOverride(
+	exportDir string,
+) func(t *testing.T) {
+	return func(t *testing.T) {
+		tmpDir, tempDirCleanupFn := testutils.TempDir(t)
+		defer tempDirCleanupFn()
+
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					// This test exercises the restore behaviour on the system
+					// tenant, so we disable non-system tenants.
+					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+					},
+				}})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+
+		// The restore queries are run with `UNSAFE_RESTORE_INCOMPATIBLE_VERSION`
+		// option to ensure the restore is successful on development branches. This
+		// is because, while the backups were generated on release branches and have
+		// versions such as 22.2 in their manifest, the development branch will have
+		// a MinSupportedVersion offset by the clusterversion.DevOffset described in
+		// `pkg/clusterversion/cockroach_versions.go`. This will mean that the
+		// manifest version is always less than the MinSupportedVersion which will
+		// in turn fail the restore unless we pass in the specified option to elide
+		// the compatibility check.
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM LATEST IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+
+		// No 'version' key for tenant_id = 0 in system.tenant_settings.
+		sqlDB.CheckQueryResults(t, "SELECT * FROM system.tenant_settings", [][]string{
+			{"2", "cluster.organization", "Cockroach Labs - Production Testing", "2024-06-24 20:11:21.433048 +0000 +0000", "s", "NULL"},
+			{"2", "enterprise.license", "", "2024-06-24 20:11:21.441043 +0000 +0000", "s", "NULL"},
 		})
 	}
 }
