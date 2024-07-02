@@ -66,12 +66,6 @@ type createTenantOptions struct {
 }
 type createTenantOpt func(*createTenantOptions)
 
-func createTenantRegion(region string) createTenantOpt {
-	return func(c *createTenantOptions) {
-		c.region = region
-	}
-}
-
 func createTenantNodeInternal(
 	ctx context.Context,
 	t test.Test,

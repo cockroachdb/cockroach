@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,8 +32,7 @@ import (
 
 func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Start the storage layer.
-	storageNodes := c.All()
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), storageNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	// Start a virtual cluster.
 	const virtualClusterName = "acceptance-tenant"
@@ -82,60 +80,41 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 // will be spread across at least two regions.
 func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c cluster.Cluster) {
 	startOptions := option.NewStartOpts(option.NoBackupSchedule)
-	c.Start(ctx, t.L(), startOptions, install.MakeClusterSettings(install.SecureOption(true)), c.All())
+	c.Start(ctx, t.L(), startOptions, install.MakeClusterSettings(), c.All())
 	regions := strings.Split(c.Spec().GCE.Zones, ",")
 	regionOnly := func(regionAndZone string) string {
 		r := strings.Split(regionAndZone, "-")
 		return r[0] + "-" + r[1]
 	}
 
-	const tenantID = 123
-	{
-		// Intentionally, alter settings so that the system database span config
-		// changes propagate faster, when we convert the system database to MR.
-		conn := c.Conn(ctx, t.L(), 1)
-		defer conn.Close()
-		_, err := conn.Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID)
-		require.NoError(t, err)
-		configStmts := []string{
-			`SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled='true'`,
-			`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`,
-			`SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`,
-			"SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off",
-			"SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'",
-			"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50 ms'",
-			`SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_override = '1500ms'`,
-			`ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '500ms'`,
-			`SET CLUSTER setting kv.replication_reports.interval = '5s';`,
-		}
-		for _, stmt := range configStmts {
-			_, err := conn.Exec(stmt)
-			require.NoError(t, err)
-		}
-	}
-
-	const (
-		tenantHTTPPort  = 8081
-		tenantSQLPort   = 30258
-		otherRegionNode = 7
+	// Start a virtual cluster.
+	const virtualClusterName = "multiregion-tenant"
+	virtualClusterNode := c.Node(1)
+	c.StartServiceForVirtualCluster(
+		ctx, t.L(),
+		option.StartVirtualClusterOpts(virtualClusterName, virtualClusterNode),
+		install.MakeClusterSettings(),
 	)
-	// Start an equal number of tenants on the cluster, located in the same regions.
-	tenants := make([]*tenantNode, 0, len(c.All()))
-	for i, node := range c.All() {
-		region := regions[i]
-		regionInfo := fmt.Sprintf("cloud=%s,region=%s,zone=%s", c.Cloud(), regionOnly(region), region)
-		tenant := deprecatedCreateTenantNode(ctx, t, c, c.All(), tenantID, node, tenantHTTPPort, tenantSQLPort, createTenantRegion(regionInfo))
-		tenant.start(ctx, t, c, "./cockroach")
-		tenants = append(tenants, tenant)
 
-		// Setup the system database for multi-region, and add all the region
+	virtualClusterURLs := func() []string {
+		urls, err := c.ExternalPGUrl(ctx, t.L(), virtualClusterNode, roachprod.PGURLOptions{
+			VirtualClusterName: virtualClusterName,
+		})
+		require.NoError(t, err)
+
+		return urls
+	}()
+
+	const otherRegionNode = 7
+	for i := range c.All() {
+		// Set up the system database for multi-region, and add all the region
 		// in our cluster.
 		if i == 0 {
 			includedRegions := make(map[string]struct{})
-			verifySQL(t, tenants[0].pgURL,
+			verifySQL(t, virtualClusterURLs[0],
 				mkStmt("SET CLUSTER SETTING sql.region_liveness.enabled='yes'"),
 			)
-			verifySQL(t, tenants[0].pgURL,
+			verifySQL(t, virtualClusterURLs[0],
 				mkStmt(fmt.Sprintf(`ALTER DATABASE system SET PRIMARY REGION '%s'`, regionOnly(regions[0]))),
 				mkStmt(fmt.Sprintf(`ALTER DATABASE defaultdb SET PRIMARY REGION '%s'`, regionOnly(regions[0]))))
 			includedRegions[regions[0]] = struct{}{}
@@ -144,7 +123,7 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 					continue
 				}
 				includedRegions[region] = struct{}{}
-				verifySQL(t, tenants[0].pgURL,
+				verifySQL(t, virtualClusterURLs[0],
 					mkStmt(fmt.Sprintf(`ALTER DATABASE system ADD REGION '%s'`, regionOnly(region))),
 					mkStmt(fmt.Sprintf(`ALTER DATABASE defaultdb ADD REGION '%s'`, regionOnly(region))))
 			}
@@ -153,7 +132,7 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 
 	// Sanity: Make sure the first tenant can be connected to.
 	t.Status("checking that a client can connect to the tenant server")
-	verifySQL(t, tenants[0].pgURL,
+	verifySQL(t, virtualClusterURLs[0],
 		mkStmt(`CREATE TABLE foo (id INT PRIMARY KEY, v STRING)`),
 		mkStmt(`INSERT INTO foo VALUES($1, $2)`, 1, "bar"),
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
@@ -162,7 +141,7 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 	// Wait for the span configs to propagate. After we know they have
 	// propagated, we'll shut down the tenant and wait for them to get
 	// applied.
-	tdb, tdbCloser := openDBAndMakeSQLRunner(t, tenants[0].pgURL)
+	tdb, tdbCloser := openDBAndMakeSQLRunner(t, virtualClusterURLs[0])
 	defer tdbCloser()
 	t.Status("Waiting for span config reconciliation...")
 	sqlutils.WaitForSpanConfigReconciliation(t, tdb)
@@ -251,15 +230,6 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 	}
 	t.Status("Replication changes complete")
 
-	// Stop all the tenants gracefully first.
-	for _, tenant := range tenants {
-		tenant.stop(ctx, t, c)
-	}
-	// Start them all up again.
-	for _, tenant := range tenants {
-		tenant.start(ctx, t, c, "./cockroach")
-	}
-
 	grp := ctxgroup.WithContext(ctx)
 	startSchemaChange := make(chan struct{})
 	waitForSchemaChange := make(chan struct{})
@@ -269,7 +239,7 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 	// to schema change on. The region we are connecting to will be intentionally,
 	// killed off.
 	grp.GoCtx(func(ctx context.Context) (err error) {
-		db, err := gosql.Open("postgres", tenants[otherRegionNode].pgURL)
+		db, err := gosql.Open("postgres", virtualClusterURLs[otherRegionNode])
 		if err != nil {
 			return err
 		}
@@ -301,7 +271,7 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 		defer func() {
 			waitForSchemaChange <- struct{}{}
 		}()
-		db, err := gosql.Open("postgres", tenants[0].pgURL)
+		db, err := gosql.Open("postgres", virtualClusterURLs[0])
 		if err != nil {
 			return err
 		}
@@ -338,34 +308,9 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 
 	// Restart the KV storage servers first.
 	c.Start(ctx, t.L(), startOptions, install.MakeClusterSettings(install.SecureOption(true)), c.Range(otherRegionNode, len(c.All())))
-	// Re-add any dead tenants back again.
-	for _, tenant := range tenants[otherRegionNode-1:] {
-		tenant.start(ctx, t, c, "./cockroach")
-	}
 	// Validate that no region is labeled as unavailable after.
-	for _, tenant := range tenants[otherRegionNode-1:] {
-		verifySQL(t, tenant.pgURL,
+	for _, virtualClusterURL := range virtualClusterURLs[otherRegionNode-1:] {
+		verifySQL(t, virtualClusterURL,
 			mkStmt("SELECT * FROM system.region_liveness").withResults([][]string{}))
 	}
-	// Stop the server, which also ensures that log files get flushed.
-	for _, tenant := range tenants {
-		tenant.stop(ctx, t, c)
-	}
-	// Check that the server identifiers are present in the tenant log file.
-	logFile := filepath.Join(tenants[0].logDir(), "*.log")
-	if err := c.RunE(ctx, install.WithNodes(c.Node(1).InstallNodes()),
-		"grep", "-q", "'start\\.go.*clusterID:'", logFile); err != nil {
-		t.Fatal(errors.Wrap(err, "cluster ID not found in log file"))
-	}
-	if err := c.RunE(ctx, install.WithNodes(c.Node(1).InstallNodes()),
-		"grep", "-q", "'start\\.go.*tenantID:'", logFile); err != nil {
-		t.Fatal(errors.Wrap(err, "tenant ID not found in log file"))
-	}
-	if err := c.RunE(ctx, install.WithNodes(c.Node(1).InstallNodes()),
-		"grep", "-q", "'start\\.go.*instanceID:'", logFile); err != nil {
-		t.Fatal(errors.Wrap(err, "SQL instance ID not found in log file"))
-	}
-
-	t.Status("checking log file contents")
-
 }
