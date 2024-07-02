@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -81,9 +82,8 @@ $$`)
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
 			var funcDef *tree.ResolvedFunctionDefinition
-			err := withPlanner(
-				context.Background(), &execCfg, username.RootUserName(),
-				s.Clock().Now(), defaultDBSessionData,
+			err := withPlanner(context.Background(), &execCfg, hlc.Timestamp{},
+				username.RootUserName(), s.Clock().Now(), defaultDBSessionData,
 				func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) (err error) {
 					defer cleanup()
 					semaCtx := execCtx.SemaCtx()

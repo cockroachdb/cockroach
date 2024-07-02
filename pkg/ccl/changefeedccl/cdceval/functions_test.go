@@ -54,7 +54,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	semaCtx := tree.MakeSemaContext()
-	defer configSemaForCDC(&semaCtx)()
+	defer configSemaForCDC(&semaCtx, hlc.Timestamp{})()
 
 	t.Run("time", func(t *testing.T) {
 		expectTSTZ := func(ts hlc.Timestamp) tree.Datum {
@@ -433,7 +433,7 @@ func newEvaluator(
 		return nil, err
 	}
 
-	defer configSemaForCDC(semaCtx)()
+	defer configSemaForCDC(semaCtx, hlc.Timestamp{})()
 	norm, err := normalizeSelectClause(context.Background(), semaCtx, sc, ed)
 	if err != nil {
 		return nil, err
