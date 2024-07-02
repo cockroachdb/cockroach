@@ -783,6 +783,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
+	skip.UnderDeadlock(t, "scatter may take too long")
 
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
