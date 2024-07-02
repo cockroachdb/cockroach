@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
@@ -1190,13 +1189,14 @@ func IncrementValRetryable(ctx context.Context, db *DB, key roachpb.Key, inc int
 	var res KeyValue
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = db.Context().Stopper.ShouldQuiesce()
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		res, err = db.Inc(ctx, key, inc)
-		if errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil)) ||
-			errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
-			continue
-		}
-		break
-	}
+	// for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	// 	res, err = db.Inc(ctx, key, inc)
+	// 	if errors.HasType(err, (*kvpb.UnhandledRetryableError)(nil)) ||
+	// 		errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
+	// 		continue
+	// 	}
+	// 	break
+	// }
+	res, err = db.Inc(ctx, key, inc)
 	return res.ValueInt(), err
 }
