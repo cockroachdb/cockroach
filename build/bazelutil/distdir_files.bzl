@@ -614,6 +614,8 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hetznercloud/hcloud-go/com_github_hetznercloud_hcloud_go-v1.32.0.zip": "c530755603bfe3c79ee4327f896057d6c2fe93792d8a77c42c22b90547c52e7c",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/howeyc/gopass/com_github_howeyc_gopass-v0.0.0-20190910152052-7cb4b85ec19c.zip": "83560b6c9a6220bcbb4ad2f043e5a190ab11a013b77c1bbff9a3a67ed74d4b37",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hpcloud/tail/com_github_hpcloud_tail-v1.0.0.zip": "3cba484748e2e2919d72663599b8cc6454058976fbca96f9ac78d84f195b922a",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/huandu/go-assert/com_github_huandu_go_assert-v1.1.5.zip": "3200f97168bb9c477de1866a002ca1dfe28fc82212591e6437f12afef9b2e564",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/huandu/skiplist/com_github_huandu_skiplist-v1.2.0.zip": "08ba556e0864fb32b6a65ccb2ba61c457dd396e61bb71eddc71eec98ceaa42c8",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/huandu/xstrings/com_github_huandu_xstrings-v1.3.0.zip": "cdd580467bc14ea0ad6856782d8aeb3d954e9c3499f4a771b6813174d2713d0d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hudl/fargo/com_github_hudl_fargo-v1.3.0.zip": "040aa24d7c5cdf43ed18767d4dff7d5533c65f58f45424f38eed51a5956445cf",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hydrogen18/memlistener/com_github_hydrogen18_memlistener-v1.0.0.zip": "c47c6f44a9c1096c1b61f6c49be924c42e69545ca23a008881d950ee942a2268",
