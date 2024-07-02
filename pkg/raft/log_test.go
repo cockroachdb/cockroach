@@ -150,6 +150,7 @@ func TestIsUpToDate(t *testing.T) {
 	}
 }
 
+// TODO(pav-kv): merge this into TestLogAppend.
 func TestAppend(t *testing.T) {
 	init := entryID{}.append(1, 2, 2)
 	commit := uint64(1)
@@ -198,12 +199,12 @@ func TestAppend(t *testing.T) {
 	}
 }
 
-// TestLogMaybeAppend tests the behaviour of maybeAppend method:
+// TestLogAppend tests the behaviour of raftLog.append method:
 //  1. The request is rejected if the "previous entry" check fails, when the
 //     corresponding entry is missing or has a mismatching term.
 //  2. If the request is accepted, the slice is appended to the log, and all the
 //     entries at higher indices are truncated.
-func TestLogMaybeAppend(t *testing.T) {
+func TestLogAppend(t *testing.T) {
 	init := entryID{}.append(1, 2, 3)
 	last := init.lastEntryID()
 	commit := uint64(1)
@@ -254,7 +255,7 @@ func TestLogMaybeAppend(t *testing.T) {
 					require.True(t, tt.panic)
 				}
 			}()
-			ok := raftLog.maybeAppend(app)
+			ok := raftLog.append(app)
 			require.Equal(t, !tt.notOk, ok)
 			require.False(t, tt.panic)
 			require.Equal(t, commit, raftLog.committed) // commit index did not change

@@ -1692,7 +1692,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed})
 		return
 	}
-	if r.raftLog.maybeAppend(a) {
+	if r.raftLog.append(a) {
 		r.accTerm = m.Term // our log is now consistent with the m.Term leader
 		// TODO(pav-kv): make it possible to commit even if the append did not
 		// succeed or is stale. If r.accTerm >= m.Term, then our log contains all

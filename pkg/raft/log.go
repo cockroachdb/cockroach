@@ -103,33 +103,25 @@ func (l *raftLog) String() string {
 		l.committed, l.applied, l.applying, l.unstable.offset, l.unstable.offsetInProgress, len(l.unstable.entries))
 }
 
-// maybeAppend conditionally appends the given log slice to the log. The log is
+// append conditionally appends the given log slice to the log. The log is
 // truncated to end at a.lastIndex() if any entry is overwritten. Entries that
 // are already present in the log are skipped.
 //
 // Returns false if the slice can not be appended because it fails the prev term
 // check, or is out of bounds.
-func (l *raftLog) maybeAppend(a logSlice) bool {
-	match, ok := l.findConflict(a)
-	if !ok {
-		return false
-	}
-	// Fast-forward to the first mismatching or missing entry.
-	// NB: prev.index <= match.index <= a.lastIndex(), so the sub-slicing is safe.
-	a.entries = a.entries[match.index-a.prev.index:]
-	a.prev = match
-	return l.append(a)
-}
-
-// append conditionally appends the given log slice to the log. The log is
-// truncated to end at a.lastIndex() if any entry is overwritten.
-//
-// Returns false if the slice can not be appended because it fails the prev term
-// check, or is out of bounds.
 func (l *raftLog) append(a logSlice) bool {
-	if !l.matchTerm(a.prev) {
-		return false
+	// Fast-path: appends at the end of the log skip the log match search.
+	if a.prev != l.lastEntryID() {
+		match, ok := l.findConflict(a)
+		if !ok {
+			return false
+		}
+		// Fast-forward to the first mismatching or missing entry.
+		// NB: prev.index <= match.index <= a.lastIndex(), so the sub-slicing is safe.
+		a.entries = a.entries[match.index-a.prev.index:]
+		a.prev = match
 	}
+
 	if len(a.entries) == 0 {
 		return true
 	}
