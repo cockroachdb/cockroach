@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
@@ -38,6 +39,7 @@ const (
 	OIDCGenerateClusterSSOTokenUseTokenSettingName = baseOIDCSettingName + "generate_cluster_sso_token.use_token"
 	OIDCGenerateClusterSSOTokenSQLHostSettingName  = baseOIDCSettingName + "generate_cluster_sso_token.sql_host"
 	OIDCGenerateClusterSSOTokenSQLPortSettingName  = baseOIDCSettingName + "generate_cluster_sso_token.sql_port"
+	oidcAuthClientTimeoutSettingName               = baseOIDCSettingName + "client_timeout"
 )
 
 // OIDCEnabled enables or disabled OIDC login for the DB Console.
@@ -70,6 +72,18 @@ var OIDCClientSecret = settings.RegisterStringSetting(
 	settings.WithPublic,
 	settings.WithReportable(false),
 	settings.Sensitive,
+)
+
+// OIDCAuthClientTimeout is the client timeout for all the external calls made
+// during OIDC authentication (e.g. authorization code flow, etc.).
+var OIDCAuthClientTimeout = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	oidcAuthClientTimeoutSettingName,
+	"sets the client timeout for external calls made during OIDC authentication "+
+		"(e.g. authorization code flow, etc.)",
+	30*time.Second,
+	settings.NonNegativeDuration,
+	settings.WithPublic,
 )
 
 type redirectURLConf struct {

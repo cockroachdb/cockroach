@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/identmap",
         "//pkg/ui",
+        "//pkg/util/httputil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
@@ -42,6 +43,7 @@ go_test(
         "main_test.go",
         "settings_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":oidcccl"],
     deps = [
         "//pkg/base",
