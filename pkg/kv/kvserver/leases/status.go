@@ -113,10 +113,9 @@ func Status(ctx context.Context, nl NodeLiveness, i StatusInput) kvserverpb.Leas
 		RequestTime:               i.RequestTs,
 		MinValidObservedTimestamp: i.MinValidObservedTs,
 	}
-	var expiration hlc.Timestamp
-	if lease.Type() == roachpb.LeaseExpiration {
-		expiration = lease.GetExpiration()
-	} else {
+	if lease.Type() == roachpb.LeaseEpoch {
+		// For epoch-based leases, retrieve the node liveness record associated with
+		// the lease.
 		l, ok := nl.GetLiveness(lease.Replica.NodeID)
 		status.Liveness = l.Liveness
 		if !ok || status.Liveness.Epoch < lease.Epoch {
@@ -138,12 +137,12 @@ func Status(ctx context.Context, nl NodeLiveness, i StatusInput) kvserverpb.Leas
 			status.ErrInfo = msg.String()
 			return status
 		}
-		if status.Liveness.Epoch > lease.Epoch {
-			status.State = kvserverpb.LeaseState_EXPIRED
-			return status
-		}
-		expiration = status.Liveness.Expiration.ToTimestamp()
+		// If the epoch matches (l.Epoch == lease.Epoch), status.Expiration uses the
+		// liveness record's expiration to determine the expiration of the lease. If
+		// not, the lease is likely expired, but its minimum expiration may still be
+		// in the future (also consulted in status.Expiration), so we check below.
 	}
+	expiration := status.Expiration()
 	maxOffset := i.MaxOffset
 	stasis := expiration.Add(-int64(maxOffset), 0)
 	ownedLocally := lease.OwnedBy(i.LocalStoreID)
