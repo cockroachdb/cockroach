@@ -51,15 +51,20 @@ const maxCachedSize = 128 * 1024
 
 // CachedData is the data associated with a cache entry.
 type CachedData struct {
-	SQL  string
-	Memo *memo.Memo
+	SQL string
+	// TODO(michae2): cache these separately?
+	CustomMemo  *memo.Memo
+	GenericMemo *memo.Memo
 	// PrepareMetadata is set for prepare queries. In this case the memo contains
 	// unassigned placeholders. For non-prepared queries, it is nil.
 	PrepareMetadata *PrepareMetadata
 }
 
 func (cd *CachedData) memoryEstimate() int64 {
-	res := int64(len(cd.SQL)) + cd.Memo.MemoryEstimate()
+	res := int64(len(cd.SQL)) + cd.CustomMemo.MemoryEstimate()
+	if cd.GenericMemo != nil {
+		res += cd.GenericMemo.MemoryEstimate()
+	}
 	if cd.PrepareMetadata != nil {
 		res += cd.PrepareMetadata.MemoryEstimate()
 	}

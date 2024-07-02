@@ -55,10 +55,21 @@ const (
 type PreparedStatement struct {
 	querycache.PrepareMetadata
 
-	// Memo is the memoized data structure constructed by the cost-based optimizer
-	// during prepare of a SQL statement. It can significantly speed up execution
-	// if it is used by the optimizer as a starting point.
-	Memo *memo.Memo
+	// CustomMemo is the normalized memo constructed by the optimizer during
+	// prepare of a SQL statement. If the statement did not have placeholders or
+	// was able to use the placeholder fast path it will be fully
+	// optimized. Otherwise, it will need to undergo optimization during the
+	// execute phase.
+	CustomMemo *memo.Memo
+
+	// GenericMemo is the fully-optimized memo constructed by the optimizer during
+	// prepare of a SQL statement. (If the CustomMemo is already fully-optimized
+	// it will be nil.) Unlike the CustomMemo it does not need to undergo
+	// optimization during the execute phase, but might be less
+	// optimal. GenericMemo is most useful for short queries for which full
+	// optimization of CustomMemo would be a significant portion of execution
+	// time.
+	GenericMemo *memo.Memo
 
 	// refCount keeps track of the number of references to this PreparedStatement.
 	// New references are registered through incRef().
@@ -84,8 +95,11 @@ func (p *PreparedStatement) MemoryEstimate() int64 {
 	//   1. Size of the prepare metadata.
 	//   2. Size of the prepared memo, if using the cost-based optimizer.
 	size := p.PrepareMetadata.MemoryEstimate()
-	if p.Memo != nil {
-		size += p.Memo.MemoryEstimate()
+	if p.CustomMemo != nil {
+		size += p.CustomMemo.MemoryEstimate()
+	}
+	if p.GenericMemo != nil {
+		size += p.GenericMemo.MemoryEstimate()
 	}
 	return size
 }
