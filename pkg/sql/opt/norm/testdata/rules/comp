@@ -1087,3 +1087,73 @@ project
  │    └── columns: b:2
  └── projections
       └── b:2 [as="?column?":5, outer=(2)]
+
+norm expect=NormalizeLikePattern
+SELECT s FROM a WHERE s LIKE '%%abc%%%%dddd'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 LIKE '%abc%dddd' [outer=(4), constraints=(/4: (/NULL - ])]
+
+norm expect=NormalizeLikePattern
+SELECT s FROM a WHERE s LIKE '%%abc%%%%dddd'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 LIKE '%abc%dddd' [outer=(4), constraints=(/4: (/NULL - ])]
+
+norm expect=NormalizeLikePattern
+SELECT s NOT LIKE 'a%%bcd%%' FROM a
+----
+project
+ ├── columns: "?column?":12
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── s:4 NOT LIKE 'a%bcd%' [as="?column?":12, outer=(4)]
+
+norm expect=NormalizeLikePattern
+SELECT s FROM a WHERE s ILIKE '%%abc%%%%dddd'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 ILIKE '%abc%dddd' [outer=(4), constraints=(/4: (/NULL - ])]
+
+norm expect=NormalizeLikePattern
+SELECT s FROM a WHERE s NOT ILIKE 'abcd%%%'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 NOT ILIKE 'abcd%' [outer=(4), constraints=(/4: (/NULL - ])]
+
+norm expect=NormalizeLikePattern
+SELECT s FROM a WHERE s SIMILAR TO '%a%b%%c%%d'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 SIMILAR TO '%a%b%c%d' [outer=(4), constraints=(/4: [/'' - ])]
+
+norm expect=NormalizeLikePattern
+SELECT s FROM a WHERE s NOT SIMILAR TO '%%%%'
+----
+select
+ ├── columns: s:4!null
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 NOT SIMILAR TO '%' [outer=(4), constraints=(/4: (/NULL - ])]

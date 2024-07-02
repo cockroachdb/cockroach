@@ -167,3 +167,64 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 	}
 	return string(buf)
 }
+
+// CollapseRepeatedChar will take the given string and given character
+// and collapse any repeating instances of this character to a
+// single instance.
+// E.g. CollapseRepeatedChar("wwwhy hello there", 'w') returns "why hello there"
+func CollapseRepeatedChar(toCollapse string, collapseChar rune) string {
+	// start and end indices denote the subrange of toCollapse
+	start, end := 0, len(toCollapse)-1
+	hasSuffixCollapseChar, hasPrefixcollapseChar := false, false
+	collapseCharWidth := utf8.RuneLen(collapseChar)
+	for start <= end {
+		r, w := utf8.DecodeRuneInString(toCollapse[start:])
+		if r != collapseChar {
+			break
+		}
+		start += w
+		hasPrefixcollapseChar = true
+	}
+	for end >= start {
+		r, w := utf8.DecodeLastRuneInString(toCollapse[:end+1])
+		if r != collapseChar {
+			break
+		}
+		end -= w
+		hasSuffixCollapseChar = true
+	}
+
+	// include a single collapseChar on prefix/suffix
+	if hasPrefixcollapseChar {
+		start -= collapseCharWidth
+	}
+	if hasSuffixCollapseChar {
+		end += collapseCharWidth
+	}
+
+	if !strings.Contains(toCollapse[start:end+1], fmt.Sprintf("%c%c", collapseChar, collapseChar)) {
+		return toCollapse[start : end+1]
+	}
+	var builder strings.Builder
+	builder.Grow(len(toCollapse))
+	for i := start; i <= end; {
+		r, w := utf8.DecodeRuneInString(toCollapse[i:])
+		i += w
+		if r != collapseChar {
+			continue
+		}
+		builder.WriteString(toCollapse[start:i])
+		for {
+			r, w := utf8.DecodeRuneInString(toCollapse[i:])
+			if r != collapseChar {
+				break
+			}
+			i += w
+		}
+		start = i
+	}
+	if !hasSuffixCollapseChar {
+		builder.WriteString(toCollapse[start:])
+	}
+	return builder.String()
+}

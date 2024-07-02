@@ -11,11 +11,14 @@
 package norm
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -155,4 +158,21 @@ func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.Sca
 			Overload:   overload,
 		},
 	)
+}
+
+func (c *CustomFuncs) CollapseRepeatedChar(input opt.ScalarExpr) opt.ScalarExpr {
+	pattern, ok := memo.ExtractConstDatum(input).(*tree.DString)
+	if !ok {
+		panic(errors.AssertionFailedf("expected string constant"))
+	}
+	collapsed := util.CollapseRepeatedChar(string(*pattern), '%')
+	return c.f.ConstructConstVal(tree.NewDString(collapsed), input.DataType())
+}
+
+func (c *CustomFuncs) CanCollapseRepeatedChar(input opt.ScalarExpr) bool {
+	pattern, ok := memo.ExtractConstDatum(input).(*tree.DString)
+	if !ok {
+		panic(errors.AssertionFailedf("expected string constant"))
+	}
+	return strings.Contains(string(*pattern), "%%")
 }

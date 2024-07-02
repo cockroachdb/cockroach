@@ -12,6 +12,10 @@ package util
 
 import (
 	"bytes"
+	"fmt"
+	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -140,4 +144,82 @@ func TestStringListBuilder(t *testing.T) {
 	b.Addf(&buf, "%s", "two")
 	b.Finish(&buf)
 	expect("[one, two]")
+}
+
+func TestCollapseRepeatedChar(t *testing.T) {
+	type StringTest struct {
+		ToTest   string
+		DupeChar rune
+		Expected string
+	}
+
+	tests := []StringTest{
+		{"%test%", '%', "%test%"},
+		{"%test%%%%", '%', "%test%"},
+		{"%%%test%%%%", '%', "%test%"},
+		{"%%%test1%%%test2%%%test3%%%", '%', "%test1%test2%test3%"},
+		{"I work on ddddddifferent characters", 'd', "I work on different characters"},
+		{"%%%%%%%%tèʂt%", '%', "%tèʂt%"},
+		{"%a%b%%c%%d", '%', "%a%b%c%d"},
+		{"🐛🐛", '🐛', "🐛"},
+	}
+
+	for _, test := range tests {
+		result := CollapseRepeatedChar(test.ToTest, test.DupeChar)
+
+		if result != test.Expected {
+			t.Errorf("expected %s but got %s", test.Expected, result)
+		}
+	}
+}
+
+func BenchmarkCollapseRepeatedChar(b *testing.B) {
+	for _, runFn := range []func(*testing.B){
+		runBenchmarkNoDupe,
+		runBenchmarkSingleDupe,
+		runBenchmarkMultipleDupe,
+		runBenchmarkSpacedDupe,
+	} {
+		fnName := runtime.FuncForPC(reflect.ValueOf(runFn).Pointer()).Name()
+		fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/util.runBenchmark")
+		b.Run(fnName, func(b *testing.B) {
+			for _, count := range []int{1, 10, 100, 1000} {
+				b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
+					runFn(b)
+				})
+			}
+		})
+	}
+}
+
+func runBenchmarkNoDupe(b *testing.B) {
+	toTest := "%test%"
+
+	for n := 0; n < b.N; n++ {
+		CollapseRepeatedChar(toTest, '%')
+	}
+}
+
+func runBenchmarkSingleDupe(b *testing.B) {
+	toTest := "%test%%%%"
+
+	for n := 0; n < b.N; n++ {
+		CollapseRepeatedChar(toTest, '%')
+	}
+}
+
+func runBenchmarkMultipleDupe(b *testing.B) {
+	toTest := "%%%%%test%%%%"
+
+	for n := 0; n < b.N; n++ {
+		CollapseRepeatedChar(toTest, '%')
+	}
+}
+
+func runBenchmarkSpacedDupe(b *testing.B) {
+	toTest := "%%%spaced%%%dupe%%%"
+
+	for n := 0; n < b.N; n++ {
+		CollapseRepeatedChar(toTest, '%')
+	}
 }
