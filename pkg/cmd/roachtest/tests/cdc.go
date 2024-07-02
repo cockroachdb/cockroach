@@ -641,6 +641,8 @@ func (ct *cdcTester) runFeedLatencyVerifier(
 	}
 }
 
+// This is very coupled both to the CREATE TABLE required (`CREATE TABLE t (id INT PRIMARY KEY, x INT);`) and the validator itself in cdctest.
+// TODO: reorganize this to make more sense
 func (ct *cdcTester) runIntegrityWorkload(ivt cdctest.IntegrityValidationType) (wait func()) {
 	switch ivt {
 	case cdctest.IntegrityValidationNone:
