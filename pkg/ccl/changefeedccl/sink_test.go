@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 var zeroTS hlc.Timestamp
@@ -931,10 +932,14 @@ func TestChangefeedConsistentPartitioning(t *testing.T) {
 	referencePartitions[longString2] = 592
 
 	partitioner := newChangefeedPartitioner("topic1")
+	kgoPartitioner := newKgoChangefeedPartitioner().ForTopic("topic1")
 
 	for key, expected := range referencePartitions {
 		actual, err := partitioner.Partition(&sarama.ProducerMessage{Key: sarama.ByteEncoder(key)}, 1031)
 		require.NoError(t, err)
+		require.Equal(t, expected, actual)
+
+		actual = int32(kgoPartitioner.Partition(&kgo.Record{Key: []byte(key)}, 1031))
 		require.Equal(t, expected, actual)
 	}
 
