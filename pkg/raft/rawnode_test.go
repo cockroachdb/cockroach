@@ -997,6 +997,54 @@ func BenchmarkRawNode(b *testing.B) {
 	}
 }
 
+func TestRawNodeReadyWithSnapshotAndEntries(t *testing.T) {
+	s := newTestMemoryStorage(withPeers(1, 2))
+	require.NoError(t, s.Append(index(1).terms(2, 2, 2)))
+	confState := s.snapshot.Metadata.ConfState
+
+	cfg := newTestConfig(1, 3, 1, s)
+	cfg.AsyncStorageWrites = true
+	rn, err := NewRawNode(cfg)
+	require.NoError(t, err)
+
+	// Send a snapshot at index 5 to this node.
+	snap := pb.Snapshot{Metadata: pb.SnapshotMetadata{
+		ConfState: confState,
+		Term:      2,
+		Index:     5,
+	}}
+	require.NoError(t, rn.Step(pb.Message{
+		Type: pb.MsgSnap, From: 2, To: 1, Term: 2, Snapshot: &snap,
+	}))
+	require.Equal(t, snap, *rn.raft.raftLog.unstable.snapshot)
+
+	// Send an append right after index 5.
+	require.NoError(t, rn.Step(pb.Message{
+		Type: pb.MsgApp, From: 2, To: 1, Term: 2,
+		Index: 5, LogTerm: 2,
+		Entries: index(6).terms(2, 2, 2),
+		Commit:  7,
+	}))
+
+	require.Equal(t, snap, *rn.raft.raftLog.unstable.snapshot)
+	require.Len(t, rn.raft.raftLog.unstable.entries, 3)
+
+	// Ready has both the Snapshot, and Entries.
+	require.True(t, rn.HasReady())
+	rd := rn.Ready()
+	t.Logf("Snapshot: %+v", rd.Snapshot)
+	t.Logf("Entries: %+v", rd.Entries)
+	require.Equal(t, snap, rd.Snapshot)
+	require.Len(t, rd.Entries, 3)
+
+	// As well as the MsgStorageAppend message in it.
+	require.Len(t, rd.Messages, 1)
+	msg := rd.Messages[0]
+	require.Equal(t, pb.MsgStorageAppend, msg.Type)
+	require.Equal(t, rd.Snapshot, *msg.Snapshot)
+	require.Equal(t, rd.Entries, msg.Entries)
+}
+
 func benchmarkRawNodeImpl(b *testing.B, peers ...uint64) {
 
 	const debug = false
