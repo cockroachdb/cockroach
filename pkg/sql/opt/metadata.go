@@ -399,11 +399,6 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
-	// Ensure that all required privileges for the data sources are still valid.
-	if err := md.checkDataSourcePrivileges(ctx, optCatalog); err != nil {
-		return false, err
-	}
-
 	// Check that no referenced user defined types have changed.
 	for _, typ := range md.AllUserDefinedTypes() {
 		id := cat.StableID(catid.UserDefinedOIDToID(typ.Oid()))
@@ -460,6 +455,15 @@ func (md *Metadata) CheckDependencies(
 				return false, nil
 			}
 		}
+	}
+
+	// Check that the role still has the required privileges for the data sources.
+	//
+	// NOTE: this check has to happen after the object resolution checks, or else
+	// we may end up returning a privilege error when the memo should have just
+	// been invalidated.
+	if err := md.checkDataSourcePrivileges(ctx, optCatalog); err != nil {
+		return false, err
 	}
 
 	return true, nil
