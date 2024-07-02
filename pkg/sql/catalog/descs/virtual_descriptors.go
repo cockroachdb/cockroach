@@ -11,20 +11,24 @@
 package descs
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-type virtualDescriptors struct {
-	vs catalog.VirtualSchemas
+// VirtualCatalogHolder holds a catalog of all virtual descriptors.
+type VirtualCatalogHolder interface {
+	catalog.VirtualSchemas
+	// GetCatalog returns a catalog of vritual descriptors.
+	GetCatalog() nstree.Catalog
 }
 
-func makeVirtualDescriptors(schemas catalog.VirtualSchemas) virtualDescriptors {
+type virtualDescriptors struct {
+	vs VirtualCatalogHolder
+}
+
+func makeVirtualDescriptors(schemas VirtualCatalogHolder) virtualDescriptors {
 	return virtualDescriptors{vs: schemas}
 }
 
@@ -82,25 +86,5 @@ func (tc virtualDescriptors) getSchemaByID(id descpb.ID) catalog.VirtualSchema {
 }
 
 func (tc virtualDescriptors) addAllToCatalog(mc nstree.MutableCatalog) {
-	_ = tc.vs.Visit(func(vd catalog.Descriptor, comment string) error {
-		mc.UpsertDescriptor(vd)
-		if vd.GetID() != keys.PublicSchemaID && !vd.Dropped() && !vd.SkipNamespace() {
-			mc.UpsertNamespaceEntry(vd, vd.GetID(), hlc.Timestamp{})
-		}
-		if comment == "" {
-			return nil
-		}
-		ck := catalogkeys.CommentKey{ObjectID: uint32(vd.GetID())}
-		switch vd.DescriptorType() {
-		case catalog.Database:
-			ck.CommentType = catalogkeys.DatabaseCommentType
-		case catalog.Schema:
-			ck.CommentType = catalogkeys.SchemaCommentType
-		case catalog.Table:
-			ck.CommentType = catalogkeys.TableCommentType
-		default:
-			return nil
-		}
-		return mc.UpsertComment(ck, comment)
-	})
+	mc.AddAll(tc.vs.GetCatalog())
 }
