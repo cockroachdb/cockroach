@@ -235,12 +235,11 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 		// User a super low quality of service (lower than TTL low), as we don't
 		// really care if statistics gets left behind and prefer the TTL job to
 		// have priority.
-		qosLevel := sessiondatapb.SystemLow
 		datums, err := execCfg.InternalDB.Executor().QueryRowEx(
 			ctx,
 			c.opName,
 			nil,
-			getInternalExecutorOverride(qosLevel),
+			getInternalExecutorOverride(sessiondatapb.SystemLowQoS),
 			c.query,
 			c.args...,
 		)
