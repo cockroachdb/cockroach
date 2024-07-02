@@ -118,8 +118,6 @@ func (b *SelectQueryBuilder) buildQuery() string {
 	)
 }
 
-var qosLevel = sessiondatapb.TTLLow
-
 func getInternalExecutorOverride(
 	qosLevel sessiondatapb.QoSLevel,
 ) sessiondata.InternalExecutorOverride {
@@ -158,7 +156,7 @@ func (b *SelectQueryBuilder) Run(
 		ctx,
 		b.selectOpName,
 		nil, /* txn */
-		getInternalExecutorOverride(qosLevel),
+		getInternalExecutorOverride(sessiondatapb.TTLLowQoS),
 		query,
 		b.cachedArgs...,
 	)
@@ -261,7 +259,7 @@ func (b *DeleteQueryBuilder) Run(
 		ctx,
 		b.deleteOpName,
 		txn.KV(),
-		getInternalExecutorOverride(qosLevel),
+		getInternalExecutorOverride(sessiondatapb.TTLLowQoS),
 		query,
 		deleteArgs...,
 	)
