@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/raftpb"
 	"go.etcd.io/raft/v3/tracker"
@@ -68,9 +69,9 @@ const mergeApplicationTimeout = 5 * time.Second
 var sendSnapshotTimeout = envutil.EnvOrDefaultDuration(
 	"COCKROACH_RAFT_SEND_SNAPSHOT_TIMEOUT", 1*time.Hour)
 
-// AdminSplit divides the range into into two ranges using args.SplitKey.
+// AdminSplit divides the range into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
-	ctx context.Context, args kvpb.AdminSplitRequest, reason string,
+	ctx context.Context, args kvpb.AdminSplitRequest, reason redact.RedactableString,
 ) (reply kvpb.AdminSplitResponse, _ *kvpb.Error) {
 	if len(args.SplitKey) == 0 {
 		return kvpb.AdminSplitResponse{}, kvpb.NewErrorf("cannot split range with no key provided")
@@ -100,8 +101,8 @@ func maybeDescriptorChangedError(
 	return false, nil
 }
 
-func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) string {
-	var s string
+func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) redact.RedactableString {
+	var s redact.RedactableString
 	if status != nil && status.RaftState == raft.StateLeader {
 		for replicaID, pr := range status.Progress {
 			if replicaID == status.Lead {
@@ -113,7 +114,7 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 				// This follower is in good working order.
 				continue
 			}
-			s += fmt.Sprintf("; r%d/%d is ", rangeID, replicaID)
+			s += redact.Sprintf("; r%d/%d is ", rangeID, replicaID)
 			switch pr.State {
 			case tracker.StateSnapshot:
 				// If the Raft snapshot queue is backed up, replicas can spend
@@ -127,7 +128,7 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) strin
 				s += "being probed (may or may not need a Raft snapshot)"
 			default:
 				// Future proofing.
-				s += "in unknown state " + pr.State.String()
+				s += redact.Sprintf("in unknown state %s", redact.Safe(pr.State))
 			}
 		}
 	}
@@ -172,7 +173,7 @@ func splitTxnAttempt(
 	splitKey roachpb.RKey,
 	expiration hlc.Timestamp,
 	oldDesc *roachpb.RangeDescriptor,
-	reason string,
+	reason redact.RedactableString,
 ) error {
 	txn.SetDebugName(splitTxnName)
 
@@ -210,7 +211,7 @@ func splitTxnAttempt(
 	}
 
 	// Log the split into the range event log.
-	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason, true /* logAsync */); err != nil {
+	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason.StripMarkers(), true /* logAsync */); err != nil {
 		return err
 	}
 
@@ -298,7 +299,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	args kvpb.AdminSplitRequest,
 	desc *roachpb.RangeDescriptor,
 	delayable bool,
-	reason string,
+	reason redact.RedactableString,
 	findFirstSafeKey bool,
 ) (kvpb.AdminSplitResponse, error) {
 	var err error
@@ -430,7 +431,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		return reply, errors.Wrap(err, "unable to allocate range id for right hand side")
 	}
 
-	var extra string
+	var extra redact.RedactableString
 	if delayable {
 		extra += maybeDelaySplitToAvoidSnapshot(ctx, (*splitDelayHelper)(r))
 	}
@@ -594,7 +595,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) AdminMerge(
-	ctx context.Context, args kvpb.AdminMergeRequest, reason string,
+	ctx context.Context, args kvpb.AdminMergeRequest, reason redact.RedactableString,
 ) (kvpb.AdminMergeResponse, *kvpb.Error) {
 	var reply kvpb.AdminMergeResponse
 
