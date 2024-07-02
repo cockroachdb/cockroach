@@ -41,11 +41,11 @@ import (
 
 // staticAddressResolver maps execinfra.StaticSQLInstanceID to the given address.
 func staticAddressResolver(addr net.Addr) nodedialer.AddressResolver {
-	return func(nodeID roachpb.NodeID) (net.Addr, error) {
+	return func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
 		if nodeID == roachpb.NodeID(execinfra.StaticSQLInstanceID) {
-			return addr, nil
+			return addr, roachpb.Locality{}, nil
 		}
-		return nil, errors.Errorf("node %d not found", nodeID)
+		return nil, roachpb.Locality{}, errors.Errorf("node %d not found", nodeID)
 	}
 }
 

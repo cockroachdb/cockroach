@@ -28,7 +28,7 @@ import (
 )
 
 // An AddressResolver translates NodeIDs into addresses.
-type AddressResolver func(roachpb.NodeID) (net.Addr, error)
+type AddressResolver func(roachpb.NodeID) (net.Addr, roachpb.Locality, error)
 
 // A Dialer wraps an *rpc.Context for dialing based on node IDs. For each node,
 // it maintains a circuit breaker that prevents rapid connection attempts and
@@ -95,12 +95,12 @@ func (n *Dialer) Dial(
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, errors.Wrap(ctxErr, "dial")
 	}
-	addr, err := n.resolver(nodeID)
+	addr, locality, err := n.resolver(nodeID)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
 		return nil, err
 	}
-	return n.dial(ctx, nodeID, addr, true, class)
+	return n.dial(ctx, nodeID, addr, locality, true, class)
 }
 
 // DialNoBreaker is like Dial, but will not check the circuit breaker before
@@ -112,11 +112,11 @@ func (n *Dialer) DialNoBreaker(
 	if n == nil || n.resolver == nil {
 		return nil, errors.New("no node dialer configured")
 	}
-	addr, err := n.resolver(nodeID)
+	addr, locality, err := n.resolver(nodeID)
 	if err != nil {
 		return nil, err
 	}
-	return n.dial(ctx, nodeID, addr, false, class)
+	return n.dial(ctx, nodeID, addr, locality, false, class)
 }
 
 // DialInternalClient is a specialization of DialClass for callers that
@@ -140,12 +140,12 @@ func (n *Dialer) DialInternalClient(
 		}
 	}
 
-	addr, err := n.resolver(nodeID)
+	addr, locality, err := n.resolver(nodeID)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolver error")
 	}
 	log.VEventf(ctx, 2, "sending request to %s", addr)
-	conn, err := n.dial(ctx, nodeID, addr, true, class)
+	conn, err := n.dial(ctx, nodeID, addr, locality, true, class)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +159,7 @@ func (n *Dialer) dial(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	addr net.Addr,
+	locality roachpb.Locality,
 	checkBreaker bool,
 	class rpc.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
@@ -167,7 +168,7 @@ func (n *Dialer) dial(
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, errors.Wrap(ctxErr, ctxWrapMsg)
 	}
-	rpcConn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, class)
+	rpcConn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class)
 	connect := rpcConn.Connect
 	if !checkBreaker {
 		connect = rpcConn.ConnectNoBreaker
@@ -193,7 +194,7 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 	if n == nil || n.resolver == nil {
 		return errors.New("no node dialer configured")
 	}
-	addr, err := n.resolver(nodeID)
+	addr, _, err := n.resolver(nodeID)
 	if err != nil {
 		return err
 	}
@@ -222,13 +223,13 @@ func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionCl
 	if err == nil {
 		return err
 	}
-	addr, err := n.resolver(nodeID)
+	addr, locality, err := n.resolver(nodeID)
 	if err != nil {
 		return err
 	}
 	// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
 	// not be done by the time `Health` is called since GRPCDialNode is async.
-	return n.rpcContext.GRPCDialNode(addr.String(), nodeID, class).Health()
+	return n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class).Health()
 }
 
 // GetCircuitBreaker retrieves the circuit breaker for connections to the
@@ -237,7 +238,7 @@ func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionCl
 func (n *Dialer) GetCircuitBreaker(
 	nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (*circuit2.Breaker, bool) {
-	addr, err := n.resolver(nodeID)
+	addr, _, err := n.resolver(nodeID)
 	if err != nil {
 		return nil, false
 	}
