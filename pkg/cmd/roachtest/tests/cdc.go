@@ -652,6 +652,8 @@ func (ct *cdcTester) runIntegrityWorkload(ivt cdctest.IntegrityValidationType) (
 		ct.t.Fatalf("unknown integrity validation type: %v", ivt)
 	}
 
+	ct.t.L().Printf("running each-key-sequential integrity workload")
+
 	const (
 		parallelism = 8
 		numKeys     = 1000
