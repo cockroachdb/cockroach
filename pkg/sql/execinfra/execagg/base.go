@@ -27,10 +27,12 @@ import (
 // AggregateConstructor is a function that creates an aggregate function.
 type AggregateConstructor func(*eval.Context, tree.Datums) eval.AggregateFunc
 
-// GetAggregateInfo returns the aggregate constructor and the return type for
-// the given aggregate function when applied on the given type.
-func GetAggregateInfo(
-	fn execinfrapb.AggregatorSpec_Func, inputTypes ...*types.T,
+// getAggregateInfo returns the aggregate constructor and the return type for
+// the given aggregate function when applied on the given types.
+//
+// inputTypes cannot be mutated if aggregateConstructor will be used.
+func getAggregateInfo(
+	fn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T,
 ) (aggregateConstructor AggregateConstructor, returnType *types.T, err error) {
 	if fn == execinfrapb.AnyNotNull {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
@@ -107,8 +109,19 @@ func GetAggregateConstructor(
 		argTypes[len(aggInfo.ColIdx)+j] = d.ResolvedType()
 		arguments[j] = d
 	}
-	constructor, outputType, err = GetAggregateInfo(aggInfo.Func, argTypes...)
+	constructor, outputType, err = getAggregateInfo(aggInfo.Func, argTypes)
 	return
+}
+
+// GetAggregateOutputType returns the output type for the given aggregate
+// function when applied on the given types.
+//
+// inputTypes argument can be mutated by the caller.
+func GetAggregateOutputType(
+	fn execinfrapb.AggregatorSpec_Func, inputTypes []*types.T,
+) (outputType *types.T, err error) {
+	_, outputType, err = getAggregateInfo(fn, inputTypes)
+	return outputType, err
 }
 
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
