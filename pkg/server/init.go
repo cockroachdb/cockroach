@@ -642,7 +642,7 @@ func newInitServerConfig(
 	latestVersion := cfg.Settings.Version.LatestVersion()
 	minSupportedVersion := cfg.Settings.Version.MinSupportedVersion()
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
-		if overrideVersion := knobs.(*TestingKnobs).BinaryVersionOverride; overrideVersion != (roachpb.Version{}) {
+		if overrideVersion := knobs.(*TestingKnobs).OverrideClusterVersion; overrideVersion != (roachpb.Version{}) {
 			// We are customizing the cluster version. We can only bootstrap a fresh
 			// cluster at specific versions (specifically, the current version and
 			// previously released versions down to the minimum supported).

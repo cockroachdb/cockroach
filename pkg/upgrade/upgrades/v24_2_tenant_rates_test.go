@@ -34,7 +34,7 @@ func TestTenantRatesMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+					OverrideClusterVersion:         clusterversion.MinSupported.Version(),
 				},
 			},
 		},

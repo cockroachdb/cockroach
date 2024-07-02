@@ -84,7 +84,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          startCV.Version(),
+					OverrideClusterVersion:         startCV.Version(),
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				DistSQL: &execinfra.TestingKnobs{
@@ -288,7 +288,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			Server: &server.TestingKnobs{
-				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+				OverrideClusterVersion:         clusterversion.MinSupported.Version(),
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
@@ -302,7 +302,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 		TenantID: roachpb.MustMakeTenantID(10),
 		TestingKnobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+				OverrideClusterVersion:         clusterversion.MinSupported.Version(),
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -384,7 +384,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          startCV,
+					OverrideClusterVersion:         startCV,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
@@ -493,7 +493,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 			),
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          versions[0],
+					OverrideClusterVersion:         versions[0],
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
@@ -577,7 +577,7 @@ func TestPauseMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          startCV.Version(),
+					OverrideClusterVersion:         startCV.Version(),
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
@@ -705,7 +705,7 @@ func TestPrecondition(t *testing.T) {
 	knobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          v0,
+			OverrideClusterVersion:         v0,
 		},
 		// Inject an upgrade which would run to upgrade the cluster.
 		// We'll validate that we never create a job for this upgrade.
@@ -865,7 +865,7 @@ func TestMigrationFailure(t *testing.T) {
 		TestingKnobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          startVersion,
+				OverrideClusterVersion:         startVersion,
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
 				DontUseJobs: true,

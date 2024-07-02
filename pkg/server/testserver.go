@@ -2302,7 +2302,7 @@ func (ts *testServer) BinaryVersionOverride() roachpb.Version {
 	if knobs == nil {
 		return roachpb.Version{}
 	}
-	return knobs.(*TestingKnobs).BinaryVersionOverride
+	return knobs.(*TestingKnobs).OverrideClusterVersion
 }
 
 // KvProber is part of the serverutils.StorageLayerInterface.

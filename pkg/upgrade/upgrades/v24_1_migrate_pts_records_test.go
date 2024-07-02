@@ -49,7 +49,7 @@ func TestMigrateOldStlePTSRecords(t *testing.T) {
 					WriteDeprecatedPTSRecords: true},
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+					OverrideClusterVersion:         clusterversion.MinSupported.Version(),
 				},
 			},
 		},
