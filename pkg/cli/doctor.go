@@ -387,9 +387,9 @@ func fromZipDir(
 				return errors.Wrapf(err, "failed to parse descriptor id %s", fields[0])
 			}
 
-			descBytes, err := hx.DecodeString(fields[last])
-			if err != nil {
-				return errors.Wrapf(err, "failed to decode hex descriptor %d", i)
+			descBytes, ok := interpretString(fields[last])
+			if !ok {
+				return errors.Newf("failed to decode hex descriptor %d", i)
 			}
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			descTable = append(descTable, doctor.DescriptorTableRow{ID: int64(i), DescBytes: descBytes, ModTime: ts})
@@ -507,8 +507,8 @@ func fromZipDir(
 	}
 
 	jobsTable = make(doctor.JobsTable, 0)
-	if checkIfFileExists(zipDirPath, "system.jobs.txt") {
-		if err := slurp(zipDirPath, "system.jobs.txt", func(row string) error {
+	if checkIfFileExists(zipDirPath, "crdb_internal.system_jobs.txt") {
+		if err := slurp(zipDirPath, "crdb_internal.system_jobs.txt", func(row string) error {
 			fields := strings.Fields(row)
 			md := jobs.JobMetadata{}
 			md.Status = jobs.Status(fields[1])
@@ -519,23 +519,23 @@ func fromZipDir(
 			}
 			md.ID = jobspb.JobID(id)
 
-			last := len(fields) - 1
-			payloadBytes, err := hx.DecodeString(fields[last-1])
-			if err != nil {
-				// TODO(postamar): remove this check once payload redaction is improved
-				if fields[last-1] == "NULL" {
-					return nil
-				}
-				return errors.Wrapf(err, "job %d: failed to decode hex payload", id)
+			// N.B. The "created" column takes 2 positions in our fields array.
+			payloadBytes, ok := interpretString(fields[4])
+			if !ok {
+				return errors.Newf("job %d: failed to decode hex payload", id)
 			}
 			md.Payload = &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, md.Payload); err != nil {
 				return errors.Wrap(err, "failed unmarshalling job payload")
 			}
 
-			progressBytes, err := hx.DecodeString(fields[last])
-			if err != nil {
-				return errors.Wrapf(err, "job %d: failed to decode hex progress", id)
+			// Skip NULL job payloads.
+			if fields[5] == "NULL" {
+				return nil
+			}
+			progressBytes, ok := interpretString(fields[5])
+			if !ok {
+				return errors.Newf("job %d: failed to decode hex progress", id)
 			}
 			md.Progress = &jobspb.Progress{}
 			if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
@@ -554,8 +554,8 @@ func fromZipDir(
 			Payload  string `json:"hex_payload"`
 			Progress string `json:"hex_progress"`
 		}, 0)
-		if err := parseJSONFile(zipDirPath, "system.jobs.json", &jobsTableJSON); err != nil {
-			return nil, nil, nil, errors.Wrapf(err, "failed to parse system.descriptor.json")
+		if err := parseJSONFile(zipDirPath, "crdb_internal.system_jobs.json", &jobsTableJSON); err != nil {
+			return nil, nil, nil, errors.Wrapf(err, "failed to parse crdb_internal.system_jobs.json")
 		}
 		for _, job := range jobsTableJSON {
 			row := jobs.JobMetadata{

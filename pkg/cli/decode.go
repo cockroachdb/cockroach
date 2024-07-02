@@ -142,6 +142,12 @@ func interpretString(s string) ([]byte, bool) {
 	if err == nil {
 		return bytes, true
 	}
+	// Support PG \xDEADBEEF format (ie bytea_output default).
+	if strings.HasPrefix(s, "\\x") {
+		if bytes, err = gohex.DecodeString(s[2:]); err == nil {
+			return bytes, true
+		}
+	}
 	// Try base64.
 	bytes, err = base64.StdEncoding.DecodeString(s)
 	if err == nil {
