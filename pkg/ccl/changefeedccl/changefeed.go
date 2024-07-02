@@ -111,6 +111,7 @@ func init() {
 			m.SinkURI, err = cloud.SanitizeExternalStorageURI(m.SinkURI, []string{
 				changefeedbase.SinkParamSASLPassword,
 				changefeedbase.SinkParamCACert,
+				changefeedbase.SinkParamClientKey,
 				changefeedbase.SinkParamClientCert,
 				changefeedbase.SinkParamConfluentAPISecret,
 				changefeedbase.SinkParamAzureAccessKey,
