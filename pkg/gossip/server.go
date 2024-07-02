@@ -187,10 +187,9 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 			if err := send(reply); err != nil {
 				return err
 			}
-			s.mu.Lock()
+		} else {
+			s.mu.Unlock()
 		}
-
-		s.mu.Unlock()
 
 		select {
 		case <-s.stopper.ShouldQuiesce():
