@@ -2361,7 +2361,11 @@ func (bc *backupCollection) verifyOnlineRestore(
 // specified version binary. This is done before we attempt restoring a
 // full cluster backup.
 func (u *CommonTestUtils) resetCluster(
-	ctx context.Context, l *logger.Logger, version *clusterupgrade.Version, expectDeathsFn func(int),
+	ctx context.Context,
+	l *logger.Logger,
+	version *clusterupgrade.Version,
+	expectDeathsFn func(int),
+	settings []install.ClusterSettingOption,
 ) error {
 	l.Printf("resetting cluster using version %q", version.String())
 	expectDeathsFn(len(u.roachNodes))
@@ -2370,9 +2374,9 @@ func (u *CommonTestUtils) resetCluster(
 	}
 
 	cockroachPath := clusterupgrade.CockroachPathForVersion(u.t, version)
+	settings = append(settings, install.BinaryOption(cockroachPath), install.SecureOption(true))
 	return clusterupgrade.StartWithSettings(
-		ctx, l, u.cluster, u.roachNodes, option.NewStartOpts(option.NoBackupSchedule),
-		install.BinaryOption(cockroachPath), install.SecureOption(true),
+		ctx, l, u.cluster, u.roachNodes, option.NewStartOpts(option.NoBackupSchedule), settings...,
 	)
 }
 
@@ -2450,7 +2454,14 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 			}
 
 			if _, ok := collection.btype.(*clusterBackup); ok {
-				err := u.resetCluster(ctx, l, version, h.ExpectDeaths)
+				var settings []install.ClusterSettingOption
+				if h.IsSkipVersionUpgrade() {
+					settings = []install.ClusterSettingOption{
+						install.EnvOption([]string{"COCKROACH_ALLOW_VERSION_SKIPPING=true"}),
+					}
+				}
+
+				err := u.resetCluster(ctx, l, version, h.ExpectDeaths, settings)
 				if err != nil {
 					err := errors.Wrapf(err, "%s", version)
 					l.Printf("error resetting cluster: %v", err)
