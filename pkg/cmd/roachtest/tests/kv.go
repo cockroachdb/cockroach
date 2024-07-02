@@ -184,7 +184,7 @@ func registerKV(r registry.Registry) {
 			) +
 				histograms + concurrency + splits + duration + readPercent +
 				batchSize + blockSize + sequential + envFlags + url
-			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
+			c.Run(ctx, option.WithNodes(c.WorkloadNodes()), cmd)
 			return nil
 		})
 		m.Wait()
@@ -336,7 +336,7 @@ func registerKV(r registry.Registry) {
 		if opts.nodes > 3 {
 			workloadNodeCPUs = opts.cpus
 		}
-		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(workloadNodeCPUs), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
+		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.WorkloadNodes(1), spec.WorkloadNodeCPU(workloadNodeCPUs), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
 
 		var clouds registry.CloudSet
 		tags := make(map[string]struct{})
@@ -534,7 +534,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNode())
+			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.WorkloadNodes())
 
 			t.Status("starting cluster")
 			// If the test ever fails, the person who investigates the

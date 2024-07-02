@@ -99,10 +99,10 @@ const (
 type ClusterSpec struct {
 	Arch      vm.CPUArch // CPU architecture; auto-chosen if left empty
 	NodeCount int
-	// WorkloadNode indicates that the last node of the cluster should be a
-	// workload node. Defaults to a VM with 4 CPUs if not specified by
+	// WorkloadNodes indicates that the last n nodes of the cluster should
+	// be workload nodes. Defaults to VMs with 4 CPUs if not specified by
 	// WorkloadNodeCPUs.
-	WorkloadNode     bool
+	WorkloadNodes    int
 	WorkloadNodeCPUs int
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
@@ -526,8 +526,5 @@ func (s *ClusterSpec) Expiration() time.Time {
 
 // TotalCPUs is the total amount of CPUs allocated for a cluster.
 func (s *ClusterSpec) TotalCPUs() int {
-	if !s.WorkloadNode {
-		return s.NodeCount * s.CPUs
-	}
-	return (s.NodeCount-1)*s.CPUs + s.WorkloadNodeCPUs
+	return (s.NodeCount-s.WorkloadNodes)*s.CPUs + (s.WorkloadNodeCPUs * s.WorkloadNodes)
 }
