@@ -294,7 +294,7 @@ EOF"
     ;;
   "create")
     if [ "$#" -lt 2 ]; then
-      echo "usage: drtprod create {drt-large,drt-chaos,drt-ua1,drt-ua2}"
+      echo "usage: drtprod create {drt-large,drt-chaos,drt-ua1,drt-ua2,workload-large,workload-chaos}"
       exit 1
     fi
     case "${2}" in
@@ -315,6 +315,16 @@ EOF"
         # setup dns
         $0 dns drt-large create
         ;;
+      "workload-large")
+        roachprod create workload-large \
+          --clouds gce \
+          --gce-zones "northamerica-northeast2-a,us-east5-a,northamerica-northeast1-a" \
+          --nodes 3 \
+          --gce-machine-type n2-standard-4 \
+          --os-volume-size 100 \
+          --username workload \
+          --lifetime 8760h
+        ;;
       "drt-chaos")
         roachprod create drt-chaos \
           --clouds gce \
@@ -330,6 +340,15 @@ EOF"
           --gce-image "ubuntu-2204-jammy-v20240319"
         # setup dns
         $0 dns drt-chaos create
+        ;;
+      "workload-chaos")
+        roachprod create workload-large \
+          --clouds gce \
+          --nodes 1 \
+          --gce-machine-type n2-standard-4 \
+          --os-volume-size 100 \
+          --username workload \
+          --lifetime 8760h
         ;;
       "ua")
         roachprod create drt-ua1 \
