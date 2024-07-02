@@ -129,6 +129,7 @@ func (i *concurrentBufferIngester) Start(
 
 // Clear flushes the underlying buffer, and signals the underlying registry
 // to clear any remaining cached data afterward. This is an async operation.
+// It implements the Writer interface.
 func (i *concurrentBufferIngester) Clear() {
 	i.guard.ForceSyncExec(func() {
 		// Our flush function defined on the guard is responsible for setting clearRegistry back to 0.
@@ -152,6 +153,7 @@ func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 	}
 }
 
+// ObserveStatement implements the Writer interface.
 func (i *concurrentBufferIngester) ObserveStatement(
 	sessionID clusterunique.ID, statement *Statement,
 ) {
@@ -166,6 +168,7 @@ func (i *concurrentBufferIngester) ObserveStatement(
 	})
 }
 
+// ObserveTransaction implements the Writer interface.
 func (i *concurrentBufferIngester) ObserveTransaction(
 	sessionID clusterunique.ID, transaction *Transaction,
 ) {
@@ -178,6 +181,11 @@ func (i *concurrentBufferIngester) ObserveTransaction(
 			transaction: transaction,
 		}
 	})
+}
+
+// Enabled implements the Writer interface.
+func (i *concurrentBufferIngester) Enabled() bool {
+	return i.registry.enabled()
 }
 
 func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIngester {

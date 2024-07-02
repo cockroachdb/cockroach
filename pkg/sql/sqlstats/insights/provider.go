@@ -25,10 +25,22 @@ type defaultProvider struct {
 
 var _ Provider = &defaultProvider{}
 
+// Start implements the Provider interface.
 func (p *defaultProvider) Start(ctx context.Context, stopper *stop.Stopper) {
+	ExecutionInsightsCapacity.SetOnChange(&p.anomalyDetector.settings.SV, func(ctx context.Context) {
+		if ExecutionInsightsCapacity.Get(&p.anomalyDetector.settings.SV) == 0 {
+			p.store.clear()
+		}
+	})
+	AnomalyDetectionEnabled.SetOnChange(&p.anomalyDetector.settings.SV, func(ctx context.Context) {
+		if !AnomalyDetectionEnabled.Get(&p.anomalyDetector.settings.SV) {
+			p.anomalyDetector.reset()
+		}
+	})
 	p.ingester.Start(ctx, stopper)
 }
 
+// Writer implements the Provider interface.
 func (p *defaultProvider) Writer(internal bool) Writer {
 	// We ignore statements and transactions run by the internal executor.
 	if internal {
@@ -37,12 +49,21 @@ func (p *defaultProvider) Writer(internal bool) Writer {
 	return p.ingester
 }
 
+// Reader implements the Provider interface.
 func (p *defaultProvider) Reader() Reader {
 	return p.store
 }
 
+// LatencyInformation implements the Provider interface.
 func (p *defaultProvider) LatencyInformation() LatencyInformation {
 	return p.anomalyDetector
+}
+
+// Reset implements the Provider interface.
+func (p *defaultProvider) Reset() {
+	p.ingester.Clear()
+	p.anomalyDetector.reset()
+	p.store.clear()
 }
 
 type nullWriter struct{}
@@ -54,6 +75,11 @@ func (n *nullWriter) ObserveTransaction(_ clusterunique.ID, _ *Transaction) {
 }
 
 func (n *nullWriter) Clear() {
+}
+
+func (n *nullWriter) Enabled() bool {
+	return true
+
 }
 
 var nullWriterInstance Writer = &nullWriter{}

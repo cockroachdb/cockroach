@@ -47,6 +47,12 @@ func (s *lockingStore) IterateInsights(
 	})
 }
 
+func (s *lockingStore) clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.insights.Clear()
+}
+
 var _ Reader = &lockingStore{}
 var _ sink = &lockingStore{}
 

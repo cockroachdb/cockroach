@@ -13,6 +13,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/appstatspb",
         "//pkg/sql/contention",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats/insights",
         "//pkg/testutils",

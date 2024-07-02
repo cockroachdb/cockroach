@@ -28,7 +28,8 @@ import (
 var ExecutionInsightsCapacity = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.insights.execution_insights_capacity",
-	"the size of the per-node store of execution insights",
+	"the size of the per-node store of execution insights. Use 0 to disable insights"+
+		"and clear the store.",
 	1000,
 	settings.NonNegativeInt,
 	settings.WithPublic)
@@ -146,6 +147,9 @@ type Writer interface {
 	// Clear clears the underlying cache of its contents, with no guarantees around flush behavior.
 	// Data may simply be erased depending on the implementation.
 	Clear()
+
+	// Enabled returns whether the insights writing is enabled.
+	Enabled() bool
 }
 
 // WriterProvider offers a Writer.
@@ -183,6 +187,9 @@ type Provider interface {
 	// LatencyInformation returns an object that offers read access to latency information,
 	// such as percentiles.
 	LatencyInformation() LatencyInformation
+
+	// Reset resets the provider, clearing all information tracked by insights.
+	Reset()
 }
 
 // New builds a new Provider.

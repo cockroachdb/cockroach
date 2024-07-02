@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -956,4 +957,121 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 
 		return nil
 	}, 1*time.Second)
+}
+
+func TestInsightsDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+	connE := ts.SQLConn(t)
+	conn := sqlutils.MakeSQLRunner(connE)
+	provider := ts.SQLServer().(*sql.Server).GetInsightsProvider()
+
+	// Use the internal executor so it won't pollute our results.
+	observerConn := ts.InternalExecutor().(*sql.InternalExecutor)
+	execInternal := func(query string) {
+		_, err := observerConn.Exec(ctx, "test-insights-disabled", nil, query)
+		require.NoError(t, err)
+	}
+
+	verifyInsightsCount := func(expected int) {
+		testutils.SucceedsSoon(t, func() error {
+			row, err := observerConn.QueryRow(
+				ctx,
+				"count-insights",
+				nil,
+				"SELECT count(*) FROM crdb_internal.node_execution_insights")
+			require.NoError(t, err)
+			count := int(tree.MustBeDInt(row[0]))
+			if count != expected {
+				return fmt.Errorf("expected %d insights, found %d", expected, count)
+			}
+			return nil
+		})
+	}
+
+	insertTenInsights := func() {
+		// Insert a bunch of insights.
+		for i := 0; i < 5; i++ {
+			conn.Exec(t, "SELECT pg_sleep(0.2)")
+			connE.Exec("SELECT 1/0")
+		}
+	}
+
+	reset := func() {
+		provider.Reset()
+		verifyInsightsCount(0)
+		execInternal("RESET CLUSTER SETTING sql.insights.latency_threshold")
+		execInternal("RESET CLUSTER SETTING sql.insights.anomaly_detection.enabled")
+		execInternal("RESET CLUSTER SETTING sql.insights.execution_insights_capacity")
+	}
+
+	t.Run("disabling insights collection via capacity should clear the store", func(t *testing.T) {
+		// Disable insights collection, but doesn't clear the cache.
+		insertTenInsights()
+		verifyInsightsCount(10)
+
+		conn.Exec(t, "SET CLUSTER SETTING sql.insights.execution_insights_capacity = 0")
+
+		insertTenInsights()
+		verifyInsightsCount(0)
+	})
+
+	t.Run("disable insights collection via detectors", func(t *testing.T) {
+		reset()
+		insertTenInsights()
+		verifyInsightsCount(10)
+
+		// Disable insights collection - this doesn't clear the cache.
+		conn.Exec(t, "SET CLUSTER SETTING sql.insights.latency_threshold = '0s'")
+		conn.Exec(t, "SET CLUSTER SETTING sql.insights.anomaly_detection.enabled = f")
+
+		insertTenInsights()
+		verifyInsightsCount(10)
+	})
+
+	t.Run("disable latency detection", func(t *testing.T) {
+		reset()
+		execInternal("SET CLUSTER SETTING sql.insights.latency_threshold = '0s'")
+
+		// This statement starts anomaly tracking. Anomaly tracking starts at 50ms by default.
+		conn.Exec(t, "SELECT pg_sleep(0.06)")
+		conn.Exec(t, "SELECT pg_sleep(0.08)")
+		verifyInsightsCount(2)
+
+		metrics := ts.SQLServer().(*sql.Server).ServerMetrics
+		require.Greater(t, metrics.InsightsMetrics.Fingerprints.Value(), int64(0))
+		require.Greater(t, metrics.InsightsMetrics.Memory.Value(), int64(0))
+
+		// Disabling anomaly detection should clear the anomaly tracking.
+		conn.Exec(t, "SET CLUSTER SETTING sql.insights.anomaly_detection.enabled = f")
+		testutils.SucceedsSoon(t, func() error {
+			if metrics.InsightsMetrics.Fingerprints.Value() != 0 {
+				return fmt.Errorf("expected 0 fingerprints, found %d", metrics.InsightsMetrics.Fingerprints.Value())
+			}
+			if metrics.InsightsMetrics.Memory.Value() != 0 {
+				return fmt.Errorf("expected 0 memory, found %d", metrics.InsightsMetrics.Memory.Value())
+			}
+			return nil
+		})
+
+	})
+
+	t.Run("disable anomaly detection", func(t *testing.T) {
+		reset()
+		execInternal("SET CLUSTER SETTING sql.insights.anomaly_detection.enabled = f")
+		execInternal("SET CLUSTER SETTING sql.insights.latency_threshold = '500ms'")
+
+		// We'll execute the same statements used for anomaly detection in the
+		// previous test. They should be skipped this time.
+		conn.Exec(t, "SELECT pg_sleep(0.06)")
+		conn.Exec(t, "SELECT pg_sleep(0.08)")
+		conn.Exec(t, "SELECT pg_sleep(0.6)")
+		verifyInsightsCount(1)
+	})
+
 }
