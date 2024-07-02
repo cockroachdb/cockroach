@@ -763,11 +763,16 @@ type ProjectsVal struct {
 // https://cloud.google.com/compute/docs/regions-zones#available
 //
 // Note that the default zone (the first zone returned by this
-// function) is always in the us-east1 region, but we randomize the
-// specific zone. This is to avoid "zone exhausted" errors in one
-// particular zone, especially during nightly roachtest runs.
-func defaultZones() []string {
+// function) is always in the us-east1 region (or us-central1 for
+// ARM64 builds), but we randomize the specific zone. This is to avoid
+// "zone exhausted" errors in one particular zone, especially during
+// nightly roachtest runs.
+func defaultZones(arch string) []string {
 	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
+	if vm.ParseArch(arch) == vm.ArchARM64 {
+		// T2A instances are only available in us-central1 in NA.
+		zones = []string{"us-central1-a", "us-central1-b", "us-central1-f"}
+	}
 	rand.Shuffle(len(zones), func(i, j int) { zones[i], zones[j] = zones[j], zones[i] })
 
 	return []string{
@@ -858,7 +863,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
-			strings.Join(defaultZones(), ",")))
+			strings.Join(defaultZones(string(vm.ArchAMD64)), ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
 		"use preemptible GCE instances (lifetime cannot exceed 24h)")
 	flags.BoolVar(&o.useSpot, ProviderName+"-use-spot", false,
@@ -1013,9 +1018,9 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 	}
 	if len(zones) == 0 {
 		if opts.GeoDistributed {
-			zones = defaultZones()
+			zones = defaultZones(opts.Arch)
 		} else {
-			zones = []string{defaultZones()[0]}
+			zones = []string{defaultZones(opts.Arch)[0]}
 		}
 	}
 	if providerOpts.useArmAMI() {
