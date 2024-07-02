@@ -291,8 +291,7 @@ type planner struct {
 	// checkScanParallelizationIfLocal.
 	parallelizationChecker localScanParallelizationChecker
 
-	// datumAlloc is used when decoding datums and is initialized in
-	// initPlanner.
+	// datumAlloc is used when decoding datums and running subqueries.
 	datumAlloc *tree.DatumAlloc
 }
 
@@ -416,7 +415,7 @@ func newInternalPlanner(
 	})
 	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
 
-	p := &planner{execCfg: execCfg}
+	p := &planner{execCfg: execCfg, datumAlloc: &tree.DatumAlloc{}}
 	p.resetPlanner(ctx, txn, sd, plannerMon, nil /* sessionMon */)
 
 	smi := &sessionDataMutatorIterator{
