@@ -1882,7 +1882,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 				// a single value against a tuple.
 				toAppend = row[0]
 			} else {
-				toAppend = &tree.DTuple{D: row}
+				toAppend = planner.datumAlloc.NewDTuple(tree.DTuple{D: row})
 			}
 			// Perform memory accounting for this datum. We do this in an
 			// incremental fashion since we might be materializing a lot of data
