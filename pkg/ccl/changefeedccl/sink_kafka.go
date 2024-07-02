@@ -865,11 +865,18 @@ func parseRequiredAcks(a string) (sarama.RequiredAcks, error) {
 
 func getSaramaConfig(
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	topLevelCompression string,
 ) (config *saramaConfig, err error) {
 	config = defaultSaramaConfig()
 	if jsonStr != `` {
 		err = json.Unmarshal([]byte(jsonStr), config)
 	}
+	if config.Compression == 0 && topLevelCompression != `` {
+		codec, exists := saramaCompressionCodecOptions[strings.ToUpper(topLevelCompression)]
+		if !exists {
+			return
+		}
+		config.Compression = codec
 	return
 }
 
@@ -1180,6 +1187,7 @@ func buildKafkaConfig(
 	u sinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	kafkaThrottlingMetrics metrics.Histogram,
+	topLevelCompression string,
 ) (*sarama.Config, error) {
 	dialConfig, err := buildDialConfig(u)
 	if err != nil {
@@ -1247,7 +1255,7 @@ func buildKafkaConfig(
 	}
 
 	// Apply statement level overrides.
-	saramaCfg, err := getSaramaConfig(jsonStr)
+	saramaCfg, err := getSaramaConfig(jsonStr, topLevelCompression)
 	if err != nil {
 		return nil, errors.Wrapf(err,
 			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
@@ -1278,6 +1286,7 @@ func makeKafkaSink(
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
+	topLevelCompression string,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
@@ -1286,7 +1295,7 @@ func makeKafkaSink(
 	}
 
 	m := mb(requiresResourceAccounting)
-	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings))
+	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings), topLevelCompression)
 	if err != nil {
 		return nil, err
 	}
