@@ -150,11 +150,11 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	reply := new(Response)
 
 	for init := true; ; init = false {
+		s.mu.Lock()
 		// Store the old ready so that if it gets replaced with a new one
 		// (once the lock is released) and is closed, we still trigger the
 		// select below.
 		ready := s.ready.Load().(chan struct{})
-		s.mu.Lock()
 		delta := s.mu.is.delta(args.HighWaterStamps)
 		if init {
 			s.mu.is.populateMostDistantMarkers(delta)
@@ -184,11 +184,10 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 				Delta:           delta,
 			}
 
-			s.mu.Unlock()
 			if err := send(reply); err != nil {
+				s.mu.Unlock()
 				return err
 			}
-			s.mu.Lock()
 		}
 
 		s.mu.Unlock()
