@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -61,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -387,6 +389,7 @@ func newRaftConfig(
 	appliedIndex kvpb.RaftIndex,
 	storeCfg StoreConfig,
 	logger raft.Logger,
+	storeLiveness raftstoreliveness.StoreLiveness,
 ) *raft.Config {
 	return &raft.Config{
 		ID:                          id,
@@ -402,6 +405,7 @@ func newRaftConfig(
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
 		Storage:                     strg,
 		Logger:                      logger,
+		StoreLiveness:               storeLiveness,
 
 		// We only set this on replica initialization, so replicas without
 		// StepDownOnRemoval may remain on 23.2 nodes until they restart. That's
@@ -893,6 +897,7 @@ type Store struct {
 	metrics             *StoreMetrics
 	intentResolver      *intentresolver.IntentResolver
 	recoveryMgr         txnrecovery.Manager
+	storeLiveness       storeliveness.Fabric
 	syncWaiter          *logstore.SyncWaiterLoop
 	raftEntryCache      *raftentry.Cache
 	limiters            batcheval.Limiters
@@ -2153,6 +2158,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.cfg.AmbientCtx, s.cfg.Clock, s.db, stopper,
 	)
 	s.metrics.registry.AddMetricStruct(s.recoveryMgr.Metrics())
+
+	// TODO(mira): create the store liveness support manager here.
+	// s.storeLiveness = ...
 
 	s.rangeIDAlloc = idAlloc
 

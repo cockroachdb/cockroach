@@ -191,18 +191,6 @@ This metric is thus not an indicator of KV health.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
-	metaActiveRangeFeed = metric.Metadata{
-		Name:        "rpc.streams.rangefeed.active",
-		Help:        `Number of currently running RangeFeed streams`,
-		Measurement: "Streams",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaTotalRangeFeed = metric.Metadata{
-		Name:        "rpc.streams.rangefeed.recv",
-		Help:        `Total number of RangeFeed streams`,
-		Measurement: "Streams",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaActiveMuxRangeFeed = metric.Metadata{
 		Name:        "rpc.streams.mux_rangefeed.active",
 		Help:        `Number of currently running MuxRangeFeed streams`,
@@ -270,8 +258,6 @@ type nodeMetrics struct {
 	CrossRegionBatchResponseBytes *metric.Counter
 	CrossZoneBatchRequestBytes    *metric.Counter
 	CrossZoneBatchResponseBytes   *metric.Counter
-	NumRangeFeed                  *metric.Counter
-	ActiveRangeFeed               *metric.Gauge
 	NumMuxRangeFeed               *metric.Counter
 	ActiveMuxRangeFeed            *metric.Gauge
 }
@@ -293,8 +279,6 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 		CrossRegionBatchResponseBytes: metric.NewCounter(metaCrossRegionBatchResponse),
 		CrossZoneBatchRequestBytes:    metric.NewCounter(metaCrossZoneBatchRequest),
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
-		ActiveRangeFeed:               metric.NewGauge(metaActiveRangeFeed),
-		NumRangeFeed:                  metric.NewCounter(metaTotalRangeFeed),
 		ActiveMuxRangeFeed:            metric.NewGauge(metaActiveMuxRangeFeed),
 		NumMuxRangeFeed:               metric.NewCounter(metaTotalMuxRangeFeed),
 	}
@@ -1832,10 +1816,10 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
-// setRangeIDEventSink annotates each response with range and stream IDs.
-// This is used by MuxRangeFeed.
-// TODO: This code can be removed in 22.2 once MuxRangeFeed is the default, and
-// the old style RangeFeed deprecated.
+// setRangeIDEventSink is an implementation of rangefeed.Stream which annotates
+// each response with rangeID and streamID. It is used by MuxRangeFeed. Note
+// that the wrapped stream is a locked mux stream, ensuring safe concurrent Send
+// calls.
 type setRangeIDEventSink struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -1857,10 +1841,14 @@ func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	return s.wrapped.Send(response)
 }
 
+// Wrapped stream is a locked mux stream, ensuring safe concurrent Send.
+func (s *setRangeIDEventSink) SendIsThreadSafe() {}
+
 var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
 
-// lockedMuxStream provides support for concurrent calls to Send.
-// The underlying MuxRangeFeedServer is not safe for concurrent calls to Send.
+// lockedMuxStream provides support for concurrent calls to Send. The underlying
+// MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
+// Send.
 type lockedMuxStream struct {
 	wrapped kvpb.Internal_MuxRangeFeedServer
 	sendMu  syncutil.Mutex
