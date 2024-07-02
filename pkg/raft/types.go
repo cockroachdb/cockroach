@@ -91,6 +91,25 @@ func (s logSlice) lastEntryID() entryID {
 	return s.prev
 }
 
+// termAt returns the term of the entry at the given index.
+// Requires: prev.index <= index <= lastIndex().
+func (s logSlice) termAt(index uint64) uint64 {
+	if index == s.prev.index {
+		return s.prev.term
+	}
+	return s.entries[index-s.prev.index-1].Term
+}
+
+// forward returns a logSlice with prev forwarded to the given index.
+// Requires: prev.index <= index <= lastIndex().
+func (s logSlice) forward(index uint64) logSlice {
+	return logSlice{
+		term:    s.term,
+		prev:    entryID{term: s.termAt(index), index: index},
+		entries: s.entries[index-s.prev.index:],
+	}
+}
+
 // valid returns nil iff the logSlice is a well-formed log slice. See logSlice
 // comment for details on what constitutes a valid raft log slice.
 func (s logSlice) valid() error {
