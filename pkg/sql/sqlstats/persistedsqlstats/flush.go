@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -148,7 +149,7 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 		ctx,
 		"fetch-stmt-count",
 		nil,
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		readStmt,
 		randomShard,
 	)
@@ -198,7 +199,7 @@ func (s *PersistedSQLStats) doFlushSingleTxnStats(
 			return errors.Wrapf(err, "flushing transaction %d's statistics", stats.TransactionFingerprintID)
 		}
 		return nil
-	})
+	}, isql.WithPriority(admissionpb.UserLowPri))
 }
 
 func (s *PersistedSQLStats) doFlushSingleStmtStats(
@@ -222,7 +223,7 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 			return errors.Wrapf(err, "flush statement %d's statistics", stats.ID)
 		}
 		return nil
-	})
+	}, isql.WithPriority(admissionpb.UserLowPri))
 }
 
 // ComputeAggregatedTs returns the aggregation timestamp to assign
@@ -286,7 +287,7 @@ SET
 		ctx,
 		"upsert-txn-stats",
 		txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		upsertStmt,
 		aggregatedTs,            // aggregated_ts
 		serializedFingerprintID, // fingerprint_id
@@ -362,7 +363,7 @@ SET
 		ctx,
 		"upsert-stmt-stats",
 		txn.KV(), /* txn */
-		sessiondata.NodeUserSessionDataOverride,
+		sessiondata.NodeUserWithLowUserPrioritySessionDataOverride,
 		upsertStmt,
 		args...,
 	)
