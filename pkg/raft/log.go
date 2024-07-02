@@ -144,16 +144,7 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 // append adds the given log slice to the end of the log. Returns false if this
 // can not be done.
 func (l *raftLog) append(a logSlice) bool {
-	if a.prev != l.lastEntryID() {
-		return false
-	}
-	if len(a.entries) == 0 {
-		// TODO(pav-kv): remove this clause and handle it in unstable. The log slice
-		// can carry a newer a.term, which should update our accTerm.
-		return true
-	}
-	// TODO(pav-kv): add unstable.append method which never truncates the log.
-	return l.unstable.truncateAndAppend(a)
+	return l.unstable.append(a)
 }
 
 // match finds the longest prefix of the given log slice that matches the log.
