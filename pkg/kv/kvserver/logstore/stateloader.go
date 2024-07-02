@@ -181,6 +181,9 @@ func (sl StateLoader) SynthesizeHardState(
 		// updated votes yet.
 		newHS.Term = oldHS.Term
 	}
+	if oldHS.AccTerm > newHS.AccTerm {
+		newHS.AccTerm = oldHS.AccTerm
+	}
 	// If the existing HardState voted in this term, remember that.
 	if oldHS.Term == newHS.Term {
 		newHS.Vote = oldHS.Vote

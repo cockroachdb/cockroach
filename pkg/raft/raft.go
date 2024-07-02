@@ -492,9 +492,10 @@ func (r *raft) softState() SoftState { return SoftState{Lead: r.lead, RaftState:
 
 func (r *raft) hardState() pb.HardState {
 	return pb.HardState{
-		Term:   r.Term,
-		Vote:   r.Vote,
-		Commit: r.raftLog.committed,
+		Term:    r.Term,
+		Vote:    r.Vote,
+		Commit:  r.raftLog.committed,
+		AccTerm: r.accTerm,
 	}
 }
 
@@ -1974,6 +1975,7 @@ func (r *raft) loadState(state pb.HardState) {
 	r.raftLog.committed = state.Commit
 	r.Term = state.Term
 	r.Vote = state.Vote
+	r.accTerm = state.AccTerm
 }
 
 // pastElectionTimeout returns true if r.electionElapsed is greater

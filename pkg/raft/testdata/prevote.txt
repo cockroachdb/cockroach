@@ -208,6 +208,7 @@ stabilize
 > 2 handling Ready
   Ready MustSync=true:
   Lead:2 State:StateLeader
+  HardState Term:2 Vote:2 Commit:12
   Entries:
   2/13 EntryNormal ""
   Messages:
@@ -220,6 +221,7 @@ stabilize
 > 1 handling Ready
   Ready MustSync=true:
   Lead:2 State:StateFollower
+  HardState Term:2 Vote:2 Commit:12
   Entries:
   2/13 EntryNormal ""
   Messages:
@@ -227,6 +229,7 @@ stabilize
 > 3 handling Ready
   Ready MustSync=true:
   Lead:2 State:StateFollower
+  HardState Term:2 Vote:2 Commit:12
   Entries:
   2/13 EntryNormal ""
   Messages:

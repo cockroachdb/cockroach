@@ -226,6 +226,9 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 		m.Term = rd.Term
 		m.Vote = rd.Vote
 		m.Commit = rd.Commit
+		// TODO(pav-kv): LogTerm has different semantics
+		// we should look into refactor Message struct to include accTerm.
+		m.LogTerm = rd.AccTerm
 	}
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot

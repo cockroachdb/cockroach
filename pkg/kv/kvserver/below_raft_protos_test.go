@@ -51,9 +51,10 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 		},
 		func(r *rand.Rand) protoutil.Message {
 			type expectedHardState struct {
-				Term   uint64
-				Vote   uint64
-				Commit uint64
+				Term    uint64
+				Vote    uint64
+				Commit  uint64
+				AccTerm uint64
 			}
 			// Conversion fails if new fields are added to `HardState`, in which case this method
 			// and the expected sums should be updated.
@@ -61,9 +62,10 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 
 			n := r.Uint64()
 			return &raftpb.HardState{
-				Term:   n % 3,
-				Vote:   n % 7,
-				Commit: n % 11,
+				Term:    n % 3,
+				Vote:    n % 7,
+				Commit:  n % 11,
+				AccTerm: n % 13,
 			}
 		},
 		func(r *rand.Rand) protoutil.Message {

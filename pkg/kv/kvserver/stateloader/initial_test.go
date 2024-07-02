@@ -32,7 +32,7 @@ func TestSynthesizeHardState(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
 
-	tHS := raftpb.HardState{Term: 2, Vote: 3, Commit: 4}
+	tHS := raftpb.HardState{Term: 2, Vote: 3, Commit: 4, AccTerm: 2}
 
 	testCases := []struct {
 		TruncTerm        kvpb.RaftTerm
@@ -45,10 +45,10 @@ func TestSynthesizeHardState(t *testing.T) {
 		// Can't wind back the committed index of the new HardState.
 		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit - 1), Err: "can't decrease HardState.Commit"},
 		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit), NewHS: tHS},
-		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit + 1), NewHS: raftpb.HardState{Term: tHS.Term, Vote: 3, Commit: tHS.Commit + 1}},
+		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit + 1), NewHS: raftpb.HardState{Term: tHS.Term, Vote: 3, Commit: tHS.Commit + 1, AccTerm: 2}},
 		// Higher Term is picked up, but vote isn't carried over when the term
 		// changes.
-		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit), TruncTerm: 11, NewHS: raftpb.HardState{Term: 11, Vote: 0, Commit: tHS.Commit}},
+		{OldHS: &tHS, RaftAppliedIndex: kvpb.RaftIndex(tHS.Commit), TruncTerm: 11, NewHS: raftpb.HardState{Term: 11, Vote: 0, Commit: tHS.Commit, AccTerm: 2}},
 	}
 
 	for i, test := range testCases {
