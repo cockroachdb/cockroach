@@ -893,3 +893,20 @@ type AddDatabaseZoneConfig struct {
 	ZoneConfig *zonepb.ZoneConfig
 	SeqNum     uint32
 }
+
+// AddTableZoneConfig adds a zone config to a table.
+type AddTableZoneConfig struct {
+	immediateMutationOp
+	TableID    descpb.ID
+	ZoneConfig *zonepb.ZoneConfig
+	SeqNum     uint32
+}
+
+// AddIndexZoneConfig adds a zone config to an index.
+type AddIndexZoneConfig struct {
+	immediateMutationOp
+	TableID    descpb.ID
+	IndexID    descpb.IndexID
+	ZoneConfig *zonepb.ZoneConfig
+	SeqNum     uint32
+}
