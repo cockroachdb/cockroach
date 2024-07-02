@@ -32,13 +32,13 @@ metadata:
   labels:
     app: cockroachdb
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - get
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - create
+      - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -47,14 +47,14 @@ metadata:
   labels:
     app: cockroachdb
 rules:
-- apiGroups:
-  - certificates.k8s.io
-  resources:
-  - certificatesigningrequests
-  verbs:
-  - create
-  - get
-  - watch
+  - apiGroups:
+      - certificates.k8s.io
+    resources:
+      - certificatesigningrequests
+    verbs:
+      - create
+      - get
+      - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -67,9 +67,9 @@ roleRef:
   kind: Role
   name: cockroachdb
 subjects:
-- kind: ServiceAccount
-  name: cockroachdb
-  namespace: default
+  - kind: ServiceAccount
+    name: cockroachdb
+    namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -82,9 +82,9 @@ roleRef:
   kind: ClusterRole
   name: cockroachdb
 subjects:
-- kind: ServiceAccount
-  name: cockroachdb
-  namespace: default
+  - kind: ServiceAccount
+    name: cockroachdb
+    namespace: default
 ---
 apiVersion: v1
 kind: Service
@@ -96,15 +96,15 @@ metadata:
     app: cockroachdb
 spec:
   ports:
-  # The main port, served by gRPC, serves Postgres-flavor SQL, internode
-  # traffic and the cli.
-  - port: 26257
-    targetPort: 26257
-    name: grpc
-  # The secondary port serves the UI as well as health and debug endpoints.
-  - port: 8080
-    targetPort: 8080
-    name: http
+    # The main port, served by gRPC, serves Postgres-flavor SQL, internode
+    # traffic and the cli.
+    - port: 26257
+      targetPort: 26257
+      name: grpc
+    # The secondary port serves the UI as well as health and debug endpoints.
+    - port: 8080
+      targetPort: 8080
+      name: http
   selector:
     app: cockroachdb
 ---
@@ -130,12 +130,12 @@ metadata:
     prometheus.io/port: "8080"
 spec:
   ports:
-  - port: 26257
-    targetPort: 26257
-    name: grpc
-  - port: 8080
-    targetPort: 8080
-    name: http
+    - port: 26257
+      targetPort: 26257
+      name: grpc
+    - port: 8080
+      targetPort: 8080
+      name: http
   # We want all pods in the StatefulSet to have their addresses published for
   # the sake of the other CockroachDB pods even before they're ready, since they
   # have to be able to talk to each other in order to become ready.
@@ -144,7 +144,7 @@ spec:
   selector:
     app: cockroachdb
 ---
-apiVersion: policy/v1beta1
+apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: cockroachdb-budget
@@ -187,30 +187,30 @@ spec:
       # it's started up for the first time. It has to exit successfully
       # before the pod's main containers are allowed to start.
       initContainers:
-      # The init-certs container sends a certificate signing request to the
-      # kubernetes cluster.
-      # You can see pending requests using: kubectl get csr
-      # CSRs can be approved using:         kubectl certificate approve <csr name>
-      #
-      # All addresses used to contact a node must be specified in the --addresses arg.
-      #
-      # In addition to the node certificate and key, the init-certs entrypoint will symlink
-      # the cluster CA to the certs directory.
-      - name: init-certs
-        image: cockroachdb/cockroach-k8s-request-cert:0.4
-        imagePullPolicy: IfNotPresent
-        command:
-        - "/bin/ash"
-        - "-ecx"
-        - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname -f),$(hostname -f|cut -f 1-2 -d '.'),cockroachdb-public,cockroachdb-public.$(hostname -f|cut -f 3- -d '.'),cockroachdb-public.$(hostname -f|cut -f 3-4 -d '.'),cockroachdb-public.$(hostname -f|cut -f 3 -d '.') -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-        env:
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        volumeMounts:
-        - name: certs
-          mountPath: /cockroach-certs
+        # The init-certs container sends a certificate signing request to the
+        # kubernetes cluster.
+        # You can see pending requests using: kubectl get csr
+        # CSRs can be approved using:         kubectl certificate approve <csr name>
+        #
+        # All addresses used to contact a node must be specified in the --addresses arg.
+        #
+        # In addition to the node certificate and key, the init-certs entrypoint will symlink
+        # the cluster CA to the certs directory.
+        - name: init-certs
+          image: cockroachdb/cockroach-k8s-request-cert:0.4
+          imagePullPolicy: IfNotPresent
+          command:
+            - "/bin/ash"
+            - "-ecx"
+            - "/request-cert -namespace=${POD_NAMESPACE} -certs-dir=/cockroach-certs -type=node -addresses=localhost,127.0.0.1,$(hostname -f),$(hostname -f|cut -f 1-2 -d '.'),cockroachdb-public,cockroachdb-public.$(hostname -f|cut -f 3- -d '.'),cockroachdb-public.$(hostname -f|cut -f 3-4 -d '.'),cockroachdb-public.$(hostname -f|cut -f 3 -d '.') -symlink-ca-from=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: certs
+              mountPath: /cockroach-certs
       # NOTE: If you are running clients that generate heavy load, you may find
       # it useful to copy this anti-affinity policy into the client pods'
       # configurations as well to avoid running them on the same machines as
@@ -218,95 +218,95 @@ spec:
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - cockroachdb
-              topologyKey: kubernetes.io/hostname
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - cockroachdb
+                topologyKey: kubernetes.io/hostname
       containers:
-      - name: cockroachdb
-        # NOTE: Always use the most recent version of CockroachDB for the best
-        # performance and reliability.
-        image: cockroachdb/cockroach:@VERSION@
-        imagePullPolicy: IfNotPresent
-        # TODO: Change these to appropriate values for the hardware that you're running. You can see
-        # the resources that can be allocated on each of your Kubernetes nodes by running:
-        #   kubectl describe nodes
-        # Note that requests and limits should have identical values.
-        resources:
-          requests:
-            cpu: "2"
-            memory: "8Gi"
-          limits:
-            cpu: "2"
-            memory: "8Gi" 
-        ports:
-        - containerPort: 26257
-          name: grpc
-        - containerPort: 8080
-          name: http
-# We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
-#       livenessProbe:
-#         httpGet:
-#           path: "/health"
-#           port: http
-#           scheme: HTTPS
-#         initialDelaySeconds: 30
-#         periodSeconds: 5
-        readinessProbe:
-          httpGet:
-            path: "/health?ready=1"
-            port: http
-            scheme: HTTPS
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          failureThreshold: 2
-        volumeMounts:
-        - name: datadir
-          mountPath: /cockroach/cockroach-data
-        - name: certs
-          mountPath: /cockroach/cockroach-certs
-        env:
-        - name: COCKROACH_CHANNEL
-          value: kubernetes-secure
-        command:
-          - "/bin/bash"
-          - "-ecx"
-          # The use of qualified `hostname -f` is crucial:
-          # Other nodes aren't able to look up the unqualified hostname.
-          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --advertise-host $(hostname -f) --http-addr 0.0.0.0 --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb --cache 25% --max-sql-memory 25%"
+        - name: cockroachdb
+          # NOTE: Always use the most recent version of CockroachDB for the best
+          # performance and reliability.
+          image: cockroachdb/cockroach:@VERSION@
+          imagePullPolicy: IfNotPresent
+          # TODO: Change these to appropriate values for the hardware that you're running. You can see
+          # the resources that can be allocated on each of your Kubernetes nodes by running:
+          #   kubectl describe nodes
+          # Note that requests and limits should have identical values.
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+            limits:
+              cpu: "2"
+              memory: "8Gi"
+          ports:
+            - containerPort: 26257
+              name: grpc
+            - containerPort: 8080
+              name: http
+          # We recommend that you do not configure a liveness probe on a production environment, as this can impact the availability of production databases.
+          #       livenessProbe:
+          #         httpGet:
+          #           path: "/health"
+          #           port: http
+          #           scheme: HTTPS
+          #         initialDelaySeconds: 30
+          #         periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: "/health?ready=1"
+              port: http
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 2
+          volumeMounts:
+            - name: datadir
+              mountPath: /cockroach/cockroach-data
+            - name: certs
+              mountPath: /cockroach/cockroach-certs
+          env:
+            - name: COCKROACH_CHANNEL
+              value: kubernetes-secure
+          command:
+            - "/bin/bash"
+            - "-ecx"
+            # The use of qualified `hostname -f` is crucial:
+            # Other nodes aren't able to look up the unqualified hostname.
+            - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --advertise-host $(hostname -f) --http-addr 0.0.0.0 --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb --cache 25% --max-sql-memory 25%"
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
       # needed for graceful shutdown of a node.
       terminationGracePeriodSeconds: 60
       volumes:
-      - name: datadir
-        persistentVolumeClaim:
-          claimName: datadir
-      - name: certs
-        emptyDir: {}
+        - name: datadir
+          persistentVolumeClaim:
+            claimName: datadir
+        - name: certs
+          emptyDir: {}
   podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
   volumeClaimTemplates:
-  - metadata:
-      name: datadir
-    spec:
-      accessModes:
-        - "ReadWriteOnce"
-      # TODO: This specifically asks for a storage class with the name "ssd". A
-      # storage class of this name doesn't exist by default. See our docs for
-      # more information on how to create an optimized storage class for use here:
-      # https://www.cockroachlabs.com/docs/stable/kubernetes-performance.html#disk-type
-      storageClassName: ssd
-      resources:
-        requests:
-          # TODO: This asks for a fairly large disk by default because on
-          # certain popular clouds there is a direct correlation between disk
-          # size and the IOPS provisioned to the disk. Change this as necessary
-          # to suit your needs, but be aware that smaller disks will typically
-          # mean worse performance.
-          storage: 1024Gi
+    - metadata:
+        name: datadir
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        # TODO: This specifically asks for a storage class with the name "ssd". A
+        # storage class of this name doesn't exist by default. See our docs for
+        # more information on how to create an optimized storage class for use here:
+        # https://www.cockroachlabs.com/docs/stable/kubernetes-performance.html#disk-type
+        storageClassName: ssd
+        resources:
+          requests:
+            # TODO: This asks for a fairly large disk by default because on
+            # certain popular clouds there is a direct correlation between disk
+            # size and the IOPS provisioned to the disk. Change this as necessary
+            # to suit your needs, but be aware that smaller disks will typically
+            # mean worse performance.
+            storage: 1024Gi
