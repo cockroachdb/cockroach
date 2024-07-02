@@ -90,6 +90,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
 }
 
+func TestExecBuild_generic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "generic")
+}
+
 func TestExecBuild_geospatial(
 	t *testing.T,
 ) {

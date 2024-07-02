@@ -57,7 +57,7 @@ func init() {
 		opt.VariableOp:       (*Builder).buildVariable,
 		opt.ConstOp:          (*Builder).buildTypedExpr,
 		opt.NullOp:           (*Builder).buildNull,
-		opt.PlaceholderOp:    (*Builder).buildTypedExpr,
+		opt.PlaceholderOp:    (*Builder).buildPlaceholder,
 		opt.TupleOp:          (*Builder).buildTuple,
 		opt.FunctionOp:       (*Builder).buildFunction,
 		opt.CaseOp:           (*Builder).buildCase,
@@ -129,6 +129,15 @@ func (b *Builder) buildTypedExpr(
 	ctx *buildScalarCtx, scalar opt.ScalarExpr,
 ) (tree.TypedExpr, error) {
 	return scalar.Private().(tree.TypedExpr), nil
+}
+
+func (b *Builder) buildPlaceholder(
+	ctx *buildScalarCtx, scalar opt.ScalarExpr,
+) (tree.TypedExpr, error) {
+	if b.evalCtx != nil && b.evalCtx.Placeholders != nil {
+		return eval.Expr(b.ctx, b.evalCtx, scalar.Private().(*tree.Placeholder))
+	}
+	return b.buildTypedExpr(ctx, scalar)
 }
 
 func (b *Builder) buildNull(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
