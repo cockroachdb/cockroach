@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -33,15 +34,29 @@ import (
 
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
 // OutputBuilder flags are taken into account.
-func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
-	return emitInternal(ctx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
+func Emit(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	plan *Plan,
+	ob *OutputBuilder,
+	spanFormatFn SpanFormatFn,
+) error {
+	return emitInternal(ctx, evalCtx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
 }
+
+// MaybeAdjustVirtualIndexScan is injected from the sql package.
+//
+// This function clarifies usage of the virtual indexes for EXPLAIN purposes.
+var MaybeAdjustVirtualIndexScan func(
+	ctx context.Context, evalCtx *eval.Context, index cat.Index, params exec.ScanParams,
+) (cat.Index, exec.ScanParams)
 
 // - visitedFKsByCascades is updated on recursive calls for each cascade plan.
 // Can be nil if the plan doesn't have any cascades. In this map the key is the
 // "id" of the FK constraint that we construct as OriginTableID || Name.
 func emitInternal(
 	ctx context.Context,
+	evalCtx *eval.Context,
 	plan *Plan,
 	ob *OutputBuilder,
 	spanFormatFn SpanFormatFn,
@@ -64,7 +79,7 @@ func emitInternal(
 			return err
 		}
 		ob.EnterNode(name, columns, ordering)
-		if err := e.emitNodeAttributes(n); err != nil {
+		if err := e.emitNodeAttributes(ctx, evalCtx, n); err != nil {
 			return err
 		}
 		for _, c := range n.children {
@@ -144,7 +159,7 @@ func emitInternal(
 			} else {
 				visitedFKsByCascades[fkID] = struct{}{}
 				defer delete(visitedFKsByCascades, fkID)
-				if err = emitInternal(ctx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
+				if err = emitInternal(ctx, evalCtx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
 					return err
 				}
 			}
@@ -434,7 +449,7 @@ func omitStats(n *Node) bool {
 	return false
 }
 
-func (e *emitter) emitNodeAttributes(n *Node) error {
+func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context, n *Node) error {
 	var actualRowCount uint64
 	var hasActualRowCount bool
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
@@ -628,6 +643,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				"WARNING: the row count estimate on table %[1]q is inaccurate, "+
 					"consider running 'ANALYZE %[1]s'", a.Table.Name(),
 			))
+		}
+		if a.Table.IsVirtualTable() && MaybeAdjustVirtualIndexScan != nil {
+			a.Index, a.Params = MaybeAdjustVirtualIndexScan(ctx, evalCtx, a.Index, a.Params)
 		}
 		e.emitTableAndIndex("table", a.Table, a.Index, suffix)
 		// Omit spans for virtual tables, unless we actually have a constraint.
