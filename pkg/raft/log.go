@@ -109,11 +109,11 @@ func (l *raftLog) String() string {
 //
 // TODO(pav-kv): merge maybeAppend and append into one method.
 func (l *raftLog) maybeAppend(a logSlice) bool {
-	match, ok := l.findConflict(a)
+	match, ok := l.match(a)
 	if !ok {
 		return false
 	}
-	// Fast-forward to the first mismatching or missing entry.
+	// Fast-forward the appended log slice to the last matching entry.
 	// NB: a.prev.index <= match.index <= a.lastIndex(), so the call is safe.
 	a = a.forward(match.index)
 
@@ -133,8 +133,8 @@ func (l *raftLog) append(ents ...pb.Entry) {
 	l.unstable.truncateAndAppend(ents)
 }
 
-// findConflict finds the last entry in the given log slice that matches the
-// log. The next entry either mismatches, or is missing.
+// match finds the last entry in the given log slice that matches the log. The
+// next entry either mismatches, or is missing.
 //
 // If the slice partially/fully matches, this method returns true. The returned
 // entryID is the ID of the last matching entry. It can be s.prev if it is the
@@ -148,7 +148,7 @@ func (l *raftLog) append(ents ...pb.Entry) {
 // Returns false if the given slice mismatches the log entirely, i.e. the s.prev
 // entry has a mismatching entryID.term. In this case an append request can not
 // proceed.
-func (l *raftLog) findConflict(s logSlice) (entryID, bool) {
+func (l *raftLog) match(s logSlice) (entryID, bool) {
 	if !l.matchTerm(s.prev) {
 		return entryID{}, false
 	}
