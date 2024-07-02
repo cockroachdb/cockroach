@@ -104,6 +104,8 @@ type Context struct {
 	//   [region=us,dc=east]
 	// The region entry in this variable is the gateway region.
 	Locality roachpb.Locality
+	// SQLAddr is the bound SQL address of this instance.
+	SQLAddr string
 
 	// OriginalLocality is the initial Locality at the time the connection was
 	// established. Since Locality may be overridden in some paths, this provides
