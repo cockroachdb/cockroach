@@ -1971,7 +1971,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 // maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten
 // indexes from the old index over to the new index. Noop if run on behalf of a
-// tenant.
+// tenant. If forceSwap is set, we copy the zone configs for primary keys
+// regardless of the table's locality.
 func maybeUpdateZoneConfigsForPKChange(
 	ctx context.Context,
 	txn descs.Txn,
@@ -1979,6 +1980,7 @@ func maybeUpdateZoneConfigsForPKChange(
 	kvTrace bool,
 	table *tabledesc.Mutable,
 	swapInfo *descpb.PrimaryKeySwap,
+	forceSwap bool,
 ) error {
 	zoneWithRaw, err := txn.Descriptors().GetZoneConfig(ctx, txn.KV(), table.GetID())
 	if err != nil {
@@ -2000,7 +2002,7 @@ func maybeUpdateZoneConfigsForPKChange(
 	// It is safe to copy the zone config off a primary index of a REGIONAL BY ROW table.
 	// This is because the prefix of the PK we used to partition by will stay the same,
 	// so a direct copy will always work.
-	if table.IsLocalityRegionalByRow() {
+	if table.IsLocalityRegionalByRow() || forceSwap {
 		oldIdxToNewIdx[swapInfo.OldPrimaryIndexId] = swapInfo.NewPrimaryIndexId
 	}
 
@@ -3141,6 +3143,7 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 		// necessary.
 		return maybeUpdateZoneConfigsForPKChange(
 			ctx, txn, sc.execCfg, false /* kvTrace */, tableDesc, pkSwap.PrimaryKeySwapDesc(),
+			false, /* forceSwap */
 		)
 	}
 	return nil
