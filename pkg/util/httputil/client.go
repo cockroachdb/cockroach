@@ -12,6 +12,8 @@ package httputil
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"net"
 	"net/http"
@@ -25,29 +27,87 @@ var DefaultClient = NewClientWithTimeout(StandardHTTPTimeout)
 // StandardHTTPTimeout is the default timeout to use for HTTP connections.
 const StandardHTTPTimeout time.Duration = 3 * time.Second
 
-// NewClientWithTimeout defines a http.Client with the given timeout.
-func NewClientWithTimeout(timeout time.Duration) *Client {
-	return NewClientWithTimeouts(timeout, timeout)
+type clientOptions struct {
+	clientTimeout time.Duration
+	dialerTimeout time.Duration
+	customCAPEM   string
 }
 
-// NewClientWithTimeouts defines a http.Client with the given dialer and client timeouts.
-func NewClientWithTimeouts(dialerTimeout, clientTimeout time.Duration) *Client {
-	t := http.DefaultTransport.(*http.Transport)
-	return &Client{&http.Client{
-		Timeout: clientTimeout,
-		Transport: &http.Transport{
-			// Don't leak a goroutine on OSX (the TCP level timeout is probably
-			// much higher than on linux).
-			DialContext:       (&net.Dialer{Timeout: dialerTimeout}).DialContext,
-			DisableKeepAlives: true,
+// ClientOption overrides behavior of NewClient.
+type ClientOption interface {
+	apply(*clientOptions)
+}
 
-			Proxy:                 t.Proxy,
-			MaxIdleConns:          t.MaxIdleConns,
-			IdleConnTimeout:       t.IdleConnTimeout,
-			TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
-			ExpectContinueTimeout: t.ExpectContinueTimeout,
+type clientOptionFunc func(options *clientOptions)
+
+func (f clientOptionFunc) apply(o *clientOptions) {
+	f(o)
+}
+
+// WithClientTimeout sets the client timeout for the http.Client.
+func WithClientTimeout(timeout time.Duration) ClientOption {
+	return clientOptionFunc(func(o *clientOptions) {
+		o.clientTimeout = timeout
+	})
+}
+
+// WithDialerTimeout sets the dialer timeout for the http.Client.
+func WithDialerTimeout(timeout time.Duration) ClientOption {
+	return clientOptionFunc(func(o *clientOptions) {
+		o.dialerTimeout = timeout
+	})
+}
+
+// WithCustomCAPEM sets the custom root CA for the http.Client.
+func WithCustomCAPEM(customCAPEM string) ClientOption {
+	return clientOptionFunc(func(o *clientOptions) {
+		o.customCAPEM = customCAPEM
+	})
+}
+
+// NewClient defines a new http.Client as per the provided options.
+func NewClient(opts ...ClientOption) *Client {
+	options := &clientOptions{}
+	for _, o := range opts {
+		o.apply(options)
+	}
+
+	t := http.DefaultTransport.(*http.Transport)
+	var tlsConf *tls.Config
+	if options.customCAPEM != "" {
+		certPool := x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM([]byte(options.customCAPEM)) {
+			return nil
+		}
+		tlsConf = &tls.Config{
+			RootCAs: certPool,
+		}
+	}
+
+	return &Client{
+		&http.Client{
+			Timeout: options.clientTimeout,
+			Transport: &http.Transport{
+				DialContext:           (&net.Dialer{Timeout: options.dialerTimeout}).DialContext,
+				DisableKeepAlives:     true,
+				Proxy:                 t.Proxy,
+				MaxIdleConns:          t.MaxIdleConns,
+				IdleConnTimeout:       t.IdleConnTimeout,
+				TLSHandshakeTimeout:   t.TLSHandshakeTimeout,
+				ExpectContinueTimeout: t.ExpectContinueTimeout,
+				TLSClientConfig:       tlsConf,
+			},
 		},
-	}}
+	}
+}
+
+// NewClientWithTimeout defines a http.Client with the given timeout.
+// TODO(pritesh-lahoti): Deprecate this in favor of NewClient.
+func NewClientWithTimeout(timeout time.Duration) *Client {
+	return NewClient(
+		WithClientTimeout(timeout),
+		WithDialerTimeout(timeout),
+	)
 }
 
 // Client is a replacement for http.Client which implements method
