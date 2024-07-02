@@ -261,6 +261,9 @@ type Provider struct {
 	// IAMProfile designates the name of the instance profile to use for created
 	// EC2 instances if non-empty.
 	IAMProfile string
+
+	// aws accounts to perform action in, used by gcCmd only as it clean ups multiple aws accounts
+	AccountIds []string
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
@@ -451,6 +454,12 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.Multiple
 	providerInstance.Config = &configFlagVal.awsConfig
 	flags.Var(&configFlagVal, ProviderName+"-config",
 		"Path to json for aws configuration, defaults to predefined configuration")
+}
+
+// ConfigureClusterCleanupFlags implements ProviderOpts.
+func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+	flags.StringSliceVar(&providerInstance.AccountIds, ProviderName+"-account-ids", []string{},
+		"AWS account ids as a comma-separated string")
 }
 
 // CleanSSH is part of vm.Provider.  This implementation is a no-op,

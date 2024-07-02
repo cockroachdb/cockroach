@@ -353,6 +353,9 @@ type ProviderOpts interface {
 	// cluster manipulation commands (`create`, `destroy`, `list`, `sync` and
 	// `gc`).
 	ConfigureClusterFlags(*pflag.FlagSet, MultipleProjectsOption)
+	// ConfigureClusterCleanupFlags configures a FlagSet with any options relevant to
+	// commands (`gc`)
+	ConfigureClusterCleanupFlags(*pflag.FlagSet)
 }
 
 // VolumeSnapshot is an abstract representation of a specific volume snapshot.
@@ -435,6 +438,7 @@ type ListOptions struct {
 	IncludeVolumes       bool
 	IncludeEmptyClusters bool
 	ComputeEstimatedCost bool
+	IncludeProviders     []string
 }
 
 type PreemptedVM struct {
@@ -565,6 +569,11 @@ func AllProviderNames() []string {
 		ret = append(ret, name)
 	}
 	return ret
+}
+
+// GetProviderByName returns a specific vm Provider
+func GetProviderByName(name string) Provider {
+	return Providers[name]
 }
 
 // FanOut collates a collection of VMs by their provider and invoke the callbacks in parallel.

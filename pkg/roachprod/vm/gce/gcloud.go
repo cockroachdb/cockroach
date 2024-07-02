@@ -1151,6 +1151,10 @@ func (o *ProviderOpts) useArmAMI() bool {
 	return strings.HasPrefix(strings.ToLower(o.MachineType), "t2a-")
 }
 
+// ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
+func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+}
+
 // CleanSSH TODO(peter): document
 func (p *Provider) CleanSSH(l *logger.Logger) error {
 	for _, prj := range p.GetProjects() {
