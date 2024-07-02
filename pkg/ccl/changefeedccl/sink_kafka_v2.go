@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/aws/aws-msk-iam-sasl-signer-go/signer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -406,11 +407,16 @@ func buildKgoConfig(
 		var sasl sasl.Mechanism
 		switch dialConfig.saslMechanism {
 		case "OAUTHBEARER":
-			tp, err := newKgoOauthTokenProvider(ctx, dialConfig)
-			if err != nil {
-				return nil, err
+			if dialConfig.saslAwsIAMRoleEnabled {
+				tp := newKgoAWSTokenProvider(dialConfig)
+				sasl = sasloauth.Oauth(tp)
+			} else {
+				tp, err := newKgoOauthTokenProvider(ctx, dialConfig)
+				if err != nil {
+					return nil, err
+				}
+				sasl = sasloauth.Oauth(tp)
 			}
-			sasl = sasloauth.Oauth(tp)
 		case "PLAIN", "":
 			sasl = saslplain.Plain(func(ctc context.Context) (saslplain.Auth, error) {
 				return saslplain.Auth{
@@ -590,6 +596,20 @@ func newKgoOauthTokenProvider(
 		}
 		return sasloauth.Auth{Token: tok.AccessToken}, nil
 	}, nil
+}
+
+func newKgoAWSTokenProvider(dialConfig kafkaDialConfig) func(ctx context.Context) (sasloauth.Auth, error) {
+	return func(ctx context.Context) (sasloauth.Auth, error) {
+		token, _, err := signer.GenerateAuthTokenFromRole(ctx,
+			dialConfig.saslAwsRegion,
+			dialConfig.saslAwsIAMRoleArn,
+			dialConfig.saslAwsIAMSessionName,
+		)
+		if err != nil {
+			return sasloauth.Auth{}, err
+		}
+		return sasloauth.Auth{Token: token}, nil
+	}
 }
 
 type kgoMetricsAdapter struct {

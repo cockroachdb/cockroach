@@ -219,6 +219,10 @@ const (
 	SinkParamSASLTokenURL           = `sasl_token_url`
 	SinkParamSASLScopes             = `sasl_scopes`
 	SinkParamSASLGrantType          = `sasl_grant_type`
+	SinkParamSASLAwsIAMRoleEnabled  = `sasl_aws_iam_role_enabled`
+	SinkParamSASLAwsIAMRoleArn      = `sasl_aws_iam_role_arn`
+	SinkParamSASLAwsRegion          = `sasl_aws_region`
+	SinkParamSASLAwsIAMSessionName  = `sasl_aws_iam_session_name`
 	SinkParamTableNameAttribute     = `with_table_name_attribute`
 
 	SinkSchemeConfluentKafka    = `confluent-cloud`
