@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -136,27 +135,6 @@ func TestServer(t *testing.T) {
 			})
 		}
 	})
-}
-
-// Test that a node gossips its DistSQL version information.
-func TestDistSQLServerGossipsVersion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
-
-	var v execinfrapb.DistSQLVersionGossipInfo
-	if err := s.GossipI().(*gossip.Gossip).GetInfoProto(
-		gossip.MakeDistSQLNodeVersionKey(base.SQLInstanceID(s.NodeID())), &v,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if v.Version != execinfra.Version || v.MinAcceptedVersion != execinfra.MinAcceptedVersion {
-		t.Fatalf("node is gossipping the wrong version. Expected: [%d-%d], got [%d-%d",
-			execinfra.Version, execinfra.MinAcceptedVersion, v.Version, v.MinAcceptedVersion)
-	}
 }
 
 // runLocalFlow takes in a SetupFlowRequest to setup a local sync flow that is
