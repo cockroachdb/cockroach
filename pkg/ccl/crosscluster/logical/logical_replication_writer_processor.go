@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -597,7 +598,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 			// If it already failed while applying on its own, handle the failure.
 			if len(batch) == 1 {
 				if mustProcess || !lrw.shouldRetryLater(err) {
-					if err := lrw.dlq(ctx, batch[0], err); err != nil {
+					if err := lrw.dlq(ctx, batch[0], bh.GetLastRow(), err); err != nil {
 						return batchStats{}, err
 					}
 				}
@@ -607,7 +608,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 				for i := range batch {
 					if singleStats, err := bh.HandleBatch(ctx, batch[i:i+1]); err != nil {
 						if mustProcess || !lrw.shouldRetryLater(err) {
-							if err := lrw.dlq(ctx, batch[i], err); err != nil {
+							if err := lrw.dlq(ctx, batch[i], bh.GetLastRow(), err); err != nil {
 								return batchStats{}, err
 							}
 						}
@@ -644,15 +645,21 @@ func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(err error) bool {
 const logAllDLQs = true
 
 // dlq handles a row update that fails to apply by durably recording it in a DLQ
-// or returns an error if it cannot.
+// or returns an error if it cannot. The decoded row should be passed to it if
+// it is available, and dlq may persist it in addition to the event if
+// row.IsInitialized() is true.
 //
 // TODO(dt): implement something here.
 // TODO(dt): plumb the cdcevent.Row to this.
 func (lrw *logicalReplicationWriterProcessor) dlq(
-	ctx context.Context, event streampb.StreamEvent_KV, applyErr error,
+	ctx context.Context, event streampb.StreamEvent_KV, row cdcevent.Row, applyErr error,
 ) error {
 	if log.V(1) || logAllDLQs {
-		log.Infof(ctx, "sending KV to DLQ, %s due to %v", event.String(), applyErr)
+		if row.IsInitialized() {
+			log.Infof(ctx, "sending event to DLQ, %s due to %v", row.DebugString(), applyErr)
+		} else {
+			log.Infof(ctx, "sending KV to DLQ, %s due to %v", event.String(), applyErr)
+		}
 	}
 	// TODO(dt): try to DLQ it and don't return an error if successful.
 	return applyErr
@@ -675,6 +682,7 @@ type BatchHandler interface {
 	// or are not applied as a group. If the batch is a single KV it may use an
 	// implicit txn.
 	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
+	GetLastRow() cdcevent.Row
 }
 
 // RowProcessor knows how to process a single row from an event stream.
@@ -683,6 +691,7 @@ type RowProcessor interface {
 	// Txn argument can be nil. The provided value is the "previous value",
 	// before the change was applied on the source.
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
+	GetLastRow() cdcevent.Row
 }
 
 type txnBatch struct {
@@ -729,6 +738,10 @@ func (t *txnBatch) HandleBatch(
 		stats = txnStats
 	}
 	return stats, err
+}
+
+func (t *txnBatch) GetLastRow() cdcevent.Row {
+	return t.rp.GetLastRow()
 }
 
 func init() {

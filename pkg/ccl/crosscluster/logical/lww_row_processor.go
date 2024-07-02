@@ -62,6 +62,7 @@ type sqlLastWriteWinsRowProcessor struct {
 	queryBuffer queryBuffer
 	settings    *cluster.Settings
 	ie          isql.Executor
+	lastRow     cdcevent.Row
 }
 
 type queryBuilder struct {
@@ -187,8 +188,10 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 
 	row, err := lww.decoder.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
+		lww.lastRow = cdcevent.Row{}
 		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
 	}
+	lww.lastRow = row
 	var stats batchStats
 	if row.IsDeleted() {
 		stats, err = lww.deleteRow(ctx, txn, row)
@@ -197,6 +200,10 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	}
 	stats.byteSize = int64(kv.Size())
 	return stats, err
+}
+
+func (lww *sqlLastWriteWinsRowProcessor) GetLastRow() cdcevent.Row {
+	return lww.lastRow
 }
 
 var (
