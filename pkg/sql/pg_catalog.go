@@ -3395,6 +3395,8 @@ func addPGTypeRow(
 		}
 	case types.VoidFamily:
 		// void does not have an array type.
+	case types.TriggerFamily:
+		// trigger does not have an array type.
 	default:
 		typArray = tree.NewDOid(types.CalcArrayOid(typ))
 	}
@@ -4725,6 +4727,9 @@ func typLen(typ *types.T) *tree.DInt {
 }
 
 func typByVal(typ *types.T) tree.Datum {
+	if typ.Identical(types.Trigger) {
+		return tree.DBoolTrue
+	}
 	_, variable := tree.DatumTypeSize(typ)
 	return tree.MakeDBool(tree.DBool(!variable))
 }
@@ -4780,6 +4785,7 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.INetFamily:        typCategoryNetworkAddr,
 	types.UnknownFamily:     typCategoryUnknown,
 	types.VoidFamily:        typCategoryPseudo,
+	types.TriggerFamily:     typCategoryPseudo,
 }
 
 func typCategory(typ *types.T) tree.Datum {

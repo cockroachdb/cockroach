@@ -470,11 +470,11 @@ func arrayOf(
 	// rather than an array type reference.
 	if typ, ok := tree.GetStaticallyKnownType(ref); ok {
 		// Do not allow type unknown[]. This is consistent with Postgres' behavior.
-		if typ.Family() == types.UnknownFamily {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "type unknown[] does not exist")
-		}
-		if typ.Family() == types.VoidFamily {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "type void[] does not exist")
+		switch typ.Family() {
+		case types.UnknownFamily, types.VoidFamily, types.TriggerFamily:
+			// Do not allow arrays of these types. This is consistent with Postgres'
+			// behavior.
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "type %s[] does not exist", typ.Name())
 		}
 		if err := types.CheckArrayElementType(typ); err != nil {
 			return nil, err

@@ -402,6 +402,12 @@ enum Family {
     //   Oid      : T_refcursor
     RefCursorFamily = 31;
 
+    // TriggerFamily is a type family for the trigger type, which is the return
+    // type for trigger functions.
+    //   Canonical: types.Trigger
+    //   Oid      : T_trigger
+    TriggerFamily = 32;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an

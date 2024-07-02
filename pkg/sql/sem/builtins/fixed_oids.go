@@ -2583,6 +2583,20 @@ var builtinOidsArray = []string{
 	2615: `crdb_internal.scatter(key: bytes, end_key: bytes) -> void`,
 	2616: `crdb_internal.plan_logical_replication(req: bytes) -> bytes`,
 	2617: `crdb_internal.start_replication_stream_for_tables(req: bytes) -> bytes`,
+	2618: `crdb_internal.start_logical_replication_job(conn_str: string, table_names: string[]) -> int`,
+	2619: `crdb_internal.plan_logical_replication(req: bytes) -> bytes`,
+	2620: `crdb_internal.start_replication_stream_for_tables(req: bytes) -> bytes`,
+	2621: `triggerin(input: anyelement) -> trigger`,
+	2622: `triggerout(trigger: trigger) -> bytes`,
+	2623: `triggersend(trigger: trigger) -> bytes`,
+	2624: `triggerrecv(input: anyelement) -> trigger`,
+	2625: `trigger(trigger: trigger) -> trigger`,
+	2626: `trigger(string: string) -> trigger`,
+	2627: `bpchar(trigger: trigger) -> char`,
+	2628: `char(trigger: trigger) -> "char"`,
+	2629: `name(trigger: trigger) -> name`,
+	2630: `text(trigger: trigger) -> string`,
+	2631: `varchar(trigger: trigger) -> varchar`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

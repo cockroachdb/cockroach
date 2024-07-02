@@ -611,6 +611,11 @@ var (
 	EmptyTuple = &T{InternalType: InternalType{
 		Family: TupleFamily, Oid: oid.T_record, Locale: &emptyLocale}}
 
+	// Trigger is a special type used for trigger functions, which return a row of
+	// their target table.
+	Trigger = &T{InternalType: InternalType{
+		Family: TriggerFamily, Oid: oid.T_trigger, Locale: &emptyLocale}}
+
 	// StringArray is the type of an array value having String-typed elements.
 	StringArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: String, Oid: oid.T__text, Locale: &emptyLocale}}
@@ -1513,6 +1518,7 @@ var familyNames = map[Family]redact.SafeString{
 	TimestampFamily:      "timestamp",
 	TimestampTZFamily:    "timestamptz",
 	TimeTZFamily:         "timetz",
+	TriggerFamily:        "trigger",
 	TSQueryFamily:        "tsquery",
 	TSVectorFamily:       "tsvector",
 	TupleFamily:          "tuple",
@@ -1847,6 +1853,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 			return "timestamp with time zone"
 		}
 		return fmt.Sprintf("timestamp(%d) with time zone", typmod)
+	case TriggerFamily:
+		return "trigger"
 	case TSQueryFamily:
 		return "tsquery"
 	case TSVectorFamily:
@@ -2205,6 +2213,11 @@ func (t *T) IsPolymorphicType() bool {
 		}
 	}
 	return false
+}
+
+// IsPseudoType returns true if the type is a pseudotype.
+func (t *T) IsPseudoType() bool {
+	return t.Identical(Trigger) || t.IsPolymorphicType()
 }
 
 // Size returns the size, in bytes, of this type once it has been marshaled to

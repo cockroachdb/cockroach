@@ -1,0 +1,164 @@
+# TODO(#126356): remove this case when trigger functions are supported.
+statement error pgcode 0A000 pq: unimplemented: trigger functions are not yet supported
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+# ==============================================================================
+# Trigger functions cannot be directly invoked.
+# ==============================================================================
+
+subtest direct_invocation
+
+# TODO(#126356): uncomment these cases when trigger functions are supported.
+#statement ok
+#CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+#
+#statement error pgcode 0A000 pq: trigger functions can only be called as triggers
+#SELECT f();
+#
+#statement error pgcode 0A000 pq: trigger functions can only be called as triggers
+#CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS $$ SELECT f(); SELECT 1; $$;
+#
+#statement error pgcode 0A000 pq: trigger functions can only be called as triggers
+#CREATE FUNCTION foo() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN SELECT f(); RETURN 1; END $$;
+#
+#statement ok
+#DROP FUNCTION f;
+
+# ==============================================================================
+# Test invalid usage of parameters in trigger functions.
+# ==============================================================================
+
+# Trigger functions are not allowed to be defined with parameters. Instead,
+# arguments are passed through the implicitly defined TG_ARGV variable.
+subtest parameters
+
+statement error pgcode 42P13 pq: trigger functions cannot have declared arguments
+CREATE FUNCTION f(x TEXT) RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement error pgcode 42P13 pq: function result type must be string because of OUT parameters
+CREATE FUNCTION f(OUT x TEXT) RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement error pgcode 42P13 pq: function result type must be string because of OUT parameters
+CREATE FUNCTION f(INOUT x TEXT) RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+# ==============================================================================
+# Test invalid usage of the TRIGGER datatype in PL/pgSQL routines.
+# ==============================================================================
+
+subtest trigger_in_plpgsql_routine
+
+statement error pgcode 0A000 pq: cannot accept a value of type trigger
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL::TRIGGER; END $$;
+
+statement error pgcode 0A000 pq: PL/pgSQL functions cannot accept type trigger
+CREATE FUNCTION f(x TRIGGER) RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement error pgcode 0A000 pq: PL/pgSQL functions cannot accept type trigger
+CREATE FUNCTION f(OUT x TRIGGER) LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement error pgcode 0A000 pq: PL/pgSQL functions cannot accept type trigger
+CREATE FUNCTION f(INOUT x TRIGGER) RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement error pgcode 0A000 pq: PL/pgSQL functions cannot accept type trigger
+CREATE PROCEDURE p(x TRIGGER) LANGUAGE PLpgSQL AS $$ BEGIN END $$;
+
+statement error pgcode 0A000 pq: PL/pgSQL functions cannot accept type trigger
+CREATE PROCEDURE p(OUT x TRIGGER) LANGUAGE PLpgSQL AS $$ BEGIN END $$;
+
+statement error pgcode 0A000 pq: PL/pgSQL functions cannot accept type trigger
+CREATE PROCEDURE p(INOUT x TRIGGER) LANGUAGE PLpgSQL AS $$ BEGIN END $$;
+
+# ==============================================================================
+# Test invalid usage of the TRIGGER datatype in SQL routines.
+# ==============================================================================
+
+subtest trigger_in_sql_routine
+
+statement error pgcode 0A000 pq: cannot accept a value of type trigger
+CREATE FUNCTION f() RETURNS RECORD LANGUAGE SQL AS $$ SELECT NULL::TRIGGER; $$;
+
+statement error pgcode 42P13 pq: SQL functions cannot return type trigger
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE SQL AS $$ SELECT NULL $$;
+
+statement error pgcode 42P13 pq: SQL functions cannot have arguments of type trigger
+CREATE FUNCTION f(x TRIGGER) RETURNS INT LANGUAGE SQL AS $$ SELECT NULL $$;
+
+statement error pgcode 42P13 pq: SQL functions cannot return type trigger
+CREATE FUNCTION f(OUT x TRIGGER) LANGUAGE SQL AS $$ SELECT NULL $$;
+
+statement error pgcode 42P13 pq: SQL functions cannot return type trigger
+CREATE FUNCTION f(INOUT x TRIGGER) RETURNS INT LANGUAGE SQL AS $$ SELECT NULL $$;
+
+statement error pgcode 42P13 pq: SQL functions cannot have arguments of type trigger
+CREATE PROCEDURE p(x TRIGGER) LANGUAGE SQL AS $$ SELECT NULL $$;
+
+statement error pgcode 42P13 pq: SQL functions cannot return type trigger
+CREATE PROCEDURE p(OUT x TRIGGER) LANGUAGE SQL AS $$ SELECT NULL $$;
+
+statement error pgcode 42P13 pq: SQL functions cannot return type trigger
+CREATE PROCEDURE p(INOUT x TRIGGER) LANGUAGE SQL AS $$ SELECT NULL $$;
+
+# ==============================================================================
+# Test invalid usage of the TRIGGER datatype in SQL statements.
+# ==============================================================================
+
+subtest trigger_in_sql_statement
+
+# Cast.
+statement error pgcode 0A000 pq: cannot accept a value of type trigger
+SELECT NULL::TRIGGER;
+
+# Trigger array cast.
+statement error pgcode 42704 pq: at or near "EOF": syntax error: type trigger\[\] does not exist
+SELECT NULL::TRIGGER[];
+
+# Invalid cast from integer.
+statement error pgcode 42846 pq: invalid cast: int -> trigger
+SELECT 1::TRIGGER;
+
+# Type annotation.
+statement error pgcode 0A000 pq: cannot accept a value of type trigger
+SELECT NULL:::TRIGGER;
+
+# Builtin type conversion function.
+statement error pgcode 0A000 pq: cannot accept a value of type trigger
+SELECT triggerin(1);
+
+# Builtin type conversion function with NULL argument.
+# NOTE: this case succeeds because the function is not actually called
+# or fully type-checked when it is supplied NULl arguments.
+# statement error pgcode 0A000 pq: cannot accept a value of type trigger
+statement ok
+SELECT triggerin(NULL);
+
+# ==============================================================================
+# Test invalid usage of the TRIGGER datatype in CREATE statements.
+# ==============================================================================
+
+subtest trigger_in_create
+
+# Column type.
+statement error pgcode 42P16 pq: value type trigger cannot be used for table columns
+CREATE TABLE t (x INT, y TRIGGER, z TEXT);
+
+# Array column type.
+statement error pgcode 42704 pq: at or near ",": syntax error: type trigger\[\] does not exist
+CREATE TABLE t (x INT, y TRIGGER[], z TEXT);
+
+# Cast in partial index predicate.
+statement error pgcode 0A000 pq: cannot accept a value of type trigger
+CREATE TABLE t (x INT, y INT, INDEX (y) WHERE (NULL::TRIGGER IS NOT NULL));
+
+# Cast in computed column expression.
+statement error pgcode 0A000 pq: cannot accept a value of type trigger
+CREATE TABLE t (x INT, y BOOL GENERATED ALWAYS AS (NULL::TRIGGER IS NOT NULL) STORED);
+
+# Trigger UDT field.
+statement error pgcode 0A000 pq: cannot accept a value of type trigger
+CREATE TYPE udt AS (x INT, y TRIGGER, z TEXT);
+
+# Trigger array UDT field.
+statement error pgcode 42601 pq: at or near "\[": syntax error
+CREATE TYPE udt AS (x INT, y TRIGGER[], z TEXT);
+
+subtest end

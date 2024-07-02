@@ -691,6 +691,11 @@ func (expr *CastExpr) TypeCheck(
 	if err != nil {
 		return nil, err
 	}
+	if exprType.Identical(types.Trigger) {
+		// Trigger is not allowed in casts. This happens after resolving the cast to
+		// ensure that we return an "invalid cast" error when postgres does.
+		return nil, CannotAcceptTriggerErr
+	}
 	expr.Expr = typedSubExpr
 	expr.Type = exprType
 	expr.typ = exprType
@@ -770,6 +775,9 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 	annotateType, err := ResolveType(ctx, expr.Type, semaCtx.GetTypeResolver())
 	if err != nil {
 		return nil, err
+	}
+	if annotateType.Identical(types.Trigger) {
+		return nil, CannotAcceptTriggerErr
 	}
 	if err = CheckUnsupportedType(ctx, semaCtx, annotateType); err != nil {
 		return nil, err
@@ -1371,13 +1379,20 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
-	if overloadImpl.Type == BuiltinRoutine && (def.Name == "min" || def.Name == "max") {
-		// Special case: for REFCURSOR, we disallow min/max during type-checking
-		// despite having overloads for REFCURSOR. This maintains compatibility with
-		// postgres without having to add special checks in optimizer rules for
-		// REFCURSOR.
-		if len(s.typedExprs) > 0 && s.typedExprs[0].ResolvedType().Family() == types.RefCursorFamily {
-			return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %s(refcursor) does not exist", def.Name)
+	// Some builtins are disabled in certain contexts for Postgres compatibility.
+	if overloadImpl.Type == BuiltinRoutine {
+		switch def.Name {
+		case "min", "max":
+			// Special case: for REFCURSOR, we disallow min/max during type-checking
+			// despite having overloads for REFCURSOR. This maintains compatibility
+			// with postgres without having to add special checks in optimizer rules
+			// for REFCURSOR.
+			if len(s.typedExprs) > 0 && s.typedExprs[0].ResolvedType().Family() == types.RefCursorFamily {
+				return nil, pgerror.Newf(pgcode.UndefinedFunction, "function %s(refcursor) does not exist", def.Name)
+			}
+		case "triggerin", "triggerrecv", "trigger":
+			// Built-in IO functions that output TRIGGER are not allowed.
+			return nil, CannotAcceptTriggerErr
 		}
 	}
 
@@ -3730,6 +3745,10 @@ func CheckUnsupportedType(ctx context.Context, semaCtx *SemaContext, typ *types.
 	}
 	return semaCtx.UnsupportedTypeChecker.CheckType(ctx, typ)
 }
+
+var CannotAcceptTriggerErr = pgerror.New(pgcode.FeatureNotSupported,
+	"cannot accept a value of type trigger",
+)
 
 // checkRefCursorComparison checks whether the given types are or contain the
 // REFCURSOR data type, which is invalid for comparison. We don't simply remove
