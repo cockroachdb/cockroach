@@ -431,7 +431,8 @@ func (b *Builder) buildRoutine(
 		var expr memo.RelExpr
 		var physProps *physical.Required
 		plBuilder := newPLpgSQLBuilder(
-			b, def.Name, stmt.AST.Label, colRefs, routineParams, f.ResolvedType(), isProc, outScope,
+			b, def.Name, stmt.AST.Label, colRefs, routineParams, f.ResolvedType(),
+			isProc, true /* buildSQL */, outScope,
 		)
 		stmtScope := plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		expr, physProps = b.finishBuildLastStmt(
@@ -788,4 +789,20 @@ func (b *Builder) withinNestedPLpgSQLCall(fn func()) {
 	}(b.insideNestedPLpgSQLCall)
 	b.insideNestedPLpgSQLCall = true
 	fn()
+}
+
+// triggerFuncStaticParams is the set of implicitly-defined parameters for a
+// PL/pgSQL trigger function, excluding the NEW and OLD parameters which are
+// determined by the table when a trigger is created.
+var triggerFuncStaticParams = []routineParam{
+	{name: "tg_name", typ: types.Name, class: tree.RoutineParamIn},
+	{name: "tg_when", typ: types.String, class: tree.RoutineParamIn},
+	{name: "tg_level", typ: types.String, class: tree.RoutineParamIn},
+	{name: "tg_op", typ: types.String, class: tree.RoutineParamIn},
+	{name: "tg_relid", typ: types.Oid, class: tree.RoutineParamIn},
+	{name: "tg_relname", typ: types.Name, class: tree.RoutineParamIn},
+	{name: "tg_table_name", typ: types.Name, class: tree.RoutineParamIn},
+	{name: "tg_table_schema", typ: types.Name, class: tree.RoutineParamIn},
+	{name: "tg_nargs", typ: types.Int, class: tree.RoutineParamIn},
+	{name: "tg_argv", typ: types.StringArray, class: tree.RoutineParamIn},
 }

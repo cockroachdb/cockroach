@@ -1587,10 +1587,21 @@ func (b *builderState) WrapFunctionBody(
 	fnID descpb.ID,
 	bodyStr string,
 	lang catpb.Function_Language,
+	returnType tree.ResolvableTypeReference,
 	refProvider scbuildstmt.ReferenceProvider,
 ) *scpb.FunctionBody {
-	bodyStr = b.replaceSeqNamesWithIDs(bodyStr, lang)
-	bodyStr = b.serializeUserDefinedTypes(bodyStr, lang)
+	// Trigger functions do not analyze SQL statements beyond parsing, so type and
+	// sequence names should not be replaced during trigger-function creation.
+	var lazilyEvalSQL bool
+	if returnType != nil {
+		if typ, ok := returnType.(*types.T); ok && typ.Identical(types.Trigger) {
+			lazilyEvalSQL = true
+		}
+	}
+	if !lazilyEvalSQL {
+		bodyStr = b.replaceSeqNamesWithIDs(bodyStr, lang)
+		bodyStr = b.serializeUserDefinedTypes(bodyStr, lang)
+	}
 	fnBody := &scpb.FunctionBody{
 		FunctionID: fnID,
 		Body:       bodyStr,
