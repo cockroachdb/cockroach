@@ -13,7 +13,6 @@ package cockroach.kv.kvserver.storeliveness.storelivenesspb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb";
 
 import "gogoproto/gogo.proto";
-import "roachpb/data.proto";
 import "util/hlc/timestamp.proto";
 
 // StoreIdent includes all necessary info for a store to identify and
