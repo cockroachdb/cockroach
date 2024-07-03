@@ -1674,7 +1674,7 @@ func (s *statusServer) fetchProfileFromAllNodes(
 	}
 	senderServerVersion := resp.Desc.ServerVersion
 
-	opName := fmt.Sprintf("fetch cluster-wide %s profile", req.Type)
+	opName := redact.Sprintf("fetch cluster-wide %s profile", req.Type)
 	nodeFn := func(ctx context.Context, statusClient serverpb.StatusClient, nodeID roachpb.NodeID) (*profData, error) {
 		var pd *profData
 		err := timeutil.RunWithTimeout(ctx, opName, 1*time.Minute, func(ctx context.Context) error {
@@ -3129,7 +3129,7 @@ func (s *statusServer) Range(
 	}
 
 	if err := iterateNodes(
-		ctx, s.serverIterator, s.stopper, fmt.Sprintf("details about range %d", req.RangeId), noTimeout,
+		ctx, s.serverIterator, s.stopper, redact.Sprintf("details about range %d", req.RangeId), noTimeout,
 		s.dialNode, nodeFn, responseFn, errorFn,
 	); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
@@ -3160,7 +3160,7 @@ func iterateNodes[Client, Result any](
 	ctx context.Context,
 	iter ServerIterator,
 	stopper *stop.Stopper,
-	errorCtx string,
+	errorCtx redact.RedactableString,
 	nodeFnTimeout time.Duration,
 	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (Client, error),
 	nodeFn func(ctx context.Context, client Client, nodeID roachpb.NodeID) (Result, error),
@@ -3260,7 +3260,7 @@ func iterateNodes[Client, Result any](
 func paginatedIterateNodes[Result any](
 	ctx context.Context,
 	s *statusServer,
-	errorCtx string,
+	errorCtx redact.RedactableString,
 	limit int,
 	pagState paginationState,
 	requestedNodes []roachpb.NodeID,
