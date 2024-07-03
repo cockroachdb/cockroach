@@ -196,6 +196,32 @@ func TestQueryCache(t *testing.T) {
 			}
 		})
 
+		t.Run("simple-prepare-generic", func(t *testing.T) {
+			parallel(t)
+			h := makeQueryCacheTestHelper(t, 2 /* numConns */)
+			defer h.Stop()
+			custom, generic := h.runners[0], h.runners[1]
+			custom.Exec(t, "SET plan_cache_mode = force_custom_plan")
+			generic.Exec(t, "SET plan_cache_mode = force_generic_plan")
+
+			custom.Exec(t, "PREPARE p AS SELECT * FROM t")
+			h.AssertStats(t, 0 /* hits */, 1 /* misses */)
+			custom.CheckQueryResults(t, "EXECUTE p", [][]string{{"1", "1"}})
+			custom.Exec(t, "DEALLOCATE p")
+
+			// The perfect generic plan in the cache can be used when
+			// plan_cache_mode is either force_custom_plan or
+			// force_generic_plan.
+			generic.Exec(t, "PREPARE p AS SELECT * FROM t")
+			h.AssertStats(t, 1 /* hits */, 1 /* misses */)
+
+			custom.Exec(t, "PREPARE p AS SELECT * FROM t")
+			h.AssertStats(t, 2 /* hits */, 1 /* misses */)
+
+			custom.CheckQueryResults(t, "EXECUTE p", [][]string{{"1", "1"}})
+			generic.CheckQueryResults(t, "EXECUTE p", [][]string{{"1", "1"}})
+		})
+
 		// Verify that using a relative timestamp literal interacts correctly with
 		// the query cache (#48717).
 		t.Run("relative-timestamp", func(t *testing.T) {
