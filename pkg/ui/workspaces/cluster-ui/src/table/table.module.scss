@@ -47,23 +47,6 @@
   }
   // END: Table Column
 
-  // Expand/Collapse icon
-  :global(.ant-table-row-expand-icon) {
-    border: none;
-    background-color: transparent;
-  }
-
-  :global(.ant-table-row-collapsed)::after {
-    content: "▶";
-    font-size: 8px;
-  }
-
-  :global(.ant-table-row-expanded)::after {
-    content: "▼";
-    font-size: 8px;
-  }
-  // END: Expand/Collapse icon
-
   // Table row
   :global(.ant-table-row) {
     @include text--body;
@@ -129,4 +112,8 @@
       border: none;
     }
   }
+}
+
+.expand-toggle {
+  margin-right: 8px;
 }
