@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -281,7 +282,7 @@ func (rh *RowHelper) CheckRowSize(
 		} else {
 			event = &eventpb.LargeRow{CommonLargeRowDetails: details}
 		}
-		log.StructuredEvent(ctx, event)
+		log.StructuredEvent(ctx, severity.INFO, event)
 	}
 	if shouldErr {
 		if rh.metrics != nil {

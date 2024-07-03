@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/go-ldap/ldap/v3"
@@ -750,7 +751,7 @@ func MaybeConvertStoredPasswordHash(
 		log.Warningf(ctx, "storing the new password hash after conversion failed: %+v", err)
 	} else {
 		// Inform the security audit log that the hash was upgraded.
-		log.StructuredEvent(ctx, &eventpb.PasswordHashConverted{
+		log.StructuredEvent(ctx, severity.INFO, &eventpb.PasswordHashConverted{
 			RoleName:  userName.Normalized(),
 			OldMethod: currentHash.Method().String(),
 			NewMethod: newMethod,

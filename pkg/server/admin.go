@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -3319,7 +3320,7 @@ func (s *systemAdminServer) SendKVBatch(
 		},
 		BatchRequest: string(baJSON),
 	}
-	log.StructuredEvent(ctx, event)
+	log.StructuredEvent(ctx, severity.INFO, event)
 
 	ctx, sp := s.server.node.setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba)
 	// Wipe the tracing information from the request. We've used this info in the
