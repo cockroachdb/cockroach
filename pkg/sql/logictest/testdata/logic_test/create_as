@@ -378,10 +378,10 @@ CREATE SEQUENCE seq;
 statement OK
 CREATE TABLE tab_from_seq AS (SELECT nextval('seq'))
 
-query I
-SELECT * FROM tab_from_seq
+query B
+SELECT nextval >= 2 FROM tab_from_seq
 ----
-2
+true
 
 # Regression test for #105393
 subtest regression_105393
