@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // zipper is the interface to the zip file stored on disk.
@@ -310,7 +311,7 @@ var zipReportingMu syncutil.Mutex
 // progress messages for the zip command.
 type zipReporter struct {
 	// prefix is the string printed at the start of new lines.
-	prefix string
+	prefix redact.RedactableString
 
 	// flowing when set indicates the reporter should attempt to print
 	// progress about a single item of work on the same line of output.
@@ -331,10 +332,10 @@ type zipReporter struct {
 	sqlOutputFilenameExtension string
 }
 
-func (zc *zipContext) newZipReporter(format string, args ...interface{}) *zipReporter {
+func (zc *zipContext) newZipReporter(prefix redact.RedactableString) *zipReporter {
 	return &zipReporter{
 		flowing: zc.concurrency == 1,
-		prefix:  "[" + fmt.Sprintf(format, args...) + "]",
+		prefix:  "[" + prefix + "]",
 		newline: true,
 		inItem:  false,
 	}
@@ -342,7 +343,7 @@ func (zc *zipContext) newZipReporter(format string, args ...interface{}) *zipRep
 
 // withPrefix creates a reported which adds the provided formatted
 // message as additional prefix at the start of new lines.
-func (z *zipReporter) withPrefix(format string, args ...interface{}) *zipReporter {
+func (z *zipReporter) withPrefix(prefix redact.RedactableString) *zipReporter {
 	zipReportingMu.Lock()
 	defer zipReportingMu.Unlock()
 
@@ -352,7 +353,7 @@ func (z *zipReporter) withPrefix(format string, args ...interface{}) *zipReporte
 
 	z.completeprevLocked()
 	return &zipReporter{
-		prefix:  z.prefix + " [" + fmt.Sprintf(format, args...) + "]",
+		prefix:  z.prefix + " [" + prefix + "]",
 		flowing: z.flowing,
 		newline: z.newline,
 	}
@@ -362,7 +363,7 @@ func (z *zipReporter) withPrefix(format string, args ...interface{}) *zipReporte
 // specific to that unit of work. The caller can call .progress()
 // zero or more times, and complete with .done() / .fail() /
 // .result().
-func (z *zipReporter) start(format string, args ...interface{}) *zipReporter {
+func (z *zipReporter) start(description redact.RedactableString) *zipReporter {
 	zipReportingMu.Lock()
 	defer zipReportingMu.Unlock()
 
@@ -371,13 +372,13 @@ func (z *zipReporter) start(format string, args ...interface{}) *zipReporter {
 	}
 
 	z.completeprevLocked()
-	msg := z.prefix + " " + fmt.Sprintf(format, args...)
+	msg := z.prefix + " " + description
 	nz := &zipReporter{
 		prefix:  msg,
 		flowing: z.flowing,
 		inItem:  true,
 	}
-	fmt.Print(msg + "...")
+	fmt.Print(msg.StripMarkers() + "...")
 	nz.flowLocked()
 	return nz
 }
@@ -402,7 +403,7 @@ func (z *zipReporter) flowLocked() {
 func (z *zipReporter) resumeLocked() {
 	zipReportingMu.AssertHeld()
 	if !z.flowing || z.newline {
-		fmt.Print(z.prefix + ":")
+		fmt.Print(z.prefix.StripMarkers() + ":")
 	}
 	if z.flowing {
 		z.newline = false
@@ -441,7 +442,7 @@ func (z *zipReporter) info(format string, args ...interface{}) {
 	defer zipReportingMu.Unlock()
 
 	z.completeprevLocked()
-	fmt.Print(z.prefix)
+	fmt.Print(z.prefix.StripMarkers())
 	fmt.Print(" ")
 	fmt.Printf(format, args...)
 	z.endlLocked()
@@ -472,7 +473,7 @@ func (z *zipReporter) shout(format string, args ...interface{}) {
 	defer zipReportingMu.Unlock()
 
 	z.completeprevLocked()
-	fmt.Print(z.prefix + ": ")
+	fmt.Print(z.prefix.StripMarkers() + ": ")
 	fmt.Printf(format, args...)
 	z.endlLocked()
 }

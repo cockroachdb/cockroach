@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 )
 
 // The motivating use case for this package are opportunities to perform cleanup
@@ -96,7 +97,7 @@ type Config struct {
 	AmbientCtx log.AmbientContext
 
 	// Name of the batcher, used for logging, timeout errors, and the stopper.
-	Name string
+	Name redact.RedactableString
 
 	// Sender can round-trip a batch. Sender must not be nil.
 	Sender kv.Sender
@@ -213,7 +214,7 @@ type RequestBatcher struct {
 
 	// sendBatchOpName is the string passed to timeoututil.RunWithTimeout when
 	// sending a batch.
-	sendBatchOpName string
+	sendBatchOpName redact.RedactableString
 
 	batches batchQueue
 
@@ -238,9 +239,9 @@ func New(cfg Config) *RequestBatcher {
 		requestChan:  make(chan *request),
 		sendDoneChan: make(chan struct{}),
 	}
-	b.sendBatchOpName = b.cfg.Name + ".sendBatch"
+	b.sendBatchOpName = redact.Sprintf("%s.sendBatch", b.cfg.Name)
 	bgCtx := cfg.AmbientCtx.AnnotateCtx(context.Background())
-	if err := cfg.Stopper.RunAsyncTask(bgCtx, b.cfg.Name, b.run); err != nil {
+	if err := cfg.Stopper.RunAsyncTask(bgCtx, b.cfg.Name.StripMarkers(), b.run); err != nil {
 		panic(err)
 	}
 	return b

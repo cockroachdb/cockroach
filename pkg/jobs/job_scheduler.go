@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // CreatedByScheduledJobs identifies the job that was created
@@ -264,7 +265,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 	if processErr := withSavePoint(ctx, txn.KV(), func() error {
 		if timeout > 0 {
 			return timeutil.RunWithTimeout(
-				ctx, fmt.Sprintf("process-schedule-%d", schedule.ScheduleID()), timeout,
+				ctx, redact.Sprintf("process-schedule-%d", schedule.ScheduleID()), timeout,
 				func(ctx context.Context) error {
 					return s.processSchedule(ctx, schedule, numRunning, txn)
 				})

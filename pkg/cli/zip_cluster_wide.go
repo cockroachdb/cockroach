@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -192,9 +193,9 @@ func (zc *debugZipContext) collectClusterData(
 				sort.Slice(rangeList.Ranges, func(i, j int) bool {
 					return rangeList.Ranges[i].RangeID > rangeList.Ranges[j].RangeID
 				})
-				sLocality := zc.clusterPrinter.start("writing tenant ranges for locality: %s", locality)
+				sLocality := zc.clusterPrinter.start(redact.Sprintf("writing tenant ranges for locality: %s", locality))
 				name := fmt.Sprintf("%s/%s/%s", zc.prefix, tenantRangesName, locality)
-				s := zc.clusterPrinter.start("writing tenant ranges for locality %s", locality)
+				s := zc.clusterPrinter.start(redact.Sprintf("writing tenant ranges for locality %s", locality))
 				if err := zc.z.createJSON(s, name+".json", rangeList.Ranges); err != nil {
 					return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, s.fail(err)
 				}

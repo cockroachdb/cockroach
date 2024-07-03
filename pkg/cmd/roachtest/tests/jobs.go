@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -180,23 +181,27 @@ func checkJobQueryLatency(
 		return err
 	}
 
-	if err := checkQueryLatency(ctx, fmt.Sprintf("SHOW JOB %d", randomChangefeedJobID), conn, t.L(), showJobsTimeout/10); err != nil {
+	if err := checkQueryLatency(ctx, redact.Sprintf("SHOW JOB %d", randomChangefeedJobID), conn, t.L(), showJobsTimeout/10); err != nil {
 		return err
 	}
 	return nil
 }
 
 func checkQueryLatency(
-	ctx context.Context, query string, conn *gosql.DB, l *logger.Logger, timeout time.Duration,
+	ctx context.Context,
+	query redact.RedactableString,
+	conn *gosql.DB,
+	l *logger.Logger,
+	timeout time.Duration,
 ) error {
 	queryBegin := timeutil.Now()
 	var err error
 	if err := timeutil.RunWithTimeout(ctx, query, timeout, func(ctx context.Context) error {
-		_, err = conn.ExecContext(ctx, query)
+		_, err = conn.ExecContext(ctx, query.StripMarkers())
 		return err
 	}); err != nil {
 		l.Printf("%s query exceeded max latency of %.2f seconds. Ran in %.2f seconds. Try to grab explain analyze", query, timeout.Seconds(), timeutil.Since(queryBegin).Seconds())
-		explainErr := timeutil.RunWithTimeout(ctx, fmt.Sprintf("%s explain", query), timeout*10, func(ctx context.Context) error {
+		explainErr := timeutil.RunWithTimeout(ctx, redact.Sprintf("%s explain", query), timeout*10, func(ctx context.Context) error {
 			var explainAnalyze string
 			explainErr := conn.QueryRowContext(ctx, fmt.Sprintf("EXPLAIN ANALYZE (VERBOSE) %s", query)).Scan(&explainAnalyze)
 			l.Printf("%s", explainAnalyze)
