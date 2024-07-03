@@ -190,7 +190,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	validateTypeReferences(b, refProvider, db.DatabaseID)
 	validateFunctionRelationReferences(b, refProvider, db.DatabaseID)
 	validateFunctionToFunctionReferences(b, refProvider, db.DatabaseID)
-	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, refProvider))
+	b.Add(b.WrapFunctionBody(fnID, fnBodyStr, lang, typ, refProvider))
 	b.LogEventForExistingTarget(&fn)
 }
 
