@@ -493,7 +493,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	ctx, sp := tracing.ChildSpan(ctx, "logical-replication-writer-flush")
 	defer sp.Finish()
 
-	if len(kvs) < 1 {
+	if len(kvs) == 0 {
 		return nil, nil
 	}
 
@@ -524,6 +524,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	const minChunkSize = 64
 	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
 
+	total := int64(len(kvs))
 	g := ctxgroup.WithContext(ctx)
 	for worker := range lrw.bh {
 		if len(kvs) == 0 {
@@ -551,7 +552,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	}
 
 	if err := g.Wait(); err != nil {
-		return kvs, err
+		return nil, err
 	}
 
 	if notProcessed.Load() > 0 {
@@ -559,15 +560,15 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	}
 
 	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
-	keyCount, byteCount := int64(len(kvs)), flushByteSize.Load()
-	lrw.debug.RecordFlushComplete(flushTime, keyCount, byteCount)
+	byteCount := flushByteSize.Load()
+	lrw.debug.RecordFlushComplete(flushTime, total, byteCount)
 
-	lrw.metrics.AppliedRowUpdates.Inc(int64(len(kvs)))
+	lrw.metrics.AppliedRowUpdates.Inc(total)
 	lrw.metrics.AppliedLogicalBytes.Inc(byteCount)
 	lrw.metrics.CommitToCommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
 
 	lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
-	lrw.metrics.StreamBatchRowsHist.RecordValue(keyCount)
+	lrw.metrics.StreamBatchRowsHist.RecordValue(total)
 	lrw.metrics.StreamBatchBytesHist.RecordValue(byteCount)
 	return unapplied, nil
 }
