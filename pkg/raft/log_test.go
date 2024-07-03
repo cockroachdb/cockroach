@@ -277,7 +277,7 @@ func TestCompactionSideEffects(t *testing.T) {
 	raftLog := newLog(storage, discardLogger)
 	require.True(t, raftLog.append(unstable))
 
-	require.True(t, raftLog.maybeCommit(raftLog.lastEntryID()))
+	raftLog.commitTo(raftLog.lastIndex())
 	raftLog.appliedTo(raftLog.committed, 0 /* size */)
 
 	offset := uint64(500)
@@ -343,7 +343,7 @@ func TestHasNextCommittedEnts(t *testing.T) {
 			raftLog := newLog(storage, discardLogger)
 			require.True(t, raftLog.append(init))
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(entryID{term: 1, index: 5})
+			raftLog.commitTo(5)
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
 			raftLog.applyingEntsPaused = tt.paused
@@ -396,7 +396,7 @@ func TestNextCommittedEnts(t *testing.T) {
 			raftLog := newLog(storage, discardLogger)
 			require.True(t, raftLog.append(init))
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(entryID{term: 1, index: 5})
+			raftLog.commitTo(5)
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
 			raftLog.applyingEntsPaused = tt.paused
@@ -450,7 +450,7 @@ func TestAcceptApplying(t *testing.T) {
 			raftLog := newLogWithSize(storage, discardLogger, maxSize)
 			require.True(t, raftLog.append(init))
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(entryID{term: 1, index: 5})
+			raftLog.commitTo(5)
 			raftLog.appliedTo(3, 0 /* size */)
 
 			raftLog.acceptApplying(tt.index, tt.size, tt.allowUnstable)
@@ -494,7 +494,7 @@ func TestAppliedTo(t *testing.T) {
 			raftLog := newLogWithSize(storage, discardLogger, maxSize)
 			require.True(t, raftLog.append(init))
 			raftLog.stableTo(entryID{term: 1, index: 4})
-			raftLog.maybeCommit(entryID{term: 1, index: 5})
+			raftLog.commitTo(5)
 			raftLog.appliedTo(3, 0 /* size */)
 			raftLog.acceptApplying(5, maxSize+overshoot, false /* allowUnstable */)
 
@@ -644,7 +644,7 @@ func TestCompaction(t *testing.T) {
 			storage := NewMemoryStorage()
 			require.NoError(t, storage.Append(index(1).termRange(1, tt.lastIndex+1)))
 			raftLog := newLog(storage, discardLogger)
-			raftLog.maybeCommit(entryID{term: 0, index: tt.lastIndex}) // TODO(pav-kv): this is a no-op
+			raftLog.commitTo(tt.lastIndex)
 
 			raftLog.appliedTo(raftLog.committed, 0 /* size */)
 			for j := 0; j < len(tt.compact); j++ {
