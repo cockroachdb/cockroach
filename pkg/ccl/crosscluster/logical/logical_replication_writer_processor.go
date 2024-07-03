@@ -92,6 +92,8 @@ type logicalReplicationWriterProcessor struct {
 	debug streampb.DebugLogicalConsumerStatus
 
 	dlqClient DeadLetterQueueClient
+
+	purgatory purgatory
 }
 
 var (
@@ -150,6 +152,11 @@ func newLogicalReplicationWriterProcessor(
 			ProcessorID: processorID,
 		},
 		dlqClient: InitDeadLetterQueueClient(),
+		purgatory: purgatory{
+			deadline:   time.Minute,
+			delay:      time.Second * 5,
+			levelLimit: 10,
+		},
 	}
 	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
@@ -372,11 +379,11 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(
 
 	switch event.Type() {
 	case crosscluster.KVEvent:
-		if err := lrw.flushBuffer(ctx, event.GetKVs()); err != nil {
+		if err := lrw.handleStreamBuffer(ctx, event.GetKVs()); err != nil {
 			return err
 		}
 	case crosscluster.CheckpointEvent:
-		if err := lrw.checkpoint(ctx, event); err != nil {
+		if err := lrw.maybeCheckpoint(ctx, event.GetResolvedSpans()); err != nil {
 			return err
 		}
 	case crosscluster.SSTableEvent, crosscluster.DeleteRangeEvent:
@@ -393,8 +400,21 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(
 	return nil
 }
 
+func (lrw *logicalReplicationWriterProcessor) maybeCheckpoint(
+	ctx context.Context, resolvedSpans []jobspb.ResolvedSpan,
+) error {
+	// If purgatory is non-empty, it intercepts the checkpoint and then we can try
+	// to drain it.
+	if !lrw.purgatory.Empty() {
+		lrw.purgatory.Checkpoint(ctx, resolvedSpans)
+		return lrw.purgatory.Drain(ctx, lrw.flushBuffer, lrw.checkpoint)
+	}
+
+	return lrw.checkpoint(ctx, resolvedSpans)
+}
+
 func (lrw *logicalReplicationWriterProcessor) checkpoint(
-	ctx context.Context, event crosscluster.Event,
+	ctx context.Context, resolvedSpans []jobspb.ResolvedSpan,
 ) error {
 	if streamingKnobs, ok := lrw.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.ElideCheckpointEvent != nil {
@@ -404,7 +424,6 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 		}
 	}
 
-	resolvedSpans := event.GetResolvedSpans()
 	if resolvedSpans == nil {
 		return errors.New("checkpoint event expected to have resolved spans")
 	}
@@ -425,17 +444,56 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 	return nil
 }
 
-const maxWriterWorkers = 32
-
-// flushBuffer flushes a buffer using many workers if needed.
-func (lrw *logicalReplicationWriterProcessor) flushBuffer(
+// handleStreamBuffer handles a buffer of KV events from the incoming stream.
+func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
+	unapplied, err := lrw.flushBuffer(ctx, kvs, false)
+	if err != nil {
+		return err
+	}
+	// Put any events that failed to apply into purgatory (flushing if needed).
+	if err := lrw.purgatory.Store(ctx, unapplied, lrw.flushBuffer, lrw.checkpoint); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func filterRemaining(kvs []streampb.StreamEvent_KV) []streampb.StreamEvent_KV {
+	remaining := kvs
+	var j int
+	for i := range kvs {
+		if len(kvs[i].KeyValue.Key) != 0 {
+			remaining[j] = kvs[i]
+			j++
+		}
+	}
+	// If remaining shrunk by half or more, reallocate it to avoid aliasing.
+	if j < len(kvs)/2 {
+		return append(remaining[:0:0], remaining[:j]...)
+	}
+	return remaining[:j]
+}
+
+const maxWriterWorkers = 32
+
+// flushBuffer processes some or all of the events in the passed buffer, and
+// zeros out each event in the passed buffer for which it successfully completed
+// processing either by applying it or by sending it to a DLQ. If mustProcess is
+// true it must process every event in the buffer, one way or another, while if
+// it is false it may elect to leave an event in the buffer to indicate that
+// processing of that event did not complete, for example if application failed
+// but it was not sent to the DLQ, and thus should remain buffered for a later
+// retry.
+func (lrw *logicalReplicationWriterProcessor) flushBuffer(
+	ctx context.Context, kvs []streampb.StreamEvent_KV, mustProcess bool,
+) (unapplied []streampb.StreamEvent_KV, _ error) {
 	ctx, sp := tracing.ChildSpan(ctx, "logical-replication-writer-flush")
 	defer sp.Finish()
 
 	if len(kvs) < 1 {
-		return nil
+		return nil, nil
 	}
 
 	// Ensure the batcher is always reset, even on early error returns.
@@ -460,7 +518,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
 
-	var flushByteSize atomic.Int64
+	var flushByteSize, notProcessed atomic.Int64
 
 	const minChunkSize = 64
 	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
@@ -480,18 +538,23 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		bh := lrw.bh[worker]
 
 		g.GoCtx(func(ctx context.Context) error {
-			s, err := lrw.flushChunk(ctx, bh, chunk)
+			s, err := lrw.flushChunk(ctx, bh, chunk, mustProcess)
 			if err != nil {
 				return err
 			}
 			flushByteSize.Add(s.byteSize)
+			notProcessed.Add(s.notProcessed)
 			lrw.metrics.OptimisticInsertConflictCount.Inc(s.optimisticInsertConflicts)
 			return nil
 		})
 	}
 
 	if err := g.Wait(); err != nil {
-		return err
+		return kvs, err
+	}
+
+	if notProcessed.Load() > 0 {
+		unapplied = filterRemaining(kvs)
 	}
 
 	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
@@ -505,11 +568,12 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
 	lrw.metrics.StreamBatchRowsHist.RecordValue(keyCount)
 	lrw.metrics.StreamBatchBytesHist.RecordValue(byteCount)
-	return nil
+	return unapplied, nil
 }
 
+// flushChunk is the per-thread body of flushBuffer; see flushBuffer's contract.
 func (lrw *logicalReplicationWriterProcessor) flushChunk(
-	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV,
+	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, mustProcess bool,
 ) (batchStats, error) {
 	batchSize := int(flushBatchSize.Get(&lrw.FlowCtx.Cfg.Settings.SV))
 	// TODO(yuzefovich): we should have a better heuristic for when to use the
@@ -528,13 +592,39 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 		batch := chunk[:min(batchSize, len(chunk))]
 		chunk = chunk[len(batch):]
 		preBatchTime := timeutil.Now()
-		s, err := bh.HandleBatch(ctx, batch)
-		if err != nil {
-			// TODO(ssd): Handle errors. We should perhaps split the batch and retry a portion of the batch.
-			// If that fails, send the failed application to the dead-letter-queue.
-			return batchStats{}, err
+
+		if s, err := bh.HandleBatch(ctx, batch); err != nil {
+			// If it already failed while applying on its own, handle the failure.
+			if len(batch) == 1 {
+				if mustProcess || !lrw.shouldRetryLater(err) {
+					if err := lrw.dlq(ctx, batch[0], err); err != nil {
+						return batchStats{}, err
+					}
+				}
+			} else {
+				// If there were multiple events in the batch, give each its own chance
+				// to apply on its own before switching to handle its failure.
+				for i := range batch {
+					if singleStats, err := bh.HandleBatch(ctx, batch[i:i+1]); err != nil {
+						if mustProcess || !lrw.shouldRetryLater(err) {
+							if err := lrw.dlq(ctx, batch[i], err); err != nil {
+								return batchStats{}, err
+							}
+						}
+					} else {
+						batch[i] = streampb.StreamEvent_KV{}
+						stats.Add(singleStats)
+					}
+				}
+			}
+		} else {
+			// Clear the event to indicate successful application.
+			for i := range batch {
+				batch[i] = streampb.StreamEvent_KV{}
+			}
+			stats.Add(s)
 		}
-		stats.Add(s)
+
 		batchTime := timeutil.Since(preBatchTime)
 		lrw.debug.RecordBatchApplied(batchTime, int64(len(batch)))
 		lrw.metrics.ApplyBatchNanosHist.RecordValue(batchTime.Nanoseconds())
@@ -542,7 +632,34 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	return stats, nil
 }
 
+// shouldRetryLater returns true if a given error encountered by an attempt to
+// process an event may be resolved if processing of that event is reattempted
+// again at a later time. This could be the case, for example, if that time is
+// after the parent side of an FK relationship is ingested by another processor.
+func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(err error) bool {
+	// TODO(dt): maybe this should only be constraint violation errors?
+	return true
+}
+
+const logAllDLQs = true
+
+// dlq handles a row update that fails to apply by durably recording it in a DLQ
+// or returns an error if it cannot.
+//
+// TODO(dt): implement something here.
+// TODO(dt): plumb the cdcevent.Row to this.
+func (lrw *logicalReplicationWriterProcessor) dlq(
+	ctx context.Context, event streampb.StreamEvent_KV, applyErr error,
+) error {
+	if log.V(1) || logAllDLQs {
+		log.Infof(ctx, "sending KV to DLQ, %s due to %v", event.String(), applyErr)
+	}
+	// TODO(dt): try to DLQ it and don't return an error if successful.
+	return applyErr
+}
+
 type batchStats struct {
+	notProcessed              int64
 	byteSize                  int64
 	optimisticInsertConflicts int64
 }
