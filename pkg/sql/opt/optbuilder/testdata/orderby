@@ -1099,6 +1099,41 @@ sort
            ├── b:2 IS NULL [as=nulls_ordering_b:7]
            └── c:3 IS NULL [as=nulls_ordering_c:8]
 
+# Null reordering is unnecessary if the order by column is not nullable.
+build
+SELECT a FROM abcd ORDER BY a ASC NULLS LAST
+----
+project
+ ├── columns: a:1!null
+ ├── ordering: +1
+ └── scan abcd
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── ordering: +1
+
+# Null reordering is unnecessary if the order by column is not nullable.
+build
+SELECT a FROM abcd ORDER BY a DESC NULLS FIRST
+----
+project
+ ├── columns: a:1!null
+ ├── ordering: -1
+ └── scan abcd,rev
+      ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+      └── ordering: -1
+
+# Null reordering is needed for "b" but not for "a".
+build
+SELECT a FROM abcd ORDER BY a DESC NULLS FIRST, b DESC NULLS FIRST
+----
+project
+ ├── columns: a:1!null  [hidden: nulls_ordering_b:7!null b:2]
+ ├── ordering: -1,-7,-2
+ ├── scan abcd,rev
+ │    ├── columns: a:1!null b:2 c:3 d:4 crdb_internal_mvcc_timestamp:5 tableoid:6
+ │    └── ordering: -1
+ └── projections
+      └── b:2 IS NULL [as=nulls_ordering_b:7]
+
 # Try NULLS ordered last.
 # Next two plans should be the same.
 build set=null_ordered_last=true

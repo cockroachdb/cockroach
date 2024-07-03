@@ -268,7 +268,8 @@ func (b *Builder) analyzeExtraArgument(
 	for _, e := range exprs {
 		// Ensure we can order on the given column(s).
 		ensureColumnOrderable(e)
-		if !nullsDefaultOrder {
+		// If the column is NOT NULL, then null reordering is irrelevant.
+		if !nullsDefaultOrder && !b.isNotNullCol(e) {
 			metadataName := fmt.Sprintf("nulls_ordering_%s", e.String())
 			extraColsScope.addColumn(
 				scopeColName("").WithMetadataName(metadataName),
@@ -292,6 +293,23 @@ func (b *Builder) hasDefaultNullsOrder(order *tree.Order) bool {
 	}
 	telemetry.Inc(sqltelemetry.OrderByNullsStandardCounter)
 	return true
+}
+
+// isNotNullCol returns true if e is a reference to a NOT NULL column in a base
+// table.
+func (b *Builder) isNotNullCol(e tree.TypedExpr) bool {
+	sCol, ok := e.(*scopeColumn)
+	if !ok {
+		return false
+	}
+	tabID := b.factory.Metadata().ColumnMeta(sCol.id).Table
+	if tabID == 0 {
+		// The column is a synthesized column.
+		return false
+	}
+	ord := tabID.ColumnOrdinal(sCol.id)
+	col := b.factory.Metadata().Table(tabID).Column(ord)
+	return !col.IsNullable()
 }
 
 func ensureColumnOrderable(e tree.TypedExpr) {

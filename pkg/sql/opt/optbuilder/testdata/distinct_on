@@ -507,26 +507,26 @@ ORDER BY
   "genre" ASC NULLS LAST,
   "id" ASC NULLS LAST
 ----
-distinct-on
+sort
  ├── columns: id:1!null name:2 genre:3  [hidden: nulls_ordering_genre:6!null]
- ├── grouping columns: genre:3 nulls_ordering_genre:6!null
- ├── internal-ordering: +7,+1 opt(3,6)
  ├── ordering: +6,+3
- ├── sort
- │    ├── columns: id:1!null name:2 genre:3 nulls_ordering_genre:6!null nulls_ordering_id:7!null
- │    ├── ordering: +6,+3,+7,+1
- │    └── project
- │         ├── columns: nulls_ordering_genre:6!null nulls_ordering_id:7!null id:1!null name:2 genre:3
- │         ├── scan author
- │         │    └── columns: id:1!null name:2 genre:3 crdb_internal_mvcc_timestamp:4 tableoid:5
- │         └── projections
- │              ├── genre:3 IS NULL [as=nulls_ordering_genre:6]
- │              └── id:1 IS NULL [as=nulls_ordering_id:7]
- └── aggregations
-      ├── first-agg [as=id:1]
-      │    └── id:1
-      └── first-agg [as=name:2]
-           └── name:2
+ └── distinct-on
+      ├── columns: id:1!null name:2 genre:3 nulls_ordering_genre:6!null
+      ├── grouping columns: genre:3 nulls_ordering_genre:6!null
+      ├── internal-ordering: +1 opt(3,6)
+      ├── project
+      │    ├── columns: nulls_ordering_genre:6!null id:1!null name:2 genre:3
+      │    ├── ordering: +1 opt(3,6)
+      │    ├── scan author
+      │    │    ├── columns: id:1!null name:2 genre:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    │    └── ordering: +1 opt(3)
+      │    └── projections
+      │         └── genre:3 IS NULL [as=nulls_ordering_genre:6]
+      └── aggregations
+           ├── first-agg [as=id:1]
+           │    └── id:1
+           └── first-agg [as=name:2]
+                └── name:2
 
 # Regression test for #107839. More fixes for NULLS FIRST/LAST with DISTINCT ON.
 
