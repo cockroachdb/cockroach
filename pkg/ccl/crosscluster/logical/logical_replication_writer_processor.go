@@ -141,6 +141,8 @@ func newLogicalReplicationWriterProcessor(
 		}
 	}
 
+	dlqDbExec := flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)))
+
 	lrw := &logicalReplicationWriterProcessor{
 		spec: spec,
 		getBatchSize: func() int {
@@ -159,7 +161,7 @@ func newLogicalReplicationWriterProcessor(
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
 		},
-		dlqClient: InitDeadLetterQueueClient(),
+		dlqClient: InitDeadLetterQueueClient(dlqDbExec),
 		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 	}
 	lrw.purgatory = purgatory{
@@ -760,7 +762,7 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 	case errType:
 		lrw.metrics.DLQedDueToErrType.Inc(1)
 	}
-	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, applyErr)
+	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, eligibility)
 }
 
 type batchStats struct {

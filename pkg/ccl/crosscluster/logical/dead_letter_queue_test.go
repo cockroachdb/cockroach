@@ -14,9 +14,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,14 +33,15 @@ func TestLoggingDLQClient(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
 
-	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
+	tableName := "foo"
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	familyDesc := &descpb.ColumnFamilyDescriptor{
 		ID:   descpb.FamilyID(1),
 		Name: "",
@@ -47,8 +50,9 @@ func TestLoggingDLQClient(t *testing.T) {
 	ed, err := cdcevent.NewEventDescriptor(tableDesc, familyDesc, false, false, hlc.Timestamp{})
 	require.NoError(t, err)
 
-	dlqClient := InitDeadLetterQueueClient()
-	require.NoError(t, dlqClient.Create())
+	tableID := int32(tableDesc.GetID())
+	dlqClient := InitLoggingDeadLetterQueueClient()
+	require.NoError(t, dlqClient.Create(ctx, []int32{tableID}))
 
 	type testCase struct {
 		name           string
@@ -57,7 +61,8 @@ func TestLoggingDLQClient(t *testing.T) {
 		jobID       int64
 		kv          streampb.StreamEvent_KV
 		cdcEventRow cdcevent.Row
-		reason      error
+		applyError  error
+		dlqReason   retryEligibility
 	}
 
 	testCases := []testCase{
@@ -73,10 +78,85 @@ func TestLoggingDLQClient(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.reason == nil {
-				tc.reason = errors.New("some error")
+			if tc.applyError == nil {
+				tc.applyError = errors.New("some error")
 			}
-			err := dlqClient.Log(ctx, tc.jobID, tc.kv, tc.cdcEventRow, tc.reason)
+			err := dlqClient.Log(ctx, tc.jobID, tc.kv, tc.cdcEventRow, tc.dlqReason)
+			if tc.expectedErrMsg == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.expectedErrMsg)
+			}
+		})
+	}
+}
+
+func TestDLQClient(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
+	ie := s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd))
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
+
+	tableName := "foo"
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
+	familyDesc := &descpb.ColumnFamilyDescriptor{
+		ID:   descpb.FamilyID(1),
+		Name: "",
+	}
+
+	ed, err := cdcevent.NewEventDescriptor(tableDesc, familyDesc, false, false, hlc.Timestamp{})
+	require.NoError(t, err)
+
+	tableID := int32(tableDesc.GetID())
+	dlqClient := InitDeadLetterQueueClient(ie)
+	require.NoError(t, dlqClient.Create(ctx, []int32{tableID}))
+
+	var tableNameQueryResult string
+	sqlDB.QueryRow(t, `SELECT table_name FROM [SHOW TABLES FROM defaultdb]`).Scan(&tableNameQueryResult)
+	require.Equal(t, tableName, tableNameQueryResult)
+
+	type testCase struct {
+		name           string
+		expectedErrMsg string
+
+		jobID       int64
+		tableID     int32
+		tableName   string
+		kv          streampb.StreamEvent_KV
+		cdcEventRow cdcevent.Row
+		applyError  error
+		dlqReason   retryEligibility
+	}
+
+	testCases := []testCase{
+		{
+			name:        "insert row into dlq table",
+			cdcEventRow: cdcevent.Row{EventDescriptor: ed},
+			tableID:     tableID,
+			tableName:   tableName,
+			dlqReason:   noSpace,
+		},
+		{
+			name:           "expect error when given nil cdcEventRow",
+			expectedErrMsg: "cdc event row not initialized",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.applyError == nil {
+				tc.applyError = errors.New("some error")
+			}
+			err := dlqClient.Log(ctx, tc.jobID, tc.kv, tc.cdcEventRow, tc.dlqReason)
 			if tc.expectedErrMsg == "" {
 				require.NoError(t, err)
 			} else {
