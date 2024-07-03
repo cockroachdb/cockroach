@@ -14,9 +14,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -26,19 +28,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoggingDLQClient(t *testing.T) {
+func TestDLQClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	jobExecCtx := sql.FakeJobExecContext{ExecutorConfig: &execCfg}
+
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
+	ie := s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd))
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
 
-	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
+	tableName := "foo"
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	familyDesc := &descpb.ColumnFamilyDescriptor{
 		ID:   descpb.FamilyID(1),
 		Name: "",
@@ -47,8 +56,9 @@ func TestLoggingDLQClient(t *testing.T) {
 	ed, err := cdcevent.NewEventDescriptor(tableDesc, familyDesc, false, false, hlc.Timestamp{})
 	require.NoError(t, err)
 
+	tableID := int32(tableDesc.GetID())
 	dlqClient := InitDeadLetterQueueClient()
-	require.NoError(t, dlqClient.Create())
+	require.NoError(t, dlqClient.Create(ctx, &jobExecCtx, []int32{tableID}))
 
 	type testCase struct {
 		name           string
@@ -57,7 +67,8 @@ func TestLoggingDLQClient(t *testing.T) {
 		jobID       int64
 		kv          streampb.StreamEvent_KV
 		cdcEventRow cdcevent.Row
-		reason      error
+		applyError  error
+		dlqReason   retryEligibility
 	}
 
 	testCases := []testCase{
@@ -73,10 +84,10 @@ func TestLoggingDLQClient(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.reason == nil {
-				tc.reason = errors.New("some error")
+			if tc.applyError == nil {
+				tc.applyError = errors.New("some error")
 			}
-			err := dlqClient.Log(ctx, tc.jobID, tc.kv, tc.cdcEventRow, tc.reason)
+			err := dlqClient.Log(ctx, ie, tc.jobID, tc.kv, tc.cdcEventRow, tc.dlqReason)
 			if tc.expectedErrMsg == "" {
 				require.NoError(t, err)
 			} else {

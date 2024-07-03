@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -672,10 +673,17 @@ func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
 
 type mockDLQ int
 
-func (m *mockDLQ) Create() error { return nil }
+func (m *mockDLQ) Create(_ context.Context, _ sql.JobExecContext, _ []int32) error {
+	return nil
+}
 
 func (m *mockDLQ) Log(
-	_ context.Context, _ int64, _ streampb.StreamEvent_KV, _ cdcevent.Row, _ error,
+	_ context.Context,
+	_ isql.Executor,
+	_ int64,
+	_ streampb.StreamEvent_KV,
+	_ cdcevent.Row,
+	_ retryEligibility,
 ) error {
 	*m++
 	return nil

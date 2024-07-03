@@ -664,7 +664,8 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 			// If it already failed while applying on its own, handle the failure.
 			if len(batch) == 1 {
 				if eligibility := lrw.shouldRetryLater(err, canRetry); eligibility != retryAllowed {
-					if err := lrw.dlq(ctx, batch[0], bh.GetLastRow(), err, eligibility); err != nil {
+					ie := lrw.FlowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, lrw.FlowCtx.Cfg.Settings, "" /* opName */)))
+					if err := lrw.dlq(ctx, ie, batch[0], bh.GetLastRow(), err, eligibility); err != nil {
 						return flushStats{}, err
 					}
 					stats.processed.dlq++
@@ -678,7 +679,8 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 				for i := range batch {
 					if singleStats, err := bh.HandleBatch(ctx, batch[i:i+1]); err != nil {
 						if eligibility := lrw.shouldRetryLater(err, canRetry); eligibility != retryAllowed {
-							if err := lrw.dlq(ctx, batch[i], bh.GetLastRow(), err, eligibility); err != nil {
+							ie := lrw.FlowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, lrw.FlowCtx.Cfg.Settings, "" /* opName */)))
+							if err := lrw.dlq(ctx, ie, batch[i], bh.GetLastRow(), err, eligibility); err != nil {
 								return flushStats{}, err
 							}
 							stats.processed.dlq++
@@ -736,6 +738,7 @@ const logAllDLQs = true
 // TODO(dt): plumb the cdcevent.Row to this.
 func (lrw *logicalReplicationWriterProcessor) dlq(
 	ctx context.Context,
+	ie isql.Executor,
 	event streampb.StreamEvent_KV,
 	row cdcevent.Row,
 	applyErr error,
@@ -760,7 +763,7 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 	case errType:
 		lrw.metrics.DLQedDueToErrType.Inc(1)
 	}
-	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, applyErr)
+	return lrw.dlqClient.Log(ctx, ie, lrw.spec.JobID, event, row, eligibility)
 }
 
 type batchStats struct {

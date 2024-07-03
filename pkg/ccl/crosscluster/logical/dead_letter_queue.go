@@ -14,11 +14,39 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(azhu): Use WriteType as built-in database enum.
+const (
+	dlqBaseTableName = "crdb_replication_conflict_dlq_%d"
+	writeEnumStmt    = "CREATE TYPE write AS ENUM ('insert', 'update', 'delete')"
+
+	createTableStmt = `CREATE TABLE IF NOT EXISTS "%s" (
+			id                  INT8 DEFAULT unique_rowid(),
+			ingestion_job_id    INT8 NOT NULL,
+  		table_id    				INT8 NOT NULL,
+			dlq_timestamp     	TIMESTAMP NOT NULL,
+  		dlq_reason					STRING NOT NULL,
+			write_type					write,       
+  		key_value_bytes			BYTES NOT NULL,
+			incoming_row     		STRING NOT NULL,
+			PRIMARY KEY (ingestion_job_id, dlq_timestamp, id) USING HASH
+		)`
+
+	insertRowStmt = `INSERT INTO "%s" (
+			ingestion_job_id, 
+			table_id, 
+			dlq_timestamp,
+			dlq_reason,
+			write_type,
+			key_value_bytes,
+			incoming_row
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+)
+
 type WriteType int
 
 const (
@@ -29,81 +57,93 @@ const (
 func (t WriteType) String() string {
 	switch t {
 	case Insert:
-		return "Insert"
+		return "insert"
 	case Delete:
-		return "Delete"
+		return "delete"
 	default:
 		return fmt.Sprintf("Unrecognized WriteType(%d)", int(t))
 	}
 }
 
-type ConflictResolutionType int
-
-const (
-	Unresolved ConflictResolutionType = iota
-	ManuallyResolved
-	Applied
-	Ignored
-)
-
 type DeadLetterQueueClient interface {
-	Create() error
+	Create(
+		ctx context.Context, jobExecCtx sql.JobExecContext, tableIDs []int32,
+	) error
 
 	Log(
 		ctx context.Context,
+		ie isql.Executor,
 		ingestionJobID int64,
 		kv streampb.StreamEvent_KV,
 		cdcEventRow cdcevent.Row,
-		reason error,
+		dlqReason retryEligibility,
 	) error
 }
 
-type loggingDeadLetterQueueClient struct {
+type deadLetterQueueClient struct {
 }
 
-// TODO(azhu): Implement after V0.
-// In future iterations Create() should create a DLQ table in the database.
-func (dlq *loggingDeadLetterQueueClient) Create() error {
+func (dlq *deadLetterQueueClient) Create(
+	ctx context.Context, jobExecCtx sql.JobExecContext, tableIDs []int32,
+) error {
+	db := jobExecCtx.ExecCfg().InternalDB.Executor()
+
+	if _, err := db.Exec(ctx, "create-write-type-enum", nil, writeEnumStmt); err != nil {
+		return errors.Wrap(err, "failed to create write enum")
+	}
+
+	// Create a dlq table for each given table.
+	for _, tableID := range tableIDs {
+		tableName := fmt.Sprintf(dlqBaseTableName, tableID)
+		if _, err := db.Exec(ctx, "create-dlq-table", nil, fmt.Sprintf(createTableStmt, tableName)); err != nil {
+			return errors.Wrapf(err, "failed to create dlq for table %s", tableName)
+		}
+	}
 	return nil
 }
 
-// TODO(azhu): Append complete log as rows to DLQ table.
-func (dlq *loggingDeadLetterQueueClient) Log(
+func (dlq *deadLetterQueueClient) Log(
 	ctx context.Context,
+	ie isql.Executor,
 	ingestionJobID int64,
 	kv streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
-	reason error,
+	dlqReason retryEligibility,
 ) error {
-	if !dlq.exists() {
-		return errors.New("dead letter queue table needs to be created before logs can be appended")
-	}
-
 	if !cdcEventRow.IsInitialized() {
 		return errors.New("cdc event row not initialized")
 	}
 
 	tableID := cdcEventRow.TableID
-	var writeType WriteType
+	tableName := fmt.Sprintf(dlqBaseTableName, tableID)
+	currentTime := timeutil.Now()
+	bytes := kv.KeyValue.Value.RawBytes
 
+	var writeType WriteType
 	if cdcEventRow.IsDeleted() {
 		writeType = Delete
 	} else {
 		writeType = Insert
 	}
 
-	// TODO(azhu): once we have the actual reason passed in, replace DebugString() with reason
-	log.Infof(ctx,
-		`ingestion_job_id: %d,\n table_id: %d,\n write_type: %s,\n row: %s, \n reason: %s`,
-		ingestionJobID, tableID, writeType, cdcEventRow.DebugString(), reason.Error())
+	if _, err := ie.Exec(
+		ctx,
+		"insert-row-into-dlq-table",
+		nil, /* txn */
+		fmt.Sprintf(insertRowStmt, tableName),
+		ingestionJobID,
+		tableID,
+		currentTime,
+		dlqReason.String(),
+		writeType,
+		bytes,
+		cdcEventRow.DebugString(),
+	); err != nil {
+		return errors.Wrapf(err, "failed to insert row for table %d", tableID)
+	}
 	return nil
 }
 
-// TODO(azhu): verify that DLQ table exists.
-func (dlq *loggingDeadLetterQueueClient) exists() bool {
-	return true
-}
-
 func InitDeadLetterQueueClient() DeadLetterQueueClient {
-	return &loggingDeadLetterQueueClient{}
+	return &deadLetterQueueClient{}
 }
