@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 )
@@ -122,9 +123,8 @@ func (cm *CertManager) Reload(ctx context.Context) {
 			Success: false,
 			ErrorMessage: fmt.Sprintf(
 				"%d certs (out of %d) failed to reload", errCount, len(cm.certs),
-			)},
-		)
+			)}, severity.INFO, 0)
 	} else {
-		log.StructuredEvent(cm.ctx, &eventpb.CertsReload{Success: true})
+		log.StructuredEvent(cm.ctx, &eventpb.CertsReload{Success: true}, severity.INFO, 0)
 	}
 }

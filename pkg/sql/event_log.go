@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -564,7 +565,7 @@ func insertEventRecords(
 		// Simply emit the events to their respective channels and call it a day.
 		if opts.dst.hasFlag(LogExternally) {
 			for i := range entries {
-				log.StructuredEvent(ctx, entries[i])
+				log.StructuredEvent(ctx, entries[i], severity.INFO, 0)
 			}
 		}
 		// Not writing to system table: shortcut.
@@ -577,7 +578,7 @@ func insertEventRecords(
 	if txn != nil && opts.dst.hasFlag(LogExternally) {
 		txn.KV().AddCommitTrigger(func(ctx context.Context) {
 			for i := range entries {
-				log.StructuredEvent(ctx, entries[i])
+				log.StructuredEvent(ctx, entries[i], severity.INFO, 0)
 			}
 		})
 	}

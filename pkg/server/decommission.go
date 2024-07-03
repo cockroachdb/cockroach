@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -363,7 +364,7 @@ func (s *topLevelServer) Decommission(
 			event, nodeDetails := newEvent()
 			nodeDetails.TargetNodeID = int32(nodeID)
 			// Ensure an entry is produced in the external log in all cases.
-			log.StructuredEvent(ctx, event)
+			log.StructuredEvent(ctx, event, severity.INFO, 0)
 
 			// If we die right now or if this transaction fails to commit, the
 			// membership event will not be recorded to the event log. While we

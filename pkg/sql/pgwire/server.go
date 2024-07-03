@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -762,7 +763,7 @@ func (s *Server) ServeConn(
 			CommonEventDetails:      logpb.CommonEventDetails{Timestamp: connStart.UnixNano()},
 			CommonConnectionDetails: connDetails,
 		}
-		log.StructuredEvent(ctx, ev)
+		log.StructuredEvent(ctx, ev, severity.INFO, 0)
 	}
 	defer func() {
 		// The duration of the session is logged at the end so that the
@@ -776,7 +777,7 @@ func (s *Server) ServeConn(
 				CommonConnectionDetails: connDetails,
 				Duration:                endTime.Sub(connStart).Nanoseconds(),
 			}
-			log.StructuredEvent(ctx, ev)
+			log.StructuredEvent(ctx, ev, severity.INFO, 0)
 		}
 	}()
 

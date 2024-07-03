@@ -38,6 +38,7 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
+        "//pkg/util/log/severity",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
         "//pkg/util/mon",

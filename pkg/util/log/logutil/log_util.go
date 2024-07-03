@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/redact"
 )
@@ -54,7 +55,7 @@ func LogJobCompletion(
 		NumRows:      numRows,
 	}
 
-	log.StructuredEvent(ctx, event)
+	log.StructuredEvent(ctx, event, severity.INFO, 0)
 }
 
 // LogEventsWithDelay logs an eventpb.EventPayload at provided
@@ -72,7 +73,7 @@ func LogEventsWithDelay(
 			return
 		case <-timer.C:
 			event := events[0]
-			log.StructuredEvent(ctx, event)
+			log.StructuredEvent(ctx, event, severity.INFO, 0)
 			events = events[1:]
 			// Apply a delay to subsequent events.
 			timer.Reset(delay)

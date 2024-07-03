@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 )
 
@@ -74,7 +75,7 @@ func logBackupTelemetry(
 	ctx context.Context, initialDetails jobspb.BackupDetails, jobID jobspb.JobID,
 ) {
 	event := createBackupRecoveryEvent(ctx, initialDetails, jobID)
-	log.StructuredEvent(ctx, &event)
+	log.StructuredEvent(ctx, &event, severity.INFO, 0)
 }
 
 func createBackupRecoveryEvent(
@@ -302,7 +303,7 @@ func logCreateScheduleTelemetry(
 	backupEvent.OnExecutionFailure = jobspb.ScheduleDetails_ErrorHandlingBehavior_name[int32(details.OnError)]
 	backupEvent.IgnoreExistingBackup = ignoreExisting
 
-	log.StructuredEvent(ctx, &backupEvent)
+	log.StructuredEvent(ctx, &backupEvent, severity.INFO, 0)
 }
 
 // logRestoreTelemetry publishes an eventpb.RecoveryEvent about a restore
@@ -435,5 +436,5 @@ func logRestoreTelemetry(
 	}
 	sort.Strings(event.DestinationStorageTypes)
 
-	log.StructuredEvent(ctx, event)
+	log.StructuredEvent(ctx, event, severity.INFO, 0)
 }
