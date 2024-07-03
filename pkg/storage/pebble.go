@@ -1682,6 +1682,8 @@ func (p *Pebble) Close() {
 	for _, closeFunc := range p.cfg.afterClose {
 		closeFunc()
 	}
+
+	p.logger.Infof("Closed storage engine")
 }
 
 // aggregateIterStats is propagated to all of an engine's iterators, aggregating
