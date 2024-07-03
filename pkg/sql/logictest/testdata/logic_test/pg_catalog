@@ -5179,10 +5179,13 @@ subtest regression_126042
 statement ok
 CREATE TABLE t126042 (
   id INT8 NOT NULL PRIMARY KEY,
-  bytes_array BYTES[] DEFAULT '{f}'::BYTES[]
+  b BYTES DEFAULT 'f'::BYTES,
+  bytes_array BYTES[] DEFAULT '{f}'::BYTES[],
+  text_array TEXT[] DEFAULT '{a, b}'::TEXT[]
 )
 
-# Regression test for #126042. Expressions of type BYTES[] should be parsable.
+# Regression test for #126042 and #126344. Expressions of type BYTES and BYTES[]
+# should be parsable.
 query TT
 SELECT a.attname, pg_get_expr(d.adbin, d.adrelid)
 FROM pg_attribute a
@@ -5190,8 +5193,10 @@ LEFT JOIN pg_attrdef d ON a.attrelid = d.adrelid AND a.attnum = d.adnum
 WHERE a.attrelid = 't126042'::REGCLASS
 ORDER BY 1
 ----
+b            '\x66'::BYTES
 bytes_array  '{"\\x66"}'::BYTES[]
 id           NULL
+text_array   '{a,b}'::STRING[]
 
 subtest end
 
