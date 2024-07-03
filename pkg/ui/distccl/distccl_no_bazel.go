@@ -17,18 +17,26 @@ package distccl
 import (
 	"embed"
 	"io/fs"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/ui"
 )
 
 //go:embed assets/*
 var assets embed.FS
+var loadOnce sync.Once
+var lazyLoadedAssets fs.FS
 
 func init() {
-	var err error
-	ui.Assets, err = fs.Sub(assets, "assets")
-	if err != nil {
-		panic(err)
+	ui.Assets = func() fs.FS {
+		loadOnce.Do(func() {
+			var err error
+			lazyLoadedAssets, err = fs.Sub(assets, "assets")
+			if err != nil {
+				panic(err)
+			}
+		})
+		return lazyLoadedAssets
 	}
 	ui.HaveUI = true
 }

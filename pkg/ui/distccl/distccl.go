@@ -17,6 +17,8 @@ package distccl
 import (
 	"bytes"
 	_ "embed"
+	"io/fs"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/assetbundle"
@@ -24,12 +26,19 @@ import (
 
 //go:embed assets.tar.zst
 var assets []byte
+var loadOnce sync.Once
+var lazyLoadedAssets fs.FS
 
 func init() {
-	fs, err := assetbundle.AsFS(bytes.NewBuffer(assets))
-	if err != nil {
-		panic(err)
+	ui.Assets = func() fs.FS {
+		loadOnce.Do(func() {
+			var err error
+			lazyLoadedAssets, err = assetbundle.AsFS(bytes.NewBuffer(assets))
+			if err != nil {
+				panic(err)
+			}
+		})
+		return lazyLoadedAssets
 	}
-	ui.Assets = fs
 	ui.HaveUI = true
 }
