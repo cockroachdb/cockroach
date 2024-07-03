@@ -452,8 +452,14 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
 	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
 		cpuTime := grunning.Time() - ah.cpuStart
-		if buildutil.CrdbTestBuild && cpuTime < 0 {
-			panic("grunning.Time() should be non-decreasing")
+		if cpuTime < 0 {
+			// We sometimes see cpuTime to be negative. We use 1ns here, arbitrarily.
+			// This issue is tracked by
+			// https://github.com/cockroachdb/cockroach/issues/126681.
+			if buildutil.CrdbTestBuild {
+				log.Warningf(context.Background(), "grunning.Time() should be non-decreasing, cpuTime=%s", cpuTime)
+			}
+			cpuTime = 1
 		}
 		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID, cpuTime)
 	}
