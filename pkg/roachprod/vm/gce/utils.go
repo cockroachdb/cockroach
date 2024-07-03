@@ -262,6 +262,9 @@ sudo ua enable fips --assume-yes
 sudo -u {{ .SharedUser }} bash -c "mkdir ~/.ssh && chmod 700 ~/.ssh"
 sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
 
+sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
+sudo service ssh restart
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
