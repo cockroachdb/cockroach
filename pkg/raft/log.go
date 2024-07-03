@@ -103,11 +103,17 @@ func (l *raftLog) String() string {
 		l.committed, l.applied, l.applying, l.unstable.offset, l.unstable.offsetInProgress, len(l.unstable.entries))
 }
 
-// maybeAppend appends the given log slice to the log. Returns false if the
-// slice can not be appended (because it is out of bounds, or a.prev does not
-// match the log).
+// maybeAppend conditionally appends the given log slice to the log, making it
+// consistent with the a.term leader log up to a.lastIndex(). A prefix of this
+// log slice may already be present in the log, in which case it is skipped, and
+// only the missing suffix is appended.
 //
-// TODO(pav-kv): merge maybeAppend and append into one method.
+// Before appending, this may truncate a suffix of the log first, from the index
+// at which a newer leader's log (and the given slice) diverges from this log.
+//
+// Returns false if the operation can not be done: entry a.prev does not match
+// the log (so this log slice is insufficient to make our log consistent with
+// the leader log), or is out of bounds (appending it would introduce a gap).
 func (l *raftLog) maybeAppend(a logSlice) bool {
 	match, ok := l.match(a)
 	if !ok {
@@ -115,22 +121,26 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 	}
 	// Fast-forward the appended log slice to the last matching entry.
 	// NB: a.prev.index <= match <= a.lastIndex(), so the call is safe.
-	a = a.forward(match)
-
-	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
-	// bookkeeping in the unstable structure.
-	l.append(a.entries...)
-	return true
+	return l.append(a.forward(match))
 }
 
-func (l *raftLog) append(ents ...pb.Entry) {
-	if len(ents) == 0 {
-		return
+// append conditionally appends the given log slice to the log. Same as
+// maybeAppend, but does not skip the already present entries.
+//
+// TODO(pav-kv): do a clearer distinction between maybeAppend and append. The
+// append method should only append at the end of the log (and verify that it's
+// the case), and maybeAppend can truncate the log.
+func (l *raftLog) append(a logSlice) bool {
+	if len(a.entries) == 0 {
+		return true
 	}
-	if first := ents[0].Index; first <= l.committed {
+	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
 	}
-	l.unstable.truncateAndAppend(ents)
+	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
+	// bookkeeping in the unstable structure.
+	l.unstable.truncateAndAppend(a.entries)
+	return true
 }
 
 // match finds the longest prefix of the given log slice that matches the log.
