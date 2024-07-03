@@ -129,6 +129,7 @@ func init() {
 			Use:   `run`,
 			Short: `run a workload's operations against a cluster`,
 		})
+
 		for _, meta := range workload.Registered() {
 			gen := meta.New()
 			if _, ok := gen.(workload.Opser); !ok {
@@ -140,7 +141,6 @@ func init() {
 			var genFlags *pflag.FlagSet
 			if f, ok := gen.(workload.Flagser); ok {
 				genFlags = f.Flags().FlagSet
-				gen.(workload.Flagser).Flags().AddFlag(runFlags.Lookup("duration"))
 			}
 
 			genRunCmd := SetCmdDefaults(&cobra.Command{
@@ -401,6 +401,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		}
 	}
 
+	// Adding --duration to the generator flags for checking long duration workload in tpcc
+	gen.(workload.Flagser).Flags().AddFlag(runFlags.Lookup("duration"))
 	var limiter *rate.Limiter
 	if *maxRate > 0 {
 		// Create a limiter using maxRate specified on the command line and
