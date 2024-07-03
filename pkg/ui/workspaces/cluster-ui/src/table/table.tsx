@@ -12,6 +12,7 @@ import React from "react";
 import { Table as AntTable, ConfigProvider } from "antd";
 import classnames from "classnames/bind";
 import isArray from "lodash/isArray";
+import { CaretDownOutlined, CaretRightOutlined } from "@ant-design/icons";
 
 import styles from "./table.module.scss";
 
@@ -35,7 +36,7 @@ const customizeRenderEmpty = (node: React.ReactNode) => () => (
   <div className={cx("empty-table__message")}>{node}</div>
 );
 
-export function Table<T extends object>(
+export function Table<T extends object & { children?: T[] }>(
   props: TableProps<T>,
 ): React.ReactElement {
   const {
@@ -55,7 +56,6 @@ export function Table<T extends object>(
         })}
         columns={columns}
         dataSource={dataSource}
-        expandRowByClick
         tableLayout={tableLayout}
         pagination={{ hideOnSinglePage: true, pageSize }}
         onChange={(_pagination, _filters, sorter) => {
@@ -65,6 +65,26 @@ export function Table<T extends object>(
               sorter.order === "ascend",
             );
           }
+        }}
+        expandable={{
+          expandRowByClick: true,
+          expandIcon: ({ expanded, onExpand, record }) => {
+            // Don't render expand icon for row that doesn't have children elements.
+            if (!(record.children && record.children.length > 0)) {
+              return null;
+            }
+            return expanded ? (
+              <CaretDownOutlined
+                onClick={e => onExpand(record, e)}
+                className={cx("expand-toggle")}
+              />
+            ) : (
+              <CaretRightOutlined
+                onClick={e => onExpand(record, e)}
+                className={cx("expand-toggle")}
+              />
+            );
+          },
         }}
       />
     </ConfigProvider>
