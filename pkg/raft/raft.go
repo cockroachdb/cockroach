@@ -747,7 +747,23 @@ func (r *raft) appliedSnap(snap *pb.Snapshot) {
 // index changed (in which case the caller should call r.bcastAppend). This can
 // only be called in StateLeader.
 func (r *raft) maybeCommit() bool {
-	return r.raftLog.maybeCommit(entryID{term: r.Term, index: r.trk.Committed()})
+	index := r.trk.Committed()
+	if index <= r.raftLog.committed {
+		// The commit index must not regress.
+		// TODO(pav-kv): consider making it an assertion.
+		return false
+	}
+	// Section 5.4.2 of raft paper (https://raft.github.io/raft.pdf):
+	//
+	// Only log entries from the leader’s current term are committed by counting
+	// replicas; once an entry from the current term has been committed in this
+	// way, then all prior entries are committed indirectly because of the Log
+	// Matching Property.
+	if !r.raftLog.matchTerm(entryID{term: r.Term, index: index}) {
+		return false
+	}
+	r.raftLog.commitTo(index)
+	return true
 }
 
 func (r *raft) reset(term uint64) {
