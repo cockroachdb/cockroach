@@ -476,17 +476,6 @@ func (l *raftLog) matchTerm(id entryID) bool {
 	return t == id.term
 }
 
-func (l *raftLog) maybeCommit(at entryID) bool {
-	// NB: term should never be 0 on a commit because the leader campaigned at
-	// least at term 1. But if it is 0 for some reason, we don't consider this a
-	// term match.
-	if at.term != 0 && at.index > l.committed && l.matchTerm(at) {
-		l.commitTo(at.index)
-		return true
-	}
-	return false
-}
-
 func (l *raftLog) restore(s pb.Snapshot) {
 	l.logger.Infof("log [%s] starts to restore snapshot [index: %d, term: %d]", l, s.Metadata.Index, s.Metadata.Term)
 	l.committed = s.Metadata.Index
