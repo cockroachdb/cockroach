@@ -205,6 +205,9 @@ sudo hostnamectl set-hostname {{.VMName}}
 sudo ua enable fips --assume-yes
 {{ end }}
 
+sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
+sudo service ssh restart
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
