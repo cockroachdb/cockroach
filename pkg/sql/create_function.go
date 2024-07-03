@@ -587,17 +587,25 @@ func setFuncOptions(
 	}
 
 	if lang != catpb.Function_UNKNOWN_LANGUAGE && body != "" {
-		// Replace any sequence names in the function body with IDs.
-		seqReplacedFuncBody, err := replaceSeqNamesWithIDsLang(params.ctx, params.p, body, true, lang)
-		if err != nil {
-			return err
+		// Trigger functions do not analyze SQL statements beyond parsing, so type
+		// and sequence names should not be replaced during trigger-function
+		// creation.
+		returnType := udfDesc.ReturnType.Type
+		lazilyEvalSQL := returnType != nil && returnType.Identical(types.Trigger)
+		if !lazilyEvalSQL {
+			// Replace any sequence names in the function body with IDs.
+			body, err = replaceSeqNamesWithIDsLang(params.ctx, params.p, body, true, lang)
+			if err != nil {
+				return err
+			}
+			// Replace any UDT names in the function body with IDs.
+			body, err = serializeUserDefinedTypesLang(
+				params.ctx, params.p.SemaCtx(), body, true /* multiStmt */, "UDFs", lang)
+			if err != nil {
+				return err
+			}
 		}
-		typeReplacedFuncBody, err := serializeUserDefinedTypesLang(
-			params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */, "UDFs", lang)
-		if err != nil {
-			return err
-		}
-		udfDesc.SetFuncBody(typeReplacedFuncBody)
+		udfDesc.SetFuncBody(body)
 	}
 	return nil
 }
