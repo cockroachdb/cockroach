@@ -1,4 +1,6 @@
 ---
+includes:
+- config-override.yaml
 service:
   flush: 1
   daemon: off
@@ -23,6 +25,11 @@ pipeline:
     format: json
     storage.type: filesystem
     alias: cockroachdb
+  filters:
+  - name: modify
+    match: "*"
+    set:
+    - hostname {{ .Hostname }}
   outputs:
   - name: datadog
     match: cockroachdb

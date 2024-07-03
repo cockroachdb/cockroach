@@ -60,7 +60,6 @@ func Install(ctx context.Context, l *logger.Logger, c *install.SyncedCluster, co
 		tags := []string{
 			// Reserved Datadog tags.
 			"env:development",
-			fmt.Sprintf("host:%s", vm.Name(c.Name, int(node))),
 
 			// Custom tags.
 			fmt.Sprintf("cluster:%s", c.Name),
@@ -71,6 +70,7 @@ func Install(ctx context.Context, l *logger.Logger, c *install.SyncedCluster, co
 			DatadogSite:    config.DatadogSite,
 			DatadogAPIKey:  config.DatadogAPIKey,
 			DatadogService: config.DatadogService,
+			Hostname:       vm.Name(c.Name, int(node)),
 			Tags:           tags,
 		}
 
@@ -90,11 +90,15 @@ func Install(ctx context.Context, l *logger.Logger, c *install.SyncedCluster, co
 			return res, res.Err
 		}
 
+		// The `/etc/fluent-bit/config-override.yaml` file is created with no
+		// content so that the fluent-bit service can successfully start. Operators
+		// can add additional configuration in there to suit their needs.
 		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(install.Nodes{node}), "fluent-bit", `
-sudo cp /tmp/fluent-bit.yaml /etc/fluent-bit/fluent-bit.yaml && rm /tmp/fluent-bit.yaml
-sudo cp /tmp/fluent-bit.service /etc/systemd/system/fluent-bit.service && rm /tmp/fluent-bit.service
-sudo systemctl daemon-reload && sudo systemctl enable fluent-bit && sudo systemctl restart fluent-bit
-`); err != nil {
+		sudo cp /tmp/fluent-bit.yaml /etc/fluent-bit/fluent-bit.yaml && rm /tmp/fluent-bit.yaml
+		sudo touch /etc/fluent-bit/config-override.yaml
+		sudo cp /tmp/fluent-bit.service /etc/systemd/system/fluent-bit.service && rm /tmp/fluent-bit.service
+		sudo systemctl daemon-reload && sudo systemctl enable fluent-bit && sudo systemctl restart fluent-bit
+		`); err != nil {
 			res.Err = errors.Wrap(err, "failed enabling and starting fluent bit service")
 			return res, res.Err
 		}
@@ -122,6 +126,7 @@ type templateData struct {
 	DatadogSite    string
 	DatadogAPIKey  string
 	DatadogService string
+	Hostname       string
 	Tags           []string
 }
 

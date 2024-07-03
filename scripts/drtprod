@@ -97,7 +97,7 @@ case $1 in
 
     # Disable the default integrations for the Datadog agent in preparation for
     # its removal.
-    roachprod ssh ${cluster} -- 'sudo bash -c "for file in $(find /etc/datadog-agent/conf.d -type f -name conf.yaml.default); do mv ${file} ${file}.bak; done"'
+    roachprod ssh ${cluster} -- 'sudo bash -c "for file in \$(find /etc/datadog-agent/conf.d -type f -name conf.yaml.default); do mv \${file} \${file}.bak; done"'
 
     roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/datadog.yaml > /dev/null << EOF
 ---
@@ -114,6 +114,32 @@ tags:
 EOF"
 
     case $cluster in
+      "drt-chaos")
+        roachprod ssh ${cluster} -- "sudo mkdir -p /etc/fluent-bit && sudo tee /etc/fluent-bit/config-override.yaml > /dev/null << EOF
+---
+pipeline:
+  inputs:
+  - name: tail
+    path: /var/log/audit/audit.log
+    tag: audit
+    key: message
+    storage.type: filesystem
+    alias: audit
+  outputs:
+  - name: datadog
+    match: audit
+    host: http-intake.logs.${dd_site}
+    tls: on
+    compress: gzip
+    apikey: ${dd_api_key}
+    dd_source: audit
+    dd_service: drt-cockroachdb
+    dd_tags: env:development,cluster:${cluster%:*},service:drt-cockroachdb,team:drt
+    alias: audit
+    storage.total_limit_size: 25MB
+EOF"
+        ;;
+
       "workload-chaos")
         roachprod ssh ${cluster} -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
 ---
