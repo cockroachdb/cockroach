@@ -287,6 +287,12 @@ npm_translate_lock(
     },
     pnpm_lock = "//pkg/ui:pnpm-lock.yaml",
     verify_node_modules_ignored = "//:.bazelignore",
+    # public_hoist_packages should contain the same packages defined in .npmrc file > public-hoist-pattern.
+    public_hoist_packages = {
+        # `antd` components inherit prop types from rc-* components which types aren't hoisted to be
+        # publicly accessible but it still needed to properly resolve types by Typescript.
+        "rc-table": ["pkg/ui/workspaces/cluster-ui"],
+    },
 )
 
 load("@npm//:repositories.bzl", "npm_repositories")
