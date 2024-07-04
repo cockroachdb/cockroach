@@ -28,6 +28,8 @@ type purgatory struct {
 	delay      time.Duration // delay to wait between attempts of a level.
 	deadline   time.Duration // age of a level after which drain is mandatory.
 	levelLimit int
+	flush      func(context.Context, []streampb.StreamEvent_KV, bool) ([]streampb.StreamEvent_KV, error)
+	checkpoint func(context.Context, []jobspb.ResolvedSpan) error
 }
 
 type purgatoryLevel struct {
@@ -46,18 +48,13 @@ func (p *purgatory) Checkpoint(ctx context.Context, checkpoint []jobspb.Resolved
 	p.levels[len(p.levels)-1].closedAt = timeutil.Now()
 }
 
-func (p *purgatory) Store(
-	ctx context.Context,
-	events []streampb.StreamEvent_KV,
-	flush func(context.Context, []streampb.StreamEvent_KV, bool) ([]streampb.StreamEvent_KV, error),
-	checkpoint func(context.Context, []jobspb.ResolvedSpan) error,
-) error {
+func (p *purgatory) Store(ctx context.Context, events []streampb.StreamEvent_KV) error {
 	if len(events) == 0 {
 		return nil
 	}
 
 	if p.full() {
-		if err := p.Drain(ctx, flush, checkpoint); err != nil {
+		if err := p.Drain(ctx); err != nil {
 			return err
 		}
 	}
@@ -66,11 +63,7 @@ func (p *purgatory) Store(
 	return nil
 }
 
-func (p *purgatory) Drain(
-	ctx context.Context,
-	flush func(context.Context, []streampb.StreamEvent_KV, bool) ([]streampb.StreamEvent_KV, error),
-	checkpoint func(context.Context, []jobspb.ResolvedSpan) error,
-) error {
+func (p *purgatory) Drain(ctx context.Context) error {
 	var resolved int
 
 	for i := range p.levels {
@@ -83,9 +76,8 @@ func (p *purgatory) Drain(
 		if timeutil.Since(p.levels[i].lastAttempted) < p.delay && !mustProcess {
 			break
 		}
-
 		p.levels[i].lastAttempted = timeutil.Now()
-		remaining, err := flush(ctx, p.levels[i].events, mustProcess)
+		remaining, err := p.flush(ctx, p.levels[i].events, mustProcess)
 		if err != nil {
 			return err
 		}
@@ -96,7 +88,7 @@ func (p *purgatory) Drain(
 		if resolved == i && len(remaining) == 0 {
 			resolved++
 			if p.levels[i].willResolve != nil {
-				if err := checkpoint(ctx, p.levels[i].willResolve); err != nil {
+				if err := p.checkpoint(ctx, p.levels[i].willResolve); err != nil {
 					return err
 				}
 			}
