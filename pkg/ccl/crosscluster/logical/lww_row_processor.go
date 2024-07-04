@@ -198,7 +198,6 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	} else {
 		stats, err = lww.insertRow(ctx, txn, row, prevValue)
 	}
-	stats.byteSize = int64(kv.Size())
 	return stats, err
 }
 
