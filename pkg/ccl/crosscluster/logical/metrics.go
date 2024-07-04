@@ -22,6 +22,12 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDLQedRowUpdates = metric.Metadata{
+		Name:        "logical_replication.events_dlqed",
+		Help:        "Row update events sent to DLQ",
+		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaAppliedLogicalBytes = metric.Metadata{
 		Name:        "logical_replication.logical_bytes",
 		Help:        "Logical bytes (sum of keys + values) ingested by all replication jobs",
@@ -49,6 +55,30 @@ var (
 		Help:        "Time spent flushing a batch",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaInitialApplySuccess = metric.Metadata{
+		Name:        "logical_replication.events_initial_success",
+		Help:        "Successful applications of an incoming row update",
+		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaInitialApplyFailures = metric.Metadata{
+		Name:        "logical_replication.events_initial_failure",
+		Help:        "Failed attempts to apply an incoming row update",
+		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRetriedApplySuccesses = metric.Metadata{
+		Name:        "logical_replication.events_retry_success",
+		Help:        "Row update events applied after one or more retries",
+		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRetriedApplyFailures = metric.Metadata{
+		Name:        "logical_replication.events_retry_failure",
+		Help:        "Failed re-attempts to apply a row update",
+		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Internal metrics.
@@ -89,6 +119,7 @@ type Metrics struct {
 	// Top-line user-facing numbers that how many events and how much data are
 	// bring moved and applied/rejected/etc.
 	AppliedRowUpdates     *metric.Counter
+	DLQedRowUpdates       *metric.Counter
 	AppliedLogicalBytes   *metric.Counter
 	CommitToCommitLatency metric.IHistogram
 	ReplicatedTimeSeconds *metric.Gauge
@@ -97,6 +128,11 @@ type Metrics struct {
 	// should be a narrow subset of numbers that are actually relevant to a user
 	// such as the latency of application as that could be their supplied UDF.
 	ApplyBatchNanosHist metric.IHistogram
+
+	InitialApplySuccesses *metric.Counter
+	InitialApplyFailures  *metric.Counter
+	RetriedApplySuccesses *metric.Counter
+	RetriedApplyFailures  *metric.Counter
 
 	// Internal numbers that are useful for determining why a stream is behaving
 	// a specific way.
@@ -115,6 +151,7 @@ func (*Metrics) MetricStruct() {}
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	return &Metrics{
 		AppliedRowUpdates:   metric.NewCounter(metaAppliedRowUpdates),
+		DLQedRowUpdates:     metric.NewCounter(metaDLQedRowUpdates),
 		AppliedLogicalBytes: metric.NewCounter(metaAppliedLogicalBytes),
 		CommitToCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
@@ -129,7 +166,11 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
-		CheckpointEvents: metric.NewCounter(metaCheckpointEvents),
+		InitialApplySuccesses: metric.NewCounter(metaInitialApplySuccess),
+		InitialApplyFailures:  metric.NewCounter(metaInitialApplyFailures),
+		RetriedApplySuccesses: metric.NewCounter(metaRetriedApplySuccesses),
+		RetriedApplyFailures:  metric.NewCounter(metaRetriedApplyFailures),
+		CheckpointEvents:      metric.NewCounter(metaCheckpointEvents),
 		StreamBatchRowsHist: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaStreamBatchRowsHist,
