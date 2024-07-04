@@ -190,6 +190,10 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 func (o *providerOpts) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
 
+// ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
+func (o *providerOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
+}
+
 // CleanSSH is part of the vm.Provider interface.  This implementation is a no-op.
 func (p *Provider) CleanSSH(l *logger.Logger) error {
 	return nil
