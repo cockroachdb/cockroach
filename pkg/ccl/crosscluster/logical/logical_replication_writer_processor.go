@@ -503,9 +503,21 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return nil, 0, nil
 	}
 
-	// Ensure the batcher is always reset, even on early error returns.
 	preFlushTime := timeutil.Now()
-	lrw.debug.RecordFlushStart(preFlushTime, int64(len(kvs)))
+
+	// Inform the debugging helper that a flush is starting and configure failure
+	// injection if it indicates it is requested.
+	testingFailPercent := lrw.debug.RecordFlushStart(preFlushTime, int64(len(kvs)))
+	if testingFailPercent > 0 {
+		for i := range lrw.bh {
+			lrw.bh[i].SetSyntheticFailurePercent(testingFailPercent)
+		}
+		defer func() {
+			for i := range lrw.bh {
+				lrw.bh[i].SetSyntheticFailurePercent(0)
+			}
+		}()
+	}
 
 	// k returns the row key for some KV event, truncated if needed to the row key
 	// prefix.
@@ -724,6 +736,7 @@ type BatchHandler interface {
 	// implicit txn.
 	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
 	GetLastRow() cdcevent.Row
+	SetSyntheticFailurePercent(uint32)
 }
 
 // RowProcessor knows how to process a single row from an event stream.
@@ -733,6 +746,7 @@ type RowProcessor interface {
 	// before the change was applied on the source.
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
 	GetLastRow() cdcevent.Row
+	SetSyntheticFailurePercent(uint32)
 }
 
 type txnBatch struct {
@@ -780,6 +794,10 @@ func (t *txnBatch) HandleBatch(
 
 func (t *txnBatch) GetLastRow() cdcevent.Row {
 	return t.rp.GetLastRow()
+}
+
+func (t *txnBatch) SetSyntheticFailurePercent(rate uint32) {
+	t.rp.SetSyntheticFailurePercent(rate)
 }
 
 func init() {
