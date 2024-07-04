@@ -27,6 +27,8 @@ const (
 	AcceptHeader = "Accept"
 	// AcceptEncodingHeader is the canonical header name for accept encoding.
 	AcceptEncodingHeader = "Accept-Encoding"
+	// ContentDispositionHeader is the canonical header name for content disposition.
+	ContentDispositionHeader = "Content-Disposition"
 	// ContentEncodingHeader is the canonical header name for content type.
 	ContentEncodingHeader = "Content-Encoding"
 	// ContentTypeHeader is the canonical header name for content type.
