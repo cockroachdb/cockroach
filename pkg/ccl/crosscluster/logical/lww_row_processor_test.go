@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -75,13 +76,13 @@ func TestLWWInsertQueryGeneration(t *testing.T) {
 		return tableName
 	}
 
-	setup := func(t *testing.T, schemaTmpl string) (*sqlLastWriteWinsRowProcessor, func(...interface{}) roachpb.KeyValue) {
+	setup := func(t *testing.T, schemaTmpl string) (*sqlRowProcessor, func(...interface{}) roachpb.KeyValue) {
 		tableNameSrc := createTable(t, schemaTmpl)
 		tableNameDst := createTable(t, schemaTmpl)
 		srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameSrc)
 		dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameDst)
-		rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]catalog.TableDescriptor{
-			int32(dstDesc.GetID()): srcDesc,
+		rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]catalog.TableDescriptor{
+			dstDesc.GetID(): srcDesc,
 		}, s.InternalExecutor().(isql.Executor))
 		require.NoError(t, err)
 		return rp, func(datums ...interface{}) roachpb.KeyValue {
@@ -147,8 +148,8 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	// Simulate how we set up the row processor on the main code path.
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
-	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]catalog.TableDescriptor{
-		int32(desc.GetID()): desc,
+	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[descpb.ID]catalog.TableDescriptor{
+		desc.GetID(): desc,
 	}, s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)))
 	require.NoError(b, err)
 
