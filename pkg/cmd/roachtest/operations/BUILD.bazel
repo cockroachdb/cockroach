@@ -6,6 +6,7 @@ go_library(
         "add_column.go",
         "add_index.go",
         "cluster_settings.go",
+        "compaction.go",
         "disk_stall.go",
         "network_partition.go",
         "node_kill.go",
