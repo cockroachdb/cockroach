@@ -30,43 +30,39 @@ func ts(i int64) []jobspb.ResolvedSpan {
 
 func TestPurgatory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	ctx := context.Background()
 
+	var flushed, resolved int
 	p := &purgatory{
 		levelLimit: 5,
-	}
-
-	var flushed int
-	noopFlush := func(
-		_ context.Context, ev []streampb.StreamEvent_KV, _ bool,
-	) ([]streampb.StreamEvent_KV, error) {
-		for i := range ev {
-			if i%2 == 0 {
-				flushed++
-				t.Logf("flush %s", ev[i].KeyValue.Key)
-				ev[i] = streampb.StreamEvent_KV{}
+		flush: func(
+			_ context.Context, ev []streampb.StreamEvent_KV, _ bool,
+		) ([]streampb.StreamEvent_KV, error) {
+			for i := range ev {
+				if i%2 == 0 {
+					flushed++
+					t.Logf("flush %s", ev[i].KeyValue.Key)
+					ev[i] = streampb.StreamEvent_KV{}
+				}
 			}
-		}
-		return filterRemaining(ev), nil
-	}
-
-	var resolved int
-	checkpoint := func(_ context.Context, sp []jobspb.ResolvedSpan) error {
-		resolved = int(sp[0].Timestamp.WallTime)
-		return nil
+			return filterRemaining(ev), nil
+		},
+		checkpoint: func(_ context.Context, sp []jobspb.ResolvedSpan) error {
+			resolved = int(sp[0].Timestamp.WallTime)
+			return nil
+		},
 	}
 
 	// Adding events makes it non-empty.
 	require.True(t, p.Empty())
-	require.NoError(t, p.Store(ctx, []streampb.StreamEvent_KV{skv("a"), skv("b")}, nil, nil))
-	require.NoError(t, p.Store(ctx, []streampb.StreamEvent_KV{skv("c"), skv("d")}, nil, nil))
+	require.NoError(t, p.Store(ctx, []streampb.StreamEvent_KV{skv("a"), skv("b")}))
+	require.NoError(t, p.Store(ctx, []streampb.StreamEvent_KV{skv("c"), skv("d")}))
 	p.Checkpoint(ctx, ts(1))
 
-	require.NoError(t, p.Store(ctx, []streampb.StreamEvent_KV{skv("e"), skv("f"), skv("g"), skv("h")}, nil, nil))
+	require.NoError(t, p.Store(ctx, []streampb.StreamEvent_KV{skv("e"), skv("f"), skv("g"), skv("h")}))
 	p.Checkpoint(ctx, ts(2))
 
-	require.NoError(t, p.Store(ctx, []streampb.StreamEvent_KV{skv("x")}, nil, nil))
+	require.NoError(t, p.Store(ctx, []streampb.StreamEvent_KV{skv("x")}))
 	require.False(t, p.Empty())
 
 	// Nothing has drained yet, so no movement in flushed or resolved.
@@ -75,17 +71,17 @@ func TestPurgatory(t *testing.T) {
 	require.Equal(t, 4, len(p.levels))
 
 	// Draining drains half the events, but no checkpoints yet.
-	require.NoError(t, p.Drain(ctx, noopFlush, checkpoint))
+	require.NoError(t, p.Drain(ctx))
 	require.Equal(t, 5, flushed)
 	require.Equal(t, 0, resolved)
 
 	// Draining drains half the events, now checkpointing after lvl 2.
-	require.NoError(t, p.Drain(ctx, noopFlush, checkpoint))
+	require.NoError(t, p.Drain(ctx))
 	require.Equal(t, 8, flushed)
 	require.Equal(t, 1, resolved)
 	require.False(t, p.Empty())
 
-	require.NoError(t, p.Drain(ctx, noopFlush, checkpoint))
+	require.NoError(t, p.Drain(ctx))
 	require.Equal(t, 9, flushed)
 	require.Equal(t, 2, resolved)
 	require.True(t, p.Empty())

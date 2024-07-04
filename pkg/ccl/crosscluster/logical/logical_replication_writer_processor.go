@@ -153,12 +153,15 @@ func newLogicalReplicationWriterProcessor(
 			ProcessorID: processorID,
 		},
 		dlqClient: InitDeadLetterQueueClient(),
-		purgatory: purgatory{
-			deadline:   time.Minute,
-			delay:      time.Second * 5,
-			levelLimit: 10,
-		},
 	}
+	lrw.purgatory = purgatory{
+		deadline:   time.Minute,
+		delay:      time.Second * 5,
+		levelLimit: 10,
+		flush:      lrw.flushBuffer,
+		checkpoint: lrw.checkpoint,
+	}
+
 	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
@@ -408,7 +411,7 @@ func (lrw *logicalReplicationWriterProcessor) maybeCheckpoint(
 	// to drain it.
 	if !lrw.purgatory.Empty() {
 		lrw.purgatory.Checkpoint(ctx, resolvedSpans)
-		return lrw.purgatory.Drain(ctx, lrw.flushBuffer, lrw.checkpoint)
+		return lrw.purgatory.Drain(ctx)
 	}
 
 	return lrw.checkpoint(ctx, resolvedSpans)
@@ -454,7 +457,7 @@ func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 		return err
 	}
 	// Put any events that failed to apply into purgatory (flushing if needed).
-	if err := lrw.purgatory.Store(ctx, unapplied, lrw.flushBuffer, lrw.checkpoint); err != nil {
+	if err := lrw.purgatory.Store(ctx, unapplied); err != nil {
 		return err
 	}
 
