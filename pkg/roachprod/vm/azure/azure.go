@@ -420,8 +420,41 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	return nil
 }
 
-// Reset implements the vm.Provider interface. It is a no-op.
+// Reset implements the vm.Provider interface.
 func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
+	defer cancel()
+
+	sub, err := p.getSubscription(ctx)
+	if err != nil {
+		return err
+	}
+	client := compute.NewVirtualMachinesClient(sub)
+	if client.Authorizer, err = p.getAuthorizer(); err != nil {
+		return err
+	}
+
+	var futures []compute.VirtualMachinesRestartFuture
+	for _, vm := range vms {
+		parts, err := parseAzureID(vm.ProviderID)
+		if err != nil {
+			return err
+		}
+		future, err := client.Restart(ctx, parts.resourceGroup, parts.resourceName)
+		if err != nil {
+			return errors.Wrapf(err, "could not restart %s", vm.ProviderID)
+		}
+		futures = append(futures, future)
+	}
+
+	for _, future := range futures {
+		if err := future.WaitForCompletionRef(ctx, client.Client); err != nil {
+			return err
+		}
+		if _, err := future.Result(client); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

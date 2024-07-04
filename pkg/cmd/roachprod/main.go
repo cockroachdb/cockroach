@@ -992,9 +992,8 @@ var runCmd = &cobra.Command{
 var resetCmd = &cobra.Command{
 	Use:   "reset <cluster>",
 	Short: "reset *all* VMs in a cluster",
-	Long: `Reset a cloud VM. This may not be implemented for all
-environments and will fall back to a no-op.`,
-	Args: cobra.ExactArgs(1),
+	Long:  `Reset a cloud VM.`,
+	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 		return roachprod.Reset(config.Logger, args[0])
 	}),

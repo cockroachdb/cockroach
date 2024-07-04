@@ -736,9 +736,26 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	return g.Wait()
 }
 
-// Reset is part of vm.Provider. It is a no-op.
+// Reset is part of vm.Provider.
 func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
-	return nil // unimplemented
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return err
+	}
+	g := errgroup.Group{}
+	for region, list := range byRegion {
+		args := []string{
+			"ec2", "reboot-instances",
+			"--region", region,
+			"--instance-ids",
+		}
+		args = append(args, list.ProviderIDs()...)
+		g.Go(func() error {
+			_, e := p.runCommand(l, args)
+			return e
+		})
+	}
+	return g.Wait()
 }
 
 // Extend is part of the vm.Provider interface.
