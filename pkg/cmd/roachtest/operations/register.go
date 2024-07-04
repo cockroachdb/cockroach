@@ -21,4 +21,5 @@ func RegisterOperations(r registry.Registry) {
 	registerNodeKill(r)
 	registerClusterSettings(r)
 	registerBackupRestore(r)
+	registerManualCompaction(r)
 }
