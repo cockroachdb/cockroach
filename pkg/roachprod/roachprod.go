@@ -1682,14 +1682,17 @@ func GC(l *logger.Logger, dryrun bool) error {
 		}()
 	}
 
-	// GCAwsKeyPairs has no dependencies and can start immediately.
+	// GC of aws need to be handled separately because gcCmd supports this operation on multiple aws account.
+	// Handles AWS garbage collection by assuming a unique IAM role (`roachprod-gc-cronjob`) in each AWS account.
+	// This is necessary because a single IAM user cannot perform actions across multiple AWS accounts.
+	// Temporary AWS credentials are generated via STS for each account to run garbage collection.
 	addOpFn(func() error {
-		return cloud.GCAWSKeyPairs(l, dryrun)
+		return cloud.GCAWS(l, dryrun)
 	})
 
 	// ListCloud may fail for a provider, but we can still attempt GC on
 	// the clusters we do have.
-	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true})
+	cld, _ := cloud.ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{gce.ProviderName, azure.ProviderName}})
 	addOpFn(func() error {
 		return cloud.GCClusters(l, cld, dryrun)
 	})
