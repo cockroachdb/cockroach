@@ -949,6 +949,9 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
+	if _, err := sqlDB.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.foo (v INT);
