@@ -161,7 +161,7 @@ func (s *StatsCollector) StartTransaction() {
 // txn.
 func (s *StatsCollector) EndTransaction(
 	ctx context.Context, transactionFingerprintID appstatspb.TransactionFingerprintID,
-) {
+) (discardedStats int64) {
 	// We possibly ignore the transactionFingerprintID, for situations where
 	// grouping by it would otherwise result in collecting higher-cardinality
 	// data in the system tables than the cleanup job is able to keep up with.
@@ -170,10 +170,9 @@ func (s *StatsCollector) EndTransaction(
 		transactionFingerprintID = appstatspb.InvalidTransactionFingerprintID
 	}
 
-	var discardedStats uint64
-	discardedStats += s.flushTarget.MergeApplicationStatementStats(
+	discardedStats += int64(s.flushTarget.MergeApplicationStatementStats(
 		ctx, s.currentTransactionStatementStats, transactionFingerprintID,
-	)
+	))
 
 	// Avoid taking locks if no stats are discarded.
 	if discardedStats > 0 {
@@ -181,6 +180,8 @@ func (s *StatsCollector) EndTransaction(
 	}
 
 	s.currentTransactionStatementStats.Clear(ctx)
+
+	return discardedStats
 }
 
 // ShouldSample returns two booleans, the first one indicates whether we
