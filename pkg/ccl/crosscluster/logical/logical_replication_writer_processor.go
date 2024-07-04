@@ -124,7 +124,7 @@ func newLogicalReplicationWriterProcessor(
 
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
-		rp, err := makeSQLLastWriteWinsHandler(
+		rp, err := makeSQLProcessor(
 			ctx, flowCtx.Cfg.Settings, spec.TableDescriptors,
 			// Initialize the executor with a fresh session data - this will
 			// avoid creating a new copy on each executor usage.
