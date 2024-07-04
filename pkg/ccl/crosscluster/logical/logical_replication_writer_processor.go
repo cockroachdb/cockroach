@@ -601,6 +601,8 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 					if err := lrw.dlq(ctx, batch[0], bh.GetLastRow(), err); err != nil {
 						return batchStats{}, err
 					}
+				} else {
+					stats.notProcessed++
 				}
 			} else {
 				// If there were multiple events in the batch, give each its own chance
@@ -611,6 +613,8 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 							if err := lrw.dlq(ctx, batch[i], bh.GetLastRow(), err); err != nil {
 								return batchStats{}, err
 							}
+						} else {
+							stats.notProcessed++
 						}
 					} else {
 						batch[i] = streampb.StreamEvent_KV{}
