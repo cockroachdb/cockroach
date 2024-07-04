@@ -452,7 +452,8 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
-	unapplied, err := lrw.flushBuffer(ctx, kvs, false)
+	const notRetry = false
+	unapplied, err := lrw.flushBuffer(ctx, kvs, notRetry, false)
 	if err != nil {
 		return err
 	}
@@ -491,8 +492,8 @@ const maxWriterWorkers = 32
 // but it was not sent to the DLQ, and thus should remain buffered for a later
 // retry.
 func (lrw *logicalReplicationWriterProcessor) flushBuffer(
-	ctx context.Context, kvs []streampb.StreamEvent_KV, mustProcess bool,
-) (unapplied []streampb.StreamEvent_KV, _ error) {
+	ctx context.Context, kvs []streampb.StreamEvent_KV, isRetry, mustProcess bool,
+) (notProcessed []streampb.StreamEvent_KV, _ error) {
 	ctx, sp := tracing.ChildSpan(ctx, "logical-replication-writer-flush")
 	defer sp.Finish()
 
@@ -522,7 +523,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
 
-	var flushByteSize, notProcessed atomic.Int64
+	var flushByteSize, notProcessedAtomic, dlqAtomic atomic.Int64
 
 	const minChunkSize = 64
 	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
@@ -548,7 +549,8 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 				return err
 			}
 			flushByteSize.Add(s.byteSize)
-			notProcessed.Add(s.notProcessed)
+			notProcessedAtomic.Add(s.notProcessed)
+			dlqAtomic.Add(s.dlq)
 			lrw.metrics.OptimisticInsertConflictCount.Inc(s.optimisticInsertConflicts)
 			return nil
 		})
@@ -558,22 +560,35 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return nil, err
 	}
 
-	if notProcessed.Load() > 0 {
-		unapplied = filterRemaining(kvs)
+	notProcessedCount, dlqCount := notProcessedAtomic.Load(), dlqAtomic.Load()
+	if notProcessedCount > 0 {
+		notProcessed = filterRemaining(kvs)
 	}
+
+	failures := notProcessedCount + dlqCount
+	applied := total - failures
 
 	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
 	byteCount := flushByteSize.Load()
 	lrw.debug.RecordFlushComplete(flushTime, total, byteCount)
 
-	lrw.metrics.AppliedRowUpdates.Inc(total)
+	lrw.metrics.AppliedRowUpdates.Inc(applied)
+	lrw.metrics.DLQedRowUpdates.Inc(dlqCount)
+	if isRetry {
+		lrw.metrics.RetriedApplySuccesses.Inc(applied)
+		lrw.metrics.RetriedApplyFailures.Inc(failures)
+	} else {
+		lrw.metrics.InitialApplySuccesses.Inc(applied)
+		lrw.metrics.InitialApplyFailures.Inc(failures)
+	}
+
 	lrw.metrics.AppliedLogicalBytes.Inc(byteCount)
 	lrw.metrics.CommitToCommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
 
 	lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
 	lrw.metrics.StreamBatchRowsHist.RecordValue(total)
 	lrw.metrics.StreamBatchBytesHist.RecordValue(byteCount)
-	return unapplied, nil
+	return notProcessed, nil
 }
 
 // flushChunk is the per-thread body of flushBuffer; see flushBuffer's contract.
@@ -605,6 +620,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 					if err := lrw.dlq(ctx, batch[0], bh.GetLastRow(), err); err != nil {
 						return batchStats{}, err
 					}
+					stats.dlq++
 				} else {
 					stats.notProcessed++
 				}
@@ -617,6 +633,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 							if err := lrw.dlq(ctx, batch[i], bh.GetLastRow(), err); err != nil {
 								return batchStats{}, err
 							}
+							stats.dlq++
 						} else {
 							stats.notProcessed++
 						}
@@ -675,6 +692,7 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 
 type batchStats struct {
 	notProcessed              int64
+	dlq                       int64
 	byteSize                  int64
 	optimisticInsertConflicts int64
 }

@@ -28,7 +28,7 @@ type purgatory struct {
 	delay      time.Duration // delay to wait between attempts of a level.
 	deadline   time.Duration // age of a level after which drain is mandatory.
 	levelLimit int
-	flush      func(context.Context, []streampb.StreamEvent_KV, bool) ([]streampb.StreamEvent_KV, error)
+	flush      func(context.Context, []streampb.StreamEvent_KV, bool, bool) ([]streampb.StreamEvent_KV, error)
 	checkpoint func(context.Context, []jobspb.ResolvedSpan) error
 }
 
@@ -81,8 +81,9 @@ func (p *purgatory) Drain(
 		if timeutil.Since(p.levels[i].lastAttempted) < p.delay && !mustProcess {
 			break
 		}
+		const isRetry = true
 		p.levels[i].lastAttempted = timeutil.Now()
-		remaining, err := p.flush(ctx, p.levels[i].events, mustProcess)
+		remaining, err := p.flush(ctx, p.levels[i].events, isRetry, mustProcess)
 		if err != nil {
 			return err
 		}
