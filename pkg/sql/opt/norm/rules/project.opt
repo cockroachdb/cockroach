@@ -330,3 +330,24 @@ $input
     (FoldJSONFieldAccess $projections $jsonCols $col $input)
     $passthrough
 )
+
+# FoldIsNullProject folds "x IS NULL" projections to false if "x" is not null in
+# the Project's input. It matches if there is at least one projection that can
+# be folded, and it replaces all projections that can be folded.
+[FoldIsNullProject, Normalize]
+(Project
+    $input:*
+    $projections:[
+            ...
+            $item:(ProjectionsItem (Is (Variable $col:*) (Null)))
+            ...
+        ] &
+        (IsColNotNull $col $input)
+    $passthrough:*
+)
+=>
+(Project
+    $input
+    (FoldIsNullProjectionsItems $projections $input)
+    $passthrough
+)

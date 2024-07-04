@@ -1916,3 +1916,105 @@ project
  │    └── ('["foo", "baz"]',)
  └── projections
       └── column1:1->'foo' [as="?column?":2, outer=(1), immutable]
+
+# --------------------------------------------------
+# FoldIsNullProject
+# --------------------------------------------------
+
+norm expect=FoldIsNullProject
+SELECT x IS NULL FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── fd: ()-->(7)
+ ├── scan a
+ └── projections
+      └── false [as="?column?":7]
+
+norm expect=FoldIsNullProject
+SELECT k IS NULL, v IS NULL, r1 IS NULL FROM fks
+----
+project
+ ├── columns: "?column?":8!null "?column?":9!null "?column?":10!null
+ ├── fd: ()-->(8,10)
+ ├── scan fks
+ │    └── columns: v:2
+ └── projections
+      ├── false [as="?column?":8]
+      ├── v:2 IS NULL [as="?column?":9, outer=(2)]
+      └── false [as="?column?":10]
+
+norm expect-not=FoldIsNullProject
+SELECT y IS NULL FROM a
+----
+project
+ ├── columns: "?column?":7!null
+ ├── scan a
+ │    └── columns: y:2
+ └── projections
+      └── y:2 IS NULL [as="?column?":7, outer=(2)]
+
+# The column "b.x" is not nullable in the base table, but could be NULL after
+# the left-join, so b.x IS NULL cannot be folded.
+norm expect=FoldIsNullProject
+SELECT a.x IS NULL, b.x IS NULL FROM a LEFT JOIN b ON a.x = b.x;
+----
+project
+ ├── columns: "?column?":12!null "?column?":13!null
+ ├── fd: ()-->(12)
+ ├── left-join (hash)
+ │    ├── columns: a.x:1!null b.x:7
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(7)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1!null
+ │    │    └── key: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.x:7!null
+ │    │    └── key: (7)
+ │    └── filters
+ │         └── a.x:1 = b.x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ └── projections
+      ├── false [as="?column?":12]
+      └── b.x:7 IS NULL [as="?column?":13, outer=(7)]
+
+# FoldIsNullProject helps eliminate NULL reordering for ASC NULLS LAST if the
+# order by column is not nullable.
+norm expect=FoldIsNullProject
+SELECT x FROM a ORDER BY x ASC NULLS LAST
+----
+scan a
+ ├── columns: x:1!null
+ ├── key: (1)
+ └── ordering: +1
+
+# FoldIsNullProject helps eliminate NULL reordering for DESC NULLS LAST if the
+# order by column is not nullable.
+norm expect=FoldIsNullProject
+SELECT x FROM a ORDER BY x DESC NULLS FIRST
+----
+scan a,rev
+ ├── columns: x:1!null
+ ├── key: (1)
+ └── ordering: -1
+
+# Null reordering is needed for "y" but not for "x".
+norm expect=FoldIsNullProject
+SELECT x FROM a ORDER BY y DESC NULLS FIRST, x DESC NULLS FIRST
+----
+sort
+ ├── columns: x:1!null  [hidden: y:2 nulls_ordering_y:7!null]
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)-->(7)
+ ├── ordering: -7,-2,-1
+ └── project
+      ├── columns: nulls_ordering_y:7!null x:1!null y:2
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(7)
+      ├── scan a
+      │    ├── columns: x:1!null y:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── projections
+           └── y:2 IS NULL [as=nulls_ordering_y:7, outer=(2)]
