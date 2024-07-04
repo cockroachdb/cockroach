@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -124,13 +125,14 @@ func newLogicalReplicationWriterProcessor(
 		}
 	}
 
-	tableDescs := make(map[int32]catalog.TableDescriptor)
+	tableDescs := make(map[descpb.ID]catalog.TableDescriptor)
 	for dstTableDescID, desc := range spec.TableDescriptors {
-		tableDescs[dstTableDescID] = tabledesc.NewBuilder(&desc).BuildImmutableTable()
+		tableDescs[descpb.ID(dstTableDescID)] = tabledesc.NewBuilder(&desc).BuildImmutableTable()
 	}
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
-		rp, err := makeSQLLastWriteWinsHandler(
+
+		rp, err := makeSQLProcessor(
 			ctx, flowCtx.Cfg.Settings, tableDescs,
 			// Initialize the executor with a fresh session data - this will
 			// avoid creating a new copy on each executor usage.
