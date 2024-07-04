@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -1911,4 +1912,178 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 			require.Equal(t, 1, sampledCnt)
 		})
 	})
+}
+
+// TestSQLStatsDiscardStatsOnFingerprintLimit verifies that when we reach
+// the fingerprint limit for a node, we don't record new fingerprints.
+// Note that this limit is currently an exclusive boundary, meaning
+// that we will discard stats if the total fingerprint count is equal to
+// the limit - 1.
+func TestSQLStatsDiscardStatsOnFingerprintLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+	utilConn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
+	ssProvider := ts.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	discardedMetric := ts.SQLServer().(*sql.Server).ServerMetrics.StatsMetrics.DiscardedStatsCount
+
+	resetMetricsForTest := func() {
+		// Reset the stats to ensure we start with a clean slate.
+		require.NoError(t, ssProvider.Reset(ctx))
+		discardedMetric.Reset()
+	}
+
+	countStmts := func() int {
+		var count int
+		row := utilConn.QueryRow(t,
+			`SELECT count(*) FROM crdb_internal.statement_statistics`)
+		row.Scan(&count)
+		t.Log(utilConn.QueryStr(t, `SELECT app_name, metadata->'query' FROM crdb_internal.statement_statistics`))
+		return count
+	}
+
+	countTxns := func() int {
+		var count int
+		row := utilConn.QueryRow(t,
+			`SELECT count(*) FROM crdb_internal.transaction_statistics`)
+		row.Scan(&count)
+		return count
+	}
+
+	// We'll execute queries across 3 different applications.
+	// The fingerprint limit should be enforced per-node, so even if the entry
+	// count per application is below the max, we should still discard stats if
+	// the total fingerprint count across all applications exceeds the limit.
+	conns := make([]*sqlutils.SQLRunner, 3)
+	for i := 0; i < 3; i++ {
+		appName := fmt.Sprintf("app%d", i)
+		conns[i] = sqlutils.MakeSQLRunner(ts.SQLConn(t))
+		conns[i].Exec(t, "SET application_name = $1", appName)
+	}
+
+	t.Run("default limit, no stats discarded", func(t *testing.T) {
+		// To start, the default limit should result in no discarded stats.
+		for i := 0; i < 10; i++ {
+			conns[i%3].Exec(t, "SELECT "+strings.Repeat("1, ", i)+"1")
+		}
+		require.Zero(t, discardedMetric.Count())
+	})
+
+	type testExecs struct {
+		connIdx int
+		stmt    string
+	}
+	type testCase struct {
+		name         string
+		stmtLimit    int
+		txnLimit     int
+		stmts        []testExecs
+		totalSkipped int
+		minStmts     int
+		minTxns      int
+	}
+
+	tests := []testCase{
+		{
+			name:      "statements in transactions are counted towards the limit",
+			stmtLimit: 4,
+			stmts: []testExecs{
+				{0, "BEGIN; SELECT 1; SELECT 1, 2; SELECT 1, 2, 3; COMMIT;"},
+				// Stmts below are discarded.
+				{0, "CREATE TABLE foo (a INT, b INT)"},
+				{1, "SHOW DATABASES"},
+				{2, "SELECT 1"},
+			},
+			totalSkipped: 3,
+			minTxns:      4,
+		},
+		{
+			name:      "statement limit reached across applications",
+			stmtLimit: 4,
+			stmts: []testExecs{
+				{0, "SELECT 1"},
+				{1, "SELECT 1"},
+				{2, "SELECT 1"},
+				// Stmts below are discarded.
+				{0, "SELECT * FROM foo"},
+				{0, "SELECT a FROM foo"},
+				{1, "SELECT b FROM foo"},
+				{2, "SHOW DATABASES"},
+			},
+			totalSkipped: 4,
+			minTxns:      7,
+		},
+		{
+			name: "transaction limit reached across applications",
+			// We set the txn limit to 1 to ensure that we discard
+			// all transactions.
+			txnLimit: 2,
+			stmts: []testExecs{
+				{0, "SELECT 1"},
+				// All stats for new transactions below will be discarded.
+				{1, "SELECT 1"},
+				{2, "SELECT 1"},
+				{0, "SELECT 1; SELECT 2"},
+				{1, "SELECT 1; SELECT 2"},
+				{2, "SELECT 1; SELECT 2"},
+			},
+			// There should be 3 statements per connection since
+			// stmt stats are not limited.
+			totalSkipped: 5,
+			minStmts:     6,
+		},
+		{
+			name:      "statement and txn limit reached across applications",
+			stmtLimit: 2,
+			txnLimit:  2,
+			stmts: []testExecs{
+				{0, "SELECT 1"},
+				// Stmts below are discarded.
+				{0, "SELECT * FROM foo"},
+				{0, "SELECT 1, 2"},
+				{1, "SELECT 1"},
+				{1, "SELECT 1, 2"},
+				{2, "SELECT 1"},
+				{2, "SELECT a FROM foo;"},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.stmtLimit > 0 {
+				utilConn.Exec(t, "SET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints = $1", tc.stmtLimit)
+			}
+			if tc.txnLimit > 0 {
+				utilConn.Exec(t, "SET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints = $1", tc.txnLimit)
+			}
+			resetMetricsForTest()
+
+			// Execute the statements assigned to each connection.
+			for _, exec := range tc.stmts {
+				conns[exec.connIdx].Exec(t, exec.stmt)
+			}
+
+			// Verify that the expected stats are present, and we've skipped a minimum
+			// number of stats the test expects. We use this as a minimum since internal
+			// statements may be executed in the background.
+			if tc.stmtLimit == 0 {
+				require.GreaterOrEqual(t, countStmts(), tc.minStmts)
+			} else {
+				require.Equal(t, tc.stmtLimit-1, countStmts())
+			}
+			if tc.txnLimit == 0 {
+				require.GreaterOrEqual(t, countTxns(), tc.minTxns)
+			} else {
+				require.Equal(t, tc.txnLimit-1, countTxns())
+			}
+			require.GreaterOrEqual(t, discardedMetric.Count(), int64(tc.totalSkipped))
+		})
+		utilConn.Exec(t, "RESET CLUSTER SETTING sql.metrics.max_mem_stmt_fingerprints")
+		utilConn.Exec(t, "RESET CLUSTER SETTING sql.metrics.max_mem_txn_fingerprints")
+	}
 }
