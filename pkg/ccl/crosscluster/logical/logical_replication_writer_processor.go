@@ -156,7 +156,7 @@ func newLogicalReplicationWriterProcessor(
 	lrw.purgatory = purgatory{
 		deadline:   time.Minute,
 		delay:      time.Second * 5,
-		levelLimit: 10,
+		byteLimit:  8 << 20,
 		flush:      lrw.flushBuffer,
 		checkpoint: lrw.checkpoint,
 	}
@@ -452,12 +452,12 @@ func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
 	const notRetry = false
-	unapplied, err := lrw.flushBuffer(ctx, kvs, notRetry, false)
+	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, false)
 	if err != nil {
 		return err
 	}
 	// Put any events that failed to apply into purgatory (flushing if needed).
-	if err := lrw.purgatory.Store(ctx, unapplied); err != nil {
+	if err := lrw.purgatory.Store(ctx, unapplied, unappliedBytes); err != nil {
 		return err
 	}
 
@@ -492,12 +492,12 @@ const maxWriterWorkers = 32
 // retry.
 func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV, isRetry, mustProcess bool,
-) (notProcessed []streampb.StreamEvent_KV, _ error) {
+) (notProcessed []streampb.StreamEvent_KV, notProcessedByteSize int64, _ error) {
 	ctx, sp := tracing.ChildSpan(ctx, "logical-replication-writer-flush")
 	defer sp.Finish()
 
 	if len(kvs) == 0 {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	// Ensure the batcher is always reset, even on early error returns.
@@ -554,7 +554,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	}
 
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var stats flushStats
@@ -584,7 +584,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		lrw.metrics.StreamBatchRowsHist.RecordValue(total)
 		lrw.metrics.StreamBatchBytesHist.RecordValue(stats.processed.bytes + stats.notProcessed.bytes)
 	}
-	return notProcessed, nil
+	return notProcessed, stats.notProcessed.bytes, nil
 }
 
 // flushChunk is the per-thread body of flushBuffer; see flushBuffer's contract.
