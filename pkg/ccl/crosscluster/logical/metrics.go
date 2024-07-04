@@ -50,6 +50,18 @@ var (
 	}
 
 	// User-visible health and ops metrics.
+	metaRetryQueueBytes = metric.Metadata{
+		Name:        "logical_replication.retry_queue_bytes",
+		Help:        "The replicated time of the logical replication stream in seconds since the unix epoch.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRetryQueueEvents = metric.Metadata{
+		Name:        "logical_replication.retry_queue_events",
+		Help:        "The replicated time of the logical replication stream in seconds since the unix epoch.",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaApplyBatchNanosHist = metric.Metadata{
 		Name:        "logical_replication.batch_hist_nanos",
 		Help:        "Time spent flushing a batch",
@@ -127,6 +139,8 @@ type Metrics struct {
 	// User-surfaced information about the health/operation of the stream; this
 	// should be a narrow subset of numbers that are actually relevant to a user
 	// such as the latency of application as that could be their supplied UDF.
+	RetryQueueBytes     *metric.Gauge
+	RetryQueueEvents    *metric.Gauge
 	ApplyBatchNanosHist metric.IHistogram
 
 	InitialApplySuccesses *metric.Counter
@@ -166,6 +180,8 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
+		RetryQueueBytes:       metric.NewGauge(metaRetryQueueBytes),
+		RetryQueueEvents:      metric.NewGauge(metaRetryQueueEvents),
 		InitialApplySuccesses: metric.NewCounter(metaInitialApplySuccess),
 		InitialApplyFailures:  metric.NewCounter(metaInitialApplyFailures),
 		RetriedApplySuccesses: metric.NewCounter(metaRetriedApplySuccesses),

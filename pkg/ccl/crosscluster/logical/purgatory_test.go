@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +35,9 @@ func TestPurgatory(t *testing.T) {
 
 	var flushed, resolved int
 	p := &purgatory{
-		byteLimit: 5 << 20,
+		byteLimit:   5 << 20,
+		bytesGauge:  metric.NewGauge(metric.Metadata{}),
+		eventsGauge: metric.NewGauge(metric.Metadata{}),
 		flush: func(
 			_ context.Context, ev []streampb.StreamEvent_KV, _, _ bool,
 		) ([]streampb.StreamEvent_KV, int64, error) {
@@ -67,6 +70,7 @@ func TestPurgatory(t *testing.T) {
 	p.Checkpoint(ctx, ts(1))
 
 	require.NoError(t, p.Store(ctx, []streampb.StreamEvent_KV{skv("e"), skv("f"), skv("g"), skv("h")}, sz*4))
+	require.Equal(t, int64(8), p.eventsGauge.Value())
 	require.Equal(t, sz*8, p.bytes)
 	p.Checkpoint(ctx, ts(2))
 
@@ -74,6 +78,7 @@ func TestPurgatory(t *testing.T) {
 	require.False(t, p.Empty())
 	require.Equal(t, 4, len(p.levels))
 	require.Equal(t, sz*9, p.bytes)
+	require.Equal(t, sz*9, p.bytesGauge.Value())
 
 	// Nothing has drained yet, so no movement in flushed or resolved.
 	require.Equal(t, 0, flushed)
@@ -82,8 +87,10 @@ func TestPurgatory(t *testing.T) {
 	// Draining drains half the events, but no checkpoints yet.
 	require.NoError(t, p.Drain(ctx))
 	require.Equal(t, 5, flushed)
+	require.Equal(t, int64(4), p.eventsGauge.Value())
 	require.Equal(t, 0, resolved)
 	require.Equal(t, sz*4, p.bytes)
+	require.Equal(t, sz*4, p.bytesGauge.Value())
 
 	// Draining drains half the events, now checkpointing after lvl 2.
 	require.NoError(t, p.Drain(ctx))
@@ -97,4 +104,6 @@ func TestPurgatory(t *testing.T) {
 	require.Equal(t, 2, resolved)
 	require.Equal(t, sz*0, p.bytes)
 	require.True(t, p.Empty())
+	require.Equal(t, int64(0), p.eventsGauge.Value())
+	require.Equal(t, sz*0, p.bytesGauge.Value())
 }

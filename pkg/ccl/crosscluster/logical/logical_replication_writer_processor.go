@@ -152,13 +152,16 @@ func newLogicalReplicationWriterProcessor(
 			ProcessorID: processorID,
 		},
 		dlqClient: InitDeadLetterQueueClient(),
+		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 	}
 	lrw.purgatory = purgatory{
-		deadline:   time.Minute,
-		delay:      time.Second * 5,
-		byteLimit:  8 << 20,
-		flush:      lrw.flushBuffer,
-		checkpoint: lrw.checkpoint,
+		deadline:    time.Minute,
+		delay:       time.Second * 5,
+		byteLimit:   8 << 20,
+		flush:       lrw.flushBuffer,
+		checkpoint:  lrw.checkpoint,
+		bytesGauge:  lrw.metrics.RetryQueueBytes,
+		eventsGauge: lrw.metrics.RetryQueueEvents,
 	}
 
 	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
