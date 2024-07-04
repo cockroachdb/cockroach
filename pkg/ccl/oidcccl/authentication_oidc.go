@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/ui"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -152,6 +153,7 @@ type oidcAuthenticationConf struct {
 	generateJWTAuthTokenUseToken tokenToUse
 	generateJWTAuthTokenSQLHost  string
 	generateJWTAuthTokenSQLPort  int64
+	clientTimeout                time.Duration
 }
 
 // GetOIDCConf is used to extract certain parts of the OIDC
@@ -186,6 +188,7 @@ func (s *oidcAuthenticationServer) maybeInitializeLocked(
 type oidcManager struct {
 	oauth2Config *oauth2.Config
 	verifier     *oidc.IDTokenVerifier
+	httpClient   *httputil.Client
 }
 
 func (o *oidcManager) ExchangeVerifyGetClaims(
@@ -220,13 +223,26 @@ func (o *oidcManager) ExchangeVerifyGetClaims(
 }
 
 func (o *oidcManager) Verify(ctx context.Context, s string) (*oidc.IDToken, error) {
-	return o.verifier.Verify(ctx, s)
+	// Set the HTTP client in the context, as required by the `go-oidc` module.
+	//
+	// Note that the `Verify` method in the current version (v2.2.1) of the
+	// `go-oidc` module does not use the HTTP client from the ctx provided here.
+	//
+	// It uses the HTTP client from the ctx passed to `NewProvider` at the time
+	// of initialization instead. However, this behavior has been fixed in the
+	// latest version of the module.
+	//
+	// This change is being made for forward-compatibility.
+	octx := oidc.ClientContext(ctx, o.httpClient.Client)
+	return o.verifier.Verify(octx, s)
 }
 
 func (o *oidcManager) Exchange(
 	ctx context.Context, s string, option ...oauth2.AuthCodeOption,
 ) (*oauth2.Token, error) {
-	return o.oauth2Config.Exchange(ctx, s, option...)
+	// Set the HTTP client in the context, as required by the `oauth2` module.
+	octx := oidc.ClientContext(ctx, o.httpClient.Client)
+	return o.oauth2Config.Exchange(octx, s, option...)
 }
 
 func (o oidcManager) AuthCodeURL(s string, option ...oauth2.AuthCodeOption) string {
@@ -256,7 +272,11 @@ var NewOIDCManager func(context.Context, oidcAuthenticationConf, string, []strin
 	// https://github.com/coreos/go-oidc/blob/6d6be43e852de391805e5a5bc14146ba3cdd4195/oidc/verify.go#L125
 	ctx = context.WithoutCancel(ctx)
 
-	provider, err := oidc.NewProvider(ctx, conf.providerURL)
+	// Set the HTTP client in the context, as required by the `go-oidc` module.
+	httpClient := httputil.NewClientWithTimeout(conf.clientTimeout)
+	octx := oidc.ClientContext(ctx, httpClient.Client)
+
+	provider, err := oidc.NewProvider(octx, conf.providerURL)
 	if err != nil {
 		return nil, err
 	}
@@ -275,6 +295,7 @@ var NewOIDCManager func(context.Context, oidcAuthenticationConf, string, []strin
 	return &oidcManager{
 		verifier:     verifier,
 		oauth2Config: oauth2Config,
+		httpClient:   httpClient,
 	}, nil
 }
 
@@ -313,6 +334,7 @@ func reloadConfigLocked(
 		generateJWTAuthTokenUseToken: OIDCGenerateClusterSSOTokenUseToken.Get(&st.SV),
 		generateJWTAuthTokenSQLHost:  OIDCGenerateClusterSSOTokenSQLHost.Get(&st.SV),
 		generateJWTAuthTokenSQLPort:  OIDCGenerateClusterSSOTokenSQLPort.Get(&st.SV),
+		clientTimeout:                OIDCAuthClientTimeout.Get(&st.SV),
 	}
 
 	if !oidcAuthServer.conf.enabled && conf.enabled {
@@ -800,6 +822,9 @@ var ConfigureOIDC = func(
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCGenerateClusterSSOTokenSQLPort.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	OIDCAuthClientTimeout.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 
