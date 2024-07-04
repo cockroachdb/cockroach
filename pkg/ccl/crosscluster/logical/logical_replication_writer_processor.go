@@ -11,7 +11,6 @@ package logical
 import (
 	"context"
 	"slices"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -452,7 +451,8 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
-	unapplied, err := lrw.flushBuffer(ctx, kvs, false)
+	const notRetry = false
+	unapplied, err := lrw.flushBuffer(ctx, kvs, notRetry, false)
 	if err != nil {
 		return err
 	}
@@ -491,8 +491,8 @@ const maxWriterWorkers = 32
 // but it was not sent to the DLQ, and thus should remain buffered for a later
 // retry.
 func (lrw *logicalReplicationWriterProcessor) flushBuffer(
-	ctx context.Context, kvs []streampb.StreamEvent_KV, mustProcess bool,
-) (unapplied []streampb.StreamEvent_KV, _ error) {
+	ctx context.Context, kvs []streampb.StreamEvent_KV, isRetry, mustProcess bool,
+) (notProcessed []streampb.StreamEvent_KV, _ error) {
 	ctx, sp := tracing.ChildSpan(ctx, "logical-replication-writer-flush")
 	defer sp.Finish()
 
@@ -522,10 +522,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
 
-	var flushByteSize, notProcessed atomic.Int64
-
 	const minChunkSize = 64
 	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
+
+	perChunkStats := make([]flushStats, len(lrw.bh))
 
 	total := int64(len(kvs))
 	g := ctxgroup.WithContext(ctx)
@@ -547,8 +547,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 			if err != nil {
 				return err
 			}
-			flushByteSize.Add(s.byteSize)
-			notProcessed.Add(s.notProcessed)
+			perChunkStats[worker] = s
 			lrw.metrics.OptimisticInsertConflictCount.Inc(s.optimisticInsertConflicts)
 			return nil
 		})
@@ -558,28 +557,40 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return nil, err
 	}
 
-	if notProcessed.Load() > 0 {
-		unapplied = filterRemaining(kvs)
+	var stats flushStats
+	for _, i := range perChunkStats {
+		stats.Add(i)
+	}
+
+	if stats.notProcessed.count > 0 {
+		notProcessed = filterRemaining(kvs)
 	}
 
 	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
-	byteCount := flushByteSize.Load()
-	lrw.debug.RecordFlushComplete(flushTime, total, byteCount)
+	lrw.debug.RecordFlushComplete(flushTime, total, stats.processed.bytes)
 
-	lrw.metrics.AppliedRowUpdates.Inc(total)
-	lrw.metrics.AppliedLogicalBytes.Inc(byteCount)
+	lrw.metrics.AppliedRowUpdates.Inc(stats.processed.success)
+	lrw.metrics.DLQedRowUpdates.Inc(stats.processed.dlq)
+	lrw.metrics.AppliedLogicalBytes.Inc(stats.processed.bytes)
 	lrw.metrics.CommitToCommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
 
-	lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
-	lrw.metrics.StreamBatchRowsHist.RecordValue(total)
-	lrw.metrics.StreamBatchBytesHist.RecordValue(byteCount)
-	return unapplied, nil
+	if isRetry {
+		lrw.metrics.RetriedApplySuccesses.Inc(stats.processed.success)
+		lrw.metrics.RetriedApplyFailures.Inc(stats.notProcessed.count + stats.processed.dlq)
+	} else {
+		lrw.metrics.InitialApplySuccesses.Inc(stats.processed.success)
+		lrw.metrics.InitialApplyFailures.Inc(stats.notProcessed.count + stats.processed.dlq)
+		lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
+		lrw.metrics.StreamBatchRowsHist.RecordValue(total)
+		lrw.metrics.StreamBatchBytesHist.RecordValue(stats.processed.bytes + stats.notProcessed.bytes)
+	}
+	return notProcessed, nil
 }
 
 // flushChunk is the per-thread body of flushBuffer; see flushBuffer's contract.
 func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, mustProcess bool,
-) (batchStats, error) {
+) (flushStats, error) {
 	batchSize := int(flushBatchSize.Get(&lrw.FlowCtx.Cfg.Settings.SV))
 	// TODO(yuzefovich): we should have a better heuristic for when to use the
 	// implicit vs explicit txns (for example, depending on the presence of the
@@ -588,7 +599,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 		batchSize = 1
 	}
 
-	var stats batchStats
+	var stats flushStats
 	// TODO: The batching here in production would need to be much
 	// smarter. Namely, we don't want to include updates to the
 	// same key in the same batch. Also, it's possible batching
@@ -603,10 +614,12 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 			if len(batch) == 1 {
 				if mustProcess || !lrw.shouldRetryLater(err) {
 					if err := lrw.dlq(ctx, batch[0], bh.GetLastRow(), err); err != nil {
-						return batchStats{}, err
+						return flushStats{}, err
 					}
+					stats.processed.dlq++
 				} else {
-					stats.notProcessed++
+					stats.notProcessed.count++
+					stats.notProcessed.bytes += int64(batch[0].Size())
 				}
 			} else {
 				// If there were multiple events in the batch, give each its own chance
@@ -615,23 +628,29 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 					if singleStats, err := bh.HandleBatch(ctx, batch[i:i+1]); err != nil {
 						if mustProcess || !lrw.shouldRetryLater(err) {
 							if err := lrw.dlq(ctx, batch[i], bh.GetLastRow(), err); err != nil {
-								return batchStats{}, err
+								return flushStats{}, err
 							}
+							stats.processed.dlq++
 						} else {
-							stats.notProcessed++
+							stats.notProcessed.count++
+							stats.notProcessed.bytes += int64(batch[i].Size())
 						}
 					} else {
+						stats.optimisticInsertConflicts += singleStats.optimisticInsertConflicts
 						batch[i] = streampb.StreamEvent_KV{}
-						stats.Add(singleStats)
+						stats.processed.success++
+						stats.processed.bytes += int64(batch[i].Size())
 					}
 				}
 			}
 		} else {
+			stats.optimisticInsertConflicts += s.optimisticInsertConflicts
+			stats.processed.success += int64(len(batch))
 			// Clear the event to indicate successful application.
 			for i := range batch {
+				stats.processed.bytes += int64(batch[i].Size())
 				batch[i] = streampb.StreamEvent_KV{}
 			}
-			stats.Add(s)
 		}
 
 		batchTime := timeutil.Since(preBatchTime)
@@ -674,13 +693,24 @@ func (lrw *logicalReplicationWriterProcessor) dlq(
 }
 
 type batchStats struct {
-	notProcessed              int64
-	byteSize                  int64
+	optimisticInsertConflicts int64
+}
+type flushStats struct {
+	processed struct {
+		success, dlq, bytes int64
+	}
+	notProcessed struct {
+		count, bytes int64
+	}
 	optimisticInsertConflicts int64
 }
 
-func (b *batchStats) Add(o batchStats) {
-	b.byteSize += o.byteSize
+func (b *flushStats) Add(o flushStats) {
+	b.processed.success += o.processed.success
+	b.processed.dlq += o.processed.dlq
+	b.processed.bytes += o.processed.bytes
+	b.notProcessed.count += o.notProcessed.count
+	b.notProcessed.bytes += o.notProcessed.bytes
 	b.optimisticInsertConflicts += o.optimisticInsertConflicts
 }
 
@@ -725,25 +755,22 @@ func (t *txnBatch) HandleBatch(
 	stats := batchStats{}
 	var err error
 	if len(batch) == 1 {
-		rowStats, err := t.rp.ProcessRow(ctx, nil /* txn */, batch[0].KeyValue, batch[0].PrevValue)
+		s, err := t.rp.ProcessRow(ctx, nil /* txn */, batch[0].KeyValue, batch[0].PrevValue)
 		if err != nil {
 			return stats, err
 		}
-		stats.Add(rowStats)
+		stats.optimisticInsertConflicts += s.optimisticInsertConflicts
 	} else {
-		var txnStats batchStats
 		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			txnStats = batchStats{}
 			for _, kv := range batch {
-				rowStats, err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue)
+				s, err := t.rp.ProcessRow(ctx, txn, kv.KeyValue, kv.PrevValue)
 				if err != nil {
 					return err
 				}
-				txnStats.Add(rowStats)
+				stats.optimisticInsertConflicts += s.optimisticInsertConflicts
 			}
 			return nil
 		}, isql.WithSessionData(t.sd))
-		stats = txnStats
 	}
 	return stats, err
 }

@@ -36,7 +36,7 @@ func TestPurgatory(t *testing.T) {
 	p := &purgatory{
 		levelLimit: 5,
 		flush: func(
-			_ context.Context, ev []streampb.StreamEvent_KV, _ bool,
+			_ context.Context, ev []streampb.StreamEvent_KV, _, _ bool,
 		) ([]streampb.StreamEvent_KV, error) {
 			for i := range ev {
 				if i%2 == 0 {
