@@ -903,3 +903,34 @@ func (c *CustomFuncs) RemapProjectionCols(
 func (c *CustomFuncs) CanUseImprovedJoinElimination(from, to opt.ColSet) bool {
 	return c.f.evalCtx.SessionData().OptimizerUseImprovedJoinElimination || from.SubsetOf(to)
 }
+
+// FoldIsNullProjectionsItems folds all projections in the form "x IS NOT NULL"
+// if "x"  is known to be not null in the input relational expression.
+func (c *CustomFuncs) FoldIsNullProjectionsItems(
+	projections memo.ProjectionsExpr, input memo.RelExpr,
+) memo.ProjectionsExpr {
+	isNullColExpr := func(e opt.ScalarExpr) (opt.ColumnID, bool) {
+		is, ok := e.(*memo.IsExpr)
+		if !ok {
+			return 0, false
+		}
+		v, ok := is.Left.(*memo.VariableExpr)
+		if !ok {
+			return 0, false
+		}
+		if _, ok := is.Right.(*memo.NullExpr); !ok {
+			return 0, false
+		}
+		return v.Col, true
+	}
+	newProjections := make(memo.ProjectionsExpr, len(projections))
+	for i := range projections {
+		p := &projections[i]
+		if col, ok := isNullColExpr(p.Element); ok && c.IsColNotNull(col, input) {
+			newProjections[i] = c.f.ConstructProjectionsItem(memo.FalseSingleton, p.Col)
+		} else {
+			newProjections[i] = *p
+		}
+	}
+	return newProjections
+}
