@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -32,8 +33,9 @@ type purgatory struct {
 	checkpoint func(context.Context, []jobspb.ResolvedSpan) error
 
 	// internally managed state.
-	bytes  int64
-	levels []purgatoryLevel
+	bytes                   int64
+	levels                  []purgatoryLevel
+	eventsGauge, bytesGauge *metric.Gauge
 }
 
 type purgatoryLevel struct {
@@ -68,6 +70,8 @@ func (p *purgatory) Store(
 
 	p.levels = append(p.levels, purgatoryLevel{events: events, bytes: byteSize})
 	p.bytes += byteSize
+	p.bytesGauge.Inc(byteSize)
+	p.eventsGauge.Inc(int64(len(events)))
 	return nil
 }
 
@@ -87,7 +91,7 @@ func (p *purgatory) Drain(ctx context.Context) error {
 		p.levels[i].lastAttempted = timeutil.Now()
 
 		const isRetry = true
-		levelBytes := p.levels[i].bytes
+		levelBytes, levelCount := p.levels[i].bytes, len(p.levels[i].events)
 		remaining, remainingSize, err := p.flush(ctx, p.levels[i].events, isRetry, mustProcess)
 		if err != nil {
 			return err
@@ -99,6 +103,9 @@ func (p *purgatory) Drain(ctx context.Context) error {
 			p.levels[i].events, p.levels[i].bytes = nil, 0
 			p.bytes -= levelBytes
 		}
+
+		p.bytesGauge.Dec(levelBytes - p.levels[i].bytes)
+		p.eventsGauge.Dec(int64(levelCount - len(remaining)))
 
 		// If we have resolved every prior level and all events in this level were
 		// handled, we can resolve this level and emit its checkpoint, if any.

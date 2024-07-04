@@ -152,6 +152,7 @@ func newLogicalReplicationWriterProcessor(
 			ProcessorID: processorID,
 		},
 		dlqClient: InitDeadLetterQueueClient(),
+		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 	}
 	lrw.purgatory = purgatory{
 		deadline:   time.Minute,
