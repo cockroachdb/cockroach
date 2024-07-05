@@ -1283,7 +1283,14 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 		"enterprise.license":   config.CockroachDevLicense,
 	}
 	for name, value := range c.ClusterSettings.ClusterSettings {
-		clusterSettings[name] = value
+		// Only set the cluster settings passed when calling `Start` if we
+		// are starting the storage cluster. Setting them unconditionally
+		// would mean only supporting `ApplicationLevel` cluster settings
+		// in this field. That is not easily enforceable and a lot of
+		// tests already use this field to set `SystemOnly` settings.
+		if tenantPrefix == "" {
+			clusterSettings[name] = value
+		}
 	}
 	var clusterSettingsString string
 	for name, value := range clusterSettings {

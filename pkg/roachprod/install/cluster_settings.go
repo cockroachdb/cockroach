@@ -29,6 +29,11 @@ type ClusterSettings struct {
 	DebugDir string
 	// ClusterSettings are, eh, actual cluster settings, i.e.
 	// SET CLUSTER SETTING foo = 'bar'. The name clash is unfortunate.
+	//
+	// NOTE: these cluster settings are only applied when starting the
+	// storage cluster. In the future, we could support some kind of
+	// representation that allows the caller to indicate if the setting
+	// also applies to virtual clusters.
 	ClusterSettings map[string]string
 }
 
