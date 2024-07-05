@@ -542,19 +542,19 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	perChunkStats := make([]flushStats, len(lrw.bh))
 
-	total := int64(len(kvs))
+	todo := kvs
 	g := ctxgroup.WithContext(ctx)
 	for worker := range lrw.bh {
-		if len(kvs) == 0 {
+		if len(todo) == 0 {
 			break
 		}
 		// The chunk should end after the first new key after chunk size.
-		chunkEnd := min(chunkSize, len(kvs))
-		for chunkEnd < len(kvs) && k(kvs[chunkEnd-1]).Equal(k(kvs[chunkEnd])) {
+		chunkEnd := min(chunkSize, len(todo))
+		for chunkEnd < len(todo) && k(todo[chunkEnd-1]).Equal(k(todo[chunkEnd])) {
 			chunkEnd++
 		}
-		chunk := kvs[0:chunkEnd]
-		kvs = kvs[len(chunk):]
+		chunk := todo[0:chunkEnd]
+		todo = todo[len(chunk):]
 		bh := lrw.bh[worker]
 
 		g.GoCtx(func(ctx context.Context) error {
@@ -582,7 +582,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	}
 
 	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
-	lrw.debug.RecordFlushComplete(flushTime, total, stats.processed.bytes)
+	lrw.debug.RecordFlushComplete(flushTime, int64(len(kvs)), stats.processed.bytes)
 
 	lrw.metrics.AppliedRowUpdates.Inc(stats.processed.success)
 	lrw.metrics.DLQedRowUpdates.Inc(stats.processed.dlq)
@@ -595,7 +595,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		lrw.metrics.InitialApplySuccesses.Inc(stats.processed.success)
 		lrw.metrics.InitialApplyFailures.Inc(stats.notProcessed.count + stats.processed.dlq)
 		lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
-		lrw.metrics.StreamBatchRowsHist.RecordValue(total)
+		lrw.metrics.StreamBatchRowsHist.RecordValue(int64(len(kvs)))
 		lrw.metrics.StreamBatchBytesHist.RecordValue(stats.processed.bytes + stats.notProcessed.bytes)
 		lrw.metrics.ReceivedLogicalBytes.Inc(stats.processed.bytes + stats.notProcessed.bytes)
 	}
