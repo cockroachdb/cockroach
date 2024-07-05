@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -169,7 +168,7 @@ func TestStorage(t *testing.T) {
 		// Verify all instances are returned by GetAllInstancesDataForTest.
 		{
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
-			sortInstances(instances)
+			instancestorage.SortInstances(instances)
 			require.NoError(t, err)
 			require.Equal(t, preallocatedCount, len(instances))
 			for _, i := range []int{0, 1, 2} {
@@ -188,7 +187,7 @@ func TestStorage(t *testing.T) {
 		// Verify all instances are returned by GetAllInstancesDataForTest.
 		{
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
-			sortInstances(instances)
+			instancestorage.SortInstances(instances)
 			require.NoError(t, err)
 			require.Equal(t, preallocatedCount, len(instances))
 			for i := range instances {
@@ -207,7 +206,7 @@ func TestStorage(t *testing.T) {
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
 			require.NoError(t, err)
 			require.Equal(t, preallocatedCount, len(instances))
-			sortInstances(instances)
+			instancestorage.SortInstances(instances)
 
 			for i, instance := range instances {
 				if i == 0 {
@@ -231,7 +230,7 @@ func TestStorage(t *testing.T) {
 
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
 			require.NoError(t, err)
-			sortInstances(instances)
+			instancestorage.SortInstances(instances)
 
 			require.Equal(t, len(initialInstances), len(instances))
 			for index, instance := range instances {
@@ -598,7 +597,7 @@ func TestReclaimLoop(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		sortInstances(instances)
+		instancestorage.SortInstances(instances)
 		if len(instances) == 0 {
 			return errors.New("instances have not been generated yet")
 		}
@@ -663,7 +662,7 @@ func TestReclaimLoop(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		sortInstances(instances)
+		instancestorage.SortInstances(instances)
 		if len(instances) == preallocatedCount {
 			return errors.New("new instances have not been generated yet")
 		}
@@ -688,10 +687,4 @@ func TestReclaimLoop(t *testing.T) {
 			require.Empty(t, instance.BinaryVersion)
 		}
 	}
-}
-
-func sortInstances(instances []sqlinstance.InstanceInfo) {
-	sort.SliceStable(instances, func(idx1, idx2 int) bool {
-		return instances[idx1].InstanceID < instances[idx2].InstanceID
-	})
 }

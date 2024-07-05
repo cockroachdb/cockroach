@@ -156,6 +156,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionImplemented("bad row skipped when restoring system.tenant_settings"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add new column to the system.sql_instances table to store whether a node is draining",
+		clusterversion.V24_2_SQLInstancesAddDraining.Version(),
+		upgrade.NoPrecondition,
+		sqlInstancesAddDrainingMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

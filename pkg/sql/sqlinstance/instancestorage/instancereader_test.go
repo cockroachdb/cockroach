@@ -217,7 +217,7 @@ func TestReader(t *testing.T) {
 			if err != nil {
 				return errors.Wrapf(err, "%s", name)
 			}
-			sortInstances(instances)
+			instancestorage.SortInstances(instances)
 			return errors.Wrapf(testOutputFn(exp, instances), "%s", name)
 		}
 		verifyInstances := func(t *testing.T, exp expectations) error {
