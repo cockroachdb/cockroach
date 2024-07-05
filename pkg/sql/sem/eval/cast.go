@@ -890,6 +890,8 @@ func performCastWithoutPrecisionTruncation(
 				return nil, err
 			}
 			return &tree.DTSQuery{TSQuery: q}, nil
+		case *tree.DTSQuery:
+			return d, nil
 		}
 	case types.TSVectorFamily:
 		switch v := d.(type) {
@@ -899,6 +901,8 @@ func performCastWithoutPrecisionTruncation(
 				return nil, err
 			}
 			return &tree.DTSVector{TSVector: vec}, nil
+		case *tree.DTSVector:
+			return d, nil
 		}
 	case types.ArrayFamily:
 		switch v := d.(type) {
