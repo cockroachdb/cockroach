@@ -135,6 +135,8 @@ func makeInstanceInfo(row instancerow) sqlinstance.InstanceInfo {
 		SessionID:       row.sessionID,
 		Locality:        row.locality,
 		BinaryVersion:   row.binaryVersion,
+		Region:          row.region,
+		IsDraining:      row.isDraining,
 	}
 }
 

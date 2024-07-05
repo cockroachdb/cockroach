@@ -847,8 +847,18 @@ CREATE TABLE system.sql_instances (
     sql_addr       STRING,
     crdb_region    BYTES NOT NULL,
     binary_version STRING,
+    is_draining    BOOL NULL,
     CONSTRAINT "primary" PRIMARY KEY (crdb_region, id),
-    FAMILY "primary" (id, addr, session_id, locality, sql_addr, crdb_region, binary_version)
+    FAMILY "primary" (
+      id, 
+      addr, 
+      session_id, 
+      locality, 
+      sql_addr, 
+      crdb_region, 
+      binary_version, 
+      is_draining
+    )
 )`
 
 	SpanConfigurationsTableSchema = `
@@ -1275,7 +1285,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_3_TenantExcludeDataFromBackup.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_3_SQLInstancesAddDraining.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -3893,13 +3903,14 @@ var (
 					{Name: "sql_addr", ID: 5, Type: types.String, Nullable: true},
 					{Name: "crdb_region", ID: 6, Type: types.Bytes, Nullable: false},
 					{Name: "binary_version", ID: 7, Type: types.String, Nullable: true},
+					{Name: "is_draining", ID: 8, Type: types.Bool, Nullable: true},
 				},
 				[]descpb.ColumnFamilyDescriptor{
 					{
 						Name:            "primary",
 						ID:              0,
-						ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr", "crdb_region", "binary_version"},
-						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+						ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr", "crdb_region", "binary_version", "is_draining"},
+						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
 						DefaultColumnID: 0,
 					},
 				},
