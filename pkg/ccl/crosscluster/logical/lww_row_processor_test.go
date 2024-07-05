@@ -74,7 +74,7 @@ func TestLWWInsertQueryQuoting(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/insert", tc.name), func(t *testing.T) {
 			tableName := createTable(tc.schemaTmpl)
 			desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
-			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
+			rp, err := makeSQLLastWriteWinsProcessor(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
 				int32(desc.GetID()): *desc.TableDesc(),
 			}, s.InternalExecutor().(isql.Executor))
 			require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestLWWInsertQueryQuoting(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/delete", tc.name), func(t *testing.T) {
 			tableName := createTable(tc.schemaTmpl)
 			desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
-			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
+			rp, err := makeSQLLastWriteWinsProcessor(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
 				int32(desc.GetID()): *desc.TableDesc(),
 			}, s.InternalExecutor().(isql.Executor))
 			require.NoError(t, err)
@@ -128,7 +128,7 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	// Simulate how we set up the row processor on the main code path.
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
-	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
+	rp, err := makeSQLLastWriteWinsProcessor(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
 		int32(desc.GetID()): *desc.TableDesc(),
 	}, s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)))
 	require.NoError(b, err)
