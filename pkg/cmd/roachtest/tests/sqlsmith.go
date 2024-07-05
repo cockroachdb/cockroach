@@ -334,10 +334,12 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			clusterSpec = r.MakeClusterSpec(numNodes)
 		}
 		r.Add(registry.TestSpec{
-			Name:             fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
-			Owner:            registry.OwnerSQLQueries,
-			Cluster:          clusterSpec,
-			CompatibleClouds: registry.AllExceptAWS,
+			Name:    fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
+			Owner:   registry.OwnerSQLQueries,
+			Cluster: clusterSpec,
+			// Uses gs://cockroach-fixtures-us-east1. See:
+			// https://github.com/cockroachdb/cockroach/issues/105968
+			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
@@ -346,9 +348,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Cloud() != spec.GCE && !c.IsLocal() {
-					t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-				}
 				runSQLSmith(ctx, t, c, setup, setting)
 			},
 			ExtraLabels: []string{"O-rsg"},

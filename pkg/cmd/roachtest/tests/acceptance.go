@@ -23,6 +23,12 @@ import (
 )
 
 func registerAcceptance(r registry.Registry) {
+	// TODO(renato): delete once #126775 is merged.
+	allExceptLocal := strings.Split(
+		registry.AllExceptLocal.String(),
+		",",
+	)
+
 	testCases := map[registry.Owner][]struct {
 		name               string
 		fn                 func(ctx context.Context, t test.Test, c cluster.Cluster)
@@ -73,9 +79,10 @@ func registerAcceptance(r registry.Registry) {
 		},
 		registry.OwnerDisasterRecovery: {
 			{
-				name:     "c2c",
-				fn:       runAcceptanceClusterReplication,
-				numNodes: 3,
+				name:               "c2c",
+				fn:                 runAcceptanceClusterReplication,
+				numNodes:           3,
+				incompatibleClouds: allExceptLocal,
 			},
 			{
 				name:               "multitenant",
