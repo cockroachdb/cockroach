@@ -95,6 +95,7 @@ func RegisterTests(r registry.Registry) {
 	registerLoadSplits(r)
 	registerMVCCGC(r)
 	registerMultiTenantDistSQL(r)
+	registerMultiTenantMultiregion(r)
 	registerMultiTenantTPCH(r)
 	registerMultiTenantUpgrade(r)
 	registerMultiTenantSharedProcess(r)
