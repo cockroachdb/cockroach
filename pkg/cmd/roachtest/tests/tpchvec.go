@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -584,11 +585,13 @@ const tpchVecNodeCount = 3
 
 func registerTPCHVec(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "tpchvec/perf",
-		Owner:            registry.OwnerSQLQueries,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:      "tpchvec/perf",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
@@ -600,10 +603,12 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             "tpchvec/disk",
-		Owner:            registry.OwnerSQLQueries,
-		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "tpchvec/disk",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecDiskTest{})
@@ -611,11 +616,13 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             "tpchvec/streamer",
-		Owner:            registry.OwnerSQLQueries,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:      "tpchvec/streamer",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
@@ -627,11 +634,13 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             "tpchvec/direct_scans",
-		Owner:            registry.OwnerSQLQueries,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:      "tpchvec/direct_scans",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
@@ -643,11 +652,13 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             "tpchvec/direct_scans/mt-shared-process",
-		Owner:            registry.OwnerSQLQueries,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:      "tpchvec/direct_scans/mt-shared-process",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(tpchVecNodeCount),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			p := newTpchVecPerfTest(
@@ -665,10 +676,12 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             "tpchvec/bench",
-		Owner:            registry.OwnerSQLQueries,
-		Cluster:          r.MakeClusterSpec(tpchVecNodeCount),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "tpchvec/bench",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Skip: "This config can be used to perform some benchmarking and is not " +
 			"meant to be run on a nightly basis",
