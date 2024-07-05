@@ -46,9 +46,10 @@ func (s *SQLServer) startTenantAutoUpgradeLoop(ctx context.Context) error {
 			case <-time.After(loopFrequency):
 				storageClusterVersion := s.settingsWatcher.GetStorageClusterActiveVersion().Version
 
-				// Only attempt to upgrade if the storage cluster is at an Internal version of 0,
-				// which implies that storage is at the "final" version for some release.
-				if storageClusterVersion.Internal == 0 {
+				// Only attempt to upgrade if the storage cluster version has
+				// reached the latest known version, meaning that it has
+				// finished upgrading.
+				if storageClusterVersion.Equal(clusterversion.Latest.Version()) {
 					upgradeCompleted, err := s.startAttemptTenantUpgrade(ctx)
 					if err != nil {
 						log.Errorf(ctx, "failed to start an upgrade attempt: %v", err)
@@ -202,8 +203,6 @@ func (s *SQLServer) tenantUpgradeStatus(
 				minVersion = instance.BinaryVersion
 			}
 		}
-		// We are only interested in major and minor versions, not internal ones.
-		minVersion.Internal = 0
 		return minVersion
 	}
 

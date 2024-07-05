@@ -85,7 +85,6 @@ func testTenantAutoUpgrade(t *testing.T, clusterSetting *autoUpgradeClusterSetti
 
 	expectedInitialTenantVersion := v0.Version()
 	expectedFinalTenantVersion := clusterversion.Latest.Version()
-	expectedFinalTenantVersion.Internal = 0 // tenants only upgrade to non-internal versions
 
 	tenantSettings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.Latest.Version(),
