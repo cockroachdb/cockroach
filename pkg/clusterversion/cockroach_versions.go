@@ -268,6 +268,10 @@ const (
 	// minimum timestamp field.
 	V24_2_LeaseMinTimestamp
 
+	// V24_2_SQLInstancesAddDraining is the migration to add the `is_draining`
+	// column to the system.sql_instances table.
+	V24_2_SQLInstancesAddDraining
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -332,6 +336,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_2_TenantRates:                 {Major: 24, Minor: 1, Internal: 8},
 	V24_2_DeleteTenantSettingsVersion: {Major: 24, Minor: 1, Internal: 10},
 	V24_2_LeaseMinTimestamp:           {Major: 24, Minor: 1, Internal: 12},
+	V24_2_SQLInstancesAddDraining:     {Major: 24, Minor: 1, Internal: 14},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
