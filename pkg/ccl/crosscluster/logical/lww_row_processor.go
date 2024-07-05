@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -63,6 +64,9 @@ type sqlLastWriteWinsRowProcessor struct {
 	settings    *cluster.Settings
 	ie          isql.Executor
 	lastRow     cdcevent.Row
+
+	// testing knobs.
+	testingInjectFailurePercent uint32
 }
 
 type queryBuilder struct {
@@ -177,9 +181,17 @@ func makeSQLLastWriteWinsHandler(
 	}, nil
 }
 
+var errInjected = errors.New("injected synthetic error")
+
 func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 	ctx context.Context, txn isql.Txn, kv roachpb.KeyValue, prevValue roachpb.Value,
 ) (batchStats, error) {
+	if lww.testingInjectFailurePercent != 0 {
+		if randutil.FastUint32()%100 < lww.testingInjectFailurePercent {
+			return batchStats{}, errInjected
+		}
+	}
+
 	var err error
 	kv.Key, err = keys.StripTenantPrefix(kv.Key)
 	if err != nil {
@@ -203,6 +215,10 @@ func (lww *sqlLastWriteWinsRowProcessor) ProcessRow(
 
 func (lww *sqlLastWriteWinsRowProcessor) GetLastRow() cdcevent.Row {
 	return lww.lastRow
+}
+
+func (lww *sqlLastWriteWinsRowProcessor) SetSyntheticFailurePercent(rate uint32) {
+	lww.testingInjectFailurePercent = rate
 }
 
 var (

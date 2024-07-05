@@ -64,6 +64,8 @@ type logicalReplicationWriterProcessor struct {
 
 	bh []BatchHandler
 
+	getBatchSize func() int
+
 	streamPartitionClient streamclient.Client
 
 	// frontier keeps track of the progress for the spans tracked by this processor
@@ -140,7 +142,13 @@ func newLogicalReplicationWriterProcessor(
 	}
 
 	lrw := &logicalReplicationWriterProcessor{
-		spec:           spec,
+		spec: spec,
+		getBatchSize: func() int {
+			if useImplicitTxns.Get(&flowCtx.Cfg.Settings.SV) {
+				return 1
+			}
+			return int(flushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
+		},
 		bh:             bhPool,
 		frontier:       frontier,
 		stopCh:         make(chan struct{}),
@@ -152,13 +160,16 @@ func newLogicalReplicationWriterProcessor(
 			ProcessorID: processorID,
 		},
 		dlqClient: InitDeadLetterQueueClient(),
+		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 	}
 	lrw.purgatory = purgatory{
-		deadline:   time.Minute,
-		delay:      time.Second * 5,
-		levelLimit: 10,
-		flush:      lrw.flushBuffer,
-		checkpoint: lrw.checkpoint,
+		deadline:    time.Minute,
+		delay:       time.Second * 5,
+		byteLimit:   8 << 20,
+		flush:       lrw.flushBuffer,
+		checkpoint:  lrw.checkpoint,
+		bytesGauge:  lrw.metrics.RetryQueueBytes,
+		eventsGauge: lrw.metrics.RetryQueueEvents,
 	}
 
 	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
@@ -452,12 +463,12 @@ func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
 	const notRetry = false
-	unapplied, err := lrw.flushBuffer(ctx, kvs, notRetry, false)
+	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, false)
 	if err != nil {
 		return err
 	}
 	// Put any events that failed to apply into purgatory (flushing if needed).
-	if err := lrw.purgatory.Store(ctx, unapplied); err != nil {
+	if err := lrw.purgatory.Store(ctx, unapplied, unappliedBytes); err != nil {
 		return err
 	}
 
@@ -492,17 +503,29 @@ const maxWriterWorkers = 32
 // retry.
 func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV, isRetry, mustProcess bool,
-) (notProcessed []streampb.StreamEvent_KV, _ error) {
+) (notProcessed []streampb.StreamEvent_KV, notProcessedByteSize int64, _ error) {
 	ctx, sp := tracing.ChildSpan(ctx, "logical-replication-writer-flush")
 	defer sp.Finish()
 
 	if len(kvs) == 0 {
-		return nil, nil
+		return nil, 0, nil
 	}
 
-	// Ensure the batcher is always reset, even on early error returns.
 	preFlushTime := timeutil.Now()
-	lrw.debug.RecordFlushStart(preFlushTime, int64(len(kvs)))
+
+	// Inform the debugging helper that a flush is starting and configure failure
+	// injection if it indicates it is requested.
+	testingFailPercent := lrw.debug.RecordFlushStart(preFlushTime, int64(len(kvs)))
+	if testingFailPercent > 0 {
+		for i := range lrw.bh {
+			lrw.bh[i].SetSyntheticFailurePercent(testingFailPercent)
+		}
+		defer func() {
+			for i := range lrw.bh {
+				lrw.bh[i].SetSyntheticFailurePercent(0)
+			}
+		}()
+	}
 
 	// k returns the row key for some KV event, truncated if needed to the row key
 	// prefix.
@@ -527,19 +550,19 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	perChunkStats := make([]flushStats, len(lrw.bh))
 
-	total := int64(len(kvs))
+	todo := kvs
 	g := ctxgroup.WithContext(ctx)
 	for worker := range lrw.bh {
-		if len(kvs) == 0 {
+		if len(todo) == 0 {
 			break
 		}
 		// The chunk should end after the first new key after chunk size.
-		chunkEnd := min(chunkSize, len(kvs))
-		for chunkEnd < len(kvs) && k(kvs[chunkEnd-1]).Equal(k(kvs[chunkEnd])) {
+		chunkEnd := min(chunkSize, len(todo))
+		for chunkEnd < len(todo) && k(todo[chunkEnd-1]).Equal(k(todo[chunkEnd])) {
 			chunkEnd++
 		}
-		chunk := kvs[0:chunkEnd]
-		kvs = kvs[len(chunk):]
+		chunk := todo[0:chunkEnd]
+		todo = todo[len(chunk):]
 		bh := lrw.bh[worker]
 
 		g.GoCtx(func(ctx context.Context) error {
@@ -554,7 +577,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	}
 
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var stats flushStats
@@ -567,11 +590,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	}
 
 	flushTime := timeutil.Since(preFlushTime).Nanoseconds()
-	lrw.debug.RecordFlushComplete(flushTime, total, stats.processed.bytes)
+	lrw.debug.RecordFlushComplete(flushTime, int64(len(kvs)), stats.processed.bytes)
 
 	lrw.metrics.AppliedRowUpdates.Inc(stats.processed.success)
 	lrw.metrics.DLQedRowUpdates.Inc(stats.processed.dlq)
-	lrw.metrics.AppliedLogicalBytes.Inc(stats.processed.bytes)
 	lrw.metrics.CommitToCommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
 
 	if isRetry {
@@ -581,23 +603,21 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		lrw.metrics.InitialApplySuccesses.Inc(stats.processed.success)
 		lrw.metrics.InitialApplyFailures.Inc(stats.notProcessed.count + stats.processed.dlq)
 		lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
-		lrw.metrics.StreamBatchRowsHist.RecordValue(total)
+		lrw.metrics.StreamBatchRowsHist.RecordValue(int64(len(kvs)))
 		lrw.metrics.StreamBatchBytesHist.RecordValue(stats.processed.bytes + stats.notProcessed.bytes)
+		lrw.metrics.ReceivedLogicalBytes.Inc(stats.processed.bytes + stats.notProcessed.bytes)
 	}
-	return notProcessed, nil
+	return notProcessed, stats.notProcessed.bytes, nil
 }
 
 // flushChunk is the per-thread body of flushBuffer; see flushBuffer's contract.
 func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, mustProcess bool,
 ) (flushStats, error) {
-	batchSize := int(flushBatchSize.Get(&lrw.FlowCtx.Cfg.Settings.SV))
+	batchSize := lrw.getBatchSize()
 	// TODO(yuzefovich): we should have a better heuristic for when to use the
 	// implicit vs explicit txns (for example, depending on the presence of the
 	// secondary indexes).
-	if useImplicitTxns.Get(&lrw.FlowCtx.Cfg.Settings.SV) {
-		batchSize = 1
-	}
 
 	var stats flushStats
 	// TODO: The batching here in production would need to be much
@@ -721,6 +741,7 @@ type BatchHandler interface {
 	// implicit txn.
 	HandleBatch(context.Context, []streampb.StreamEvent_KV) (batchStats, error)
 	GetLastRow() cdcevent.Row
+	SetSyntheticFailurePercent(uint32)
 }
 
 // RowProcessor knows how to process a single row from an event stream.
@@ -730,6 +751,7 @@ type RowProcessor interface {
 	// before the change was applied on the source.
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
 	GetLastRow() cdcevent.Row
+	SetSyntheticFailurePercent(uint32)
 }
 
 type txnBatch struct {
@@ -777,6 +799,10 @@ func (t *txnBatch) HandleBatch(
 
 func (t *txnBatch) GetLastRow() cdcevent.Row {
 	return t.rp.GetLastRow()
+}
+
+func (t *txnBatch) SetSyntheticFailurePercent(rate uint32) {
+	t.rp.SetSyntheticFailurePercent(rate)
 }
 
 func init() {

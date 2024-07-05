@@ -28,9 +28,9 @@ var (
 		Measurement: "Failures",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaAppliedLogicalBytes = metric.Metadata{
+	metaReceivedLogicalBytes = metric.Metadata{
 		Name:        "logical_replication.logical_bytes",
-		Help:        "Logical bytes (sum of keys + values) ingested by all replication jobs",
+		Help:        "Logical bytes (sum of keys + values) received by all replication jobs",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -50,6 +50,18 @@ var (
 	}
 
 	// User-visible health and ops metrics.
+	metaRetryQueueBytes = metric.Metadata{
+		Name:        "logical_replication.retry_queue_bytes",
+		Help:        "The replicated time of the logical replication stream in seconds since the unix epoch.",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRetryQueueEvents = metric.Metadata{
+		Name:        "logical_replication.retry_queue_events",
+		Help:        "The replicated time of the logical replication stream in seconds since the unix epoch.",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaApplyBatchNanosHist = metric.Metadata{
 		Name:        "logical_replication.batch_hist_nanos",
 		Help:        "Time spent flushing a batch",
@@ -120,13 +132,15 @@ type Metrics struct {
 	// bring moved and applied/rejected/etc.
 	AppliedRowUpdates     *metric.Counter
 	DLQedRowUpdates       *metric.Counter
-	AppliedLogicalBytes   *metric.Counter
+	ReceivedLogicalBytes  *metric.Counter
 	CommitToCommitLatency metric.IHistogram
 	ReplicatedTimeSeconds *metric.Gauge
 
 	// User-surfaced information about the health/operation of the stream; this
 	// should be a narrow subset of numbers that are actually relevant to a user
 	// such as the latency of application as that could be their supplied UDF.
+	RetryQueueBytes     *metric.Gauge
+	RetryQueueEvents    *metric.Gauge
 	ApplyBatchNanosHist metric.IHistogram
 
 	InitialApplySuccesses *metric.Counter
@@ -150,9 +164,9 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for logical replication job monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	return &Metrics{
-		AppliedRowUpdates:   metric.NewCounter(metaAppliedRowUpdates),
-		DLQedRowUpdates:     metric.NewCounter(metaDLQedRowUpdates),
-		AppliedLogicalBytes: metric.NewCounter(metaAppliedLogicalBytes),
+		AppliedRowUpdates:    metric.NewCounter(metaAppliedRowUpdates),
+		DLQedRowUpdates:      metric.NewCounter(metaDLQedRowUpdates),
+		ReceivedLogicalBytes: metric.NewCounter(metaReceivedLogicalBytes),
 		CommitToCommitLatency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     metaCommitToCommitLatency,
@@ -166,6 +180,8 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
+		RetryQueueBytes:       metric.NewGauge(metaRetryQueueBytes),
+		RetryQueueEvents:      metric.NewGauge(metaRetryQueueEvents),
 		InitialApplySuccesses: metric.NewCounter(metaInitialApplySuccess),
 		InitialApplyFailures:  metric.NewCounter(metaInitialApplyFailures),
 		RetriedApplySuccesses: metric.NewCounter(metaRetriedApplySuccesses),

@@ -124,7 +124,8 @@ type DebugLogicalConsumerStatus struct {
 	ProcessorID int32
 	mu          struct {
 		syncutil.Mutex
-		stats DebugLogicalConsumerStats
+		stats                DebugLogicalConsumerStats
+		injectFailurePercent uint32
 	}
 }
 
@@ -162,12 +163,20 @@ func (d *DebugLogicalConsumerStatus) RecordRecv(wait time.Duration) {
 	d.mu.Unlock()
 }
 
-func (d *DebugLogicalConsumerStatus) RecordFlushStart(start time.Time, keyCount int64) {
+func (d *DebugLogicalConsumerStatus) SetInjectedFailurePercent(percent uint32) {
+	d.mu.Lock()
+	d.mu.injectFailurePercent = percent
+	d.mu.Unlock()
+}
+
+func (d *DebugLogicalConsumerStatus) RecordFlushStart(start time.Time, keyCount int64) uint32 {
 	micros := start.UnixMicro()
 	d.mu.Lock()
 	d.mu.stats.Flushes.Current.TotalKVs = keyCount
 	d.mu.stats.Flushes.Current.StartedUnixMicros = micros
+	failPercent := d.mu.injectFailurePercent
 	d.mu.Unlock()
+	return failPercent
 }
 
 func (d *DebugLogicalConsumerStatus) RecordBatchApplied(t time.Duration, keyCount int64) {

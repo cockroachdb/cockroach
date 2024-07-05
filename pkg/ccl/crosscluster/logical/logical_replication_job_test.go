@@ -18,10 +18,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -491,4 +493,68 @@ func WaitUntilReplicatedTime(
 		}
 		return nil
 	})
+}
+
+type mockBatchHandler bool
+
+var _ BatchHandler = mockBatchHandler(true)
+
+func (m mockBatchHandler) HandleBatch(
+	_ context.Context, _ []streampb.StreamEvent_KV,
+) (batchStats, error) {
+	if m {
+		return batchStats{}, errors.New("batch processing failure")
+	}
+	return batchStats{}, nil
+}
+func (m mockBatchHandler) GetLastRow() cdcevent.Row            { return cdcevent.Row{} }
+func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
+
+type mockDLQ int
+
+func (m *mockDLQ) Create() error { return nil }
+
+func (m *mockDLQ) Log(
+	_ context.Context, _ int64, _ streampb.StreamEvent_KV, _ cdcevent.Row, _ error,
+) error {
+	*m++
+	return nil
+}
+
+// TestFlushErrorHandling exercises the flush path in cases where writes fail.
+func TestFlushErrorHandling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	dlq := mockDLQ(0)
+	lrw := &logicalReplicationWriterProcessor{
+		metrics:      MakeMetrics(0).(*Metrics),
+		getBatchSize: func() int { return 1 },
+		dlqClient:    &dlq,
+	}
+	lrw.purgatory.flush = lrw.flushBuffer
+	lrw.purgatory.bytesGauge = lrw.metrics.RetryQueueBytes
+	lrw.purgatory.eventsGauge = lrw.metrics.RetryQueueEvents
+
+	lrw.bh = []BatchHandler{(mockBatchHandler(true))}
+
+	// One failure immediately means a zero-byte purgatory is full.
+	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("a")}))
+	require.Equal(t, int64(1), lrw.metrics.RetryQueueEvents.Value())
+	require.True(t, lrw.purgatory.full())
+	require.Equal(t, 0, int(dlq))
+
+	// Another failure causes a forced drain of purgatory, incrementing DLQ count.
+	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("b")}))
+	require.Equal(t, int64(1), lrw.metrics.RetryQueueEvents.Value())
+	require.Equal(t, 1, int(dlq))
+
+	// Bump up the purgatory size limit and observe no more DLQ'ed items.
+	lrw.purgatory.byteLimit = 1 << 20
+	require.False(t, lrw.purgatory.full())
+	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("c")}))
+	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("d")}))
+	require.Equal(t, 1, int(dlq))
+	require.Equal(t, int64(3), lrw.metrics.RetryQueueEvents.Value())
+
 }
