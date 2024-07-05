@@ -490,3 +490,14 @@ SELECT count(*) FROM cte AS cte1 JOIN cte AS cte2 ON cte1.col = cte2.col;
 statement ok
 RESET vectorize;
 RESET distsql_workmem;
+
+
+# Regression test for tsvector to tsvector assignment cast.
+statement ok
+CREATE TABLE t126773 (pk INT PRIMARY KEY, v TSVECTOR);
+
+statement ok
+INSERT INTO t126773 (pk, v) values (1, tsvector('splendid water fowl'));
+
+statement ok
+SELECT t126773::t126773 FROM t126773;
