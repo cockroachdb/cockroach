@@ -303,7 +303,7 @@ EOF"
           --clouds gce \
           --gce-managed \
           --gce-enable-multiple-stores \
-          --gce-zones "northamerica-northeast2-a:2,northamerica-northeast2-b:2,northamerica-northeast2-c:1,us-east5-a:2,us-east5-b:2,us-east5-c:1,northamerica-northeast1-a:2,northamerica-northeast1-b:2,northamerica-northeast1-c:1" \
+          --gce-zones "northamerica-northeast2-a:2,northamerica-northeast2-b:2,northamerica-northeast2-c:1,us-east5-a:2,us-east5-b:2,us-east5-c:1,us-central1-a:2,us-central1-b:2,us-central1-c:1" \
           --gce-use-spot \
           --nodes 15 \
           --gce-machine-type n2-standard-16 \
@@ -318,7 +318,7 @@ EOF"
       "workload-large")
         roachprod create workload-large \
           --clouds gce \
-          --gce-zones "northamerica-northeast2-a,us-east5-a,northamerica-northeast1-a" \
+          --gce-zones "northamerica-northeast2-a,us-east5-a,us-central1-a" \
           --nodes 3 \
           --gce-machine-type n2-standard-4 \
           --os-volume-size 100 \
