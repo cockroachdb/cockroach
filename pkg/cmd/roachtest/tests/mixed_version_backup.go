@@ -2574,13 +2574,11 @@ func registerBackupMixedVersion(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
 		NativeLibs:        registry.LibGEOS,
-		CompatibleClouds:  registry.AllExceptAWS,
-		Suites:            registry.Suites(registry.Nightly),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Cloud() != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroachdb-backup-testing-long-ttl; see https://github.com/cockroachdb/cockroach/issues/105968")
-			}
-
 			roachNodes := c.Range(1, c.Spec().NodeCount-1)
 			workloadNode := c.Node(c.Spec().NodeCount)
 			mvt := mixedversion.NewTest(
