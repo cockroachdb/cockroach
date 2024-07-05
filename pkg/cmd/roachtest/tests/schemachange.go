@@ -29,16 +29,15 @@ import (
 
 func registerSchemaChangeDuringKV(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             `schemachange/during/kv`,
-		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(5),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    `schemachange/during/kv`,
+		Owner:   registry.OwnerSQLFoundations,
+		Cluster: r.MakeClusterSpec(5),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Cloud() != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-			}
 			const fixturePath = `gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=10/backup?AUTH=implicit`
 
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")

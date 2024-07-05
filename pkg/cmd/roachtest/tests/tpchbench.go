@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -164,11 +165,13 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 	numNodes := b.Nodes + 1
 
 	r.Add(registry.TestSpec{
-		Name:             strings.Join(nameParts, "/"),
-		Owner:            registry.OwnerSQLQueries,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(numNodes),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:      strings.Join(nameParts, "/"),
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(numNodes),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHBench(ctx, t, c, b)

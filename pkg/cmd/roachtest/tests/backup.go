@@ -369,42 +369,31 @@ func registerBackup(r registry.Registry) {
 		},
 	})
 
-	for _, item := range []struct {
-		cloudProvider string
-		machine       string
-	}{
-		{cloudProvider: "GCS", machine: spec.GCE},
-		{cloudProvider: "AWS", machine: spec.AWS},
-	} {
-		item := item
+	for _, cloudProvider := range []string{spec.GCE, spec.AWS} {
 		r.Add(registry.TestSpec{
-			Name:              fmt.Sprintf("backup/assume-role/%s", item.cloudProvider),
+			Name:              fmt.Sprintf("backup/assume-role/%s", cloudProvider),
 			Owner:             registry.OwnerDisasterRecovery,
 			Cluster:           r.MakeClusterSpec(3),
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
-			CompatibleClouds:  registry.AllExceptAWS,
+			CompatibleClouds:  registry.Clouds(cloudProvider),
 			Suites:            registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Cloud() != item.machine {
-					t.Skip("backup assumeRole is only configured to run on "+item.machine, "")
-				}
-
 				rows := 100
 
 				dest := importBankData(ctx, rows, t, c)
 
 				var backupPath, kmsURI string
 				var err error
-				switch item.cloudProvider {
-				case "AWS":
+				switch cloudProvider {
+				case spec.AWS:
 					if backupPath, err = getAWSBackupPath(dest); err != nil {
 						t.Fatal(err)
 					}
 					if kmsURI, err = getAWSKMSAssumeRoleURI(); err != nil {
 						t.Fatal(err)
 					}
-				case "GCS":
+				case spec.GCE:
 					if backupPath, err = getGCSBackupPath(dest); err != nil {
 						t.Fatal(err)
 					}
@@ -458,28 +447,16 @@ func registerBackup(r registry.Registry) {
 		})
 	}
 	KMSSpec := r.MakeClusterSpec(3)
-	for _, item := range []struct {
-		kmsProvider string
-		machine     string
-		clouds      registry.CloudSet
-	}{
-		{kmsProvider: "GCS", machine: spec.GCE, clouds: registry.AllExceptAWS},
-		{kmsProvider: "AWS", machine: spec.AWS, clouds: registry.OnlyAWS},
-	} {
-		item := item
+	for _, cloudProvider := range []string{spec.GCE, spec.AWS} {
 		r.Add(registry.TestSpec{
-			Name:              fmt.Sprintf("backup/KMS/%s/%s", item.kmsProvider, KMSSpec.String()),
+			Name:              fmt.Sprintf("backup/KMS/%s/%s", cloudProvider, KMSSpec.String()),
 			Owner:             registry.OwnerDisasterRecovery,
 			Cluster:           KMSSpec,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
-			CompatibleClouds:  item.clouds,
+			CompatibleClouds:  registry.Clouds(cloudProvider),
 			Suites:            registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Cloud() != item.machine {
-					t.Skip("backupKMS roachtest is only configured to run on "+item.machine, "")
-				}
-
 				// ~10GiB - which is 30Gib replicated.
 				rows := rows30GiB
 				if c.IsLocal() {
@@ -499,12 +476,12 @@ func registerBackup(r registry.Registry) {
 				m.Wait()
 				var kmsURIA, kmsURIB string
 				var err error
-				backupPath := fmt.Sprintf("nodelocal://1/kmsbackup/%s/%s", item.kmsProvider, dest)
+				backupPath := fmt.Sprintf("nodelocal://1/kmsbackup/%s/%s", cloudProvider, dest)
 
 				m = c.NewMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
-					switch item.kmsProvider {
-					case "AWS":
+					switch cloudProvider {
+					case spec.AWS:
 						t.Status(`running encrypted backup with AWS KMS`)
 						kmsURIA, err = getAWSKMSURI(KMSRegionAEnvVar, KMSKeyARNAEnvVar)
 						if err != nil {
@@ -515,7 +492,7 @@ func registerBackup(r registry.Registry) {
 						if err != nil {
 							return err
 						}
-					case "GCS":
+					case spec.GCE:
 						t.Status(`running encrypted backup with GCS KMS`)
 						kmsURIA, err = getGCSKMSURI(KMSKeyNameAEnvVar)
 						if err != nil {
@@ -588,12 +565,11 @@ func registerBackup(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(3, spec.CPU(8)),
 		Leases:            registry.MetamorphicLeases,
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		CompatibleClouds:  registry.AllExceptAWS,
-		Suites:            registry.Suites(registry.Nightly),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Cloud() != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-			}
 			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})
 		},
 	})
