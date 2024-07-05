@@ -215,29 +215,23 @@ func (srp *sqlRowProcessor) SetSyntheticFailurePercent(rate uint32) {
 	srp.testingInjectFailurePercent = rate
 }
 
-var (
-	implicitTxnOverrides = sessiondata.InternalExecutorOverride{
-		AttributeToUser: true,
+var txnOverrides = sessiondata.InternalExecutorOverride{
+	AttributeToUser: true,
 
-		// The OriginIDForLogicalDataReplication session variable will bind the
-		// origin ID 1 to each per-statement batch request header sent by the
-		// internal executor. This metadata will be plumbed to the MVCCValueHeader
-		// of each written kv, and will be used by source side rangefeeds to filter
-		// these replicated events, preventing data looping.
-		//
-		// Note that a similar ingestion side plumbing strategy will be used for
-		// OriginTimestamp even though each ingested row may have a different
-		// timestamp. We can still bind the OriginTimestamp to the Internal Executor
-		// session before each query because 1) each IE query creates a new session;
-		// 2) we do not plan to use multi row insert statements during LDR ingestion
-		// via sql.
-		OriginIDForLogicalDataReplication: 1,
-	}
-	explicitTxnOverrides = sessiondata.InternalExecutorOverride{
-		AttributeToUser:                   true,
-		OriginIDForLogicalDataReplication: 1,
-	}
-)
+	// The OriginIDForLogicalDataReplication session variable will bind the
+	// origin ID 1 to each per-statement batch request header sent by the
+	// internal executor. This metadata will be plumbed to the MVCCValueHeader
+	// of each written kv, and will be used by source side rangefeeds to filter
+	// these replicated events, preventing data looping.
+	//
+	// Note that a similar ingestion side plumbing strategy will be used for
+	// OriginTimestamp even though each ingested row may have a different
+	// timestamp. We can still bind the OriginTimestamp to the Internal Executor
+	// session before each query because 1) each IE query creates a new session;
+	// 2) we do not plan to use multi row insert statements during LDR ingestion
+	// via sql.
+	OriginIDForLogicalDataReplication: 1,
+}
 
 var tryOptimisticInsertEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -310,10 +304,8 @@ func (lww *lwwQuerier) InsertRow(
 	ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevValue roachpb.Value,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
-	ieOverrides := implicitTxnOverrides
 	if txn != nil {
 		kvTxn = txn.KV()
-		ieOverrides = explicitTxnOverrides
 	}
 	insertQueriesForTable, ok := lww.queryBuffer.insertQueries[row.TableID]
 	if !ok {
@@ -333,7 +325,7 @@ func (lww *lwwQuerier) InsertRow(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if _, err = ie.ExecParsed(ctx, "replicated-optimistic-insert", kvTxn, ieOverrides, stmt, datums...); err != nil {
+		if _, err = ie.ExecParsed(ctx, "replicated-optimistic-insert", kvTxn, txnOverrides, stmt, datums...); err != nil {
 			// If the optimistic insert failed with unique violation, we have to
 			// fall back to the pessimistic path. If we got a different error,
 			// then we bail completely.
@@ -352,7 +344,7 @@ func (lww *lwwQuerier) InsertRow(
 	if err != nil {
 		return batchStats{}, err
 	}
-	if _, err = ie.ExecParsed(ctx, "replicated-insert", kvTxn, ieOverrides, stmt, datums...); err != nil {
+	if _, err = ie.ExecParsed(ctx, "replicated-insert", kvTxn, txnOverrides, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
@@ -363,10 +355,8 @@ func (lww *lwwQuerier) DeleteRow(
 	ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
-	ieOverrides := implicitTxnOverrides
 	if txn != nil {
 		kvTxn = txn.KV()
-		ieOverrides = explicitTxnOverrides
 	}
 
 	deleteQuery, ok := lww.queryBuffer.deleteQueries[row.TableID]
@@ -383,7 +373,7 @@ func (lww *lwwQuerier) DeleteRow(
 		return batchStats{}, err
 	}
 
-	if _, err := ie.ExecParsed(ctx, "replicated-delete", kvTxn, ieOverrides, stmt, datums...); err != nil {
+	if _, err := ie.ExecParsed(ctx, "replicated-delete", kvTxn, txnOverrides, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
