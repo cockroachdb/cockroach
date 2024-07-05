@@ -574,7 +574,6 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	lrw.metrics.AppliedRowUpdates.Inc(stats.processed.success)
 	lrw.metrics.DLQedRowUpdates.Inc(stats.processed.dlq)
-	lrw.metrics.AppliedLogicalBytes.Inc(stats.processed.bytes)
 	lrw.metrics.CommitToCommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
 
 	if isRetry {
@@ -586,6 +585,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		lrw.metrics.StreamBatchNanosHist.RecordValue(flushTime)
 		lrw.metrics.StreamBatchRowsHist.RecordValue(total)
 		lrw.metrics.StreamBatchBytesHist.RecordValue(stats.processed.bytes + stats.notProcessed.bytes)
+		lrw.metrics.ReceivedLogicalBytes.Inc(stats.processed.bytes + stats.notProcessed.bytes)
 	}
 	return notProcessed, stats.notProcessed.bytes, nil
 }
