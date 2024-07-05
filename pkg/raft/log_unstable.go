@@ -216,11 +216,14 @@ func (u *unstable) stableSnapTo(i uint64) {
 	}
 }
 
-func (u *unstable) restore(s pb.Snapshot) {
-	u.offset = s.Metadata.Index + 1
+func (u *unstable) restore(s snapshot) {
+	// TODO(pav-kv): add a safety check making sure the snapshot does not regress
+	// the logMark of unstable. The ("accepted term", lastIndex) is the logical
+	// clock that must not regress.
+	u.offset = s.lastIndex() + 1
 	u.offsetInProgress = u.offset
 	u.entries = nil
-	u.snapshot = &s
+	u.snapshot = &s.snap
 	u.snapshotInProgress = false
 }
 

@@ -762,7 +762,7 @@ func (r *raft) maybeCommit() bool {
 	if !r.raftLog.matchTerm(entryID{term: r.Term, index: index}) {
 		return false
 	}
-	r.raftLog.commitTo(index)
+	r.raftLog.commitTo(logMark{term: r.Term, index: index})
 	return true
 }
 
@@ -1723,7 +1723,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		// committed entries at m.Term (by raft invariants), so it is safe to bump
 		// the commit index even if the MsgApp is stale.
 		lastIndex := a.lastIndex()
-		r.raftLog.commitTo(min(m.Commit, lastIndex))
+		r.raftLog.commitTo(logMark{term: m.Term, index: min(m.Commit, lastIndex)})
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: lastIndex})
 		return
 	}
@@ -1774,6 +1774,7 @@ func (r *raft) checkMatch(match uint64) {
 
 func (r *raft) handleHeartbeat(m pb.Message) {
 	r.checkMatch(m.Match)
+
 	// The m.Term leader is indicating to us through this heartbeat message
 	// that indices <= m.Commit in its log are committed. If our log matches
 	// the leader's up to index M, then we can update our commit index to
@@ -1792,12 +1793,13 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 	// enables advancing the commit index. By this, we have the guarantee that our
 	// commit index converges to the leader's.
 	//
-	// TODO(pav-kv): move this logic to r.raftLog, which is more appropriate for
-	// handling safety. The raftLog can use accTerm for other safety checks too.
-	// For example, unstable.truncateAndAppend currently may override a suffix of
-	// the log unconditionally, but it can only be done if m.Term > accTerm.
-	if m.Term == r.accTerm {
-		r.raftLog.commitTo(min(m.Commit, r.raftLog.lastIndex()))
+	// TODO(pav-kv): the condition can be relaxed, it is actually safe to bump the
+	// commit index if accTerm >= m.Term.
+	// TODO(pav-kv): move this logic to raftLog.commitTo, once the accTerm has
+	// migrated to raftLog/unstable.
+	mark := logMark{term: m.Term, index: min(m.Commit, r.raftLog.lastIndex())}
+	if mark.term == r.accTerm {
+		r.raftLog.commitTo(mark)
 	}
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
 }
@@ -1805,19 +1807,26 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 func (r *raft) handleSnapshot(m pb.Message) {
 	// MsgSnap messages should always carry a non-nil Snapshot, but err on the
 	// side of safety and treat a nil Snapshot as a zero-valued Snapshot.
-	var s pb.Snapshot
+	s := snapshot{term: m.Term}
 	if m.Snapshot != nil {
-		s = *m.Snapshot
+		s.snap = *m.Snapshot
 	}
-	sindex, sterm := s.Metadata.Index, s.Metadata.Term
+	if err := s.valid(); err != nil {
+		// TODO(pav-kv): add a special kind of logger.Errorf that panics in tests,
+		// but logs an error in prod. We want to eliminate all such errors in tests.
+		r.logger.Errorf("%x received an invalid MsgSnap: %v", r.id, err)
+		return
+	}
+
+	id := s.lastEntryID()
 	if r.restore(s) {
 		r.logger.Infof("%x [commit: %d] restored snapshot [index: %d, term: %d]",
-			r.id, r.raftLog.committed, sindex, sterm)
+			r.id, r.raftLog.committed, id.index, id.term)
 		r.accTerm = m.Term // our log is now consistent with the leader
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex()})
 	} else {
 		r.logger.Infof("%x [commit: %d] ignored snapshot [index: %d, term: %d]",
-			r.id, r.raftLog.committed, sindex, sterm)
+			r.id, r.raftLog.committed, id.index, id.term)
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: r.raftLog.committed})
 	}
 }
@@ -1825,8 +1834,9 @@ func (r *raft) handleSnapshot(m pb.Message) {
 // restore recovers the state machine from a snapshot. It restores the log and the
 // configuration of state machine. If this method returns false, the snapshot was
 // ignored, either because it was obsolete or because of an error.
-func (r *raft) restore(s pb.Snapshot) bool {
-	if s.Metadata.Index <= r.raftLog.committed {
+func (r *raft) restore(s snapshot) bool {
+	id := s.lastEntryID()
+	if id.index <= r.raftLog.committed {
 		return false
 	}
 	if r.state != StateFollower {
@@ -1844,7 +1854,7 @@ func (r *raft) restore(s pb.Snapshot) bool {
 	// config. This shouldn't ever happen (at the time of writing) but lots of
 	// code here and there assumes that r.id is in the progress tracker.
 	found := false
-	cs := s.Metadata.ConfState
+	cs := s.snap.Metadata.ConfState
 
 	for _, set := range [][]pb.PeerID{
 		cs.Voters,
@@ -1873,13 +1883,12 @@ func (r *raft) restore(s pb.Snapshot) bool {
 
 	// Now go ahead and actually restore.
 
-	id := entryID{term: s.Metadata.Term, index: s.Metadata.Index}
 	if r.raftLog.matchTerm(id) {
 		// TODO(pav-kv): can print %+v of the id, but it will change the format.
 		last := r.raftLog.lastEntryID()
 		r.logger.Infof("%x [commit: %d, lastindex: %d, lastterm: %d] fast-forwarded commit to snapshot [index: %d, term: %d]",
 			r.id, r.raftLog.committed, last.index, last.term, id.index, id.term)
-		r.raftLog.commitTo(s.Metadata.Index)
+		r.raftLog.commitTo(s.mark())
 		return false
 	}
 
