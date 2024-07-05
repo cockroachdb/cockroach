@@ -64,6 +64,8 @@ type logicalReplicationWriterProcessor struct {
 
 	bh []BatchHandler
 
+	getBatchSize func() int
+
 	streamPartitionClient streamclient.Client
 
 	// frontier keeps track of the progress for the spans tracked by this processor
@@ -140,7 +142,13 @@ func newLogicalReplicationWriterProcessor(
 	}
 
 	lrw := &logicalReplicationWriterProcessor{
-		spec:           spec,
+		spec: spec,
+		getBatchSize: func() int {
+			if useImplicitTxns.Get(&flowCtx.Cfg.Settings.SV) {
+				return 1
+			}
+			return int(flushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
+		},
 		bh:             bhPool,
 		frontier:       frontier,
 		stopCh:         make(chan struct{}),
@@ -606,13 +614,10 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, mustProcess bool,
 ) (flushStats, error) {
-	batchSize := int(flushBatchSize.Get(&lrw.FlowCtx.Cfg.Settings.SV))
+	batchSize := lrw.getBatchSize()
 	// TODO(yuzefovich): we should have a better heuristic for when to use the
 	// implicit vs explicit txns (for example, depending on the presence of the
 	// secondary indexes).
-	if useImplicitTxns.Get(&lrw.FlowCtx.Cfg.Settings.SV) {
-		batchSize = 1
-	}
 
 	var stats flushStats
 	// TODO: The batching here in production would need to be much
