@@ -228,6 +228,10 @@ const (
 	// to the system tenant.
 	V24_3_TableMetadata
 
+	// V24_3_SQLInstancesAddDraining is the migration to add the `is_draining`
+	// column to the system.sql_instances table.
+	V24_3_SQLInstancesAddDraining
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -279,6 +283,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_3_StoreLivenessEnabled:    {Major: 24, Minor: 2, Internal: 4},
 	V24_3_AddTimeseriesZoneConfig: {Major: 24, Minor: 2, Internal: 6},
 	V24_3_TableMetadata:           {Major: 24, Minor: 2, Internal: 8},
+	V24_3_SQLInstancesAddDraining: {Major: 24, Minor: 2, Internal: 10},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
