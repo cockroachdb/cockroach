@@ -887,6 +887,22 @@ func (txn *wrappedInternalTxn) QueryRowEx(
 	return txn.wrapped.QueryRowEx(ctx, opName, kvTxn, session, stmt, qargs...)
 }
 
+func (txn *wrappedInternalTxn) QueryRowExParsed(
+	ctx context.Context,
+	opName string,
+	kvTxn *kv.Txn,
+	session sessiondata.InternalExecutorOverride,
+	parsedStmt statements.Statement[tree.Statement],
+	qargs ...interface{},
+) (tree.Datums, error) {
+	if f := txn.errFunc; f != nil {
+		if err := f(parsedStmt.SQL); err != nil {
+			return nil, err
+		}
+	}
+	return txn.wrapped.QueryRowExParsed(ctx, opName, kvTxn, session, parsedStmt, qargs...)
+}
+
 func (txn *wrappedInternalTxn) QueryRow(
 	ctx context.Context, opName string, _ *kv.Txn, statement string, qargs ...interface{},
 ) (tree.Datums, error) {
