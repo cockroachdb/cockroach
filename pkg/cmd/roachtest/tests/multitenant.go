@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -78,9 +80,9 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 	t.L().Printf("after virtual cluster stopped, received error: %v", err)
 }
 
-// Runs an acceptance test on a multi-region multi-tenant cluster, which
-// will be spread across at least two regions.
-func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c cluster.Cluster) {
+// Runs a test on a multi-region multi-tenant cluster, which will be
+// spread across at least two regions.
+func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Cluster) {
 	startOptions := option.NewStartOpts(option.NoBackupSchedule)
 	c.Start(ctx, t.L(), startOptions, install.MakeClusterSettings(install.SecureOption(true)), c.All())
 	regions := strings.Split(c.Spec().GCE.Zones, ",")
@@ -367,5 +369,29 @@ func runAcceptanceMultitenantMultiRegion(ctx context.Context, t test.Test, c clu
 	}
 
 	t.Status("checking log file contents")
+}
 
+func registerMultiTenantMultiregion(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "multitenant-multiregion",
+		Timeout: 20 * time.Minute,
+		Owner:   registry.OwnerSQLFoundations,
+		Cluster: r.MakeClusterSpec(
+			9,
+			spec.Geo(),
+			spec.GCEZones(strings.Join([]string{
+				"us-west1-b", "us-west1-b", "us-west1-b",
+				"us-west1-b", "us-west1-b", "us-west1-b",
+				"us-east1-b", "us-east1-b", "us-east1-b",
+			}, ",")),
+		),
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
+		RequiresLicense:   true,
+		CompatibleClouds:  registry.OnlyGCE,
+		Suites:            registry.Suites(registry.Nightly, registry.Quick),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runMultiTenantMultiRegion(ctx, t, c)
+		},
+	})
 }

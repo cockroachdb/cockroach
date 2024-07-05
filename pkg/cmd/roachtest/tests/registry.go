@@ -97,6 +97,7 @@ func RegisterTests(r registry.Registry) {
 	registerMVCCGC(r)
 	registerMultiStoreRemove(r)
 	registerMultiTenantDistSQL(r)
+	registerMultiTenantMultiregion(r)
 	registerMultiTenantTPCH(r)
 	registerMultiTenantUpgrade(r)
 	registerMultiTenantSharedProcess(r)
