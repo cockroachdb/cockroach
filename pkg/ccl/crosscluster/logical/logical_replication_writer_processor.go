@@ -352,6 +352,13 @@ func (lrw *logicalReplicationWriterProcessor) close() {
 		log.Errorf(lrw.Ctx(), "error on close(): %s", err)
 	}
 
+	// Update the global retry queue gauges to reflect that this queue is going
+	// away, including everything in it that is included in those gauges.
+	lrw.purgatory.bytesGauge.Dec(lrw.purgatory.bytes)
+	for _, i := range lrw.purgatory.levels {
+		lrw.purgatory.eventsGauge.Dec(int64(len(i.events)))
+	}
+
 	lrw.InternalClose()
 }
 
