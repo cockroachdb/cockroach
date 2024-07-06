@@ -558,7 +558,7 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+				ClusterVersionOverride:         clusterversion.MinSupported.Version(),
 			},
 		},
 		multiregionccltestutils.WithSettings(makeSettings()))
@@ -572,7 +572,7 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		TestingKnobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+				ClusterVersionOverride:         clusterversion.MinSupported.Version(),
 			},
 		},
 		TenantID: id,

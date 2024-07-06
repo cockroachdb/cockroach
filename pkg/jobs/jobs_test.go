@@ -2366,7 +2366,7 @@ func TestStartableJobMixedVersion(t *testing.T) {
 		Settings: st,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
+				ClusterVersionOverride:         clusterversion.MinSupported.Version(),
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 		},

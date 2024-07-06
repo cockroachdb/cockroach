@@ -3031,7 +3031,7 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 		},
 	}
 	params.Knobs.Server = &server.TestingKnobs{
-		BinaryVersionOverride:          clusterversion.V23_2.Version(),
+		ClusterVersionOverride:         clusterversion.V23_2.Version(),
 		DisableAutomaticVersionUpgrade: make(chan struct{}),
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -3873,7 +3873,7 @@ func TestSessionLeasingTable(t *testing.T) {
 		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				BinaryVersionOverride:          clusterversion.V23_2.Version(),
+				ClusterVersionOverride:         clusterversion.V23_2.Version(),
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 		},
@@ -3949,7 +3949,7 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 		DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				BinaryVersionOverride:          clusterversion.V23_2.Version(),
+				ClusterVersionOverride:         clusterversion.V23_2.Version(),
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 		},
