@@ -198,7 +198,7 @@ func TestUnstableRestore(t *testing.T) {
 		term: 2,
 		snap: pb.Snapshot{Metadata: pb.SnapshotMetadata{Index: 6, Term: 2}},
 	}
-	u.restore(s)
+	require.True(t, u.restore(s))
 	u.checkInvariants(t)
 
 	require.Equal(t, uint64(6), u.entryInProgress)

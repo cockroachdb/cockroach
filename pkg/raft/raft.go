@@ -1892,7 +1892,10 @@ func (r *raft) restore(s snapshot) bool {
 		return false
 	}
 
-	r.raftLog.restore(s)
+	if !r.raftLog.restore(s) {
+		r.logger.Errorf("%x unable to restore snapshot [index: %d, term: %d]", r.id, id.index, id.term)
+		return false
+	}
 
 	// Reset the configuration and add the (potentially updated) peers in anew.
 	r.trk = tracker.MakeProgressTracker(r.trk.MaxInflight, r.trk.MaxInflightBytes)

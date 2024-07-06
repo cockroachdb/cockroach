@@ -487,11 +487,14 @@ func (l *raftLog) matchTerm(id entryID) bool {
 	return t == id.term
 }
 
-func (l *raftLog) restore(s snapshot) {
+func (l *raftLog) restore(s snapshot) bool {
 	id := s.lastEntryID()
 	l.logger.Infof("log [%s] starts to restore snapshot [index: %d, term: %d]", l, id.index, id.term)
-	l.unstable.restore(s)
+	if !l.unstable.restore(s) {
+		return false
+	}
 	l.committed = id.index
+	return true
 }
 
 // scan visits all log entries in the [lo, hi) range, returning them via the
