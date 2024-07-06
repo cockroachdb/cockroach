@@ -273,3 +273,10 @@ func TestCCLLogic_unique_read_committed(
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "unique_read_committed")
 }
+
+func TestCCLLogic_vector(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "vector")
+}

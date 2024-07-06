@@ -173,18 +173,18 @@ func IsLegalColumnType(typ *types.T) bool {
 		return false
 	}
 	ctx := context.Background()
-	version := clustersettings.MakeTestingClusterSettings().Version
-	return colinfo.ValidateColumnDefType(ctx, version, typ) == nil
+	st := clustersettings.MakeTestingClusterSettings()
+	return colinfo.ValidateColumnDefType(ctx, st, typ) == nil
 }
 
 // RandArrayType generates a random array type.
 func RandArrayType(rng *rand.Rand) *types.T {
 	ctx := context.Background()
-	version := clustersettings.MakeTestingClusterSettings().Version
+	st := clustersettings.MakeTestingClusterSettings()
 	for {
 		typ := RandColumnType(rng)
 		resTyp := types.MakeArray(typ)
-		if err := colinfo.ValidateColumnDefType(ctx, version, resTyp); err == nil {
+		if err := colinfo.ValidateColumnDefType(ctx, st, resTyp); err == nil {
 			return resTyp
 		}
 	}
