@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -238,10 +239,12 @@ var (
 		// 2) we do not plan to use multi row insert statements during LDR ingestion
 		// via sql.
 		OriginIDForLogicalDataReplication: 1,
+		QualityOfService:                  &sessiondatapb.UserLowQoS,
 	}
 	explicitTxnOverrides = sessiondata.InternalExecutorOverride{
 		AttributeToUser:                   true,
 		OriginIDForLogicalDataReplication: 1,
+		QualityOfService:                  &sessiondatapb.UserLowQoS,
 	}
 )
 
