@@ -315,6 +315,7 @@ var encodeURICmd = func() *cobra.Command {
 	f.BoolVar(&encodeURIOpts.sslInline, "inline", false, "whether to inline certificates (supported by CRDB's Physical Replication feature)")
 	f.StringVar(&encodeURIOpts.user, "user", "", "username (overrides any username in the passed URL)")
 	f.StringVar(&encodeURIOpts.cluster, "cluster", "system", "virtual cluster to connect to")
+	f.StringVar(&encodeURIOpts.certsDir, "certs-dir", "", "certs directory in which to find certs automatically")
 	f.StringVar(&encodeURIOpts.caCertPath, "ca-cert", "", "path to CA certificate")
 	f.StringVar(&encodeURIOpts.certPath, "cert", "", "path to certificate for client-cert authentication")
 	f.StringVar(&encodeURIOpts.keyPath, "key", "", "path to key for client-cert authentication")
@@ -326,6 +327,7 @@ var encodeURIOpts = struct {
 	sslInline  bool
 	user       string
 	cluster    string
+	certsDir   string
 	caCertPath string
 	certPath   string
 	keyPath    string
@@ -368,6 +370,23 @@ func encodeURI(cmd *cobra.Command, args []string) error {
 			pgURL.User = url.UserPassword(user.Normalized(), pass)
 		} else {
 			pgURL.User = url.User(user.Normalized())
+		}
+	}
+
+	if encodeURIOpts.certsDir != "" {
+		cm, err := security.NewCertificateManager(encodeURIOpts.certsDir, security.CommandTLSSettings{})
+		if err != nil {
+			return errors.Wrap(err, "cannot load certificates")
+		}
+		if encodeURIOpts.caCertPath == "" {
+			encodeURIOpts.caCertPath = cm.CACertPath()
+		}
+
+		if encodeURIOpts.certPath == "" {
+			encodeURIOpts.certPath = cm.ClientCertPath(user)
+		}
+		if encodeURIOpts.keyPath == "" {
+			encodeURIOpts.keyPath = cm.ClientKeyPath(user)
 		}
 	}
 
