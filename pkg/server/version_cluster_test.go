@@ -221,7 +221,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          oldVersion,
+					ClusterVersionOverride:         oldVersion,
 					DisableAutomaticVersionUpgrade: disableUpgradeCh,
 				},
 			},
@@ -401,7 +401,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	knobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          v0,
+			ClusterVersionOverride:         v0,
 		},
 		// Inject an upgrade which would run to upgrade the cluster.
 		// We'll validate that we never create a job for this upgrade.

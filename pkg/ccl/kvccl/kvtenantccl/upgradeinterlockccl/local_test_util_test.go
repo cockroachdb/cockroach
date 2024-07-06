@@ -139,7 +139,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					// Initialize to the minimum supported version
 					// so that we can perform the upgrade below.
-					BinaryVersionOverride: msv,
+					ClusterVersionOverride: msv,
 				},
 			},
 		},

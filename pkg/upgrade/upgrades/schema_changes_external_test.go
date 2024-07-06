@@ -341,7 +341,7 @@ func testMigrationWithFailures(
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          startCV,
+							ClusterVersionOverride:         startCV,
 						},
 						JobsTestingKnobs: jobsKnobs,
 						SQLExecutor: &sql.ExecutorTestingKnobs{
