@@ -40,12 +40,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const originTimestampColumnName = "crdb_replication_origin_timestamp"
-
 const (
+	originTimestampColumnName = "crdb_replication_origin_timestamp"
+
 	lwwProcessor        = "last-write-wins"
-	defaultSQLProcessor = lwwProcessor
+	udfApplierProcessor = "applier-udf"
 )
+
+var defaultSQLProcessor = lwwProcessor
 
 // A sqlRowProcessor is a RowProcessor that handles rows using the
 // provided querier.
@@ -69,7 +71,10 @@ type querier interface {
 }
 
 type queryBuilder struct {
+	// stmts are parsed SQL statements. They should have the same number
+	// of inputs.
 	stmts []statements.Statement[tree.Statement]
+
 	// TODO(ssd): It would almost surely be better to track this by column IDs than name.
 	//
 	// TODO(ssd): The management of MVCC Origin Timestamp column is a bit messy. The mess
@@ -105,24 +110,71 @@ func (q *queryBuilder) AddRow(row cdcevent.Row) error {
 	return nil
 }
 
+func (q *queryBuilder) AddRowDefaultNull(row cdcevent.Row) error {
+	q.scratchDatums = q.scratchDatums[:0]
+	for _, n := range q.inputColumns {
+		it, err := row.DatumNamed(n)
+		if err != nil {
+			q.scratchDatums = append(q.scratchDatums, tree.DNull)
+			continue
+		}
+		if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+			q.scratchDatums = append(q.scratchDatums, d)
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
+	if q.needsOriginTimestamp {
+		q.scratchTS.Decimal = eval.TimestampToDecimal(row.MvccTimestamp)
+		q.scratchDatums = append(q.scratchDatums, &q.scratchTS)
+	}
+	return nil
+}
+
 func (q *queryBuilder) Query(
 	variant int,
 ) (statements.Statement[tree.Statement], []interface{}, error) {
-	expectedScratchSize := len(q.inputColumns)
-	if q.needsOriginTimestamp {
-		expectedScratchSize++
-	}
-	if len(q.scratchDatums) != expectedScratchSize {
-		return statements.Statement[tree.Statement]{}, nil, errors.Errorf("unexpected number of datums for query (have %d, expected %d)",
-			len(q.scratchDatums),
-			len(q.inputColumns))
-	}
 	return q.stmts[variant], q.scratchDatums, nil
 }
 
 type queryBuffer struct {
-	deleteQueries map[catid.DescID]queryBuilder
-	insertQueries map[catid.DescID]map[catid.FamilyID]queryBuilder
+	deleteQueries  map[catid.DescID]queryBuilder
+	insertQueries  map[catid.DescID]map[catid.FamilyID]queryBuilder
+	applierQueries map[catid.DescID]map[catid.FamilyID]queryBuilder
+}
+
+func (q *queryBuffer) DeleteQueryForRow(row cdcevent.Row) (queryBuilder, error) {
+	dq, ok := q.deleteQueries[row.TableID]
+	if !ok {
+		return queryBuilder{}, errors.Errorf("no pre-generated delete query for table %d", row.TableID)
+	}
+	return dq, nil
+}
+
+func (q *queryBuffer) InsertQueryForRow(row cdcevent.Row) (queryBuilder, error) {
+	insertQueriesForTable, ok := q.insertQueries[row.TableID]
+	if !ok {
+		return queryBuilder{}, errors.Errorf("no pre-generated insert query for table %d", row.TableID)
+	}
+	insertQueryBuilder, ok := insertQueriesForTable[row.FamilyID]
+	if !ok {
+		return queryBuilder{}, errors.Errorf("no pre-generated insert query for table %d column family %d", row.TableID, row.FamilyID)
+	}
+	return insertQueryBuilder, nil
+}
+
+func (q *queryBuffer) ApplierQueryForRow(row cdcevent.Row) (queryBuilder, error) {
+	applierQueriesForTable, ok := q.applierQueries[row.TableID]
+	if !ok {
+		return queryBuilder{}, errors.Errorf("no pre-generated apply query for table %d", row.TableID)
+	}
+	applierQueryBuilder, ok := applierQueriesForTable[row.FamilyID]
+	if !ok {
+		return queryBuilder{}, errors.Errorf("no pre-generated apply query for table %d column family %d", row.TableID, row.FamilyID)
+	}
+	return applierQueryBuilder, nil
 }
 
 func makeSQLProcessor(
@@ -134,6 +186,8 @@ func makeSQLProcessor(
 	switch defaultSQLProcessor {
 	case lwwProcessor:
 		return makeSQLLastWriteWinsHandler(ctx, settings, tableDescs, ie)
+	case udfApplierProcessor:
+		return makeUDFApplierProcessor(ctx, settings, tableDescs, ie)
 	default:
 		return nil, errors.AssertionFailedf("unknown SQL processor: %s", defaultSQLProcessor)
 	}
@@ -256,10 +310,10 @@ var tryOptimisticInsertEnabled = settings.RegisterBoolSetting(
 // column family ID to two INSERT statements (one optimistic that assumes
 // there is no conflicting row in the table, and another pessimistic one).
 const (
+	defaultQuery = 0
+
 	insertQueriesOptimisticIndex  = 0
 	insertQueriesPessimisticIndex = 1
-
-	deleteQueryStd = 0
 )
 
 func makeSQLLastWriteWinsHandler(
@@ -317,16 +371,10 @@ func (lww *lwwQuerier) InsertRow(
 	if txn != nil {
 		kvTxn = txn.KV()
 	}
-
-	insertQueriesForTable, ok := lww.queryBuffer.insertQueries[row.TableID]
-	if !ok {
-		return batchStats{}, errors.Errorf("no pre-generated insert query for table %d", row.TableID)
+	insertQueryBuilder, err := lww.queryBuffer.InsertQueryForRow(row)
+	if err != nil {
+		return batchStats{}, err
 	}
-	insertQueryBuilder, ok := insertQueriesForTable[row.FamilyID]
-	if !ok {
-		return batchStats{}, errors.Errorf("no pre-generated insert query for table %d column family %d", row.TableID, row.FamilyID)
-	}
-
 	if err := insertQueryBuilder.AddRow(row); err != nil {
 		return batchStats{}, err
 	}
@@ -369,17 +417,16 @@ func (lww *lwwQuerier) DeleteRow(
 	if txn != nil {
 		kvTxn = txn.KV()
 	}
-
-	deleteQuery, ok := lww.queryBuffer.deleteQueries[row.TableID]
-	if !ok {
-		return batchStats{}, errors.Errorf("no pre-generated delete query for table %d", row.TableID)
+	deleteQuery, err := lww.queryBuffer.DeleteQueryForRow(row)
+	if err != nil {
+		return batchStats{}, err
 	}
 
 	if err := deleteQuery.AddRow(row); err != nil {
 		return batchStats{}, err
 	}
 
-	stmt, datums, err := deleteQuery.Query(deleteQueryStd)
+	stmt, datums, err := deleteQuery.Query(defaultQuery)
 	if err != nil {
 		return batchStats{}, err
 	}
@@ -422,76 +469,99 @@ func sqlEscapedJoin(parts []string, sep string) string {
 	}
 }
 
+func insertColumnNamesForFamily(
+	td catalog.TableDescriptor, family *descpb.ColumnFamilyDescriptor, includeComputed bool,
+) ([]string, error) {
+	inputColumnNames := make([]string, 0)
+	seenIds := make(map[catid.ColumnID]struct{})
+	publicColumns := td.PublicColumns()
+	colOrd := catalog.ColumnIDToOrdinalMap(publicColumns)
+	addColumn := func(colID catid.ColumnID) error {
+		ord, ok := colOrd.Get(colID)
+		if !ok {
+			return errors.AssertionFailedf("expected to find column %d", colID)
+		}
+		col := publicColumns[ord]
+		if col.IsComputed() && !includeComputed {
+			return nil
+		}
+		colName := col.GetName()
+		// We will set crdb_replication_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
+		// We should never see this on the rangefeed as a non-null value as that would imply we've looped data around.
+		if colName == originTimestampColumnName {
+			return nil
+		}
+		if _, seen := seenIds[colID]; seen {
+			return nil
+		}
+		if colName != originTimestampColumnName {
+			inputColumnNames = append(inputColumnNames, colName)
+		}
+		seenIds[colID] = struct{}{}
+		return nil
+	}
+
+	primaryIndex := td.GetPrimaryIndex()
+	for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
+		if err := addColumn(primaryIndex.GetKeyColumnID(i)); err != nil {
+			return nil, err
+		}
+	}
+
+	for i := range family.ColumnNames {
+		if err := addColumn(family.ColumnIDs[i]); err != nil {
+			return nil, err
+		}
+	}
+	return inputColumnNames, nil
+}
+
+func valueStringForNumItems(count int) string {
+	var valueString strings.Builder
+	for argIdx := 1; argIdx <= count; argIdx++ {
+		if argIdx == 1 {
+			fmt.Fprintf(&valueString, "$%d", argIdx)
+		} else {
+			fmt.Fprintf(&valueString, ", $%d", argIdx)
+		}
+
+	}
+	return valueString.String()
+}
+
 func makeLWWInsertQueries(
 	dstTableDescID int32, td catalog.TableDescriptor,
 ) (map[catid.FamilyID]queryBuilder, error) {
 	queryBuilders := make(map[catid.FamilyID]queryBuilder, td.NumFamilies())
 	if err := td.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		var columnNames strings.Builder
-		var valueStrings strings.Builder
 		var onConflictUpdateClause strings.Builder
 		argIdx := 1
-		inputColumnNames := make([]string, 0)
-		seenIds := make(map[catid.ColumnID]struct{})
-		publicColumns := td.PublicColumns()
-		colOrd := catalog.ColumnIDToOrdinalMap(publicColumns)
-		addColumnByNameNoCheck := func(colName string) {
-			if colName != originTimestampColumnName {
-				inputColumnNames = append(inputColumnNames, colName)
-			}
+		addColToQueryParts := func(colName string) {
 			colName = lexbase.EscapeSQLIdent(colName)
 			if argIdx == 1 {
 				columnNames.WriteString(colName)
-				fmt.Fprintf(&valueStrings, "$%d", argIdx)
 				fmt.Fprintf(&onConflictUpdateClause, "%s = excluded.%[1]s", colName)
 			} else {
 				fmt.Fprintf(&columnNames, ", %s", colName)
-				fmt.Fprintf(&valueStrings, ", $%d", argIdx)
 				fmt.Fprintf(&onConflictUpdateClause, ",\n%s = excluded.%[1]s", colName)
 			}
 			argIdx++
 		}
-		addColumnByID := func(colID catid.ColumnID) error {
-			ord, ok := colOrd.Get(colID)
-			if !ok {
-				return errors.AssertionFailedf("expected to find column %d", colID)
-			}
-			col := publicColumns[ord]
-			if col.IsComputed() {
-				return nil
-			}
-			colName := col.GetName()
-			// We will set crdb_replication_origin_timestamp ourselves from the MVCC timestamp of the incoming datum.
-			// We should never see this on the rangefeed as a non-null value as that would imply we've looped data around.
-			if colName == originTimestampColumnName {
-				return nil
-			}
-			if _, seen := seenIds[colID]; seen {
-				return nil
-			}
-			addColumnByNameNoCheck(colName)
-			seenIds[colID] = struct{}{}
-			return nil
+		inputColumnNames, err := insertColumnNamesForFamily(td, family, false)
+		if err != nil {
+			return err
+		}
+		for _, name := range inputColumnNames {
+			addColToQueryParts(name)
 		}
 
-		primaryIndex := td.GetPrimaryIndex()
-		for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
-			if err := addColumnByID(primaryIndex.GetKeyColumnID(i)); err != nil {
-				return err
-			}
-		}
-
-		for i := range family.ColumnNames {
-			if err := addColumnByID(family.ColumnIDs[i]); err != nil {
-				return err
-			}
-		}
-		addColumnByNameNoCheck(originTimestampColumnName)
-
+		addColToQueryParts(originTimestampColumnName)
+		valStr := valueStringForNumItems(len(inputColumnNames) + 1)
 		parsedOptimisticQuery, err := parser.ParseOne(fmt.Sprintf(insertQueryOptimistic,
 			dstTableDescID,
 			columnNames.String(),
-			valueStrings.String(),
+			valStr,
 		))
 		if err != nil {
 			return err
@@ -500,8 +570,8 @@ func makeLWWInsertQueries(
 		parsedPessimisticQuery, err := parser.ParseOne(fmt.Sprintf(insertQueryPessimistic,
 			dstTableDescID,
 			columnNames.String(),
-			valueStrings.String(),
-			sqlEscapedJoin(td.TableDesc().PrimaryIndex.KeyColumnNames, ","),
+			valStr,
+			lexbase.EscapeSQLIdent(td.GetPrimaryIndex().GetName()),
 			onConflictUpdateClause.String(),
 		))
 		if err != nil {
