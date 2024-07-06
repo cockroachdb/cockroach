@@ -89,7 +89,7 @@ type logicalReplicationWriterProcessor struct {
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
 
-	logBufferEvery log.EveryN
+	logEvery log.EveryN
 
 	debug streampb.DebugLogicalConsumerStatus
 
@@ -151,12 +151,12 @@ func newLogicalReplicationWriterProcessor(
 			}
 			return int(flushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
 		},
-		bh:             bhPool,
-		frontier:       frontier,
-		stopCh:         make(chan struct{}),
-		checkpointCh:   make(chan []jobspb.ResolvedSpan),
-		errCh:          make(chan error, 1),
-		logBufferEvery: log.Every(30 * time.Second),
+		bh:           bhPool,
+		frontier:     frontier,
+		stopCh:       make(chan struct{}),
+		checkpointCh: make(chan []jobspb.ResolvedSpan),
+		errCh:        make(chan error, 1),
+		logEvery:     log.Every(60 * time.Second),
 		debug: streampb.DebugLogicalConsumerStatus{
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
@@ -554,14 +554,34 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
 
-	const minChunkSize = 64
-	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
+	workers := len(lrw.bh)
+	// Don't start lots of workers when out of CPU just to wait for one another.
+	// Starting at 60%, reduce the worker count -- initially by 1/4, then to half
+	// at 70%, 1/4 at 80% and 1/8 at 90%.
+	if cpu := lrw.FlowCtx.Cfg.RuntimeStats.GetCPUCombinedPercentNorm(); cpu > 0.6 {
 
-	perChunkStats := make([]flushStats, len(lrw.bh))
+		if cpu > 0.9 {
+			workers /= 8
+		} else if cpu > 0.8 {
+			workers /= 4
+		} else if cpu > 0.7 {
+			workers /= 2
+		} else {
+			workers -= workers / 4
+		}
+
+		if log.V(1) || lrw.logEvery.ShouldLog() {
+			log.Infof(ctx, "reducing logical replication flush concurrency to %d due to insufficient CPU capacity", workers)
+		}
+	}
+	const minChunkSize = 64
+	chunkSize := max((len(kvs)/workers)+1, minChunkSize)
+
+	perChunkStats := make([]flushStats, workers)
 
 	todo := kvs
 	g := ctxgroup.WithContext(ctx)
-	for worker := range lrw.bh {
+	for worker := range lrw.bh[:workers] {
 		if len(todo) == 0 {
 			break
 		}
