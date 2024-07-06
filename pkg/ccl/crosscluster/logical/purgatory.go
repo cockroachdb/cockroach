@@ -29,7 +29,7 @@ type purgatory struct {
 	delay      time.Duration // delay to wait between attempts of a level.
 	deadline   time.Duration // age of a level after which drain is mandatory.
 	byteLimit  int64
-	flush      func(context.Context, []streampb.StreamEvent_KV, bool, bool) ([]streampb.StreamEvent_KV, int64, error)
+	flush      func(context.Context, []streampb.StreamEvent_KV, bool, retryEligibility) ([]streampb.StreamEvent_KV, int64, error)
 	checkpoint func(context.Context, []jobspb.ResolvedSpan) error
 
 	// internally managed state.
@@ -81,18 +81,23 @@ func (p *purgatory) Drain(ctx context.Context) error {
 	for i := range p.levels {
 		// If we need to make space, or if the events have been in purgatory for too
 		// long, we will tell flush that it *must* process events.
-		mustProcess := (i == 0 && p.full()) || timeutil.Since(p.levels[i].closedAt) > p.deadline
+		allowRetry := retryAllowed
+		if p.full() {
+			allowRetry = noSpace
+		} else if timeutil.Since(p.levels[i].closedAt) > p.deadline {
+			allowRetry = tooOld
+		}
 
 		// If tried to flush this purgatory recently and it isn't required to flush
 		// now, wait a until next time to try again.
-		if timeutil.Since(p.levels[i].lastAttempted) < p.delay && !mustProcess {
+		if timeutil.Since(p.levels[i].lastAttempted) < p.delay && allowRetry == retryAllowed {
 			break
 		}
 		p.levels[i].lastAttempted = timeutil.Now()
 
 		const isRetry = true
 		levelBytes, levelCount := p.levels[i].bytes, len(p.levels[i].events)
-		remaining, remainingSize, err := p.flush(ctx, p.levels[i].events, isRetry, mustProcess)
+		remaining, remainingSize, err := p.flush(ctx, p.levels[i].events, isRetry, allowRetry)
 		if err != nil {
 			return err
 		}

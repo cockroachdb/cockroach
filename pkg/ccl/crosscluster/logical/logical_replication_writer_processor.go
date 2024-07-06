@@ -463,7 +463,7 @@ func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
 	const notRetry = false
-	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, false)
+	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, retryAllowed)
 	if err != nil {
 		return err
 	}
@@ -502,7 +502,7 @@ const maxWriterWorkers = 32
 // but it was not sent to the DLQ, and thus should remain buffered for a later
 // retry.
 func (lrw *logicalReplicationWriterProcessor) flushBuffer(
-	ctx context.Context, kvs []streampb.StreamEvent_KV, isRetry, mustProcess bool,
+	ctx context.Context, kvs []streampb.StreamEvent_KV, isRetry bool, canRetry retryEligibility,
 ) (notProcessed []streampb.StreamEvent_KV, notProcessedByteSize int64, _ error) {
 	ctx, sp := tracing.ChildSpan(ctx, "logical-replication-writer-flush")
 	defer sp.Finish()
@@ -566,7 +566,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		bh := lrw.bh[worker]
 
 		g.GoCtx(func(ctx context.Context) error {
-			s, err := lrw.flushChunk(ctx, bh, chunk, mustProcess)
+			s, err := lrw.flushChunk(ctx, bh, chunk, canRetry)
 			if err != nil {
 				return err
 			}
@@ -594,6 +594,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 
 	lrw.metrics.AppliedRowUpdates.Inc(stats.processed.success)
 	lrw.metrics.DLQedRowUpdates.Inc(stats.processed.dlq)
+
 	lrw.metrics.CommitToCommitLatency.RecordValue(timeutil.Since(firstKeyTS).Nanoseconds())
 
 	if isRetry {
@@ -610,9 +611,32 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	return notProcessed, stats.notProcessed.bytes, nil
 }
 
+type retryEligibility int
+
+const (
+	retryAllowed retryEligibility = iota
+	noSpace
+	tooOld
+	errType
+)
+
+func (r retryEligibility) String() string {
+	switch r {
+	case retryAllowed:
+		return "allowed"
+	case noSpace:
+		return "size limit"
+	case tooOld:
+		return "age limit"
+	case errType:
+		return "not retryable"
+	}
+	return "unknown"
+}
+
 // flushChunk is the per-thread body of flushBuffer; see flushBuffer's contract.
 func (lrw *logicalReplicationWriterProcessor) flushChunk(
-	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, mustProcess bool,
+	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, canRetry retryEligibility,
 ) (flushStats, error) {
 	batchSize := lrw.getBatchSize()
 	// TODO(yuzefovich): we should have a better heuristic for when to use the
@@ -632,8 +656,8 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 		if s, err := bh.HandleBatch(ctx, batch); err != nil {
 			// If it already failed while applying on its own, handle the failure.
 			if len(batch) == 1 {
-				if mustProcess || !lrw.shouldRetryLater(err) {
-					if err := lrw.dlq(ctx, batch[0], bh.GetLastRow(), err); err != nil {
+				if eligibility := lrw.shouldRetryLater(err, canRetry); eligibility != retryAllowed {
+					if err := lrw.dlq(ctx, batch[0], bh.GetLastRow(), err, eligibility); err != nil {
 						return flushStats{}, err
 					}
 					stats.processed.dlq++
@@ -646,8 +670,8 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 				// to apply on its own before switching to handle its failure.
 				for i := range batch {
 					if singleStats, err := bh.HandleBatch(ctx, batch[i:i+1]); err != nil {
-						if mustProcess || !lrw.shouldRetryLater(err) {
-							if err := lrw.dlq(ctx, batch[i], bh.GetLastRow(), err); err != nil {
+						if eligibility := lrw.shouldRetryLater(err, canRetry); eligibility != retryAllowed {
+							if err := lrw.dlq(ctx, batch[i], bh.GetLastRow(), err, eligibility); err != nil {
 								return flushStats{}, err
 							}
 							stats.processed.dlq++
@@ -684,9 +708,14 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 // process an event may be resolved if processing of that event is reattempted
 // again at a later time. This could be the case, for example, if that time is
 // after the parent side of an FK relationship is ingested by another processor.
-func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(err error) bool {
+func (lrw *logicalReplicationWriterProcessor) shouldRetryLater(
+	err error, eligibility retryEligibility,
+) retryEligibility {
+	if eligibility != retryAllowed {
+		return eligibility
+	}
 	// TODO(dt): maybe this should only be constraint violation errors?
-	return true
+	return retryAllowed
 }
 
 const logAllDLQs = true
@@ -699,16 +728,31 @@ const logAllDLQs = true
 // TODO(dt): implement something here.
 // TODO(dt): plumb the cdcevent.Row to this.
 func (lrw *logicalReplicationWriterProcessor) dlq(
-	ctx context.Context, event streampb.StreamEvent_KV, row cdcevent.Row, applyErr error,
+	ctx context.Context,
+	event streampb.StreamEvent_KV,
+	row cdcevent.Row,
+	applyErr error,
+	eligibility retryEligibility,
 ) error {
 	if log.V(1) || logAllDLQs {
 		if row.IsInitialized() {
-			log.Infof(ctx, "sending event to DLQ, %s due to %v", row.DebugString(), applyErr)
+			log.Infof(ctx, "DLQ'ing row update due to %s (%s): %s", applyErr, eligibility, row.DebugString())
 		} else {
-			log.Infof(ctx, "sending KV to DLQ, %s due to %v", event.String(), applyErr)
+			log.Infof(ctx, "DLQ'ing KV due to %s (%s): %s", applyErr, eligibility, event)
 		}
 	}
-
+	// We don't inc the total DLQ'ed metric here as that is done by flushBuffer
+	// instead, using a single Inc() for the total. We could accumulate these in
+	// the flushStats to do the same but DLQs are rare enough not to worry about
+	// an inc for each.
+	switch eligibility {
+	case tooOld:
+		lrw.metrics.DLQedDueToAge.Inc(1)
+	case noSpace:
+		lrw.metrics.DLQedDueToQueueSpace.Inc(1)
+	case errType:
+		lrw.metrics.DLQedDueToErrType.Inc(1)
+	}
 	return lrw.dlqClient.Log(ctx, lrw.spec.JobID, event, row, applyErr)
 }
 
