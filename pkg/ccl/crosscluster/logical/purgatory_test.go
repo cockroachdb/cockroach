@@ -39,7 +39,7 @@ func TestPurgatory(t *testing.T) {
 		bytesGauge:  metric.NewGauge(metric.Metadata{}),
 		eventsGauge: metric.NewGauge(metric.Metadata{}),
 		flush: func(
-			_ context.Context, ev []streampb.StreamEvent_KV, _, _ bool,
+			_ context.Context, ev []streampb.StreamEvent_KV, _ bool, _ retryEligibility,
 		) ([]streampb.StreamEvent_KV, int64, error) {
 			var unappliedBytes int64
 			for i := range ev {
