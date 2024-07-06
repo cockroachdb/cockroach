@@ -306,7 +306,7 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 // encodeURICmd creates a PG URI for the given parameters.
 var encodeURICmd = func() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "encode-uri USERNAME[:PASSWORD]@HOST",
+		Use:   "encode-uri [postgres://]USERNAME[:PASSWORD]@HOST",
 		Short: "encode a CRDB connection URL",
 		Args:  cobra.ExactArgs(1),
 		RunE:  clierrorplus.MaybeDecorateError(encodeURI),
@@ -331,11 +331,17 @@ var encodeURIOpts = struct {
 }{}
 
 func encodeURI(cmd *cobra.Command, args []string) error {
-	usernameAndHost := args[0]
-
-	pgURL, err := url.Parse(fmt.Sprintf("postgresql://%s/%s", usernameAndHost, encodeURIOpts.database))
+	pgURL, err := url.Parse(args[0])
 	if err != nil {
 		return err
+	}
+
+	if pgURL.Scheme == "" {
+		pgURL.Scheme = "postgresql://"
+	}
+
+	if encodeURIOpts.database != "" {
+		pgURL.Path = encodeURIOpts.database
 	}
 
 	options := pgURL.Query()
