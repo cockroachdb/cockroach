@@ -89,7 +89,7 @@ type logicalReplicationWriterProcessor struct {
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
 
-	logBufferEvery log.EveryN
+	logEvery log.EveryN
 
 	debug streampb.DebugLogicalConsumerStatus
 
@@ -149,12 +149,12 @@ func newLogicalReplicationWriterProcessor(
 			}
 			return int(flushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
 		},
-		bh:             bhPool,
-		frontier:       frontier,
-		stopCh:         make(chan struct{}),
-		checkpointCh:   make(chan []jobspb.ResolvedSpan),
-		errCh:          make(chan error, 1),
-		logBufferEvery: log.Every(30 * time.Second),
+		bh:           bhPool,
+		frontier:     frontier,
+		stopCh:       make(chan struct{}),
+		checkpointCh: make(chan []jobspb.ResolvedSpan),
+		errCh:        make(chan error, 1),
+		logEvery:     log.Every(60 * time.Second),
 		debug: streampb.DebugLogicalConsumerStatus{
 			StreamID:    streampb.StreamID(spec.StreamID),
 			ProcessorID: processorID,
@@ -552,14 +552,29 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return a.KeyValue.Value.Timestamp.Compare(b.KeyValue.Value.Timestamp)
 	})
 
+	workers := len(lrw.bh)
+	// Don't start lots of workers when out of CPU just to wait for one another.
+	// Cut a fourth above 70%, a third above 80%, and half above 90%.
+	if cpu := lrw.FlowCtx.Cfg.RuntimeStats.GetCPUCombinedPercentNorm(); cpu > 0.7 {
+		workers -= workers / 4
+		if cpu > 0.8 {
+			workers -= workers / 3
+		}
+		if cpu > 0.9 {
+			workers -= workers / 2
+		}
+		if log.V(1) || lrw.logEvery.ShouldLog() {
+			log.Infof(ctx, "reducing logical replication flush concurrency to %d due to insufficient CPU capacity", workers)
+		}
+	}
 	const minChunkSize = 64
-	chunkSize := max((len(kvs)/len(lrw.bh))+1, minChunkSize)
+	chunkSize := max((len(kvs)/workers)+1, minChunkSize)
 
-	perChunkStats := make([]flushStats, len(lrw.bh))
+	perChunkStats := make([]flushStats, workers)
 
 	todo := kvs
 	g := ctxgroup.WithContext(ctx)
-	for worker := range lrw.bh {
+	for worker := range lrw.bh[:workers] {
 		if len(todo) == 0 {
 			break
 		}
