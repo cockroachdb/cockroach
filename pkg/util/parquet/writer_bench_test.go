@@ -69,7 +69,7 @@ func getBenchmarkTypes() []*types.T {
 	for _, typ := range randgen.SeedTypes {
 		switch typ.Family() {
 		case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily,
-			types.VoidFamily:
+			types.VoidFamily, types.PGVectorFamily:
 		case types.TupleFamily:
 			// Replace Any Tuple with Tuple of Ints with size 5.
 			typs = append(typs, types.MakeTuple([]*types.T{

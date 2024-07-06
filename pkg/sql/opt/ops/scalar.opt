@@ -514,6 +514,30 @@ define TSMatches {
     Right ScalarExpr
 }
 
+# VectorDistance is the <-> operator when used with vector operands.
+# It maps to tree.Distance.
+[Scalar, Binary]
+define VectorDistance {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
+# VectorCosDistance is the <=> operator when used with vector operands.
+# It maps to tree.CosDistance.
+[Scalar, Binary]
+define VectorCosDistance {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
+# VectorNegInnerProduct is the <#> operator when used with vector operands.
+# It maps to tree.NegInnerProduct.
+[Scalar, Binary]
+define VectorNegInnerProduct {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
 # AnyScalar is the form of ANY which refers to an ANY operation on a
 # tuple or array, as opposed to Any which operates on a subquery.
 [Scalar, Bool]

@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -477,6 +478,12 @@ func DecodeDatum(
 				return nil, err
 			}
 			return &tree.DTSVector{TSVector: ret}, nil
+		case oidext.T_pgvector:
+			ret, err := vector.ParseVector(bs)
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DPGVector{T: ret}, nil
 		}
 		switch typ.Family() {
 		case types.ArrayFamily, types.TupleFamily:

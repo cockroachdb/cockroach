@@ -1279,6 +1279,25 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Stable</td></tr></tbody>
 </table>
 
+### PGVector functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="cosine_distance"></a><code>cosine_distance(v1: vector, v2: vector) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the cosine distance between the two vectors.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="inner_product"></a><code>inner_product(v1: vector, v2: vector) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the inner product between the two vectors.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="l1_distance"></a><code>l1_distance(v1: vector, v2: vector) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Manhattan distance between the two vectors.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="l2_distance"></a><code>l2_distance(v1: vector, v2: vector) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Euclidean distance between the two vectors.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="vector_dims"></a><code>vector_dims(vector: vector) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of the dimensions in the vector.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="vector_norm"></a><code>vector_norm(vector: vector) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the Euclidean norm of the vector.</p>
+</span></td><td>Immutable</td></tr></tbody>
+</table>
+
 ### STRING[] functions
 
 <table>
