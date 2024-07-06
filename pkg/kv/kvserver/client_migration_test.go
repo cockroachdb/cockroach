@@ -253,7 +253,7 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 			Settings: cluster.MakeTestingClusterSettingsWithVersions(endV, startV, false),
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          startV,
+					ClusterVersionOverride:         startV,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{

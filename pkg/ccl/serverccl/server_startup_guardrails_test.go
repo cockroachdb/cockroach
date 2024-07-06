@@ -97,7 +97,7 @@ func TestServerStartupGuardrails(t *testing.T) {
 				Settings:          storageSettings,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						BinaryVersionOverride:          test.storageBinaryVersion,
+						ClusterVersionOverride:         test.storageBinaryVersion,
 						DisableAutomaticVersionUpgrade: make(chan struct{}),
 					},
 					SQLEvalContext: &eval.TestingKnobs{
@@ -124,7 +124,7 @@ func TestServerStartupGuardrails(t *testing.T) {
 					TenantID: serverutils.TestTenantID(),
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
-							BinaryVersionOverride:          test.tenantBinaryVersion,
+							ClusterVersionOverride:         test.tenantBinaryVersion,
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
 						},
 					},

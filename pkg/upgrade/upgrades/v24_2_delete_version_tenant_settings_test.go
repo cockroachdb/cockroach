@@ -34,7 +34,7 @@ func TestDeleteVersionTenantSettings(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.V24_1.Version(),
+					ClusterVersionOverride:         clusterversion.V24_1.Version(),
 				},
 			},
 		},
