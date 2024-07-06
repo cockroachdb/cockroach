@@ -153,6 +153,7 @@ func RandCreateTableWithName(
 }
 
 type tableGenerationOptions struct {
+	primaryIndexRequired      bool
 	skipColumnFamilyMutations bool
 }
 
@@ -160,6 +161,10 @@ type TableGenerationOption func(*tableGenerationOptions)
 
 func SkipColumnFamilyMutation() TableGenerationOption {
 	return func(o *tableGenerationOptions) { o.skipColumnFamilyMutations = true }
+}
+
+func RequirePrimaryIndex() TableGenerationOption {
+	return func(o *tableGenerationOptions) { o.primaryIndexRequired = true }
 }
 
 func randCreateTableWithColumnIndexNumberGeneratorAndName(
@@ -211,26 +216,30 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 
 	// Make a random primary key with high likelihood.
 	var pk *tree.IndexTableDef
-	if rng.Intn(8) != 0 {
-		indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
-		if ok {
-			pk = &indexDef
-		}
-		if ok && !indexDef.Inverted {
-			defs = append(defs, &tree.UniqueConstraintTableDef{
-				PrimaryKey:    true,
-				IndexTableDef: indexDef,
-			})
-		}
-		// Although not necessary for Cockroach to function correctly,
-		// but for ease of use for any code that introspects on the
-		// AST data structure (instead of the descriptor which doesn't
-		// exist yet), explicitly set all PK cols as NOT NULL.
-		for _, col := range columnDefs {
-			for _, elem := range indexDef.Columns {
-				if col.Name == elem.Column {
-					col.Nullable.Nullability = tree.NotNull
+	if options.primaryIndexRequired || (rng.Intn(8) != 0) {
+		for {
+			indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
+			canUseIndex := ok && !indexDef.Inverted
+			if canUseIndex {
+				// Although not necessary for Cockroach to function correctly,
+				// but for ease of use for any code that introspects on the
+				// AST data structure (instead of the descriptor which doesn't
+				// exist yet), explicitly set all PK cols as NOT NULL.
+				for _, col := range columnDefs {
+					for _, elem := range indexDef.Columns {
+						if col.Name == elem.Column {
+							col.Nullable.Nullability = tree.NotNull
+						}
+					}
 				}
+				pk = &indexDef
+				defs = append(defs, &tree.UniqueConstraintTableDef{
+					PrimaryKey:    true,
+					IndexTableDef: indexDef,
+				})
+			}
+			if canUseIndex || !options.primaryIndexRequired {
+				break
 			}
 		}
 	}
