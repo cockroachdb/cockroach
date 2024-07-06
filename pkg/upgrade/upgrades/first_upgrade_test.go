@@ -55,7 +55,7 @@ func TestFirstUpgrade(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          v0,
+				ClusterVersionOverride:         v0,
 			},
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
@@ -160,7 +160,7 @@ func TestFirstUpgradeRepair(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          v0,
+				ClusterVersionOverride:         v0,
 			},
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},

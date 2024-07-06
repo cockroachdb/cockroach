@@ -73,7 +73,7 @@ func TestIndexDoesNotStorePrimaryKeyColumnMixedVersion(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride:          v0.Version(),
+				ClusterVersionOverride:         v0.Version(),
 			},
 		},
 	})
