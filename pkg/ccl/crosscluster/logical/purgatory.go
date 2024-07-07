@@ -84,7 +84,7 @@ func (p *purgatory) Drain(ctx context.Context) error {
 		allowRetry := retryAllowed
 		if p.full() {
 			allowRetry = noSpace
-		} else if timeutil.Since(p.levels[i].closedAt) > p.deadline {
+		} else if !p.levels[i].closedAt.IsZero() && timeutil.Since(p.levels[i].closedAt) > p.deadline {
 			allowRetry = tooOld
 		}
 
