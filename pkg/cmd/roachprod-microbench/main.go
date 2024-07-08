@@ -48,7 +48,32 @@ Typical usage:
 	command.AddCommand(makeCompareCommand())
 	command.AddCommand(makeRunCommand())
 	command.AddCommand(makeExportCommand())
+	command.AddCommand(makeCleanCommand())
 
+	return command
+}
+
+func makeCleanCommand() *cobra.Command {
+	config := defaultCleanConfig()
+	runCmdFunc := func(cmd *cobra.Command, commandLine []string) error {
+		args, _ := splitArgsAtDash(cmd, commandLine)
+
+		config.inputFilePath = args[0]
+		config.outputFilePath = args[1]
+		c, err := newClean(config)
+		if err != nil {
+			return err
+		}
+
+		return c.cleanBenchmarkOutputLog()
+	}
+	command := &cobra.Command{
+		Use:   "clean <inputFilePath> <outputFilePath>",
+		Short: "remove noisy logs from the benchmark output and dump it to a file",
+		Long:  `remove noisy logs from the benchmark output and dump it to a file`,
+		Args:  cobra.ExactArgs(2),
+		RunE:  runCmdFunc,
+	}
 	return command
 }
 
