@@ -32,8 +32,9 @@ func (r *Replica) maybeRateLimitBatch(ctx context.Context, ba *kvpb.BatchRequest
 		return nil
 	}
 
-	// writeMultiplier isn't needed here since it's only used to calculate RUs.
-	err := r.tenantLimiter.Wait(ctx, tenantcostmodel.MakeRequestInfo(ba, 1, 1))
+	// Request object only needs to account for writeCount and writeBytes. All
+	// the others are only used to calculate usage, and not for rate limiting.
+	err := r.tenantLimiter.Wait(ctx, tenantcostmodel.MakeRequestInfo(ba, 1, 1, nil))
 
 	// For performance reasons, we do not hold any Replica's mutexes while waiting
 	// on the tenantLimiter, and so we are racing with the Replica lifecycle. The

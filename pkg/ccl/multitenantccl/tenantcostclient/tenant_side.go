@@ -125,6 +125,7 @@ func newTenantSideCostController(
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
 	provider kvtenant.TokenBucketProvider,
+	locality roachpb.Locality,
 	timeSource timeutil.TimeSource,
 	testInstr TestInstrumentation,
 ) (multitenant.TenantSideCostController, error) {
@@ -142,7 +143,7 @@ func newTenantSideCostController(
 	}
 
 	// Initialize metrics.
-	c.metrics.Init()
+	c.metrics.Init(locality)
 
 	// Start with filled burst buffer.
 	c.limiter.Init(&c.metrics, timeSource, c.lowTokensNotifyChan)
@@ -173,10 +174,13 @@ func newTenantSideCostController(
 // NewTenantSideCostController creates an object which implements the
 // server.TenantSideCostController interface.
 func NewTenantSideCostController(
-	st *cluster.Settings, tenantID roachpb.TenantID, provider kvtenant.TokenBucketProvider,
+	st *cluster.Settings,
+	tenantID roachpb.TenantID,
+	provider kvtenant.TokenBucketProvider,
+	locality roachpb.Locality,
 ) (multitenant.TenantSideCostController, error) {
 	return newTenantSideCostController(
-		st, tenantID, provider,
+		st, tenantID, provider, locality,
 		timeutil.DefaultTimeSource{},
 		nil, /* testInstr */
 	)
@@ -188,10 +192,11 @@ func TestingTenantSideCostController(
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
 	provider kvtenant.TokenBucketProvider,
+	locality roachpb.Locality,
 	timeSource timeutil.TimeSource,
 	testInstr TestInstrumentation,
 ) (multitenant.TenantSideCostController, error) {
-	return newTenantSideCostController(st, tenantID, provider, timeSource, testInstr)
+	return newTenantSideCostController(st, tenantID, provider, locality, timeSource, testInstr)
 }
 
 // TestingTokenBucketString returns a string representation of the tenant's
@@ -836,6 +841,14 @@ func (c *tenantSideCostController) OnResponseWait(
 		c.metrics.TotalWriteBatches.Inc(req.WriteReplicas())
 		c.metrics.TotalWriteRequests.Inc(req.WriteReplicas() * req.WriteCount())
 		c.metrics.TotalWriteBytes.Inc(req.WriteReplicas() * req.WriteBytes())
+
+		for _, path := range req.ReplicationNetworkPaths() {
+			c.metrics.updateEstimatedReplicationBytes(
+				path.FromNodeID, path.FromLocality,
+				path.ToNodeID, path.ToLocality,
+				req.WriteBytes(),
+			)
+		}
 	} else if resp.IsRead() {
 		c.metrics.TotalReadBatches.Inc(1)
 		c.metrics.TotalReadRequests.Inc(resp.ReadCount())

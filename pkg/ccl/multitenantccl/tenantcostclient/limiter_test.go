@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -31,7 +32,7 @@ func TestLimiterNotify(t *testing.T) {
 	ch := make(chan struct{}, 100)
 
 	var met metrics
-	met.Init()
+	met.Init(roachpb.Locality{})
 
 	var lim limiter
 	lim.Init(&met, ts, ch)
@@ -189,7 +190,7 @@ func TestLimiterMetrics(t *testing.T) {
 	ch := make(chan struct{}, 100)
 
 	var met metrics
-	met.Init()
+	met.Init(roachpb.Locality{})
 
 	var lim limiter
 	lim.Init(&met, ts, ch)
