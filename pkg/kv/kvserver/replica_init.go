@@ -147,7 +147,6 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]*replicaChecksum{}
 	r.mu.proposalBuf.Init((*replicaProposer)(r), tracker.NewLockfreeTracker(), r.Clock(), r.ClusterSettings())
-	r.mu.proposalBuf.testing.allowLeaseProposalWhenNotLeader = store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader
 	r.mu.proposalBuf.testing.dontCloseTimestamps = store.cfg.TestingKnobs.DontCloseTimestamps
 	if filter := store.cfg.TestingKnobs.TestingProposalSubmitFilter; filter != nil {
 		r.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (bool, error) {

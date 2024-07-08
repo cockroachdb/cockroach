@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -190,7 +189,10 @@ func (h *leaseRequestHandle) Cancel() {
 // resolve notifies the handle of the request's result.
 //
 // Requires repl.mu is exclusively locked.
-func (h *leaseRequestHandle) resolve(pErr *kvpb.Error) { h.c <- pErr }
+func (h *leaseRequestHandle) resolve(pErr *kvpb.Error) *leaseRequestHandle {
+	h.c <- pErr
+	return h
+}
 
 // pendingLeaseRequest coalesces RequestLease requests and lets
 // callers join an in-progress lease request and wait for the result.
@@ -281,28 +283,52 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	// No request in progress. Let's propose a Lease command asynchronously.
 	llHandle := p.newHandle()
 
-	// Construct the next lease.
-	st := leases.Settings{
-		UseExpirationLeases:      p.repl.shouldUseExpirationLeaseRLocked(),
-		TransferExpirationLeases: TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV),
-		ExpToEpochEquiv:          p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start),
-		MinExpirationSupported:   p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_2_LeaseMinTimestamp),
-		RangeLeaseDuration:       p.repl.store.cfg.RangeLeaseDuration,
+	// Grab the current raft status. We'll use this to determine whether we should
+	// perform the lease request.
+	raftStatus := p.repl.raftStatusRLocked()
+	if raftStatus == nil {
+		// If the raft status is not available, the replica may have been destroyed.
+		if _, err := p.repl.isDestroyedRLocked(); err != nil {
+			return llHandle.resolve(kvpb.NewError(err))
+		}
+		return llHandle.resolve(kvpb.NewErrorf("raft status not available"))
 	}
+
+	// Construct the next lease.
+	//
+	// While doing so, verify that the lease request (acquisition or transfer) is
+	// safe. This verification is best-effort in that it can race with Raft
+	// leadership changes, configuration changes, and log truncation. This is
+	// because it is performed above latches and above the Raft state machine.
+	//
+	// See propBuf.maybeRejectUnsafeProposalLocked for a non-racy version of this
+	// check. We include both because rejecting a lease transfer in the propBuf
+	// after we have revoked our current lease is more disruptive than doing so
+	// here, before we have revoked our current lease.
+	st := p.repl.leaseSettings(ctx)
 	nl := p.repl.store.cfg.NodeLiveness
 	in := leases.BuildInput{
 		LocalStoreID:          p.repl.StoreID(),
+		LocalReplicaID:        p.repl.ReplicaID(),
+		Desc:                  p.repl.descRLocked(),
 		Now:                   status.Now,
 		MinLeaseProposedTS:    p.repl.mu.minLeaseProposedTS,
+		RaftStatus:            raftStatus,
+		RaftFirstIndex:        p.repl.raftFirstIndexRLocked(),
 		PrevLease:             status.Lease,
 		PrevLeaseNodeLiveness: status.Liveness,
 		PrevLeaseExpired:      status.IsExpired(),
 		NextLeaseHolder:       nextLeaseHolder,
+		BypassSafetyChecks:    bypassSafetyChecks,
 	}
-	out, err := leases.Build(st, nl, in)
+	out, err := leases.VerifyAndBuild(ctx, st, nl, in)
 	if err != nil {
-		llHandle.resolve(kvpb.NewError(err))
-		return llHandle
+		if in.Transfer() {
+			p.repl.store.metrics.LeaseTransferErrorCount.Inc(1)
+		} else {
+			p.repl.store.metrics.LeaseRequestErrorCount.Inc(1)
+		}
+		return llHandle.resolve(kvpb.NewError(err))
 	}
 
 	var leaseReq kvpb.Request
@@ -317,13 +343,6 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			Lease:              out.NextLease,
 		}
 	} else {
-		if bypassSafetyChecks {
-			// TODO(nvanbenschoten): we could support a similar bypassSafetyChecks
-			// flag for RequestLeaseRequest, which would disable the protection in
-			// propBuf.maybeRejectUnsafeProposalLocked. For now, we use a testing
-			// knob.
-			log.Fatal(ctx, "bypassSafetyChecks not supported for RequestLeaseRequest")
-		}
 		leaseReq = &kvpb.RequestLeaseRequest{
 			RequestHeader: leaseReqHeader,
 			PrevLease:     in.PrevLease,
@@ -699,6 +718,19 @@ func (r *Replica) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimest
 	return st.IsValid() && st.OwnedBy(r.store.StoreID())
 }
 
+func (r *Replica) leaseSettings(ctx context.Context) leases.Settings {
+	return leases.Settings{
+		UseExpirationLeases:                       r.shouldUseExpirationLeaseRLocked(),
+		TransferExpirationLeases:                  TransferExpirationLeasesFirstEnabled.Get(&r.store.ClusterSettings().SV),
+		RejectLeaseOnLeaderUnknown:                RejectLeaseOnLeaderUnknown.Get(&r.store.ClusterSettings().SV),
+		DisableAboveRaftLeaseTransferSafetyChecks: r.store.cfg.TestingKnobs.DisableAboveRaftLeaseTransferSafetyChecks,
+		AllowLeaseProposalWhenNotLeader:           r.store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader,
+		ExpToEpochEquiv:                           r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start),
+		MinExpirationSupported:                    r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_2_LeaseMinTimestamp),
+		RangeLeaseDuration:                        r.store.cfg.RangeLeaseDuration,
+	}
+}
+
 // requiresExpirationLeaseRLocked returns whether this range unconditionally
 // uses an expiration-based lease. Ranges located before or including the node
 // liveness table must always use expiration leases to avoid circular
@@ -833,24 +865,6 @@ func (r *Replica) AdminTransferLease(
 				"another transfer to a different store is in progress")
 		}
 
-		// Verify that the lease transfer would be safe. This check is best-effort
-		// in that it can race with Raft leadership changes and log truncation. See
-		// propBuf.maybeRejectUnsafeProposalLocked for a non-racy version of this
-		// check, along with a full explanation of why it is important. We include
-		// both because rejecting a lease transfer in the propBuf after we have
-		// revoked our current lease is more disruptive than doing so here, before
-		// we have revoked our current lease.
-		raftStatus := r.raftStatusRLocked()
-		raftFirstIndex := r.raftFirstIndexRLocked()
-		snapStatus := raftutil.ReplicaMayNeedSnapshot(raftStatus, raftFirstIndex, nextLeaseHolder.ReplicaID)
-		if snapStatus != raftutil.NoSnapshotNeeded && !bypassSafetyChecks && !r.store.cfg.TestingKnobs.DisableAboveRaftLeaseTransferSafetyChecks {
-			r.store.metrics.LeaseTransferErrorCount.Inc(1)
-			log.VEventf(ctx, 2, "not initiating lease transfer because the target %s may "+
-				"need a snapshot: %s", nextLeaseHolder, snapStatus)
-			err := NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(nextLeaseHolder, snapStatus)
-			return nil, nil, err
-		}
-
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(ctx, nextLeaseHolder, status,
 			desc.StartKey.AsRawKey(), bypassSafetyChecks, nil /* limiter */)
 		return nil, transfer, nil
@@ -881,14 +895,6 @@ func (r *Replica) AdminTransferLease(
 		// If there isn't, request a transfer.
 		extension, transfer, err := initTransferHelper()
 		if err != nil {
-			if IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) && transferRejectedRetry.Next() {
-				// If the lease transfer was rejected because the target may need a
-				// snapshot, try again. After the backoff, we may have become the Raft
-				// leader (through maybeTransferRaftLeadershipToLeaseholderLocked) or
-				// may have learned more about the state of the lease target's log.
-				log.VEventf(ctx, 2, "retrying lease transfer to store %d after rejection", target)
-				continue
-			}
 			return err
 		}
 		if extension == nil {
@@ -898,7 +904,16 @@ func (r *Replica) AdminTransferLease(
 			}
 			select {
 			case pErr := <-transfer.C():
-				return pErr.GoError()
+				err = pErr.GoError()
+				if IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) && transferRejectedRetry.Next() {
+					// If the lease transfer was rejected because the target may need a
+					// snapshot, try again. After the backoff, we may have become the Raft
+					// leader (through maybeTransferRaftLeadershipToLeaseholderLocked) or
+					// may have learned more about the state of the lease target's log.
+					log.VEventf(ctx, 2, "retrying lease transfer to store %d after rejection", target)
+					continue
+				}
+				return err
 			case <-ctx.Done():
 				transfer.Cancel()
 				return ctx.Err()
@@ -941,17 +956,6 @@ func (r *Replica) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
 	if r.mu.state.Lease.Sequence == seq {
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
-}
-
-// NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError return an error
-// indicating that a lease transfer failed because the current leaseholder could
-// not prove that the lease transfer target did not need a Raft snapshot.
-func NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
-	target roachpb.ReplicaDescriptor, snapStatus raftutil.ReplicaNeedsSnapshotStatus,
-) error {
-	err := errors.Errorf("refusing to transfer lease to %d because target may need a Raft snapshot: %s",
-		target, snapStatus)
-	return errors.Mark(err, errMarkLeaseTransferRejectedBecauseTargetMayNeedSnapshot)
 }
 
 // checkRequestTimeRLocked checks that the provided request timestamp is not

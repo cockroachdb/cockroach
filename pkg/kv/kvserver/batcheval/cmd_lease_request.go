@@ -61,6 +61,7 @@ func RequestLease(
 
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
+	// TODO(nvanbenschoten): move this into leases.Verify.
 	wasLastLeaseholder := prevLease.Replica.StoreID == newLease.Replica.StoreID
 	if err := roachpb.CheckCanReceiveLease(
 		newLease.Replica, cArgs.EvalCtx.Desc().Replicas(), wasLastLeaseholder,
