@@ -31,12 +31,13 @@ spec:
         spec:
           containers:
             - name: roachprod-gc-cronjob
-              image: gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:2a6193bba6b
+              image: gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:485975b3a82
               args:
                 - gc
                 - --gce-project=cockroach-ephemeral,cockroach-roachstress
                 - --slack-token
                 - $(SLACK_TOKEN)
+                - --aws-account-ids=541263489771,337380398238
               env:
                 - name: SLACK_TOKEN
                   valueFrom:
