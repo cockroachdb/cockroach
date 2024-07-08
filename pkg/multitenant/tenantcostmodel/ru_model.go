@@ -10,7 +10,10 @@
 
 package tenantcostmodel
 
-import "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // RU stands for "Request Unit(s)"; the tenant cost model maps tenant activity
 // into this abstract unit.
@@ -183,10 +186,32 @@ type RequestInfo struct {
 	// calculated ahead of time by distsender and accounts for the network cost
 	// of each replica written.
 	networkCost NetworkCost
+	// replicationNetworkPaths is the network paths taken by the leaseholder
+	// for replication. This is computed ahead of time by distsender, and
+	// accounts for the network paths of each replica written. This will be
+	// empty if it is a read-only batch.
+	replicationNetworkPaths []LocalityNetworkPath
+}
+
+// LocalityNetworkPath describes a source -> destination network flow.
+type LocalityNetworkPath struct {
+	// FromNodeID describes the ID of the source node.
+	FromNodeID roachpb.NodeID
+	// FromLocality describes the locality of the source.
+	FromLocality roachpb.Locality
+	// ToNodeID describes the ID of the destination node.
+	ToNodeID roachpb.NodeID
+	// ToLocality describes the locality of the destination.
+	ToLocality roachpb.Locality
 }
 
 // MakeRequestInfo extracts the relevant information from a BatchRequest.
-func MakeRequestInfo(ba *kvpb.BatchRequest, replicas int, networkCost NetworkCost) RequestInfo {
+func MakeRequestInfo(
+	ba *kvpb.BatchRequest,
+	replicas int,
+	networkCost NetworkCost,
+	replicationNetworkPaths []LocalityNetworkPath,
+) RequestInfo {
 	// The cost of read-only batches is captured by MakeResponseInfo.
 	if !ba.IsWrite() {
 		return RequestInfo{}
@@ -209,10 +234,11 @@ func MakeRequestInfo(ba *kvpb.BatchRequest, replicas int, networkCost NetworkCos
 		}
 	}
 	return RequestInfo{
-		writeReplicas: int64(replicas),
-		writeCount:    writeCount,
-		writeBytes:    writeBytes,
-		networkCost:   networkCost,
+		writeReplicas:           int64(replicas),
+		writeCount:              writeCount,
+		writeBytes:              writeBytes,
+		networkCost:             networkCost,
+		replicationNetworkPaths: replicationNetworkPaths,
 	}
 }
 
@@ -239,15 +265,24 @@ func (bri RequestInfo) WriteBytes() int64 {
 	return bri.writeBytes
 }
 
+// ReplicationNetworkPaths returns a list of network paths taken by the
+// leaseholders for replication. This will be empty if it is a read-only batch.
+func (bri RequestInfo) ReplicationNetworkPaths() []LocalityNetworkPath {
+	return bri.replicationNetworkPaths
+}
+
 // TestingRequestInfo creates a RequestInfo for testing purposes.
 func TestingRequestInfo(
-	writeReplicas, writeCount, writeBytes int64, networkCost NetworkCost,
+	writeReplicas, writeCount, writeBytes int64,
+	networkCost NetworkCost,
+	replicationNetworkPaths []LocalityNetworkPath,
 ) RequestInfo {
 	return RequestInfo{
-		writeReplicas: writeReplicas,
-		writeCount:    writeCount,
-		writeBytes:    writeBytes,
-		networkCost:   networkCost,
+		writeReplicas:           writeReplicas,
+		writeCount:              writeCount,
+		writeBytes:              writeBytes,
+		networkCost:             networkCost,
+		replicationNetworkPaths: replicationNetworkPaths,
 	}
 }
 

@@ -59,11 +59,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -140,6 +142,10 @@ func (ts *testState) start(t *testing.T) {
 		ts.settings,
 		roachpb.MustMakeTenantID(5),
 		ts.provider,
+		roachpb.Locality{Tiers: []roachpb.Tier{
+			{Key: "region", Value: "east"},
+			{Key: "zone", Value: "az1"},
+		}},
 		ts.timeSrc,
 		ts.eventWait,
 	)
@@ -335,7 +341,60 @@ func (ts *testState) request(
 		readBytes = args.bytes
 		readNetworkCost = tenantcostmodel.NetworkCost(args.networkCost)
 	}
-	reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes, writeNetworkCost)
+	replicationPaths := []tenantcostmodel.LocalityNetworkPath{
+		// Cross-zone.
+		{
+			FromNodeID: roachpb.NodeID(1),
+			FromLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az1"},
+			}},
+			ToNodeID: roachpb.NodeID(2),
+			ToLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az2"},
+			}},
+		},
+		// Same-zone.
+		{
+			FromNodeID: roachpb.NodeID(1),
+			FromLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az1"},
+			}},
+			ToNodeID: roachpb.NodeID(3),
+			ToLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az1"},
+			}},
+		},
+		// Cross-regions.
+		{
+			FromNodeID: roachpb.NodeID(1),
+			FromLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az1"},
+			}},
+			ToNodeID: roachpb.NodeID(4),
+			ToLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "europe-west1"},
+				{Key: "zone", Value: "az1"},
+			}},
+		},
+		{
+			FromNodeID: roachpb.NodeID(1),
+			FromLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az1"},
+			}},
+			ToNodeID: roachpb.NodeID(5),
+			ToLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "europe-west1"},
+				{Key: "zone", Value: "az2"},
+			}},
+		},
+	}
+	reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes, writeNetworkCost, replicationPaths)
 	respInfo := tenantcostmodel.TestingResponseInfo(!isWrite, readCount, readBytes, readNetworkCost)
 
 	for ; repeat > 0; repeat-- {
@@ -558,13 +617,13 @@ func (ts *testState) pgwireEgress(t *testing.T, d *datadriven.TestData, _ cmdArg
 func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 	c := ts.provider.consumption()
 	return fmt.Sprintf(""+
-		"RU:  %.2f\n"+
-		"KVRU:  %.2f\n"+
-		"CrossRegionNetworkRU:  %.2f\n"+
-		"Reads:  %d requests in %d batches (%d bytes)\n"+
-		"Writes:  %d requests in %d batches (%d bytes)\n"+
-		"SQL Pods CPU seconds:  %.2f\n"+
-		"PGWire egress:  %d bytes\n"+
+		"RU: %.2f\n"+
+		"KVRU: %.2f\n"+
+		"CrossRegionNetworkRU: %.2f\n"+
+		"Reads: %d requests in %d batches (%d bytes)\n"+
+		"Writes: %d requests in %d batches (%d bytes)\n"+
+		"SQL Pods CPU seconds: %.2f\n"+
+		"PGWire egress: %d bytes\n"+
 		"ExternalIO egress: %d bytes\n"+
 		"ExternalIO ingress: %d bytes\n"+
 		"Estimated CPU seconds: %.2f\n",
@@ -605,11 +664,17 @@ func (ts *testState) metrics(*testing.T, *datadriven.TestData, cmdArgs) string {
 		"tenant.sql_usage.cross_region_network_ru",
 		"tenant.sql_usage.estimated_kv_cpu_seconds",
 		"tenant.sql_usage.estimated_cpu_seconds",
+		"tenant.sql_usage.estimated_replication_bytes",
 	}
+	var childMetrics string
 	state := make(map[string]interface{})
 	v := reflect.ValueOf(ts.controller.Metrics()).Elem()
 	for i := 0; i < v.NumField(); i++ {
-		switch typ := v.Field(i).Interface().(type) {
+		vfield := v.Field(i)
+		if !vfield.CanInterface() {
+			continue
+		}
+		switch typ := vfield.Interface().(type) {
 		case metric.Iterable:
 			typ.Inspect(func(v interface{}) {
 				switch it := v.(type) {
@@ -617,6 +682,22 @@ func (ts *testState) metrics(*testing.T, *datadriven.TestData, cmdArgs) string {
 					state[typ.GetName()] = it.Count()
 				case *metric.CounterFloat64:
 					state[typ.GetName()] = fmt.Sprintf("%.2f", it.Count())
+				case *aggmetric.AggCounter:
+					state[typ.GetName()] = it.Count()
+					promIter, ok := v.(metric.PrometheusIterable)
+					if !ok {
+						return
+					}
+					promIter.Each(it.GetLabels(), func(m *prometheusgo.Metric) {
+						childMetrics += fmt.Sprintf("%s{", typ.GetName())
+						for i, l := range m.Label {
+							if i > 0 {
+								childMetrics += ","
+							}
+							childMetrics += fmt.Sprintf(`%s="%s"`, l.GetName(), l.GetValue())
+						}
+						childMetrics += fmt.Sprintf("}: %.0f\n", m.Counter.GetValue())
+					})
 				}
 			})
 		}
@@ -629,6 +710,7 @@ func (ts *testState) metrics(*testing.T, *datadriven.TestData, cmdArgs) string {
 		}
 		output += fmt.Sprintf("%s: %v\n", name, v)
 	}
+	output += childMetrics
 	return output
 }
 
@@ -850,12 +932,12 @@ func TestWaitingTokens(t *testing.T) {
 	timeSource := timeutil.NewManualTime(t0)
 	eventWait := newEventWaiter(timeSource)
 	ctrl, err := tenantcostclient.TestingTenantSideCostController(
-		st, tenantID, testProvider, timeSource, eventWait)
+		st, tenantID, testProvider, roachpb.Locality{}, timeSource, eventWait)
 	require.NoError(t, err)
 
 	// Immediately consume the initial 5K tokens.
 	require.NoError(t, ctrl.OnResponseWait(ctx,
-		tenantcostmodel.TestingRequestInfo(1, 1, 5117952, 0), tenantcostmodel.ResponseInfo{}))
+		tenantcostmodel.TestingRequestInfo(1, 1, 5117952, 0, nil), tenantcostmodel.ResponseInfo{}))
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -873,7 +955,7 @@ func TestWaitingTokens(t *testing.T) {
 	// Send 20 KV requests for 1K tokens each.
 	const count = 20
 	const fillRate = 100
-	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952, 0)
+	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952, 0, nil)
 	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0, 0)
 
 	testutils.SucceedsWithin(t, func() error {
@@ -1531,7 +1613,7 @@ func TestRUSettingsChanged(t *testing.T) {
 	defer tenant1.AppStopper().Stop(ctx)
 	defer tenantDB1.Close()
 
-	costClient, err := tenantcostclient.NewTenantSideCostController(tenant1.ClusterSettings(), tenantID, nil)
+	costClient, err := tenantcostclient.NewTenantSideCostController(tenant1.ClusterSettings(), tenantID, nil, roachpb.Locality{})
 	require.NoError(t, err)
 
 	initialModel := costClient.GetRequestUnitModel()
@@ -1663,7 +1745,7 @@ func TestCPUModelSettingsChanged(t *testing.T) {
 	defer tenant1.AppStopper().Stop(ctx)
 	defer tenantDB1.Close()
 
-	costClient, err := tenantcostclient.NewTenantSideCostController(tenant1.ClusterSettings(), tenantID, nil)
+	costClient, err := tenantcostclient.NewTenantSideCostController(tenant1.ClusterSettings(), tenantID, nil, roachpb.Locality{})
 	require.NoError(t, err)
 
 	newModel := `
