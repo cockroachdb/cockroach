@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -59,6 +60,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errutil"
 	"github.com/cockroachdb/redact"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -5888,7 +5890,7 @@ func TestDistSenderCrossLocalityMetrics(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("%-v", tc.crossLocalityType), func(t *testing.T) {
-			metrics := MakeDistSenderMetrics()
+			metrics := MakeDistSenderMetrics(roachpb.Locality{})
 			beforeMetrics, err := metrics.getDistSenderCounterMetrics(metricsNames)
 			if err != nil {
 				t.Error(err)
@@ -6423,6 +6425,427 @@ func TestProxyRequestDoesNotSplit(t *testing.T) {
 		require.Equal(t, roachpb.RangeGeneration(2), rangeInfo.Desc.Generation)
 		// Validate the request was not split and only sent to one store.
 		require.Equal(t, int64(1), sendCount.Load())
+	}
+}
+
+func TestDistSenderKVInterceptorMetrics_getEstimatedReplicationBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sqlLocality := roachpb.Locality{Tiers: []roachpb.Tier{
+		{Key: "region", Value: "us-east1"},
+		{Key: "zone", Value: "az1"},
+	}}
+	m := newDistSenderKVInterceptorMetrics(sqlLocality)
+	require.Equal(t, sqlLocality, m.baseLocality)
+	require.Empty(t, m.mu.pathMetrics)
+
+	assertCachedPathMetricsSize := func(size int) {
+		count := 0
+		m.cachedPathMetrics.Range(func(key, value any) bool {
+			count++
+			return true
+		})
+		require.Equal(t, size, count)
+	}
+
+	assertCachedPathMetricsSize(0)
+
+	type networkPath struct {
+		fromNodeID   roachpb.NodeID
+		fromLocality roachpb.Locality
+		toNodeID     roachpb.NodeID
+		toLocality   roachpb.Locality
+	}
+
+	get := func(np networkPath) *aggmetric.Counter {
+		return m.getEstimatedReplicationBytes(
+			np.fromNodeID, np.fromLocality, np.toNodeID, np.toLocality,
+		)
+	}
+
+	crossZonePath := networkPath{
+		fromNodeID: roachpb.NodeID(1),
+		fromLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east1"},
+			{Key: "zone", Value: "1"},
+		}},
+		toNodeID: roachpb.NodeID(2),
+		toLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east1"},
+			{Key: "zone", Value: "2"},
+		}},
+	}
+	crossRegionPath1 := networkPath{
+		fromNodeID: roachpb.NodeID(3),
+		fromLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-central1"},
+			{Key: "zone", Value: "1"},
+		}},
+		toNodeID: roachpb.NodeID(2),
+		toLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east1"},
+			{Key: "zone", Value: "2"},
+		}},
+	}
+	crossRegionPath2 := networkPath{
+		fromNodeID: roachpb.NodeID(4),
+		fromLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-central1"},
+			{Key: "zone", Value: "3"},
+		}},
+		toNodeID: roachpb.NodeID(5),
+		toLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east1"},
+			{Key: "zone", Value: "4"},
+		}},
+	}
+
+	// Create a new cross-zone metric.
+	crossZoneMetric := get(crossZonePath)
+	require.EqualValues(t, 0, crossZoneMetric.Value())
+	crossZoneMetric.Inc(10)
+	require.Len(t, m.mu.pathMetrics, 1)
+	assertCachedPathMetricsSize(1)
+
+	// Create a new cross-region metric.
+	crossRegionMetric := get(crossRegionPath1)
+	require.EqualValues(t, 0, crossRegionMetric.Value())
+	crossRegionMetric.Inc(5)
+	require.Len(t, m.mu.pathMetrics, 2)
+	assertCachedPathMetricsSize(2)
+
+	// Use a different network path. Metric should be the same after
+	// normalization.
+	crossRegionMetric = get(crossRegionPath2)
+	require.EqualValues(t, 5, crossRegionMetric.Value())
+	crossRegionMetric.Inc(2)
+	require.Len(t, m.mu.pathMetrics, 2)
+	assertCachedPathMetricsSize(3)
+
+	// Fetch existing metrics.
+	crossZoneMetric = get(crossZonePath)
+	require.EqualValues(t, 10, crossZoneMetric.Value())
+	crossRegionMetric = get(crossRegionPath1)
+	require.EqualValues(t, 7, crossRegionMetric.Value())
+	crossRegionMetric = get(crossRegionPath2)
+	require.EqualValues(t, 7, crossRegionMetric.Value())
+	require.Len(t, m.mu.pathMetrics, 2)
+	assertCachedPathMetricsSize(3)
+
+	// Localities were updated, but cached metrics exist.
+	crossRegionPath3 := networkPath{
+		fromNodeID: roachpb.NodeID(4),
+		fromLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+			{Key: "region", Value: "europe-west1"},
+		}},
+		toNodeID: roachpb.NodeID(5),
+		toLocality: roachpb.Locality{Tiers: []roachpb.Tier{
+			{Key: "region", Value: "us-east1"},
+		}},
+	}
+	crossRegionMetric = get(crossRegionPath3)
+	require.EqualValues(t, 7, crossRegionMetric.Value())
+	require.Len(t, m.mu.pathMetrics, 2)
+	assertCachedPathMetricsSize(3)
+}
+
+func TestMakeLocalityLabelValues(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, tc := range []struct {
+		name           string
+		baseKeys       []string
+		from           roachpb.Locality
+		to             roachpb.Locality
+		expectedLabels []string
+	}{
+		{
+			name: "no keys",
+			from: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east1"},
+			}},
+			to: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east1"},
+			}},
+			expectedLabels: []string{},
+		},
+		{
+			name:     "no matching keys",
+			baseKeys: []string{"foo", "bar"},
+			from: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east1"},
+			}},
+			to: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east1"},
+			}},
+			expectedLabels: []string{"", "", "", ""},
+		},
+		{
+			name:     "same locality",
+			baseKeys: []string{"region", "zone"},
+			from: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east1"},
+				{Key: "zone", Value: "az1"},
+			}},
+			to: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east1"},
+				{Key: "zone", Value: "az1"},
+			}},
+			expectedLabels: []string{"us-east1", "az1", "us-east1", "az1"},
+		},
+		{
+			name:     "same locality with gaps",
+			baseKeys: []string{"region", "zone", "rack", "dns"},
+			from: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east1"},
+				{Key: "zone", Value: "az1"},
+			}},
+			to: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east1"},
+				{Key: "zone", Value: "az1"},
+			}},
+			expectedLabels: []string{"us-east1", "az1", "", "", "us-east1", "az1", "", ""},
+		},
+		{
+			name:     "different region",
+			baseKeys: []string{"region", "zone", "rack"},
+			from: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east1"},
+				{Key: "zone", Value: "az1"},
+				{Key: "rack", Value: "1"},
+			}},
+			to: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az2"},
+				{Key: "rack", Value: "2"},
+			}},
+			expectedLabels: []string{"us-east1", "", "", "us-central1", "", ""},
+		},
+		{
+			name:     "different zone",
+			baseKeys: []string{"region", "zone", "rack"},
+			from: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az1"},
+				{Key: "rack", Value: "1"},
+			}},
+			to: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az2"},
+				{Key: "rack", Value: "2"},
+			}},
+			expectedLabels: []string{"us-central1", "az1", "", "us-central1", "az2", ""},
+		},
+		{
+			name:     "missing zone in from",
+			baseKeys: []string{"region", "zone"},
+			from: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+			}},
+			to: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az2"},
+			}},
+			expectedLabels: []string{"us-central1", "", "us-central1", ""},
+		},
+		{
+			name:     "missing zone in to",
+			baseKeys: []string{"region", "zone"},
+			from: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az1"},
+			}},
+			to: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+			}},
+			expectedLabels: []string{"us-central1", "", "us-central1", ""},
+		},
+		{
+			name:     "empty zone in to",
+			baseKeys: []string{"region", "zone", "rack"},
+			from: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az1"},
+				{Key: "rack", Value: "1"},
+				{Key: "dns", Value: "a"},
+			}},
+			to: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: ""},
+				{Key: "rack", Value: "1"},
+				{Key: "dns", Value: "b"},
+			}},
+			expectedLabels: []string{"us-central1", "az1", "", "us-central1", "", ""},
+		},
+		{
+			name:     "different localities",
+			baseKeys: []string{"region", "zone"},
+			from: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-central1"},
+				{Key: "zone", Value: "az1"},
+			}},
+			to: roachpb.Locality{Tiers: []roachpb.Tier{
+				{Key: "cloud", Value: "cloud1"},
+				{Key: "region", Value: "us-central1"},
+			}},
+			expectedLabels: []string{"", "", "", ""},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			baseLocality := roachpb.Locality{}
+			for _, k := range tc.baseKeys {
+				baseLocality.Tiers = append(baseLocality.Tiers, roachpb.Tier{Key: k})
+			}
+			labels := makeLocalityLabelValues(baseLocality, tc.from, tc.to)
+			require.Equal(t, tc.expectedLabels, labels)
+		})
+	}
+}
+
+func TestDistSender_updateEstimatedReplicationBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	const writeBytes = 100
+
+	rddb := MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+	) {
+		// This test should not be using this at all, but DistSender insists on
+		// having a non-nil one.
+		return nil, nil, errors.New("range desc db unexpectedly used")
+	})
+
+	newRangeDescriptor := func(numReplicas int) *roachpb.RangeDescriptor {
+		desc := &roachpb.RangeDescriptor{
+			InternalReplicas: make([]roachpb.ReplicaDescriptor, numReplicas),
+		}
+		// ReplicaIDs are always NodeIDs + 1 for this test.
+		for i := 1; i <= numReplicas; i++ {
+			desc.InternalReplicas[i-1].NodeID = roachpb.NodeID(i)
+			desc.InternalReplicas[i-1].ReplicaID = roachpb.ReplicaID(i + 1)
+		}
+		return desc
+	}
+
+	makeNodeDescriptor := func(nodeID int, region string) roachpb.NodeDescriptor {
+		return roachpb.NodeDescriptor{
+			NodeID:   roachpb.NodeID(nodeID),
+			Address:  util.UnresolvedAddr{},
+			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: region}}},
+		}
+	}
+
+	for _, tc := range []struct {
+		name                 string
+		cfg                  *DistSenderConfig
+		desc                 *roachpb.RangeDescriptor
+		curReplica           *roachpb.ReplicaDescriptor
+		expectedChildMetrics map[string]string
+	}{
+		{
+			name: "missing node descriptor for leaseholder",
+			cfg: &DistSenderConfig{
+				NodeDescs: &mockNodeStore{
+					nodes: []roachpb.NodeDescriptor{
+						makeNodeDescriptor(2, "eu-central1"),
+						makeNodeDescriptor(3, "asia-southeast1"),
+					},
+				},
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "region", Value: "asia-southeast1"},
+				}},
+			},
+			desc: func() *roachpb.RangeDescriptor {
+				return newRangeDescriptor(5)
+			}(),
+			curReplica:           &roachpb.ReplicaDescriptor{NodeID: 1, ReplicaID: 2},
+			expectedChildMetrics: map[string]string{},
+		},
+		{
+			name: "missing some node descriptors",
+			cfg: &DistSenderConfig{
+				NodeDescs: &mockNodeStore{
+					nodes: []roachpb.NodeDescriptor{
+						makeNodeDescriptor(1, "us-east1"),
+						makeNodeDescriptor(3, "eu-central1"),
+						makeNodeDescriptor(5, "asia-southeast1"),
+						makeNodeDescriptor(7, "us-central1"),
+					},
+				},
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "region", Value: "asia-southeast1"},
+				}},
+			},
+			desc: func() *roachpb.RangeDescriptor {
+				return newRangeDescriptor(8)
+			}(),
+			curReplica: &roachpb.ReplicaDescriptor{NodeID: 3, ReplicaID: 4},
+			expectedChildMetrics: map[string]string{
+				`{from_region="eu-central1",to_region="asia-southeast1"}`: "100",
+				`{from_region="eu-central1",to_region="us-central1"}`:     "100",
+				`{from_region="eu-central1",to_region="us-east1"}`:        "100",
+			},
+		},
+		{
+			name: "write for range with 5 replicas",
+			cfg: &DistSenderConfig{
+				NodeDescs: &mockNodeStore{
+					nodes: []roachpb.NodeDescriptor{
+						makeNodeDescriptor(1, "us-east1"),
+						makeNodeDescriptor(2, "eu-central1"),
+						makeNodeDescriptor(3, "asia-southeast1"),
+					},
+				},
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "region", Value: "asia-southeast1"},
+				}},
+			},
+			desc: func() *roachpb.RangeDescriptor {
+				rd := newRangeDescriptor(5)
+				rd.InternalReplicas[3].NodeID = 1
+				rd.InternalReplicas[3].ReplicaID = 2
+				rd.InternalReplicas[4].NodeID = 2
+				rd.InternalReplicas[4].ReplicaID = 3
+				return rd
+			}(),
+			curReplica: &roachpb.ReplicaDescriptor{NodeID: 1, ReplicaID: 2},
+			expectedChildMetrics: map[string]string{
+				`{from_region="us-east1",to_region="asia-southeast1"}`: "100",
+				`{from_region="us-east1",to_region="eu-central1"}`:     "200",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.cfg.AmbientCtx = log.MakeTestingAmbientContext(tracing.NewTracer())
+			tc.cfg.Stopper = stopper
+			tc.cfg.RangeDescriptorDB = rddb
+			tc.cfg.Settings = cluster.MakeTestingClusterSettings()
+			tc.cfg.TransportFactory = func(SendOptions, ReplicaSlice) Transport {
+				assert.Fail(t, "test should not try and use the transport factory")
+				return nil
+			}
+			ds := NewDistSender(*tc.cfg)
+			ds.updateEstimatedReplicationBytes(ctx, tc.desc, tc.curReplica, writeBytes)
+
+			childMetrics := make(map[string]string)
+			b := ds.metrics.KVInterceptor.EstimatedReplicationBytes
+			b.Each(b.GetLabels(), func(m *prometheusgo.Metric) {
+				var name string
+				name += "{"
+				for i, l := range m.Label {
+					if i > 0 {
+						name += ","
+					}
+					name += fmt.Sprintf(`%s="%s"`, l.GetName(), l.GetValue())
+				}
+				name += "}"
+				childMetrics[name] = fmt.Sprintf("%.0f", m.Counter.GetValue())
+			})
+			require.EqualValues(t, tc.expectedChildMetrics, childMetrics)
+		})
 	}
 }
 
