@@ -1052,14 +1052,8 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
     "histo_buckets": [
         {
             "distinct_range": 0,
-            "num_eq": 0,
-            "num_range": 0,
-            "upper_bound": "-9223372036854775808"
-        },
-        {
-            "distinct_range": 0.5,
             "num_eq": 1,
-            "num_range": 1,
+            "num_range": 0,
             "upper_bound": "0"
         },
         {
@@ -1139,12 +1133,6 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
             "num_eq": 1,
             "num_range": 4,
             "upper_bound": "55"
-        },
-        {
-            "distinct_range": 0.5,
-            "num_eq": 0,
-            "num_range": 1,
-            "upper_bound": "9223372036854775807"
         }
     ],
     "histo_col_type": "INT8",
@@ -1170,7 +1158,7 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
         {
             "distinct_range": 9,
             "num_eq": 1,
-            "num_range": 10,
+            "num_range": 9,
             "upper_bound": "10"
         },
         {
@@ -1216,9 +1204,9 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
             "upper_bound": "36"
         },
         {
-            "distinct_range": 3,
+            "distinct_range": 2,
             "num_eq": 1,
-            "num_range": 4,
+            "num_range": 3,
             "upper_bound": "40"
         },
         {
@@ -1313,6 +1301,67 @@ FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
 ORDER BY statistics_name
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__merged__       {a}           10002      9803            1
+__merged__       {a}           10002      9922            1
 ka_fullstat      {a}           10000      9920            1
 ka_partialstat   {a}           3          3               1
+
+# Verify that the merged histogram correctly appends the partial stat buckets
+query T
+SELECT jsonb_pretty(bucket)
+FROM (
+SELECT jsonb_array_elements(stat->'histo_buckets') AS bucket
+FROM (
+SELECT jsonb_array_elements(statistics) AS stat FROM [SHOW STATISTICS USING JSON FOR TABLE ka WITH MERGE]
+)
+WHERE stat->>'name' = '__merged__'
+)
+ORDER BY (bucket->>'upper_bound')::INT DESC
+LIMIT 3
+----
+{
+    "distinct_range": 0,
+    "num_eq": 1,
+    "num_range": 0,
+    "upper_bound": "10000"
+}
+{
+    "distinct_range": 0,
+    "num_eq": 1,
+    "num_range": 0,
+    "upper_bound": "9999"
+}
+{
+    "distinct_range": 49.59173044047086,
+    "num_eq": 1,
+    "num_range": 50,
+    "upper_bound": "9998"
+}
+
+# Verify that distinct counts and null counts are merged correctly.
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.count = 10005
+
+statement ok
+INSERT INTO ka VALUES (10002, 10001)
+
+statement ok
+CREATE STATISTICS ka_fullstat ON a FROM ka
+
+statement ok
+INSERT INTO ka VALUES (10003, 10002), (10004, NULL)
+
+statement ok
+CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
+ORDER BY statistics_name
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__merged__       {a}           10005      9924            2
+ka_fullstat      {a}           10003      9923            1
+ka_partialstat   {a}           3          2               2
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.count
