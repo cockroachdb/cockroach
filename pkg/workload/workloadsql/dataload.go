@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -61,13 +62,40 @@ func (l InsertsDataLoader) InitialDataLoad(
 		}
 	}
 
-	for _, table := range tables {
-		tableName := table.GetResolvedName()
-		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s %s`, tableName.String(), table.Schema)
-		if _, err := db.ExecContext(ctx, createStmt); err != nil {
-			return 0, errors.WithDetailf(errors.Wrapf(err, "could not create table: %q", table.Name),
-				"SQL: %s", createStmt)
+	const maxTableBatchSize = 5000
+	currentTable := 0
+	// When dealing with large number of tables, opt to use transactions
+	// to minimize the round trips involved, which can be bad on multi-region
+	// clusters.
+	for currentTable < len(tables) {
+		batchEnd := min(currentTable+maxTableBatchSize, len(tables))
+		nextBatch := tables[currentTable:batchEnd]
+		if err := crdb.ExecuteTx(ctx, db, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
+			currentDatabase := ""
+			for _, table := range nextBatch {
+				// Switch databases if one is explicitly specified for multi-region
+				// configurations with multiple databases.
+				if table.ObjectPrefix != nil &&
+					table.ObjectPrefix.ExplicitCatalog &&
+					currentDatabase != table.ObjectPrefix.Catalog() {
+					_, err := tx.ExecContext(ctx, "USE $1", table.ObjectPrefix.Catalog())
+					if err != nil {
+						return err
+					}
+					currentDatabase = table.ObjectPrefix.Catalog()
+				}
+				tableName := table.GetResolvedName()
+				createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s %s`, tableName.String(), table.Schema)
+				if _, err := tx.ExecContext(ctx, createStmt); err != nil {
+					return errors.WithDetailf(errors.Wrapf(err, "could not create table: %q", table.Name),
+						"SQL: %s", createStmt)
+				}
+			}
+			return nil
+		}); err != nil {
+			return 0, err
 		}
+		currentTable += maxTableBatchSize
 	}
 
 	if hooks.PreLoad != nil {
