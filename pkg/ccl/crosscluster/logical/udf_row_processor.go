@@ -239,7 +239,6 @@ func (aq *applierQuerier) applyUDF(
 
 	decisionRow, err := aq.queryRowExParsed(ctx, "replicated-apply-udf", txn, ie, stmt, datums...)
 	if err != nil {
-		log.Warningf(ctx, "replicated apply of UDF failed (query: %s): %s", stmt.SQL, err.Error())
 		return noDecision, nil, err
 	}
 	if len(decisionRow) < 2 {
@@ -312,7 +311,7 @@ func (aq *applierQuerier) applyDecicion(
 			return batchStats{}, err
 		}
 		return batchStats{}, nil
-	case "upsert_specified":
+	case upsertSpecified:
 		q, err := aq.queryBuffer.InsertQueryForRow(row)
 		if err != nil {
 			return batchStats{}, err
@@ -325,6 +324,11 @@ func (aq *applierQuerier) applyDecicion(
 		for i := range decisionRow {
 			datums[i] = decisionRow[i]
 		}
+		// TODO(ssd): Should we even record an
+		// crdb_replication_origin_timestamp here. Perhaps the UDF mode
+		// should leave this completely to the user and not use this
+		// extra column at all since in the case of upsertSpecfied, the
+		// origin is really the UDF itself, not the remote cluster.
 		datums[len(datums)-1] = &tree.DDecimal{Decimal: eval.TimestampToDecimal(row.MvccTimestamp)}
 		if err := aq.execParsed(ctx, "replicated-insert", txn, ie, stmt, datums...); err != nil {
 			return batchStats{}, err
@@ -366,9 +370,9 @@ func (aq *applierQuerier) queryRowExParsed(
 	}
 }
 
-// makeApplierJoinClause creates a join clause for all primary keys.
-// It would be _nice_ if we could instead use the 'USING(...)' syntax here
-// but it appears that NOT VISIBLE columns.
+// makeApplierJoinClause creates a join clause for all primary keys.  It would
+// be _nice_ if we could instead use the 'USING(...)' syntax here but it appears
+// that NOT VISIBLE columns can't be referenced in a USING clause.
 //
 // Ref: https://github.com/cockroachdb/cockroach/issues/126767
 func makeApplierJoinClause(pkColumns []string) string {
