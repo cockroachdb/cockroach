@@ -176,10 +176,7 @@ func mergeExtremesStatistic(
 	if fullHistogram[0].UpperBound == tree.DNull {
 		fullHistogram = fullHistogram[1:]
 	}
-
-	var partialNullCount uint64
 	if partialHistogram[0].UpperBound == tree.DNull {
-		partialNullCount = uint64(partialHistogram[0].NumEq)
 		partialHistogram = partialHistogram[1:]
 	}
 
@@ -228,23 +225,16 @@ func mergeExtremesStatistic(
 		i++
 	}
 
-	var mergedRowCount uint64
-	var mergedDistinctCount uint64
 	// Since partial statistics at the extremes will always scan over
 	// the NULL rows at the lowerbound, we don't include the NULL count
 	// of the full statistic.
-	mergedNullCount := partialNullCount
-	for _, bucket := range mergedHistogram {
-		mergedRowCount += uint64(bucket.NumEq + bucket.NumRange)
-		mergedDistinctCount += uint64(bucket.DistinctRange)
-		if bucket.NumEq > 0 {
-			mergedDistinctCount += 1
-		}
+	mergedRowCount := (fullStat.RowCount - fullStat.NullCount) + (partialStat.RowCount)
+	mergedDistinctCount := fullStat.DistinctCount + partialStat.DistinctCount
+	// Avoid double counting the NULL distinct value.
+	if fullStat.NullCount > 0 {
+		mergedDistinctCount -= 1
 	}
-	mergedRowCount += mergedNullCount
-	if mergedNullCount > 0 {
-		mergedDistinctCount += 1
-	}
+	mergedNullCount := partialStat.NullCount
 
 	mergedAvgSize := (partialStat.AvgSize*partialStat.RowCount + fullStat.AvgSize*fullStat.RowCount) / mergedRowCount
 

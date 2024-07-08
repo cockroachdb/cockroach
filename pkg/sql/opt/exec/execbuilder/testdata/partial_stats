@@ -1313,6 +1313,35 @@ FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
 ORDER BY statistics_name
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__merged__       {a}           10002      9803            1
+__merged__       {a}           10002      9922            1
 ka_fullstat      {a}           10000      9920            1
 ka_partialstat   {a}           3          3               1
+
+# Verify that distinct counts and null counts are merged correctly.
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.count = 10005
+
+statement ok
+INSERT INTO ka VALUES (10002, 10001)
+
+statement ok
+CREATE STATISTICS ka_fullstat ON a FROM ka
+
+statement ok
+INSERT INTO ka VALUES (10003, 10002), (10004, NULL)
+
+statement ok
+CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
+ORDER BY statistics_name
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__merged__       {a}           10005      9924            2
+ka_fullstat      {a}           10003      9923            1
+ka_partialstat   {a}           3          2               2
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.count
