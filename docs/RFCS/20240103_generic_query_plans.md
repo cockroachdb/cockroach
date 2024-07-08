@@ -114,7 +114,7 @@ plan regressions in early versions of generic query plans.
 There is one exception for `force_custom_plan` with statements that either have
 no placeholders nor fold-able, stable expressions, or statements that can
 utilize the placeholder fast path. These statements can be fully optimized into
-_absolute_ generic plans that can be reused without re-optimization because the
+_ideal_ generic plans that can be reused without re-optimization because the
 optimal query plan will not change between executions.
 
 If `plan_cache_mode` is set to `auto`, the optimizer will automatically choose
@@ -143,8 +143,8 @@ statements are prepared.
 The prepared statement namespace will be expanded to store both a "base memo"
 and a "generic memo". The base memo will be a normalized, yet unoptimized memo
 that can be used as a starting point for build custom plans. The generic memo
-will be fully optimized as an absolute generic query plan or non-absolute
-generic query plan.
+will be fully optimized as an ideal generic query plan or non-ideal generic
+query plan.
 
 ### Using Lookup-Joins as "Constrained Scans"
 
