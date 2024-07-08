@@ -104,11 +104,16 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	scanPrivate *memo.ScanPrivate,
 	filters memo.FiltersExpr,
 ) {
+	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
 	// Iterate over all partial indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, filters, rejectNonPartialIndexes|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, remainingFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+		if !c.IsVirtualIndexScanSupported(tabMeta, index, scanPrivate.Constraint) {
+			return
+		}
+
 		var sb indexScanBuilder
 		sb.Init(c, scanPrivate.Table)
 		newScanPrivate := *scanPrivate
@@ -477,6 +482,10 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 					}
 				}
 			}
+		}
+
+		if !c.IsVirtualIndexScanSupported(tabMeta, index, combinedConstraint) {
+			return
 		}
 
 		// Construct new constrained ScanPrivate.

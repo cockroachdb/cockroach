@@ -109,6 +109,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		return
 	}
 	limitVal := int64(*limit.(*tree.DInt))
+	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
 
 	var pkCols opt.ColSet
 	var sb indexScanBuilder
@@ -127,6 +128,9 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		// transformation.
 		if len(constProj) != 0 {
 			panic(errors.AssertionFailedf("expected constProj to be empty"))
+		}
+		if !c.IsVirtualIndexScanSupported(tabMeta, index, scanPrivate.Constraint) {
+			return
 		}
 
 		newScanPrivate := *scanPrivate
@@ -281,6 +285,7 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 	if len(requiredOrdering.Columns) == 0 {
 		return
 	}
+	tabMeta := c.e.mem.Metadata().TableMeta(sp.Table)
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
@@ -296,6 +301,9 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 		// panic to avoid performing a logically incorrect transformation.
 		if len(constProj) != 0 {
 			panic(errors.AssertionFailedf("expected constProj to be empty"))
+		}
+		if !c.IsVirtualIndexScanSupported(tabMeta, index, sp.Constraint) {
+			return
 		}
 
 		// If the secondary index includes the set of needed columns, then this

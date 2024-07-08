@@ -545,6 +545,7 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 	if !requiredOrdering.Any() && !requiredOrdering.Group(0).Intersects(gp.GroupingCols) && !requiredOrdering.Optional.Intersects(gp.GroupingCols) {
 		return
 	}
+	tabMeta := c.e.mem.Metadata().TableMeta(sp.Table)
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
@@ -560,6 +561,9 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 		// panic to avoid performing a logically incorrect transformation.
 		if len(constProj) != 0 {
 			panic(errors.AssertionFailedf("expected constProj to be empty"))
+		}
+		if !c.IsVirtualIndexScanSupported(tabMeta, index, sp.Constraint) {
+			return
 		}
 
 		// If the secondary index includes the set of needed columns, then this
