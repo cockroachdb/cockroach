@@ -58,6 +58,11 @@ func (c *CustomFuncs) GenerateIndexScans(
 		if len(constProj) != 0 {
 			panic(errors.AssertionFailedf("expected constProj to be empty"))
 		}
+		if scanPrivate.IsVirtualTable(c.e.mem.Metadata()) {
+			if !c.IsVirtualIndexScanSupported(index, scanPrivate.Constraint) {
+				return
+			}
+		}
 
 		// If the secondary index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
@@ -559,4 +564,29 @@ func (c *CustomFuncs) IsSelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
 		return gatewayRegion != tableHomeRegion
 	}
 	return false
+}
+
+// IsVirtualIndexScanSupported returns whether the scan of the given virtual
+// index is supported. Returns true for the "primary key" of the vtable.
+func (c *CustomFuncs) IsVirtualIndexScanSupported(index cat.Index, cs *constraint.Constraint) bool {
+	if index.ID() == 0 {
+		// A primary index of the vtable.
+		return true
+	}
+	if cs == nil || cs.IsUnconstrained() {
+		// With a non-constrained scan we unconditionally fall back to the
+		// 'populate' function (which is the "primary key" of the vtable).
+		return false
+	}
+	// Execution support for virtual indexes has a limitation with range scans
+	// being unsupported, so if we have at least one range span in the index
+	// constraint, we do not generate a plan with the virtual index.
+	spans := cs.Spans
+	for i := 0; i < spans.Count(); i++ {
+		s := spans.Get(i)
+		if !s.HasSingleKey(c.e.ctx, c.e.evalCtx) {
+			return false
+		}
+	}
+	return true
 }

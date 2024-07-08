@@ -291,11 +291,10 @@ func (t virtualSchemaTable) isUnimplemented() bool {
 }
 
 // preferIndexOverGenerator defines the cases in which we are able to use a
-// virtual index's populate function when we have a virtual table defined with
-// a generator function instead of a populate function. Specifically, use of a
-// virtual index is supported when we have only single key constraints, and are
-// not using a partial index, and therefore do not need to fallback on an
-// undefined populate function.
+// virtual index's populate function when we have a virtual table defined with a
+// generator function instead of a populate function. Specifically, use of a
+// virtual index is supported when we are not using a partial index and
+// therefore do not need to fallback on an undefined populate function.
 func (t virtualSchemaTable) preferIndexOverGenerator(
 	ctx context.Context, p *planner, index catalog.Index, idxConstraint *constraint.Constraint,
 ) bool {
@@ -308,18 +307,7 @@ func (t virtualSchemaTable) preferIndexOverGenerator(
 	}
 
 	virtualIdx := t.getIndex(index.GetID())
-	if virtualIdx.incomplete {
-		return false
-	}
-
-	for i := 0; i < idxConstraint.Spans.Count(); i++ {
-		constraintSpan := idxConstraint.Spans.Get(i)
-		if !constraintSpan.HasSingleKey(ctx, p.EvalContext()) {
-			return false
-		}
-	}
-
-	return true
+	return !virtualIdx.incomplete
 }
 
 // getSchema is part of the virtualSchemaDef interface.
@@ -791,8 +779,8 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 					"programming error: can't push down composite constraints into vtables")
 			}
 			if !span.HasSingleKey(ctx, p.EvalContext()) {
-				// No hope - we can't deal with range scans on virtual indexes.
-				break
+				return errors.AssertionFailedf(
+					"programming error: range scans of virtual indexes are not supported")
 			}
 			constraintDatum := span.StartKey().Value(0)
 			unwrappedConstraint := eval.UnwrapDatum(ctx, p.EvalContext(), constraintDatum)

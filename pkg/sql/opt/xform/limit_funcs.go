@@ -128,6 +128,11 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		if len(constProj) != 0 {
 			panic(errors.AssertionFailedf("expected constProj to be empty"))
 		}
+		if scanPrivate.IsVirtualTable(c.e.mem.Metadata()) {
+			if !c.IsVirtualIndexScanSupported(index, scanPrivate.Constraint) {
+				return
+			}
+		}
 
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Distribution.Regions = nil
@@ -296,6 +301,11 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 		// panic to avoid performing a logically incorrect transformation.
 		if len(constProj) != 0 {
 			panic(errors.AssertionFailedf("expected constProj to be empty"))
+		}
+		if sp.IsVirtualTable(c.e.mem.Metadata()) {
+			if !c.IsVirtualIndexScanSupported(index, sp.Constraint) {
+				return
+			}
 		}
 
 		// If the secondary index includes the set of needed columns, then this

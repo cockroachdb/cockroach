@@ -993,35 +993,28 @@ WHERE
 project
  ├── columns: attname:3!null atttypid:4!null typbasetype:53 typtype:35
  ├── stats: [rows=198]
- ├── cost: 2928.23877
- └── inner-join (merge)
+ ├── cost: 2929.32
+ └── inner-join (hash)
       ├── columns: attname:3!null atttypid:4!null oid:29!null typtype:35 typbasetype:53
-      ├── left ordering: +29
-      ├── right ordering: +4
       ├── stats: [rows=198, distinct(4)=17.2927, null(4)=0, distinct(29)=17.2927, null(29)=0]
-      ├── cost: 2926.23877
+      ├── cost: 2927.32
       ├── fd: (4)==(29), (29)==(4)
-      ├── scan pg_type@pg_type_oid_idx [as=t]
+      ├── scan pg_type [as=t]
       │    ├── columns: oid:29!null typtype:35 typbasetype:53
       │    ├── stats: [rows=1000, distinct(29)=100, null(29)=0]
-      │    ├── cost: 1481.52
-      │    └── ordering: +29
-      ├── sort
+      │    └── cost: 1481.52
+      ├── select
       │    ├── columns: attname:3!null atttypid:4
       │    ├── stats: [rows=20, distinct(3)=2, null(3)=0, distinct(4)=18.2927, null(4)=0.2]
-      │    ├── cost: 1433.49877
-      │    ├── ordering: +4
-      │    └── select
-      │         ├── columns: attname:3!null atttypid:4
-      │         ├── stats: [rows=20, distinct(3)=2, null(3)=0, distinct(4)=18.2927, null(4)=0.2]
-      │         ├── cost: 1430.95
-      │         ├── scan pg_attribute [as=a]
-      │         │    ├── columns: attname:3 atttypid:4
-      │         │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=10]
-      │         │    └── cost: 1420.92
-      │         └── filters
-      │              └── attname:3 IN ('descriptor_id', 'descriptor_name') [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id'] [/'descriptor_name' - /'descriptor_name']; tight)]
-      └── filters (true)
+      │    ├── cost: 1430.95
+      │    ├── scan pg_attribute [as=a]
+      │    │    ├── columns: attname:3 atttypid:4
+      │    │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=10]
+      │    │    └── cost: 1420.92
+      │    └── filters
+      │         └── attname:3 IN ('descriptor_id', 'descriptor_name') [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id'] [/'descriptor_name' - /'descriptor_name']; tight)]
+      └── filters
+           └── atttypid:4 = oid:29 [outer=(4,29), constraints=(/4: (/NULL - ]; /29: (/NULL - ]), fd=(4)==(29), (29)==(4)]
 
 
 # A lookup join should be performed with a virtual table if the filter
