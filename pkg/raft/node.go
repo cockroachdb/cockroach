@@ -41,7 +41,7 @@ var (
 // SoftState provides state that is useful for logging and debugging.
 // The state is volatile and does not need to be persisted to the WAL.
 type SoftState struct {
-	Lead      pb.PeerID // must use atomic operations to access; keep 64-bit aligned.
+	Lead      pb.PeerID
 	RaftState StateType
 }
 
