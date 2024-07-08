@@ -93,6 +93,25 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaDLQedDueToAge = metric.Metadata{
+		Name:        "logical_replication.events_dlqed_age",
+		Help:        "Row update events sent to DLQ due to reaching the maximum time allowed in the retry queue",
+		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDLQedDueToQueueSpace = metric.Metadata{
+		Name:        "logical_replication.events_dlqed_space",
+		Help:        "Row update events sent to DLQ due to capacity of the retry queue",
+		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDLQedDueToErrType = metric.Metadata{
+		Name:        "logical_replication.events_dlqed_errtype",
+		Help:        "Row update events sent to DLQ due to an error not considered retryable",
+		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Internal metrics.
 	metaCheckpointEvents = metric.Metadata{
 		Name:        "logical_replication.checkpoint_events_ingested",
@@ -124,6 +143,12 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSQLReplanCount = metric.Metadata{
+		Name:        "logical_replication.replan_count",
+		Help:        "Total number of dist sql replanning events",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of logical replication jobs.
@@ -143,6 +168,10 @@ type Metrics struct {
 	RetryQueueEvents    *metric.Gauge
 	ApplyBatchNanosHist metric.IHistogram
 
+	DLQedDueToAge        *metric.Counter
+	DLQedDueToQueueSpace *metric.Counter
+	DLQedDueToErrType    *metric.Counter
+
 	InitialApplySuccesses *metric.Counter
 	InitialApplyFailures  *metric.Counter
 	RetriedApplySuccesses *metric.Counter
@@ -156,6 +185,7 @@ type Metrics struct {
 	StreamBatchBytesHist          metric.IHistogram
 	StreamBatchNanosHist          metric.IHistogram
 	OptimisticInsertConflictCount *metric.Counter
+	ReplanCount                   *metric.Counter
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -180,8 +210,12 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
-		RetryQueueBytes:       metric.NewGauge(metaRetryQueueBytes),
-		RetryQueueEvents:      metric.NewGauge(metaRetryQueueEvents),
+		RetryQueueBytes:      metric.NewGauge(metaRetryQueueBytes),
+		RetryQueueEvents:     metric.NewGauge(metaRetryQueueEvents),
+		DLQedDueToAge:        metric.NewCounter(metaDLQedDueToAge),
+		DLQedDueToQueueSpace: metric.NewCounter(metaDLQedDueToQueueSpace),
+		DLQedDueToErrType:    metric.NewCounter(metaDLQedDueToErrType),
+
 		InitialApplySuccesses: metric.NewCounter(metaInitialApplySuccess),
 		InitialApplyFailures:  metric.NewCounter(metaInitialApplyFailures),
 		RetriedApplySuccesses: metric.NewCounter(metaRetriedApplySuccesses),
@@ -206,5 +240,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
 		OptimisticInsertConflictCount: metric.NewCounter(metaOptimisticInsertConflictCount),
+		ReplanCount:                   metric.NewCounter(metaDistSQLReplanCount),
 	}
 }
