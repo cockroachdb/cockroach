@@ -1,0 +1,28 @@
+/* setup */
+CREATE TABLE t(i int);
+
+/* test */
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 7;
+EXPLAIN (DDL) ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 10000;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›; following ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹7›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC TableZoneConfig:{DescID: 104 (t), SeqNum: 2}
+ │         └── 1 Mutation operation
+ │              └── AddTableZoneConfig {"TableID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 2 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT TableZoneConfig:{DescID: 104 (t), SeqNum: 1}
+      │    │    └── PUBLIC → ABSENT TableZoneConfig:{DescID: 104 (t), SeqNum: 2}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 2 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC TableZoneConfig:{DescID: 104 (t), SeqNum: 1}
+           │    └── ABSENT → PUBLIC TableZoneConfig:{DescID: 104 (t), SeqNum: 2}
+           └── 2 Mutation operations
+                ├── AddTableZoneConfig {"TableID":104}
+                └── AddTableZoneConfig {"TableID":104}
