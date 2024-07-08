@@ -397,6 +397,22 @@ SHOW lock_timeout
 0
 
 statement ok
+SET deadlock_timeout = '1ms'
+
+query T
+SHOW deadlock_timeout
+----
+1
+
+statement ok
+SET deadlock_timeout = 0
+
+query T
+SHOW deadlock_timeout
+----
+0
+
+statement ok
 SET idle_in_session_timeout = 10000
 
 query T

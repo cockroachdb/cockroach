@@ -189,6 +189,7 @@ type txnKVFetcher struct {
 	// existing lock in order to perform a non-locking read on a key.
 	lockTimeout time.Duration
 
+	deadlockTimeout time.Duration
 	// alreadyFetched indicates whether fetch() has already been executed at
 	// least once.
 	alreadyFetched bool
@@ -544,6 +545,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba := &kvpb.BatchRequest{}
 	ba.Header.WaitPolicy = f.lockWaitPolicy
 	ba.Header.LockTimeout = f.lockTimeout
+	ba.Header.DeadlockTimeout = f.deadlockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	if buildutil.CrdbTestBuild {

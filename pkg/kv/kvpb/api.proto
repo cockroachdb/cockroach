@@ -2962,8 +2962,38 @@ message Header {
   reserved 7, 10, 12, 14, 20;
 
   WriteOptions write_options = 35;
-   
-  // Next ID: 36
+
+  // Transactions that come across contending locks must push the lock holder
+  // to detect whether they're abandoned or are part of a dependency cycle that
+  // would cause a deadlock. We optimistically assume failed transaction
+  // coordinators and deadlocks are not common in production applications, and
+  // wait locally on locks for a while before checking for a deadlock. This
+  // reduces needless pushing in cases where there is no deadlock or coordinator
+  // failure to speak of.
+  //
+  // Assuming we care about detecting failed coordinators more than deadlocks
+  // (which are a true rarity and a case we don't want to optimize for),
+  // increasing the value of this setting would come down to optimizing the cost
+  // we pay per-abandoned transaction. Currently, with the txnStatusCache,
+  // we pay a cost per abandoned transaction per range. The txnStatusCache is
+  // also quite small. Some improvements here could be:
+  // - A per-store cache instead of a per-range cache.
+  // - Increasing the number of finalized transactions we keep track of, even if
+  // this is per-request instead of per-range.
+  //
+  // This setting is analogous to Postgres' deadlock_timeout setting, which has
+  // a default value of 1s:
+  //  https://www.postgresql.org/docs/current/runtime-config-locks.html#GUC-DEADLOCK-TIMEOUT.
+  //
+  // When increasing this value, we should be conscious that even once
+  // distributed deadlock detection begins, there is some latency proportional
+  // to the length of the dependency cycle before the deadlock is detected.
+  //
+  // A value of zero disables the timeout.
+  google.protobuf.Duration deadlock_timeout = 36 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
+
+  // Next ID: 37
 }
 
 message WriteOptions {

@@ -118,6 +118,8 @@ type tableWriterBase struct {
 	// lockTimeout specifies the maximum amount of time that the writer will
 	// wait while attempting to acquire a lock on a key.
 	lockTimeout time.Duration
+	// deadlockTimeout
+	deadlockTimeout time.Duration
 	// maxBatchSize determines the maximum number of entries in the KV batch
 	// for a mutation operation. By default, it will be set to 10k but can be
 	// a different value in tests.
@@ -168,9 +170,11 @@ func (tb *tableWriterBase) init(
 	tb.txn = txn
 	tb.desc = tableDesc
 	tb.lockTimeout = 0
+	tb.deadlockTimeout = 0
 	tb.originID = 0
 	if evalCtx != nil {
 		tb.lockTimeout = evalCtx.SessionData().LockTimeout
+		tb.deadlockTimeout = evalCtx.SessionData().DeadlockTimeout
 		tb.originID = evalCtx.SessionData().OriginIDForLogicalDataReplication
 	}
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionValues
@@ -270,6 +274,7 @@ func (tb *tableWriterBase) initNewBatch() {
 	tb.b = tb.txn.NewBatch()
 	tb.putter.Batch = tb.b
 	tb.b.Header.LockTimeout = tb.lockTimeout
+	tb.b.Header.DeadlockTimeout = tb.deadlockTimeout
 	if tb.originID != 0 {
 		tb.b.Header.WriteOptions = &kvpb.WriteOptions{OriginID: tb.originID}
 	}

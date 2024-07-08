@@ -277,6 +277,7 @@ var sqlDefaultSettings = map[InternalKey]struct{}{
 	"sql.defaults.large_full_scan_rows":                                         {},
 	"sql.defaults.locality_optimized_partitioned_index_scan.enabled":            {},
 	"sql.defaults.lock_timeout":                                                 {},
+	"sql.defaults.deadlock_timeout":                                             {},
 	"sql.defaults.multiregion_placement_policy.enabled":                         {},
 	"sql.defaults.on_update_rehome_row.enabled":                                 {},
 	"sql.defaults.optimizer_use_histograms.enabled":                             {},

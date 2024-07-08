@@ -1141,6 +1141,19 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// See https://www.postgresql.org/docs/current/runtime-config-locks.html#RUNTIME-CONFIG-LOCKS
+	`deadlock_timeout`: {
+		GetStringVal: makeTimeoutVarGetter(`deadlock_timeout`),
+		Set:          deadlockTimeoutVarSet,
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			ms := evalCtx.SessionData().LockTimeout.Milliseconds()
+			return strconv.FormatInt(ms, 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return clusterDeadlockTimeout.String(sv)
+		},
+	},
+
 	// See https://www.postgresql.org/docs/12/runtime-config-client.html.
 	`default_table_access_method`: makeCompatStringVar(`default_table_access_method`, `heap`),
 
