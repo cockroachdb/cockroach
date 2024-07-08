@@ -123,6 +123,7 @@ func (r *Replica) evalAndPropose(
 	defer tok.DoneIfNotMoved(ctx)
 	idKey := raftlog.MakeCmdIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, g, st, ui)
+	ba = proposal.Request // may have been updated
 	log.Event(proposal.ctx, "evaluated request")
 
 	// If the request hit a server-side concurrency retry error, immediately
@@ -303,7 +304,7 @@ func (r *Replica) evalAndPropose(
 			Cmd:        proposal.command,
 			QuotaAlloc: proposal.quotaAlloc,
 			CmdID:      idKey,
-			Req:        ba,
+			Req:        proposal.Request,
 			// SeedID not set, since this is not a reproposal.
 		}
 		if pErr = filter(filterArgs); pErr != nil {

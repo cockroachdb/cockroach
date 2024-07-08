@@ -132,7 +132,7 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 
 	var result result.Result
-	br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, g, &st, ui, evalPath)
+	ba, br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, g, &st, ui, evalPath)
 
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
@@ -421,7 +421,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
-) (br *kvpb.BatchResponse, res result.Result, pErr *kvpb.Error) {
+) (_ *kvpb.BatchRequest, br *kvpb.BatchResponse, res result.Result, pErr *kvpb.Error) {
 	log.Event(ctx, "executing read-only batch")
 
 	var rootMonitor *mon.BytesMonitor
@@ -487,7 +487,11 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		// retry at a higher timestamp because it is not isolated at higher
 		// timestamps.
 		latchesHeld := g != nil
-		if !latchesHeld || !canDoServersideRetry(ctx, pErr, ba, g, hlc.Timestamp{}) {
+		var ok bool
+		if latchesHeld {
+			ba, ok = canDoServersideRetry(ctx, pErr, ba, g, hlc.Timestamp{})
+		}
+		if !ok {
 			// TODO(aayush,arul): These metrics are incorrect at the moment since
 			// hitting this branch does not mean that we won't serverside retry, it
 			// just means that we will have to reacquire latches.
@@ -505,9 +509,9 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			EncounteredIntents: res.Local.DetachEncounteredIntents(),
 			Metrics:            res.Local.Metrics,
 		}
-		return nil, res, pErr
+		return ba, nil, res, pErr
 	}
-	return br, res, nil
+	return ba, br, res, nil
 }
 
 func (r *Replica) handleReadOnlyLocalEvalResult(
