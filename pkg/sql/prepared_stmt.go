@@ -56,9 +56,17 @@ type PreparedStatement struct {
 	querycache.PrepareMetadata
 
 	// BaseMemo is the memoized data structure constructed by the cost-based
-	// optimizer during prepare of a SQL statement. It may be a fully-optimized
-	// memo if the prepared statement has no placeholders and no fold-able
-	// stable expressions. Otherwise, it is an unoptimized, normalized memo.
+	// optimizer during prepare of a SQL statement.
+	//
+	// It may be a fully-optimized memo if it contains an "ideal generic plan"
+	// that is guaranteed to be optimal across all executions of the prepared
+	// statement. Ideal generic plans are generated when the statement has no
+	// placeholders nor fold-able stable expressions, or when the placeholder
+	// fast-path is utilized.
+	//
+	// If it is not an ideal generic plan, it is an unoptimized, normalized
+	// memo that is used as a starting point for optimization during each
+	// execution.
 	BaseMemo *memo.Memo
 
 	// GenericMemo, if present, is a fully-optimized memo that can be executed
@@ -66,6 +74,13 @@ type PreparedStatement struct {
 	// TODO(mgartner): Put all fully-optimized plans in the GenericMemo field to
 	// reduce confusion.
 	GenericMemo *memo.Memo
+
+	// CustomCosts tracks the costs of previously optimized "custom plans".
+	CustomCosts planCostStats
+
+	// GenericCost is the cost of the generic plan, if one has been generated
+	// for this prepared statement.
+	GenericCost memo.Cost
 
 	// refCount keeps track of the number of references to this PreparedStatement.
 	// New references are registered through incRef().
@@ -115,6 +130,52 @@ func (p *PreparedStatement) incRef(ctx context.Context) {
 		log.Fatal(ctx, "corrupt PreparedStatement refcount")
 	}
 	p.refCount++
+}
+
+const (
+	// CustomPlanThreshold is the number of custom plans executed when
+	// plan_cache_mode=auto before attempting to generate a generic plan. It is
+	// also the maximum number of custom plan costs tracked the planCostStats.
+	CustomPlanThreshold = 5
+)
+
+// planCostStats tracks statistics about a fixed numbed of plan costs. It
+// maintains statistics for only the last CustomPlanThreshold costs added via
+// Add.
+type planCostStats struct {
+	nextIdx int
+	length  int
+	costs   [CustomPlanThreshold]memo.Cost
+}
+
+// Add adds a cost to the planCostStats, evicting the oldest cost if necessary.
+func (p *planCostStats) Add(cost memo.Cost) {
+	p.costs[p.nextIdx] = cost
+	p.nextIdx++
+	if p.nextIdx >= CustomPlanThreshold {
+		p.nextIdx = 0
+	}
+	if p.length < CustomPlanThreshold {
+		p.length++
+	}
+}
+
+// Len returns the number of costs in the planCostStats.
+func (p *planCostStats) Len() int {
+	return p.length
+}
+
+// Avg returns the average cost of all the costs in planCostStats. If
+// planCostStats is empty, it returns 0.
+func (p *planCostStats) Avg() memo.Cost {
+	if p.length == 0 {
+		return 0
+	}
+	var sum memo.Cost
+	for i := 0; i < p.length; i++ {
+		sum += p.costs[i]
+	}
+	return sum / memo.Cost(p.length)
 }
 
 // preparedStatementsAccessor gives a planner access to a session's collection
