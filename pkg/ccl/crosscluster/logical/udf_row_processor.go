@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -66,14 +65,14 @@ const (
 -- function. The row field is the row to be insert when the decision is upsert_specified.
 -- Note that users need to take special care that the columns returned in row are in canonical
 -- order. It isn't particularly clear how the user is going to do this easily.
-CREATE TYPE crdb_replication_applier_decision AS (decision STRING, row RECORD)
-	`
+CREATE TYPE crdb_replication_applier_decision AS (decision STRING, row RECORD)`
+
 	applierQueryBase = `
 WITH data (%s)
 AS (VALUES (%s))
 SELECT (res).decision, (res).row FROM
 (
-	SELECT %s('%s', data, existing) AS res
+	SELECT %s('%s', data, existing, (%s)) AS res
 	FROM data LEFT JOIN [%d as existing]
 	%s
 )`
@@ -162,20 +161,27 @@ func (aq *applierQuerier) AddTable(targetDescID int32, td catalog.TableDescripto
 	return err
 }
 
+func (aq *applierQuerier) RequiresParsedBeforeRow() bool { return true }
+
 func (aq *applierQuerier) InsertRow(
-	ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevValue roachpb.Value,
+	ctx context.Context,
+	txn isql.Txn,
+	ie isql.Executor,
+	row cdcevent.Row,
+	prevRow *cdcevent.Row,
+	likelyInsert bool,
 ) (batchStats, error) {
 	mutType := updateMutation
-	if prevValue.RawBytes == nil {
+	if likelyInsert {
 		mutType = insertMutation
 	}
-	return aq.processRow(ctx, txn, ie, row, prevValue, mutType)
+	return aq.processRow(ctx, txn, ie, row, prevRow, mutType)
 }
 
 func (aq *applierQuerier) DeleteRow(
-	ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row,
+	ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row,
 ) (batchStats, error) {
-	return aq.processRow(ctx, txn, ie, row, roachpb.Value{}, deleteMutation)
+	return aq.processRow(ctx, txn, ie, row, prevRow, deleteMutation)
 }
 
 func (aq *applierQuerier) processRow(
@@ -183,14 +189,14 @@ func (aq *applierQuerier) processRow(
 	txn isql.Txn,
 	ie isql.Executor,
 	row cdcevent.Row,
-	prevValue roachpb.Value,
+	prevRow *cdcevent.Row,
 	mutType mutationType,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
 	if txn != nil {
 		kvTxn = txn.KV()
 	}
-	decision, decisionRow, err := aq.applyUDF(ctx, kvTxn, ie, mutType, row, prevValue)
+	decision, decisionRow, err := aq.applyUDF(ctx, kvTxn, ie, mutType, row, prevRow)
 	if err != nil {
 		return batchStats{}, err
 	}
@@ -203,13 +209,16 @@ func (aq *applierQuerier) applyUDF(
 	ie isql.Executor,
 	mutType mutationType,
 	row cdcevent.Row,
-	_ roachpb.Value,
+	prevRow *cdcevent.Row,
 ) (applierDecision, tree.Datums, error) {
 	applyQueryBuilder, err := aq.queryBuffer.ApplierQueryForRow(row)
 	if err != nil {
 		return noDecision, nil, err
 	}
-	if err := applyQueryBuilder.AddRowDefaultNull(row); err != nil {
+	if err := applyQueryBuilder.AddRowDefaultNull(&row); err != nil {
+		return noDecision, nil, err
+	}
+	if err := applyQueryBuilder.AddRowDefaultNull(prevRow); err != nil {
 		return noDecision, nil, err
 	}
 
@@ -402,7 +411,6 @@ func makeApplierApplyQueries(
 		return nil, errors.Errorf("multiple-column familes not supported by the custom-UDF applier")
 	}
 
-	queryBuilders := make(map[catid.FamilyID]queryBuilder, td.NumFamilies())
 	// We pass all Visible columns into the applier. We can't pass non-visible
 	// columns currently as we are using the implicit record type for the table
 	// as the argument type for the UDF. Implicit record types only contain
@@ -413,55 +421,39 @@ func makeApplierApplyQueries(
 	for i := range visColumns {
 		inputColumnNames[i] = visColumns[i].GetName()
 	}
+	colCount := len(inputColumnNames)
 	colNames := escapedColumnNameList(inputColumnNames)
-	valStr := valueStringForNumItems(len(inputColumnNames))
+	valStr := valueStringForNumItems(colCount, 1)
+	prevValStr := valueStringForNumItems(colCount, colCount+1)
 	joinClause := makeApplierJoinClause(td.TableDesc().PrimaryIndex.KeyColumnNames)
 
 	statements := make([]statements.Statement[tree.Statement], 3)
-	q := fmt.Sprintf(applierQueryBase,
-		colNames,
-		valStr,
-		udfName,
-		insertMutation,
-		dstTableDescID,
-		joinClause,
-	)
-	var err error
-	statements[insertQuery], err = parser.ParseOne(q)
-	if err != nil {
-		return nil, errors.Wrapf(err, "parsing %s", q)
+	for statementIdx, mutType := range map[int]mutationType{
+		insertQuery: insertMutation,
+		updateQuery: updateMutation,
+		deleteQuery: deleteMutation,
+	} {
+		q := fmt.Sprintf(applierQueryBase,
+			colNames,
+			valStr,
+			udfName,
+			mutType,
+			prevValStr,
+			dstTableDescID,
+			joinClause,
+		)
+		var err error
+		statements[statementIdx], err = parser.ParseOne(q)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parsing %s", q)
+		}
 	}
-	statements[updateQuery], err = parser.ParseOne(fmt.Sprintf(applierQueryBase,
-		colNames,
-		valStr,
-		udfName,
-		updateMutation,
-		dstTableDescID,
-		joinClause,
-	))
-	if err != nil {
-		return nil, err
-	}
-	statements[deleteQuery], err = parser.ParseOne(fmt.Sprintf(applierQueryBase,
-		colNames,
-		valStr,
-		udfName,
-		deleteMutation,
-		dstTableDescID,
-		joinClause,
-	))
-	if err != nil {
-		return nil, err
-	}
-
-	queryBuilders[0] = queryBuilder{
-		stmts: statements,
-		// needsOriginTimestamp: true,
-		inputColumns:  inputColumnNames,
-		scratchDatums: make([]interface{}, len(inputColumnNames)+1),
-	}
-
-	return queryBuilders, nil
+	return map[catid.FamilyID]queryBuilder{
+		0: {
+			stmts:         statements,
+			inputColumns:  inputColumnNames,
+			scratchDatums: make([]interface{}, len(inputColumnNames)+1),
+		}}, nil
 }
 
 func makeApplierInsertQueries(
@@ -474,7 +466,7 @@ func makeApplierInsertQueries(
 			return err
 		}
 		colNames := escapedColumnNameList(append(inputColumnNames, originTimestampColumnName))
-		valStr := valueStringForNumItems(len(inputColumnNames) + 1)
+		valStr := valueStringForNumItems(len(inputColumnNames)+1, 1)
 		upsertQuery, err := parser.ParseOne(fmt.Sprintf(applierUpsertQueryBase,
 			dstTableDescID,
 			colNames,
