@@ -114,6 +114,9 @@ type tpccOptions struct {
 	// these isolation levels and we are bootstrapping the cluster in an
 	// older version, where they are not supported.
 	DisableIsolationLevels bool
+	// DisableHistogram will determine if the histogram argument should
+	// be passed in.
+	DisableHistogram bool
 }
 
 func (t tpccOptions) getWorkloadCmd() string {
@@ -305,7 +308,7 @@ func runTPCC(
 			cmd := roachtestutil.NewCommand("%s workload run %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
 				MaybeFlag(opts.DB != "", "db", opts.DB).
 				Flag("warehouses", opts.Warehouses).
-				Flag("histograms", histogramsPath).
+				MaybeFlag(!opts.DisableHistogram, "histograms", histogramsPath).
 				Flag("ramp", rampDur).
 				Flag("duration", opts.Duration).
 				Flag("prometheus-port", workloadInstances[i].prometheusPort).
