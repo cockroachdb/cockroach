@@ -13,7 +13,6 @@ package sql
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // getCurrentEncodedVersionSettingValue returns the encoded value of
@@ -54,7 +54,7 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 	// the same time guaranteeing that a node reporting a certain version has
 	// also processed the corresponding version bump (which is important as only
 	// then does the node update its persisted state; see #22796).
-	if err := timeutil.RunWithTimeout(ctx, fmt.Sprintf("show cluster setting %s", name), 2*time.Minute,
+	if err := timeutil.RunWithTimeout(ctx, redact.Sprintf("show cluster setting %s", name), 2*time.Minute,
 		func(ctx context.Context) error {
 			tBegin := timeutil.Now()
 

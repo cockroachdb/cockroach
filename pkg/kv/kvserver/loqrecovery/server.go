@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -640,7 +641,7 @@ func verifyRecoveryNodeStatusParallelFn(
 	ctx context.Context, nss *threadSafeSlice[loqrecoverypb.NodeRecoveryStatus],
 ) visitNodeAdminFn {
 	return func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
-		return timeutil.RunWithTimeout(ctx, fmt.Sprintf("retrieve status of n%d", nodeID),
+		return timeutil.RunWithTimeout(ctx, redact.Sprintf("retrieve status of n%d", nodeID),
 			retrieveNodeStatusTimeout,
 			func(ctx context.Context) error {
 				res, err := client.RecoveryNodeStatus(ctx, &serverpb.RecoveryNodeStatusRequest{})

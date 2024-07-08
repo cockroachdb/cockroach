@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -25,7 +26,7 @@ import (
 // an operation didn't complete within its designated timeout.
 type TimeoutError struct {
 	// The operation that timed out.
-	operation string
+	operation redact.RedactableString
 	// The configured timeout.
 	timeout time.Duration
 	// The duration of the operation. This is usually expected to be the same as
@@ -44,7 +45,7 @@ var _ errors.SafeFormatter = (*TimeoutError)(nil)
 var _ net.Error = (*TimeoutError)(nil)
 
 // Operation returns the name of the operation that timed out.
-func (t *TimeoutError) Operation() string {
+func (t *TimeoutError) Operation() redact.RedactableString {
 	return t.operation
 }
 
@@ -60,7 +61,7 @@ func (t *TimeoutError) SafeFormatError(p errors.Printer) (next error) {
 	// timeout set by RunWithTimeout. It is also possible for the operation to run
 	// for much longer than the timeout, e.g. if the callee does not check the
 	// context in a timely manner. The error message must make this clear.
-	p.Printf("operation %q timed out", t.operation)
+	p.Printf("operation \"%s\" timed out", t.operation)
 	if t.took != 0 {
 		p.Printf(" after %s", t.took.Round(time.Millisecond))
 	}
@@ -80,40 +81,37 @@ func (t *TimeoutError) Cause() error {
 }
 
 // encodeTimeoutError serializes a TimeoutError.
-// We cannot include the operation in the safe strings because
-// we currently have plenty of uses where the operation is constructed
-// from unsafe/sensitive data.
 func encodeTimeoutError(
 	_ context.Context, err error,
 ) (msgPrefix string, safe []string, details proto.Message) {
 	t := err.(*TimeoutError)
 	details = &errorspb.StringsPayload{
-		Details: []string{t.operation, t.timeout.String(), t.took.String()},
+		Details: []string{t.timeout.String(), t.took.String()},
 	}
 	msgPrefix = fmt.Sprintf("operation %q timed out after %s", t.operation, t.timeout)
-	return msgPrefix, nil, details
+	return msgPrefix, []string{string(t.operation)}, details
 }
 
 func decodeTimeoutError(
 	ctx context.Context, cause error, msgPrefix string, safeDetails []string, payload proto.Message,
 ) error {
 	m, ok := payload.(*errorspb.StringsPayload)
-	if !ok || len(m.Details) < 2 {
+	if !ok || len(m.Details) < 1 || len(safeDetails) < 1 {
 		// If this ever happens, this means some version of the library
 		// (presumably future) changed the payload type, and we're
 		// receiving this here. In this case, give up and let
 		// DecodeError use the opaque type.
 		return nil
 	}
-	op := m.Details[0]
-	timeout, decodeErr := time.ParseDuration(m.Details[1])
+	op := redact.RedactableString(safeDetails[0])
+	timeout, decodeErr := time.ParseDuration(m.Details[0])
 	if decodeErr != nil {
 		// Not encoded by our encode function. Bail out.
 		return nil //nolint:returnerrcheck
 	}
 	var took time.Duration
-	if len(m.Details) >= 3 {
-		took, decodeErr = time.ParseDuration(m.Details[2])
+	if len(m.Details) >= 2 {
+		took, decodeErr = time.ParseDuration(m.Details[1])
 		if decodeErr != nil {
 			// Not encoded by our encode function. Bail out.
 			return nil //nolint:returnerrcheck

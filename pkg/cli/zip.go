@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	tracezipper "github.com/cockroachdb/cockroach/pkg/util/tracing/zipper"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgconn"
 	"github.com/marusama/semaphore"
 	"github.com/spf13/cobra"
@@ -80,7 +81,7 @@ func (zc *debugZipContext) runZipFnWithTimeout(
 // runZipRequest runs a zipRequest and stores its JSON result or error
 // message in the output zip.
 func (zc *debugZipContext) runZipRequest(ctx context.Context, zr *zipReporter, r zipRequest) error {
-	s := zr.start("requesting data for %s", r.pathName)
+	s := zr.start(redact.Sprintf("requesting data for %s", r.pathName))
 	var data interface{}
 	err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
 		thisData, err := r.fn(ctx)
@@ -200,7 +201,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	}
 
 	dirName := args[0]
-	s := zr.start("creating output file %s", dirName)
+	s := zr.start(redact.Sprintf("creating output file %s", dirName))
 	out, err := os.Create(dirName)
 	if err != nil {
 		return s.fail(err)
@@ -219,7 +220,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			cfg.AdvertiseAddr = tenant.RpcAddr
 			sqlAddr := tenant.SqlAddr
 
-			s := zr.start("establishing RPC connection to %s", cfg.AdvertiseAddr)
+			s := zr.start(redact.Sprintf("establishing RPC connection to %s", cfg.AdvertiseAddr))
 			conn, finish, err := getClientGRPCConn(ctx, cfg)
 			if err != nil {
 				return s.fail(err)
@@ -235,7 +236,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				// SQL and RPC.
 				sqlAddr = tenant.RpcAddr
 			}
-			s = zr.start("using SQL address: %s", sqlAddr)
+			s = zr.start(redact.Sprintf("using SQL address: %s", sqlAddr))
 
 			cliCtx.clientOpts.ServerHost, cliCtx.clientOpts.ServerPort, err = net.SplitHostPort(sqlAddr)
 			if err != nil {
@@ -448,7 +449,7 @@ INNER JOIN latestprogress ON j.id = latestprogress.job_id;`,
 
 			ts := timeutil.Now().Format(`20060102150405`)
 			name := fmt.Sprintf("%s/jobs/%d/%s/trace.zip", zc.prefix, jobTrace.jobID, ts)
-			s := zc.clusterPrinter.start("requesting traces for job %d", jobTrace.jobID)
+			s := zc.clusterPrinter.start(redact.Sprintf("requesting traces for job %d", jobTrace.jobID))
 			if err := zc.z.createRaw(s, name, jobZip); err != nil {
 				log.Warningf(ctx, "failed to write inflight trace zip for job %d to file %s: %v",
 					jobTrace.jobID, name, err)
@@ -473,7 +474,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	ctx := context.Background()
 	baseName := base + "/" + sanitizeFilename(table)
 
-	s := zr.start("retrieving SQL data for %s", table)
+	s := zr.start(redact.Sprintf("retrieving SQL data for %s", table))
 	const maxRetries = 5
 	suffix := ""
 	for numRetries := 1; numRetries <= maxRetries; numRetries++ {
@@ -529,7 +530,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			}
 			// We've encountered a retry error. Add a suffix then loop.
 			suffix = fmt.Sprintf(".%d", numRetries)
-			s = zr.start("retrying %s", table)
+			s = zr.start(redact.Sprintf("retrying %s", table))
 			continue
 		}
 		s.done()
