@@ -66,8 +66,9 @@ type sqlRowProcessor struct {
 // to the querier using the passed isql.Txn and internal executor.
 type querier interface {
 	AddTable(int32, catalog.TableDescriptor) error
-	InsertRow(context.Context, isql.Txn, isql.Executor, cdcevent.Row, roachpb.Value) (batchStats, error)
-	DeleteRow(context.Context, isql.Txn, isql.Executor, cdcevent.Row) (batchStats, error)
+	InsertRow(context.Context, isql.Txn, isql.Executor, cdcevent.Row, *cdcevent.Row, bool) (batchStats, error)
+	DeleteRow(context.Context, isql.Txn, isql.Executor, cdcevent.Row, *cdcevent.Row) (batchStats, error)
+	RequiresParsedBeforeRow() bool
 }
 
 type queryBuilder struct {
@@ -91,8 +92,11 @@ type queryBuilder struct {
 	scratchTS     tree.DDecimal
 }
 
-func (q *queryBuilder) AddRow(row cdcevent.Row) error {
+func (q *queryBuilder) Reset() {
 	q.scratchDatums = q.scratchDatums[:0]
+}
+
+func (q *queryBuilder) AddRow(row cdcevent.Row) error {
 	it, err := row.DatumsNamed(q.inputColumns)
 	if err != nil {
 		return err
@@ -110,8 +114,13 @@ func (q *queryBuilder) AddRow(row cdcevent.Row) error {
 	return nil
 }
 
-func (q *queryBuilder) AddRowDefaultNull(row cdcevent.Row) error {
-	q.scratchDatums = q.scratchDatums[:0]
+func (q *queryBuilder) AddRowDefaultNull(row *cdcevent.Row) error {
+	if row == nil {
+		for range q.inputColumns {
+			q.scratchDatums = append(q.scratchDatums, tree.DNull)
+		}
+	}
+
 	for _, n := range q.inputColumns {
 		it, err := row.DatumNamed(n)
 		if err != nil {
@@ -150,6 +159,7 @@ func (q *queryBuffer) DeleteQueryForRow(row cdcevent.Row) (queryBuilder, error) 
 	if !ok {
 		return queryBuilder{}, errors.Errorf("no pre-generated delete query for table %d", row.TableID)
 	}
+	dq.Reset()
 	return dq, nil
 }
 
@@ -162,6 +172,7 @@ func (q *queryBuffer) InsertQueryForRow(row cdcevent.Row) (queryBuilder, error) 
 	if !ok {
 		return queryBuilder{}, errors.Errorf("no pre-generated insert query for table %d column family %d", row.TableID, row.FamilyID)
 	}
+	insertQueryBuilder.Reset()
 	return insertQueryBuilder, nil
 }
 
@@ -174,6 +185,7 @@ func (q *queryBuffer) ApplierQueryForRow(row cdcevent.Row) (queryBuilder, error)
 	if !ok {
 		return queryBuilder{}, errors.Errorf("no pre-generated apply query for table %d column family %d", row.TableID, row.FamilyID)
 	}
+	applierQueryBuilder.Reset()
 	return applierQueryBuilder, nil
 }
 
@@ -252,11 +264,24 @@ func (srp *sqlRowProcessor) ProcessRow(
 		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
 	}
 	srp.lastRow = row
+
+	var parsedBeforeRow *cdcevent.Row
+	if srp.querier.RequiresParsedBeforeRow() {
+		before, err := srp.decoder.DecodeKV(ctx, roachpb.KeyValue{
+			Key:   kv.Key,
+			Value: prevValue,
+		}, cdcevent.PrevRow, prevValue.Timestamp, false)
+		if err != nil {
+			return batchStats{}, err
+		}
+		parsedBeforeRow = &before
+	}
+
 	var stats batchStats
 	if row.IsDeleted() {
-		stats, err = srp.querier.DeleteRow(ctx, txn, srp.ie, row)
+		stats, err = srp.querier.DeleteRow(ctx, txn, srp.ie, row, parsedBeforeRow)
 	} else {
-		stats, err = srp.querier.InsertRow(ctx, txn, srp.ie, row, prevValue)
+		stats, err = srp.querier.InsertRow(ctx, txn, srp.ie, row, parsedBeforeRow, prevValue.RawBytes == nil)
 	}
 	return stats, err
 }
@@ -354,8 +379,15 @@ func (lww *lwwQuerier) AddTable(targetDescID int32, td catalog.TableDescriptor) 
 	return err
 }
 
+func (lww *lwwQuerier) RequiresParsedBeforeRow() bool { return false }
+
 func (lww *lwwQuerier) InsertRow(
-	ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevValue roachpb.Value,
+	ctx context.Context,
+	txn isql.Txn,
+	ie isql.Executor,
+	row cdcevent.Row,
+	prevRow *cdcevent.Row,
+	likelyInsert bool,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
 	if txn != nil {
@@ -369,7 +401,7 @@ func (lww *lwwQuerier) InsertRow(
 		return batchStats{}, err
 	}
 	var optimisticInsertConflicts int64
-	if prevValue.RawBytes == nil && tryOptimisticInsertEnabled.Get(&lww.settings.SV) {
+	if likelyInsert && tryOptimisticInsertEnabled.Get(&lww.settings.SV) {
 		stmt, datums, err := insertQueryBuilder.Query(insertQueriesOptimisticIndex)
 		if err != nil {
 			return batchStats{}, err
@@ -401,7 +433,7 @@ func (lww *lwwQuerier) InsertRow(
 }
 
 func (lww *lwwQuerier) DeleteRow(
-	ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row,
+	ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
 	if txn != nil {
@@ -489,13 +521,13 @@ func insertColumnNamesForFamily(
 	return inputColumnNames, nil
 }
 
-func valueStringForNumItems(count int) string {
+func valueStringForNumItems(count int, startIndex int) string {
 	var valueString strings.Builder
-	for argIdx := 1; argIdx <= count; argIdx++ {
-		if argIdx == 1 {
-			fmt.Fprintf(&valueString, "$%d", argIdx)
+	for i := 0; i < count; i++ {
+		if i == 0 {
+			fmt.Fprintf(&valueString, "$%d", i+startIndex)
 		} else {
-			fmt.Fprintf(&valueString, ", $%d", argIdx)
+			fmt.Fprintf(&valueString, ", $%d", i+startIndex)
 		}
 
 	}
@@ -530,7 +562,7 @@ func makeLWWInsertQueries(
 		}
 
 		addColToQueryParts(originTimestampColumnName)
-		valStr := valueStringForNumItems(len(inputColumnNames) + 1)
+		valStr := valueStringForNumItems(len(inputColumnNames)+1, 1)
 		parsedOptimisticQuery, err := parser.ParseOne(fmt.Sprintf(insertQueryOptimistic,
 			dstTableDescID,
 			columnNames.String(),

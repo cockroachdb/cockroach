@@ -56,7 +56,7 @@ func TestUDFWithRandomTables(t *testing.T) {
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, applierTypes)
 	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, data rand_table, existing rand_table)
+		CREATE OR REPLACE FUNCTION repl_apply(action STRING, data rand_table, existing rand_table, prev rand_table)
 		RETURNS crdb_replication_applier_decision
 		AS $$
 		BEGIN
@@ -105,7 +105,7 @@ func TestUDFApplieSpecified(t *testing.T) {
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, applierTypes)
 	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies)
+		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies)
 		RETURNS crdb_replication_applier_decision
 		AS $$
 		BEGIN
@@ -152,7 +152,7 @@ func TestUDFInsertOnly(t *testing.T) {
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, applierTypes)
 	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies)
+		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies)
 		RETURNS crdb_replication_applier_decision
 		AS $$
 		BEGIN
@@ -188,6 +188,57 @@ func TestUDFInsertOnly(t *testing.T) {
 		{"3", "33"},
 		{"4", "44"},
 		{"5", "55"},
+	})
+}
+
+func TestUDFPreviousValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, sqlA, sqlB, cleanup := setupTwoDBUDFTestCluster(t)
+	defer cleanup()
+
+	runnerA := sqlutils.MakeSQLRunner(sqlA)
+	runnerB := sqlutils.MakeSQLRunner(sqlB)
+	tableName := "tallies"
+	stmt := "CREATE TABLE tallies(pk INT PRIMARY KEY, v INT)"
+	runnerA.Exec(t, stmt)
+	runnerA.Exec(t, "INSERT INTO tallies VALUES (1, 10)")
+	runnerB.Exec(t, stmt)
+	runnerB.Exec(t, "INSERT INTO tallies VALUES (1, 20)")
+	runnerB.Exec(t, applierTypes)
+	runnerB.Exec(t, `
+		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies)
+		RETURNS crdb_replication_applier_decision
+		AS $$
+		BEGIN
+		IF action = 'update' THEN
+			RETURN ('upsert_specified', ((proposed).pk, (existing).v + ((proposed).v-(prev).v)));
+		END IF;
+		RETURN ('ignore_proposed', NULL);
+		END
+		$$ LANGUAGE plpgsql
+		`)
+
+	addCol := fmt.Sprintf(`ALTER TABLE %s `+lwwColumnAdd, tableName)
+	runnerA.Exec(t, addCol)
+	runnerB.Exec(t, addCol)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+
+	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
+	var jobBID jobspb.JobID
+	runnerB.QueryRow(t, streamStartStmt, dbAURL.String()).Scan(&jobBID)
+
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
+	runnerA.Exec(t, "UPDATE tallies SET v = 15 WHERE pk = 1")
+
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
+
+	runnerB.CheckQueryResults(t, "SELECT * FROM tallies", [][]string{
+		{"1", "25"},
 	})
 }
 
