@@ -446,6 +446,15 @@ type PreemptedVM struct {
 	PreemptedAt time.Time
 }
 
+// CreatePreemptedVMs returns a list of PreemptedVM created from given list of vmNames
+func CreatePreemptedVMs(vmNames []string) []PreemptedVM {
+	preemptedVMs := make([]PreemptedVM, len(vmNames))
+	for i, name := range vmNames {
+		preemptedVMs[i] = PreemptedVM{Name: name}
+	}
+	return preemptedVMs
+}
+
 // ServiceAddress stores the IP and port of a service.
 type ServiceAddress struct {
 	IP   string
