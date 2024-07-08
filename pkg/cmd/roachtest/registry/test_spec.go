@@ -290,10 +290,9 @@ func (cs CloudSet) NoAzure() CloudSet {
 }
 
 // Remove removes all clouds passed in and returns the new set.
-func (cs CloudSet) Remove(clouds ...string) CloudSet {
-	assertValidValues(allClouds, clouds...)
+func (cs CloudSet) Remove(clouds CloudSet) CloudSet {
 	copyCs := CloudSet{m: cs.m}
-	for _, c := range clouds {
+	for c := range clouds.m {
 		copyCs.m = removeFromSet(copyCs.m, c)
 	}
 
@@ -314,9 +313,13 @@ func (cs CloudSet) String() string {
 
 // AssertInitialized panics if the CloudSet is the zero value.
 func (cs CloudSet) AssertInitialized() {
-	if cs.m == nil {
+	if !cs.IsInitialized() {
 		panic("CloudSet not initialized")
 	}
+}
+
+func (cs CloudSet) IsInitialized() bool {
+	return cs.m != nil
 }
 
 // Suite names.
@@ -379,7 +382,7 @@ func (ss SuiteSet) String() string {
 
 // AssertInitialized panics if the SuiteSet is the zero value.
 func (ss SuiteSet) AssertInitialized() {
-	if ss.m == nil {
+	if !ss.IsInitialized() {
 		panic("SuiteSet not initialized")
 	}
 }
