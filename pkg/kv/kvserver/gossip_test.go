@@ -146,6 +146,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// As of Nov 2018 it takes 3.6s.
 	skip.UnderShort(t)
 	skip.UnderDeadlock(t)
+	skip.UnderRace(t)
 	ctx := context.Background()
 
 	// Shorten the raft tick interval and election timeout to make range leases
