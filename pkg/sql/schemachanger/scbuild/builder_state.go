@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -272,6 +273,28 @@ func (b *builderState) LogEventForExistingTarget(e scpb.Element) {
 		panic(errors.AssertionFailedf("no target set for element %s in builder state", key))
 	}
 	es.withLogEvent = true
+}
+
+// LogEventForExistingPayload implements the scbuildstmt.BuilderState interface.
+func (b *builderState) LogEventForExistingPayload(e scpb.Element, payload logpb.EventPayload) {
+	id := screl.GetDescID(e)
+	key := screl.ElementString(e)
+
+	c, ok := b.descCache[id]
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"elements for descriptor ID %d not found in builder state, %s expected", id, key))
+	}
+	i, ok := c.elementIndexMap[key]
+	if !ok {
+		panic(errors.AssertionFailedf("element %s expected in builder state but not found", key))
+	}
+	es := &b.output[i]
+	if es.target == scpb.InvalidTarget {
+		panic(errors.AssertionFailedf("no target set for element %s in builder state", key))
+	}
+	es.withLogEvent = true
+	es.maybePayload = payload
 }
 
 var _ scbuildstmt.PrivilegeChecker = (*builderState)(nil)
@@ -1099,6 +1122,20 @@ func (b *builderState) ResolveTable(
 	}
 	if rel, ok := c.desc.(catalog.TableDescriptor); !ok || !rel.IsTable() {
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table", c.desc.GetName()))
+	}
+	return b.QueryByID(c.desc.GetID())
+}
+
+// ResolvePhysicalTable implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolvePhysicalTable(
+	name *tree.UnresolvedObjectName, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	c := b.resolveRelation(name, p)
+	if c == nil {
+		return nil
+	}
+	if rel, ok := c.desc.(catalog.TableDescriptor); !ok || !rel.IsPhysicalTable() {
+		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a table, view, or sequence", c.desc.GetName()))
 	}
 	return b.QueryByID(c.desc.GetID())
 }

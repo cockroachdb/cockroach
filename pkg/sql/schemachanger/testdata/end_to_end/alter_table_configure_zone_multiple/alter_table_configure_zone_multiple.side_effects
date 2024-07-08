@@ -1,14 +1,13 @@
 /* setup */
-CREATE DATABASE db;
+CREATE TABLE t(i int);
 ----
 ...
-+database {0 0 db} -> 104
-+schema {104 0 public} -> 105
++object {100 101 t} -> 104
 
 /* test */
-ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
-ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 10000;
-ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 10;
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 7;
+ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 10000;
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 10;
 ----
 begin transaction #1
 # begin StatementPhase
@@ -17,10 +16,10 @@ write *eventpb.SetZoneConfig to event log:
   config:
     options:
     - num_replicas = 7
-    target: DATABASE db
+    target: TABLE defaultdb.public.t
   sql:
     descriptorId: 104
-    statement: ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹num_replicas› = ‹7›
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹7›
     tag: CONFIGURE ZONE
     user: root
 ## StatementPhase stage 1 of 1 with 1 MutationType op
@@ -30,10 +29,10 @@ write *eventpb.SetZoneConfig to event log:
   config:
     options:
     - '"gc.ttlseconds" = 10000'
-    target: DATABASE db
+    target: TABLE defaultdb.public.t
   sql:
     descriptorId: 104
-    statement: ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›
     tag: CONFIGURE ZONE
     user: root
 ## StatementPhase stage 1 of 1 with 1 MutationType op
@@ -43,10 +42,10 @@ write *eventpb.SetZoneConfig to event log:
   config:
     options:
     - num_replicas = 10
-    target: DATABASE db
+    target: TABLE defaultdb.public.t
   sql:
     descriptorId: 104
-    statement: ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹num_replicas› = ‹10›
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹10›
     tag: CONFIGURE ZONE
     user: root
 ## StatementPhase stage 1 of 1 with 1 MutationType op

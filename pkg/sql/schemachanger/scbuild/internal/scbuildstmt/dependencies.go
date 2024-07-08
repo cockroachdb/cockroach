@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
 // BuildCtx wraps BuilderState and exposes various convenience methods for the
@@ -101,6 +102,10 @@ type BuilderState interface {
 	// log for the existing target corresponding to the provided element.
 	// An error is thrown if no such target exists.
 	LogEventForExistingTarget(element scpb.Element)
+
+	// LogEventForExistingPayload is like LogEventForExistingTarget, but it allows
+	// the caller to provide additional details of the payload.
+	LogEventForExistingPayload(element scpb.Element, payload logpb.EventPayload)
 
 	// GenerateUniqueDescID returns the next available descriptor id for a new
 	// descriptor and mark the new id as being used for new descriptor, so that
@@ -392,6 +397,10 @@ type NameResolver interface {
 
 	// ResolveTable retrieves a table by name and returns its elements.
 	ResolveTable(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet
+
+	// ResolvePhysicalTable retrieves a table, materialized view, or sequence
+	// by name and returns its elements.
+	ResolvePhysicalTable(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet
 
 	// ResolveSequence retrieves a sequence by name and returns its elements.
 	ResolveSequence(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet
