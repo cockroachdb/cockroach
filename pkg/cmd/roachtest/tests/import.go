@@ -86,16 +86,15 @@ func registerImportNodeShutdown(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             "import/nodeShutdown/worker",
-		Owner:            registry.OwnerSQLQueries,
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "import/nodeShutdown/worker",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(4),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Cloud() != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-			}
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -105,16 +104,15 @@ func registerImportNodeShutdown(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:             "import/nodeShutdown/coordinator",
-		Owner:            registry.OwnerSQLQueries,
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "import/nodeShutdown/coordinator",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(4),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Cloud() != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-			}
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -235,19 +233,18 @@ func registerImportTPCH(r registry.Registry) {
 	} {
 		item := item
 		r.Add(registry.TestSpec{
-			Name:              fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
-			Owner:             registry.OwnerSQLQueries,
-			Benchmark:         true,
-			Cluster:           r.MakeClusterSpec(item.nodes),
-			CompatibleClouds:  registry.AllExceptAWS,
+			Name:      fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
+			Owner:     registry.OwnerSQLQueries,
+			Benchmark: true,
+			Cluster:   r.MakeClusterSpec(item.nodes),
+			// Uses gs://cockroach-fixtures-us-east1. See:
+			// https://github.com/cockroachdb/cockroach/issues/105968
+			CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
 			Suites:            registry.Suites(registry.Nightly),
 			Timeout:           item.timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Cloud() != spec.GCE && !c.IsLocal() {
-					t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-				}
 				tick, perfBuf := initBulkJobPerfArtifacts(t.Name(), item.timeout)
 
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())

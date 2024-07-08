@@ -388,9 +388,6 @@ func (bo replicateBulkOps) sourceRunCmd(tenantName string, nodes option.NodeList
 func (bo replicateBulkOps) runDriver(
 	workloadCtx context.Context, c cluster.Cluster, t test.Test, setup *c2cSetup,
 ) error {
-	if c.Cloud() != spec.GCE && !c.IsLocal() {
-		t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-	}
 	runBackupMVCCRangeTombstones(workloadCtx, t, c, mvccRangeTombstoneConfig{
 		skipBackupRestore: true,
 		skipClusterSetup:  true,
@@ -1086,9 +1083,6 @@ func c2cRegisterWrapper(
 }
 
 func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
-	if !c.IsLocal() {
-		t.Skip("c2c/acceptance is only meant to run on a local cluster")
-	}
 	sp := replicationSpec{
 		srcNodes: 1,
 		dstNodes: 1,
@@ -1364,7 +1358,6 @@ func registerClusterToCluster(r registry.Registry) {
 			skip:                      "used for debugging when the full test fails",
 		},
 	} {
-		sp := sp
 		c2cRegisterWrapper(r, sp,
 			func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rd := makeReplicationDriver(t, c, sp)

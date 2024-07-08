@@ -192,16 +192,15 @@ func registerCopy(r registry.Registry) {
 	for _, tc := range testcases {
 		tc := tc
 		r.Add(registry.TestSpec{
-			Name:             fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
-			Owner:            registry.OwnerKV,
-			Cluster:          r.MakeClusterSpec(tc.nodes),
-			CompatibleClouds: registry.AllExceptAWS,
+			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(tc.nodes),
+			// Uses gs://cockroach-fixtures-us-east1. See:
+			// https://github.com/cockroachdb/cockroach/issues/105968
+			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Cloud() != spec.GCE && !c.IsLocal() {
-					t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-				}
 				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},
 		})
