@@ -56,6 +56,11 @@ export default function (props: GraphDashboardProps) {
          title="Row Updates Applied"
          nonNegativeRate
        />
+      <Metric
+         name="cr.node.logical_replication.events_dlqed"
+         title="Row Updates sent to DLQ"
+         nonNegativeRate
+       />
      </Axis>
    </LineGraph>,
 
@@ -149,6 +154,52 @@ export default function (props: GraphDashboardProps) {
       downsampleMax
     />
   ))}
+  </Axis>
+  </LineGraph>,
+
+  <LineGraph
+    title="DLQ Causes"
+    sources={storeSources}
+    tenantSource={tenantSource}
+    tooltip={`Reasons events were sent to the DLQ `}
+    showMetricsInTooltip={true}
+    >
+    <Axis label="updates">
+      <Metric
+        name="cr.node.logical_replication.events_dlqed_age"
+        title="Retry Duration Expired"
+        nonNegativeRate
+      />
+      <Metric
+        name="cr.node.logical_replication.events_dlqed_space"
+        title="Retry Queue Full"
+        nonNegativeRate
+      />
+      <Metric
+        name="cr.node.logical_replication.events_dlqed_errtype"
+        title="Non-retryable"
+        nonNegativeRate
+      />
+    </Axis>
+    
+  </LineGraph>,
+  
+  <LineGraph
+    title="Retry Queue Size"
+    sources={storeSources}
+    tenantSource={tenantSource}
+    tooltip={`Total size of the retry queues across all processors in all LDR jobs`}
+    showMetricsInTooltip={true}
+  >
+  <Axis units={AxisUnits.Bytes} label="bytes">
+    {nodeIDs.map( node => (
+      <Metric
+        key={node}
+        name="cr.node.logical_replication.retry_queue_bytes"
+        title={nodeDisplayName(nodeDisplayNameByID, node)}
+        sources={[node]}
+      />
+    ))}
   </Axis>
   </LineGraph>,
   ];
