@@ -1049,9 +1049,6 @@ func (i *intentInterleavingIter) HasPointAndRange() (bool, bool) {
 
 // RangeBounds implements SimpleMVCCIterator.
 func (i *intentInterleavingIter) RangeBounds() roachpb.Span {
-	if _, hasRange := i.HasPointAndRange(); !hasRange {
-		return roachpb.Span{}
-	}
 	return i.iter.RangeBounds()
 }
 
