@@ -380,7 +380,6 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 	for _, arg := range args {
 		switch arg.Key {
 		case "predecessors":
-			arg := arg // copy range variable
 			predecessors = func(rng *rand.Rand, v *clusterupgrade.Version, n int) ([]*clusterupgrade.Version, error) {
 				return parseVersions(arg.Vals), nil
 			}

@@ -479,7 +479,7 @@ func buildFilterHostErrorCliArgs(
 	vms vm.List, since time.Time, projectName string,
 ) ([]string, error) {
 	// Create a filter to match hostError events for the specified projectName
-	filter := fmt.Sprintf(`resource.type=gce_instance AND protoPayload.methodName=compute.instances.hostError 
+	filter := fmt.Sprintf(`resource.type=gce_instance AND protoPayload.methodName=compute.instances.hostError
 		AND logName=projects/%s/logs/cloudaudit.googleapis.com%%2Fsystem_event`, projectName)
 	return buildFilterCliArgs(vms, projectName, since, filter)
 }
@@ -2240,7 +2240,6 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 	// deleted.
 	g = errgroup.Group{}
 	for cluster, project := range clusterProjectMap {
-		cluster, project := cluster, project
 		g.Go(func() error {
 			return deleteInstanceTemplate(project /* project */, cluster /* cluster */)
 		})

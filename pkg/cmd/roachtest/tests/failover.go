@@ -69,8 +69,6 @@ func registerFailover(r registry.Registry) {
 		}
 
 		for _, readOnly := range []bool{false, true} {
-			readOnly := readOnly // pin loop variable
-			suffix := suffix
 			if readOnly {
 				suffix = "/read-only" + suffix
 			} else {
@@ -129,8 +127,6 @@ func registerFailover(r registry.Registry) {
 		})
 
 		for _, failureMode := range allFailureModes {
-			failureMode := failureMode // pin loop variable
-
 			clusterOpts := make([]spec.Option, 0)
 			clusterOpts = append(clusterOpts, spec.CPU(2))
 			clouds := registry.AllExceptAWS
