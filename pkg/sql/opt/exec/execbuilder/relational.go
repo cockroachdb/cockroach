@@ -3654,7 +3654,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (_ execPlan, outputCols colOrd
 			OrderBy:    orderingExprs,
 			Frame:      frame,
 		}
-		wrappedFn, err := b.wrapFunction(name)
+		wrappedFn, err := b.wrapBuiltinFunction(name)
 		if err != nil {
 			return execPlan{}, colOrdMap{}, err
 		}
