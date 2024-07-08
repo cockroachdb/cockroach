@@ -40,10 +40,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -311,6 +313,12 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderKVInterceptorEstimatedReplicationBytes = metric.Metadata{
+		Name:        "distsender.estimated_replication_bytes",
+		Help:        "Total number of estimated bytes for KV replication traffic by DistSender",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // metamorphicRouteToLeaseholderFirst is used to control the behavior of the
@@ -427,6 +435,7 @@ type DistSenderMetrics struct {
 	MethodCounts                       [kvpb.NumMethods]*metric.Counter
 	ErrCounts                          [kvpb.NumErrors]*metric.Counter
 	CircuitBreaker                     DistSenderCircuitBreakerMetrics
+	KVInterceptor                      *DistSenderKVInterceptorMetrics
 	DistSenderRangeFeedMetrics
 }
 
@@ -452,7 +461,38 @@ type DistSenderRangeFeedMetrics struct {
 	Errors                 rangeFeedErrorCounters
 }
 
-func MakeDistSenderMetrics() DistSenderMetrics {
+// DistSenderKVInterceptorMetrics is a set of KV interceptor specific metrics.
+type DistSenderKVInterceptorMetrics struct {
+	EstimatedReplicationBytes *aggmetric.AggCounter
+
+	mu struct {
+		syncutil.Mutex
+		// cachedPathMetrics stores a cache of network paths to the metrics
+		// which have been initialized. Having this layer of caching prevents us
+		// from needing to compute the normalized locality on every request.
+		cachedPathMetrics map[networkPath]networkPathMetrics
+		// pathMetrics stores a mapping of the locality values to network path
+		// metrics. These metrics should only be initialized once for every set
+		// of locality values. We will apply normalized locality values to
+		// reduce the total number of metrics that we'll be tracking. For
+		// example, for a cross-region request for nodes with the "region" and
+		// "zone" locality keys, the metric labels will only include the region
+		// (and not the zone).
+		pathMetrics map[string]networkPathMetrics
+	}
+	baseLocality roachpb.Locality
+}
+
+type networkPath struct {
+	fromNodeID roachpb.NodeID
+	toNodeID   roachpb.NodeID
+}
+
+type networkPathMetrics struct {
+	EstimatedReplicationBytes *aggmetric.Counter
+}
+
+func MakeDistSenderMetrics(locality roachpb.Locality) DistSenderMetrics {
 	m := DistSenderMetrics{
 		BatchCount:                         metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:                  metric.NewCounter(metaDistSenderPartialBatchCount),
@@ -478,6 +518,7 @@ func MakeDistSenderMetrics() DistSenderMetrics {
 		ProxyForwardSentCount:              metric.NewCounter(metaDistSenderProxyForwardSentCount),
 		ProxyForwardErrCount:               metric.NewCounter(metaDistSenderProxyForwardErrCount),
 		DistSenderRangeFeedMetrics:         makeDistSenderRangeFeedMetrics(),
+		KVInterceptor:                      newDistSenderKVInterceptorMetrics(locality),
 	}
 	for i := range m.MethodCounts {
 		method := kvpb.Method(i).String()
@@ -595,6 +636,101 @@ func makeDistSenderRangeFeedMetrics() DistSenderRangeFeedMetrics {
 
 // MetricStruct implements metrics.Struct interface.
 func (DistSenderRangeFeedMetrics) MetricStruct() {}
+
+func newDistSenderKVInterceptorMetrics(locality roachpb.Locality) *DistSenderKVInterceptorMetrics {
+	// Metric labels for KV replication traffic will be derived from the SQL
+	// server's locality. e.g. {"from_region", "from_az", "to_region", "to_az"}.
+	var labels []string
+	for _, t := range locality.Tiers {
+		labels = append(labels, fmt.Sprintf("from_%s", t.Key))
+	}
+	for _, t := range locality.Tiers {
+		labels = append(labels, fmt.Sprintf("to_%s", t.Key))
+	}
+	m := &DistSenderKVInterceptorMetrics{
+		baseLocality: locality,
+		EstimatedReplicationBytes: aggmetric.NewCounter(
+			metaDistSenderKVInterceptorEstimatedReplicationBytes, labels...,
+		),
+	}
+	m.mu.cachedPathMetrics = make(map[networkPath]networkPathMetrics)
+	m.mu.pathMetrics = make(map[string]networkPathMetrics)
+	return m
+}
+
+// MetricStruct implements the metrics.Struct interface.
+func (m *DistSenderKVInterceptorMetrics) MetricStruct() {}
+
+// updateEstimatedReplicationBytes updates the EstimatedReplicationBytes metric
+// that represents the estimated replication bytes for the given KV replication
+// network path.
+func (m *DistSenderKVInterceptorMetrics) updateEstimatedReplicationBytes(
+	fromNodeID roachpb.NodeID,
+	fromLocality roachpb.Locality,
+	toNodeID roachpb.NodeID,
+	toLocality roachpb.Locality,
+	inc int64,
+) {
+	m.getEstimatedReplicationBytes(fromNodeID, fromLocality, toNodeID, toLocality).Inc(inc)
+}
+
+// getEstimatedReplicationBytes returns the metric that represents the estimated
+// replication bytes for the given network path.
+func (m *DistSenderKVInterceptorMetrics) getEstimatedReplicationBytes(
+	fromNodeID roachpb.NodeID,
+	fromLocality roachpb.Locality,
+	toNodeID roachpb.NodeID,
+	toLocality roachpb.Locality,
+) *aggmetric.Counter {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check if we have cached values.
+	np := networkPath{fromNodeID: fromNodeID, toNodeID: toNodeID}
+	if cached, ok := m.mu.cachedPathMetrics[np]; ok {
+		return cached.EstimatedReplicationBytes
+	}
+
+	// Check if we've already initialized the metric. This is the case if a
+	// different network path results in the same normalized locality values.
+	labelValues := makeLocalityLabelValues(m.baseLocality, fromLocality, toLocality)
+	storeKey := strings.Join(labelValues, ",")
+	pm, ok := m.mu.pathMetrics[storeKey]
+	if !ok {
+		pm = networkPathMetrics{
+			EstimatedReplicationBytes: m.EstimatedReplicationBytes.AddChild(labelValues...),
+		}
+		m.mu.pathMetrics[storeKey] = pm
+	}
+	m.mu.cachedPathMetrics[np] = pm
+
+	return pm.EstimatedReplicationBytes
+}
+
+// makeLocalityLabelValues returns a list of label values which can be used for
+// network path metrics. This applies a mapping approach where all the values in
+// "from" and "to" localities are taken up until the first value that differs.
+// Remaining values will be padded as empty strings. Note that the keys must
+// exist in the given base locality. See test cases for more information.
+func makeLocalityLabelValues(baseLocality, fromLocality, toLocality roachpb.Locality) []string {
+	labelValues := make([]string, 2*len(baseLocality.Tiers))
+	for i := 0; i < len(baseLocality.Tiers); i++ {
+		if i >= len(fromLocality.Tiers) ||
+			i >= len(toLocality.Tiers) ||
+			fromLocality.Tiers[i].Key != baseLocality.Tiers[i].Key ||
+			toLocality.Tiers[i].Key != baseLocality.Tiers[i].Key {
+			break
+		}
+		labelValues[i] = fromLocality.Tiers[i].Value
+		labelValues[i+len(baseLocality.Tiers)] = toLocality.Tiers[i].Value
+
+		// Stop at the first non-matching value.
+		if fromLocality.Tiers[i].Value != toLocality.Tiers[i].Value {
+			break
+		}
+	}
+	return labelValues
+}
 
 // updateCrossLocalityMetricsOnReplicaAddressedBatchRequest updates
 // DistSenderMetrics for batch requests that have been divided and are currently
@@ -797,7 +933,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		clock:         cfg.Clock,
 		nodeDescs:     cfg.NodeDescs,
 		nodeIDGetter:  nodeIDGetter,
-		metrics:       MakeDistSenderMetrics(),
+		metrics:       MakeDistSenderMetrics(cfg.Locality),
 		kvInterceptor: cfg.KVInterceptor,
 		locality:      cfg.Locality,
 		healthFunc:    cfg.HealthFunc,
@@ -2884,6 +3020,7 @@ func (ds *DistSender) sendToReplicas(
 					if ba.IsWrite() {
 						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, true /* isWrite */)
 						reqInfo = tenantcostmodel.MakeRequestInfo(ba, len(desc.Replicas().Descriptors()), networkCost)
+						ds.updateEstimatedReplicationBytes(ctx, desc, &curReplica, reqInfo.WriteBytes())
 					}
 					if !reqInfo.IsWrite() {
 						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, false /* isWrite */)
@@ -3223,6 +3360,38 @@ func (ds *DistSender) computeNetworkCost(
 	}
 
 	return cost
+}
+
+func (ds *DistSender) updateEstimatedReplicationBytes(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	leaseholderReplica *roachpb.ReplicaDescriptor,
+	writeBytes int64,
+) {
+	fromNode, err := ds.nodeDescs.GetNodeDescriptor(leaseholderReplica.NodeID)
+	if err != nil {
+		// If we don't know where a node is, we can't determine the network
+		// path for the operation.
+		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", leaseholderReplica.NodeID, err)
+		return
+	}
+	for _, replica := range desc.Replicas().Descriptors() {
+		if replica.ReplicaID == leaseholderReplica.ReplicaID {
+			continue
+		}
+		toNode, err := ds.nodeDescs.GetNodeDescriptor(replica.NodeID)
+		if err != nil {
+			// If we don't know where a node is, we can't determine the network
+			// path for the operation.
+			log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
+			continue
+		}
+		ds.metrics.KVInterceptor.updateEstimatedReplicationBytes(
+			leaseholderReplica.NodeID, fromNode.Locality,
+			replica.NodeID, toNode.Locality,
+			writeBytes,
+		)
+	}
 }
 
 func (ds *DistSender) getReplicaRegion(
