@@ -1079,12 +1079,11 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 			// for tokens.
 			for i := range entries {
 				entryFCState := getFlowControlState(entries[i])
-				if !entryFCState.usesFlowControl {
-					continue
-				}
 				wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
-				rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
 				rs.replicaSendStream.advanceNextRaftIndexAndSent(entryFCState)
+				if entryFCState.usesFlowControl {
+					rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
+				}
 			}
 			continue
 		}
