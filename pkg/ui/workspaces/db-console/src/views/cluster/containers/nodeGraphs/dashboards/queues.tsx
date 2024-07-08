@@ -338,6 +338,10 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
+      tooltip={`The Consistency Checker Queue periodically checks 
+      that all replicas in a given range are consistent. For large 
+      clusters, the queue is always expected to have a pending 
+      backlog.`}
     >
       <Axis units={AxisUnits.Count} label="actions">
         <Metric
