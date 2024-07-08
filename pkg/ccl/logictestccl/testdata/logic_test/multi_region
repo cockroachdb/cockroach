@@ -1602,3 +1602,17 @@ statement ok
 SET sql_safe_updates = false;
 DROP DATABASE "mr-create-table-as";
 SET sql_safe_updates = true
+
+# Checks that DROP REGION works when index expressions exist on tables,
+# which will create public inaccessible columns (#126549).
+subtest drop_region_126549
+
+statement ok
+CREATE DATABASE  drop_region_126549 PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
+CREATE TABLE drop_region_126549.t1 (n string PRIMARY KEY, INDEX((lower(n)))) LOCALITY REGIONAL BY ROW;
+
+statement ok
+ALTER DATABASE drop_region_126549 DROP REGION "us-east-1";
+
+subtest end
+
