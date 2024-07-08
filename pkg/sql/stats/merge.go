@@ -72,6 +72,25 @@ func MergedStatistics(
 	return mergedStats
 }
 
+// stripOuterBuckets removes the outer buckets from a histogram without a
+// leading NULL bucket.
+func stripOuterBuckets(
+	ctx context.Context, evalCtx *eval.Context, histogram []cat.HistogramBucket,
+) []cat.HistogramBucket {
+	if len(histogram) == 0 {
+		return histogram
+	}
+	startIdx := 0
+	endIdx := len(histogram)
+	if histogram[0].UpperBound.IsMin(ctx, evalCtx) && histogram[0].NumEq == 0 {
+		startIdx = 1
+	}
+	if histogram[len(histogram)-1].UpperBound.IsMax(ctx, evalCtx) && histogram[len(histogram)-1].NumEq == 0 {
+		endIdx = len(histogram) - 1
+	}
+	return histogram[startIdx:endIdx]
+}
+
 // mergeExtremesStatistic merges a full table statistic with a partial table
 // statistic and returns a new full table statistic. It does this by prepending
 // the partial histogram buckets with UpperBound less than the first bucket of
@@ -118,6 +137,7 @@ func MergedStatistics(
 func mergeExtremesStatistic(
 	ctx context.Context, fullStat *TableStatistic, partialStat *TableStatistic, st *cluster.Settings,
 ) (*TableStatistic, error) {
+	var compareCtx *eval.Context
 	fullStatColKey := MakeSortedColStatKey(fullStat.ColumnIDs)
 	partialStatColKey := MakeSortedColStatKey(partialStat.ColumnIDs)
 	if fullStatColKey != partialStatColKey {
@@ -162,6 +182,11 @@ func mergeExtremesStatistic(
 		partialNullCount = uint64(partialHistogram[0].NumEq)
 		partialHistogram = partialHistogram[1:]
 	}
+
+	// Remove the outer buckets from the ends of the histograms if they exist.
+	// This is done to avoid overlapping buckets when merging the histograms.
+	fullHistogram = stripOuterBuckets(ctx, compareCtx, fullHistogram)
+	partialHistogram = stripOuterBuckets(ctx, compareCtx, partialHistogram)
 
 	var cmpCtx *eval.Context
 
@@ -241,6 +266,7 @@ func mergeExtremesStatistic(
 	hist := histogram{
 		buckets: mergedHistogram,
 	}
+	hist.adjustCounts(ctx, compareCtx, fullStat.HistogramData.ColumnType, float64(mergedRowCount), float64(mergedDistinctCount))
 	histData, err := hist.toHistogramData(ctx, fullStat.HistogramData.ColumnType, st)
 	if err != nil {
 		return nil, err
