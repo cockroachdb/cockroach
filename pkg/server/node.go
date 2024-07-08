@@ -262,8 +262,8 @@ type nodeMetrics struct {
 	ActiveMuxRangeFeed            *metric.Gauge
 }
 
-func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
-	nm := nodeMetrics{
+func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeMetrics {
+	nm := &nodeMetrics{
 		Latency: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaExecLatency,
@@ -298,7 +298,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 // callComplete records very high-level metrics about the number of completed
 // calls and their latency. Currently, this only records statistics at the batch
 // level; stats on specific lower-level kv operations are not recorded.
-func (nm nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
+func (nm *nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
 	if pErr != nil && pErr.TransactionRestart() == kvpb.TransactionRestart_NONE {
 		nm.Err.Inc(1)
 	} else {
@@ -314,7 +314,7 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
 // activities across different zones within the same region or in cases where
 // region tiers are not configured. These metrics may include batches that were
 // not successfully sent but were terminated at an early stage.
-func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
+func (nm *nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
 	comparisonResult roachpb.LocalityComparisonType, inc int64,
 ) {
 	nm.BatchRequestsBytes.Inc(inc)
@@ -331,7 +331,7 @@ func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
 // parameter determined during the initial batch requests check. The underlying
 // assumption is that the response should match the cross-region or cross-zone
 // nature of the requests.
-func (nm nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
+func (nm *nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
 	comparisonResult roachpb.LocalityComparisonType, inc int64,
 ) {
 	nm.BatchResponsesBytes.Inc(inc)
@@ -359,7 +359,7 @@ type Node struct {
 	storeCfg     kvserver.StoreConfig     // Config to use and pass to stores
 	execCfg      *sql.ExecutorConfig      // For event logging
 	stores       *kvserver.Stores         // Access to node-local stores
-	metrics      nodeMetrics
+	metrics      *nodeMetrics
 	recorder     *status.MetricsRecorder
 	startedAt    int64
 	lastUp       int64
