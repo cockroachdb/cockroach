@@ -32,17 +32,16 @@ import (
 
 func registerImportCancellation(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             `import-cancellation`,
-		Owner:            registry.OwnerSQLQueries,
-		Timeout:          6 * time.Hour,
-		Cluster:          r.MakeClusterSpec(6, spec.CPU(32)),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    `import-cancellation`,
+		Owner:   registry.OwnerSQLQueries,
+		Timeout: 6 * time.Hour,
+		Cluster: r.MakeClusterSpec(6, spec.CPU(32)),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Cloud() != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-			}
 			runImportCancellation(ctx, t, c)
 		},
 	})

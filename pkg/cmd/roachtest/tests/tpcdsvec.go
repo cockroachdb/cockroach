@@ -186,16 +186,15 @@ WITH unsafe_restore_incompatible_version;
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             "tpcdsvec",
-		Owner:            registry.OwnerSQLQueries,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(3),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:      "tpcdsvec",
+		Owner:     registry.OwnerSQLQueries,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(3),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Cloud() != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
-			}
 			runTPCDSVec(ctx, t, c)
 		},
 	})

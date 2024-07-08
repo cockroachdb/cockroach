@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -177,10 +178,12 @@ func registerCancel(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("cancel/tpch/distsql/queries=%s,nodes=%d", queries, numNodes),
-		Owner:            registry.OwnerSQLQueries,
-		Cluster:          r.MakeClusterSpec(numNodes),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    fmt.Sprintf("cancel/tpch/distsql/queries=%s,nodes=%d", queries, numNodes),
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(numNodes),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -189,10 +192,12 @@ func registerCancel(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("cancel/tpch/local/queries=%s,nodes=%d", queries, numNodes),
-		Owner:            registry.OwnerSQLQueries,
-		Cluster:          r.MakeClusterSpec(numNodes),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    fmt.Sprintf("cancel/tpch/local/queries=%s,nodes=%d", queries, numNodes),
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(numNodes),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

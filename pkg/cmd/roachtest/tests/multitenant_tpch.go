@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -150,11 +151,13 @@ func registerMultiTenantTPCH(r registry.Registry) {
 				name += "/enable_direct_scans"
 			}
 			r.Add(registry.TestSpec{
-				Name:             name,
-				Owner:            registry.OwnerSQLQueries,
-				Benchmark:        true,
-				Cluster:          r.MakeClusterSpec(1 /* nodeCount */),
-				CompatibleClouds: registry.CloudsWithServiceRegistration,
+				Name:      name,
+				Owner:     registry.OwnerSQLQueries,
+				Benchmark: true,
+				Cluster:   r.MakeClusterSpec(1 /* nodeCount */),
+				// Uses gs://cockroach-fixtures-us-east1. See:
+				// https://github.com/cockroachdb/cockroach/issues/105968
+				CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 				Suites:           registry.Suites(registry.Nightly),
 				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
