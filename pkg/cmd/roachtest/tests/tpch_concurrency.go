@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
@@ -203,11 +204,13 @@ func registerTPCHConcurrency(r registry.Registry) {
 	// the overload point, so it cannot withstand any metamorphic perturbations.
 	cockroachBinary := registry.StandardCockroach
 	r.Add(registry.TestSpec{
-		Name:             "tpch_concurrency",
-		Owner:            registry.OwnerSQLQueries,
-		Timeout:          timeout,
-		Cluster:          r.MakeClusterSpec(numNodes),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "tpch_concurrency",
+		Owner:   registry.OwnerSQLQueries,
+		Timeout: timeout,
+		Cluster: r.MakeClusterSpec(numNodes),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		CockroachBinary:  cockroachBinary,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -216,11 +219,13 @@ func registerTPCHConcurrency(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             "tpch_concurrency/no_streamer",
-		Owner:            registry.OwnerSQLQueries,
-		Timeout:          timeout,
-		Cluster:          r.MakeClusterSpec(numNodes),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "tpch_concurrency/no_streamer",
+		Owner:   registry.OwnerSQLQueries,
+		Timeout: timeout,
+		Cluster: r.MakeClusterSpec(numNodes),
+		// Uses gs://cockroach-fixtures-us-east1. See:
+		// https://github.com/cockroachdb/cockroach/issues/105968
+		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		CockroachBinary:  cockroachBinary,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
