@@ -142,15 +142,26 @@ func makeCompareCommand() *cobra.Command {
 			return err
 		}
 
-		links, err := c.publishToGoogleSheets(metricMaps)
-		if err != nil {
-			return err
-		}
-		if config.slackToken != "" {
-			err = c.postToSlack(links, metricMaps)
+		comparisonResult := c.createComparisons(metricMaps, "old", "new")
+
+		var links map[string]string
+		if config.publishGoogleSheet {
+			links, err = c.publishToGoogleSheets(comparisonResult)
 			if err != nil {
 				return err
 			}
+		}
+
+		if config.slackToken != "" {
+			err = c.postToSlack(links, comparisonResult)
+			if err != nil {
+				return err
+			}
+		}
+
+		// if the threshold is set, we want to compare and fail the job in case of perf regressions
+		if config.threshold != skipComparison {
+			return c.compareUsingThreshold(comparisonResult)
 		}
 		return nil
 	}
@@ -166,6 +177,8 @@ func makeCompareCommand() *cobra.Command {
 	cmd.Flags().StringVar(&config.slackToken, "slack-token", config.slackToken, "pass a slack token to post the results to a slack channel")
 	cmd.Flags().StringVar(&config.slackUser, "slack-user", config.slackUser, "slack user to post the results as")
 	cmd.Flags().StringVar(&config.slackChannel, "slack-channel", config.slackChannel, "slack channel to post the results to")
+	cmd.Flags().Float64Var(&config.threshold, "threshold", config.threshold, "threshold for detecting perf regression")
+	cmd.Flags().BoolVar(&config.publishGoogleSheet, "publish-sheets", config.publishGoogleSheet, "flag to make the command create a google sheet of the benchmark results and publish it")
 	return cmd
 }
 
