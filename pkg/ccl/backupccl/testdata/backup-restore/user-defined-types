@@ -114,6 +114,13 @@ exec-sql
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 CREATE TYPE d.farewell AS ENUM ('bye', 'cya');
+----
+
+exec-sql
+CREATE TYPE d.roach_status AS (queen_roach UUID, king_roach  UUID, worker_roach INT);
+----
+
+exec-sql
 CREATE TABLE d.t1 (x d.greeting);
 INSERT INTO d.t1 VALUES ('hello'), ('howdy');
 CREATE TABLE d.t2 (x d.greeting[]);
