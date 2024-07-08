@@ -183,15 +183,16 @@ func (r *logicalReplicationResumer) ingest(
 		execCfg.InternalDB,
 		jobID)
 
+	heartbeatSender := streamclient.NewHeartbeatSender(ctx, client, streampb.StreamID(streamID),
+		func() time.Duration {
+			return heartbeatFrequency.Get(&execCfg.Settings.SV)
+		})
+	defer func() {
+		_ = heartbeatSender.Stop()
+		stopReplanner()
+	}()
+
 	execPlan := func(ctx context.Context) error {
-		heartbeatSender := streamclient.NewHeartbeatSender(ctx, client, streampb.StreamID(streamID),
-			func() time.Duration {
-				return heartbeatFrequency.Get(&execCfg.Settings.SV)
-			})
-		defer func() {
-			_ = heartbeatSender.Stop()
-			stopReplanner()
-		}()
 
 		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 			log.Warningf(ctx, "received unexpected producer meta: %v", meta)
@@ -230,7 +231,14 @@ func (r *logicalReplicationResumer) ingest(
 
 		return rowResultWriter.Err()
 	}
-	err = ctxgroup.GoAndWait(ctx, execPlan, replanner)
+
+	startHeartbeat := func(ctx context.Context) error {
+		heartbeatSender.Start(ctx, timeutil.DefaultTimeSource{})
+		err := heartbeatSender.Wait()
+		return err
+	}
+
+	err = ctxgroup.GoAndWait(ctx, execPlan, replanner, startHeartbeat)
 	if errors.Is(err, sql.ErrPlanChanged) {
 		metrics.ReplanCount.Inc(1)
 	}
