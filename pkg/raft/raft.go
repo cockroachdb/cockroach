@@ -1137,6 +1137,9 @@ func (r *raft) Step(m pb.Message) error {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
 			r.send(pb.Message{To: m.From, Term: r.Term, Type: pb.MsgPreVoteResp, Reject: true})
+		} else if m.Type == pb.MsgSnap {
+			// TODO(pav-kv): allow receiving MsgSnap with an outdated term. MsgSnap
+			// carries committed state which can always be applied.
 		} else if m.Type == pb.MsgStorageAppendResp {
 			if m.Snapshot != nil {
 				// Even if the snapshot applied under a different term, its application
