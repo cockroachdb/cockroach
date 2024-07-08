@@ -159,6 +159,16 @@ type instrumentationHelper struct {
 	distribution     physicalplan.PlanDistribution
 	vectorized       bool
 	containsMutation bool
+	// generic is true if the plan can be fully-optimized once and re-used
+	// without re-optimization. Plans without placeholders and fold-able stable
+	// expressions, and plans utilizing the placeholder fast-path are always
+	// considered "generic". Plans that are fully optimized with placeholders
+	// present via the force_generic_plan or auto settings for plan_cache_mode
+	// are also considered "generic".
+	generic bool
+	// optimized is true if the plan was optimized or re-optimized during the
+	// current execution.
+	optimized bool
 
 	traceMetadata execNodeTraceMetadata
 
@@ -765,11 +775,13 @@ func (ih *instrumentationHelper) RecordExplainPlan(explainPlan *explain.Plan) {
 
 // RecordPlanInfo records top-level information about the plan.
 func (ih *instrumentationHelper) RecordPlanInfo(
-	distribution physicalplan.PlanDistribution, vectorized, containsMutation bool,
+	distribution physicalplan.PlanDistribution, vectorized, containsMutation, generic, optimized bool,
 ) {
 	ih.distribution = distribution
 	ih.vectorized = vectorized
 	ih.containsMutation = containsMutation
+	ih.generic = generic
+	ih.optimized = optimized
 }
 
 // PlanForStats returns the plan as an ExplainTreePlanNode tree, if it was
@@ -785,6 +797,7 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *appstatspb.E
 	})
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
+	ob.AddPlanType(ih.generic, ih.optimized)
 	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
 		return nil
@@ -810,6 +823,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddExecutionTime(phaseTimes.GetRunLatency())
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
+	ob.AddPlanType(ih.generic, ih.optimized)
 
 	if queryStats != nil {
 		if queryStats.KVRowsRead != 0 {

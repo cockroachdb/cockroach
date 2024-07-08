@@ -308,6 +308,19 @@ func (ob *OutputBuilder) AddVectorized(value bool) {
 	ob.AddFlakyTopLevelField(DeflakeVectorized, "vectorized", fmt.Sprintf("%t", value))
 }
 
+// AddGeneric adds a top-level generic field, if value is true. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddPlanType(generic, optimized bool) {
+	switch {
+	case generic && optimized:
+		ob.AddTopLevelField("plan type", "generic, re-optimized")
+	case generic && !optimized:
+		ob.AddTopLevelField("plan type", "generic, reused")
+	default:
+		ob.AddTopLevelField("plan type", "custom")
+	}
+}
+
 // AddPlanningTime adds a top-level planning time field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
