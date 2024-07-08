@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -5643,6 +5645,158 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 	}
 }
 
+func TestDistSenderComputeWriteReplicationNetworkPaths(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	rddb := MockRangeDescriptorDB(func(key roachpb.RKey, reverse bool) (
+		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
+	) {
+		// This test should not be using this at all, but DistSender insists on
+		// having a non-nil one.
+		return nil, nil, errors.New("range desc db unexpectedly used")
+	})
+
+	newRangeDescriptor := func(numReplicas int) *roachpb.RangeDescriptor {
+		desc := &roachpb.RangeDescriptor{
+			InternalReplicas: make([]roachpb.ReplicaDescriptor, numReplicas),
+		}
+		// ReplicaIDs are always NodeIDs + 1 for this test.
+		for i := 1; i <= numReplicas; i++ {
+			desc.InternalReplicas[i-1].NodeID = roachpb.NodeID(i)
+			desc.InternalReplicas[i-1].ReplicaID = roachpb.ReplicaID(i + 1)
+		}
+		return desc
+	}
+
+	makeLocality := func(region string) roachpb.Locality {
+		return roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: region}}}
+	}
+
+	makeNodeDescriptor := func(nodeID int, region string) roachpb.NodeDescriptor {
+		return roachpb.NodeDescriptor{
+			NodeID:   roachpb.NodeID(nodeID),
+			Address:  util.UnresolvedAddr{},
+			Locality: makeLocality(region),
+		}
+	}
+
+	makeNetworkPath := func(
+		fromID int, fromRegion string, toID int, toRegion string,
+	) tenantcostmodel.LocalityNetworkPath {
+		return tenantcostmodel.LocalityNetworkPath{
+			FromNodeID:   roachpb.NodeID(fromID),
+			FromLocality: makeLocality(fromRegion),
+			ToNodeID:     roachpb.NodeID(toID),
+			ToLocality:   makeLocality(toRegion),
+		}
+	}
+
+	for _, tc := range []struct {
+		name          string
+		cfg           *DistSenderConfig
+		desc          *roachpb.RangeDescriptor
+		curReplica    *roachpb.ReplicaDescriptor
+		expectedPaths []tenantcostmodel.LocalityNetworkPath
+	}{
+		{
+			name: "missing node descriptor for leaseholder",
+			cfg: &DistSenderConfig{
+				NodeDescs: &mockNodeStore{
+					nodes: []roachpb.NodeDescriptor{
+						makeNodeDescriptor(2, "eu-central1"),
+						makeNodeDescriptor(3, "asia-southeast1"),
+					},
+				},
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "region", Value: "asia-southeast1"},
+				}},
+			},
+			desc: func() *roachpb.RangeDescriptor {
+				return newRangeDescriptor(5)
+			}(),
+			curReplica:    &roachpb.ReplicaDescriptor{NodeID: 1, ReplicaID: 2},
+			expectedPaths: []tenantcostmodel.LocalityNetworkPath{},
+		},
+		{
+			name: "missing some node descriptors",
+			cfg: &DistSenderConfig{
+				NodeDescs: &mockNodeStore{
+					nodes: []roachpb.NodeDescriptor{
+						makeNodeDescriptor(1, "us-east1"),
+						makeNodeDescriptor(3, "eu-central1"),
+						makeNodeDescriptor(5, "asia-southeast1"),
+						makeNodeDescriptor(7, "us-central1"),
+					},
+				},
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "region", Value: "asia-southeast1"},
+				}},
+			},
+			desc: func() *roachpb.RangeDescriptor {
+				return newRangeDescriptor(8)
+			}(),
+			curReplica: &roachpb.ReplicaDescriptor{NodeID: 3, ReplicaID: 4},
+			expectedPaths: []tenantcostmodel.LocalityNetworkPath{
+				makeNetworkPath(3, "eu-central1", 1, "us-east1"),
+				makeNetworkPath(3, "eu-central1", 5, "asia-southeast1"),
+				makeNetworkPath(3, "eu-central1", 7, "us-central1"),
+			},
+		},
+		{
+			name: "write for range with 5 replicas",
+			cfg: &DistSenderConfig{
+				NodeDescs: &mockNodeStore{
+					nodes: []roachpb.NodeDescriptor{
+						makeNodeDescriptor(1, "us-east1"),
+						makeNodeDescriptor(2, "eu-central1"),
+						makeNodeDescriptor(3, "asia-southeast1"),
+					},
+				},
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "region", Value: "asia-southeast1"},
+				}},
+			},
+			desc: func() *roachpb.RangeDescriptor {
+				rd := newRangeDescriptor(5)
+				rd.InternalReplicas[3].NodeID = 1
+				rd.InternalReplicas[3].ReplicaID = 2
+				rd.InternalReplicas[4].NodeID = 2
+				rd.InternalReplicas[4].ReplicaID = 3
+				return rd
+			}(),
+			curReplica: &roachpb.ReplicaDescriptor{NodeID: 1, ReplicaID: 2},
+			expectedPaths: []tenantcostmodel.LocalityNetworkPath{
+				makeNetworkPath(1, "us-east1", 2, "eu-central1"),
+				makeNetworkPath(1, "us-east1", 2, "eu-central1"),
+				makeNetworkPath(1, "us-east1", 3, "asia-southeast1"),
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.cfg.AmbientCtx = log.MakeTestingAmbientContext(tracing.NewTracer())
+			tc.cfg.Stopper = stopper
+			tc.cfg.RangeDescriptorDB = rddb
+			tc.cfg.Settings = cluster.MakeTestingClusterSettings()
+			tc.cfg.TransportFactory = func(SendOptions, ReplicaSlice) Transport {
+				assert.Fail(t, "test should not try and use the transport factory")
+				return nil
+			}
+			ds := NewDistSender(*tc.cfg)
+			paths := ds.computeWriteReplicationNetworkPaths(ctx, tc.desc, tc.curReplica)
+			slices.SortFunc(paths, func(a, b tenantcostmodel.LocalityNetworkPath) int {
+				if a.FromNodeID == b.FromNodeID {
+					return cmp.Compare(a.ToNodeID, b.ToNodeID)
+				}
+				return cmp.Compare(a.FromNodeID, b.FromNodeID)
+			})
+			require.Equal(t, tc.expectedPaths, paths)
+		})
+	}
+}
+
 // Test a scenario where the DistSender first updates the leaseholder in its
 // routing information and then evicts the descriptor altogether. This scenario
 // is interesting because it shows that evictions work even after the
@@ -5888,7 +6042,7 @@ func TestDistSenderCrossLocalityMetrics(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("%-v", tc.crossLocalityType), func(t *testing.T) {
-			metrics := MakeDistSenderMetrics()
+			metrics := MakeDistSenderMetrics(roachpb.Locality{})
 			beforeMetrics, err := metrics.getDistSenderCounterMetrics(metricsNames)
 			if err != nil {
 				t.Error(err)

@@ -58,9 +58,9 @@ func TestCloser(t *testing.T) {
 	closer := make(chan struct{})
 	limiter := factory.GetTenant(ctx, tenant, closer)
 	// First Wait call will not block.
-	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1, 1)))
+	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1, 1, nil)))
 	errCh := make(chan error, 1)
-	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1<<33, 1)) }()
+	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1<<33, 1, nil)) }()
 	testutils.SucceedsSoon(t, func() error {
 		if timers := timeSource.Timers(); len(timers) != 1 {
 			return errors.Errorf("expected 1 timer, found %d", len(timers))
@@ -90,7 +90,7 @@ func TestUseAfterRelease(t *testing.T) {
 	const n = math.MaxInt64 / 50
 
 	rq := tenantcostmodel.TestingRequestInfo(
-		2 /* writeReplicas */, n /* writeCount */, n /* writeBytes */, 1 /* *writeMultiplier */)
+		2 /* writeReplicas */, n /* writeCount */, n /* writeBytes */, 1 /* *networkCost */, nil /* replicationNetworkPaths */)
 	rs := tenantcostmodel.TestingResponseInfo(
 		true /* isRead */, n /* readCount */, n /* readBytes */, 1 /* readMultiplier */)
 
@@ -298,10 +298,10 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 		}
 		go func() {
 			// We'll not worry about ever releasing tenant Limiters.
-			reqInfo := tenantcostmodel.TestingRequestInfo(1, s.writeRequests, s.writeBytes, 1)
+			reqInfo := tenantcostmodel.TestingRequestInfo(1, s.writeRequests, s.writeBytes, 1, nil)
 			if s.writeRequests == 0 {
 				// Read-only request.
-				reqInfo = tenantcostmodel.TestingRequestInfo(0, 0, 0, 0)
+				reqInfo = tenantcostmodel.TestingRequestInfo(0, 0, 0, 0, nil)
 			}
 			s.reserveCh <- lims[0].Wait(s.ctx, reqInfo)
 		}()
