@@ -754,15 +754,18 @@ type RangeControllerImpl struct {
 	// eventually consistent with the set of replicas.
 	leaseholder roachpb.ReplicaID
 
-	// TODO: synchronization. Ensure all methods other than WaitForEval are
-	// called with raftMu held. RangeControllerImpl needs its own mutex for
-	// WaitForEval since it needs to sample voterSets*.
+	mu struct {
+		syncutil.Mutex
+		// TODO: synchronization. Ensure all methods other than WaitForEval are
+		// called with raftMu held. RangeControllerImpl needs its own mutex for
+		// WaitForEval since it needs to sample voterSets*.
 
-	// State for waiters. When anything in voterSets changes, voterSetRefreshCh
-	// is closed, and replaced with a new channel. The voterSets is
-	// copy-on-write, so waiters make a shallow copy.
-	voterSets         []voterSet
-	voterSetRefreshCh chan struct{}
+		// State for waiters. When anything in voterSets changes, voterSetRefreshCh
+		// is closed, and replaced with a new channel. The voterSets is
+		// copy-on-write, so waiters make a shallow copy.
+		voterSets         []voterSet
+		voterSetRefreshCh chan struct{}
+	}
 
 	replicaMap map[roachpb.ReplicaID]*replicaState
 
@@ -795,8 +798,8 @@ func NewRangeControllerImpl(
 		leaseholder:       init.Leaseholder,
 		replicaMap:        map[roachpb.ReplicaID]*replicaState{},
 		scheduledReplicas: make(map[roachpb.ReplicaID]struct{}),
-		voterSetRefreshCh: make(chan struct{}),
 	}
+	rc.mu.voterSetRefreshCh = make(chan struct{})
 	rc.updateReplicaSetAndMap(init.ReplicaSet)
 	rc.updateVoterSets()
 	return rc
@@ -869,6 +872,9 @@ func (rc *RangeControllerImpl) updateReplicaSetAndMap(newSet ReplicaSet) {
 
 // replicaSet, replicaMap, leaseholder are up-to-date.
 func (rc *RangeControllerImpl) updateVoterSets() {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
 	setCount := 1
 	for _, r := range rc.replicaSet {
 		isOld := r.IsVoterOldConfig()
@@ -908,9 +914,9 @@ func (rc *RangeControllerImpl) updateVoterSets() {
 			voterSets[1] = append(voterSets[1], vsfw)
 		}
 	}
-	rc.voterSets = voterSets
-	close(rc.voterSetRefreshCh)
-	rc.voterSetRefreshCh = make(chan struct{})
+	rc.mu.voterSets = voterSets
+	close(rc.mu.voterSetRefreshCh)
+	rc.mu.voterSetRefreshCh = make(chan struct{})
 
 	// TODO: go through the voters and figure out if we need to force-flush
 	// something. Account for already ongoing force-flushes.
@@ -929,8 +935,11 @@ func (rc *RangeControllerImpl) WaitForEval(
 retry:
 	// Snapshot the voterSets and voterSetRefreshCh.
 	// TODO: synchronization.
-	vss := rc.voterSets
-	vssRefreshCh := rc.voterSetRefreshCh
+	rc.mu.Lock()
+	vss := rc.mu.voterSets
+	vssRefreshCh := rc.mu.voterSetRefreshCh
+	rc.mu.Unlock()
+
 	if vssRefreshCh == nil {
 		// RangeControllerImpl is closed.
 		return nil
@@ -1292,8 +1301,10 @@ func (rc *RangeControllerImpl) SetLeaseholder(replica roachpb.ReplicaID) {
 }
 
 func (rc *RangeControllerImpl) Close() {
-	close(rc.voterSetRefreshCh)
-	rc.voterSetRefreshCh = nil
+	rc.mu.Lock()
+	close(rc.mu.voterSetRefreshCh)
+	rc.mu.voterSetRefreshCh = nil
+	rc.mu.Unlock()
 	for _, rs := range rc.replicaMap {
 		rs.close()
 	}
