@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
@@ -267,13 +268,44 @@ type Provider struct {
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
-	return false
+	return true
 }
 
 func (p *Provider) GetPreemptedSpotVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]vm.PreemptedVM, error) {
-	return nil, nil
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return nil, err
+	}
+
+	var preemptedVMs []vm.PreemptedVM
+	for region, vmList := range byRegion {
+		args := []string{
+			"ec2", "describe-instances",
+			"--region", region,
+			"--instance-ids",
+		}
+		args = append(args, vmList.ProviderIDs()...)
+		var describeInstancesResponse DescribeInstancesOutput
+		err := p.runJSONCommand(l, args, &describeInstancesResponse)
+		if err != nil {
+			return nil, rperrors.TransientFailure(err, "aws spot vm preemption issue")
+		}
+
+		// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-interrupted-Spot-Instance.html
+		for _, r := range describeInstancesResponse.Reservations {
+			for _, instance := range r.Instances {
+				if instance.InstanceLifecycle == "spot" &&
+					instance.State.Name == "terminated" &&
+					instance.StateReason.Code == "Server.SpotInstanceTermination" {
+					preemptedVMs = append(preemptedVMs, vm.PreemptedVM{Name: instance.InstanceID})
+				}
+			}
+		}
+	}
+
+	return preemptedVMs, nil
 }
 
 func (p *Provider) GetHostErrorVMs(
@@ -982,6 +1014,10 @@ type DescribeInstancesOutput struct {
 				Code int
 				Name string
 			}
+			StateReason struct {
+				Code    string `json:"Code"`
+				Message string `json:"Message"`
+			} `json:"StateReason"`
 			RootDeviceName string
 
 			BlockDeviceMappings []struct {
