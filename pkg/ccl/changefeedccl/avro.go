@@ -623,6 +623,12 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				return tree.ParseDTSVector(x.(string))
 			},
 		)
+	// case types.PGVectorFamily:
+	//
+	// We could have easily supported PGVector type via stringification, but it
+	// would probably be quite inefficient; thus, in order to not back ourselves
+	// into a corner with compatibility, we choose to return an error instead
+	// for now.
 	case types.EnumFamily:
 		setNullable(
 			avroSchemaString,
