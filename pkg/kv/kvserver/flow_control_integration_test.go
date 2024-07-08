@@ -2313,6 +2313,22 @@ ORDER BY name ASC;
 `)
 }
 
+// TestRACV2Basic tests basic functionality of replication admission control
+// V2, intializing a 3 node cluster and sending a single put.
+func TestRACV2Basic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
+	defer tc.Stopper().Stop(ctx)
+
+	k := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+	require.NoError(t, tc.Server(0).DB().Put(ctx, k, "a"))
+}
+
 type flowControlTestHelper struct {
 	t   *testing.T
 	tc  *testcluster.TestCluster

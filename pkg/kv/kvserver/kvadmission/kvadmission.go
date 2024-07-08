@@ -350,7 +350,7 @@ func (n *controllerImpl) AdmitKVWork(
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
 		var admitted bool
 		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV)
-		if attemptFlowControl && !bypassAdmission && !kvflowconnectedstream.UseRACv2 {
+		if attemptFlowControl && !bypassAdmission {
 			if !kvflowconnectedstream.UseRACv2 {
 				kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
 				if !found {

@@ -2102,4 +2102,4 @@ func (cs connectedState) shouldWaitForElasticEvalTokens() bool {
 
 // UseRACv2 is used to exercise integration. The integration in the prototype
 // does not have any capability to switch a range from RACv1 to RACv2.
-const UseRACv2 = false
+const UseRACv2 = true
