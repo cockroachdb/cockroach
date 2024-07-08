@@ -38,7 +38,13 @@ func (st LeaseStatus) Expiration() hlc.Timestamp {
 	case roachpb.LeaseExpiration:
 		return st.Lease.GetExpiration()
 	case roachpb.LeaseEpoch:
-		return st.Liveness.Expiration.ToTimestamp()
+		exp := st.Lease.MinExpiration
+		// The expiration of the liveness record is inherited by the lease iff the
+		// lease epoch matches the liveness epoch.
+		if st.Lease.Epoch == st.Liveness.Epoch {
+			exp.Forward(st.Liveness.Expiration.ToTimestamp())
+		}
+		return exp
 	default:
 		panic("unexpected")
 	}

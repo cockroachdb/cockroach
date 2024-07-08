@@ -286,6 +286,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		UseExpirationLeases:      p.repl.shouldUseExpirationLeaseRLocked(),
 		TransferExpirationLeases: TransferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV),
 		ExpToEpochEquiv:          p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start),
+		MinExpirationSupported:   p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_2_LeaseMinTimestamp),
 		RangeLeaseDuration:       p.repl.store.cfg.RangeLeaseDuration,
 	}
 	nl := p.repl.store.cfg.NodeLiveness
