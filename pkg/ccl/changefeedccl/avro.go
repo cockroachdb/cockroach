@@ -623,6 +623,16 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				return tree.ParseDTSVector(x.(string))
 			},
 		)
+	case types.PGVectorFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DPGVector).T.String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.ParseDPGVector(x.(string))
+			},
+		)
 	case types.EnumFamily:
 		setNullable(
 			avroSchemaString,
