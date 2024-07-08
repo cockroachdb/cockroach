@@ -101,3 +101,9 @@ SELECT l1_distance(v1,v2), l2_distance(v1,v2), cosine_distance(v1,v2), inner_pro
 3     3     2     -2    1     1
 NULL  NULL  NULL  NULL  NULL  NULL
 NULL  NULL  NULL  NULL  1     1
+
+# Regression test for not handling the vector type in a builtin (#126797).
+query T
+SELECT json_build_object('[1, 2]':::VECTOR, 1);
+----
+{"[1,2]": 1}
