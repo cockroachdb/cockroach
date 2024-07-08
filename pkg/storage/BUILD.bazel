@@ -28,6 +28,7 @@ go_library(
         "pebble.go",
         "pebble_batch.go",
         "pebble_iterator.go",
+        "pebble_logger_and_tracer.go",
         "pebble_merge.go",
         "pebble_mvcc_scanner.go",
         "read_as_of_iterator.go",
