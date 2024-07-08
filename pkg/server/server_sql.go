@@ -1200,6 +1200,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		// Job internal operations use the node principal.
 		sd.UserProto = username.NodeUserName().EncodeProto()
+
+		// The following should not apply to SQL operations performed by the jobs
+		// subsystem.
+		sd.StmtTimeout = 0
 	})
 	jobRegistry.SetInternalDB(jobsInternalDB)
 
