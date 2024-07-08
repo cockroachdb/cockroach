@@ -483,11 +483,16 @@ func combineOverloads(a, b []QualifiedOverload, path SearchPath) []QualifiedOver
 			foundUDFOverload = true
 		}
 	}
-	// When a UDF overload is found, reset the "prefered" attribute.
+	// When a UDF overload is found, reset the "preferred" attribute. We need to
+	// copy the overload to avoid modifying the hardcoded definition.
 	if foundUDFOverload {
 		for i, overload := range result {
-			overload.PreferredOverload = false
-			result[i] = overload
+			copiedOverload := *overload.Overload
+			copiedOverload.PreferredOverload = false
+			result[i] = QualifiedOverload{
+				Schema:   overload.Schema,
+				Overload: &copiedOverload,
+			}
 		}
 	}
 
