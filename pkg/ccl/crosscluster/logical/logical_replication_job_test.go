@@ -456,6 +456,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
 					StreamingTestingKnobs: &sql.StreamingTestingKnobs{
 						BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
@@ -526,6 +527,69 @@ func TestLogicalAutoReplan(t *testing.T) {
 	close(turnOffReplanning)
 
 	require.Greater(t, len(clientAddresses), 1)
+}
+
+func TestHeartbeatCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
+
+	ctx := context.Background()
+
+	// Make size of channel double the number of nodes
+	retryErrorChan := make(chan error, 4)
+	var alreadyCancelled atomic.Bool
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				Streaming: &sql.StreamingTestingKnobs{
+					AfterRetryIteration: func(err error) {
+						if err != nil && !alreadyCancelled.Load() {
+							retryErrorChan <- err
+							alreadyCancelled.Store(true)
+						}
+					},
+				},
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	defer server.Stopper().Stop(ctx)
+
+	serverutils.SetClusterSetting(t, server, "logical_replication.consumer.heartbeat_frequency", time.Second*1)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	var prodAID jobspb.JobID
+	dbA.QueryRow(t, "SELECT job_ID FROM [SHOW JOBS] WHERE job_type='REPLICATION STREAM PRODUCER'").Scan(&prodAID)
+
+	// Cancel the producer job and wait for the hearbeat to pick up that the stream is inactive
+	t.Logf("Canceling  replication producer %s", prodAID)
+	dbA.QueryRow(t, "CANCEL JOB $1", prodAID)
+
+	// The ingestion job should eventually retry because it detects 2 nodes are dead
+	require.ErrorContains(t, <-retryErrorChan, fmt.Sprintf("replication stream %s is not running, status is STREAM_INACTIVE", prodAID))
 }
 
 func setupLogicalTestServer(
