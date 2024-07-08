@@ -704,6 +704,9 @@ func (p *pebbleIterator) HasPointAndRange() (bool, bool) {
 
 // RangeBounds implements the MVCCIterator interface.
 func (p *pebbleIterator) RangeBounds() roachpb.Span {
+	if _, hasRange := p.HasPointAndRange(); !hasRange {
+		return roachpb.Span{}
+	}
 	start, end := p.iter.RangeBounds()
 
 	// Avoid decoding empty keys: DecodeMVCCKey() will return errors for these,
