@@ -26,10 +26,10 @@ import (
 // Assumption: 1. The metricNames parameter should consist of string literals
 // that match the metadata names used for metric counters. 2. Each metric name
 // provided in `metricNames` must exist, unique and be a counter type.
-func (nm nodeMetrics) getNodeCounterMetrics(metricsName []string) (map[string]int64, error) {
+func (nm *nodeMetrics) getNodeCounterMetrics(metricsName []string) (map[string]int64, error) {
 	metricCountMap := make(map[string]int64)
 	getFirstNodeMetric := func(metricName string) int64 {
-		metricsStruct := reflect.ValueOf(nm)
+		metricsStruct := reflect.ValueOf(*nm)
 		for i := 0; i < metricsStruct.NumField(); i++ {
 			field := metricsStruct.Field(i)
 			switch t := field.Interface().(type) {
