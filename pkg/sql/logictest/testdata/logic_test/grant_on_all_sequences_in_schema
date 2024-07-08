@@ -9,10 +9,12 @@ CREATE SCHEMA s2;
 statement ok
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA s TO testuser
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+test           public       NULL         schema       public   CREATE          false
+test           public       NULL         schema       public   USAGE           false
 
 statement ok
 CREATE SEQUENCE s.q;
@@ -46,6 +48,8 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  object_name  object_type  grantee   privilege_type  is_grantable
+test           public       NULL         schema       public    CREATE          false
+test           public       NULL         schema       public    USAGE           false
 test           s            q            sequence     testuser  SELECT          false
 test           s            t            table        testuser  BACKUP          false
 
@@ -56,6 +60,8 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  object_name  object_type  grantee   privilege_type  is_grantable
+test           public       NULL         schema       public    CREATE          false
+test           public       NULL         schema       public    USAGE           false
 test           s            q            sequence     testuser  SELECT          false
 test           s            q            sequence     testuser  USAGE           false
 test           s            t            table        testuser  BACKUP          false
@@ -67,6 +73,8 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
 test           s            q            sequence     testuser   SELECT          false
 test           s            q            sequence     testuser   USAGE           false
 test           s            q            sequence     testuser2  SELECT          false
@@ -81,6 +89,8 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
 test           s            q            sequence     testuser   ALL             false
 test           s            q            sequence     testuser2  ALL             false
 test           s            t            table        testuser   BACKUP          false
@@ -98,6 +108,8 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser3
 ----
 database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
 test           s2           q            sequence     testuser3  ALL             false
 test           s2           t            table        testuser3  ALL             false
 
@@ -114,6 +126,8 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
 test           s            q            sequence     testuser   ALL             false
 test           s            q            sequence     testuser2  ALL             false
 test           s            t            table        testuser   BACKUP          false
@@ -126,6 +140,8 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser3
 ----
 database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
 test           s2           q            sequence     testuser3  ALL             false
 test           s2           t            table        testuser3  ALL             false
 test           s3           q            sequence     testuser3  USAGE           false
