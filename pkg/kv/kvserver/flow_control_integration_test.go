@@ -2314,19 +2314,30 @@ ORDER BY name ASC;
 }
 
 // TestRACV2Basic tests basic functionality of replication admission control
-// V2, intializing a 3 node cluster and sending a single put.
+// V2, intializing a 1 or 3 node cluster and sending a single put.
 func TestRACV2Basic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
-	defer tc.Stopper().Stop(ctx)
+	t.Run("1_node", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, 1,
+			base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
+		defer tc.Stopper().Stop(ctx)
 
-	k := tc.ScratchRange(t)
-	tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
-	require.NoError(t, tc.Server(0).DB().Put(ctx, k, "a"))
+		k := tc.ScratchRange(t)
+		require.NoError(t, tc.Server(0).DB().Put(ctx, k, "a"))
+	})
+
+	t.Run("3_node", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, 3,
+			base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
+		defer tc.Stopper().Stop(ctx)
+
+		k := tc.ScratchRange(t)
+		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+		require.NoError(t, tc.Server(0).DB().Put(ctx, k, "a"))
+	})
 }
 
 type flowControlTestHelper struct {

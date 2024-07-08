@@ -1197,9 +1197,9 @@ func testingEncodeRaftFlowControlState(
 		AdmissionCreateTime: createTime,
 	}
 
-  // Deduct the size of the command not including the write batch data, this
-  // makes the size of the command exactly tokens long.
-	cmd.WriteBatch = &kvserverpb.WriteBatch{Data: randutil.RandBytes(r, int(tokens) - 60)}
+	// Deduct the size of the command not including the write batch data, this
+	// makes the size of the command exactly tokens long.
+	cmd.WriteBatch = &kvserverpb.WriteBatch{Data: randutil.RandBytes(r, int(tokens)-60)}
 
 	data, err := raftlog.EncodeCommand(context.Background(), cmd, idKey, admissionMeta, usesFlowControl)
 	if err != nil {
@@ -1502,6 +1502,9 @@ func newReplicaSendStream(
 	rss.sendQueue.nextRaftIndex = init.nextRaftIndex
 	rss.sendQueue.approxMeanSizeBytes = init.approxMeanSizeBytes
 	rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
+
+	log.VInfof(context.TODO(), 1, "init replica send stream(%v): %v next_raft_index_initial=%d next_raft_index=%d",
+		rss.parent.desc.ReplicaID, rss, rss.nextRaftIndexInitial, rss.sendQueue.nextRaftIndex)
 	return rss
 }
 
@@ -1705,7 +1708,9 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 
 func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowControlState) {
 	if entry.index != rss.sendQueue.nextRaftIndex {
-		panic("")
+		panic(fmt.Sprintf(
+			"expected entry index=%v (%v) == nextRaftIndex=%v (%v)",
+			entry.index, entry, rss, rss.sendQueue.nextRaftIndex))
 	}
 	wasEmpty := rss.isEmptySendQueue()
 	// TODO: if wasEmpty, we may need to force-flush something. That decision needs to be
@@ -1753,7 +1758,7 @@ func (rss *replicaSendStream) Notify() {
 	wc := kvflowcontrolpb.WorkClassFromRaftPriority(pri)
 	queueSize := rss.queueSize()
 	tokens := rss.parent.sendTokenCounter.TryDeduct(context.TODO(), wc, queueSize)
-	if tokens > 0 {
+	if tokens > 0 && rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
 		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
 		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
 		rss.sendQueue.deductedForScheduler.wc = wc
@@ -1896,7 +1901,8 @@ func (rss *replicaSendStream) makeConsistentWhenUnexpectedPop(indexToSend uint64
 	// can't happen for any index >= nextRaftIndexInitial since these were proposed after
 	// this replicaSendStream was created.
 	if indexToSend > rss.nextRaftIndexInitial {
-		panic("")
+		panic(fmt.Sprintf("%v: unexpected indexToSend=%d > nextRaftIndexInitial=%d",
+			rss, indexToSend, rss.nextRaftIndexInitial))
 	}
 	// INVARIANT: indexToSend <= rss.nextRaftIndexInitial. Don't need to
 	// change any stats.

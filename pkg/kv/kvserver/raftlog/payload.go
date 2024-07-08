@@ -50,6 +50,8 @@ func EncodeCommand(
 		if useRACv2 {
 			entryEncoding = EntryEncodingStandardWithRaftPriority
 			rpri = kvflowcontrolpb.RaftPriority(raftAdmissionMeta.AdmissionPriority)
+			// TODO(racv2): Add an assertion that the admission fields on command are
+			// 0 when useRACv2 is true.
 		} else {
 			entryEncoding = EntryEncodingStandardWithAC
 		}
@@ -88,14 +90,12 @@ func EncodeCommand(
 	// INVARIANT: raftAdmissionMeta != nil => prefix
 	preLen := 0
 	cmdLen := command.Size()
-
 	var admissionMetaLen int
 	if prefix {
 		preLen = RaftCommandPrefixLen
 		if raftAdmissionMeta != nil {
 			// Encode admission metadata data at the start, right after the command
 			// prefix.
-
 			admissionMetaLen = raftAdmissionMeta.Size()
 			cmdLen += admissionMetaLen
 		}

@@ -157,7 +157,9 @@ type AdmittedPiggybackStateManager interface {
 }
 
 func NewAdmittedPiggybackStateManager() AdmittedPiggybackStateManager {
-	return &admittedPiggybackStateManager{}
+	ap := &admittedPiggybackStateManager{}
+	ap.mu.msgsForNode = make(map[roachpb.NodeID]map[roachpb.RangeID]kvflowcontrolpb.AdmittedForRangeRACv2)
+	return ap
 }
 
 type admittedPiggybackStateManager struct {

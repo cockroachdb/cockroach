@@ -13,6 +13,7 @@ package kvflowconnectedstream
 import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
@@ -36,6 +37,17 @@ func NewRaftNode(node *raft.RawNode) RaftNode {
 }
 
 func (r raftInterfaceImpl) FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo {
+	// TODO: FollowerState is being called when the follower tracking may be
+	// uninitialized for the follower replicaID on the leader. This is a bug.
+	// Check whether the follower exists in the progress map, if not return
+	// probe.
+	status := r.RawNode.Status()
+	if _, ok := status.Progress[raftpb.PeerID(replicaID)]; !ok {
+		return FollowerStateInfo{
+			State: tracker.StateProbe,
+		}
+	}
+
 	pr := r.GetProgress(raftpb.PeerID(replicaID))
 	return FollowerStateInfo{
 		State:    pr.State,

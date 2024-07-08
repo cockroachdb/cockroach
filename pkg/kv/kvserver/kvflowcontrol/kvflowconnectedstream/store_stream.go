@@ -287,7 +287,10 @@ func (s *storeStreamSendTokensWatcher) CancelHandle(handleID StoreStreamSendToke
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	handle := s.mu.handles[handleID]
+	handle, ok := s.mu.handles[handleID]
+	if !ok {
+		panic(fmt.Sprintf("handle with handleID=%v does not exist", handleID))
+	}
 	watcher := s.mu.watchers[handle.stc]
 	watcher.removeHandleLocked(*handle)
 	delete(s.mu.handles, handle.id)

@@ -632,8 +632,8 @@ func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor)
 		wasUninitialized = true
 		var rn *raft.RawNode
 		func() {
-			rr2.replica.mu.RLock()
-			defer rr2.replica.mu.RUnlock()
+			// TODO(racV2-integration): On init, the raft and replica mu is already
+			// held so we don't lock. In other cases, they may not be.
 			rn = rr2.replica.mu.internalRaftGroup
 		}()
 		rr2.raftAdmittedInterface = kvflowconnectedstream.NewRaftNode(rn)
@@ -941,7 +941,7 @@ func (w *waitingForAdmissionState) computeAdmitted(
 	var admitted [kvflowcontrolpb.NumRaftPriorities]uint64
 	for i := range w.waiting {
 		admitted[i] = stableIndex
-		if len(w.waiting) > 0 {
+		if len(w.waiting[i]) > 0 {
 			upperBoundAdmitted := w.waiting[i][0] - 1
 			if upperBoundAdmitted < admitted[i] {
 				admitted[i] = upperBoundAdmitted
