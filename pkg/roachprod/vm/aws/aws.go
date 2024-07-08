@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -267,13 +268,135 @@ type Provider struct {
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
-	return false
+	return true
+}
+
+// CloudTrailEvent represents a single event from AWS CloudTrail
+type CloudTrailEvent struct {
+	EventId     string `json:"EventId"`
+	EventName   string `json:"EventName"`
+	ReadOnly    string `json:"ReadOnly"`
+	EventTime   string `json:"EventTime"`
+	EventSource string `json:"EventSource"`
+	Resources   []struct {
+		ResourceType string `json:"ResourceType"`
+		ResourceName string `json:"ResourceName"`
+	} `json:"Resources"`
+	// after unmarshal will have data from EventDetails field
+	TrailEventDetails TrailEventDetails `json:"-"`
+	EventDetails      string            `json:"CloudTrailEvent"`
+}
+
+// TrailEventDetails represent details related to single CloudTrail event
+type TrailEventDetails struct {
+	EventTime           time.Time `json:"eventTime"`
+	EventName           string    `json:"eventName"`
+	AwsRegion           string    `json:"awsRegion"`
+	ServiceEventDetails struct {
+		InstanceIdSet []string `json:"instanceIdSet"`
+	} `json:"serviceEventDetails"`
+}
+
+// UnmarshalJSON implement json.Unmarshaler.
+// The extra logic is used to populate TrailEventDetails from ct.EventDetails which is a json encoded string.
+func (ct *CloudTrailEvent) UnmarshalJSON(data []byte) error {
+	// Creating an alias from the target type to avoid recursion.
+	type Alias CloudTrailEvent
+	var raw Alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	*ct = CloudTrailEvent(raw)
+
+	// Unmarshal the EventDetails JSON into TrailEventDetails struct
+	if len(ct.EventDetails) > 0 {
+		if err := json.Unmarshal([]byte(ct.EventDetails), &ct.TrailEventDetails); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (p *Provider) GetPreemptedSpotVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]vm.PreemptedVM, error) {
-	return nil, nil
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return nil, err
+	}
+
+	var preemptedVMs []vm.PreemptedVM
+	for region, vmList := range byRegion {
+		args := []string{
+			"ec2", "describe-instances",
+			"--region", region,
+			"--instance-ids",
+		}
+		args = append(args, vmList.ProviderIDs()...)
+		var describeInstancesResponse DescribeInstancesOutput
+		// ignoring error because if we do describe instance after 1 hour of instance termination
+		// it will give error `InvalidInstanceID.NotFound`
+		_ = p.runJSONCommand(l, args, &describeInstancesResponse)
+
+		// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-interrupted-Spot-Instance.html
+		for _, r := range describeInstancesResponse.Reservations {
+			for _, instance := range r.Instances {
+				if instance.InstanceLifecycle == "spot" &&
+					instance.State.Name == "terminated" &&
+					instance.StateReason.Code == "Server.SpotInstanceTermination" {
+					preemptedVMs = append(preemptedVMs, vm.PreemptedVM{Name: instance.InstanceID})
+				}
+			}
+		}
+	}
+
+	// fallback on cloudTrail as the instance is not available after 1 hour of termination
+	if len(preemptedVMs) == 0 {
+		for region, vmList := range byRegion {
+			// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/BidEvictedEvent.html
+			events, err := p.getCloudTrailEvents(l, region, "BidEvictedEvent", since)
+			if err != nil {
+				l.Errorf("failed to get BidEvictedEvent from cloudTrail for %s region: %v", region, err)
+				continue
+			}
+
+			vmIDsMap := util.MapFrom(vmList.ProviderIDs(), func(id string) (string, struct{}) {
+				return id, struct{}{}
+			})
+
+			for _, event := range events {
+				for _, instanceID := range event.TrailEventDetails.ServiceEventDetails.InstanceIdSet {
+					if _, ok := vmIDsMap[instanceID]; ok {
+						preemptedVMs = append(preemptedVMs, vm.PreemptedVM{Name: instanceID, PreemptedAt: event.TrailEventDetails.EventTime})
+					}
+				}
+			}
+		}
+	}
+
+	return preemptedVMs, nil
+}
+
+func (p *Provider) getCloudTrailEvents(
+	l *logger.Logger, region, eventName string, since time.Time,
+) ([]CloudTrailEvent, error) {
+	args := []string{
+		"cloudtrail",
+		"lookup-events",
+		"--lookup-attributes", "AttributeKey=EventName,AttributeValue=" + eventName,
+		"--start-time", since.Format(time.RFC3339),
+		"--region", region,
+	}
+
+	var events struct {
+		Events []CloudTrailEvent `json:"events"`
+	}
+	if err := p.runJSONCommand(l, args, &events); err != nil {
+		return nil, err
+	}
+	return events.Events, nil
 }
 
 func (p *Provider) GetHostErrorVMs(
@@ -982,6 +1105,10 @@ type DescribeInstancesOutput struct {
 				Code int
 				Name string
 			}
+			StateReason struct {
+				Code    string `json:"Code"`
+				Message string `json:"Message"`
+			} `json:"StateReason"`
 			RootDeviceName string
 
 			BlockDeviceMappings []struct {
