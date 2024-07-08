@@ -184,7 +184,7 @@ type tenantServerDeps struct {
 }
 
 type spanLimiterFactory func(isql.Executor, *cluster.Settings, *spanconfig.TestingKnobs) spanconfig.Limiter
-type costControllerFactory func(*cluster.Settings, roachpb.TenantID, kvtenant.TokenBucketProvider) (multitenant.TenantSideCostController, error)
+type costControllerFactory func(*cluster.Settings, roachpb.TenantID, kvtenant.TokenBucketProvider, roachpb.Locality) (multitenant.TenantSideCostController, error)
 
 // NewSeparateProcessTenantServer creates a tenant-specific, SQL-only
 // server against a KV backend, with defaults appropriate for a
@@ -1183,7 +1183,7 @@ func makeTenantSQLServerArgs(
 		tenantKnobs.OverrideTokenBucketProvider != nil {
 		provider = tenantKnobs.OverrideTokenBucketProvider(provider)
 	}
-	costController, err := deps.costControllerFactory(st, sqlCfg.TenantID, provider)
+	costController, err := deps.costControllerFactory(st, sqlCfg.TenantID, provider, baseCfg.Locality)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
@@ -1428,7 +1428,7 @@ var NewTenantSideCostController costControllerFactory = NewNoopTenantSideCostCon
 // NewNoopTenantSideCostController returns a noop cost
 // controller. Used by shared-process tenants.
 func NewNoopTenantSideCostController(
-	*cluster.Settings, roachpb.TenantID, kvtenant.TokenBucketProvider,
+	*cluster.Settings, roachpb.TenantID, kvtenant.TokenBucketProvider, roachpb.Locality,
 ) (multitenant.TenantSideCostController, error) {
 	// Return a no-op implementation.
 	return noopTenantSideCostController{}, nil
