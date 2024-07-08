@@ -12,4 +12,4 @@ mkdir -p "${toplevel}"/artifacts
 # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
 docker run --rm -i ${tty-} -v $this_dir:/bootstrap \
        -v "${toplevel}"/artifacts:/artifacts \
-       us-east1-docker.pkg.dev/crl-docker-sync/docker-mirror/docker.io/library/ubuntu:focal-20210119 /bootstrap/perform-build.sh
+       us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:noble /bootstrap/perform-build.sh

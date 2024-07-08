@@ -1,10 +1,10 @@
 def _impl(rctx):
     if rctx.attr.host == "arm64":
-        url = "https://storage.googleapis.com/public-bazel-artifacts/toolchains/osxcross/aarch64/20220317-160719/x86_64-apple-darwin21.2.tar.gz"
-        sha256 = "a0fda00934d9f6f17cdd62ce685d0a12751c34686df14085b72e40d5803e93a6"
+        url = "https://storage.googleapis.com/public-bazel-artifacts/toolchains/osxcross/aarch64/20240711-185211/x86_64-apple-darwin21.2.tar.gz"
+        sha256 = "e33b81567df830a6b488ed3ad35b5c212fa113cfd1c73d61ffc04f1c7070e827"
     elif rctx.attr.host == "x86_64":
-        url = "https://storage.googleapis.com/public-bazel-artifacts/toolchains/osxcross/x86_64/20220317-165434/x86_64-apple-darwin21.2.tar.gz"
-        sha256 = "751365dbfb5db66fe8e9f47fcf82cbbd7d1c176b79112ab91945d1be1d160dd5"
+        url = "https://storage.googleapis.com/public-bazel-artifacts/toolchains/osxcross/x86_64/20240711-185136/x86_64-apple-darwin21.2.tar.gz"
+        sha256 = "64068ed6aab8d7344a79981b2444f8602b082deb7a9c3cd9a554b78100d2d7b4"
     rctx.download_and_extract(
         url = [url],
         sha256 = sha256,

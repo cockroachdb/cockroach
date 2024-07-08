@@ -8,7 +8,7 @@ apt-get update \
     autoconf \
     bzip2 \
     ca-certificates \
-    clang-10 \
+    clang-18 \
     cmake \
     curl \
     file \
@@ -25,14 +25,15 @@ apt-get update \
     make \
     patch \
     patchelf \
-    python \
+    python3 \
+    python-is-python3 \
     texinfo \
     xz-utils \
     unzip \
     zlib1g \
     zlib1g-dev \
- && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
+ && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 \
+    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-18 \
  && apt-get clean
 
 # libtapi is required for later versions of MacOSX.
