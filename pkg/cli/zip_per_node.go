@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // makePerNodeZipRequests defines the zipRequests (API requests) that are to be
@@ -133,7 +134,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 		}
 		nodeID := nodeList[i].NodeID
 		prefix := fmt.Sprintf("%s%s/%s", zc.prefix, nodesPrefix, fmt.Sprintf("%d", nodeID))
-		s := zc.clusterPrinter.start("profile for node %d", nodeID)
+		s := zc.clusterPrinter.start(redact.Sprintf("profile for node %d", nodeID))
 		if err := zc.z.createRawOrError(s, prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
 			return err
 		}
@@ -162,7 +163,7 @@ func (zc *debugZipContext) collectFileList(
 	}
 
 	var files *serverpb.GetFilesResponse
-	s := nodePrinter.start("requesting %s list", fileKind)
+	s := nodePrinter.start(redact.Sprintf("requesting %s list", fileKind))
 	if requestErr := zc.runZipFn(ctx, s,
 		func(ctx context.Context) error {
 			var err error
@@ -199,7 +200,7 @@ func (zc *debugZipContext) collectFileList(
 
 			// NB: for goroutine dumps, the files have a .txt.gz suffix already.
 			name := prefix + "/" + file.Name
-			fs := nodePrinter.start("retrieving %s", file.Name)
+			fs := nodePrinter.start(redact.Sprintf("retrieving %s", file.Name))
 			var onefile *serverpb.GetFilesResponse
 			if fileErr := zc.runZipFn(ctx, fs, func(ctx context.Context) error {
 				var err error
@@ -257,7 +258,7 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 	}
 
-	nodePrinter := zipCtx.newZipReporter("node %d", nodeID)
+	nodePrinter := zipCtx.newZipReporter(redact.Sprintf("node %d", nodeID))
 	id := fmt.Sprintf("%d", nodeID)
 	prefix := fmt.Sprintf("%s%s/%s", zc.prefix, nodesPrefix, id)
 
@@ -417,7 +418,7 @@ func (zc *debugZipContext) collectPerNodeData(
 				continue
 			}
 
-			logPrinter := nodePrinter.withPrefix("log file: %s", file.Name)
+			logPrinter := nodePrinter.withPrefix(redact.Sprintf("log file: %s", file.Name))
 			name := prefix + "/logs/" + file.Name
 			var entries *serverpb.LogEntriesResponse
 			sf := logPrinter.start("requesting file")

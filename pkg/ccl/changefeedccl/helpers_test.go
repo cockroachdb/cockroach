@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -260,7 +261,7 @@ func withTimeout(
 		jobID = jobFeed.JobID()
 	}
 	return timeutil.RunWithTimeout(context.Background(),
-		fmt.Sprintf("withTimeout-%d", jobID), timeout,
+		redact.Sprintf("withTimeout-%d", jobID), timeout,
 		func(ctx context.Context) error {
 			defer stopFeedWhenDone(ctx, f)()
 			return fn(ctx)

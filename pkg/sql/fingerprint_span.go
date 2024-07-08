@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var maxFingerprintNumWorkers = settings.RegisterIntSetting(
@@ -221,7 +221,7 @@ func fingerprintSpanImpl(
 		var recording tracingpb.Recording
 		var pErr *kvpb.Error
 		exportRequestErr := timeutil.RunWithTimeout(ctx,
-			fmt.Sprintf("ExportRequest fingerprint for span %s", roachpb.Span{Key: span.Key,
+			redact.Sprintf("ExportRequest fingerprint for span %s", roachpb.Span{Key: span.Key,
 				EndKey: span.EndKey}),
 			5*time.Minute, func(ctx context.Context) error {
 				sp := tracing.SpanFromContext(ctx)

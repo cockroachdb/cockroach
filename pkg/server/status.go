@@ -86,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/google/pprof/profile"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/prometheus/common/expfmt"
@@ -1625,7 +1626,7 @@ func (s *statusServer) fetchProfileFromAllNodes(
 		client, err := s.dialNode(ctx, nodeID)
 		return client, err
 	}
-	opName := fmt.Sprintf("fetch cluster-wide %s profile", req.Type)
+	opName := redact.Sprintf("fetch cluster-wide %s profile", req.Type)
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
 		statusClient := client.(serverpb.StatusClient)
 		var pd *profData
@@ -3026,7 +3027,7 @@ func (s *statusServer) Range(
 	}
 
 	if err := s.iterateNodes(
-		ctx, fmt.Sprintf("details about range %d", req.RangeId), noTimeout,
+		ctx, redact.Sprintf("details about range %d", req.RangeId), noTimeout,
 		dialFn,
 		nodeFn, responseFn, errorFn,
 	); err != nil {
@@ -3056,7 +3057,7 @@ func (s *statusServer) ListLocalSessions(
 // nodeError on every error result.
 func (s *statusServer) iterateNodes(
 	ctx context.Context,
-	errorCtx string,
+	errorCtx redact.RedactableString,
 	nodeFnTimeout time.Duration,
 	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error),
 	nodeFn func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error),
@@ -3155,7 +3156,7 @@ func (s *statusServer) iterateNodes(
 // If non-zero, nodeFn will run with a timeout specified by nodeFnTimeout.
 func (s *statusServer) paginatedIterateNodes(
 	ctx context.Context,
-	errorCtx string,
+	errorCtx redact.RedactableString,
 	limit int,
 	pagState paginationState,
 	requestedNodes []roachpb.NodeID,

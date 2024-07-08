@@ -992,7 +992,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 
 	ctx, span := tracing.EnsureChildSpan(ctx, bq.Tracer, bq.processOpName())
 	defer span.Finish()
-	return timeutil.RunWithTimeout(ctx, fmt.Sprintf("%s queue process replica %d", bq.name, repl.GetRangeID()),
+	return timeutil.RunWithTimeout(ctx, redact.Sprintf("%s queue process replica %d", bq.name, repl.GetRangeID()),
 		bq.processTimeoutFunc(bq.store.ClusterSettings(), repl), func(ctx context.Context) error {
 			log.VEventf(ctx, 1, "processing replica")
 

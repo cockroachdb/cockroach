@@ -10,7 +10,6 @@ package backupccl
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -552,7 +551,7 @@ func runBackupProcessor(
 						var pErr *kvpb.Error
 						requestSentAt := timeutil.Now()
 						exportRequestErr := timeutil.RunWithTimeout(ctx,
-							fmt.Sprintf("ExportRequest for span %s", span.span),
+							redact.Sprintf("ExportRequest for span %s", span.span),
 							timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
 								sp := tracing.SpanFromContext(ctx)
 								opts := make([]tracing.SpanOption, 0)

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // GetUserSessionInitInfo determines if the given user exists and
@@ -223,7 +224,7 @@ func GetUserSessionInitInfo(
 }
 
 func getUserInfoRunFn(
-	execCfg *ExecutorConfig, userName username.SQLUsername, opName string,
+	execCfg *ExecutorConfig, userName username.SQLUsername, opName redact.RedactableString,
 ) func(context.Context, func(context.Context) error) error {
 	// We may be operating with a timeout.
 	timeout := userLoginTimeout.Get(&execCfg.Settings.SV)
