@@ -142,6 +142,11 @@ func makeCompareCommand() *cobra.Command {
 			return err
 		}
 
+		// if the threshold is set, we just want to report it and not move further
+		if config.threshold != skipComparison {
+			return c.compareUsingThreshold(metricMaps)
+		}
+
 		links, err := c.publishToGoogleSheets(metricMaps)
 		if err != nil {
 			return err
@@ -166,6 +171,7 @@ func makeCompareCommand() *cobra.Command {
 	cmd.Flags().StringVar(&config.slackToken, "slack-token", config.slackToken, "pass a slack token to post the results to a slack channel")
 	cmd.Flags().StringVar(&config.slackUser, "slack-user", config.slackUser, "slack user to post the results as")
 	cmd.Flags().StringVar(&config.slackChannel, "slack-channel", config.slackChannel, "slack channel to post the results to")
+	cmd.Flags().Float64Var(&config.threshold, "threshold", config.threshold, "threshold for detecting perf regression")
 	return cmd
 }
 

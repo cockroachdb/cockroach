@@ -37,6 +37,7 @@ type compareConfig struct {
 	slackUser    string
 	slackChannel string
 	slackToken   string
+	threshold    float64
 }
 
 type compare struct {
@@ -50,7 +51,22 @@ const (
 	packageSeparator         = "→"
 	slackPercentageThreshold = 20.0
 	slackReportMax           = 3
+	skipComparison           = math.MaxFloat64
 )
+
+type PackageComparison struct {
+	PackageName string
+	Metrics     []MetricComparison
+}
+
+type MetricComparison struct {
+	MetricKey string
+	Result    string
+}
+
+type ComparisonReport struct {
+	PackageComparisons []PackageComparison
+}
 
 const slackCompareTemplateScript = `
 {{ range .Metrics }}*Top {{ len .Changes }} significant change(s) for metric: {{ .MetricName }}*
@@ -66,15 +82,19 @@ func newCompare(config compareConfig) (*compare, error) {
 		return nil, err
 	}
 	ctx := context.Background()
-	service, err := google.New(ctx)
-	if err != nil {
-		return nil, err
+	var service *google.Service
+	if config.threshold == skipComparison {
+		service, err = google.New(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &compare{compareConfig: config, service: service, packages: packages, ctx: ctx}, nil
 }
 
 func defaultCompareConfig() compareConfig {
 	return compareConfig{
+		threshold:    skipComparison, // Skip comparison by default
 		slackUser:    "microbench",
 		slackChannel: "perf-ops",
 	}
@@ -113,6 +133,35 @@ func (c *compare) readMetrics() (map[string]*model.MetricMap, error) {
 	return metricMaps, nil
 }
 
+func (c *compare) createComparisons(
+	metricMap model.MetricMap, oldID string, newID string,
+) map[string]map[string]*model.Comparison {
+
+	metricKeys := make([]string, 0, len(metricMap))
+	for sheetName := range metricMap {
+		metricKeys = append(metricKeys, sheetName)
+	}
+
+	comparisonMap := make(map[string]map[string]*model.Comparison, len(metricKeys))
+	for metricKey, metric := range metricMap {
+
+		// Compute comparisons for each benchmark present in both runs.
+		comparisons := make(map[string]*model.Comparison)
+		for name := range metric.BenchmarkEntries {
+			comparison := metric.ComputeComparison(name, oldID, newID)
+			if comparison != nil {
+				comparisons[name] = comparison
+			}
+		}
+
+		if len(comparisons) != 0 {
+			comparisonMap[metricKey] = comparisons
+		}
+	}
+
+	return comparisonMap
+}
+
 func (c *compare) publishToGoogleSheets(
 	metricMaps map[string]*model.MetricMap,
 ) (map[string]string, error) {
@@ -122,7 +171,9 @@ func (c *compare) publishToGoogleSheets(
 		if c.sheetDesc != "" {
 			sheetName = fmt.Sprintf("%s (%s)", sheetName, c.sheetDesc)
 		}
-		url, err := c.service.CreateSheet(c.ctx, sheetName, *metricMap, "old", "new")
+
+		comparisonMap := c.createComparisons(*metricMap, "old", "new")
+		url, err := c.service.CreateSheet(c.ctx, sheetName, *metricMap, comparisonMap, "old", "new")
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create sheet for %s", pkgGroup)
 		}
@@ -239,6 +290,54 @@ func (c *compare) postToSlack(
 		slack.MsgOptionText(fmt.Sprintf("Microbenchmark comparison summary: %s", c.sheetDesc), false),
 		slack.MsgOptionAttachments(attachments...),
 	)
+}
+
+func (r *ComparisonReport) getReportString() string {
+	var builder strings.Builder
+	for _, pkgError := range r.PackageComparisons {
+		builder.WriteString(fmt.Sprintf("Package: %s\n", pkgError.PackageName))
+		for _, metricError := range pkgError.Metrics {
+			builder.WriteString(fmt.Sprintf("\tMetric: %s, Result: %s\n", metricError.MetricKey, metricError.Result))
+		}
+	}
+	return builder.String()
+}
+
+func (c *compare) compareUsingThreshold(metricMap map[string]*model.MetricMap) error {
+
+	report := ComparisonReport{}
+
+	for pkgName, metricMap := range metricMap {
+		var metrics []MetricComparison
+		comparisonMap := c.createComparisons(*metricMap, "old", "new")
+
+		for metricKey, comparisons := range comparisonMap {
+			for benchmarkName, comparison := range comparisons {
+				// If Delta is more negative than the threshold, then there's a concerning perf regression
+				if comparison.Delta+(c.threshold*100) < 0 {
+					metrics = append(metrics, MetricComparison{
+						MetricKey: metricKey,
+						Result:    fmt.Sprintf("%s : %s", benchmarkName, comparison.FormattedDelta),
+					})
+				}
+			}
+		}
+
+		if len(metrics) > 0 {
+			report.PackageComparisons = append(report.PackageComparisons, PackageComparison{
+				PackageName: pkgName,
+				Metrics:     metrics,
+			})
+		}
+	}
+
+	if len(report.PackageComparisons) > 0 {
+		reportString := report.getReportString()
+		return errors.Newf("There are benchmark regressions of > %.2f%% in the following packages \n %s\n",
+			c.threshold*100, reportString)
+	}
+
+	return nil
 }
 
 func processReportFile(builder *model.Builder, id, pkg, path string) error {

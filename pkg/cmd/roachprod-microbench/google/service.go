@@ -79,38 +79,25 @@ func (srv *Service) testServices(ctx context.Context) error {
 
 // CreateSheet creates a new Google spreadsheet with the provided metric data.
 func (srv *Service) CreateSheet(
-	ctx context.Context, name string, metricMap model.MetricMap, oldID, newID string,
+	ctx context.Context,
+	name string,
+	metricMap model.MetricMap,
+	comparisonMap map[string]map[string]*model.Comparison,
+	oldID, newID string,
 ) (string, error) {
 	var s sheets.Spreadsheet
 	s.Properties = &sheets.SpreadsheetProperties{Title: name}
 
-	// Sort sheets by name in reverse order. This ensures `sec/op` is the first
-	// sheet and metric in the summary.
-	sheetNames := make([]string, 0, len(metricMap))
-	for sheetName := range metricMap {
-		sheetNames = append(sheetNames, sheetName)
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(sheetNames)))
-
 	// Raw data sheets.
 	sheetInfos, idx := make([]rawSheetInfo, 0, len(metricMap)), 0
-	for _, sheetName := range sheetNames {
+	for sheetName, comparisons := range comparisonMap {
 		metric := metricMap[sheetName]
-		// Compute comparisons for each benchmark present in both runs.
-		comparisons := make(map[string]*model.Comparison)
-		for name := range metric.BenchmarkEntries {
-			comparison := metric.ComputeComparison(name, oldID, newID)
-			if comparison != nil {
-				comparisons[name] = comparison
-			}
-		}
-		// Only generate a sheet if there are comparisons to show.
-		if len(comparisons) != 0 {
-			sh, info := srv.createRawSheet(metric, comparisons, oldID, newID, idx)
-			s.Sheets = append(s.Sheets, sh)
-			sheetInfos = append(sheetInfos, info)
-			idx++
-		}
+
+		sh, info := srv.createRawSheet(metric, comparisons, oldID, newID, idx)
+		s.Sheets = append(s.Sheets, sh)
+		sheetInfos = append(sheetInfos, info)
+		idx++
+
 	}
 
 	// Pivot table overview sheet. Place in front.
