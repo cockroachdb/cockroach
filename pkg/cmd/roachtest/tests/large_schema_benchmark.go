@@ -141,6 +141,7 @@ func registerSchemaChangeBenchmarkLargeSchema(r registry.Registry, numTables int
 						Warehouses:        len(c.All()) - 1,
 						SkipSetup:         true,
 						DisablePrometheus: true,
+						DisableHistogram:  true, // We setup the flag above.
 						WorkloadInstances: wlInstance,
 						Duration:          time.Minute * 60,
 						ExtraRunArgs: fmt.Sprintf("--db-list-file=%s --txn-preamble-file=%s --conns=%d --workers=%d %s %s",
