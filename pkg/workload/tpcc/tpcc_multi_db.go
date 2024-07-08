@@ -150,14 +150,27 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 		if err := t.runInit(); err != nil {
 			return err
 		}
+		ctx := context.Background()
+		// First create all require databases in a single txn, on multi-region
+		// this will reduce round trips and speed things up.
+		tx, err := db.BeginTx(ctx, &gosql.TxOptions{})
+		if err != nil {
+			return err
+		}
 		// Create all of the databases that was specified in the list.
 		for _, dbName := range t.dbList {
-			if _, err := db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName.Catalog())); err != nil {
+			if _, err := tx.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName.Catalog())); err != nil {
 				return err
 			}
-			if _, err := db.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s.%s", dbName.Catalog(), dbName.Schema())); err != nil {
+			if _, err := tx.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s.%s", dbName.Catalog(), dbName.Schema())); err != nil {
 				return err
 			}
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		// Next configure all the databases as multi-region.
+		for _, dbName := range t.dbList {
 			if _, err := db.Exec("USE $1", dbName.Catalog()); err != nil {
 				return err
 			}
@@ -171,6 +184,9 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 			if err := oldPrecreate(db); err != nil {
 				return err
 			}
+		}
+		if _, err := db.Exec("RESET search_path"); err != nil {
+			return err
 		}
 		return nil
 	}
