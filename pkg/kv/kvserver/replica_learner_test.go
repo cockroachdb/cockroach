@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -1180,7 +1181,7 @@ func TestSplitRetriesOnFailedExitOfJointConfig(t *testing.T) {
 			errFn: func(req *kvpb.TransferLeaseRequest) error {
 				repl := req.Lease.Replica
 				status := raftutil.ReplicaStateProbe
-				return kvserver.NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(repl, status)
+				return leases.NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(repl, status)
 			},
 		},
 		{

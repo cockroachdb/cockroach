@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -1850,7 +1851,7 @@ func TestLeaseExpirationBasedDrainTransferWithProscribed(t *testing.T) {
 				target := filterArgs.Req.Requests[0].GetTransferLease().Lease.Replica
 				if target == l.replica0Desc {
 					failedOnce.Do(func() { close(failedCh) })
-					return kvpb.NewError(kvserver.NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
+					return kvpb.NewError(leases.NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
 						target, raftutil.ReplicaStateProbe))
 				}
 			}
