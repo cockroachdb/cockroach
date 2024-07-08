@@ -780,6 +780,39 @@ statement ok
 GRANT SELECT ON TABLE tbl_owned_by_parent TO other
 
 statement ok
+REVOKE SELECT ON TABLE tbl_owned_by_root FROM other
+
+statement ok
+REVOKE SELECT ON TABLE tbl_owned_by_parent FROM other
+
+statement ok
 RESET role
+
+subtest end
+
+subtest disable_grant_option_for_owner
+
+statement ok
+SET CLUSTER SETTING sql.auth.grant_option_for_owner.enabled = false
+
+statement ok
+SET ROLE parent
+
+# Verify that parent is not able to grant SELECT on tbl_owned_by_parent.
+statement error user parent missing WITH GRANT OPTION privilege on SELECT
+GRANT SELECT ON TABLE tbl_owned_by_parent TO other
+
+statement ok
+SET ROLE child
+
+# Verify that child also is not able to grant SELECT on tbl_owned_by_parent.
+statement error user child missing WITH GRANT OPTION privilege on SELECT
+GRANT SELECT ON TABLE tbl_owned_by_parent TO other
+
+statement ok
+RESET role
+
+statement ok
+RESET CLUSTER SETTING sql.auth.grant_option_for_owner.enabled
 
 subtest end
