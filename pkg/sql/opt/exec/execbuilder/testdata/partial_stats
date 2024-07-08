@@ -1052,8 +1052,14 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
     "histo_buckets": [
         {
             "distinct_range": 0,
-            "num_eq": 1,
+            "num_eq": 0,
             "num_range": 0,
+            "upper_bound": "-9223372036854775808"
+        },
+        {
+            "distinct_range": 0.5,
+            "num_eq": 1,
+            "num_range": 1,
             "upper_bound": "0"
         },
         {
@@ -1133,6 +1139,12 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
             "num_eq": 1,
             "num_range": 4,
             "upper_bound": "55"
+        },
+        {
+            "distinct_range": 0.5,
+            "num_eq": 0,
+            "num_range": 1,
+            "upper_bound": "9223372036854775807"
         }
     ],
     "histo_col_type": "INT8",
@@ -1158,7 +1170,7 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
         {
             "distinct_range": 9,
             "num_eq": 1,
-            "num_range": 9,
+            "num_range": 10,
             "upper_bound": "10"
         },
         {
@@ -1204,9 +1216,9 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
             "upper_bound": "36"
         },
         {
-            "distinct_range": 2,
+            "distinct_range": 3,
             "num_eq": 1,
-            "num_range": 3,
+            "num_range": 4,
             "upper_bound": "40"
         },
         {
@@ -1261,3 +1273,46 @@ __merged__       {b}           2022-12-13 15:22:21.988179 +0000 UTC  61         
 # Finally, restore forecasts setting to its previous value.
 statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
+
+# Verify that we can merge partial stats with full stats that have outer
+# buckets.
+statement ok
+SET enable_create_stats_using_extremes = on
+
+statement ok
+CREATE TABLE ka (k INT PRIMARY KEY, a INT, INDEX(a))
+
+statement ok
+INSERT INTO ka select x, x from generate_series(0, 9998) as g(x)
+
+statement ok
+INSERT INTO ka VALUES (9999, NULL)
+
+statement ok
+CREATE STATISTICS ka_fullstat ON a FROM ka
+
+let $hist_id_ka_outer_buckets_full
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE ka] WHERE statistics_name = 'ka_fullstat'
+
+# The full stats collection should have added 2 outer buckets for a total of 202
+# with upper bounds of MaxInt64 and MinInt64.
+query I
+SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_ka_outer_buckets_full]
+----
+202
+
+statement ok
+INSERT INTO ka VALUES (10000, 9999), (10001, 10000)
+
+statement ok
+CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
+ORDER BY statistics_name
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__merged__       {a}           10002      9803            1
+ka_fullstat      {a}           10000      9920            1
+ka_partialstat   {a}           3          3               1
