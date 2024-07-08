@@ -473,7 +473,7 @@ func (sr *schemaResolver) ResolveFunction(
 
 	switch {
 	case builtinDef != nil && routine != nil:
-		return builtinDef.MergeWith(routine, path)
+		return builtinDef.MergeWith(routine)
 	case builtinDef != nil:
 		props, _ := builtinsregistry.GetBuiltinProperties(builtinDef.Name)
 		if props.UnsupportedWithIssue != 0 {
@@ -596,7 +596,7 @@ func maybeLookupRoutine(
 		if !found {
 			continue
 		}
-		udfDef, err = udfDef.MergeWith(curUdfDef, path)
+		udfDef, err = udfDef.MergeWith(curUdfDef)
 		if err != nil {
 			return nil, err
 		}

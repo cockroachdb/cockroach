@@ -608,35 +608,3 @@ SELECT nextval('s108297')
 2
 
 subtest end
-
-# Regression test for #124538. User should be able to override built-in functions
-# by moving "pg_catalog" to the back of the search path.
-subtest regression_124538
-
-statement ok
-CREATE FUNCTION now() RETURNS TIMESTAMP STABLE LANGUAGE SQL AS $$ SELECT TIMESTAMP '1999-12-31 23:59:59.999999'; $$;
-
-query B
-SELECT now() > '2024-06-21 19:04:25.625514+00'
-----
-true
-
-statement ok
-SET search_path = public, pg_catalog
-
-query T
-SELECT public.now()
-----
-1999-12-31 23:59:59.999999 +0000 +0000
-
-query T
-SELECT now()
-----
-1999-12-31 23:59:59.999999 +0000 +0000
-
-query B
-SELECT now() > '2024-06-21 19:04:25.625514+00'
-----
-false
-
-subtest end

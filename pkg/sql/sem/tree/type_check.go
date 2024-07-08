@@ -3484,8 +3484,7 @@ func getMostSignificantOverload(
 		schema := searchPath.GetSchema(i)
 		for _, idx := range filter {
 			if r := qualifiedOverloads[idx]; r.Schema == schema {
-				// Only throw "ambiguous function" error for user-defined functions.
-				if found && r.Type == UDFRoutine {
+				if found {
 					return QualifiedOverload{}, ambiguousError()
 				}
 				found = true
