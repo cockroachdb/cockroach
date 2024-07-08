@@ -775,6 +775,16 @@ func writeBinaryDatumNotNull(
 		lengthToWrite := b.Len() - (initialLen + 4)
 		b.putInt32AtIndex(initialLen /* index to write at */, int32(lengthToWrite))
 
+	case *tree.DPGVector:
+		// 2 bytes for dimensions, 2 bytes for unused, and 4 bytes for each
+		// float4.
+		b.putInt32(int32(4 + 4*len(v.T)))
+		b.putInt16(int16(len(v.T)))
+		b.putInt16(int16(0)) // vec->unused - "reserved for future use, always zero"
+		for _, f := range v.T {
+			b.putInt32(int32(math.Float32bits(f)))
+		}
+
 	case *tree.DArray:
 		if v.ParamTyp.Family() == types.ArrayFamily {
 			b.setError(unimplemented.NewWithIssueDetail(32552,

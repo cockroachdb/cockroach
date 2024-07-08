@@ -1,0 +1,47 @@
+send
+Query {"String": "DROP TABLE IF EXISTS v"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE v (v VECTOR)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO v VALUES('[1]'), ('[2,3]')"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# "ResultFormatCodes": [1] = binary
+send
+Parse {"Name": "s", "Query": "SELECT * FROM v"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s", "ResultFormatCodes": [1]}
+Execute {"Portal": "p"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"000100003f800000"}]}
+{"Type":"DataRow","Values":[{"binary":"000200004000000040400000"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
