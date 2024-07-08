@@ -215,7 +215,7 @@ func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, er
 	if err := protoutil.Unmarshal(data[RaftCommandPrefixLen:], &raftAdmissionMeta); err != nil {
 		return kvflowcontrolpb.RaftAdmissionMeta{}, err
 	}
-	pri := data[0] & priMask
+	pri := (data[0] & priMask) >> 6
 	switch prefix {
 	case entryEncodingStandardWithRaftPriorityPrefixByte, entryEncodingSideloadedWithRaftPriorityPrefixByte:
 		if kvflowcontrolpb.RaftPriority(pri) !=

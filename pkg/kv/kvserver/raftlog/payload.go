@@ -24,7 +24,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// encodingMask is used to encode the encoding type in the first 6 bits of the
+// first byte in the entry encoding.
 const encodingMask byte = 0x3F
+
+// priMask is used to encode the raft admission control priority of the command
+// in the last 2 bits of the first byte in the entry encoding.
 const priMask byte = 0xC0
 
 // EncodeCommand encodes the provided command into a slice.
@@ -83,12 +88,14 @@ func EncodeCommand(
 	// INVARIANT: raftAdmissionMeta != nil => prefix
 	preLen := 0
 	cmdLen := command.Size()
+
 	var admissionMetaLen int
 	if prefix {
 		preLen = RaftCommandPrefixLen
 		if raftAdmissionMeta != nil {
 			// Encode admission metadata data at the start, right after the command
 			// prefix.
+
 			admissionMetaLen = raftAdmissionMeta.Size()
 			cmdLen += admissionMetaLen
 		}
@@ -123,16 +130,11 @@ func EncodeCommand(
 			raftAdmissionMeta.AdmissionCreateTime,
 			raftAdmissionMeta.AdmissionOriginNode,
 		)
-		// Zero out what we've already encoded and marshaled to avoid re-marshaling
-		// again.
-		command.AdmissionPriority = 0
-		command.AdmissionCreateTime = 0
-		command.AdmissionOriginNode = 0
+		// We could zero out what we've already encoded and marshaled to avoid
+		// re-marshaling again, however that may change the size of the encoded
+		// command, for which we already presized the buffer.
 	}
 
-	// TODO(rac-v2): currently, this may try to encode a command that is too
-	// small for the sized buffer. It is likely the sizing calculation is off.
-	//
 	// Encode the rest of the command.
 	if _, err := protoutil.MarshalToSizedBuffer(command, data[preLen+admissionMetaLen:]); err != nil {
 		return nil, err

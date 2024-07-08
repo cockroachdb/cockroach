@@ -46,7 +46,7 @@ func EncodingOf(ent raftpb.Entry) (EntryEncoding, kvflowcontrolpb.RaftPriority, 
 		return 0, 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
 	}
 
-	pri := kvflowcontrolpb.RaftPriority(ent.Data[0] & priMask)
+	pri := kvflowcontrolpb.RaftPriority((ent.Data[0] & priMask) >> 6)
 	encoding := ent.Data[0] & encodingMask
 
 	switch encoding {

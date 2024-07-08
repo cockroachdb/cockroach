@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"strings"
 
@@ -27,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1180,21 +1183,24 @@ func testingEncodeRaftFlowControlState(
 	tokens uint64,
 	originNodeID roachpb.NodeID,
 ) raftpb.Entry {
-
+	r := rand.New(rand.NewSource(123))
+	createTime := timeutil.Now().UnixNano()
 	cmd := &kvserverpb.RaftCommand{
-		WriteBatch:        &kvserverpb.WriteBatch{},
-		LogicalOpLog:      &kvserverpb.LogicalOpLog{},
-		AdmissionPriority: int32(pri),
-		ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
-			AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{},
-		},
+		AdmissionPriority:   int32(pri),
+		AdmissionCreateTime: createTime,
+		AdmissionOriginNode: originNodeID,
 	}
 	idKey := raftlog.MakeCmdIDKey()
 	admissionMeta := &kvflowcontrolpb.RaftAdmissionMeta{
 		AdmissionPriority:   int32(pri),
 		AdmissionOriginNode: originNodeID,
+		AdmissionCreateTime: createTime,
 	}
-	cmd.ReplicatedEvalResult.AddSSTable.Data = []byte(strings.Repeat("x", raftlog.RaftCommandIDLen))
+
+  // Deduct the size of the command not including the write batch data, this
+  // makes the size of the command exactly tokens long.
+	cmd.WriteBatch = &kvserverpb.WriteBatch{Data: randutil.RandBytes(r, int(tokens) - 60)}
+
 	data, err := raftlog.EncodeCommand(context.Background(), cmd, idKey, admissionMeta, usesFlowControl)
 	if err != nil {
 		panic(err)
@@ -1228,7 +1234,9 @@ func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
 			panic(errors.AssertionFailedf("unable to decode raft command admission data: %v", err))
 		}
 		if kvflowcontrolpb.RaftPriority(meta.AdmissionPriority) != priBits {
-			panic("inconsistent priorities")
+			panic(
+				errors.AssertionFailedf("inconsistent priorities: pri bits=%v admission pri=%v",
+					priBits, kvflowcontrolpb.RaftPriority(meta.AdmissionPriority)))
 		}
 		entryFCState.originalPri = kvflowcontrolpb.RaftPriority(meta.AdmissionPriority)
 		entryFCState.tokens = kvflowcontrol.Tokens(len(entry.Data))
