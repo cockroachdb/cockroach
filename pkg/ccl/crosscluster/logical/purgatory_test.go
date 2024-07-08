@@ -11,6 +11,7 @@ package logical
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -35,7 +36,9 @@ func TestPurgatory(t *testing.T) {
 
 	var flushed, resolved int
 	p := &purgatory{
-		byteLimit:   5 << 20,
+		byteLimit:   func() int64 { return 5 << 20 },
+		delay:       func() time.Duration { return 0 },
+		deadline:    func() time.Duration { return 0 },
 		bytesGauge:  metric.NewGauge(metric.Metadata{}),
 		eventsGauge: metric.NewGauge(metric.Metadata{}),
 		flush: func(

@@ -538,6 +538,7 @@ func TestFlushErrorHandling(t *testing.T) {
 
 	lrw.bh = []BatchHandler{(mockBatchHandler(true))}
 
+	lrw.purgatory.byteLimit = func() int64 { return 0 }
 	// One failure immediately means a zero-byte purgatory is full.
 	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("a")}))
 	require.Equal(t, int64(1), lrw.metrics.RetryQueueEvents.Value())
@@ -550,7 +551,7 @@ func TestFlushErrorHandling(t *testing.T) {
 	require.Equal(t, 1, int(dlq))
 
 	// Bump up the purgatory size limit and observe no more DLQ'ed items.
-	lrw.purgatory.byteLimit = 1 << 20
+	lrw.purgatory.byteLimit = func() int64 { return 1 << 20 }
 	require.False(t, lrw.purgatory.full())
 	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("c")}))
 	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("d")}))

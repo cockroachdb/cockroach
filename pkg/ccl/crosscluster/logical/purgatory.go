@@ -14,8 +14,30 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
+
+var retryQueueAgeLimit = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.retry_queue_duration",
+	"maximum time an incoming update can be retried before it is sent to the DLQ",
+	time.Minute,
+)
+
+var retryQueueBackoff = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.retry_queue_backoff",
+	"minimum delay between retries of items in the retry queue",
+	time.Minute,
+)
+
+var retryQueueSizeLimit = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.retry_queue_partition_size_limit",
+	"byte size of retry queue per partition of replication stream above which events are sent to DLQ on failure to apply",
+	4<<20,
 )
 
 // purgatory is an ordered list of purgatory levels, each consisting of some
@@ -26,9 +48,9 @@ import (
 // instead.
 type purgatory struct {
 	// configuration provided at construction.
-	delay      time.Duration // delay to wait between attempts of a level.
-	deadline   time.Duration // age of a level after which drain is mandatory.
-	byteLimit  int64
+	delay      func() time.Duration // delay to wait between attempts of a level.
+	deadline   func() time.Duration // age of a level after which drain is mandatory.
+	byteLimit  func() int64
 	flush      func(context.Context, []streampb.StreamEvent_KV, bool, retryEligibility) ([]streampb.StreamEvent_KV, int64, error)
 	checkpoint func(context.Context, []jobspb.ResolvedSpan) error
 
@@ -78,19 +100,19 @@ func (p *purgatory) Store(
 func (p *purgatory) Drain(ctx context.Context) error {
 	var resolved int
 
-	for i := range p.levels {
+	for i, lvl := range p.levels {
 		// If we need to make space, or if the events have been in purgatory for too
 		// long, we will tell flush that it *must* process events.
 		allowRetry := retryAllowed
 		if p.full() {
 			allowRetry = noSpace
-		} else if !p.levels[i].closedAt.IsZero() && timeutil.Since(p.levels[i].closedAt) > p.deadline {
+		} else if p.deadline != nil && !lvl.closedAt.IsZero() && timeutil.Since(lvl.closedAt) > p.deadline() {
 			allowRetry = tooOld
 		}
 
 		// If tried to flush this purgatory recently and it isn't required to flush
 		// now, wait a until next time to try again.
-		if timeutil.Since(p.levels[i].lastAttempted) < p.delay && allowRetry == retryAllowed {
+		if p.delay != nil && allowRetry == retryAllowed && timeutil.Since(lvl.lastAttempted) < p.delay() {
 			break
 		}
 		p.levels[i].lastAttempted = timeutil.Now()
@@ -134,5 +156,8 @@ func (p purgatory) Empty() bool {
 }
 
 func (p *purgatory) full() bool {
-	return p.bytes >= p.byteLimit
+	if p.byteLimit == nil {
+		return false
+	}
+	return p.bytes >= p.byteLimit()
 }

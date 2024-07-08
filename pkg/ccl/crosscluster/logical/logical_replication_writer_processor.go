@@ -163,9 +163,9 @@ func newLogicalReplicationWriterProcessor(
 		metrics:   flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 	}
 	lrw.purgatory = purgatory{
-		deadline:    time.Minute,
-		delay:       time.Second * 5,
-		byteLimit:   8 << 20,
+		deadline:    func() time.Duration { return retryQueueAgeLimit.Get(&flowCtx.Cfg.Settings.SV) },
+		delay:       func() time.Duration { return retryQueueBackoff.Get(&flowCtx.Cfg.Settings.SV) },
+		byteLimit:   func() int64 { return retryQueueSizeLimit.Get(&flowCtx.Cfg.Settings.SV) },
 		flush:       lrw.flushBuffer,
 		checkpoint:  lrw.checkpoint,
 		bytesGauge:  lrw.metrics.RetryQueueBytes,
