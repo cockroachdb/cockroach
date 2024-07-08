@@ -45,8 +45,9 @@ a  test-user  ALL      true
 query TTTB rowsort
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  readwrite  ALL  true
-a  test-user  ALL  true
+a  public     CONNECT  false
+a  readwrite  ALL      true
+a  test-user  ALL      true
 
 statement ok
 REVOKE CONNECT ON DATABASE a FROM "test-user",readwrite
@@ -71,6 +72,7 @@ a  test-user  ZONECONFIG  true
 query TTTB rowsort
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
+a  public     CONNECT     false
 a  readwrite  BACKUP      true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
@@ -107,6 +109,7 @@ REVOKE ALL PRIVILEGES ON DATABASE a FROM "test-user"
 query TTTB rowsort
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
+a  public     CONNECT     false
 a  readwrite  BACKUP      true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
@@ -126,6 +129,7 @@ a  root    ALL      true
 query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
+a  public  CONNECT  false
 
 # Usage privilege should not be grantable on databases.
 

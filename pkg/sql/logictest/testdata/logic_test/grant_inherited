@@ -61,11 +61,12 @@ meeter     granter  false
 statement ok
 GRANT ALL ON DATABASE defaultdb TO meeter WITH GRANT OPTION
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON DATABASE defaultdb FOR alice
 ----
 database_name  grantee  privilege_type  is_grantable
 defaultdb      meeter   ALL             true
+defaultdb      public   CONNECT         false
 
 statement ok
 CREATE SCHEMA sc
@@ -73,7 +74,7 @@ CREATE SCHEMA sc
 statement ok
 GRANT ALL ON SCHEMA sc TO meeter WITH GRANT OPTION
 
-query TTTTB colnames
+query TTTTB colnames,rowsort
 SHOW GRANTS ON SCHEMA sc FOR alice
 ----
 database_name  schema_name  grantee  privilege_type  is_grantable
@@ -85,7 +86,7 @@ CREATE SEQUENCE sq
 statement ok
 GRANT ALL ON SEQUENCE sq TO meeter WITH GRANT OPTION
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON SEQUENCE sq FOR alice
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -97,7 +98,7 @@ CREATE TABLE tbl (i INT PRIMARY KEY);
 statement ok
 GRANT ALL ON TABLE tbl TO meeter WITH GRANT OPTION
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TABLE tbl FOR alice
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -109,11 +110,12 @@ CREATE TYPE typ AS ENUM ('a', 'b')
 statement ok
 GRANT ALL ON TYPE typ TO meeter WITH GRANT OPTION
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE typ FOR alice
 ----
 database_name  schema_name  type_name  grantee  privilege_type  is_grantable
 test           public       typ        meeter   ALL             true
+test           public       typ        public   USAGE           false
 
 statement ok
 CREATE FUNCTION fn(IN x INT)
@@ -127,11 +129,12 @@ $$
 statement ok
 GRANT EXECUTE ON FUNCTION fn TO meeter WITH GRANT OPTION
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS ON FUNCTION fn FOR alice
 ----
-database_name  schema_name  routine_id   routine_signature   grantee  privilege_type  is_grantable
-test           public       100111       fn(int8)            meeter   EXECUTE         true
+database_name  schema_name  routine_id  routine_signature  grantee  privilege_type  is_grantable
+test           public       100111      fn(int8)           meeter   EXECUTE         true
+test           public       100111      fn(int8)           public   EXECUTE         false
 
 statement ok
 CREATE EXTERNAL CONNECTION conn AS 'nodelocal://1/foo';
@@ -139,7 +142,7 @@ CREATE EXTERNAL CONNECTION conn AS 'nodelocal://1/foo';
 statement ok
 GRANT ALL ON EXTERNAL CONNECTION conn TO meeter WITH GRANT OPTION
 
-query TTTB colnames
+query TTTB colnames,rowsort
 SHOW GRANTS ON EXTERNAL CONNECTION conn FOR alice
 ----
 connection_name  grantee  privilege_type  is_grantable
@@ -148,8 +151,41 @@ conn             meeter   ALL             true
 statement ok
 GRANT SYSTEM ALL TO meeter WITH GRANT OPTION
 
-query TTB colnames
+query TTB colnames,rowsort
 SHOW SYSTEM GRANTS FOR alice
 ----
 grantee  privilege_type  is_grantable
 meeter   ALL             true
+
+# Verify that privileges inherited implicitly through public are listed
+# for a role.
+
+statement ok
+CREATE ROLE parent
+
+statement ok
+CREATE ROLE child
+
+statement ok
+GRANT parent TO child
+
+statement ok
+CREATE SCHEMA test_schema
+
+statement ok
+GRANT USAGE ON SCHEMA test_schema TO public
+
+statement ok
+GRANT CREATE ON SCHEMA test_schema TO parent
+
+query TTTTTTB colnames,rowsort
+SHOW GRANTS FOR child
+----
+database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+test           public       NULL         schema       public   CREATE          false
+test           public       NULL         schema       public   USAGE           false
+test           public       _typ         type         public   USAGE           false
+test           public       fn(int8)     routine      public   EXECUTE         false
+test           public       typ          type         public   USAGE           false
+test           test_schema  NULL         schema       parent   CREATE          false
+test           test_schema  NULL         schema       public   USAGE           false
