@@ -269,23 +269,40 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 	return (*replicaRaftStorage)(r).Snapshot()
 }
 
+type raftLead struct {
+	term uint64
+	lead raftpb.PeerID
+}
+
+func (r raftLead) unknown() bool {
+	return r.term == 0 || r.lead == raft.None
+}
+
 // GetSnapshot returns a snapshot of the replica appropriate for sending to a
 // replica. If this method returns without error, callers must eventually call
 // OutgoingSnapshot.Close.
 func (r *Replica) GetSnapshot(
 	ctx context.Context, snapUUID uuid.UUID,
-) (_ *OutgoingSnapshot, err error) {
+) (_ *OutgoingSnapshot, _ raftLead, err error) {
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
 	var snap storage.Reader
-	var startKey roachpb.RKey
 	r.raftMu.Lock()
+
+	r.mu.RLock()
+	startKey := r.mu.state.Desc.StartKey
+	s := r.raftBasicStatusRLocked()
+	r.mu.RUnlock()
+	lead := raftLead{term: s.Term, lead: s.Lead}
+	if lead.unknown() {
+		return nil, raftLead{}, errors.Errorf("raft leaded unknown at term %d", lead.term)
+	}
+
 	if r.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&r.ClusterSettings().SV) {
 		var ss *spanset.SpanSet
 		r.mu.RLock()
 		spans := rditer.MakeAllKeySpans(r.mu.state.Desc) // needs unreplicated to access Raft state
-		startKey = r.mu.state.Desc.StartKey
 		if util.RaceEnabled {
 			ss = rditer.MakeAllKeySpanSet(r.mu.state.Desc)
 			defer ss.Release()
@@ -308,13 +325,6 @@ func (r *Replica) GetSnapshot(
 		}
 	}()
 
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	rangeID := r.RangeID
-	if startKey == nil {
-		startKey = r.mu.state.Desc.StartKey
-	}
-
 	ctx, sp := r.AnnotateCtxWithSpan(ctx, "snapshot")
 	defer sp.Finish()
 
@@ -327,12 +337,12 @@ func (r *Replica) GetSnapshot(
 	// NB: We have Replica.mu read-locked, but we need it write-locked in order
 	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
-	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snap, startKey)
+	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(r.RangeID), snap, startKey)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %+v", err)
-		return nil, err
+		return nil, raftLead{}, err
 	}
-	return &snapData, nil
+	return &snapData, lead, nil
 }
 
 // OutgoingSnapshot contains the data required to stream a snapshot to a

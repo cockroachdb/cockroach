@@ -3143,6 +3143,12 @@ func (r *Replica) validateSnapshotDelegationRequest(
 		)
 	}
 
+	// Raft expects snapshots to be sent on behalf of a leader. If the delegate
+	// does not know the leader, it can't generate a correct MsgSnap message.
+	if status.Lead == raft.None {
+		return errors.Errorf("raft leader at term %d unknown", replTerm)
+	}
+
 	// Sender replica's snapshot will be rejected if the sender replica's raft
 	// applied index is lower than or equal to the log truncated constraint on the
 	// leaseholder, as this replica's snapshot will be wasted. Note that it is
@@ -3266,7 +3272,7 @@ func (r *Replica) followerSendSnapshot(
 		return nil, err
 	}
 
-	snap, err := r.GetSnapshot(ctx, req.SnapId)
+	snap, lead, err := r.GetSnapshot(ctx, req.SnapId)
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s: failed to generate snapshot", r)
 	}
@@ -3323,9 +3329,9 @@ func (r *Replica) followerSendSnapshot(
 			ToReplica:   req.RecipientReplica,
 			Message: raftpb.Message{
 				Type:     raftpb.MsgSnap,
-				From:     raftpb.PeerID(req.CoordinatorReplica.ReplicaID),
+				From:     lead.lead,
 				To:       raftpb.PeerID(req.RecipientReplica.ReplicaID),
-				Term:     uint64(req.Term),
+				Term:     lead.term,
 				Snapshot: &snap.RaftSnap,
 			},
 		},

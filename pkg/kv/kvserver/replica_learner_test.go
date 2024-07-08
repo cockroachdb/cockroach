@@ -2222,7 +2222,7 @@ func getSnapshotMetricsDiff(
 func getExpectedSnapshotSizeBytes(
 	ctx context.Context, originStore *kvserver.Store, originRepl *kvserver.Replica,
 ) (int64, error) {
-	snap, err := originRepl.GetSnapshot(ctx, uuid.MakeV4())
+	snap, _, err := originRepl.GetSnapshot(ctx, uuid.MakeV4())
 	if err != nil {
 		return 0, err
 	}
