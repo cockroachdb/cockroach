@@ -452,7 +452,7 @@ type DistSenderRangeFeedMetrics struct {
 	Errors                 rangeFeedErrorCounters
 }
 
-func MakeDistSenderMetrics() DistSenderMetrics {
+func MakeDistSenderMetrics(locality roachpb.Locality) DistSenderMetrics {
 	m := DistSenderMetrics{
 		BatchCount:                         metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:                  metric.NewCounter(metaDistSenderPartialBatchCount),
@@ -797,7 +797,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		clock:         cfg.Clock,
 		nodeDescs:     cfg.NodeDescs,
 		nodeIDGetter:  nodeIDGetter,
-		metrics:       MakeDistSenderMetrics(),
+		metrics:       MakeDistSenderMetrics(cfg.Locality),
 		kvInterceptor: cfg.KVInterceptor,
 		locality:      cfg.Locality,
 		healthFunc:    cfg.HealthFunc,
@@ -2882,8 +2882,9 @@ func (ds *DistSender) sendToReplicas(
 					var reqInfo tenantcostmodel.RequestInfo
 					var respInfo tenantcostmodel.ResponseInfo
 					if ba.IsWrite() {
+						replicationNetworkPaths := ds.computeWriteReplicationNetworkPaths(ctx, desc, &curReplica)
 						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, true /* isWrite */)
-						reqInfo = tenantcostmodel.MakeRequestInfo(ba, len(desc.Replicas().Descriptors()), networkCost)
+						reqInfo = tenantcostmodel.MakeRequestInfo(ba, len(desc.Replicas().Descriptors()), networkCost, replicationNetworkPaths)
 					}
 					if !reqInfo.IsWrite() {
 						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, false /* isWrite */)
@@ -3223,6 +3224,41 @@ func (ds *DistSender) computeNetworkCost(
 	}
 
 	return cost
+}
+
+// computeWriteReplicationNetworkPaths computes all the network paths taken by
+// the leaseholder when it replicates writes to the other replicas for the given
+// range.
+func (ds *DistSender) computeWriteReplicationNetworkPaths(
+	ctx context.Context, desc *roachpb.RangeDescriptor, leaseholderReplica *roachpb.ReplicaDescriptor,
+) []tenantcostmodel.LocalityNetworkPath {
+	np := []tenantcostmodel.LocalityNetworkPath{}
+	fromNode, err := ds.nodeDescs.GetNodeDescriptor(leaseholderReplica.NodeID)
+	if err != nil {
+		// If we don't know where a node is, we can't determine the network
+		// path for the operation.
+		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", leaseholderReplica.NodeID, err)
+		return np
+	}
+	for _, replica := range desc.Replicas().Descriptors() {
+		if replica.ReplicaID == leaseholderReplica.ReplicaID {
+			continue
+		}
+		toNode, err := ds.nodeDescs.GetNodeDescriptor(replica.NodeID)
+		if err != nil {
+			// If we don't know where a node is, we can't determine the network
+			// path for the operation.
+			log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
+			continue
+		}
+		np = append(np, tenantcostmodel.LocalityNetworkPath{
+			FromNodeID:   leaseholderReplica.NodeID,
+			FromLocality: fromNode.Locality,
+			ToNodeID:     replica.NodeID,
+			ToLocality:   toNode.Locality,
+		})
+	}
+	return np
 }
 
 func (ds *DistSender) getReplicaRegion(

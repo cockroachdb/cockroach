@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
