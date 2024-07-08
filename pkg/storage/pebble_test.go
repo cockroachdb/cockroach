@@ -13,8 +13,10 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -1507,4 +1509,82 @@ func TestMinimumSupportedFormatVersion(t *testing.T) {
 
 	require.Equal(t, pebbleFormatVersionMap[clusterversion.MinSupported], MinimumSupportedFormatVersion,
 		"MinimumSupportedFormatVersion must match the format version for %s", clusterversion.MinSupported)
+}
+
+// delayFS injects a delay on each read.
+type delayFS struct {
+	vfs.FS
+}
+
+func (fs delayFS) Open(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+	f, err := fs.FS.Open(name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return delayFile{File: f}, nil
+}
+
+type delayFile struct {
+	vfs.File
+}
+
+func (f delayFile) ReadAt(p []byte, off int64) (n int, err error) {
+	time.Sleep(10 * time.Millisecond)
+	return f.File.ReadAt(p, off)
+}
+
+func TestPebbleLoggingSlowReads(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s := log.ScopeWithoutShowLogs(t)
+	prevVModule := log.GetVModule()
+	_ = log.SetVModule("pebble_logger_and_tracer=2")
+	defer func() { _ = log.SetVModule(prevVModule) }()
+	defer s.Close(t)
+
+	ctx := context.Background()
+	testStartTs := timeutil.Now()
+
+	memFS := vfs.NewMem()
+	dFS := delayFS{FS: memFS}
+	e, err := fs.InitEnv(context.Background(), dFS, "" /* dir */, fs.EnvConfig{}, nil /* statsCollector */)
+	require.NoError(t, err)
+	// No block cache, so all reads go to FS.
+	db, err := Open(ctx, e, cluster.MakeClusterSettings(), func(cfg *engineConfig) error {
+		cfg.cacheSize = nil
+		return nil
+	})
+	require.NoError(t, err)
+	defer db.Close()
+	// Write some data and flush to disk.
+	ts1 := hlc.Timestamp{WallTime: 1}
+	k1 := MVCCKey{Key: []byte("a"), Timestamp: ts1}
+	v1 := MVCCValue{Value: roachpb.MakeValueFromString("a1")}
+	require.NoError(t, db.PutMVCC(k1, v1))
+	require.NoError(t, db.Flush())
+	// Read the data.
+	require.NoError(t, db.MVCCIterate(ctx, roachpb.Key("a"), roachpb.Key("b"), MVCCKeyIterKind, IterKeyTypePointsOnly,
+		fs.UnknownReadCategory, func(MVCCKeyValue, MVCCRangeKeyStack) error {
+			return nil
+		}))
+
+	// Grab the logs and count the slow read entries.
+	log.FlushFiles()
+	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
+		math.MaxInt64, 2000,
+		regexp.MustCompile(`pebble_logger_and_tracer\.go`),
+		log.WithMarkedSensitiveData)
+	require.NoError(t, err)
+
+	// There should be some entries like the following:
+	// I240708 14:47:54.610060 12 storage/pebble_logger_and_tracer.go:49  [-] 15  reading 32 bytes took 11.246041ms
+	slowReadRegexp, err := regexp.Compile("reading .* bytes took .*")
+	require.NoError(t, err)
+	slowCount := 0
+	for i := range entries {
+		if slowReadRegexp.MatchString(entries[i].Message) {
+			slowCount++
+		}
+	}
+	require.Less(t, 0, slowCount)
 }
