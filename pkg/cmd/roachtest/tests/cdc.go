@@ -3424,6 +3424,7 @@ func setupKafka(
 type mskManager struct {
 	t         test.Test
 	mskClient *msk.Client
+	of        func(*msk.Options)
 
 	clusterArn string
 }
@@ -3431,21 +3432,22 @@ type mskManager struct {
 func NewMskManager(ctx context.Context, t test.Test) *mskManager {
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithDefaultRegion("us-east-2"))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to load aws config: %v", err)
 	}
 	mskClient := msk.NewFromConfig(awsCfg)
 
-	return &mskManager{t: t, mskClient: mskClient}
+	return &mskManager{
+		t:         t,
+		mskClient: mskClient,
+		of: func(o *msk.Options) {
+			o.Logger = awslog.LoggerFunc(func(classification awslog.Classification, format string, v ...interface{}) {
+				format = fmt.Sprintf("msk(%v): %s", classification, format)
+				t.L().Printf(format, v...)
+			})
+		}}
 }
 
 func (m *mskManager) MakeCluster(ctx context.Context, typ msktypes.ClusterType) {
-	of := func(o *msk.Options) {
-		o.Logger = awslog.LoggerFunc(func(classification awslog.Classification, format string, v ...interface{}) {
-			format = fmt.Sprintf("msk(%v): %s", classification, format)
-			m.t.L().Printf(format, v...)
-		})
-	}
-
 	req := &msk.CreateClusterV2Input{
 		ClusterName: aws.String(fmt.Sprintf("roachtest-cdc-%v-%v", typ, timeutil.Now().Format("%FT%T"))),
 		Tags: map[string]string{
@@ -3505,23 +3507,35 @@ func (m *mskManager) MakeCluster(ctx context.Context, typ msktypes.ClusterType) 
 			},
 		}
 	}
-	resp, err := m.mskClient.CreateClusterV2(ctx, req, of)
+	resp, err := m.mskClient.CreateClusterV2(ctx, req, m.of)
 	if err != nil {
-		m.t.Fatal(err)
+		m.t.Fatalf("failed to create msk cluster: %v", err)
 	}
 	m.clusterArn = *resp.ClusterArn
 }
 
-func (m *mskManager) WaitForClusterReady(ctx context.Context, typ msktypes.ClusterType) {
-	resp, err := m.mskClient.CreateClusterV2(ctx, &msk.CreateClusterV2Input{}, func(o *msk.Options) {})
-	if err != nil {
-		m.t.Fatal(err)
+func (m *mskManager) WaitForClusterActive(ctx context.Context, typ msktypes.ClusterType) {
+	for ctx.Err() == nil {
+		resp, err := m.mskClient.DescribeClusterV2(ctx, &msk.DescribeClusterV2Input{ClusterArn: &m.clusterArn}, m.of)
+		if err != nil {
+			m.t.Fatalf("failed to describe msk cluster: %v", err)
+		}
+		if resp.ClusterInfo.State == msktypes.ClusterStateActive {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
 	}
-	m.clusterArn = *resp.ClusterArn
 }
 
 func (m *mskManager) Teardown() {
-
+	_, err := m.mskClient.DeleteCluster(context.Background(), &msk.DeleteClusterInput{ClusterArn: &m.clusterArn}, m.of)
+	if err != nil {
+		m.t.Fatalf("failed to delete msk cluster: %v", err)
+	}
 }
 
 type topicConsumer struct {
