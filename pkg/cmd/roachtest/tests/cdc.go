@@ -1947,6 +1947,7 @@ func registerCDC(r registry.Registry) {
 			tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
 
 			// TODO: mkm.CreateTopic(ctx, "auth_test_table")
+			// see
 
 			testCerts, err := makeTestCerts("0.0.0.0", "aws") // ?
 			require.NoError(t, err)
