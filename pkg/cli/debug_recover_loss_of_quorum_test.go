@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -627,6 +628,106 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 	// Finally split scratch range to ensure metadata ranges are recovered.
 	_, _, err = tc.Server(0).SplitRange(testutils.MakeKey(sk, []byte{42}))
 	require.NoError(t, err, "failed to split range after recovery")
+}
+
+func TestLossOfQuorumCliPrintsNodeProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "slow under deadlock")
+
+	ctx := context.Background()
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	c := NewCLITest(TestCLIParams{
+		NoServer: true,
+	})
+	defer c.Cleanup()
+
+	listenerReg := listenerutil.NewListenerRegistry()
+	defer listenerReg.Close()
+
+	// Test cluster contains 3 nodes that we would turn into a single node
+	// cluster using loss of quorum recovery. To do that, we will terminate
+	// two nodes and run recovery on remaining one. Restarting node should
+	// bring it back to healthy (but under-replicated) state.
+	// Note that we inject reusable listeners into all nodes to prevent tests
+	// running in parallel from taking over ports of stopped nodes and responding
+	// to gateway node with errors.
+	var failCount atomic.Int64
+	sa := make(map[int]base.TestServerArgs)
+	for i := 0; i < 3; i++ {
+		sa[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyVFSRegistry: fs.NewStickyRegistry(),
+				},
+				LOQRecovery: &loqrecovery.TestingKnobs{
+					MetadataScanTimeout: 15 * time.Second,
+					ForwardReplicaFilter: func(
+						response *serverpb.RecoveryCollectLocalReplicaInfoResponse,
+					) error {
+						// Artificially add an error that would cause the server to retry
+						// the replica info for node 1. Note that we only add an error after
+						// we return the first replica info for that node.
+						if response != nil && response.ReplicaInfo.NodeID == 1 &&
+							failCount.Add(1) < 3 && failCount.Load() > 1 {
+							return errors.New("rpc stream stopped")
+						}
+						return nil
+					},
+				},
+			},
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory: true,
+				},
+			},
+		}
+	}
+
+	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+		ReusableListenerReg: listenerReg,
+		ServerArgsPerNode:   sa,
+	})
+	tc.Start(t)
+	s := sqlutils.MakeSQLRunner(tc.Conns[0])
+	s.Exec(t, "SET CLUSTER SETTING cluster.organization = 'LoQ CLI logging test'")
+	defer tc.Stopper().Stop(ctx)
+
+	// Now that stores are prepared and replicated we can shut down cluster
+	// and perform store manipulations.
+	tc.StopServer(1)
+	tc.StopServer(2)
+
+	// Generate recovery plan and try to verify that plan file was generated and
+	// contains meaningful data. This is not strictly necessary for verifying
+	// end-to-end flow, but having assertions on generated data helps to identify
+	// which stage of pipeline broke if test fails.
+	planFile := dir + "/recovery-plan.json"
+	out, err := c.RunWithCaptureArgs(
+		[]string{
+			"debug",
+			"recover",
+			"make-plan",
+			"--confirm=y",
+			"--certs-dir=test_certs",
+			"--host=" + tc.Server(0).AdvRPCAddr(),
+			"--plan=" + planFile,
+		})
+
+	// Make sure that the CLI node logs are printed.
+	require.NoError(t, err, "failed to run make-plan")
+
+	require.Contains(t, out, "Started getting replica info for node_id:1",
+		"planner didn't log the visited nodes properly")
+	require.Contains(t, out, "Discarding replica info for node_id:1",
+		"planner didn't log the discarded nodes properly")
 }
 
 func TestUpdatePlanVsClusterDiff(t *testing.T) {

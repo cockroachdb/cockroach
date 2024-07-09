@@ -13,8 +13,10 @@ package loqrecovery
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"io"
 	"math"
+	"os"
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -46,8 +48,10 @@ type CollectionStats struct {
 // maxConcurrency is the maximum parallelism that will be used when fanning out
 // RPCs to nodes in the cluster. A value of 0 disables concurrency. A negative
 // value configures no limit for concurrency.
+// If logOutput is not nil, this function will write when a node is visited,
+// and when a node needs to be revisited.
 func CollectRemoteReplicaInfo(
-	ctx context.Context, c serverpb.AdminClient, maxConcurrency int,
+	ctx context.Context, c serverpb.AdminClient, maxConcurrency int, logOutput *os.File,
 ) (loqrecoverypb.ClusterReplicaInfo, CollectionStats, error) {
 	cc, err := c.RecoveryCollectReplicaInfo(ctx, &serverpb.RecoveryCollectReplicaInfoRequest{
 		MaxConcurrency: int32(maxConcurrency),
@@ -71,6 +75,10 @@ func CollectRemoteReplicaInfo(
 		if r := info.GetReplicaInfo(); r != nil {
 			stores[r.StoreID] = struct{}{}
 			nodes[r.NodeID] = struct{}{}
+
+			if _, ok := replInfoMap[r.NodeID]; !ok && logOutput != nil {
+				_, _ = fmt.Fprintf(logOutput, "Started getting replica info for node_id:%d.\n", r.NodeID)
+			}
 			replInfoMap[r.NodeID] = append(replInfoMap[r.NodeID], *r)
 		} else if d := info.GetRangeDescriptor(); d != nil {
 			descriptors = append(descriptors, *d)
@@ -78,6 +86,11 @@ func CollectRemoteReplicaInfo(
 			// If server had to restart a fan-out work because of error and retried,
 			// then we discard partial data for the node.
 			delete(replInfoMap, s.NodeID)
+			if logOutput != nil {
+				_, _ = fmt.Fprintf(logOutput, "Discarding replica info for node_id:%d."+
+					"The node will be revisted\n", s.NodeID)
+			}
+
 		} else if m := info.GetMetadata(); m != nil {
 			metadata = *m
 		} else {
