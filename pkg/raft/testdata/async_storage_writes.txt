@@ -246,10 +246,9 @@ process-ready 1 2 3
 > 3 handling Ready
   <empty Ready>
 
-# TODO(pav-kv): leader's next should be updated.
 status 1
 ----
-1: StateReplicate match=11 next=12
+1: StateReplicate match=11 next=13
 2: StateReplicate match=11 next=13 inflight=1
 3: StateReplicate match=11 next=13 inflight=1
 
@@ -363,7 +362,7 @@ AppendThread->3 MsgStorageAppendResp Term:1 Log:1/12
 
 status 1
 ----
-1: StateReplicate match=12 next=13
+1: StateReplicate match=12 next=14
 2: StateReplicate match=12 next=14 inflight=1
 3: StateReplicate match=12 next=14 inflight=1
 
