@@ -1261,3 +1261,107 @@ __merged__       {b}           2022-12-13 15:22:21.988179 +0000 UTC  61         
 # Finally, restore forecasts setting to its previous value.
 statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
+
+# Verify that we can merge partial stats with full stats that have outer
+# buckets.
+statement ok
+SET enable_create_stats_using_extremes = on
+
+statement ok
+CREATE TABLE ka (k INT PRIMARY KEY, a INT, INDEX(a))
+
+statement ok
+INSERT INTO ka select x, x from generate_series(0, 9998) as g(x)
+
+statement ok
+INSERT INTO ka VALUES (9999, NULL)
+
+statement ok
+CREATE STATISTICS ka_fullstat ON a FROM ka
+
+let $hist_id_ka_outer_buckets_full
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE ka] WHERE statistics_name = 'ka_fullstat'
+
+# The full stats collection should have added 2 outer buckets for a total of 202
+# with upper bounds of MaxInt64 and MinInt64.
+query I
+SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_ka_outer_buckets_full]
+----
+202
+
+statement ok
+INSERT INTO ka VALUES (10000, 9999), (10001, 10000)
+
+statement ok
+CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
+ORDER BY statistics_name
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__merged__       {a}           10002      9922            1
+ka_fullstat      {a}           10000      9920            1
+ka_partialstat   {a}           3          3               1
+
+# Verify that the merged histogram correctly appends the partial stat buckets
+query T
+SELECT jsonb_pretty(bucket)
+FROM (
+SELECT jsonb_array_elements(stat->'histo_buckets') AS bucket
+FROM (
+SELECT jsonb_array_elements(statistics) AS stat FROM [SHOW STATISTICS USING JSON FOR TABLE ka WITH MERGE]
+)
+WHERE stat->>'name' = '__merged__'
+)
+ORDER BY (bucket->>'upper_bound')::INT DESC
+LIMIT 3
+----
+{
+    "distinct_range": 0,
+    "num_eq": 1,
+    "num_range": 0,
+    "upper_bound": "10000"
+}
+{
+    "distinct_range": 0,
+    "num_eq": 1,
+    "num_range": 0,
+    "upper_bound": "9999"
+}
+{
+    "distinct_range": 49.59173044047086,
+    "num_eq": 1,
+    "num_range": 50,
+    "upper_bound": "9998"
+}
+
+# Verify that distinct counts and null counts are merged correctly.
+statement ok
+SET CLUSTER SETTING sql.stats.histogram_samples.count = 10005
+
+statement ok
+INSERT INTO ka VALUES (10002, 10001)
+
+statement ok
+CREATE STATISTICS ka_fullstat ON a FROM ka
+
+statement ok
+INSERT INTO ka VALUES (10003, 10002), (10004, NULL)
+
+statement ok
+CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count
+FROM [SHOW STATISTICS FOR TABLE ka WITH MERGE]
+ORDER BY statistics_name
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+__merged__       {a}           10005      9924            2
+ka_fullstat      {a}           10003      9923            1
+ka_partialstat   {a}           3          2               2
+
+statement ok
+RESET CLUSTER SETTING sql.stats.histogram_samples.count
