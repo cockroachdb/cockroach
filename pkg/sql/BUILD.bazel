@@ -105,6 +105,7 @@ go_library(
         "drop_sequence.go",
         "drop_table.go",
         "drop_tenant.go",
+        "drop_trigger.go",
         "drop_type.go",
         "drop_view.go",
         "error_hints.go",
