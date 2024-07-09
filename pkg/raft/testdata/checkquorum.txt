@@ -36,8 +36,8 @@ stabilize
 ----
 > 2 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateCandidate
-  HardState Term:2 Vote:2 Commit:11
+  State:StateCandidate
+  HardState Term:2 Vote:2 Commit:11 Lead:0
   Messages:
   2->1 MsgVote Term:2 Log:1/11
   2->3 MsgVote Term:2 Log:1/11
@@ -67,8 +67,9 @@ INFO 1 became follower at term 1
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=false:
-  Lead:0 State:StateFollower
+  Ready MustSync=true:
+  State:StateFollower
+  HardState Term:1 Vote:1 Commit:11 Lead:0
   Messages:
   1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
   1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
@@ -128,7 +129,7 @@ stabilize
   INFO 1 [term: 2] ignored a MsgHeartbeatResp message with lower term from 3 [term: 1]
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:2 Commit:11
+  HardState Term:2 Commit:11 Lead:0
 
 # Other nodes can now successfully campaign. Note that we haven't ticked 3, so
 # it won't grant votes.
@@ -142,7 +143,7 @@ INFO 2 [logterm: 1, index: 11] sent MsgVote request to 3 at term 3
 process-ready 2
 ----
 Ready MustSync=true:
-HardState Term:3 Vote:2 Commit:11
+HardState Term:3 Vote:2 Commit:11 Lead:0
 Messages:
 2->1 MsgVote Term:3 Log:1/11
 2->3 MsgVote Term:3 Log:1/11
@@ -165,7 +166,7 @@ stabilize
 ----
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:3 Vote:2 Commit:11
+  HardState Term:3 Vote:2 Commit:11 Lead:0
   Messages:
   1->2 MsgVoteResp Term:3 Log:0/0
 > 2 receiving messages
@@ -175,7 +176,8 @@ stabilize
   INFO 2 became leader at term 3
 > 2 handling Ready
   Ready MustSync=true:
-  Lead:2 State:StateLeader
+  State:StateLeader
+  HardState Term:3 Vote:2 Commit:11 Lead:2
   Entries:
   3/12 EntryNormal ""
   Messages:
@@ -189,15 +191,14 @@ stabilize
   INFO 3 became follower at term 3
 > 1 handling Ready
   Ready MustSync=true:
-  Lead:2 State:StateFollower
+  HardState Term:3 Vote:2 Commit:11 Lead:2
   Entries:
   3/12 EntryNormal ""
   Messages:
   1->2 MsgAppResp Term:3 Log:0/12
 > 3 handling Ready
   Ready MustSync=true:
-  Lead:2 State:StateFollower
-  HardState Term:3 Commit:11
+  HardState Term:3 Commit:11 Lead:2
   Entries:
   3/12 EntryNormal ""
   Messages:
@@ -207,7 +208,7 @@ stabilize
   3->2 MsgAppResp Term:3 Log:0/12
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:3 Vote:2 Commit:12
+  HardState Term:3 Vote:2 Commit:12 Lead:2
   CommittedEntries:
   3/12 EntryNormal ""
   Messages:
@@ -219,14 +220,14 @@ stabilize
   2->3 MsgApp Term:3 Log:3/12 Commit:12
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:3 Vote:2 Commit:12
+  HardState Term:3 Vote:2 Commit:12 Lead:2
   CommittedEntries:
   3/12 EntryNormal ""
   Messages:
   1->2 MsgAppResp Term:3 Log:0/12
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:3 Commit:12
+  HardState Term:3 Commit:12 Lead:2
   CommittedEntries:
   3/12 EntryNormal ""
   Messages:

@@ -63,6 +63,7 @@ func (env *InteractionEnv) ProcessAppendThread(idx int) error {
 		Term:   m.Term,
 		Vote:   m.Vote,
 		Commit: m.Commit,
+		Lead:   m.Lead,
 	}
 	var snap raftpb.Snapshot
 	if m.Snapshot != nil {

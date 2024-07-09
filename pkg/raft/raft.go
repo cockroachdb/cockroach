@@ -475,7 +475,7 @@ func newRaft(c *Config) *raft {
 	if c.Applied > 0 {
 		raftlog.appliedTo(c.Applied, 0 /* size */)
 	}
-	r.becomeFollower(r.Term, None)
+	r.becomeFollower(r.Term, r.lead)
 
 	var nodesStrs []string
 	for _, n := range r.trk.VoterNodes() {
@@ -490,13 +490,14 @@ func newRaft(c *Config) *raft {
 
 func (r *raft) hasLeader() bool { return r.lead != None }
 
-func (r *raft) softState() SoftState { return SoftState{Lead: r.lead, RaftState: r.state} }
+func (r *raft) softState() SoftState { return SoftState{RaftState: r.state} }
 
 func (r *raft) hardState() pb.HardState {
 	return pb.HardState{
 		Term:   r.Term,
 		Vote:   r.Vote,
 		Commit: r.raftLog.committed,
+		Lead:   r.lead,
 	}
 }
 
@@ -770,8 +771,8 @@ func (r *raft) reset(term uint64) {
 	if r.Term != term {
 		r.Term = term
 		r.Vote = None
+		r.lead = None
 	}
-	r.lead = None
 
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
@@ -1657,6 +1658,11 @@ func stepFollower(r *raft, m pb.Message) error {
 		r.send(m)
 	case pb.MsgApp:
 		r.electionElapsed = 0
+		// TODO(arul): Once r.lead != None, we shouldn't need to update r.lead
+		// anymore within the course of a single term (in the context of which this
+		// function is always called). Instead, if r.lead != None, we should be able
+		// to assert that the leader hasn't changed within a given term. Maybe at
+		// the caller itself.
 		r.lead = m.From
 		r.handleAppendEntries(m)
 	case pb.MsgHeartbeat:
@@ -2006,6 +2012,7 @@ func (r *raft) loadState(state pb.HardState) {
 	r.raftLog.committed = state.Commit
 	r.Term = state.Term
 	r.Vote = state.Vote
+	r.lead = state.Lead
 }
 
 // pastElectionTimeout returns true if r.electionElapsed is greater

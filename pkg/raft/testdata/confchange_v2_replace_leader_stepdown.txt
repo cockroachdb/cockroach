@@ -112,7 +112,7 @@ stabilize
   4->1 MsgAppResp Term:1 Log:0/5
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:5
+  HardState Term:1 Vote:1 Commit:5 Lead:1
   CommittedEntries:
   1/5 EntryConfChangeV2
   Messages:
@@ -128,11 +128,12 @@ stabilize
 > 4 receiving messages
   1->4 MsgApp Term:1 Log:1/5 Commit:5
 > 1 handling Ready
-  Ready MustSync=false:
-  Lead:0 State:StateFollower
+  Ready MustSync=true:
+  State:StateFollower
+  HardState Term:1 Vote:1 Commit:5 Lead:0
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:5
+  HardState Term:1 Vote:1 Commit:5 Lead:1
   CommittedEntries:
   1/5 EntryConfChangeV2
   Messages:
@@ -140,7 +141,7 @@ stabilize
   INFO 2 switched to configuration voters=(2 3 4)
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:5
+  HardState Term:1 Vote:1 Commit:5 Lead:1
   CommittedEntries:
   1/5 EntryConfChangeV2
   Messages:
@@ -148,7 +149,7 @@ stabilize
   INFO 3 switched to configuration voters=(2 3 4)
 > 4 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Commit:5
+  HardState Term:1 Commit:5 Lead:1
   CommittedEntries:
   1/5 EntryConfChangeV2
   Messages:

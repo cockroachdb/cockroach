@@ -143,7 +143,7 @@ func waitLeader(ns []*node) int {
 		l = make(map[pb.PeerID]struct{})
 
 		for i, n := range ns {
-			lead := n.Status().SoftState.Lead
+			lead := n.Status().HardState.Lead
 			if lead != 0 {
 				l[lead] = struct{}{}
 				if n.id == lead {
