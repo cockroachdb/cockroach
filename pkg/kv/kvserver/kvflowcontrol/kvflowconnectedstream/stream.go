@@ -1259,7 +1259,7 @@ func (rs *replicaState) close() {
 func (rs *replicaState) handleReadyState(info FollowerStateInfo, nextRaftIndexUpperBound uint64) {
 	state := info.State
 	log.VInfof(context.TODO(), 1,
-		"HandleRaftEvent(%d): info=(%v) state=(%v)", rs.desc.ReplicaID, info, rs)
+		"handle raft event replica_id=%d: info=(%v) state=(%v)", rs.desc.ReplicaID, info, rs)
 	switch state {
 	case tracker.StateProbe:
 		if rs.replicaSendStream != nil {
@@ -1317,7 +1317,7 @@ func (rs *replicaState) handleReadyEntries(entries []raftpb.Entry) {
 		for i := range entries {
 			entryFCState := getFlowControlState(entries[i])
 			wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
-			log.VInfof(context.TODO(), 1, "leader handleReadyEntries(%v): entryFCState=%v",
+			log.VInfof(context.TODO(), 1, "leader handle_ready_entries(%v): entryFCState=%v",
 				rs.replicaSendStream.stringLocked(), entryFCState)
 			rs.replicaSendStream.advanceNextRaftIndexAndSentLocked(entryFCState)
 			if entryFCState.usesFlowControl {
@@ -1338,7 +1338,7 @@ func (rs *replicaState) handleReadyEntries(entries []raftpb.Entry) {
 		toIsFinalized := false
 		for i := range entries {
 			entryFCState := getFlowControlState(entries[i])
-			log.VInfof(context.TODO(), 1, "follower handleReadyEntries(%v): entryFCState=%v",
+			log.VInfof(context.TODO(), 1, "follower handle_ready_entries(%v): entryFCState=%v",
 				rs.replicaSendStream.stringLocked(), entryFCState)
 			if toIsFinalized {
 				if entries[i].Index == to && !entryFCState.usesFlowControl {
@@ -1598,6 +1598,7 @@ func (rss *replicaSendStream) closeLocked() {
 // An entry is being sent that was never in the send-queue. So the send-queue
 // must be empty.
 func (rss *replicaSendStream) advanceNextRaftIndexAndSentLocked(state entryFlowControlState) {
+	rss.mu.AssertHeld()
 	if rss.connectedState != replicate {
 		panic("")
 	}
@@ -1614,6 +1615,7 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndSentLocked(state entryFlowC
 	}
 	// inheritedPri and originalPri are the same for an entry that was never
 	// queued.
+
 	rss.tracker.Track(context.TODO(), state.index, state.originalPri, state.originalPri, state.tokens)
 	rss.parent.evalTokenCounter.Deduct(
 		context.TODO(), kvflowcontrolpb.WorkClassFromRaftPriority(state.originalPri), state.tokens)
@@ -1941,11 +1943,22 @@ func (rss *replicaSendStream) queueSize() kvflowcontrol.Tokens {
 func (rss *replicaSendStream) queueSizeLocked() kvflowcontrol.Tokens {
 	rss.mu.AssertHeld()
 	var size kvflowcontrol.Tokens
-	countWithApproxStats := rss.nextRaftIndexInitial - rss.sendQueue.indexToSend
+	countWithApproxStats := int64(rss.nextRaftIndexInitial) - int64(rss.sendQueue.indexToSend)
 	if countWithApproxStats > 0 {
 		size = kvflowcontrol.Tokens(countWithApproxStats) * rss.sendQueue.approxMeanSizeBytes
 	}
 	size += rss.sendQueue.sizeSum
+
+	if size < 0 {
+		// The queue size should be bounded below by 0.
+		panic(fmt.Sprintf(
+			"%v: negative send queue size %v (next_raft_index_initial=%v "+
+				"index_to_send=%v approx_mean_bytes=%v send_queue_size_sum=%v)",
+			rss.parent.desc.ReplicaID, size, rss.nextRaftIndexInitial,
+			rss.sendQueue.indexToSend, rss.sendQueue.approxMeanSizeBytes,
+			rss.sendQueue.sizeSum))
+	}
+
 	return size
 }
 
