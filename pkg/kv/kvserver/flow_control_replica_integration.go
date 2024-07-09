@@ -508,6 +508,7 @@ type replicaRACv2Integration struct {
 //
 // Replica.raftMu is held. Replica.mu is not held.
 func (rr2 *replicaRACv2Integration) tryUpdateLeader(leaderID roachpb.ReplicaID, force bool) {
+	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
@@ -587,6 +588,7 @@ func descToReplicaSet(desc *roachpb.RangeDescriptor) kvflowconnectedstream.Repli
 //
 // Replica.raftMu is held. Replica.mu is not held.
 func (rr2 *replicaRACv2Integration) onDestroy() {
+	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
@@ -605,6 +607,7 @@ func (rr2 *replicaRACv2Integration) onDestroy() {
 // TODO(racV2-integration): Update naming throughout to indicate whether raft /
 // replica mu are held.
 func (rr2 *replicaRACv2Integration) tryUpdateLeaseholder(replicaID roachpb.ReplicaID) {
+	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
@@ -624,6 +627,8 @@ func (rr2 *replicaRACv2Integration) RangeController() kvflowconnectedstream.Rang
 
 // Replica.raftMu and Replica.mu are held.
 func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor) {
+	rr2.replica.raftMu.AssertHeld()
+	rr2.replica.mu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
@@ -634,6 +639,9 @@ func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor)
 		func() {
 			// TODO(racV2-integration): On init, the raft and replica mu is already
 			// held so we don't lock. In other cases, they may not be.
+			//
+			// TODO(sumeer): what does this "so we don't lock" mean. Is this a stale
+			// comment, given replicaRACv2Integration never locks raftMu.
 			rn = rr2.replica.mu.internalRaftGroup
 		}()
 		rr2.raftAdmittedInterface = kvflowconnectedstream.NewRaftNode(rn)
@@ -651,7 +659,9 @@ func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor)
 	}
 }
 
+// raftMu is held.
 func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent() {
+	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
@@ -660,6 +670,7 @@ func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent() {
 	}
 }
 
+// raftMu is not held.
 func (rr2 *replicaRACv2Integration) enqueuePiggybackedAdmitted(msg raftpb.Message) {
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
@@ -667,7 +678,9 @@ func (rr2 *replicaRACv2Integration) enqueuePiggybackedAdmitted(msg raftpb.Messag
 	rr2.mu.enqueuedPiggybackedResponses[roachpb.ReplicaID(msg.From)] = msg
 }
 
+// raftMu is held.
 func (rr2 *replicaRACv2Integration) processPiggybackedAdmitted() bool {
+	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
@@ -687,8 +700,10 @@ func (rr2 *replicaRACv2Integration) processPiggybackedAdmitted() bool {
 	return true
 }
 
+// raftMu is held.
 // entries can be empty, and there may not have been a Ready.
 func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
+	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
@@ -703,6 +718,7 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
 		// If there was a recent MsgStoreAppendResp that triggered this Ready
 		// processing, it has already been stepped, so the stable index would have
 		// advanced.
+		rr2.replica.raftMu.AssertHeld()
 		sindex := rr2.raftAdmittedInterface.StableIndex()
 		nextAdmitted := rr2.mu.waitingForAdmissionState.computeAdmitted(sindex)
 		if admittedIncreased(rr2.raftAdmittedInterface.GetAdmitted(), nextAdmitted) {
@@ -727,9 +743,12 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
 //
 // Only called when RaftMessageRequest is received with a MsgApp. So never
 // called for leader.
+//
+// raftMu is held.
 func (rr2 *replicaRACv2Integration) sideChannelForInheritedPriority(
 	first, last uint64, inheritedPri uint8,
 ) {
+	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
@@ -740,6 +759,7 @@ func (rr2 *replicaRACv2Integration) sideChannelForInheritedPriority(
 	rr2.mu.priorityInheritanceState.sideChannelForInheritedPriority(first, last, pri)
 }
 
+// raftMu is not held.
 func (rr2 *replicaRACv2Integration) admittedLogEntry(
 	ctx context.Context, pri kvflowcontrolpb.RaftPriority, index uint64,
 ) {
@@ -793,6 +813,7 @@ func (rr2 *replicaRACv2Integration) admitRaftEntry(
 	rangeID roachpb.RangeID,
 	entry raftpb.Entry,
 ) {
+	rr2.replica.raftMu.AssertHeld()
 	typ, priBits, err := raftlog.EncodingOf(entry)
 	if err != nil {
 		panic(errors.AssertionFailedf("unable to determine raft command encoding: %v", err))

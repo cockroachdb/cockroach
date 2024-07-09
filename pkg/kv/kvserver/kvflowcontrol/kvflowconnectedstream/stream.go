@@ -1113,6 +1113,8 @@ func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
 			typ != raftlog.EntryEncodingSideloadedWithRaftPriority {
 			panic("expected a RACv2 encoding")
 		}
+		// REMINDER: this decoding is for a costly assertion only for the prototype and for
+		// CrdbTestBuild.
 		meta, err := raftlog.DecodeRaftAdmissionMeta(entry.Data)
 		if err != nil {
 			panic(errors.AssertionFailedf("unable to decode raft command admission data: %v", err))
