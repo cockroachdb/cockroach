@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/aws/aws-msk-iam-sasl-signer-go/signer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -786,6 +787,34 @@ func (t *tokenProvider) Token() (*sarama.AccessToken, error) {
 	return &sarama.AccessToken{Token: token.AccessToken}, nil
 }
 
+type AwsIAMRoleSASLTokenProvider struct {
+	ctx            context.Context
+	awsRegion      string
+	iamRoleArn     string
+	iamSessionName string
+}
+
+func (p *AwsIAMRoleSASLTokenProvider) Token() (*sarama.AccessToken, error) {
+	token, _, err := signer.GenerateAuthTokenFromRole(
+		p.ctx, p.awsRegion, p.iamRoleArn, p.iamSessionName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sarama.AccessToken{Token: token}, nil
+}
+
+func newAwsIAMRoleSASLTokenProvider(
+	ctx context.Context, dialConfig kafkaDialConfig,
+) (sarama.AccessTokenProvider, error) {
+	return &AwsIAMRoleSASLTokenProvider{
+		ctx:            ctx,
+		awsRegion:      dialConfig.saslAwsRegion,
+		iamRoleArn:     dialConfig.saslAwsIAMRoleArn,
+		iamSessionName: dialConfig.saslAwsIAMSessionName,
+	}, nil
+}
+
 func newTokenProvider(
 	ctx context.Context, dialConfig kafkaDialConfig,
 ) (sarama.AccessTokenProvider, error) {
@@ -875,21 +904,24 @@ func getSaramaConfig(
 }
 
 type kafkaDialConfig struct {
-	tlsEnabled       bool
-	tlsSkipVerify    bool
-	caCert           []byte
-	clientCert       []byte
-	clientKey        []byte
-	saslEnabled      bool
-	saslHandshake    bool
-	saslUser         string
-	saslPassword     string
-	saslMechanism    string
-	saslTokenURL     string
-	saslClientID     string
-	saslClientSecret string
-	saslScopes       []string
-	saslGrantType    string
+	tlsEnabled            bool
+	tlsSkipVerify         bool
+	caCert                []byte
+	clientCert            []byte
+	clientKey             []byte
+	saslEnabled           bool
+	saslHandshake         bool
+	saslUser              string
+	saslPassword          string
+	saslMechanism         string
+	saslTokenURL          string
+	saslClientID          string
+	saslClientSecret      string
+	saslScopes            []string
+	saslGrantType         string
+	saslAwsIAMRoleArn     string
+	saslAwsRegion         string
+	saslAwsIAMSessionName string
 }
 
 func buildDialConfig(u sinkURL) (kafkaDialConfig, error) {
@@ -953,18 +985,22 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 		dialConfig.saslMechanism = sarama.SASLTypePlaintext
 	}
 	switch dialConfig.saslMechanism {
-	case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext:
+	case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext, changefeedbase.SASLTypeAWSMSKIAM:
 	default:
-		return kafkaDialConfig{}, errors.Errorf(`param %s must be one of %s, %s, %s, or %s`,
+		return kafkaDialConfig{}, errors.Errorf(`param %s must be one of %s, %s, %s, %s or %s`,
 			changefeedbase.SinkParamSASLMechanism,
-			sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext)
+			sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext, changefeedbase.SASLTypeAWSMSKIAM)
 	}
 
 	var requiredSASLParams []string
-	if dialConfig.saslMechanism == sarama.SASLTypeOAuth {
+	switch dialConfig.saslMechanism {
+	case sarama.SASLTypeOAuth:
 		requiredSASLParams = []string{changefeedbase.SinkParamSASLClientID, changefeedbase.SinkParamSASLClientSecret,
 			changefeedbase.SinkParamSASLTokenURL}
-	} else {
+	case changefeedbase.SASLTypeAWSMSKIAM:
+		requiredSASLParams = []string{changefeedbase.SinkParamSASLAwsRegion, changefeedbase.SinkParamSASLAwsIAMRoleArn,
+			changefeedbase.SinkParamSASLAwsIAMSessionName}
+	default:
 		requiredSASLParams = []string{changefeedbase.SinkParamSASLUser, changefeedbase.SinkParamSASLPassword}
 	}
 	for _, param := range requiredSASLParams {
@@ -1002,6 +1038,11 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 	dialConfig.saslClientID = u.consumeParam(changefeedbase.SinkParamSASLClientID)
 	dialConfig.saslScopes = u.Query()[changefeedbase.SinkParamSASLScopes]
 	dialConfig.saslGrantType = u.consumeParam(changefeedbase.SinkParamSASLGrantType)
+
+	// Configure AWS IAM role based authentication
+	dialConfig.saslAwsRegion = u.consumeParam(changefeedbase.SinkParamSASLAwsRegion)
+	dialConfig.saslAwsIAMSessionName = u.consumeParam(changefeedbase.SinkParamSASLAwsIAMSessionName)
+	dialConfig.saslAwsIAMRoleArn = u.consumeParam(changefeedbase.SinkParamSASLAwsIAMRoleArn)
 
 	var decodedClientSecret []byte
 	if err := u.decodeBase64(changefeedbase.SinkParamSASLClientSecret, &decodedClientSecret); err != nil {
@@ -1232,15 +1273,28 @@ func buildKafkaConfig(
 		config.Net.SASL.Handshake = dialConfig.saslHandshake
 		config.Net.SASL.User = dialConfig.saslUser
 		config.Net.SASL.Password = dialConfig.saslPassword
-		config.Net.SASL.Mechanism = sarama.SASLMechanism(dialConfig.saslMechanism)
-		switch config.Net.SASL.Mechanism {
+
+		var mechanism sarama.SASLMechanism
+		if dialConfig.saslMechanism == changefeedbase.SASLTypeAWSMSKIAM {
+			mechanism = sarama.SASLTypeOAuth
+		} else {
+			mechanism = sarama.SASLMechanism(dialConfig.saslMechanism)
+		}
+
+		config.Net.SASL.Mechanism = mechanism
+
+		switch mechanism {
 		case sarama.SASLTypeSCRAMSHA512:
 			config.Net.SASL.SCRAMClientGeneratorFunc = sha512ClientGenerator
 		case sarama.SASLTypeSCRAMSHA256:
 			config.Net.SASL.SCRAMClientGeneratorFunc = sha256ClientGenerator
 		case sarama.SASLTypeOAuth:
 			var err error
-			config.Net.SASL.TokenProvider, err = newTokenProvider(ctx, dialConfig)
+			if dialConfig.saslMechanism == changefeedbase.SASLTypeAWSMSKIAM {
+				config.Net.SASL.TokenProvider, err = newAwsIAMRoleSASLTokenProvider(ctx, dialConfig)
+			} else {
+				config.Net.SASL.TokenProvider, err = newTokenProvider(ctx, dialConfig)
+			}
 			if err != nil {
 				return nil, err
 			}
