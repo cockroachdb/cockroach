@@ -27,7 +27,8 @@ fi
 
 case $1 in
   "start")
-    if [[ "$*" != *"--restart"* ]]; then
+    cluster="$2"
+    if [[ $cluster != "drt-large" && "$*" != *"--restart"* ]]; then
       # implied for long-lived DRT clusters; avoid on init w/ --restart=false.
       shift
       set -- start "--enable-fluent-sink" "--restart" "$@"
@@ -40,12 +41,14 @@ case $1 in
       shift
       set -- start "--enable-fluent-sink" "--sql-port" "26257" "$@"
     fi
-    ;;
-  "sql")
-    if [[ "$*" != *"--secure"* ]]; then
-      shift
-      set -- sql --secure "$@"
-    fi
+    case $cluster in
+      "drt-large")
+        set -- start "--binary" "./cockroach" --args="--log=\"file-defaults: {dir: 'logs', max-group-size: 1GiB}\"" --store-count=16 --restart=false "$@"
+        roachprod run $cluster -- "\"sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh\""
+        ;;
+      *)
+        ;;
+    esac
     ;;
   "side-eye")
     shift
@@ -97,7 +100,7 @@ case $1 in
 
     # Disable the default integrations for the Datadog agent in preparation for
     # its removal.
-    roachprod ssh ${cluster} -- 'sudo bash -c "for file in $(find /etc/datadog-agent/conf.d -type f -name conf.yaml.default); do mv ${file} ${file}.bak; done"'
+    #roachprod ssh ${cluster} -- 'sudo bash -c "for file in $(find /etc/datadog-agent/conf.d -type f -name conf.yaml.default); do mv ${file} ${file}.bak; done"'
 
     roachprod ssh ${cluster} -- "sudo tee /etc/datadog-agent/datadog.yaml > /dev/null << EOF
 ---
