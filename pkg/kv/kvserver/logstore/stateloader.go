@@ -174,6 +174,11 @@ func (sl StateLoader) SynthesizeHardState(
 		return errors.Newf("can't decrease HardState.Commit from %d to %d",
 			redact.Safe(oldHS.Commit), redact.Safe(newHS.Commit))
 	}
+
+	// TODO(arul): This function can be called with an empty OldHS. In all other
+	// cases, where a term is included, we should be able to assert that the term
+	// isn't regressing (i.e. oldHS.Term >= newHS.Term).
+
 	if oldHS.Term > newHS.Term {
 		// The existing HardState is allowed to be ahead of us, which is
 		// relevant in practice for the split trigger. We already checked above
@@ -181,9 +186,11 @@ func (sl StateLoader) SynthesizeHardState(
 		// updated votes yet.
 		newHS.Term = oldHS.Term
 	}
-	// If the existing HardState voted in this term, remember that.
+	// If the existing HardState voted in this term and knows who the leader is,
+	// remember that.
 	if oldHS.Term == newHS.Term {
 		newHS.Vote = oldHS.Vote
+		newHS.Lead = oldHS.Lead
 	}
 	err := sl.SetHardState(ctx, readWriter, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)

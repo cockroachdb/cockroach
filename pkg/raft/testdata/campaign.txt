@@ -25,8 +25,8 @@ stabilize
 ----
 > 1 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateCandidate
-  HardState Term:1 Vote:1 Commit:2
+  State:StateCandidate
+  HardState Term:1 Vote:1 Commit:2 Lead:0
   Messages:
   1->2 MsgVote Term:1 Log:1/2
   1->3 MsgVote Term:1 Log:1/2
@@ -44,12 +44,12 @@ stabilize
   INFO 3 [logterm: 1, index: 2, vote: 0] cast MsgVote for 1 [logterm: 1, index: 2] at term 1
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:2
+  HardState Term:1 Vote:1 Commit:2 Lead:0
   Messages:
   2->1 MsgVoteResp Term:1 Log:0/0
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:2
+  HardState Term:1 Vote:1 Commit:2 Lead:0
   Messages:
   3->1 MsgVoteResp Term:1 Log:0/0
 > 1 receiving messages
@@ -60,7 +60,8 @@ stabilize
   3->1 MsgVoteResp Term:1 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:
-  Lead:1 State:StateLeader
+  State:StateLeader
+  HardState Term:1 Vote:1 Commit:2 Lead:1
   Entries:
   1/3 EntryNormal ""
   Messages:
@@ -72,14 +73,14 @@ stabilize
   1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
 > 2 handling Ready
   Ready MustSync=true:
-  Lead:1 State:StateFollower
+  HardState Term:1 Vote:1 Commit:2 Lead:1
   Entries:
   1/3 EntryNormal ""
   Messages:
   2->1 MsgAppResp Term:1 Log:0/3
 > 3 handling Ready
   Ready MustSync=true:
-  Lead:1 State:StateFollower
+  HardState Term:1 Vote:1 Commit:2 Lead:1
   Entries:
   1/3 EntryNormal ""
   Messages:
@@ -89,7 +90,7 @@ stabilize
   3->1 MsgAppResp Term:1 Log:0/3
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:3
+  HardState Term:1 Vote:1 Commit:3 Lead:1
   CommittedEntries:
   1/3 EntryNormal ""
   Messages:
@@ -101,14 +102,14 @@ stabilize
   1->3 MsgApp Term:1 Log:1/3 Commit:3
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:3
+  HardState Term:1 Vote:1 Commit:3 Lead:1
   CommittedEntries:
   1/3 EntryNormal ""
   Messages:
   2->1 MsgAppResp Term:1 Log:0/3
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:3
+  HardState Term:1 Vote:1 Commit:3 Lead:1
   CommittedEntries:
   1/3 EntryNormal ""
   Messages:
