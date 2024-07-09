@@ -5958,8 +5958,6 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 
 	data := `
 				-- Statements that CRDB cannot parse.
-				CREATE TRIGGER conditions_set_updated_at BEFORE UPDATE ON conditions FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
-
 				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM PUBLIC;
 				REVOKE ALL ON SEQUENCE knex_migrations_id_seq FROM database;
 
@@ -5996,6 +5994,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 				COMMENT ON TABLE t IS 'This should be skipped';
 				COMMENT ON DATABASE t IS 'This should be skipped';
 				COMMENT ON COLUMN t IS 'This should be skipped';
+				CREATE TRIGGER conditions_set_updated_at BEFORE UPDATE ON conditions FOR EACH ROW EXECUTE PROCEDURE set_updated_at();
 
 
 				-- Statements that CRDB can parse, but IMPORT does not support.
@@ -6020,7 +6019,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 
 	t.Run("dont-ignore-unsupported", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE foo1; USE foo1;")
-		sqlDB.ExpectErr(t, "syntax error", "IMPORT PGDUMP ($1)", srv.URL)
+		sqlDB.ExpectErr(t, "unsupported", "IMPORT PGDUMP ($1)", srv.URL)
 	})
 
 	t.Run("require-both-unsupported-options", func(t *testing.T) {
@@ -6077,8 +6076,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			}
 		}
 
-		schemaFileContents := []string{
-			`create trigger: could not be parsed
+		schemaFileContents := []string{`
 revoke privileges on sequence: could not be parsed
 revoke privileges on sequence: could not be parsed
 grant privileges on sequence: could not be parsed
@@ -6088,6 +6086,7 @@ comment on function: could not be parsed
 create extension if not exists with: could not be parsed
 alter aggregate: could not be parsed
 alter domain: could not be parsed
+create trigger: unsupported by IMPORT
 `,
 			`create function: could not be parsed
 alter function: could not be parsed

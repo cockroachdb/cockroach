@@ -112,6 +112,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:create_table.html",
     "//docs/generated/sql/bnf:create_table_as.html",
     "//docs/generated/sql/bnf:create_table_with_storage_param.html",
+    "//docs/generated/sql/bnf:create_trigger.html",
     "//docs/generated/sql/bnf:create_type.html",
     "//docs/generated/sql/bnf:create_view.html",
     "//docs/generated/sql/bnf:deallocate.html",
