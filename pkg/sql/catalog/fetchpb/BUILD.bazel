@@ -27,6 +27,7 @@ proto_library(
         "//pkg/geo/geopb:geopb_proto",
         "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/types:types_proto",
+        "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
 )
@@ -41,6 +42,7 @@ go_proto_library(
         "//pkg/geo/geopb",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/types",
+        "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )

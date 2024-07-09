@@ -140,6 +140,8 @@ var validationMap = []struct {
 			"SchemaLocked":                  {status: thisFieldReferencesNoObjects},
 			"ImportEpoch":                   {status: thisFieldReferencesNoObjects},
 			"ImportType":                    {status: thisFieldReferencesNoObjects},
+			// TODO: is this right?
+			"External": {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
