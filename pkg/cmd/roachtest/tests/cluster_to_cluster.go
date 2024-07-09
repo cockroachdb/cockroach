@@ -1092,7 +1092,6 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		additionalDuration:        0 * time.Minute,
 		cutover:                   30 * time.Second,
 		skipNodeDistributionCheck: true,
-		clouds:                    registry.AllExceptAWS,
 		suites:                    registry.Suites(registry.Nightly),
 	}
 	rd := makeReplicationDriver(t, c, sp)

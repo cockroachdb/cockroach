@@ -23,11 +23,7 @@ import (
 )
 
 func registerAcceptance(r registry.Registry) {
-	// TODO(renato): delete once #126775 is merged.
-	allExceptLocal := strings.Split(
-		registry.AllExceptLocal.String(),
-		",",
-	)
+	cloudsWithoutServiceRegistration := registry.AllClouds.Remove(registry.CloudsWithServiceRegistration)
 
 	testCases := map[registry.Owner][]struct {
 		name               string
@@ -40,8 +36,17 @@ func registerAcceptance(r registry.Registry) {
 		defaultLeases      bool
 		requiresLicense    bool
 		nativeLibs         []string
-		incompatibleClouds []string // Already assumes AWS is incompatible.
+		incompatibleClouds registry.CloudSet
 	}{
+		// NOTE: acceptance tests are lightweight tests that run as part
+		// of CI. As such, they must:
+		//
+		// 1. finish quickly
+		// 2. be compatible with roachtest local
+		//
+		// If you are adding a test that does not satisfy either of these
+		// properties, please register it separately (not as an acceptance
+		// test).
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
 			{name: "event-log", fn: runEventLog},
@@ -82,13 +87,13 @@ func registerAcceptance(r registry.Registry) {
 				name:               "c2c",
 				fn:                 runAcceptanceClusterReplication,
 				numNodes:           3,
-				incompatibleClouds: allExceptLocal,
+				incompatibleClouds: cloudsWithoutServiceRegistration,
 			},
 			{
 				name:               "multitenant",
 				fn:                 runAcceptanceMultitenant,
 				timeout:            time.Minute * 20,
-				incompatibleClouds: []string{spec.Azure}, // Requires service registration.
+				incompatibleClouds: cloudsWithoutServiceRegistration,
 			},
 		},
 		registry.OwnerSQLFoundations: {
@@ -103,16 +108,6 @@ func registerAcceptance(r registry.Registry) {
 				name:     "mismatched-locality",
 				fn:       runMismatchedLocalityTest,
 				numNodes: 3,
-			},
-			{
-				name:     "multitenant-multiregion",
-				fn:       runAcceptanceMultitenantMultiRegion,
-				numNodes: 9,
-				nodeRegions: []string{"us-west1-b", "us-west1-b", "us-west1-b",
-					"us-west1-b", "us-west1-b", "us-west1-b",
-					"us-east1-b", "us-east1-b", "us-east1-b"},
-				requiresLicense:    true,
-				incompatibleClouds: []string{spec.Local, spec.Azure}, // Requires service registration.
 			},
 		},
 	}
@@ -134,6 +129,13 @@ func registerAcceptance(r registry.Registry) {
 				extraOptions = append(extraOptions, spec.GCEZones(strings.Join(tc.nodeRegions, ",")))
 			}
 
+			if tc.incompatibleClouds.IsInitialized() && tc.incompatibleClouds.Contains(spec.Local) {
+				panic(errors.AssertionFailedf(
+					"acceptance tests must be able to run on roachtest local, but %q is incompatible",
+					tc.name,
+				))
+			}
+
 			testSpec := registry.TestSpec{
 				Name:              "acceptance/" + tc.name,
 				Owner:             owner,
@@ -141,7 +143,7 @@ func registerAcceptance(r registry.Registry) {
 				Skip:              tc.skip,
 				EncryptionSupport: tc.encryptionSupport,
 				Timeout:           10 * time.Minute,
-				CompatibleClouds:  registry.AllExceptAWS.Remove(tc.incompatibleClouds...),
+				CompatibleClouds:  registry.AllClouds.Remove(tc.incompatibleClouds),
 				Suites:            registry.Suites(registry.Nightly, registry.Quick, registry.Acceptance),
 				RequiresLicense:   tc.requiresLicense,
 			}
