@@ -1927,7 +1927,41 @@ func registerCDC(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			panic("todo")
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+
+			mkm := NewMskManager(ctx, t, msktypes.ClusterTypeServerless)
+			mkm.MakeCluster(ctx)
+			defer mkm.Teardown()
+
+			t.Status("waiting for cluster to be active")
+			mkm.WaitForClusterActive(ctx)
+			t.Status("cluster is active")
+			brokers := mkm.ClusterBrokers(ctx)
+
+			db := c.Conn(ctx, t.L(), 1)
+			defer stopFeeds(db)
+
+			tdb := sqlutils.MakeSQLRunner(db)
+			tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
+
+			feeds := map[string]string{
+				"sasl": fmt.Sprintf("kafka://%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", brokers.scram),
+				"iam":  fmt.Sprintf("kafka://%s&api_key=plain&todo=yes", brokers.iam),
+			}
+
+			if brokers.scram != "" {
+				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", feeds["sasl"], makeDefaultFeatureFlags()).Create()
+				if err != nil {
+					t.Fatalf("creating changefeed: %v", err)
+				}
+			}
+			if brokers.iam != "" {
+				// TODO: need to make the roachprod cluster have a good iam role and all that jazz
+				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", feeds["iam"], makeDefaultFeatureFlags()).Create()
+				if err != nil {
+					t.Fatalf("creating changefeed: %v", err)
+				}
+			}
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -3422,14 +3456,15 @@ func setupKafka(
 
 // this probably requires the roachtest to be running in aws. we can do that right?
 type mskManager struct {
-	t         test.Test
-	mskClient *msk.Client
-	of        func(*msk.Options)
+	t           test.Test
+	mskClient   *msk.Client
+	of          func(*msk.Options)
+	clusterType msktypes.ClusterType
 
 	clusterArn string
 }
 
-func NewMskManager(ctx context.Context, t test.Test) *mskManager {
+func NewMskManager(ctx context.Context, t test.Test, clusterType msktypes.ClusterType) *mskManager {
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithDefaultRegion("us-east-2"))
 	if err != nil {
 		t.Fatalf("failed to load aws config: %v", err)
@@ -3437,8 +3472,9 @@ func NewMskManager(ctx context.Context, t test.Test) *mskManager {
 	mskClient := msk.NewFromConfig(awsCfg)
 
 	return &mskManager{
-		t:         t,
-		mskClient: mskClient,
+		t:           t,
+		mskClient:   mskClient,
+		clusterType: clusterType,
 		of: func(o *msk.Options) {
 			o.Logger = awslog.LoggerFunc(func(classification awslog.Classification, format string, v ...interface{}) {
 				format = fmt.Sprintf("msk(%v): %s", classification, format)
@@ -3447,15 +3483,15 @@ func NewMskManager(ctx context.Context, t test.Test) *mskManager {
 		}}
 }
 
-func (m *mskManager) MakeCluster(ctx context.Context, typ msktypes.ClusterType) {
+func (m *mskManager) MakeCluster(ctx context.Context) {
 	req := &msk.CreateClusterV2Input{
-		ClusterName: aws.String(fmt.Sprintf("roachtest-cdc-%v-%v", typ, timeutil.Now().Format("%FT%T"))),
+		ClusterName: aws.String(fmt.Sprintf("roachtest-cdc-%v-%v", m.clusterType, timeutil.Now().Format("%FT%T"))),
 		Tags: map[string]string{
 			"roachtest": "true",
 			// todo: what other labels? see roachprod aws.go awsLabelsNameMap
 		},
 	}
-	if typ == msktypes.ClusterTypeProvisioned {
+	if m.clusterType == msktypes.ClusterTypeProvisioned {
 		req.Provisioned = &msktypes.ProvisionedRequest{
 			BrokerNodeGroupInfo: &msktypes.BrokerNodeGroupInfo{
 				// subnets that roachprod uses. TODO: dont hardcode these. something in pkg/roachprod/vm/aws/config.go``
@@ -3487,14 +3523,17 @@ func (m *mskManager) MakeCluster(ctx context.Context, typ msktypes.ClusterType) 
 					Scram: &msktypes.Scram{Enabled: aws.Bool(true)},
 				},
 			},
-			// ConfigurationInfo:  &msktypes.ConfigurationInfo{}, // TODO: maybe we can create a configuration and refer to it here?
+			ConfigurationInfo: &msktypes.ConfigurationInfo{
+				// this configuration allows auto creation of topics. but serverless doesnt let you specify this so we still need to create topics for that..
+				Arn: aws.String("arn:aws:kafka:us-east-1:541263489771:configuration/with-auto-create-topics/5c6e5964-1e39-40d6-af38-cf3227daa628-4"),
+			},
 			EncryptionInfo: &msktypes.EncryptionInfo{
 				EncryptionAtRest:    &msktypes.EncryptionAtRest{},
 				EncryptionInTransit: &msktypes.EncryptionInTransit{},
 			},
 			EnhancedMonitoring: "DEFAULT",
 		}
-	} else if typ == msktypes.ClusterTypeServerless {
+	} else if m.clusterType == msktypes.ClusterTypeServerless {
 		req.Serverless = &msktypes.ServerlessRequest{
 			VpcConfigs: []msktypes.VpcConfig{
 				{
@@ -3506,6 +3545,8 @@ func (m *mskManager) MakeCluster(ctx context.Context, typ msktypes.ClusterType) 
 				Sasl: &msktypes.ServerlessSasl{Iam: &msktypes.Iam{Enabled: aws.Bool(true)}},
 			},
 		}
+	} else {
+		panic("unknown cluster type: " + m.clusterType)
 	}
 	resp, err := m.mskClient.CreateClusterV2(ctx, req, m.of)
 	if err != nil {
@@ -3514,7 +3555,25 @@ func (m *mskManager) MakeCluster(ctx context.Context, typ msktypes.ClusterType) 
 	m.clusterArn = *resp.ClusterArn
 }
 
-func (m *mskManager) WaitForClusterActive(ctx context.Context, typ msktypes.ClusterType) {
+type mskBrokerHosts struct {
+	scram, iam string
+}
+
+func (m *mskManager) ClusterBrokers(ctx context.Context) mskBrokerHosts {
+	resp, err := m.mskClient.GetBootstrapBrokers(ctx, &msk.GetBootstrapBrokersInput{ClusterArn: &m.clusterArn}, m.of)
+	if err != nil {
+		m.t.Fatalf("failed to describe msk cluster: %v", err)
+	}
+	scram, iam := resp.BootstrapBrokerStringSaslScram, resp.BootstrapBrokerStringSaslIam
+	if scram == nil {
+		scram = aws.String("")
+	}
+	if iam == nil {
+		iam = aws.String("")
+	}
+	return mskBrokerHosts{scram: *scram, iam: *iam}
+}
+func (m *mskManager) WaitForClusterActive(ctx context.Context) {
 	for ctx.Err() == nil {
 		resp, err := m.mskClient.DescribeClusterV2(ctx, &msk.DescribeClusterV2Input{ClusterArn: &m.clusterArn}, m.of)
 		if err != nil {
