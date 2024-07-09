@@ -300,7 +300,7 @@ func TestMVCCHistories(t *testing.T) {
 			}
 
 			// Dump rangedels.
-			if rdIter, err := r.NewRawRangeDelIter(sstable.NoTransforms); err != nil {
+			if rdIter, err := r.NewRawRangeDelIter(sstable.NoFragmentTransforms); err != nil {
 				return err
 			} else if rdIter != nil {
 				defer rdIter.Close()
@@ -325,7 +325,7 @@ func TestMVCCHistories(t *testing.T) {
 			}
 
 			// Dump range keys.
-			if rkIter, err := r.NewRawRangeKeyIter(sstable.NoTransforms); err != nil {
+			if rkIter, err := r.NewRawRangeKeyIter(sstable.NoFragmentTransforms); err != nil {
 				return err
 			} else if rkIter != nil {
 				defer rkIter.Close()
