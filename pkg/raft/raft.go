@@ -797,10 +797,10 @@ func (r *raft) reset(term uint64) {
 }
 
 func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
-	last := r.raftLog.lastEntryID()
+	prev := r.raftLog.lastEntryID()
 	for i := range es {
 		es[i].Term = r.Term
-		es[i].Index = last.index + 1 + uint64(i)
+		es[i].Index = prev.index + 1 + uint64(i)
 	}
 	// Track the size of this uncommitted proposal.
 	if !r.increaseUncommittedSize(es) {
@@ -811,11 +811,19 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 		// Drop the proposal.
 		return false
 	}
-	app := logSlice{term: r.Term, prev: last, entries: es}
+	app := logSlice{term: r.Term, prev: prev, entries: es}
 	if err := app.valid(); err != nil {
 		r.logger.Panicf("%x leader could not append to its log: %v", r.id, err)
 	} else if !r.raftLog.append(app) {
 		r.logger.Panicf("%x leader could not append to its log", r.id)
+	}
+
+	// On appending entries, the leader is effectively "sending" a MsgApp to its
+	// local "acceptor". Since we don't actually send this self-MsgApp, update the
+	// progress here as if it was sent.
+	lastIndex := r.raftLog.lastIndex()
+	if pr := r.trk.Progress[r.id]; pr != nil {
+		pr.Next = lastIndex + 1
 	}
 	// The leader needs to self-ack the entries just appended once they have
 	// been durably persisted (since it doesn't send an MsgApp to itself). This
@@ -827,7 +835,7 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 	//  if r.maybeCommit() {
 	//  	r.bcastAppend()
 	//  }
-	r.send(pb.Message{To: r.id, Type: pb.MsgAppResp, Index: r.raftLog.lastIndex()})
+	r.send(pb.Message{To: r.id, Type: pb.MsgAppResp, Index: lastIndex})
 	return true
 }
 
