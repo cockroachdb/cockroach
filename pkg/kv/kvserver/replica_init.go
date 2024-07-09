@@ -224,6 +224,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	)
 	r.raftMu.racV2Integration = replicaRACv2Integration{
 		replica: r, admittedPiggybacker: r.store.cfg.RACv2AdmittedPiggybacker}
+	r.raftMu.racV2Integration.mu.enqueuedPiggybackedResponses = make(map[roachpb.ReplicaID]raftpb.Message)
 	return r
 }
 

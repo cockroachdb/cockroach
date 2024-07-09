@@ -686,9 +686,11 @@ func (r *raft) nextMsgApp(
 	}
 
 	msg := pb.Message{
+		From:    r.id,
 		To:      to,
 		Type:    pb.MsgApp,
 		Index:   prevIndex,
+		Term:    r.Term,
 		LogTerm: prevTerm,
 		Entries: entries,
 		Commit:  r.raftLog.committed,

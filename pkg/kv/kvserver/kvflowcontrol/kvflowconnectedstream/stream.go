@@ -1390,6 +1390,19 @@ func (rs *replicaState) handleReadyEntries(entries []raftpb.Entry) {
 			if err != nil {
 				panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
 			}
+			// Check that the sender and receiver replica IDs are correct, if not
+			// crash.
+			if roachpb.ReplicaID(msg.To) != r {
+				panic(fmt.Sprintf("created msg with incorrect recepient replica id expected %v got %v",
+					r, msg.To))
+			}
+			if roachpb.ReplicaID(msg.From) != rc.opts.LocalReplicaID {
+				panic(fmt.Sprintf("created msg with incorrect sender replica id expected %v got %v",
+					rc.opts.LocalReplicaID, msg.From))
+			}
+
+			log.VInfof(context.TODO(), 1, "send raft message from=%d to=%d: [%d,%d)",
+				msg.From, msg.To, msg.Index, int(msg.Index)+len(msg.Entries))
 			rc.opts.MessageSender.SendRaftMessage(
 				context.TODO(), kvflowcontrolpb.PriorityNotInheritedForFlowControl, msg)
 		}
@@ -1781,6 +1794,8 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(msg raftpb.Message) 
 				context.TODO(), admissionpb.WorkClass(i), -remainingTokens[i])
 		}
 	}
+	log.VInfof(context.TODO(), 1, "send raft message from=%d to=%d: [%d,%d)",
+		msg.From, msg.To, msg.Index, int(msg.Index)+len(msg.Entries))
 	rss.parent.parent.opts.MessageSender.SendRaftMessage(context.TODO(), inheritedPri, msg)
 }
 
@@ -2025,14 +2040,14 @@ func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(info Follower
 			if info.Next != info.Match+1 {
 				panic("")
 			}
-			rss.makeConsistentWhenProbeToReplicate(info.Next)
+			rss.makeConsistentWhenProbeToReplicateLocked(info.Next)
 		}
 	case probeRecentlyReplicate:
 		// Returned from StateProbe => StateReplicate.
 		if info.Next != info.Match+1 {
 			panic("")
 		}
-		rss.makeConsistentWhenProbeToReplicate(info.Next)
+		rss.makeConsistentWhenProbeToReplicateLocked(info.Next)
 	case snapshot:
 		// Returned from StateSnapshot => StateReplicate
 		if info.Next != info.Match+1 {
