@@ -281,6 +281,23 @@ func (is *infoStore) getHighWaterStamps() map[roachpb.NodeID]int64 {
 	return copy
 }
 
+// getHighWaterStampsWithDiff returns a copy of the high water stamps that are
+// different from the ones provided in prevFull. It also returns a full map of
+// updated high water stamps. The caller should use this in subsequent calls to
+// this method.
+func (is *infoStore) getHighWaterStampsWithDiff(
+	prevFull map[roachpb.NodeID]int64,
+) (newFull, diff map[roachpb.NodeID]int64) {
+	diff = make(map[roachpb.NodeID]int64)
+	for k, hws := range is.highWaterStamps {
+		if prevFull[k] != hws {
+			prevFull[k] = hws
+			diff[k] = hws
+		}
+	}
+	return prevFull, diff
+}
+
 // registerCallback registers a callback for a key pattern to be
 // invoked whenever new info for a gossip key matching pattern is
 // received. The callback method is invoked with the info key which
