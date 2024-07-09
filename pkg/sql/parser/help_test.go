@@ -597,6 +597,7 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE TRIGGER ??`, `CREATE TRIGGER`},
 		{`CREATE TRIGGER foo ??`, `CREATE TRIGGER`},
 		{`CREATE TRIGGER foo AFTER INSERT ON bar ??`, `CREATE TRIGGER`},
+		{`DROP TRIGGER ??`, `DROP TRIGGER`},
 	}
 
 	// The following checks that the test definition above exercises all

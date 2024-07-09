@@ -1261,6 +1261,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> drop_sequence_stmt
 %type <tree.Statement> drop_func_stmt
 %type <tree.Statement> drop_proc_stmt
+%type <tree.Statement> drop_trigger_stmt
 %type <tree.Statement> drop_virtual_cluster_stmt
 %type <bool>           opt_immediate
 
@@ -5573,6 +5574,31 @@ trigger_func_arg:
     $$ = $1
   }
 
+// %Help: DROP TRIGGER - remove a trigger
+// %Category: DDL
+// %Text:
+// DROP TRIGGER [ IF EXISTS ] name ON table_name [ CASCADE | RESTRICT ]
+// %SeeAlso: WEBDOCS/drop-trigger.html
+drop_trigger_stmt:
+  DROP TRIGGER name ON table_name opt_drop_behavior
+  {
+    $$.val = &tree.DropTrigger{
+      Trigger: tree.Name($3),
+      Table: $5.unresolvedObjectName(),
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
+| DROP TRIGGER IF EXISTS name ON table_name opt_drop_behavior
+  {
+    $$.val = &tree.DropTrigger{
+      IfExists: true,
+      Trigger: tree.Name($5),
+      Table: $7.unresolvedObjectName(),
+      DropBehavior: $8.dropBehavior(),
+    }
+  }
+| DROP TRIGGER error // SHOW HELP: DROP TRIGGER
+
 create_unsupported:
   CREATE ACCESS METHOD error { return unimplemented(sqllex, "create access method") }
 | CREATE AGGREGATE error { return unimplementedWithIssueDetail(sqllex, 74775, "create aggregate") }
@@ -5617,7 +5643,6 @@ drop_unsupported:
 | DROP SERVER error { return unimplemented(sqllex, "drop server") }
 | DROP SUBSCRIPTION error { return unimplemented(sqllex, "drop subscription") }
 | DROP TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "drop text") }
-| DROP TRIGGER error { return unimplementedWithIssueDetail(sqllex, 28296, "drop") }
 
 create_ddl_stmt:
   create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
@@ -6019,6 +6044,7 @@ drop_ddl_stmt:
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
 | drop_func_stmt     // EXTEND WITH HELP: DROP FUNCTION
 | drop_proc_stmt     // EXTEND WITH HELP: DROP FUNCTION
+| drop_trigger_stmt  // EXTEND WITH HELP: DROP TRIGGER
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL

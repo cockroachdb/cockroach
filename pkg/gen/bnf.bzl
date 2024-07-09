@@ -135,6 +135,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:drop_sequence_stmt.bnf",
     "//docs/generated/sql/bnf:drop_stmt.bnf",
     "//docs/generated/sql/bnf:drop_table.bnf",
+    "//docs/generated/sql/bnf:drop_trigger_stmt.bnf",
     "//docs/generated/sql/bnf:drop_type.bnf",
     "//docs/generated/sql/bnf:drop_view.bnf",
     "//docs/generated/sql/bnf:execute_stmt.bnf",
