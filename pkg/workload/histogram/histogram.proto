@@ -1,0 +1,23 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package histogram;
+
+import "google/protobuf/duration.proto";
+import "gogoproto/gogo.proto";
+
+// Latency records the duration for a single operation.
+message Latency {
+  // A description of the operation.
+  string operation = 1;
+  google.protobuf.Duration duration = 2
+      [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+}
