@@ -1411,3 +1411,86 @@ vectorized: true
                       estimated row count: 555,555,557 - 378,667,879,137,377,664 (11% of the table; stats collected <hidden> ago)
                       table: t104434@t104434_col1_2_col1_6_col1_7_key (partial index)
                       spans: [ - /'BOX(0.8102585814674039 -0.6055208348537393,1.2525166924090267 0.4387570127404082)') [/'BOX(0.8102585814674039 -0.6055208348537393,1.2525166924090267 0.4387570127404082)'/'2012-05-14 07:37:50.000177+00' - /'BOX(0.8102585814674039 -0.6055208348537393,1.2525166924090267 0.4387570127404082)'/'2012-05-14 07:37:50.000177+00'] (/'BOX(0.8102585814674039 -0.6055208348537393,1.2525166924090267 0.4387570127404082)' - /'BOX(0.5800044253150916 -0.631859538843543,2.166538271521436 -0.3936412129189529)') [/'BOX(0.5800044253150916 -0.631859538843543,2.166538271521436 -0.3936412129189529)'/'2012-05-14 07:37:50.000177+00' - /'BOX(0.5800044253150916 -0.631859538843543,2.166538271521436 -0.3936412129189529)'/'2012-05-14 07:37:50.000177+00'] … (35 more)
+
+# Regression test for #94188 in which we did not copy over the zone config in
+# to the new indexes created after a truncate.
+subtest zone_config
+
+statement ok
+CREATE TABLE bar(a int primary key) PARTITION BY LIST (a) (PARTITION x VALUES IN (1), PARTITION y VALUES IN (2));
+
+statement ok
+ALTER PARTITION x OF TABLE bar CONFIGURE ZONE USING gc.ttlseconds=100;
+
+statement ok
+ALTER PARTITION y OF TABLE bar CONFIGURE ZONE USING gc.ttlseconds=150;
+
+query TT
+SHOW CREATE TABLE bar;
+----
+bar  CREATE TABLE public.bar (
+       a INT8 NOT NULL,
+       CONSTRAINT bar_pkey PRIMARY KEY (a ASC)
+     ) PARTITION BY LIST (a) (
+       PARTITION x VALUES IN ((1)),
+       PARTITION y VALUES IN ((2))
+     );
+     ALTER PARTITION x OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
+       gc.ttlseconds = 100;
+     ALTER PARTITION y OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
+       gc.ttlseconds = 150
+
+
+statement ok
+TRUNCATE bar;
+
+query TT
+SHOW CREATE TABLE bar;
+----
+bar  CREATE TABLE public.bar (
+       a INT8 NOT NULL,
+       CONSTRAINT bar_pkey PRIMARY KEY (a ASC)
+     ) PARTITION BY LIST (a) (
+       PARTITION x VALUES IN ((1)),
+       PARTITION y VALUES IN ((2))
+     );
+     ALTER PARTITION x OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
+       gc.ttlseconds = 100;
+     ALTER PARTITION y OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
+       gc.ttlseconds = 150
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION x OF INDEX test.public.bar@bar_pkey;
+----
+PARTITION x OF INDEX test.public.bar@bar_pkey  ALTER PARTITION x OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
+                                                 range_min_bytes = 134217728,
+                                                 range_max_bytes = 536870912,
+                                                 gc.ttlseconds = 100,
+                                                 num_replicas = 3,
+                                                 constraints = '[]',
+                                                 lease_preferences = '[]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION y OF INDEX test.public.bar@bar_pkey;
+----
+PARTITION y OF INDEX test.public.bar@bar_pkey  ALTER PARTITION y OF INDEX test.public.bar@bar_pkey CONFIGURE ZONE USING
+                                                 range_min_bytes = 134217728,
+                                                 range_max_bytes = 536870912,
+                                                 gc.ttlseconds = 150,
+                                                 num_replicas = 3,
+                                                 constraints = '[]',
+                                                 lease_preferences = '[]'
+
+query T rowsort
+WITH subzone_spans AS (
+    SELECT json_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans') ->> 'key' AS key
+    FROM system.zones
+    WHERE id = 'bar'::REGCLASS::OID
+)
+SELECT crdb_internal.pretty_key(decode(key, 'base64'), 0) AS pretty_key
+FROM subzone_spans;
+----
+/2/1
+/2/2
+
+subtest end
