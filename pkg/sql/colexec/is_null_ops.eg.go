@@ -288,8 +288,10 @@ func (o *isTupleNullSelOp) Next() coldata.Batch {
 		if sel := batch.Selection(); sel != nil {
 			sel = sel[:n]
 			for _, i := range sel {
-				selectTuple := nulls.NullAt(i) != o.negate
-				if !selectTuple {
+				var selectTuple bool
+				if nulls.NullAt(i) {
+					selectTuple = !o.negate
+				} else {
 					selectTuple = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 				if selectTuple {
@@ -302,8 +304,10 @@ func (o *isTupleNullSelOp) Next() coldata.Batch {
 			batch.SetSelection(true)
 			sel := batch.Selection()[:n]
 			for i := range sel {
-				selectTuple := nulls.NullAt(i) != o.negate
-				if !selectTuple {
+				var selectTuple bool
+				if nulls.NullAt(i) {
+					selectTuple = !o.negate
+				} else {
 					selectTuple = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 				}
 				if selectTuple {
