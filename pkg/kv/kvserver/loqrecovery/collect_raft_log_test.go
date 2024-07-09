@@ -255,7 +255,8 @@ func TestCollectLeaseholderStatus(t *testing.T) {
 	// Note: we need to retry because replica collection is not atomic and
 	// leaseholder could move around so we could see none or more than one.
 	testutils.SucceedsSoon(t, func() error {
-		replicas, _, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm, -1 /* maxConcurrency */)
+		replicas, _, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm,
+			-1 /* maxConcurrency */, nil /* logOutput */)
 		require.NoError(t, err, "failed to collect replica info")
 
 		foundLeaseholders := 0

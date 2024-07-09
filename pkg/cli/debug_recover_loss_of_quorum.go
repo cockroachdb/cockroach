@@ -318,7 +318,8 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 			return errors.Wrapf(err, "failed to get admin connection to cluster")
 		}
 		defer finish()
-		replicaInfo, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c, debugRecoverCollectInfoOpts.maxConcurrency)
+		replicaInfo, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c,
+			debugRecoverCollectInfoOpts.maxConcurrency, stderr /* logOutput */)
 		if err != nil {
 			return errors.WithHint(errors.Wrap(err,
 				"failed to retrieve replica info from cluster"),
@@ -435,7 +436,8 @@ func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
 			return errors.Wrapf(err, "failed to get admin connection to cluster")
 		}
 		defer finish()
-		replicas, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c, debugRecoverPlanOpts.maxConcurrency)
+		replicas, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c,
+			debugRecoverPlanOpts.maxConcurrency, stderr /* logOutput */)
 		if err != nil {
 			return errors.Wrapf(err, "failed to retrieve replica info from cluster")
 		}
