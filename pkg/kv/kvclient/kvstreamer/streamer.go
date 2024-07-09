@@ -306,8 +306,12 @@ type Streamer struct {
 
 type streamerStatistics struct {
 	atomics struct {
-		kvPairsRead         *int64
-		batchRequestsIssued *int64
+		kvPairsRead *int64
+		// batchRequestsIssued tracks the number of BatchRequests issued by the
+		// Streamer. Note that this number is only used for the logging done by
+		// the Streamer itself and is separate from any possible bookkeeping
+		// done by the caller.
+		batchRequestsIssued int64
 		// resumeBatchRequests tracks the number of BatchRequests created for
 		// the ResumeSpans throughout the lifetime of the Streamer.
 		resumeBatchRequests int64
@@ -348,9 +352,14 @@ var streamerConcurrencyLimit = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+type sendFn func(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error)
+
 // NewStreamer creates a new Streamer.
 //
 // txn must be a LeafTxn that is not used by anything other than this Streamer.
+//
+// sendFn is a function that will be used for issuing BatchRequests. Normally,
+// it is txn.Send, possibly with some extra bookkeeping.
 //
 // limitBytes determines the maximum amount of memory this Streamer is allowed
 // to use (i.e. it'll be used lazily, as needed). The more memory it has, the
@@ -367,20 +376,17 @@ var streamerConcurrencyLimit = settings.RegisterIntSetting(
 //
 // kvPairsRead should be incremented atomically with the sum of NumKeys
 // parameters of all received responses.
-//
-// batchRequestsIssued should be incremented atomically every time a new
-// BatchRequest is sent.
 func NewStreamer(
 	distSender *kvcoord.DistSender,
 	stopper *stop.Stopper,
 	txn *kv.Txn,
+	sendFn func(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error),
 	st *cluster.Settings,
 	sd *sessiondata.SessionData,
 	lockWaitPolicy lock.WaitPolicy,
 	limitBytes int64,
 	acc *mon.BoundAccount,
 	kvPairsRead *int64,
-	batchRequestsIssued *int64,
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
 ) *Streamer {
@@ -413,14 +419,10 @@ func NewStreamer(
 	if kvPairsRead == nil {
 		kvPairsRead = new(int64)
 	}
-	if batchRequestsIssued == nil {
-		batchRequestsIssued = new(int64)
-	}
 	s.atomics.kvPairsRead = kvPairsRead
-	s.atomics.batchRequestsIssued = batchRequestsIssued
 	s.coordinator = workerCoordinator{
 		s:                      s,
-		txn:                    txn,
+		sendFn:                 sendFn,
 		lockWaitPolicy:         lockWaitPolicy,
 		requestAdmissionHeader: txn.AdmissionHeader(),
 		responseAdmissionQ:     txn.DB().SQLKVResponseAdmissionQ,
@@ -862,7 +864,7 @@ func (s *Streamer) adjustNumRequestsInFlight(delta int) {
 
 type workerCoordinator struct {
 	s              *Streamer
-	txn            *kv.Txn
+	sendFn         sendFn
 	lockWaitPolicy lock.WaitPolicy
 
 	asyncSem *quotapool.IntPool
@@ -951,7 +953,7 @@ func (w *workerCoordinator) logStatistics(ctx context.Context) {
 			w.s.enqueuedRequests,
 			w.s.enqueuedSingleRangeRequests,
 			atomic.LoadInt64(w.s.atomics.kvPairsRead),
-			atomic.LoadInt64(w.s.atomics.batchRequestsIssued),
+			atomic.LoadInt64(&w.s.atomics.batchRequestsIssued),
 			atomic.LoadInt64(&w.s.atomics.resumeBatchRequests),
 			atomic.LoadInt64(&w.s.atomics.resumeSingleRangeRequests),
 			w.s.results.numSpilledResults(),
@@ -1387,17 +1389,17 @@ func (w *workerCoordinator) performRequestAsync(
 			// Send since we create a separate tracing span for each async
 			// request which is sufficient to highlight where the handoff from
 			// SQL occurred.
-			br, pErr := w.txn.Send(ctx, ba)
-			if pErr != nil {
+			br, err := w.sendFn(ctx, ba)
+			if err != nil {
 				// TODO(yuzefovich): if err is
 				// ReadWithinUncertaintyIntervalError and there is only a single
 				// Streamer in a single local flow, attempt to transparently
 				// refresh.
-				log.VEventf(ctx, 2, "dropping response: error from kv: %v", pErr.GoError())
-				w.s.results.setError(pErr.GoError())
+				log.VEventf(ctx, 2, "dropping response: error from kv: %v", err)
+				w.s.results.setError(err)
 				return
 			}
-			atomic.AddInt64(w.s.atomics.batchRequestsIssued, 1)
+			atomic.AddInt64(&w.s.atomics.batchRequestsIssued, 1)
 
 			// First, we have to reconcile the memory budget. We do it
 			// separately from processing the results because we want to know

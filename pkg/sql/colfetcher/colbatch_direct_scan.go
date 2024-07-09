@@ -219,6 +219,7 @@ func NewColBatchDirectScan(
 		flowCtx.EvalCtx.SessionData().LockTimeout,
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+		spec.FetchSpec.External,
 	)
 	var hasDatumVec bool
 	for _, t := range tableArgs.typs {
