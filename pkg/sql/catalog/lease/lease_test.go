@@ -928,7 +928,11 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
-
+	// Disable the automatic stats collection, which could interfere with
+	// the lease acquisition counts in this test.
+	if _, err := sqlDB.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.foo (v INT);
@@ -1285,6 +1289,11 @@ CREATE DATABASE t;
 CREATE TABLE t.test1 (k CHAR PRIMARY KEY, v CHAR);
 CREATE TABLE t.test2 ();
 `); err != nil {
+		t.Fatal(err)
+	}
+	// Disable the automatic stats collection, which could interfere with
+	// the lease acquisition counts in this test.
+	if _, err := t.db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false"); err != nil {
 		t.Fatal(err)
 	}
 
