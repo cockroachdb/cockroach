@@ -794,6 +794,7 @@ type AwsIAMRoleSaslTokenProvider struct {
 }
 
 func (p *AwsIAMRoleSaslTokenProvider) Token() (*sarama.AccessToken, error) {
+	log.Infof(p.ctx, "generating AWS IAM role-based token for region %s, role %s, session %s", p.awsRegion, p.iamRoleArn, p.iamSessionName)
 	token, _, err := signer.GenerateAuthTokenFromRole(
 		p.ctx, p.awsRegion, p.iamRoleArn, p.iamSessionName)
 	return &sarama.AccessToken{Token: token}, err

@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -1944,8 +1945,10 @@ func registerCDC(r registry.Registry) {
 			tdb := sqlutils.MakeSQLRunner(db)
 			tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
 
+			testCerts, err := makeTestCerts("0.0.0.0", "aws") // ?
+			require.NoError(t, err)
 			feeds := map[string]string{
-				"sasl": fmt.Sprintf("kafka://%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", brokers.scram),
+				"sasl": fmt.Sprintf("kafka://%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", brokers.scram, testCerts.CACertBase64()),
 				// looks like we hardcode the ec2 role as "roachprod-testing". i just gave that guy an inline policy to assume my role
 				"iam": fmt.Sprintf("kafka://%s?tls_enabled=true&sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_region=us-east-2&sasl_aws_iam_role_arn=arn:aws:iam::541263489771:role/miles-msk-testing&sasl_aws_iam_session_name=miles", brokers.iam),
 			}
@@ -3498,9 +3501,9 @@ func (m *mskManager) MakeCluster(ctx context.Context) {
 		req.Provisioned = &msktypes.ProvisionedRequest{
 			BrokerNodeGroupInfo: &msktypes.BrokerNodeGroupInfo{
 				// subnets that roachprod uses. TODO: dont hardcode these. something in pkg/roachprod/vm/aws/config.go``
-				ClientSubnets: []string{"subnet-0258dc9d1b6473d84", "subnet-0e3d146e87ebc5a2c", "subnet-0e71591c1fe06645e"},
+				ClientSubnets:  []string{"subnet-0258dc9d1b6473d84", "subnet-0e3d146e87ebc5a2c", "subnet-0e71591c1fe06645e"},
 				SecurityGroups: []string{"sg-04d72b57e29d671f1"},
-				InstanceType:  aws.String("kafka.m5.large"), // smallest allowed instance
+				InstanceType:   aws.String("kafka.m5.large"), // smallest allowed instance
 				ConnectivityInfo: &msktypes.ConnectivityInfo{
 					VpcConnectivity: &msktypes.VpcConnectivity{
 						ClientAuthentication: &msktypes.VpcConnectivityClientAuthentication{
