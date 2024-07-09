@@ -140,6 +140,8 @@ var validationMap = []struct {
 			"SchemaLocked":                  {status: thisFieldReferencesNoObjects},
 			"ImportEpoch":                   {status: thisFieldReferencesNoObjects},
 			"ImportType":                    {status: thisFieldReferencesNoObjects},
+			"External": {status: todoIAmKnowinglyAddingTechDebt,
+				reason: "TODO(features): add validation that TableID is sane within the same tenant"},
 		},
 	},
 	{
