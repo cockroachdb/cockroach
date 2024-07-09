@@ -1263,8 +1263,8 @@ func (rs *replicaState) handleReadyState(info FollowerStateInfo) {
 		if rs.replicaSendStream == nil {
 			rs.createReplicaSendStream(info.Next)
 		} else {
-			rs.replicaSendStream.mu.Lock()
 			// replicaSendStream already exists.
+			rs.replicaSendStream.mu.Lock()
 			switch rs.replicaSendStream.connectedState {
 			case replicate:
 				rs.replicaSendStream.makeConsistentInStateReplicateLocked(info)
@@ -1309,6 +1309,8 @@ func (rs *replicaState) handleReadyEntries(entries []raftpb.Entry) {
 		for i := range entries {
 			entryFCState := getFlowControlState(entries[i])
 			wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
+			log.VInfof(context.TODO(), 1, "leader handleReadyEntries(%v): entryFCState=%v",
+				rs.replicaSendStream.stringLocked(), entryFCState)
 			rs.replicaSendStream.advanceNextRaftIndexAndSentLocked(entryFCState)
 			if entryFCState.usesFlowControl {
 				rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
@@ -1328,6 +1330,8 @@ func (rs *replicaState) handleReadyEntries(entries []raftpb.Entry) {
 		toIsFinalized := false
 		for i := range entries {
 			entryFCState := getFlowControlState(entries[i])
+			log.VInfof(context.TODO(), 1, "follower handleReadyEntries(%v): entryFCState=%v",
+				rs.replicaSendStream.stringLocked(), entryFCState)
 			if toIsFinalized {
 				if entries[i].Index == to && !entryFCState.usesFlowControl {
 					// Include additional entries that are not subject to AC, since we
@@ -1846,17 +1850,18 @@ func (rss *replicaSendStream) notifyLocked() {
 		rss.sendQueue.deductedForScheduler.wc = wc
 		rss.sendQueue.deductedForScheduler.tokens = tokens
 
+		log.VInfof(context.TODO(), 1,
+			"Notify(%v): deduct=%v watcher=%v %v state=%v",
+			rss.parent.desc.ReplicaID, tokens,
+			rss.parent.parent.opts.SendTokensWatcher, rss.stringLocked(),
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID))
+
 		// TODO(kvoli): We unlock here for testing, since scheduling a replica will
 		// call back on the same goroutine. In practice, this is async.
 		rss.mu.Unlock()
 		defer rss.mu.Lock()
 		rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 	}
-	log.VInfof(context.TODO(), 1,
-		"Notify(%v): deduct=%v watcher=%v %v state=%v",
-		rss.parent.desc.ReplicaID, tokens,
-		rss.parent.parent.opts.SendTokensWatcher, rss.stringLocked(),
-		rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID))
 }
 
 func (rss *replicaSendStream) state() connectedState {
