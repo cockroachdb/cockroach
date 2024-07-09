@@ -1198,7 +1198,7 @@ func (sp *StorePool) GetStoreList(filter StoreFilter) (StoreList, int, Throttled
 	sp.DetailsMu.Lock()
 	defer sp.DetailsMu.Unlock()
 
-	var storeIDs roachpb.StoreIDSlice
+	storeIDs := make(roachpb.StoreIDSlice, 0, len(sp.DetailsMu.StoreDetails))
 	for storeID := range sp.DetailsMu.StoreDetails {
 		storeIDs = append(storeIDs, storeID)
 	}
