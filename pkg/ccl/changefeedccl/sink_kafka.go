@@ -25,6 +25,9 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/aws/aws-msk-iam-sasl-signer-go/signer"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -795,6 +798,30 @@ type AwsIAMRoleSaslTokenProvider struct {
 
 func (p *AwsIAMRoleSaslTokenProvider) Token() (*sarama.AccessToken, error) {
 	log.Infof(p.ctx, "generating AWS IAM role-based token for region %s, role %s, session %s", p.awsRegion, p.iamRoleArn, p.iamSessionName)
+
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(p.awsRegion))
+
+	if err != nil {
+		return nil, fmt.Errorf("unable to load SDK config: %w", err)
+	}
+
+	stsClient := sts.NewFromConfig(cfg)
+
+	ident, err := stsClient.GetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to get caller identity: %w", err)
+	}
+	log.Infof(p.ctx, "caller identity: %+v", ident)
+
+	assumeRoleInput := &sts.AssumeRoleInput{
+		RoleArn:         aws.String(p.iamRoleArn),
+		RoleSessionName: aws.String(p.iamSessionName),
+	}
+	_, err = stsClient.AssumeRole(context.TODO(), assumeRoleInput)
+	if err != nil {
+		return nil, fmt.Errorf("unable to debuggingly assume role, %s: %w", p.iamRoleArn, err)
+	}
+
 	token, _, err := signer.GenerateAuthTokenFromRole(
 		p.ctx, p.awsRegion, p.iamRoleArn, p.iamSessionName)
 	return &sarama.AccessToken{Token: token}, err
