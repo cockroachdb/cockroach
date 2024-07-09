@@ -2092,7 +2092,7 @@ func (rss *replicaSendStream) makeConsistentWhenUnexpectedPopLocked(indexToSend 
 	// this replicaSendStream was created.
 	if indexToSend > rss.nextRaftIndexInitial {
 		panic(fmt.Sprintf("%v: unexpected indexToSend=%d > nextRaftIndexInitial=%d",
-			rss, indexToSend, rss.nextRaftIndexInitial))
+			rss.stringLocked(), indexToSend, rss.nextRaftIndexInitial))
 	}
 	// INVARIANT: indexToSend <= rss.nextRaftIndexInitial. Don't need to
 	// change any stats.
