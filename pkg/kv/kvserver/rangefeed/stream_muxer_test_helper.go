@@ -121,7 +121,7 @@ func (s *testServerStream) BlockSend() func() {
 // stopper := stop.NewStopper()
 // streamMuxer, cleanUp := NewTestStreamMuxer(t, ctx, stopper, serverStream)
 // defer cleanUp()
-// defer stopper.Stop(ctx) // or defer cancel() - important to stop the StreamMuxer before cleanUp()
+// defer cancel() - important to stop the StreamMuxer before cleanUp()
 func NewTestStreamMuxer(
 	t *testing.T,
 	ctx context.Context,
@@ -134,7 +134,8 @@ func NewTestStreamMuxer(
 	wg.Add(1)
 	if err := stopper.RunAsyncTask(ctx, "test-stream-muxer", func(ctx context.Context) {
 		defer wg.Done()
-		muxer.Run(ctx, stopper)
+		// Ignore stream.Send errors during tests.
+		_ = muxer.Run(ctx, stopper)
 	}); err != nil {
 		wg.Done()
 		t.Fatal(err)

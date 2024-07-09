@@ -124,6 +124,43 @@ func NewStreamMuxer(sender ServerStreamSender, metrics RangefeedMetricsRecorder)
 	}
 }
 
+// Start launches StreamMuxer.Run in the background if no error is returned and
+// provides a callback to stop the StreamMuxer. It continues running until
+// StreamMuxer.Run completes or the provided stop function is called. The caller
+// must invoke StreamMuxer.DisconnectAllWithError to disconnect all streams
+// after StreamMuxer is stopped. Note that the StreamMuxer will not send
+// completion errors after it is stopped. Example usage:
+//
+//	streamMuxerStop, err := streamMuxer.Start(ctx, n.stopper, errCh)
+//	defer streamMuxerStop()
+//	if err != nil {
+//		return err
+//	}
+func (sm *StreamMuxer) Start(
+	ctx context.Context, stopper *stop.Stopper, errCh chan error,
+) (streamMuxerStop func(), err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	if err := stopper.RunAsyncTask(ctx, "test-stream-muxer", func(ctx context.Context) {
+		defer wg.Done()
+		if err := sm.Run(ctx, stopper); err != nil {
+			select {
+			case errCh <- err:
+			default:
+			}
+		}
+	}); err != nil {
+		cancel()
+		wg.Done()
+		return func() {}, err // noop if error
+	}
+	return func() {
+		cancel()
+		wg.Wait()
+	}, nil
+}
+
 // AddStream registers a server rangefeed stream with the StreamMuxer. It
 // remains active until DisconnectRangefeedWithError is called with the same
 // streamID. Caller must ensure no duplicate stream IDs are added without
@@ -220,7 +257,7 @@ func (sm *StreamMuxer) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 //	}); err != nil {
 //	 wg.Done()
 //	}
-func (sm *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
+func (sm *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) error {
 	for {
 		select {
 		case <-sm.notifyMuxError:
@@ -229,13 +266,17 @@ func (sm *StreamMuxer) Run(ctx context.Context, stopper *stop.Stopper) {
 				if err := sm.sender.Send(clientErr); err != nil {
 					log.Errorf(ctx,
 						"failed to send rangefeed completion error back to client due to broken stream: %v", err)
-					return
+					return err
 				}
 			}
 		case <-ctx.Done():
-			return
+			// Top level goroutine will receive the context cancellation and handle
+			// ctx.Err().
+			return nil
 		case <-stopper.ShouldQuiesce():
-			return
+			// Top level goroutine will receive the stopper quiesce signal and handle
+			// error.
+			return nil
 		}
 	}
 }

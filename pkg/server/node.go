@@ -17,7 +17,6 @@ import (
 	"net"
 	"sort"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -1882,56 +1881,60 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 	muxStream := &lockedMuxStream{wrapped: stream}
 
-	var wg sync.WaitGroup
-	// Important to call cancel() to shutdown	streamMuxer before wg.Wait().
-	defer wg.Wait()
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(stream.Context()))
 	defer cancel()
-
 	streamMuxer := rangefeed.NewStreamMuxer(muxStream, n.metrics)
-	wg.Add(1)
-	if err := n.stopper.RunAsyncTask(ctx, "mux-term-forwarder", func(ctx context.Context) {
-		defer wg.Done()
-		streamMuxer.Run(ctx, n.stopper)
-	}); err != nil {
-		wg.Done()
+
+	errCh := make(chan error, 1)
+	streamMuxerStop, err := streamMuxer.Start(ctx, n.stopper, errCh)
+	defer streamMuxerStop()
+	if err != nil {
 		return err
 	}
 
 	for {
-		req, err := stream.Recv()
-		if err != nil {
+		select {
+		case err := <-errCh:
 			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-n.stopper.ShouldQuiesce():
+			return stop.ErrUnavailable
+		default:
+			req, err := stream.Recv()
+			if err != nil {
+				return err
+			}
+
+			if req.CloseStream {
+				// Note that we will call disconnect again when future.Error returns, but
+				// DisconnectRangefeedWithError will ignore subsequent errors.
+				streamMuxer.DisconnectRangefeedWithError(req.StreamID, req.RangeID,
+					kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
+				continue
+			}
+
+			streamCtx, cancel := context.WithCancel(ctx)
+			streamCtx = logtags.AddTag(streamCtx, "r", req.RangeID)
+			streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
+			streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
+
+			streamSink := &setRangeIDEventSink{
+				ctx:      streamCtx,
+				cancel:   cancel,
+				rangeID:  req.RangeID,
+				streamID: req.StreamID,
+				wrapped:  muxStream,
+			}
+			streamMuxer.AddStream(req.StreamID, cancel)
+
+			f := n.stores.RangeFeed(req, streamSink)
+			f.WhenReady(func(err error) {
+				streamMuxer.DisconnectRangefeedWithError(req.StreamID, req.RangeID, kvpb.NewError(err))
+			})
 		}
-
-		if req.CloseStream {
-			// Note that we will call disconnect again when future.Error returns, but
-			// DisconnectRangefeedWithError will ignore subsequent errors.
-			streamMuxer.DisconnectRangefeedWithError(req.StreamID, req.RangeID,
-				kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)))
-			continue
-		}
-
-		streamCtx, cancel := context.WithCancel(ctx)
-		streamCtx = logtags.AddTag(streamCtx, "r", req.RangeID)
-		streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
-		streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
-
-		streamSink := &setRangeIDEventSink{
-			ctx:      streamCtx,
-			cancel:   cancel,
-			rangeID:  req.RangeID,
-			streamID: req.StreamID,
-			wrapped:  muxStream,
-		}
-		streamMuxer.AddStream(req.StreamID, cancel)
-
-		f := n.stores.RangeFeed(req, streamSink)
-		f.WhenReady(func(err error) {
-			streamMuxer.DisconnectRangefeedWithError(req.StreamID, req.RangeID, kvpb.NewError(err))
-		})
 	}
 }
 
