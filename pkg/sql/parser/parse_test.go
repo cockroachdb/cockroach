@@ -403,7 +403,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE SUBSCRIPTION a`, 0, `create subscription`, ``},
 		{`CREATE TABLESPACE a`, 54113, `create tablespace`, ``},
 		{`CREATE TEXT SEARCH a`, 7821, `create text`, ``},
-		{`CREATE TRIGGER a`, 28296, `create`, ``},
 
 		{`DROP ACCESS METHOD a`, 0, `drop access method`, ``},
 		{`DROP AGGREGATE a`, 74775, `drop aggregate`, ``},

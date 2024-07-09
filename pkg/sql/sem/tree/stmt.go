@@ -95,6 +95,7 @@ const (
 	CreateIndexTag         = "CREATE INDEX"
 	CreateFunctionTag      = "CREATE FUNCTION"
 	CreateProcedureTag     = "CREATE PROCEDURE"
+	CreateTriggerTag       = "CREATE TRIGGER"
 	CreateSchemaTag        = "CREATE SCHEMA"
 	CreateSequenceTag      = "CREATE SEQUENCE"
 	CreateDatabaseTag      = "CREATE DATABASE"
@@ -2218,6 +2219,17 @@ func (n *DropRoutine) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
+func (*CreateTrigger) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CreateTrigger) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *CreateTrigger) StatementTag() string {
+	return CreateTriggerTag
+}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterFunctionOptions) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -2359,6 +2371,7 @@ func (n *CreateChangefeed) String() string                    { return AsString(
 func (n *CreateDatabase) String() string                      { return AsString(n) }
 func (n *CreateExtension) String() string                     { return AsString(n) }
 func (n *CreateRoutine) String() string                       { return AsString(n) }
+func (n *CreateTrigger) String() string                       { return AsString(n) }
 func (n *CreateIndex) String() string                         { return AsString(n) }
 func (n *CreateLogicalReplicationStream) String() string      { return AsString(n) }
 func (n *CreateRole) String() string                          { return AsString(n) }
