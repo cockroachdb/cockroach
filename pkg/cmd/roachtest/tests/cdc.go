@@ -3486,13 +3486,14 @@ func NewMskManager(ctx context.Context, t test.Test, clusterType msktypes.Cluste
 
 func (m *mskManager) MakeCluster(ctx context.Context) {
 	req := &msk.CreateClusterV2Input{
-		ClusterName: aws.String(fmt.Sprintf("roachtest-cdc-%v-%v", m.clusterType, timeutil.Now().Format("%FT%T"))),
+		ClusterName: aws.String(fmt.Sprintf("roachtest-cdc-%v-%v", m.clusterType, timeutil.Now().Format("2006-01-02-15-04-05"))),
 		Tags: map[string]string{
 			"roachtest": "true",
 			// todo: what other labels? see roachprod aws.go awsLabelsNameMap
 		},
 	}
-	if m.clusterType == msktypes.ClusterTypeProvisioned {
+	switch m.clusterType {
+	case msktypes.ClusterTypeProvisioned:
 		req.Provisioned = &msktypes.ProvisionedRequest{
 			BrokerNodeGroupInfo: &msktypes.BrokerNodeGroupInfo{
 				// subnets that roachprod uses. TODO: dont hardcode these. something in pkg/roachprod/vm/aws/config.go``
@@ -3534,7 +3535,7 @@ func (m *mskManager) MakeCluster(ctx context.Context) {
 			},
 			EnhancedMonitoring: "DEFAULT",
 		}
-	} else if m.clusterType == msktypes.ClusterTypeServerless {
+	case msktypes.ClusterTypeServerless:
 		req.Serverless = &msktypes.ServerlessRequest{
 			VpcConfigs: []msktypes.VpcConfig{
 				{
@@ -3546,7 +3547,7 @@ func (m *mskManager) MakeCluster(ctx context.Context) {
 				Sasl: &msktypes.ServerlessSasl{Iam: &msktypes.Iam{Enabled: aws.Bool(true)}},
 			},
 		}
-	} else {
+	default:
 		panic("unknown cluster type: " + m.clusterType)
 	}
 	resp, err := m.mskClient.CreateClusterV2(ctx, req, m.of)
