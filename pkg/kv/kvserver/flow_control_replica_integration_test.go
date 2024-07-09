@@ -289,13 +289,13 @@ func TestPriorityInheritanceState(t *testing.T) {
 		want: state(rng(1, 10, hi)),
 	}, {
 		state: state(rng(1, 5, lo), rng(6, 6, hi)), add: rng(7, 10, hi),
-		want: state(rng(1, 5, lo), rng(6, 6, hi), rng(7, 10, hi)),
+		want: state(rng(1, 5, lo), rng(6, 10, hi)),
 	}, {
 		state: state(rng(1, 5, lo), rng(6, 7, hi)), add: rng(7, 10, lo),
 		want: state(rng(1, 5, lo), rng(6, 6, hi), rng(7, 10, lo)),
 	}, {
 		state: state(rng(1, 5, lo), rng(6, 7, hi)), add: rng(7, 10, hi),
-		want: state(rng(1, 5, lo), rng(6, 6, hi), rng(7, 10, hi)),
+		want: state(rng(1, 5, lo), rng(6, 10, hi)),
 	}, {
 		state: state(rng(10, 20, lo), rng(30, 40, hi)), add: rng(5, 10, hi),
 		want: state(rng(5, 10, hi)),
@@ -322,25 +322,25 @@ func TestPriorityInheritanceState(t *testing.T) {
 		want: lo, doAC: true, new: state(),
 	}, {
 		state: state(rng(1, 10, hi)), index: 5, pri: lo,
-		want: hi, doAC: true, new: state(rng(1, 10, hi)),
+		want: hi, doAC: true, new: state(rng(6, 10, hi)),
 	}, {
 		state: state(rng(1, 10, hi)), index: 10, pri: lo,
-		want: hi, doAC: true, new: state(rng(1, 10, hi)), // FIXME
+		want: hi, doAC: true, new: state(),
 	}, {
 		state: state(rng(1, 5, lo), rng(6, 10, hi)), index: 9, pri: lo,
-		want: hi, doAC: true, new: state(rng(1, 5, lo), rng(6, 10, hi)), // FIXME
+		want: hi, doAC: true, new: state(rng(10, 10, hi)),
 	}, {
 		state: state(rng(1, 5, lo), rng(10, 20, hi)), index: 7, pri: lo,
 		want: lo, doAC: true, new: state(rng(10, 20, hi)),
 	}, {
 		state: state(rng(1, 10, noAC)), index: 6, pri: lo,
-		want: 0, doAC: false, new: state(rng(1, 10, noAC)),
+		want: 0, doAC: false, new: state(rng(7, 10, noAC)),
 	}, {
 		state: state(rng(1, 10, noPri)), index: 6, pri: lo,
-		want: lo, doAC: true, new: state(rng(1, 10, noPri)),
+		want: lo, doAC: true, new: state(rng(7, 10, noPri)),
 	}, {
 		state: state(rng(1, 10, noPri)), index: 6, pri: hi,
-		want: hi, doAC: true, new: state(rng(1, 10, noPri)),
+		want: hi, doAC: true, new: state(rng(7, 10, noPri)),
 	}, {
 		state: state(rng(1, 10, lo)), index: 20, pri: hi,
 		want: hi, doAC: true, new: state(),
@@ -358,11 +358,12 @@ func TestPriorityInheritanceState(t *testing.T) {
 }
 
 func (p *priorityInheritanceState) checkInvariant(t *testing.T) {
-	var last uint64
+	last := indexInterval{pri: kvflowcontrolpb.NumRaftPriorities}
 	for _, interval := range p.intervals {
-		require.Greater(t, interval.first, last)
 		require.LessOrEqual(t, interval.first, interval.last)
-		last = interval.last
+		require.Greater(t, interval.first, last.last)
+		require.NotEqual(t, last.pri, interval.pri)
+		last = interval
 	}
 }
 

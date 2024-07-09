@@ -847,16 +847,21 @@ func (rr2 *replicaRACv2Integration) admitRaftEntry(
 	queue.AdmitRaftEntryV1OrV2(ctx, tenantID, storeID, rangeID, entry, meta, typ.IsSideloaded())
 }
 
-// priorityInheritanceState records state provided via the side-channel,
-// regarding priority inheritance.
+// priorityInheritanceState records the mapping from raft log indices to their
+// inherited priorities.
+//
+// The lifetime of a particular log index begins when this entry is appended to
+// the in-memory log, and ends when the entry is sent to storage with the
+// priority that is extracted from this struct. The same log index can reappear
+// in this struct multiple times, typically when a new raft leader overwrites a
+// suffix of the log proposed by the previous leader.
 type priorityInheritanceState struct {
-	// Non-overlapping intervals in increasing order.
+	// intervals keeps the index-to-priority mapping in the increasing order of
+	// log indices. Contiguous index runs with the same priority are compressed.
 	//
-	// A new interval added here will throw away existing state for indices >=
-	// indexInterva.first.
-	//
-	// A read at index i will cause a prefix of intervals with
-	// indexInterval.last < i to be discarded.
+	// A new [first, last] interval added here will throw away existing state for
+	// indices >= first. A read at index i will cause a prefix of indices <= i to
+	// be discarded.
 	intervals []indexInterval
 }
 
@@ -867,61 +872,64 @@ type indexInterval struct {
 }
 
 // sideChannelForInheritedPriority is called on follower replicas, and is used
-// to provide information about priority inheritance for a range of indices.
-// The interval [first, last] is inclusive.
-// NOTE: This should only be called while holding
-// replicaFlowControlIntegrationImpl.mu.
+// to provide information about priority inheritance for the [first, last] range
+// of log indices.
+//
+// NB: Should only be called while holding replicaFlowControlIntegrationImpl.mu.
 func (p *priorityInheritanceState) sideChannelForInheritedPriority(
 	first, last uint64, inheritedPri kvflowcontrolpb.RaftPriority,
 ) {
-	// Overwrite the existing state for [first, last] with interval. Also, drop
-	// anything from before that corresponds to indices >= first.
-	interval := indexInterval{first: first, last: last, pri: inheritedPri}
-	for i := 0; i < len(p.intervals); i++ {
-		if p.intervals[i].last < interval.first {
-			// Earlier than latest info.
-			i++
-		}
-		// Overlap or later.
-
-		// Truncate.
-		p.intervals[i].last = interval.first - 1
-		if p.intervals[i].first > p.intervals[i].last {
-			// Completely subsumed.
-			p.intervals = p.intervals[:i]
-		} else {
-			// Partially subsumed.
-			p.intervals = p.intervals[:i+1]
-		}
+	// Drop all intervals starting at or after the first index. Do it from the
+	// right end, so that the append-only case is the fast path. When a suffix of
+	// entries is overwritten, the cost of this loop is an amortized O(1).
+	keep := len(p.intervals)
+	for ; keep != 0 && p.intervals[keep-1].first >= first; keep-- {
 	}
-	p.intervals = append(p.intervals, interval)
+	p.intervals = p.intervals[:keep]
+	// Partially subsume the last interval if it overlaps with the added one.
+	if keep != 0 && p.intervals[keep-1].last+1 >= first {
+		// Extend the last interval if it has the same priority, instead of
+		// appending a new one that immediately follows it.
+		if p.intervals[keep-1].pri == inheritedPri {
+			p.intervals[keep-1].last = last
+			return
+		}
+		p.intervals[keep-1].last = first - 1
+	}
+	// Append the new interval.
+	p.intervals = append(p.intervals, indexInterval{
+		first: first, last: last, pri: inheritedPri,
+	})
 }
 
 func (p *priorityInheritanceState) getEffectivePriority(
 	index uint64, pri kvflowcontrolpb.RaftPriority,
 ) (effectivePri kvflowcontrolpb.RaftPriority, doAC bool) {
-	// Also garbage collects any intervals that precede index.
-	i := 0
-	for ; i < len(p.intervals); i++ {
-		if p.intervals[i].first <= index {
-			if p.intervals[i].last >= index {
-				switch p.intervals[i].pri {
-				case kvflowcontrolpb.NotSubjectToACForFlowControl:
-					return 0, false
-				case kvflowcontrolpb.PriorityNotInheritedForFlowControl:
-					return pri, true
-				default:
-					return p.intervals[i].pri, true
-				}
-			} else {
-				continue
-			}
-		} else {
-			break
-		}
+	// Garbage collect intervals ending before the given index.
+	drop := 0
+	for ln := len(p.intervals); drop < ln && p.intervals[drop].last < index; drop++ {
 	}
-	p.intervals = p.intervals[i:]
-	return pri, true
+	p.intervals = p.intervals[drop:]
+	// If there is no interval containing the index, return the default priority.
+	if len(p.intervals) == 0 || p.intervals[0].first > index {
+		return pri, true
+	}
+	inherited := p.intervals[0].pri
+	// Remove the prefix of indices <= index.
+	if p.intervals[0].last > index {
+		p.intervals[0].first = index + 1
+	} else {
+		p.intervals = p.intervals[1:]
+	}
+
+	switch inherited {
+	case kvflowcontrolpb.NotSubjectToACForFlowControl:
+		return 0, false
+	case kvflowcontrolpb.PriorityNotInheritedForFlowControl:
+		return pri, true
+	default:
+		return inherited, true
+	}
 }
 
 // waitingForAdmissionState records the indices of individual entries that are
