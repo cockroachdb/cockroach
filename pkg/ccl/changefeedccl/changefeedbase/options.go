@@ -219,6 +219,9 @@ const (
 	SinkParamSASLTokenURL           = `sasl_token_url`
 	SinkParamSASLScopes             = `sasl_scopes`
 	SinkParamSASLGrantType          = `sasl_grant_type`
+	SinkParamSASLAwsIAMRoleArn      = `sasl_aws_iam_role_arn`
+	SinkParamSASLAwsRegion          = `sasl_aws_region`
+	SinkParamSASLAwsIAMSessionName  = `sasl_aws_iam_session_name`
 	SinkParamTableNameAttribute     = `with_table_name_attribute`
 
 	SinkSchemeConfluentKafka    = `confluent-cloud`
@@ -238,6 +241,9 @@ const (
 	// Hence, this option is not available to users
 	Topics = `topics`
 )
+
+// Support additional mechanism on top of the default SASL mechanism.
+const SASLTypeAwsIAMRole = "AWS_MSK_IAM"
 
 func makeStringSet(opts ...string) map[string]struct{} {
 	res := make(map[string]struct{}, len(opts))
