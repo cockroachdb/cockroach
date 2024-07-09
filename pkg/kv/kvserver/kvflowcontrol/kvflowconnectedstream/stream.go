@@ -986,6 +986,16 @@ retry:
 }
 
 func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
+	ready := e.Ready()
+	var entries []raftpb.Entry
+	nextRaftIndexUpperBound := uint64(math.MaxUint64)
+	if ready != nil {
+		entries = ready.GetEntries()
+		if len(entries) > 0 {
+			nextRaftIndexUpperBound = entries[0].Index
+		}
+	}
+
 	// Ensure that the replicaSendStreams are consistent with the current Raft
 	// state.
 	for r, rs := range rc.replicaMap {
@@ -1004,7 +1014,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		// In general, we need to be prepared to deal with anything returned
 		// by FollowerState.
 		info := rc.opts.RaftInterface.FollowerState(r)
-		rs.handleReadyState(info)
+		rs.handleReadyState(info, nextRaftIndexUpperBound)
 	}
 
 	// TODO: it is possible that we have a quorum with replicaSendStreams that
@@ -1014,10 +1024,6 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	// for deciding to force-flush since we need it in multiple places.
 
 	// Process ready.
-	ready := e.Ready()
-	if ready == nil {
-		return nil
-	}
 	// Send the MsgApps we have been asked to send. Note that these may cause
 	// queueing up in Replica.addUnreachableRemoteReplica, but those will be
 	// handed to Raft later, so this act will not cause a transition from
@@ -1028,7 +1034,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	//	context.TODO(), PriorityNotInheritedForFlowControl, msgApps[i])
 	// }
 
-	entries := ready.GetEntries()
+	// entries := ready.GetEntries()
 	if len(entries) == 0 {
 		return nil
 	}
@@ -1220,15 +1226,17 @@ func NewReplicaState(parent *RangeControllerImpl, desc roachpb.ReplicaDescriptor
 	}
 	info := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
 	if info.State == tracker.StateReplicate {
-		rs.createReplicaSendStream(info.Next)
+		rs.createReplicaSendStream(info.Next, math.MaxUint64)
 	}
 	return rs
 }
 
-func (rs *replicaState) createReplicaSendStream(indexToSend uint64) {
+func (rs *replicaState) createReplicaSendStream(
+	indexToSend uint64, nextRaftIndexUpperBound uint64,
+) {
 	rss := newReplicaSendStream(rs, replicaSendStreamInitState{
 		indexToSend:   indexToSend,
-		nextRaftIndex: rs.parent.opts.RaftInterface.LastEntryIndex() + 1,
+		nextRaftIndex: min(rs.parent.opts.RaftInterface.LastEntryIndex()+1, nextRaftIndexUpperBound),
 		// TODO: these need to be based on some history observed by RangeControllerImpl.
 		approxMeanSizeBytes: 1000,
 	})
@@ -1248,7 +1256,7 @@ func (rs *replicaState) close() {
 	}
 }
 
-func (rs *replicaState) handleReadyState(info FollowerStateInfo) {
+func (rs *replicaState) handleReadyState(info FollowerStateInfo, nextRaftIndexUpperBound uint64) {
 	state := info.State
 	log.VInfof(context.TODO(), 1,
 		"HandleRaftEvent(%d): info=(%v) state=(%v)", rs.desc.ReplicaID, info, rs)
@@ -1261,7 +1269,7 @@ func (rs *replicaState) handleReadyState(info FollowerStateInfo) {
 		}
 	case tracker.StateReplicate:
 		if rs.replicaSendStream == nil {
-			rs.createReplicaSendStream(info.Next)
+			rs.createReplicaSendStream(info.Next, nextRaftIndexUpperBound)
 		} else {
 			// replicaSendStream already exists.
 			rs.replicaSendStream.mu.Lock()
