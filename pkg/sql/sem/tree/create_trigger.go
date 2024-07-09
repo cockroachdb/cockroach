@@ -169,3 +169,26 @@ func (node *TriggerForEach) Format(ctx *FmtCtx) {
 		ctx.WriteString("FOR EACH ROW")
 	}
 }
+
+// DropTrigger represents a DROP TRIGGER statement.
+type DropTrigger struct {
+	IfExists     bool
+	Trigger      Name
+	Table        *UnresolvedObjectName
+	DropBehavior DropBehavior
+}
+
+// Format implements the NodeFormatter interface.
+func (node *DropTrigger) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP TRIGGER ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatName(string(node.Trigger))
+	ctx.WriteString(" ON ")
+	ctx.FormatNode(node.Table)
+	if node.DropBehavior != DropDefault {
+		ctx.WriteString(" ")
+		ctx.WriteString(node.DropBehavior.String())
+	}
+}

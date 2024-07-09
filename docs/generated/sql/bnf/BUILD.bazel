@@ -135,6 +135,7 @@ FILES = [
     "drop_sequence_stmt",
     "drop_stmt",
     "drop_table",
+    "drop_trigger_stmt",
     "drop_type",
     "drop_view",
     "execute_stmt",

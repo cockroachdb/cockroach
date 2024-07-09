@@ -1,0 +1,78 @@
+parse
+DROP TRIGGER t ON xy
+----
+DROP TRIGGER t ON xy
+DROP TRIGGER t ON xy -- fully parenthesized
+DROP TRIGGER t ON xy -- literals removed
+DROP TRIGGER _ ON _ -- identifiers removed
+
+parse
+DROP TRIGGER IF EXISTS t ON xy
+----
+DROP TRIGGER IF EXISTS t ON xy
+DROP TRIGGER IF EXISTS t ON xy -- fully parenthesized
+DROP TRIGGER IF EXISTS t ON xy -- literals removed
+DROP TRIGGER IF EXISTS _ ON _ -- identifiers removed
+
+parse
+DROP TRIGGER t ON xy CASCADE
+----
+DROP TRIGGER t ON xy CASCADE
+DROP TRIGGER t ON xy CASCADE -- fully parenthesized
+DROP TRIGGER t ON xy CASCADE -- literals removed
+DROP TRIGGER _ ON _ CASCADE -- identifiers removed
+
+parse
+DROP TRIGGER t ON foo.xy
+----
+DROP TRIGGER t ON foo.xy
+DROP TRIGGER t ON foo.xy -- fully parenthesized
+DROP TRIGGER t ON foo.xy -- literals removed
+DROP TRIGGER _ ON _._ -- identifiers removed
+
+parse
+DROP TRIGGER t ON db.foo.xy
+----
+DROP TRIGGER t ON db.foo.xy
+DROP TRIGGER t ON db.foo.xy -- fully parenthesized
+DROP TRIGGER t ON db.foo.xy -- literals removed
+DROP TRIGGER _ ON _._._ -- identifiers removed
+
+# A table name must be specified.
+error
+DROP TRIGGER t;
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+DROP TRIGGER t
+              ^
+HINT: try \h DROP TRIGGER
+
+error
+DROP TRIGGER xy.t;
+----
+at or near ".": syntax error
+DETAIL: source SQL:
+DROP TRIGGER xy.t
+               ^
+HINT: try \h DROP TRIGGER
+
+# Multiple trigger names cannot be specified.
+error
+DROP TRIGGER t, t2 ON xy
+----
+at or near ",": syntax error
+DETAIL: source SQL:
+DROP TRIGGER t, t2 ON xy
+              ^
+HINT: try \h DROP TRIGGER
+
+# Trigger names cannot be schema or db qualified.
+error
+DROP TRIGGER foo.t ON xy
+----
+at or near ".": syntax error
+DETAIL: source SQL:
+DROP TRIGGER foo.t ON xy
+                ^
+HINT: try \h DROP TRIGGER

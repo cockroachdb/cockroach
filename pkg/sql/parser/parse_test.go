@@ -421,7 +421,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DROP SERVER a`, 0, `drop server`, ``},
 		{`DROP SUBSCRIPTION a`, 0, `drop subscription`, ``},
 		{`DROP TEXT SEARCH a`, 7821, `drop text`, ``},
-		{`DROP TRIGGER a`, 28296, `drop`, ``},
 
 		{`DISCARD PLANS`, 0, `discard plans`, ``},
 

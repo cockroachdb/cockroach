@@ -109,6 +109,7 @@ const (
 	DropDatabaseTag        = "DROP DATABASE"
 	DropFunctionTag        = "DROP FUNCTION"
 	DropProcedureTag       = "DROP PROCEDURE"
+	DropTriggerTag         = "DROP TRIGGER"
 	DropIndexTag           = "DROP INDEX"
 	DropOwnedByTag         = "DROP OWNED BY"
 	DropSchemaTag          = "DROP SCHEMA"
@@ -2230,6 +2231,17 @@ func (n *CreateTrigger) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
+func (*DropTrigger) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*DropTrigger) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (n *DropTrigger) StatementTag() string {
+	return DropTriggerTag
+}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterFunctionOptions) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -2387,6 +2399,7 @@ func (n *Delete) String() string                              { return AsString(
 func (n *DeclareCursor) String() string                       { return AsString(n) }
 func (n *DropDatabase) String() string                        { return AsString(n) }
 func (n *DropRoutine) String() string                         { return AsString(n) }
+func (n *DropTrigger) String() string                         { return AsString(n) }
 func (n *DropIndex) String() string                           { return AsString(n) }
 func (n *DropOwnedBy) String() string                         { return AsString(n) }
 func (n *DropSchema) String() string                          { return AsString(n) }
