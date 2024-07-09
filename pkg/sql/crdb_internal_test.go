@@ -948,8 +948,7 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 		ContentionType:           contentionpb.ContentionType_LOCK_WAIT,
 	})
 
-	// Contention flush can take some time to flush
-	// the events
+	// Contention flush can take some time to flush the events.
 	testutils.SucceedsSoon(t, func() error {
 		row := sqlDB.QueryRow(`SELECT
     database_name, 
@@ -964,10 +963,11 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		require.Equal(t, "", db)
-		require.Equal(t, "", schema)
-		require.Equal(t, "", table)
-		require.Equal(t, "", index)
+		if db != "" || schema != "" || table != rangeKeyEscaped || index != "" {
+			return errors.Newf(
+				"unexpected row: db=%s, schema=%s, table=%s, index=%s", db, schema, table, index,
+			)
+		}
 		return nil
 	})
 }
