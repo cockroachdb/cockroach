@@ -904,7 +904,7 @@ func (rc *RangeControllerImpl) updateVoterSets() {
 			isLeader:      r.ReplicaID == rc.opts.LocalReplicaID,
 			isLeaseHolder: r.ReplicaID == rc.leaseholder,
 			isStateReplicate: rs.replicaSendStream != nil &&
-				rs.replicaSendStream.connectedState.shouldWaitForElasticEvalTokens(),
+				rs.replicaSendStream.state().shouldWaitForElasticEvalTokens(),
 			evalTokenCounter: rs.evalTokenCounter,
 		}
 		if isOld {
@@ -934,7 +934,6 @@ func (rc *RangeControllerImpl) WaitForEval(
 	var scratch []reflect.SelectCase
 retry:
 	// Snapshot the voterSets and voterSetRefreshCh.
-	// TODO: synchronization.
 	rc.mu.Lock()
 	vss := rc.mu.voterSets
 	vssRefreshCh := rc.mu.voterSetRefreshCh
@@ -1005,42 +1004,7 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		// In general, we need to be prepared to deal with anything returned
 		// by FollowerState.
 		info := rc.opts.RaftInterface.FollowerState(r)
-		state := info.State
-		log.VInfof(context.TODO(), 1,
-			"HandleRaftEvent(%d): info=(%v) state=(%v)", r, info, rs)
-		switch state {
-		case tracker.StateProbe:
-			if rs.replicaSendStream != nil {
-				// TODO: delay this by 1 sec.
-				rs.replicaSendStream.close()
-				rs.replicaSendStream = nil
-			}
-		case tracker.StateReplicate:
-			if rs.replicaSendStream == nil {
-				rs.createReplicaSendStream(info.Next)
-			} else {
-				// replicaSendStream already exists.
-				switch rs.replicaSendStream.connectedState {
-				case replicate:
-					rs.replicaSendStream.makeConsistentInStateReplicate(info)
-				case probeRecentlyReplicate:
-					rs.replicaSendStream.makeConsistentWhenProbeToReplicate(info.Next)
-				case snapshot:
-					rs.replicaSendStream.makeConsistentWhenProbeToReplicate(info.Next)
-				}
-			}
-		case tracker.StateSnapshot:
-			if rs.replicaSendStream != nil {
-				switch rs.replicaSendStream.connectedState {
-				case replicate:
-					rs.replicaSendStream.changeToStateSnapshot()
-				case probeRecentlyReplicate:
-					rs.replicaSendStream.close()
-					rs.replicaSendStream = nil
-				case snapshot:
-				}
-			}
-		}
+		rs.handleReadyState(info)
 	}
 
 	// TODO: it is possible that we have a quorum with replicaSendStreams that
@@ -1072,96 +1036,8 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	// replicas with empty send-queues. If a replica has a send-queue of
 	// existing entries, they are already trying to eliminate it, and we simply
 	// queue.
-	for r, rs := range rc.replicaMap {
-		if r == rc.opts.LocalReplicaID {
-			// Local replica, which is the leader. These will have a
-			// MsgStorageAppend that is not mediated here, but we do need to account
-			// for tokens.
-			for i := range entries {
-				entryFCState := getFlowControlState(entries[i])
-				wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
-				rs.replicaSendStream.advanceNextRaftIndexAndSent(entryFCState)
-				if entryFCState.usesFlowControl {
-					rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
-				}
-			}
-			continue
-		}
-		if rs.replicaSendStream == nil {
-			continue
-		}
-		if rs.replicaSendStream.connectedState == replicate && rs.replicaSendStream.isEmptySendQueue() {
-			// Consider sending.
-			// If leaseholder just send. If the leaseholder has a send-queue we won't be in this
-			// path, but a force-flush must be ongoing.
-			isLeaseholder := r == rc.leaseholder
-			from := entries[0].Index
-			// [from, to) is what we will send.
-			to := entries[0].Index
-			toIsFinalized := false
-			for i := range entries {
-				entryFCState := getFlowControlState(entries[i])
-				if toIsFinalized {
-					if entries[i].Index == to && !entryFCState.usesFlowControl {
-						// Include additional entries that are not subject to AC, since we
-						// always have tokens for those.
-						to++
-					} else {
-						rs.replicaSendStream.advanceNextRaftIndexAndQueued(entryFCState)
-					}
-					continue
-				}
-				// INVARIANT: !toIsFinalized.
-				wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
-				send := false
-				if isLeaseholder {
-					if entryFCState.usesFlowControl {
-						rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
-					}
-					send = true
-				} else {
-					if entryFCState.usesFlowControl {
-						tokens := rs.sendTokenCounter.TryDeduct(context.TODO(), wc, entryFCState.tokens)
-						if tokens > 0 {
-							send = true
-							if tokens < entryFCState.tokens {
-								toIsFinalized = true
-								// Deduct the remaining for this entry.
-								rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens-tokens)
-							}
-						}
-						// Else send stays false.
-					} else {
-						send = true
-					}
-				}
-				if send {
-					to++
-					rs.replicaSendStream.advanceNextRaftIndexAndSent(entryFCState)
-				} else {
-					toIsFinalized = true
-					rs.replicaSendStream.advanceNextRaftIndexAndQueued(entryFCState)
-				}
-			}
-			if to > from {
-				// Have deducted the send tokens. Proceed to send.
-				//
-				// TODO: use configuration of a limit on max inflight entries.
-				msg, err := rc.opts.RaftInterface.MakeMsgApp(r, from, to, math.MaxInt64)
-				if err != nil {
-					panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
-				}
-				rc.opts.MessageSender.SendRaftMessage(
-					context.TODO(), kvflowcontrolpb.PriorityNotInheritedForFlowControl, msg)
-			}
-			// Else nothing to send.
-		} else {
-			// Not in StateReplicate, or have an existing send-queue. Need to queue.
-			for i := range entries {
-				entryFCState := getFlowControlState(entries[i])
-				rs.replicaSendStream.advanceNextRaftIndexAndQueued(entryFCState)
-			}
-		}
+	for _, rs := range rc.replicaMap {
+		rs.handleReadyEntries(entries)
 	}
 	return nil
 }
@@ -1293,9 +1169,13 @@ func (rc *RangeControllerImpl) SetLeaseholder(replica roachpb.ReplicaID) {
 	if !ok {
 		// Ignore. Should we panic?
 	}
-	if rs.replicaSendStream != nil && rs.replicaSendStream.connectedState != snapshot &&
-		!rs.replicaSendStream.isEmptySendQueue() {
-		rs.replicaSendStream.scheduleForceFlush()
+
+	if rs.replicaSendStream != nil {
+		rs.replicaSendStream.mu.Lock()
+		defer rs.replicaSendStream.mu.Unlock()
+		if rs.replicaSendStream.connectedState != snapshot && !rs.replicaSendStream.isEmptySendQueueLocked() {
+			rs.replicaSendStream.scheduleForceFlushLocked()
+		}
 	}
 }
 
@@ -1350,16 +1230,162 @@ func (rs *replicaState) createReplicaSendStream(indexToSend uint64) {
 		// TODO: these need to be based on some history observed by RangeControllerImpl.
 		approxMeanSizeBytes: 1000,
 	})
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
 	rs.replicaSendStream = rss
-	if rs.parent.leaseholder == rs.desc.ReplicaID && !rss.isEmptySendQueue() {
-		rss.scheduleForceFlush()
+	if rs.parent.leaseholder == rs.desc.ReplicaID && !rss.isEmptySendQueueLocked() {
+		rss.scheduleForceFlushLocked()
 	}
-	rss.startProcessingSendQueue()
+	rss.startProcessingSendQueueLocked()
 }
 
 func (rs *replicaState) close() {
 	if rs.replicaSendStream != nil {
-		rs.replicaSendStream.close()
+		rs.replicaSendStream.closeLocked()
+	}
+}
+
+func (rs *replicaState) handleReadyState(info FollowerStateInfo) {
+	state := info.State
+	log.VInfof(context.TODO(), 1,
+		"HandleRaftEvent(%d): info=(%v) state=(%v)", rs.desc.ReplicaID, info, rs)
+	switch state {
+	case tracker.StateProbe:
+		if rs.replicaSendStream != nil {
+			// TODO: delay this by 1 sec.
+			rs.replicaSendStream.close()
+			rs.replicaSendStream = nil
+		}
+	case tracker.StateReplicate:
+		if rs.replicaSendStream == nil {
+			rs.createReplicaSendStream(info.Next)
+		} else {
+			rs.replicaSendStream.mu.Lock()
+			// replicaSendStream already exists.
+			switch rs.replicaSendStream.connectedState {
+			case replicate:
+				rs.replicaSendStream.makeConsistentInStateReplicateLocked(info)
+			case probeRecentlyReplicate:
+				rs.replicaSendStream.makeConsistentWhenProbeToReplicateLocked(info.Next)
+			case snapshot:
+				rs.replicaSendStream.makeConsistentWhenProbeToReplicateLocked(info.Next)
+			}
+			rs.replicaSendStream.mu.Unlock()
+		}
+	case tracker.StateSnapshot:
+		if rs.replicaSendStream != nil {
+			rs.replicaSendStream.mu.Lock()
+			switch rs.replicaSendStream.connectedState {
+			case replicate:
+				rs.replicaSendStream.changeToStateSnapshotLocked()
+			case probeRecentlyReplicate:
+				rs.replicaSendStream.closeLocked()
+				rs.replicaSendStream = nil
+			case snapshot:
+			}
+			rs.replicaSendStream.mu.Unlock()
+		}
+	}
+}
+
+// handleReadyEntries is called when on every Ready event.
+func (rs *replicaState) handleReadyEntries(entries []raftpb.Entry) {
+	if rs.replicaSendStream == nil {
+		return
+	}
+
+	rs.replicaSendStream.mu.Lock()
+	defer rs.replicaSendStream.mu.Unlock()
+
+	r := rs.desc.ReplicaID
+	rc := rs.parent
+	if r == rs.parent.opts.LocalReplicaID {
+		// Local replica, which is the leader. These will have a
+		// MsgStorageAppend that is not mediated here, but we do need to account
+		// for tokens.
+		for i := range entries {
+			entryFCState := getFlowControlState(entries[i])
+			wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
+			rs.replicaSendStream.advanceNextRaftIndexAndSentLocked(entryFCState)
+			if entryFCState.usesFlowControl {
+				rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
+			}
+		}
+		return
+	}
+
+	if rs.replicaSendStream.stateLocked() == replicate && rs.replicaSendStream.isEmptySendQueueLocked() {
+		// Consider sending.
+		// If leaseholder just send. If the leaseholder has a send-queue we won't be in this
+		// path, but a force-flush must be ongoing.
+		isLeaseholder := r == rc.leaseholder
+		from := entries[0].Index
+		// [from, to) is what we will send.
+		to := entries[0].Index
+		toIsFinalized := false
+		for i := range entries {
+			entryFCState := getFlowControlState(entries[i])
+			if toIsFinalized {
+				if entries[i].Index == to && !entryFCState.usesFlowControl {
+					// Include additional entries that are not subject to AC, since we
+					// always have tokens for those.
+					to++
+				} else {
+					rs.replicaSendStream.advanceNextRaftIndexAndQueuedLocked(entryFCState)
+				}
+				continue
+			}
+			// INVARIANT: !toIsFinalized.
+			wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
+			send := false
+			if isLeaseholder {
+				if entryFCState.usesFlowControl {
+					rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
+				}
+				send = true
+			} else {
+				if entryFCState.usesFlowControl {
+					tokens := rs.sendTokenCounter.TryDeduct(context.TODO(), wc, entryFCState.tokens)
+					if tokens > 0 {
+						send = true
+						if tokens < entryFCState.tokens {
+							toIsFinalized = true
+							// Deduct the remaining for this entry.
+							rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens-tokens)
+						}
+					}
+					// Else send stays false.
+				} else {
+					send = true
+				}
+			}
+			if send {
+				to++
+				rs.replicaSendStream.advanceNextRaftIndexAndSentLocked(entryFCState)
+			} else {
+				toIsFinalized = true
+				rs.replicaSendStream.advanceNextRaftIndexAndQueuedLocked(entryFCState)
+			}
+		}
+		if to > from {
+			// Have deducted the send tokens. Proceed to send.
+			//
+			// TODO: use configuration of a limit on max inflight entries.
+			msg, err := rc.opts.RaftInterface.MakeMsgApp(r, from, to, math.MaxInt64)
+			if err != nil {
+				panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
+			}
+			rc.opts.MessageSender.SendRaftMessage(
+				context.TODO(), kvflowcontrolpb.PriorityNotInheritedForFlowControl, msg)
+		}
+		// Else nothing to send.
+	} else {
+		// Not in StateReplicate, or have an existing send-queue. Need to queue.
+		for i := range entries {
+			entryFCState := getFlowControlState(entries[i])
+			rs.replicaSendStream.advanceNextRaftIndexAndQueuedLocked(entryFCState)
+		}
 	}
 }
 
@@ -1477,9 +1503,17 @@ type replicaSendStream struct {
 }
 
 func (rss *replicaSendStream) String() string {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	return rss.stringLocked()
+}
+
+func (rss *replicaSendStream) stringLocked() string {
+	rss.mu.AssertHeld()
 	return fmt.Sprintf("[%v,%v) conn=%v closed=%v handle_id=%d size=%v pri=%v force=%v tracker=%v",
 		rss.sendQueue.indexToSend, rss.sendQueue.nextRaftIndex, rss.connectedState, rss.closed,
-		rss.sendQueue.watcherHandleID, rss.queueSize(), rss.queuePriority(),
+		rss.sendQueue.watcherHandleID, rss.queueSizeLocked(), rss.queuePriorityLocked(),
 		rss.sendQueue.forceFlushScheduled, rss.tracker.String())
 }
 
@@ -1519,16 +1553,24 @@ func newReplicaSendStream(
 }
 
 func (rss *replicaSendStream) close() {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	rss.closeLocked()
+}
+
+func (rss *replicaSendStream) closeLocked() {
+	rss.mu.AssertHeld()
 	if rss.connectedState != snapshot {
 		// Will cause all tokens to be returned etc.
-		rss.changeToStateSnapshot()
+		rss.changeToStateSnapshotLocked()
 	}
 	rss.closed = true
 }
 
 // An entry is being sent that was never in the send-queue. So the send-queue
 // must be empty.
-func (rss *replicaSendStream) advanceNextRaftIndexAndSent(state entryFlowControlState) {
+func (rss *replicaSendStream) advanceNextRaftIndexAndSentLocked(state entryFlowControlState) {
 	if rss.connectedState != replicate {
 		panic("")
 	}
@@ -1550,27 +1592,37 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndSent(state entryFlowControl
 		context.TODO(), kvflowcontrolpb.WorkClassFromRaftPriority(state.originalPri), state.tokens)
 }
 
-func (rss *replicaSendStream) scheduleForceFlush() {
+func (rss *replicaSendStream) scheduleForceFlushLocked() {
+	rss.mu.AssertHeld()
 	if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
 		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
 		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
 	}
-	rss.returnDeductedFromSchedulerTokens()
+	rss.returnDeductedFromSchedulerTokensLocked()
 	rss.sendQueue.forceFlushScheduled = true
 	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 }
 
-// REQUIRES: !rss.closed
 func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	return rss.scheduledLocked()
+}
+
+// REQUIRES: !rss.closed
+func (rss *replicaSendStream) scheduledLocked() (scheduleAgain bool) {
+	rss.mu.AssertHeld()
+
 	if rss.connectedState != replicate {
 		return false
 	}
 	info := rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID)
 	switch info.State {
 	case tracker.StateReplicate:
-		rss.makeConsistentInStateReplicate(info)
+		rss.makeConsistentInStateReplicateLocked(info)
 	default:
-		rss.returnDeductedFromSchedulerTokens()
+		rss.returnDeductedFromSchedulerTokensLocked()
 		rss.sendQueue.forceFlushScheduled = false
 		return false
 	}
@@ -1615,30 +1667,32 @@ func (rss *replicaSendStream) scheduled() (scheduleAgain bool) {
 		if !errors.Is(err, raft.ErrCompacted) {
 			panic(err)
 		}
-		rss.changeToStateSnapshot()
+		rss.changeToStateSnapshotLocked()
 		return
 	}
-	rss.dequeueFromQueueAndSend(msg)
-	isEmpty := rss.isEmptySendQueue()
+	rss.dequeueFromQueueAndSendLocked(msg)
+	isEmpty := rss.isEmptySendQueueLocked()
 	if isEmpty {
 		if rss.sendQueue.forceFlushScheduled {
 			rss.sendQueue.forceFlushScheduled = false
 		}
-		rss.returnDeductedFromSchedulerTokens()
+		rss.returnDeductedFromSchedulerTokensLocked()
 		return false
 	}
 	// INVARIANT: !isEmpty.
 	if rss.sendQueue.forceFlushScheduled || rss.sendQueue.deductedForScheduler.tokens > 0 {
 		return true
 	} else {
-		pri := rss.queuePriority()
+		pri := rss.queuePriorityLocked()
 		rss.sendQueue.watcherHandleID = rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
 			rss.parent.sendTokenCounter, kvflowcontrolpb.WorkClassFromRaftPriority(pri), rss)
 		return false
 	}
 }
 
-func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
+func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(msg raftpb.Message) {
+	rss.mu.AssertHeld()
+
 	inheritedPri := kvflowcontrolpb.PriorityNotInheritedForFlowControl
 	// These are the remaining send tokens, that we may want to return. Can be
 	// negative, in which case we need to deduct some more.
@@ -1652,7 +1706,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 			rss.sendQueue.deductedForScheduler.wc == admissionpb.RegularWorkClass {
 			// Best guess at the inheritedPri based on the stats. We will correct
 			// this before.
-			inheritedPri = rss.queuePriority()
+			inheritedPri = rss.queuePriorityLocked()
 			if kvflowcontrolpb.WorkClassFromRaftPriority(inheritedPri) == admissionpb.ElasticWorkClass {
 				panic("")
 			}
@@ -1717,12 +1771,20 @@ func (rss *replicaSendStream) dequeueFromQueueAndSend(msg raftpb.Message) {
 }
 
 func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowControlState) {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	rss.advanceNextRaftIndexAndQueuedLocked(entry)
+}
+
+func (rss *replicaSendStream) advanceNextRaftIndexAndQueuedLocked(entry entryFlowControlState) {
+	rss.mu.AssertHeld()
 	if entry.index != rss.sendQueue.nextRaftIndex {
 		panic(fmt.Sprintf(
 			"expected entry index=%v (%v) == nextRaftIndex=%v (%v)",
-			entry.index, entry, rss, rss.sendQueue.nextRaftIndex))
+			entry.index, entry, rss.sendQueue.nextRaftIndex, rss.stringLocked()))
 	}
-	wasEmpty := rss.isEmptySendQueue()
+	wasEmpty := rss.isEmptySendQueueLocked()
 	// TODO: if wasEmpty, we may need to force-flush something. That decision needs to be
 	// made in the caller.
 
@@ -1732,7 +1794,7 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowContr
 		var existingSendQWC admissionpb.WorkClass
 		if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
 			// May need to update it.
-			existingSendQWC = kvflowcontrolpb.WorkClassFromRaftPriority(rss.queuePriority())
+			existingSendQWC = kvflowcontrolpb.WorkClassFromRaftPriority(rss.queuePriorityLocked())
 		}
 		rss.sendQueue.priorityCount[entry.originalPri]++
 		if rss.connectedState == snapshot {
@@ -1758,35 +1820,77 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndQueued(entry entryFlowContr
 
 // Notify implements TokenAvailableNotification.
 func (rss *replicaSendStream) Notify() {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	rss.notifyLocked()
+}
+
+func (rss *replicaSendStream) notifyLocked() {
+	rss.mu.AssertHeld()
 	// TODO: concurrency. raftMu is not held, and not being called from raftScheduler.
 	if rss.closed || rss.connectedState != replicate || rss.sendQueue.forceFlushScheduled {
 		// Must have canceled the handle and the cancellation raced with the
 		// notification.
 		return
 	}
-	pri := rss.queuePriority()
+	pri := rss.queuePriorityLocked()
 	wc := kvflowcontrolpb.WorkClassFromRaftPriority(pri)
-	queueSize := rss.queueSize()
+	queueSize := rss.queueSizeLocked()
 	tokens := rss.parent.sendTokenCounter.TryDeduct(context.TODO(), wc, queueSize)
 	if tokens > 0 && rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
 		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
 		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
 		rss.sendQueue.deductedForScheduler.wc = wc
 		rss.sendQueue.deductedForScheduler.tokens = tokens
+
+		// TODO(kvoli): We unlock here for testing, since scheduling a replica will
+		// call back on the same goroutine. In practice, this is async.
+		rss.mu.Unlock()
+		defer rss.mu.Lock()
 		rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 	}
 	log.VInfof(context.TODO(), 1,
-		"Notify(%v): deduct=%v watcher=%v %v",
+		"Notify(%v): deduct=%v watcher=%v %v state=%v",
 		rss.parent.desc.ReplicaID, tokens,
-		rss.parent.parent.opts.SendTokensWatcher, rss)
+		rss.parent.parent.opts.SendTokensWatcher, rss.stringLocked(),
+		rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID))
+}
+
+func (rss *replicaSendStream) state() connectedState {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	return rss.stateLocked()
+}
+
+func (rss *replicaSendStream) stateLocked() connectedState {
+	rss.mu.AssertHeld()
+	return rss.connectedState
 }
 
 func (rss *replicaSendStream) isEmptySendQueue() bool {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	return rss.isEmptySendQueueLocked()
+}
+
+func (rss *replicaSendStream) isEmptySendQueueLocked() bool {
+	rss.mu.AssertHeld()
 	return rss.sendQueue.indexToSend == rss.sendQueue.nextRaftIndex
 }
 
 // REQUIRES: send-queue is not empty.
 func (rss *replicaSendStream) queuePriority() kvflowcontrolpb.RaftPriority {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	return rss.queuePriorityLocked()
+}
+
+func (rss *replicaSendStream) queuePriorityLocked() kvflowcontrolpb.RaftPriority {
+	rss.mu.AssertHeld()
 	maxPri := kvflowcontrolpb.RaftLowPri
 	for pri := kvflowcontrolpb.RaftLowPri + 1; pri < kvflowcontrolpb.NumRaftPriorities; pri++ {
 		if rss.sendQueue.priorityCount[pri] > 0 {
@@ -1798,6 +1902,14 @@ func (rss *replicaSendStream) queuePriority() kvflowcontrolpb.RaftPriority {
 
 // REQUIRES: send-queue is not empty.
 func (rss *replicaSendStream) queueSize() kvflowcontrol.Tokens {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	return rss.queueSizeLocked()
+}
+
+func (rss *replicaSendStream) queueSizeLocked() kvflowcontrol.Tokens {
+	rss.mu.AssertHeld()
 	var size kvflowcontrol.Tokens
 	countWithApproxStats := rss.nextRaftIndexInitial - rss.sendQueue.indexToSend
 	if countWithApproxStats > 0 {
@@ -1808,6 +1920,14 @@ func (rss *replicaSendStream) queueSize() kvflowcontrol.Tokens {
 }
 
 func (rss *replicaSendStream) changeToStateSnapshot() {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	rss.changeToStateSnapshotLocked()
+}
+
+func (rss *replicaSendStream) changeToStateSnapshotLocked() {
+	rss.mu.AssertHeld()
 	rss.connectedState = snapshot
 	// The tracker must only contain entries in < rss.sendQueue.indexToSend.
 	// These may not have been received by the replica. Since the replica is
@@ -1832,11 +1952,19 @@ func (rss *replicaSendStream) changeToStateSnapshot() {
 		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
 		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
 	}
-	rss.returnDeductedFromSchedulerTokens()
+	rss.returnDeductedFromSchedulerTokensLocked()
 	rss.sendQueue.forceFlushScheduled = false
 }
 
 func (rss *replicaSendStream) returnDeductedFromSchedulerTokens() {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	rss.returnDeductedFromSchedulerTokensLocked()
+}
+
+func (rss *replicaSendStream) returnDeductedFromSchedulerTokensLocked() {
+	rss.mu.AssertHeld()
 	if rss.sendQueue.deductedForScheduler.tokens > 0 {
 		rss.parent.sendTokenCounter.Return(
 			context.TODO(), rss.sendQueue.deductedForScheduler.wc, rss.sendQueue.deductedForScheduler.tokens)
@@ -1850,6 +1978,14 @@ func (rss *replicaSendStream) returnDeductedFromSchedulerTokens() {
 // or even if we see all state transitions, info.Match can jump ahead of indexToSend, because
 // of old MsgApps arriving at the replica. So everything needs to be fixed up.
 func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateInfo) {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	rss.makeConsistentInStateReplicateLocked(info)
+}
+
+func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(info FollowerStateInfo) {
+	rss.mu.AssertHeld()
 	switch rss.connectedState {
 	case replicate:
 		if info.Match >= rss.sendQueue.indexToSend {
@@ -1859,7 +1995,7 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateI
 			if info.Next != info.Match+1 {
 				panic("")
 			}
-			rss.makeConsistentWhenUnexpectedPop(info.Next)
+			rss.makeConsistentWhenUnexpectedPopLocked(info.Next)
 		} else if info.Next == rss.sendQueue.indexToSend {
 			// Everything is as expected.
 		} else if info.Next > rss.sendQueue.indexToSend {
@@ -1887,9 +2023,9 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateI
 		if info.Next != info.Match+1 {
 			panic("")
 		}
-		rss.makeConsistentWhenSnapshotToReplicate(info.Next)
+		rss.makeConsistentWhenSnapshotToReplicateLocked(info.Next)
 	}
-	rss.returnTokensUsingAdmitted(info.Admitted)
+	rss.returnTokensUsingAdmittedLocked(info.Admitted)
 }
 
 // While in StateReplicate, send-queue could have some elements popped
@@ -1897,14 +2033,15 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateI
 // that we forgot about due to a transition out of StateReplicate and back
 // into StateReplicate, and we got acks for them (Match advanced past
 // indexToSend).
-func (rss *replicaSendStream) makeConsistentWhenUnexpectedPop(indexToSend uint64) {
+func (rss *replicaSendStream) makeConsistentWhenUnexpectedPopLocked(indexToSend uint64) {
+	rss.mu.AssertHeld()
 	// Cancel watcher and return deductedForScheduler tokens. Will try again after
 	// we've fixed up everything.
 	if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
 		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
 		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
 	}
-	rss.returnDeductedFromSchedulerTokens()
+	rss.returnDeductedFromSchedulerTokensLocked()
 	rss.sendQueue.forceFlushScheduled = false
 
 	// We have accurate stats for indices >= nextRaftIndexInitial. This unexpected pop
@@ -1918,21 +2055,29 @@ func (rss *replicaSendStream) makeConsistentWhenUnexpectedPop(indexToSend uint64
 	// change any stats.
 	rss.sendQueue.indexToSend = indexToSend
 
-	rss.startProcessingSendQueue()
+	rss.startProcessingSendQueueLocked()
 }
 
 func (rss *replicaSendStream) makeConsistentWhenProbeToReplicate(indexToSend uint64) {
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
+
+	rss.makeConsistentWhenProbeToReplicateLocked(indexToSend)
+}
+
+func (rss *replicaSendStream) makeConsistentWhenProbeToReplicateLocked(indexToSend uint64) {
+	rss.mu.AssertHeld()
 	if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
 		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
 		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
 	}
-	rss.returnDeductedFromSchedulerTokens()
+	rss.returnDeductedFromSchedulerTokensLocked()
 	rss.sendQueue.forceFlushScheduled = false
 
 	rss.connectedState = replicate
 	if indexToSend == rss.sendQueue.indexToSend {
 		// Queue state is already correct.
-		rss.startProcessingSendQueue()
+		rss.startProcessingSendQueueLocked()
 		return
 	}
 	if indexToSend > rss.sendQueue.indexToSend {
@@ -1961,10 +2106,11 @@ func (rss *replicaSendStream) makeConsistentWhenProbeToReplicate(indexToSend uin
 
 		})
 	rss.sendQueue.indexToSend = indexToSend
-	rss.startProcessingSendQueue()
+	rss.startProcessingSendQueueLocked()
 }
 
-func (rss *replicaSendStream) makeConsistentWhenSnapshotToReplicate(indexToSend uint64) {
+func (rss *replicaSendStream) makeConsistentWhenSnapshotToReplicateLocked(indexToSend uint64) {
+	rss.mu.AssertHeld()
 	if rss.sendQueue.nextRaftIndex < indexToSend {
 		panic("")
 	}
@@ -2012,18 +2158,19 @@ func (rss *replicaSendStream) makeConsistentWhenSnapshotToReplicate(indexToSend 
 	rss.sendQueue.approxMeanSizeBytes = meanSizeBytes
 	rss.sendQueue.sizeSum = 0
 	rss.nextRaftIndexInitial = rss.sendQueue.nextRaftIndex
-	rss.startProcessingSendQueue()
+	rss.startProcessingSendQueueLocked()
 }
 
-func (rss *replicaSendStream) startProcessingSendQueue() {
-	if !rss.isEmptySendQueue() {
-		rss.Notify()
+func (rss *replicaSendStream) startProcessingSendQueueLocked() {
+	rss.mu.AssertHeld()
+	if !rss.isEmptySendQueueLocked() {
+		rss.notifyLocked()
 		if rss.sendQueue.deductedForScheduler.tokens == 0 {
 			// Weren't able to deduct any tokens.
 			rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
 				rss.parent.sendTokenCounter, admissionpb.ElasticWorkClass, rss)
 		} else {
-			scheduleAgain := rss.scheduled()
+			scheduleAgain := rss.scheduledLocked()
 			if scheduleAgain {
 				rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 			} else {
@@ -2034,9 +2181,10 @@ func (rss *replicaSendStream) startProcessingSendQueue() {
 	}
 }
 
-func (rss *replicaSendStream) returnTokensUsingAdmitted(
+func (rss *replicaSendStream) returnTokensUsingAdmittedLocked(
 	admitted [kvflowcontrolpb.NumRaftPriorities]uint64,
 ) {
+	rss.mu.AssertHeld()
 	for pri, uptoIndex := range admitted {
 		rss.returnTokensForPri(kvflowcontrolpb.RaftPriority(pri), uptoIndex)
 	}
@@ -2045,6 +2193,7 @@ func (rss *replicaSendStream) returnTokensUsingAdmitted(
 func (rss *replicaSendStream) returnTokensForPri(
 	pri kvflowcontrolpb.RaftPriority, uptoIndex uint64,
 ) {
+	rss.mu.AssertHeld()
 	rss.tracker.Untrack(pri, uptoIndex,
 		func(index uint64, originalPri kvflowcontrolpb.RaftPriority, tokens kvflowcontrol.Tokens) {
 			wc := kvflowcontrolpb.WorkClassFromRaftPriority(pri)
