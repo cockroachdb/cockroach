@@ -3514,8 +3514,8 @@ func (m *mskManager) MakeCluster(ctx context.Context) {
 					VpcConnectivity: &msktypes.VpcConnectivity{
 						ClientAuthentication: &msktypes.VpcConnectivityClientAuthentication{
 							Sasl: &msktypes.VpcConnectivitySasl{
-								Iam:   &msktypes.VpcConnectivityIam{Enabled: aws.Bool(true)},
-								Scram: &msktypes.VpcConnectivityScram{Enabled: aws.Bool(true)},
+								Iam:   &msktypes.VpcConnectivityIam{Enabled: true},
+								Scram: &msktypes.VpcConnectivityScram{Enabled: true},
 							},
 						},
 					},
@@ -3523,17 +3523,17 @@ func (m *mskManager) MakeCluster(ctx context.Context) {
 				// SecurityGroups: []string{}, // do i need to specify this? make one?
 				StorageInfo: &msktypes.StorageInfo{
 					EbsStorageInfo: &msktypes.EBSStorageInfo{
-						VolumeSize: aws.Int32(5),
+						VolumeSize: 5,
 					},
 				},
 				ZoneIds: []string{"us-east-2a", "us-east-2b", "us-east-2c"}, // ditto
 			},
 			KafkaVersion:        aws.String("3.6.0"), // TODO: dont hardcode? what do we do in regular kafka
-			NumberOfBrokerNodes: aws.Int32(3),        // must equal num zones?
+			NumberOfBrokerNodes: 3,                   // must equal num zones?
 			ClientAuthentication: &msktypes.ClientAuthentication{
 				Sasl: &msktypes.Sasl{
-					Iam:   &msktypes.Iam{Enabled: aws.Bool(true)},
-					Scram: &msktypes.Scram{Enabled: aws.Bool(true)},
+					Iam:   &msktypes.Iam{Enabled: true},
+					Scram: &msktypes.Scram{Enabled: true},
 				},
 			},
 			ConfigurationInfo: &msktypes.ConfigurationInfo{
@@ -3555,7 +3555,7 @@ func (m *mskManager) MakeCluster(ctx context.Context) {
 				},
 			},
 			ClientAuthentication: &msktypes.ServerlessClientAuthentication{
-				Sasl: &msktypes.ServerlessSasl{Iam: &msktypes.Iam{Enabled: aws.Bool(true)}},
+				Sasl: &msktypes.ServerlessSasl{Iam: &msktypes.Iam{Enabled: true}},
 			},
 		}
 	default:
