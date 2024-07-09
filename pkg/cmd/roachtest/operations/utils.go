@@ -93,3 +93,25 @@ func pickRandomTable(
 	}
 	return tableNames[rng.Intn(len(tableNames))]
 }
+
+// Pick a random store in the node.
+func pickRandomStore(ctx context.Context, o operation.Operation, conn *gosql.DB, nodeId int) int {
+	rng, _ := randutil.NewPseudoRand()
+	storeIds, err := conn.QueryContext(ctx,
+		fmt.Sprintf("SELECT store_id FROM crdb_internal.kv_store_status where node_id=%d", nodeId))
+	if err != nil {
+		o.Fatal(err)
+	}
+	var stores []int
+	for storeIds.Next() {
+		var storeId int
+		if err := storeIds.Scan(&storeId); err != nil {
+			o.Fatal(err)
+		}
+		stores = append(stores, storeId)
+	}
+	if len(stores) == 0 {
+		o.Fatalf("unexpected zero active stores found in node %d", nodeId)
+	}
+	return stores[rng.Intn(len(stores))]
+}
