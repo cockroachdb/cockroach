@@ -1935,7 +1935,9 @@ func registerCDC(r registry.Registry) {
 			defer mkm.Teardown()
 
 			t.Status("waiting for cluster to be active")
-			brokers := mkm.WaitForClusterActiveAndDNSUpdated(ctx)
+			waitCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			brokers := mkm.WaitForClusterActiveAndDNSUpdated(waitCtx)
+			cancel()
 			t.Status("cluster is active")
 
 			db := c.Conn(ctx, t.L(), 1)
