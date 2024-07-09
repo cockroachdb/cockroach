@@ -443,7 +443,7 @@ func newRaft(c *Config) *raft {
 	if c.Applied > 0 {
 		raftlog.appliedTo(c.Applied, 0 /* size */)
 	}
-	r.becomeFollower(r.Term, None)
+	r.becomeFollower(r.Term, r.lead)
 
 	var nodesStrs []string
 	for _, n := range r.trk.VoterNodes() {
@@ -458,13 +458,14 @@ func newRaft(c *Config) *raft {
 
 func (r *raft) hasLeader() bool { return r.lead != None }
 
-func (r *raft) softState() SoftState { return SoftState{Lead: r.lead, RaftState: r.state} }
+func (r *raft) softState() SoftState { return SoftState{RaftState: r.state} }
 
 func (r *raft) hardState() pb.HardState {
 	return pb.HardState{
 		Term:   r.Term,
 		Vote:   r.Vote,
 		Commit: r.raftLog.committed,
+		Lead:   r.lead,
 	}
 }
 
@@ -739,6 +740,8 @@ func (r *raft) reset(term uint64) {
 		r.Term = term
 		r.Vote = None
 	}
+
+	// TODO(arul): we should only reset this if the term has changed.
 	r.lead = None
 
 	r.electionElapsed = 0
@@ -846,6 +849,11 @@ func (r *raft) tickHeartbeat() {
 	}
 }
 
+// TODO(arul): Consider removing the lead argument from this function. Instead,
+// for all the methods that want to set the leader explicitly (the ones that are
+// passing in m.From for this field), we can instead have them use an assignLead
+// function instead; in there, we can add safety checks to ensure we're not
+// overwriting the leader.
 func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 	r.step = stepFollower
 	r.reset(term)
@@ -879,6 +887,10 @@ func (r *raft) becomePreCandidate() {
 	r.step = stepCandidate
 	r.trk.ResetVotes()
 	r.tick = r.tickElection
+	// TODO(arul): We're forgetting the raft leader here. From the perspective of
+	// leader leases, this is fine, because we wouldn't be here unless we'd
+	// revoked StoreLiveness support for the leader's store to begin with. It's
+	// a bit weird from the perspective of raft though. See if we can avoid this.
 	r.lead = None
 	r.state = StatePreCandidate
 	r.logger.Infof("%x became pre-candidate at term %d", r.id, r.Term)
@@ -1226,7 +1238,13 @@ func stepLeader(r *raft, m pb.Message) error {
 	case pb.MsgCheckQuorum:
 		if !r.trk.QuorumActive() {
 			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
-			r.becomeFollower(r.Term, None)
+			// NB: Stepping down because of CheckQuorum is a special, in that we know
+			// the QSE is in the past. This means that the leader can safely call a
+			// new election or vote for a different peer without regressing the QSE.
+			// We don't need to/want to give this any special treatment -- instead, we
+			// handle this like the general step down case by simply remembering the
+			// term/lead information from our stint as the leader.
+			r.becomeFollower(r.Term, r.id)
 		}
 		// Mark everyone (but ourselves) as inactive in preparation for the next
 		// CheckQuorum.
@@ -1606,7 +1624,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 		case quorum.VoteLost:
 			// pb.MsgPreVoteResp contains future term of pre-candidate
 			// m.Term > r.Term; reuse r.Term
-			r.becomeFollower(r.Term, None)
+			r.becomeFollower(r.Term, r.lead)
 		}
 	case pb.MsgTimeoutNow:
 		r.logger.Debugf("%x [term %d state %v] ignored MsgTimeoutNow from %x", r.id, r.Term, r.state, m.From)
@@ -1623,11 +1641,19 @@ func stepFollower(r *raft, m pb.Message) error {
 		} else if r.disableProposalForwarding {
 			r.logger.Infof("%x not forwarding to leader %x at term %d; dropping proposal", r.id, r.lead, r.Term)
 			return ErrProposalDropped
+		} else if r.lead == r.id {
+			r.logger.Infof("%x not forwarding to itself at term %d; dropping proposal", r.id, r.Term)
+			return ErrProposalDropped
 		}
 		m.To = r.lead
 		r.send(m)
 	case pb.MsgApp:
 		r.electionElapsed = 0
+		// TODO(arul): Once r.lead != None, we shouldn't need to update r.lead
+		// anymore within the course of a single term (in the context of which this
+		// function is always called). Instead, if r.lead != None, we should be able
+		// to assert that the leader hasn't changed within a given term. Maybe at
+		// the caller itself.
 		r.lead = m.From
 		r.handleAppendEntries(m)
 	case pb.MsgHeartbeat:
@@ -1641,6 +1667,9 @@ func stepFollower(r *raft, m pb.Message) error {
 	case pb.MsgTransferLeader:
 		if r.lead == None {
 			r.logger.Infof("%x no leader at term %d; dropping leader transfer msg", r.id, r.Term)
+			return nil
+		} else if r.lead == r.id {
+			r.logger.Infof("%x is itself the leader at term %d; dropping leader transfer msg", r.id, r.Term)
 			return nil
 		}
 		m.To = r.lead
@@ -1944,7 +1973,9 @@ func (r *raft) switchToConfig(cfg tracker.Config, trk tracker.ProgressMap) pb.Co
 		// interruption). This might still drop some proposals but it's better than
 		// nothing.
 		if r.stepDownOnRemoval {
-			r.becomeFollower(r.Term, None)
+			// NB: Similar to the CheckQuorum step down case, we must remember our
+			// prior stint as leader, lest we regress the QSE.
+			r.becomeFollower(r.Term, r.lead)
 		}
 		return cs
 	}
@@ -1978,6 +2009,7 @@ func (r *raft) loadState(state pb.HardState) {
 	r.raftLog.committed = state.Commit
 	r.Term = state.Term
 	r.Vote = state.Vote
+	r.lead = state.Lead
 }
 
 // pastElectionTimeout returns true if r.electionElapsed is greater

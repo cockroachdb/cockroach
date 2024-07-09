@@ -202,6 +202,7 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		Term:   m.Term,
 		Vote:   m.Vote,
 		Commit: m.Commit,
+		Lead:   m.Lead,
 	}
 	if !raft.IsEmptyHardState(hs) {
 		// NB: Note that without additional safeguards, it's incorrect to write
