@@ -120,29 +120,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 		},
 	}
 
-	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
 	defer server.Stopper().Stop(ctx)
-	s := server.Server(0).ApplicationLayer()
-
-	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
-	require.NoError(t, err)
-	_, err = server.Conns[0].Exec("CREATE DATABASE a")
-	require.NoError(t, err)
-	_, err = server.Conns[0].Exec("CREATE DATABASE B")
-	require.NoError(t, err)
-
-	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
-	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
-
-	for _, s := range testClusterSettings {
-		dbA.Exec(t, s)
-	}
-
-	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
-	dbA.Exec(t, createStmt)
-	dbB.Exec(t, createStmt)
-	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
-	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
 	keyPrefix = rowenc.MakeIndexKeyPrefix(s.Codec(), desc.GetID(), desc.GetPrimaryIndexID())
@@ -484,21 +463,9 @@ func TestLogicalAutoReplan(t *testing.T) {
 							defer addressesMu.Unlock()
 							clientAddresses[addr] = struct{}{}
 						},
-						AfterRetryIteration: func(err error) {
-							if err != nil && !alreadyReplanned.Load() {
-								retryErrorChan <- err
-								<-turnOffReplanning
-								alreadyReplanned.Swap(true)
-							}
-						},
 					},
 				},
 				Streaming: &sql.StreamingTestingKnobs{
-					BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
-						addressesMu.Lock()
-						defer addressesMu.Unlock()
-						clientAddresses[addr] = struct{}{}
-					},
 					AfterRetryIteration: func(err error) {
 						if err != nil && !alreadyReplanned.Load() {
 							retryErrorChan <- err
@@ -511,33 +478,12 @@ func TestLogicalAutoReplan(t *testing.T) {
 		},
 	}
 
-	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
 	defer server.Stopper().Stop(ctx)
-	s := server.Server(0).ApplicationLayer()
-
-	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
-	require.NoError(t, err)
-	_, err = server.Conns[0].Exec("CREATE DATABASE a")
-	require.NoError(t, err)
-	_, err = server.Conns[0].Exec("CREATE DATABASE B")
-	require.NoError(t, err)
-
-	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
-	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
-
-	for _, s := range testClusterSettings {
-		dbA.Exec(t, s)
-	}
 
 	// Don't allow for replanning until the new nodes and scattered table have been created.
 	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_threshold", 0)
 	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_frequency", time.Millisecond*500)
-
-	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
-	dbA.Exec(t, createStmt)
-	dbB.Exec(t, createStmt)
-	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
-	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
 
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
@@ -559,6 +505,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 
 	server.AddAndStartServer(t, clusterArgs.ServerArgs)
 	server.AddAndStartServer(t, clusterArgs.ServerArgs)
+	t.Logf("New nodes added")
 
 	// Only need at least two nodes as leaseholders for test.
 	CreateScatteredTable(t, dbA, 2)
@@ -579,6 +526,39 @@ func TestLogicalAutoReplan(t *testing.T) {
 	close(turnOffReplanning)
 
 	require.Greater(t, len(clientAddresses), 1)
+}
+
+func setupLogicalTestServer(
+	t *testing.T, ctx context.Context, clusterArgs base.TestClusterArgs,
+) (
+	*testcluster.TestCluster,
+	serverutils.ApplicationLayerInterface,
+	*sqlutils.SQLRunner,
+	*sqlutils.SQLRunner,
+) {
+	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	s := server.Server(0).ApplicationLayer()
+
+	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE a")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE B")
+	require.NoError(t, err)
+
+	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
+	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
+
+	for _, s := range testClusterSettings {
+		dbA.Exec(t, s)
+	}
+
+	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
+	dbA.Exec(t, createStmt)
+	dbB.Exec(t, createStmt)
+	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	return server, s, dbA, dbB
 }
 
 func compareReplicatedTables(
