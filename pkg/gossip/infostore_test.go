@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/stretchr/testify/require"
 )
 
 var emptyAddr = util.MakeUnresolvedAddr("test", "<test-addr>")
@@ -92,6 +93,74 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	}
 	if is.getInfo("b") != nil {
 		t.Error("erroneously produced non-existent info for key b")
+	}
+}
+
+// TestGetHighWaterStampsWithDiff checks that getHighWaterStampsWithDiff()
+// returns the diff between the passed high water stamps and the current
+// InfoStore high water stamps.
+func TestGetHighWaterStampsWithDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	is, stopper := newTestInfoStore()
+	defer stopper.Stop(context.Background())
+
+	// Create two nodes, and attach some info to them.
+	i1 := is.newInfo(nil, time.Second)
+	i1.NodeID = 1
+	err := is.addInfo("a", i1)
+	require.NoError(t, err)
+
+	i2 := is.newInfo(nil, time.Second)
+	i2.NodeID = 2
+	err = is.addInfo("b", i2)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		originalHighWaterStamps map[roachpb.NodeID]int64
+		updatedHighWaterStamps  map[roachpb.NodeID]int64
+		expDiffStamps           map[roachpb.NodeID]int64
+	}{
+		{
+			originalHighWaterStamps: map[roachpb.NodeID]int64{},
+			updatedHighWaterStamps:  map[roachpb.NodeID]int64{i1.NodeID: 10, i2.NodeID: 10},
+			expDiffStamps:           map[roachpb.NodeID]int64{i1.NodeID: 10, i2.NodeID: 10},
+		},
+		{
+			originalHighWaterStamps: map[roachpb.NodeID]int64{i1.NodeID: 10, i2.NodeID: 20},
+			updatedHighWaterStamps:  map[roachpb.NodeID]int64{i1.NodeID: 10, i2.NodeID: 20},
+			expDiffStamps:           map[roachpb.NodeID]int64{},
+		},
+		{
+			originalHighWaterStamps: map[roachpb.NodeID]int64{i1.NodeID: 10, i2.NodeID: 20},
+			updatedHighWaterStamps:  map[roachpb.NodeID]int64{i1.NodeID: 20, i2.NodeID: 20},
+			expDiffStamps:           map[roachpb.NodeID]int64{i1.NodeID: 20},
+		},
+		{
+			originalHighWaterStamps: map[roachpb.NodeID]int64{i1.NodeID: 10, i2.NodeID: 20},
+			updatedHighWaterStamps:  map[roachpb.NodeID]int64{i1.NodeID: 10, i2.NodeID: 30},
+			expDiffStamps:           map[roachpb.NodeID]int64{i2.NodeID: 30},
+		},
+		{
+			originalHighWaterStamps: map[roachpb.NodeID]int64{i1.NodeID: 10, i2.NodeID: 20},
+			updatedHighWaterStamps:  map[roachpb.NodeID]int64{i1.NodeID: 20, i2.NodeID: 30},
+			expDiffStamps:           map[roachpb.NodeID]int64{i1.NodeID: 20, i2.NodeID: 30},
+		},
+	} {
+		// Explicitly set the high water timestamps.
+		currentStamps := tc.originalHighWaterStamps
+		is.highWaterStamps = tc.originalHighWaterStamps
+
+		// Update high water stamps.
+		is.highWaterStamps = tc.updatedHighWaterStamps
+
+		// The diff now should only show the difference between the current high
+		// stamps, and the high stamps when we last called
+		// getHighWaterStampsWithDiff.
+		currentStamps, diffStamps := is.getHighWaterStampsWithDiff(currentStamps)
+		require.Equal(t, diffStamps, tc.expDiffStamps)
+
+		// The currentStamps should hold the up-to-date high water stamps.
+		require.Equal(t, currentStamps, tc.updatedHighWaterStamps)
 	}
 }
 

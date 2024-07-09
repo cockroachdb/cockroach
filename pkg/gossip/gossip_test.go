@@ -941,3 +941,73 @@ func TestGossipLoopbackInfoPropagation(t *testing.T) {
 		return nil
 	})
 }
+
+// TestServerSendsHighStampsDiff tests that the server sends high water stamps
+// diffs to the client rather than sending the whole map.
+func TestServerSendsHighStampsDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	// Shared cluster ID by all gossipers (this ensures that the gossipers
+	// don't talk to servers from unrelated tests by accident).
+	clusterID := uuid.MakeV4()
+
+	// Start local and remote gossip servers.
+	local, localCxt := startGossip(clusterID, 1 /* nodeID */, stopper, t, metric.NewRegistry())
+	remote, remoteCxt := startGossip(clusterID, 2 /* nodeID */, stopper, t, metric.NewRegistry())
+	local.manage(localCxt)
+	remote.manage(remoteCxt)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create a client to the remote node.
+	c := newClient(log.MakeTestingAmbientCtxWithNewTracer(), remote.GetNodeAddr(), makeMetrics())
+
+	conn, err := localCxt.GRPCUnvalidatedDial(c.addr.String()).Connect(ctx)
+	require.NoError(t, err)
+
+	stream, err := NewGossipClient(conn).Gossip(ctx)
+	require.NoError(t, err)
+
+	requestGossip := func(g *Gossip, stream Gossip_GossipClient) Response {
+		err := c.requestGossip(g, stream)
+		require.NoError(t, err)
+		resp := &Response{}
+		resp, err = stream.Recv()
+		require.NoError(t, err)
+		return *resp
+	}
+
+	// Expect that the server will return its high water stamps in the response.
+	testutils.SucceedsSoon(t, func() error {
+		resp := requestGossip(local, stream)
+		local.mu.Lock()
+		currentHighStamps := remote.mu.is.getHighWaterStamps()
+		local.mu.Unlock()
+		require.Equal(t, resp.HighWaterStamps, currentHighStamps)
+		return nil
+	})
+
+	// Since the server high water stamps haven't changed, expect the server to
+	// return an empty map.
+	resp := requestGossip(local, stream)
+	require.Empty(t, resp.HighWaterStamps)
+
+	// Add some info to the server. This causes an increase in the high water
+	// time stamp.
+	err = remote.AddInfo("remote", nil, time.Hour)
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		resp := requestGossip(local, stream)
+		local.mu.Lock()
+		currentHighStamps := remote.mu.is.getHighWaterStamps()
+		local.mu.Unlock()
+
+		require.Equal(t, resp.HighWaterStamps, currentHighStamps)
+		return nil
+	})
+}
