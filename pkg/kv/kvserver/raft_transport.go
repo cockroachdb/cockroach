@@ -17,7 +17,6 @@ import (
 	"runtime/pprof"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -181,11 +180,11 @@ type RaftTransport struct {
 	//
 	// TODO(pav-kv): only SystemClass and "default" raft class slots are used.
 	// Find an efficient way to have only the necessary number of slots.
-	queues [rpc.NumConnectionClasses]syncutil.IntMap
+	queues [rpc.NumConnectionClasses]syncutil.Map[roachpb.NodeID, raftSendQueue]
 
 	dialer                  *nodedialer.Dialer
-	incomingMessageHandlers syncutil.IntMap // map[roachpb.StoreID]*IncomingRaftMessageHandler
-	outgoingMessageHandlers syncutil.IntMap // map[roachpb.StoreID]*OutgoingRaftMessageHandler
+	incomingMessageHandlers syncutil.Map[roachpb.StoreID, IncomingRaftMessageHandler]
+	outgoingMessageHandlers syncutil.Map[roachpb.StoreID, OutgoingRaftMessageHandler]
 
 	kvflowControl struct {
 		// Everything nested under this struct is used to return flow tokens
@@ -374,8 +373,8 @@ func (t *RaftTransport) Metrics() *RaftTransportMetrics {
 // visitQueues calls the visit callback on each outgoing messages sub-queue.
 func (t *RaftTransport) visitQueues(visit func(*raftSendQueue)) {
 	for class := range t.queues {
-		t.queues[class].Range(func(k int64, v unsafe.Pointer) bool {
-			visit((*raftSendQueue)(v))
+		t.queues[class].Range(func(_ roachpb.NodeID, v *raftSendQueue) bool {
+			visit(v)
 			return true
 		})
 	}
@@ -401,8 +400,8 @@ func (t *RaftTransport) queueByteSize() int64 {
 func (t *RaftTransport) getIncomingRaftMessageHandler(
 	storeID roachpb.StoreID,
 ) (IncomingRaftMessageHandler, bool) {
-	if value, ok := t.incomingMessageHandlers.Load(int64(storeID)); ok {
-		return *(*IncomingRaftMessageHandler)(value), true
+	if value, ok := t.incomingMessageHandlers.Load(storeID); ok {
+		return *value, true
 	}
 	return nil, false
 }
@@ -413,8 +412,8 @@ func (t *RaftTransport) getIncomingRaftMessageHandler(
 func (t *RaftTransport) getOutgoingMessageHandler(
 	storeID roachpb.StoreID,
 ) (OutgoingRaftMessageHandler, bool) {
-	if value, ok := t.outgoingMessageHandlers.Load(int64(storeID)); ok {
-		return *(*OutgoingRaftMessageHandler)(value), true
+	if value, ok := t.outgoingMessageHandlers.Load(storeID); ok {
+		return *value, true
 	}
 	return nil, false
 }
@@ -626,12 +625,12 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 func (t *RaftTransport) ListenIncomingRaftMessages(
 	storeID roachpb.StoreID, handler IncomingRaftMessageHandler,
 ) {
-	t.incomingMessageHandlers.Store(int64(storeID), unsafe.Pointer(&handler))
+	t.incomingMessageHandlers.Store(storeID, &handler)
 }
 
 // StopIncomingRaftMessages unregisters a IncomingRaftMessageHandler.
 func (t *RaftTransport) StopIncomingRaftMessages(storeID roachpb.StoreID) {
-	t.incomingMessageHandlers.Delete(int64(storeID))
+	t.incomingMessageHandlers.Delete(storeID)
 }
 
 // ListenOutgoingMessage registers an OutgoingRaftMessageHandler to capture
@@ -639,12 +638,12 @@ func (t *RaftTransport) StopIncomingRaftMessages(storeID roachpb.StoreID) {
 func (t *RaftTransport) ListenOutgoingMessage(
 	storeID roachpb.StoreID, handler OutgoingRaftMessageHandler,
 ) {
-	t.outgoingMessageHandlers.Store(int64(storeID), unsafe.Pointer(&handler))
+	t.outgoingMessageHandlers.Store(storeID, &handler)
 }
 
 // StopOutgoingMessage unregisters an OutgoingRaftMessageHandler.
 func (t *RaftTransport) StopOutgoingMessage(storeID roachpb.StoreID) {
-	t.outgoingMessageHandlers.Delete(int64(storeID))
+	t.outgoingMessageHandlers.Delete(storeID)
 }
 
 // processQueue opens a Raft client stream and sends messages from the
@@ -880,18 +879,18 @@ func (t *RaftTransport) getQueue(
 	nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (*raftSendQueue, bool) {
 	queuesMap := &t.queues[class]
-	value, ok := queuesMap.Load(int64(nodeID))
+	value, ok := queuesMap.Load(nodeID)
 	if !ok {
 		t.kvflowControl.mu.Lock()
-		q := raftSendQueue{
+		q := &raftSendQueue{
 			reqs:   make(chan *kvserverpb.RaftMessageRequest, raftSendBufferSize),
 			nodeID: nodeID,
 		}
-		value, ok = queuesMap.LoadOrStore(int64(nodeID), unsafe.Pointer(&q))
+		value, ok = queuesMap.LoadOrStore(nodeID, q)
 		t.kvflowControl.mu.connectionTracker.markNodeConnected(nodeID, class)
 		t.kvflowControl.mu.Unlock()
 	}
-	return (*raftSendQueue)(value), ok
+	return value, ok
 }
 
 // SendAsync sends a message to the recipient specified in the request. It
@@ -995,7 +994,7 @@ func (t *RaftTransport) startProcessNewQueue(
 		defer cleanup(q)
 		defer func() {
 			t.kvflowControl.mu.Lock()
-			t.queues[class].Delete(int64(toNodeID))
+			t.queues[class].Delete(toNodeID)
 			t.kvflowControl.mu.connectionTracker.markNodeDisconnected(toNodeID, class)
 			t.kvflowControl.mu.Unlock()
 		}()
@@ -1025,7 +1024,7 @@ func (t *RaftTransport) startProcessNewQueue(
 		})
 	if err != nil {
 		t.kvflowControl.mu.Lock()
-		t.queues[class].Delete(int64(toNodeID))
+		t.queues[class].Delete(toNodeID)
 		t.kvflowControl.mu.connectionTracker.markNodeDisconnected(toNodeID, class)
 		t.kvflowControl.mu.Unlock()
 		return false
