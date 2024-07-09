@@ -41,6 +41,11 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/aws/aws-sdk-go-v2/config"
+	msk "github.com/aws/aws-sdk-go-v2/service/kafka"
+	msktypes "github.com/aws/aws-sdk-go-v2/service/kafka/types"
+	"github.com/aws/aws-sdk-go/aws"
+	awslog "github.com/aws/smithy-go/logging"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -1914,6 +1919,18 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-auth-msk",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.OnlyAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			panic("todo")
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:      "cdc/kafka-oauth",
 		Owner:     `cdc`,
 		Benchmark: true,
@@ -3401,6 +3418,110 @@ func setupKafka(
 
 	kafka.start(ctx, "kafka")
 	return kafka, func() { kafka.stop(ctx) }
+}
+
+// this probably requires the roachtest to be running in aws. we can do that right?
+type mskManager struct {
+	t         test.Test
+	mskClient *msk.Client
+
+	clusterArn string
+}
+
+func NewMskManager(ctx context.Context, t test.Test) *mskManager {
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithDefaultRegion("us-east-2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mskClient := msk.NewFromConfig(awsCfg)
+
+	return &mskManager{t: t, mskClient: mskClient}
+}
+
+func (m *mskManager) MakeCluster(ctx context.Context, typ msktypes.ClusterType) {
+	of := func(o *msk.Options) {
+		o.Logger = awslog.LoggerFunc(func(classification awslog.Classification, format string, v ...interface{}) {
+			format = fmt.Sprintf("msk(%v): %s", classification, format)
+			m.t.L().Printf(format, v...)
+		})
+	}
+
+	req := &msk.CreateClusterV2Input{
+		ClusterName: aws.String(fmt.Sprintf("roachtest-cdc-%v-%v", typ, timeutil.Now().Format("%FT%T"))),
+		Tags: map[string]string{
+			"roachtest": "true",
+			// todo: what other labels? see roachprod aws.go awsLabelsNameMap
+		},
+	}
+	if typ == msktypes.ClusterTypeProvisioned {
+		req.Provisioned = &msktypes.ProvisionedRequest{
+			BrokerNodeGroupInfo: &msktypes.BrokerNodeGroupInfo{
+				// subnets that roachprod uses. TODO: dont hardcode these. something in pkg/roachprod/vm/aws/config.go``
+				ClientSubnets: []string{"subnet-0258dc9d1b6473d84", "subnet-0e3d146e87ebc5a2c", "subnet-0e71591c1fe06645e"},
+				InstanceType:  aws.String("kafka.m5.large"), // smallest allowed instance
+				ConnectivityInfo: &msktypes.ConnectivityInfo{
+					VpcConnectivity: &msktypes.VpcConnectivity{
+						ClientAuthentication: &msktypes.VpcConnectivityClientAuthentication{
+							Sasl: &msktypes.VpcConnectivitySasl{
+								Iam:   &msktypes.VpcConnectivityIam{Enabled: aws.Bool(true)},
+								Scram: &msktypes.VpcConnectivityScram{Enabled: aws.Bool(true)},
+							},
+						},
+					},
+				},
+				// SecurityGroups: []string{}, // do i need to specify this? make one?
+				StorageInfo: &msktypes.StorageInfo{
+					EbsStorageInfo: &msktypes.EBSStorageInfo{
+						VolumeSize: aws.Int32(5),
+					},
+				},
+				ZoneIds: []string{"us-east-2a", "us-east-2b", "us-east-2c"}, // ditto
+			},
+			KafkaVersion:        aws.String("3.6.0"), // TODO: dont hardcode? what do we do in regular kafka
+			NumberOfBrokerNodes: aws.Int32(3),        // must equal num zones?
+			ClientAuthentication: &msktypes.ClientAuthentication{
+				Sasl: &msktypes.Sasl{
+					Iam:   &msktypes.Iam{Enabled: aws.Bool(true)},
+					Scram: &msktypes.Scram{Enabled: aws.Bool(true)},
+				},
+			},
+			// ConfigurationInfo:  &msktypes.ConfigurationInfo{}, // TODO: maybe we can create a configuration and refer to it here?
+			EncryptionInfo: &msktypes.EncryptionInfo{
+				EncryptionAtRest:    &msktypes.EncryptionAtRest{},
+				EncryptionInTransit: &msktypes.EncryptionInTransit{},
+			},
+			EnhancedMonitoring: "DEFAULT",
+		}
+	} else if typ == msktypes.ClusterTypeServerless {
+		req.Serverless = &msktypes.ServerlessRequest{
+			VpcConfigs: []msktypes.VpcConfig{
+				{
+					SubnetIds:        []string{"subnet-0258dc9d1b6473d84", "subnet-0e3d146e87ebc5a2c", "subnet-0e71591c1fe06645e"}, // ditto
+					SecurityGroupIds: []string{"sg-04d72b57e29d671f1"},                                                             // roachprod sg
+				},
+			},
+			ClientAuthentication: &msktypes.ServerlessClientAuthentication{
+				Sasl: &msktypes.ServerlessSasl{Iam: &msktypes.Iam{Enabled: aws.Bool(true)}},
+			},
+		}
+	}
+	resp, err := m.mskClient.CreateClusterV2(ctx, req, of)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	m.clusterArn = *resp.ClusterArn
+}
+
+func (m *mskManager) WaitForClusterReady(ctx context.Context, typ msktypes.ClusterType) {
+	resp, err := m.mskClient.CreateClusterV2(ctx, &msk.CreateClusterV2Input{}, func(o *msk.Options) {})
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	m.clusterArn = *resp.ClusterArn
+}
+
+func (m *mskManager) Teardown() {
+
 }
 
 type topicConsumer struct {
