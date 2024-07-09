@@ -88,11 +88,12 @@ message Message {
 	optional uint64      index       = 6  [(gogoproto.nullable) = false];
 	repeated Entry       entries     = 7  [(gogoproto.nullable) = false];
 	optional uint64      commit      = 8  [(gogoproto.nullable) = false];
+	optional uint64 lead   = 16 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
 	// (type=MsgStorageAppend,vote=5,term=10) means the local node is voting for
-	// peer 5 in term 10. For MsgStorageAppends, the term, vote, and commit fields
-	// will either all be set (to facilitate the construction of a HardState) if
-	// any of the fields have changed or will all be unset if none of the fields
-	// have changed.
+	// peer 5 in term 10. For MsgStorageAppends, the term, vote, lead, and commit
+	// fields will either all be set (to facilitate the construction of a
+	// HardState) if any of the fields have changed or will all be unset if none
+	// of the fields have changed.
 	optional uint64      vote        = 13 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
 	// snapshot is non-nil and non-empty for MsgSnap messages and nil for all other
 	// message types. However, peer nodes running older binary versions may send a
@@ -107,26 +108,27 @@ message Message {
 	// is complete. Populated for MsgStorageAppend and MsgStorageApply messages.
 	repeated Message     responses   = 14 [(gogoproto.nullable) = false];
 
-  // match is the log index up to which the follower's log must persistently
-  // match the leader's. If the follower's persistent log is shorter, it means
-  // the follower has broken its promise and violated safety of Raft. Typically
-  // this means the environment (Storage) hasn't provided the required
-  // durability guarantees.
-  //
-  // If a follower sees a match index exceeding its log's last index, it must
-  // cease its membership (stop voting and acking appends) in the raft group, in
-  // order to limit the damage. Today it simply panics.
-  //
-  // match is only populated by the leader when sending messages to a voting
-  // follower. This can be 0 if the leader hasn't yet established the follower's
-  // match index, or for backward compatibility.
-  optional uint64 match = 15 [(gogoproto.nullable) = false];
+	// match is the log index up to which the follower's log must persistently
+	// match the leader's. If the follower's persistent log is shorter, it means
+	// the follower has broken its promise and violated safety of Raft. Typically
+	// this means the environment (Storage) hasn't provided the required
+	// durability guarantees.
+	//
+	// If a follower sees a match index exceeding its log's last index, it must
+	// cease its membership (stop voting and acking appends) in the raft group, in
+	// order to limit the damage. Today it simply panics.
+	//
+	// match is only populated by the leader when sending messages to a voting
+	// follower. This can be 0 if the leader hasn't yet established the follower's
+	// match index, or for backward compatibility.
+	optional uint64 match = 15 [(gogoproto.nullable) = false];
 }
 
 message HardState {
 	optional uint64 term   = 1 [(gogoproto.nullable) = false];
 	optional uint64 vote   = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
 	optional uint64 commit = 3 [(gogoproto.nullable) = false];
+	optional uint64 lead   = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
 }
 
 // ConfChangeTransition specifies the behavior of a configuration change with

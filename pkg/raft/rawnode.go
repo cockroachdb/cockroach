@@ -180,9 +180,10 @@ func MustSync(st, prevst pb.HardState, entsnum int) bool {
 	// Persistent state on all servers:
 	// (Updated on stable storage before responding to RPCs)
 	// currentTerm
+	// currentLead
 	// votedFor
 	// log entries[]
-	return entsnum != 0 || st.Vote != prevst.Vote || st.Term != prevst.Term
+	return entsnum != 0 || st.Vote != prevst.Vote || st.Term != prevst.Term || st.Lead != prevst.Lead
 }
 
 func needStorageAppendMsg(r *raft, rd Ready) bool {
@@ -226,6 +227,7 @@ func newStorageAppendMsg(r *raft, rd Ready) pb.Message {
 		m.Term = rd.Term
 		m.Vote = rd.Vote
 		m.Commit = rd.Commit
+		m.Lead = rd.Lead
 	}
 	if !IsEmptySnap(rd.Snapshot) {
 		snap := rd.Snapshot

@@ -801,7 +801,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	var hasReady bool
-	var softState *raft.SoftState
 	var outboundMsgs []raftpb.Message
 	var msgStorageAppend, msgStorageApply raftpb.Message
 	r.mu.Lock()
@@ -836,7 +835,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 			logRaftReady(ctx, syncRd)
 			asyncRd := makeAsyncReady(syncRd)
-			softState = asyncRd.SoftState
 			outboundMsgs, msgStorageAppend, msgStorageApply = splitLocalStorageMsgs(asyncRd.Messages)
 		}
 		// We unquiesce if we have a Ready (= there's work to do). We also have
@@ -874,24 +872,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// some quota back to the pool.
 		r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 		return stats, nil
-	}
-
-	refreshReason := noReason
-	if softState != nil && leaderID != roachpb.ReplicaID(softState.Lead) {
-		// Refresh pending commands if the Raft leader has changed. This is usually
-		// the first indication we have of a new leader on a restarted node.
-		//
-		// TODO(peter): Re-proposing commands when SoftState.Lead changes can lead
-		// to wasteful multiple-reproposals when we later see an empty Raft command
-		// indicating a newly elected leader or a conf change. Replay protection
-		// prevents any corruption, so the waste is only a performance issue.
-		if log.V(3) {
-			log.Infof(ctx, "raft leader changed: %d -> %d", leaderID, softState.Lead)
-		}
-		if !r.store.TestingKnobs().DisableRefreshReasonNewLeader {
-			refreshReason = reasonNewLeader
-		}
-		leaderID = roachpb.ReplicaID(softState.Lead)
 	}
 
 	r.traceMessageSends(outboundMsgs, "sending messages")
@@ -941,7 +921,28 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
+	refreshReason := noReason
 	if hasMsg(msgStorageAppend) {
+		// Leadership changes, if any, are communicated through MsgStorageAppends.
+		// Check if that's the case here.
+		if msgStorageAppend.Lead != raft.None && leaderID != roachpb.ReplicaID(msgStorageAppend.Lead) {
+			// Refresh pending commands if the Raft leader has changed. This is
+			// usually the first indication we have of a new leader on a restarted
+			// node.
+			//
+			// TODO(peter): Re-proposing commands when SoftState.Lead changes can lead
+			// to wasteful multiple-reproposals when we later see an empty Raft command
+			// indicating a newly elected leader or a conf change. Replay protection
+			// prevents any corruption, so the waste is only a performance issue.
+			if log.V(3) {
+				log.Infof(ctx, "raft leader changed: %d -> %d", leaderID, msgStorageAppend.Lead)
+			}
+			if !r.store.TestingKnobs().DisableRefreshReasonNewLeader {
+				refreshReason = reasonNewLeader
+			}
+			leaderID = roachpb.ReplicaID(msgStorageAppend.Lead)
+		}
+
 		if msgStorageAppend.Snapshot != nil {
 			if inSnap.Desc == nil {
 				// If we didn't expect Raft to have a snapshot but it has one
@@ -969,6 +970,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				Term:   msgStorageAppend.Term,
 				Vote:   msgStorageAppend.Vote,
 				Commit: msgStorageAppend.Commit,
+				Lead:   msgStorageAppend.Lead,
 			}
 			if len(msgStorageAppend.Entries) != 0 {
 				log.Fatalf(ctx, "found Entries in MsgStorageAppend with non-empty Snapshot")
@@ -1204,11 +1206,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 // All fields in asyncReady are read-only.
 // TODO(nvanbenschoten): move this into go.etcd.io/raft.
 type asyncReady struct {
-	// The current volatile state of a Node.
-	// SoftState will be nil if there is no update.
-	// It is not required to consume or store SoftState.
-	*raft.SoftState
-
 	// Messages specifies outbound messages to other peers and to local storage
 	// threads. These messages can be sent in any order.
 	//
@@ -1220,8 +1217,7 @@ type asyncReady struct {
 // makeAsyncReady constructs an asyncReady from the provided Ready.
 func makeAsyncReady(rd raft.Ready) asyncReady {
 	return asyncReady{
-		SoftState: rd.SoftState,
-		Messages:  rd.Messages,
+		Messages: rd.Messages,
 	}
 }
 
@@ -2023,7 +2019,7 @@ func (r *Replica) hasOutstandingSnapshotInFlightToStore(
 
 // HasRaftLeader returns true if the raft group has a raft leader currently.
 func HasRaftLeader(raftStatus *raft.Status) bool {
-	return raftStatus != nil && raftStatus.SoftState.Lead != 0
+	return raftStatus != nil && raftStatus.HardState.Lead != 0
 }
 
 // pendingCmdSlice sorts by increasing MaxLeaseIndex.
