@@ -95,6 +95,81 @@ func TestInfoStoreGetInfo(t *testing.T) {
 	}
 }
 
+// TestGetHighWaterStampsWithDiff checks that getHighWaterStampsWithDiff()
+// returns the diff between the passed high water stamps and the current
+// InfoStore high water stamps.
+func TestGetHighWaterStampsWithDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	is, stopper := newTestInfoStore()
+	defer stopper.Stop(context.Background())
+
+	// Create two nodes, and attach some info to them.
+	i1 := is.newInfo(nil, time.Second)
+	i1.NodeID = 1
+	if err := is.addInfo("a", i1); err != nil {
+		t.Error(err)
+	}
+
+	i2 := is.newInfo(nil, time.Second)
+	i2.NodeID = 2
+	if err := is.addInfo("b", i2); err != nil {
+		t.Error(err)
+	}
+
+	// Explicitly set the high water timestamps for nodes 1 and 2 to 10 and 20
+	// respectively.
+	is.highWaterStamps = map[roachpb.NodeID]int64{i1.NodeID: 10, i2.NodeID: 20}
+	var diffStamps map[roachpb.NodeID]int64
+	currentStamps := make(map[roachpb.NodeID]int64)
+	currentStamps, diffStamps = is.getHighWaterStampsWithDiff(currentStamps)
+
+	// The difference between an empty map of high stamps and the current high
+	// stamps should be the current stamps.
+	if !reflect.DeepEqual(diffStamps, is.getHighWaterStamps()) {
+		t.Errorf("Expected diff to be 1:10, 2:20, but found: %+v", diffStamps)
+	}
+
+	// The currentStamps should hold the up-to-date high water stamps.
+	if !reflect.DeepEqual(currentStamps, is.getHighWaterStamps()) {
+		t.Errorf("Expected currentStamps to be 1:10, 2:10, but found: %+v", currentStamps)
+	}
+
+	// Update high water stamps for node 1.
+	is.highWaterStamps[i1.NodeID] = 20
+
+	// The diff now should only show the high water stamps of node 1 since it's
+	// the only changed stamp since last time we called
+	// getHighWaterStampsWithDiff.
+	currentStamps, diffStamps = is.getHighWaterStampsWithDiff(currentStamps)
+	if diffLen := len(diffStamps); diffLen != 1 {
+		t.Errorf("Expected the diffStamps to have one element, but found %d elements.", diffLen)
+	}
+
+	if diffStamps[i1.NodeID] != 20 {
+		t.Errorf("Expected diffStamps to be 1:20, but found: %+v", currentStamps)
+	}
+
+	// The currentStamps should hold the up-to-date high water stamps.
+	if !reflect.DeepEqual(currentStamps, is.getHighWaterStamps()) {
+		t.Errorf("Expected currentStamps to be 1:20, 2:20, but found: %+v", currentStamps)
+	}
+
+	// Changing the second node's high stamps should show the same behavior.
+	is.highWaterStamps[i2.NodeID] = 30
+	currentStamps, diffStamps = is.getHighWaterStampsWithDiff(currentStamps)
+	if diffLen := len(diffStamps); diffLen != 1 {
+		t.Errorf("Expected the diffStamps to have one element, but found %d elements.", diffLen)
+	}
+
+	if diffStamps[i2.NodeID] != 30 {
+		t.Errorf("Expected diffStamps to be 2:30, but found: %+v", diffStamps)
+	}
+
+	if !reflect.DeepEqual(currentStamps, is.getHighWaterStamps()) {
+		t.Errorf("Expected currentStamps to be 1:20, 2:30, but found: %+v", currentStamps)
+	}
+}
+
 // Verify TTL is respected on info fetched by key.
 func TestInfoStoreGetInfoTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
