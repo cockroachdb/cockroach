@@ -75,13 +75,13 @@ func startGossipAtAddr(
 }
 
 type fakeGossipServer struct {
-	nodeAddr   util.UnresolvedAddr
-	nodeIDChan chan roachpb.NodeID
+	nodeAddr     util.UnresolvedAddr
+	receivedArgs chan Request
 }
 
 func newFakeGossipServer(grpcServer *grpc.Server, stopper *stop.Stopper) *fakeGossipServer {
 	s := &fakeGossipServer{
-		nodeIDChan: make(chan roachpb.NodeID, 1),
+		receivedArgs: make(chan Request, 1),
 	}
 	RegisterGossipServer(grpcServer, s)
 	return s
@@ -95,7 +95,7 @@ func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
 		}
 
 		select {
-		case s.nodeIDChan <- args.NodeID:
+		case s.receivedArgs <- *args:
 		default:
 		}
 
@@ -110,10 +110,11 @@ func (s *fakeGossipServer) Gossip(stream Gossip_GossipServer) error {
 
 // startFakeServerGossips creates local gossip instances and remote
 // faked gossip instance. The remote gossip instance launches its
-// faked gossip service just for check the client message.
+// faked gossip service just for check the client message. Also, it returns the
+// rpc context for both local and remote servers.
 func startFakeServerGossips(
 	t *testing.T, clusterID uuid.UUID, localNodeID roachpb.NodeID, stopper *stop.Stopper,
-) (*Gossip, *fakeGossipServer) {
+) (*Gossip, *fakeGossipServer, *rpc.Context, *rpc.Context) {
 	ctx := context.Background()
 	clock := hlc.NewClockForTesting(nil)
 	lRPCContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
@@ -135,7 +136,7 @@ func startFakeServerGossips(
 	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 
-	return local, remote
+	return local, remote, lRPCContext, rRPCContext
 }
 
 func gossipSucceedsSoon(
@@ -288,7 +289,7 @@ func TestClientNodeID(t *testing.T) {
 	clusterID := uuid.MakeV4()
 
 	localNodeID := roachpb.NodeID(1)
-	local, remote := startFakeServerGossips(t, clusterID, localNodeID, stopper)
+	local, remote, _, _ := startFakeServerGossips(t, clusterID, localNodeID, stopper)
 
 	clock := hlc.NewClockForTesting(nil)
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
@@ -310,9 +311,9 @@ func TestClientNodeID(t *testing.T) {
 	for {
 		// Wait for c.gossip to start.
 		select {
-		case receivedNodeID := <-remote.nodeIDChan:
-			if receivedNodeID != localNodeID {
-				t.Fatalf("client should send NodeID with %v, got %v", localNodeID, receivedNodeID)
+		case args := <-remote.receivedArgs:
+			if args.NodeID != localNodeID {
+				t.Fatalf("client should send NodeID with %v, got %v", localNodeID, args.NodeID)
 			}
 			return
 		case <-disconnected:
@@ -539,4 +540,93 @@ func TestClientForwardUnresolved(t *testing.T) {
 	if !client.forwardAddr.Equal(&newAddr) {
 		t.Fatalf("unexpected forward address %v, expected %v", client.forwardAddr, &newAddr)
 	}
+}
+
+// TestClientHighStampsDiff verifies that a client sends a diff of the high
+// water stamps rather than sending the whole map.
+func TestClientSendsHighStampsDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	disconnected := make(chan *client, 1)
+
+	// Shared cluster ID by all gossipers (this ensures that the gossipers
+	// don't talk to servers from unrelated tests by accident).
+	clusterID := uuid.MakeV4()
+
+	localNodeID := roachpb.NodeID(1)
+	local, remote, _, rCtx := startFakeServerGossips(t, clusterID, localNodeID, stopper)
+
+	clock := hlc.NewClockForTesting(nil)
+	// Use an insecure context. We're talking to tcp socket which are not in the
+	// certs.
+	rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
+
+	// Create a client and let it connect to the remote address.
+	c := newClient(log.MakeTestingAmbientCtxWithNewTracer(), &remote.nodeAddr, makeMetrics())
+	disconnected <- c
+
+	ctxNew, cancel := context.WithCancel(c.AnnotateCtx(context.Background()))
+	defer func() {
+		cancel()
+	}()
+
+	conn, err := rCtx.GRPCUnvalidatedDial(c.addr.String()).Connect(ctxNew)
+	require.NoError(t, err)
+
+	stream, err := NewGossipClient(conn).Gossip(ctx)
+	require.NoError(t, err)
+
+	// Add an info to generate some deltas and allow the request to be sent.
+	err = local.AddInfo("local-key", nil, time.Hour)
+	require.NoError(t, err)
+
+	// The first thing the client does is to request the gossips from the server.
+	// It attaches ALL the high water timestamps that it has.
+	err = c.requestGossip(local, stream)
+	require.NoError(t, err)
+
+	args := <-remote.receivedArgs
+	local.mu.Lock()
+	currentHighStamps := local.mu.is.getHighWaterStamps()
+	local.mu.Unlock()
+	require.Equal(t, args.HighWaterStamps, currentHighStamps,
+		fmt.Sprintf("Server expected to receive high water stamps of: %+v but got: %+v",
+			currentHighStamps, args.HighWaterStamps))
+
+	// Expect that the requests will only contain high water stamps if they are
+	// different from what was previously sent. Since we didn't change any info,
+	// the client should send an empty map of high water stamps.
+	err = c.sendGossip(local, stream, true /* firstReq */)
+	require.NoError(t, err)
+
+	args = <-remote.receivedArgs
+	require.Empty(t, args.HighWaterStamps, fmt.Sprintf(
+		"Server expected to receive an empty high water stamps map, but received %+v instead",
+		args.HighWaterStamps))
+
+	// Adding an info causes an update in the high water stamps.
+	err = local.AddInfo("local-key", nil, time.Hour)
+	require.NoError(t, err)
+
+	err = c.sendGossip(local, stream, false /* firstReq */)
+	require.NoError(t, err)
+
+	// Now that the timestamp is newer than what was previously sent, expect that
+	// the high water stamps will contain the new timestamp.
+	args = <-remote.receivedArgs
+	local.mu.Lock()
+	currentHighStamps = local.mu.is.getHighWaterStamps()
+	local.mu.Unlock()
+	require.Equal(t, args.HighWaterStamps, currentHighStamps,
+		fmt.Sprintf("Server expected to receive high water stamps of: %+v but got: %+v",
+			currentHighStamps, args.HighWaterStamps))
+
+	defer func() {
+		stopper.Stop(ctx)
+		if c != <-disconnected {
+			t.Errorf("expected client disconnect after remote close")
+		}
+	}()
 }
