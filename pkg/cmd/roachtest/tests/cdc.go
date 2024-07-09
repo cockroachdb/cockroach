@@ -3481,6 +3481,7 @@ func NewMskManager(ctx context.Context, t test.Test, clusterType msktypes.Cluste
 				format = fmt.Sprintf("msk(%v): %s", classification, format)
 				t.L().Printf(format, v...)
 			})
+			o.Region = "us-east-2"
 		}}
 }
 
@@ -3498,6 +3499,7 @@ func (m *mskManager) MakeCluster(ctx context.Context) {
 			BrokerNodeGroupInfo: &msktypes.BrokerNodeGroupInfo{
 				// subnets that roachprod uses. TODO: dont hardcode these. something in pkg/roachprod/vm/aws/config.go``
 				ClientSubnets: []string{"subnet-0258dc9d1b6473d84", "subnet-0e3d146e87ebc5a2c", "subnet-0e71591c1fe06645e"},
+				SecurityGroups: []string{"sg-04d72b57e29d671f1"},
 				InstanceType:  aws.String("kafka.m5.large"), // smallest allowed instance
 				ConnectivityInfo: &msktypes.ConnectivityInfo{
 					VpcConnectivity: &msktypes.VpcConnectivity{
