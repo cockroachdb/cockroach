@@ -592,8 +592,8 @@ def go_deps():
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/service/kafka",
         # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
-        sum = "h1:Q4Jr/gf+7LHjBFTdecQJn4ugVoVszCHzyq1EztrHHkc=",
-        version = "v1.35.1",
+        sum = "h1:tQvLHodH1ul0PTvinZw0OQ+jn4io1Cz+O1/f4qepinc=",
+        version = "v1.23.0",
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_service_rds",
@@ -629,11 +629,9 @@ def go_deps():
         name = "com_github_aws_aws_sdk_go_v2_service_ssooidc",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/service/ssooidc",
-        sha256 = "fb6d9039c24f3448afdb516d44b4730ba1279ca91bd10c2edfea26a020a8385b",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/ssooidc@v1.14.13",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/ssooidc/com_github_aws_aws_sdk_go_v2_service_ssooidc-v1.14.13.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:ORnrOK0C4WmYV/uYt3koHEWBLYsRDwk2Np+eEoyV4Z0=",
+        version = "v1.26.2",
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_service_sts",
