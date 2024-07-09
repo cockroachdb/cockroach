@@ -421,6 +421,16 @@ func (rn *RawNode) acceptReady(rd Ready) {
 		index := ents[len(ents)-1].Index
 		rn.raft.raftLog.acceptApplying(index, entsSize(ents), rn.applyUnstableEntries())
 	}
+
+	// On the leader, the entries sent through Ready / MsgStorageAppend are
+	// effectively a self-MsgApp, and should update the Next index accordingly so
+	// that all in-flight entries are in the (Match, Next) interval. When the
+	// entries are written, the self-directed MsgAppResp will update Match.
+	if rn.raft.state == StateLeader && len(rd.Entries) != 0 {
+		if pr := rn.raft.trk.Progress[rn.raft.id]; pr != nil {
+			pr.SentEntriesLeader(rd.Entries[len(rd.Entries)-1].Index)
+		}
+	}
 }
 
 // applyUnstableEntries returns whether entries are allowed to be applied once

@@ -178,6 +178,15 @@ func (pr *Progress) SentEntries(entries int, bytes uint64) {
 	pr.MsgAppProbesPaused = true
 }
 
+// SentEntriesLeader updates the progress on the leader, when it sends entries
+// up to lastIndex to its storage.
+func (pr *Progress) SentEntriesLeader(lastIndex uint64) {
+	// Since this is called on the leader when sending entries to its storage,
+	// lastIndex will always be >= Next, but we err on the side of caution here so
+	// that Next does not regress.
+	pr.Next = max(pr.Next, lastIndex+1)
+}
+
 // CanSendEntries returns true if the flow control state allows sending at least
 // one log entry to this follower.
 //
