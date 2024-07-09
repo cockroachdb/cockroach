@@ -1946,10 +1946,11 @@ func registerCDC(r registry.Registry) {
 
 			feeds := map[string]string{
 				"sasl": fmt.Sprintf("kafka://%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", brokers.scram),
-				"iam":  fmt.Sprintf("kafka://%s&api_key=plain&todo=yes", brokers.iam),
+				// todo: iam role etc
+				"iam": fmt.Sprintf("kafka://%s?tls_enabled=true&sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_region=us-east-2&sasl_aws_iam_role_arn=arn:aws:iam::541263489771:role/miles-msk-testing&sasl_aws_iam_session_name=miles", brokers.iam),
 			}
 
-			if brokers.scram != "" {
+			if brokers.scram != "" { // not available with serverless
 				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", feeds["sasl"], makeDefaultFeatureFlags()).Create()
 				if err != nil {
 					t.Fatalf("creating changefeed: %v", err)
