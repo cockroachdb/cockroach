@@ -3414,6 +3414,15 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (*opS
 	if schemaExists && !ifNotExists {
 		opStmt.expectedExecErrors.add(pgcode.DuplicateSchema)
 	}
+	// Descriptor ID generator may be temporarily unavailable, so
+	// allow uncategorized errors temporarily.
+	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	codesWithConditions{
+		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
+	}.add(opStmt.potentialExecErrors)
 
 	// TODO(jayshrivastava): Support authorization
 	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, tree.MakeRoleSpecWithRoleName(username.RootUserName().Normalized()))
