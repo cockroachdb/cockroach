@@ -30,13 +30,6 @@ type clean struct {
 	inputFile *os.File
 }
 
-func defaultCleanConfig() cleanConfig {
-	return cleanConfig{
-		inputFilePath:  "",
-		outputFilePath: "",
-	}
-}
-
 func newClean(config cleanConfig) (*clean, error) {
 	file, err := os.Open(config.inputFilePath)
 	if err != nil {
