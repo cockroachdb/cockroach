@@ -8,6 +8,7 @@ go_library(
         "backup_restore.go",
         "cluster_settings.go",
         "disk_stall.go",
+        "manual_compaction.go",
         "network_partition.go",
         "node_kill.go",
         "register.go",
