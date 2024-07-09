@@ -244,8 +244,10 @@ func _MAYBE_SELECT(
 	// {{define "maybeSelect" -}}
 
 	// {{if .IsTuple}}
-	selectTuple := nulls.NullAt(i) != o.negate
-	if !selectTuple {
+	var selectTuple bool
+	if nulls.NullAt(i) {
+		selectTuple = !o.negate
+	} else {
 		selectTuple = isTupleNull(datums.Get(i).(tree.Datum), o.negate)
 	}
 	if selectTuple {
