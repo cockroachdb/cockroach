@@ -1946,7 +1946,7 @@ func registerCDC(r registry.Registry) {
 
 			feeds := map[string]string{
 				"sasl": fmt.Sprintf("kafka://%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", brokers.scram),
-				// todo: iam role etc
+				// looks like we hardcode the ec2 role as "roachprod-testing". i just gave that guy an inline policy to assume my role
 				"iam": fmt.Sprintf("kafka://%s?tls_enabled=true&sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_region=us-east-2&sasl_aws_iam_role_arn=arn:aws:iam::541263489771:role/miles-msk-testing&sasl_aws_iam_session_name=miles", brokers.iam),
 			}
 
