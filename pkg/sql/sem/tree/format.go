@@ -469,6 +469,18 @@ func (ctx *FmtCtx) FormatNameP(s *string) {
 	ctx.FormatNode((*Name)(s))
 }
 
+// FormatStringConstant formats a constant string value, redacting it if
+// FmtHideConstants is set.
+func (ctx *FmtCtx) FormatStringConstant(s string) {
+	ctx.WriteString("'")
+	if ctx.HasFlags(FmtHideConstants) {
+		ctx.WriteString("_")
+	} else {
+		ctx.WriteString(s)
+	}
+	ctx.WriteString("'")
+}
+
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
 func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
