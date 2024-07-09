@@ -1936,7 +1936,7 @@ func registerCDC(r registry.Registry) {
 
 			t.Status("waiting for cluster to be active")
 			waitCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-			brokers := mkm.WaitForClusterActiveAndDNSUpdated(waitCtx)
+			brokers := mkm.WaitForClusterActiveAndDNSUpdated(waitCtx, c)
 			cancel()
 			t.Status("cluster is active")
 
@@ -3597,7 +3597,7 @@ type mskBrokerHosts struct {
 	scram, iam string
 }
 
-func (m *mskManager) WaitForClusterActiveAndDNSUpdated(ctx context.Context) mskBrokerHosts {
+func (m *mskManager) WaitForClusterActiveAndDNSUpdated(ctx context.Context, c cluster.Cluster) mskBrokerHosts {
 	for ctx.Err() == nil {
 		resp, err := m.mskClient.DescribeClusterV2(ctx, &msk.DescribeClusterV2Input{ClusterArn: &m.clusterArn}, m.of)
 		if err != nil {
@@ -3630,8 +3630,7 @@ func (m *mskManager) WaitForClusterActiveAndDNSUpdated(ctx context.Context) mskB
 	// wait for the dns to resolve
 	wait := func(host string) {
 		for ctx.Err() == nil {
-			_, err := net.LookupHost(host)
-			if err == nil {
+			if err := c.RunE(ctx, option.WithNodes(c.All()), "nslookup", host); err == nil {
 				return
 			}
 			select {
