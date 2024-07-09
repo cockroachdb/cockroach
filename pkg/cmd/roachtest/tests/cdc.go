@@ -1934,7 +1934,7 @@ func registerCDC(r registry.Registry) {
 			mkm.MakeCluster(ctx)
 			defer mkm.Teardown()
 
-			t.Status("waiting for cluster to be active")
+			t.Status("waiting for msk cluster to be active")
 			waitCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 			brokers := mkm.WaitForClusterActiveAndDNSUpdated(waitCtx, c)
 			cancel()
@@ -1947,7 +1947,7 @@ func registerCDC(r registry.Registry) {
 			tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
 
 			// TODO: mkm.CreateTopic(ctx, "auth_test_table")
-			// see
+			// see https://github.com/aws/aws-sdk-go-v2/issues/2370#issuecomment-1953308268 for why i updated all the aws sdks
 
 			testCerts, err := makeTestCerts("0.0.0.0", "aws") // ?
 			require.NoError(t, err)
