@@ -1935,9 +1935,8 @@ func registerCDC(r registry.Registry) {
 			defer mkm.Teardown()
 
 			t.Status("waiting for cluster to be active")
-			mkm.WaitForClusterActive(ctx)
+			brokers := mkm.WaitForClusterActiveAndDNSUpdated(ctx)
 			t.Status("cluster is active")
-			brokers := mkm.ClusterBrokers(ctx)
 
 			db := c.Conn(ctx, t.L(), 1)
 			defer stopFeeds(db)
@@ -1945,23 +1944,27 @@ func registerCDC(r registry.Registry) {
 			tdb := sqlutils.MakeSQLRunner(db)
 			tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
 
+			// TODO: mkm.CreateTopic(ctx, "auth_test_table")
+
 			testCerts, err := makeTestCerts("0.0.0.0", "aws") // ?
 			require.NoError(t, err)
 			feeds := map[string]string{
-				"sasl": fmt.Sprintf("kafka://%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", brokers.scram, testCerts.CACertBase64()),
+				"scram": fmt.Sprintf("kafka://%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", brokers.scram, testCerts.CACertBase64()),
 				// looks like we hardcode the ec2 role as "roachprod-testing". i just gave that guy an inline policy to assume my role
+				// TODO: why does this fail with dns error? why cant the ec2 resolve the bootstrap addr? i think we just need to wait longer...
 				"iam": fmt.Sprintf("kafka://%s?tls_enabled=true&sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_region=us-east-2&sasl_aws_iam_role_arn=arn:aws:iam::541263489771:role/miles-msk-testing&sasl_aws_iam_session_name=miles", brokers.iam),
 			}
 
-			if brokers.scram != "" { // not available with serverless
-				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", feeds["sasl"], makeDefaultFeatureFlags()).Create()
+			if brokers.iam != "" {
+				t.L().Printf("creating changefeed with scram: %s", feeds["iam"])
+				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", feeds["iam"], makeDefaultFeatureFlags()).Create()
 				if err != nil {
 					t.Fatalf("creating changefeed: %v", err)
 				}
 			}
-			if brokers.iam != "" {
-				// TODO: need to make the roachprod cluster have a good iam role and all that jazz
-				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", feeds["iam"], makeDefaultFeatureFlags()).Create()
+			if brokers.scram != "" { // not available with serverless
+				t.L().Printf("creating changefeed with scram: %s", feeds["scram"])
+				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", feeds["scram"], makeDefaultFeatureFlags()).Create()
 				if err != nil {
 					t.Fatalf("creating changefeed: %v", err)
 				}
@@ -3560,13 +3563,55 @@ func (m *mskManager) MakeCluster(ctx context.Context) {
 		m.t.Fatalf("failed to create msk cluster: %v", err)
 	}
 	m.clusterArn = *resp.ClusterArn
+
+	_, err = m.mskClient.PutClusterPolicy(ctx, &msk.PutClusterPolicyInput{
+		ClusterArn: aws.String(m.clusterArn),
+		Policy: aws.String(fmt.Sprintf(`
+	{
+		"Version": "2012-10-17",
+		"Statement": [
+		  {
+			"Effect": "Allow",
+			"Principal": {
+			  "Service": "kafka.amazonaws.com"
+			},
+			"Action": [
+			  "kafka:CreateVpcConnection",
+			  "kafka:GetBootstrapBrokers",
+			  "kafka:DescribeClusterV2"
+			],
+			"Resource": "%s"
+		  }
+		]
+	  }
+		`, m.clusterArn)),
+	}, m.of)
+	if err != nil {
+		m.t.Fatalf("failed to put msk policy: %v", err)
+	}
 }
 
 type mskBrokerHosts struct {
 	scram, iam string
 }
 
-func (m *mskManager) ClusterBrokers(ctx context.Context) mskBrokerHosts {
+func (m *mskManager) WaitForClusterActiveAndDNSUpdated(ctx context.Context) mskBrokerHosts {
+	for ctx.Err() == nil {
+		resp, err := m.mskClient.DescribeClusterV2(ctx, &msk.DescribeClusterV2Input{ClusterArn: &m.clusterArn}, m.of)
+		if err != nil {
+			m.t.Fatalf("failed to describe msk cluster: %v", err)
+		}
+		if resp.ClusterInfo.State == msktypes.ClusterStateActive {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			m.t.Fatalf("timed out waiting for msk cluster to become active")
+		case <-time.After(5 * time.Second):
+		}
+	}
+
+	// get broker hosts
 	resp, err := m.mskClient.GetBootstrapBrokers(ctx, &msk.GetBootstrapBrokersInput{ClusterArn: &m.clusterArn}, m.of)
 	if err != nil {
 		m.t.Fatalf("failed to describe msk cluster: %v", err)
@@ -3578,23 +3623,36 @@ func (m *mskManager) ClusterBrokers(ctx context.Context) mskBrokerHosts {
 	if iam == nil {
 		iam = aws.String("")
 	}
-	return mskBrokerHosts{scram: *scram, iam: *iam}
-}
-func (m *mskManager) WaitForClusterActive(ctx context.Context) {
-	for ctx.Err() == nil {
-		resp, err := m.mskClient.DescribeClusterV2(ctx, &msk.DescribeClusterV2Input{ClusterArn: &m.clusterArn}, m.of)
-		if err != nil {
-			m.t.Fatalf("failed to describe msk cluster: %v", err)
-		}
-		if resp.ClusterInfo.State == msktypes.ClusterStateActive {
-			return
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(5 * time.Second):
+	bhs := mskBrokerHosts{scram: *scram, iam: *iam}
+
+	// wait for the dns to resolve
+	wait := func(host string) {
+		for ctx.Err() == nil {
+			_, err := net.LookupHost(host)
+			if err == nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				m.t.Fatalf("timed out waiting for msk dns to resolve")
+			case <-time.After(5 * time.Second):
+			}
 		}
 	}
+	if bhs.scram != "" {
+		m.t.L().Printf("waiting for dns to resolve for %s", bhs.scram)
+		wait(strings.Split(bhs.scram, ":")[0])
+	}
+	if bhs.iam != "" {
+		m.t.L().Printf("waiting for dns to resolve for %s", bhs.iam)
+		wait(strings.Split(bhs.iam, ":")[0])
+	}
+
+	return bhs
+}
+
+func (m *mskManager) CreateTopic(ctx context.Context, topic string) {
+	panic("todo")
 }
 
 func (m *mskManager) Teardown() {
