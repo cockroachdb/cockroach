@@ -1307,3 +1307,18 @@ RESET testing_optimizer_random_seed;
 RESET testing_optimizer_disable_rule_probability;
 RESET vectorize;
 RESET distsql_workmem;
+
+# Regression test for incorrect handling of IS NOT NULL filter in the vectorized
+# engine (#126769).
+query T
+SELECT * FROM (SELECT (NULL, NULL) AS a) AS b WHERE a IS NOT NULL;
+----
+
+query T
+SELECT * FROM (SELECT (1, NULL) AS a) AS b WHERE a IS NOT NULL;
+----
+
+query T
+SELECT * FROM (SELECT (1, 2) AS a) AS b WHERE a IS NOT NULL;
+----
+(1,2)
