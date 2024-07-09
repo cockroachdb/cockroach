@@ -2039,7 +2039,7 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 	var args []string
 	healthCheckName := loadBalancerResourceName(clusterName, port, "health-check")
 	output, err := func() ([]byte, error) {
-		defer ui.NewDefaultSpinner(l, "created health check").Start()()
+		defer ui.NewDefaultSpinner(l, "create health check").Start()()
 		args = []string{"compute", "health-checks", "create", "tcp",
 			healthCheckName,
 			"--project", project,
