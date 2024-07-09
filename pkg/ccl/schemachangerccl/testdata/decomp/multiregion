@@ -203,6 +203,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 110
     type:
       arrayContents: null
@@ -230,6 +231,7 @@ ElementState:
     familyId: 0
     isNullable: false
     isVirtual: false
+    seqNum: 0
     tableId: 110
     type:
       arrayContents: null
@@ -257,6 +259,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 110
     type:
       arrayContents: null
@@ -284,6 +287,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 110
     type:
       arrayContents: null
@@ -496,6 +500,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 109
     type:
       arrayContents: null
@@ -523,6 +528,7 @@ ElementState:
     familyId: 0
     isNullable: false
     isVirtual: false
+    seqNum: 0
     tableId: 109
     type:
       arrayContents: null
@@ -550,6 +556,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 109
     type:
       arrayContents: null
@@ -577,6 +584,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 109
     type:
       arrayContents: null
@@ -830,6 +838,7 @@ ElementState:
     familyId: 0
     isNullable: false
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null
@@ -858,6 +867,7 @@ ElementState:
     familyId: 0
     isNullable: false
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null
@@ -885,6 +895,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null
@@ -912,6 +923,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null
@@ -939,6 +951,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null

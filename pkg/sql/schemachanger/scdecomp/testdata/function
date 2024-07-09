@@ -36,6 +36,7 @@ ElementState:
         closedTypeIds:
         - 108
         - 109
+        seqNum: 0
         type:
           arrayContents: null
           arrayDimensions: []
@@ -56,6 +57,7 @@ ElementState:
     returnSet: false
     returnType:
       closedTypeIds: []
+      seqNum: 0
       type:
         arrayContents: null
         arrayDimensions: []

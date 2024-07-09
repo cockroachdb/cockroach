@@ -19,7 +19,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (rowid), IndexID: 3}
            │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (i-)}
            │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "i", ColumnID: 3 (i-)}
-           │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (i-)}
+           │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (i-), SeqNum: 0}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (i-), IndexID: 1 (t_pkey+)}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (i-), IndexID: 2 (t_pkey-)}
            │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (i-), IndexID: 3}

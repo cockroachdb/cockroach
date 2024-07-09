@@ -227,6 +227,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null
@@ -257,6 +258,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents:
@@ -309,6 +311,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: true
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null
@@ -337,6 +340,7 @@ ElementState:
     familyId: 0
     isNullable: false
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null
@@ -364,6 +368,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null
@@ -391,6 +396,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null
@@ -418,6 +424,7 @@ ElementState:
     familyId: 0
     isNullable: false
     isVirtual: false
+    seqNum: 0
     tableId: 108
     type:
       arrayContents: null
@@ -646,6 +653,7 @@ ElementState:
 - CompositeTypeAttrType:
     closedTypeIds: []
     compositeTypeId: 109
+    seqNum: 0
     type:
       arrayContents: null
       arrayDimensions: []
@@ -666,6 +674,7 @@ ElementState:
 - CompositeTypeAttrType:
     closedTypeIds: []
     compositeTypeId: 109
+    seqNum: 0
     type:
       arrayContents: null
       arrayDimensions: []
@@ -896,6 +905,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 111
     type:
       arrayContents:
@@ -972,6 +982,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 111
     type:
       arrayContents: null
@@ -1038,6 +1049,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 111
     type:
       arrayContents: null
@@ -1104,6 +1116,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: true
+    seqNum: 0
     tableId: 111
     type:
       arrayContents: null
@@ -1164,6 +1177,7 @@ ElementState:
     familyId: 0
     isNullable: false
     isVirtual: false
+    seqNum: 0
     tableId: 111
     type:
       arrayContents: null
@@ -1191,6 +1205,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 111
     type:
       arrayContents: null
@@ -1218,6 +1233,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 111
     type:
       arrayContents: null
@@ -1245,6 +1261,7 @@ ElementState:
     familyId: 0
     isNullable: false
     isVirtual: false
+    seqNum: 0
     tableId: 111
     type:
       arrayContents: null
@@ -1278,6 +1295,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: true
+    seqNum: 0
     tableId: 111
     type:
       arrayContents: null

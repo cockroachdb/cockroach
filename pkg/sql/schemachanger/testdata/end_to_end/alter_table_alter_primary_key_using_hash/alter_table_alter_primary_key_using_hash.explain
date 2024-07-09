@@ -14,7 +14,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey+)}
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 3 (crdb_internal_j_shard_3+)}
- │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3+), SeqNum: 0}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+), IndexID: 4 (t_pkey+)}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+), IndexID: 5}
  │         ├── 3 elements transitioning toward TRANSIENT_ABSENT
@@ -24,7 +24,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         └── 11 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"IsHidden":true,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_j_...","TableID":104}
- │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":104}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":104}}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":5,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":5}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"Kind":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":4,"Ordinal":1,"TableID":104}
@@ -42,7 +42,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey+)}
  │    │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 3 (crdb_internal_j_shard_3+)}
- │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3+)}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3+), SeqNum: 0}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+), IndexID: 4 (t_pkey+)}
  │    │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+), IndexID: 5}
  │    │    ├── 3 elements transitioning toward TRANSIENT_ABSENT
@@ -59,7 +59,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey+)}
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 3 (crdb_internal_j_shard_3+)}
- │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3+), SeqNum: 0}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+), IndexID: 4 (t_pkey+)}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3+), IndexID: 5}
  │         ├── 3 elements transitioning toward TRANSIENT_ABSENT
@@ -69,7 +69,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         └── 15 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"IsHidden":true,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_j_...","TableID":104}
- │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":104}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":104}}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":5,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":5}}
  │              ├── MaybeAddSplitForIndex {"IndexID":4,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"Kind":2,"TableID":104}

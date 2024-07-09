@@ -164,6 +164,11 @@ message ElementProto {
 message TypeT {
   sql.sem.types.T type = 1;
   repeated uint32 closed_type_ids = 2 [(gogoproto.customname) = "ClosedTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  // SeqNum is used to denote changes to the TypeT element. When the sequence is
+  // stored as an attribute, we can transition elements between two types. For
+  // instance, if this is embedded in a column type, you can change the column's
+  // type by changing the type and this sequence.
+  uint32 seq_num = 3;
 }
 
 // Expression is a wrapper for a column or check constraint expression, which,

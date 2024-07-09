@@ -21,18 +21,18 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → ABSENT    ColumnFamily:{DescID: 106 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 1 (j-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "j", ColumnID: 1 (j-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-), SeqNum: 0}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-), SeqNum: 0}
  │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
  │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-), Expr: unique_rowid()}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), SeqNum: 0}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), SeqNum: 0}
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
  │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
@@ -85,18 +85,18 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    │    │    ├── ABSENT    → PUBLIC ColumnFamily:{DescID: 106 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 1 (j-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "j", ColumnID: 1 (j-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-), SeqNum: 0}
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-), SeqNum: 0}
  │    │    │    ├── ABSENT    → PUBLIC ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
  │    │    │    ├── ABSENT    → PUBLIC ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-), Expr: unique_rowid()}
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), SeqNum: 0}
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
- │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), SeqNum: 0}
  │    │    │    ├── ABSENT    → PUBLIC IndexColumn:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
  │    │    │    ├── ABSENT    → PUBLIC IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
  │    │    │    ├── ABSENT    → PUBLIC PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
@@ -115,18 +115,18 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → ABSENT    ColumnFamily:{DescID: 106 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 1 (j-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "j", ColumnID: 1 (j-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (j-), SeqNum: 0}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-), SeqNum: 0}
  │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
  │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-), Expr: unique_rowid()}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), SeqNum: 0}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
- │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), SeqNum: 0}
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
  │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}

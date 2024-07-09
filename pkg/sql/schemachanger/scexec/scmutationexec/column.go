@@ -49,9 +49,13 @@ func (i *immediateVisitor) MakeAbsentColumnDeleteOnly(
 	return nil
 }
 
-func (i *immediateVisitor) SetAddedColumnType(
-	ctx context.Context, op scop.SetAddedColumnType,
-) error {
+func (i *immediateVisitor) UpsertColumnType(ctx context.Context, op scop.UpsertColumnType) error {
+	// If the sequence number is positive, it means we are modifying an existing
+	// column by changing its type.
+	if op.ColumnType.SeqNum > 0 {
+		return i.updatingExistingColumnType(ctx, op)
+	}
+
 	tbl, err := i.checkOutTable(ctx, op.ColumnType.TableID)
 	if err != nil {
 		return err
@@ -356,4 +360,13 @@ func (i *immediateVisitor) RemoveColumnOnUpdateExpression(
 	d := col.ColumnDesc()
 	d.OnUpdateExpr = nil
 	return updateColumnExprSequenceUsage(d)
+}
+
+// updateExistingColumnType will queue a mutation to change the data type of an
+// existing column.
+func (i *immediateVisitor) updatingExistingColumnType(
+	ctx context.Context, op scop.UpsertColumnType,
+) error {
+	// TODO(spilchen): implement this function with issue #126143
+	return errors.AssertionFailedf("not implemented")
 }

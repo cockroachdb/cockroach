@@ -288,6 +288,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 112
     type:
       arrayContents: null
@@ -315,6 +316,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 112
     type:
       arrayContents: null
@@ -342,6 +344,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 112
     type:
       arrayContents: null
@@ -474,6 +477,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 113
     type:
       arrayContents: null
@@ -501,6 +505,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 113
     type:
       arrayContents: null
@@ -528,6 +533,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 113
     type:
       arrayContents: null
@@ -555,6 +561,7 @@ ElementState:
     familyId: 0
     isNullable: true
     isVirtual: false
+    seqNum: 0
     tableId: 113
     type:
       arrayContents: null

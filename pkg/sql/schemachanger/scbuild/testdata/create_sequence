@@ -24,7 +24,7 @@ CREATE SEQUENCE db.public.sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 
   {columnId: 2, sequenceId: 107, tableId: 106}
 - [[Column:{DescID: 107, ColumnID: 1}, PUBLIC], ABSENT]
   {columnId: 1, tableId: 107}
-- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1}, PUBLIC], ABSENT]
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1, SeqNum: 0}, PUBLIC], ABSENT]
   {columnId: 1, elementCreationMetadata: {in231OrLater: true}, tableId: 107, type: {family: IntFamily, oid: 20, width: 64}}
 - [[ColumnNotNull:{DescID: 107, ColumnID: 1, IndexID: 0}, PUBLIC], ABSENT]
   {columnId: 1, tableId: 107}

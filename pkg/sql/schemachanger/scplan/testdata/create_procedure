@@ -55,6 +55,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
             closedtypeids:
             - 107
             - 108
+            seqnum: 0
           defaultexpr: ""
         ReturnType:
           Type:
@@ -197,6 +198,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
             closedtypeids:
             - 107
             - 108
+            seqnum: 0
           defaultexpr: ""
         ReturnType:
           Type:
@@ -410,6 +412,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
             closedtypeids:
             - 107
             - 108
+            seqnum: 0
           defaultexpr: ""
         ReturnType:
           Type:
@@ -554,6 +557,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
             closedtypeids:
             - 107
             - 108
+            seqnum: 0
           defaultexpr: ""
         ReturnType:
           Type:

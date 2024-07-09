@@ -13,7 +13,7 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            ├── 3 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j-)}
            │    ├── PUBLIC      → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j-)}
-           │    └── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j-)}
+           │    └── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j-), SeqNum: 0}
            └── 4 Mutation operations
                 ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":106}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":106}
