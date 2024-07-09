@@ -911,6 +911,8 @@ type Store struct {
 	// transport is connected to, and is used by the canonical
 	// replicaFlowControlIntegration implementation.
 	raftTransportForFlowControl raftTransportForFlowControl
+	// metricsMu protects the collection and update of engine metrics.
+	metricsMu syncutil.Mutex
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -3473,6 +3475,13 @@ func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
 // computeMetrics is a common metric computation that is used by
 // ComputeMetricsPeriodically and ComputeMetrics to compute metrics.
 func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err error) {
+	s.metricsMu.Lock()
+	defer s.metricsMu.Unlock()
+	return s.computeMetricsLocked(ctx)
+}
+
+// computeMetricsLocked should only be used while holding store.metricsMu.
+func (s *Store) computeMetricsLocked(ctx context.Context) (m storage.Metrics, err error) {
 	ctx = s.AnnotateCtx(ctx)
 	if err = s.updateCapacityGauges(ctx); err != nil {
 		return m, err
