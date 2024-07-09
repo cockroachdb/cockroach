@@ -26,6 +26,7 @@ import "sql/types/types.proto";
 import "geo/geopb/config.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/metadata.proto";
+import "roachpb/data.proto";
 
 enum ConstraintValidity {
   // The constraint is valid for all rows.
@@ -1214,7 +1215,21 @@ message TableDescriptor {
   // ImportStartWallTime is set.
   optional ImportType import_type = 60 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportType"];
 
-  // Next ID: 61
+  // External indicates where the row data for this object is stored if it is
+  // stored outside the span of the object.
+  optional ExternalRowData external = 61 [(gogoproto.nullable) = true];
+
+  // Next ID: 62
+}
+
+// ExternalRowData indicates that the row data for this object is stored outside
+// the span of the object, either in some other span (such as a different
+// tenant) or in wholly different storage (such as a backup).
+message ExternalRowData {
+  option (gogoproto.equal) = true;
+  optional util.hlc.Timestamp as_of = 1 [(gogoproto.nullable) = false];
+  optional roachpb.TenantID tenant_id = 2 [(gogoproto.nullable) = false,  (gogoproto.customname) = "TenantID"];
+  optional uint32 table_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableID", (gogoproto.casttype) = "ID"];
 }
 
 // ImportType indicates the type of IMPORT that is in progress for a

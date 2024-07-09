@@ -11,6 +11,7 @@
 package row
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync/atomic"
@@ -272,7 +273,12 @@ func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) rowinfra.KeyLimit {
 	}
 }
 
-func makeTxnKVFetcherDefaultSendFunc(txn *kv.Txn, batchRequestsIssued *int64) sendFunc {
+func makeSendFunc(
+	txn *kv.Txn, ext *fetchpb.IndexFetchSpec_ExternalRowData, batchRequestsIssued *int64,
+) sendFunc {
+	if ext != nil {
+		return makeExternalSpanSendFunc(ext, txn.DB(), batchRequestsIssued)
+	}
 	return func(
 		ctx context.Context,
 		ba *kvpb.BatchRequest,
@@ -282,8 +288,99 @@ func makeTxnKVFetcherDefaultSendFunc(txn *kv.Txn, batchRequestsIssued *int64) se
 		if err != nil {
 			return nil, err.GoError()
 		}
-		*batchRequestsIssued++
+		// Note that in some code paths there is no concurrency when using the
+		// sendFunc, but we choose to unconditionally use atomics here since its
+		// overhead should be negligible in the grand scheme of things anyway.
+		atomic.AddInt64(batchRequestsIssued, 1)
 		return res, nil
+	}
+}
+
+func makeExternalSpanSendFunc(
+	ext *fetchpb.IndexFetchSpec_ExternalRowData, db *kv.DB, batchRequestsIssued *int64,
+) sendFunc {
+	// rewrite remaps the key to its external counterpart.
+	//
+	// Since we're performing this remapping before the key reaches the KV
+	// layer, we can modify the underlying slice directly (in case it has enough
+	// capacity).
+	rewrite := func(k roachpb.Key) (roachpb.Key, error) {
+		if buildutil.CrdbTestBuild {
+			if !bytes.HasPrefix(k, ext.OldPrefix) {
+				return nil, errors.AssertionFailedf(
+					"external row data does not have old prefix, key=%v, oldPrefix=%v", k, ext.OldPrefix,
+				)
+			}
+		}
+		if len(ext.OldPrefix) == len(ext.NewPrefix) {
+			// Fast path - we can simply update the prefix in-place.
+			copy(k, ext.NewPrefix)
+			return k, nil
+		}
+		suffix := k[len(ext.OldPrefix):]
+		if len(ext.OldPrefix) > len(ext.NewPrefix) {
+			// Update the prefix and shift the suffix accordingly to the left.
+			copy(k, ext.NewPrefix)
+			copy(k[len(ext.NewPrefix):], suffix)
+			k = k[:len(ext.NewPrefix)+len(suffix)]
+			return k, nil
+		}
+		if cap(k) >= len(ext.NewPrefix)+len(suffix) {
+			// There is enough capacity in the underlying slice to shift the
+			// suffix to the right.
+			k = k[:len(ext.NewPrefix)+len(suffix)]
+			// Copy the suffix first in order to not corrupt it.
+			copy(k[len(ext.NewPrefix):], suffix)
+			copy(k, ext.NewPrefix)
+			return k, nil
+		}
+		// We'll need a fresh allocation for this key.
+		// TODO(yuzefovich): consider using bufalloc here.
+		newK := make([]byte, len(ext.NewPrefix)+len(suffix))
+		copy(newK, ext.NewPrefix)
+		copy(newK[len(ext.NewPrefix):], suffix)
+		return newK, nil
+	}
+
+	return func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		ba.Timestamp = ext.AsOf
+		for _, req := range ba.Requests {
+			var err error
+			switch r := req.GetInner().(type) {
+			case *kvpb.GetRequest:
+				r.RequestHeader.Key, err = rewrite(r.RequestHeader.Key)
+				if err != nil {
+					return nil, err
+				}
+			case *kvpb.ScanRequest:
+				r.RequestHeader.Key, err = rewrite(r.RequestHeader.Key)
+				if err != nil {
+					return nil, err
+				}
+				r.RequestHeader.EndKey, err = rewrite(r.RequestHeader.EndKey)
+				if err != nil {
+					return nil, err
+				}
+			case *kvpb.ReverseScanRequest:
+				r.RequestHeader.Key, err = rewrite(r.RequestHeader.Key)
+				if err != nil {
+					return nil, err
+				}
+				r.RequestHeader.EndKey, err = rewrite(r.RequestHeader.EndKey)
+				if err != nil {
+					return nil, err
+				}
+			default:
+				return nil, errors.AssertionFailedf("request type %T unsupported for external row data", r)
+			}
+		}
+		log.VEventf(ctx, 2, "kv external fetcher: sending a batch with %d requests", len(ba.Requests))
+		res, err := db.NonTransactionalSender().Send(ctx, ba)
+		// Note that in some code paths there is no concurrency when using the
+		// sendFunc, but we choose to unconditionally use atomics here since its
+		// overhead should be negligible in the grand scheme of things anyway.
+		atomic.AddInt64(batchRequestsIssued, 1)
+		return res, err.GoError()
 	}
 }
 
