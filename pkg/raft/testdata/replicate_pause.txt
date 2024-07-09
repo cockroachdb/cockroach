@@ -97,7 +97,7 @@ ok
 # In-flight tracking to nodes 2 and 3 is saturated, but node 3 is behind.
 status 1
 ----
-1: StateReplicate match=14 next=15
+1: StateReplicate match=14 next=18
 2: StateReplicate match=14 next=18 paused inflight=3[full]
 3: StateReplicate match=11 next=15 paused inflight=3[full]
 

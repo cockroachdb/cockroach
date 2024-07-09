@@ -785,6 +785,11 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 	} else if !r.raftLog.append(app) {
 		r.logger.Panicf("%x leader could not append to its log", r.id)
 	}
+
+	// On appending entries, the leader is effectively "sending" a MsgApp to its
+	// local "acceptor". Since we don't actually send this self-MsgApp, update the
+	// progress here as if it was sent.
+	r.trk.Progress[r.id].Next = app.lastIndex() + 1
 	// The leader needs to self-ack the entries just appended once they have
 	// been durably persisted (since it doesn't send an MsgApp to itself). This
 	// response message will be added to msgsAfterAppend and delivered back to
