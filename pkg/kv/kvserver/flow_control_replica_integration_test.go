@@ -265,6 +265,107 @@ func TestFlowControlReplicaIntegration(t *testing.T) {
 	)
 }
 
+func TestPriorityInheritanceState(t *testing.T) {
+	const lo, hi = kvflowcontrolpb.RaftLowPri, kvflowcontrolpb.RaftHighPri
+	const noAC = kvflowcontrolpb.NotSubjectToACForFlowControl
+	const noPri = kvflowcontrolpb.PriorityNotInheritedForFlowControl
+
+	rng := func(first, last uint64, pri kvflowcontrolpb.RaftPriority) indexInterval {
+		return indexInterval{first: first, last: last, pri: pri}
+	}
+	state := func(intervals ...indexInterval) priorityInheritanceState {
+		if intervals == nil {
+			intervals = []indexInterval{} // canonicalize for equality checks
+		}
+		return priorityInheritanceState{intervals: intervals}
+	}
+
+	for i, tt := range []struct {
+		state priorityInheritanceState
+		add   indexInterval
+		want  priorityInheritanceState
+	}{{
+		state: state(), add: rng(1, 10, hi),
+		want: state(rng(1, 10, hi)),
+	}, {
+		state: state(rng(1, 5, lo), rng(6, 6, hi)), add: rng(7, 10, hi),
+		want: state(rng(1, 5, lo), rng(6, 6, hi), rng(7, 10, hi)),
+	}, {
+		state: state(rng(1, 5, lo), rng(6, 7, hi)), add: rng(7, 10, lo),
+		want: state(rng(1, 5, lo), rng(6, 6, hi), rng(7, 10, lo)),
+	}, {
+		state: state(rng(1, 5, lo), rng(6, 7, hi)), add: rng(7, 10, hi),
+		want: state(rng(1, 5, lo), rng(6, 6, hi), rng(7, 10, hi)),
+	}, {
+		state: state(rng(10, 20, lo), rng(30, 40, hi)), add: rng(5, 10, hi),
+		want: state(rng(5, 10, hi)),
+	}} {
+		t.Run(fmt.Sprintf("add-%d", i), func(t *testing.T) {
+			state := tt.state
+			state.checkInvariant(t)
+			state.sideChannelForInheritedPriority(tt.add.first, tt.add.last, tt.add.pri)
+			state.checkInvariant(t)
+			require.Equal(t, tt.want, state)
+		})
+	}
+
+	for i, tt := range []struct {
+		state priorityInheritanceState
+		index uint64
+		pri   kvflowcontrolpb.RaftPriority
+
+		want kvflowcontrolpb.RaftPriority
+		doAC bool
+		new  priorityInheritanceState
+	}{{
+		state: state(), index: 10, pri: lo,
+		want: lo, doAC: true, new: state(),
+	}, {
+		state: state(rng(1, 10, hi)), index: 5, pri: lo,
+		want: hi, doAC: true, new: state(rng(1, 10, hi)),
+	}, {
+		state: state(rng(1, 10, hi)), index: 10, pri: lo,
+		want: hi, doAC: true, new: state(rng(1, 10, hi)), // FIXME
+	}, {
+		state: state(rng(1, 5, lo), rng(6, 10, hi)), index: 9, pri: lo,
+		want: hi, doAC: true, new: state(rng(1, 5, lo), rng(6, 10, hi)), // FIXME
+	}, {
+		state: state(rng(1, 5, lo), rng(10, 20, hi)), index: 7, pri: lo,
+		want: lo, doAC: true, new: state(rng(10, 20, hi)),
+	}, {
+		state: state(rng(1, 10, noAC)), index: 6, pri: lo,
+		want: 0, doAC: false, new: state(rng(1, 10, noAC)),
+	}, {
+		state: state(rng(1, 10, noPri)), index: 6, pri: lo,
+		want: lo, doAC: true, new: state(rng(1, 10, noPri)),
+	}, {
+		state: state(rng(1, 10, noPri)), index: 6, pri: hi,
+		want: hi, doAC: true, new: state(rng(1, 10, noPri)),
+	}, {
+		state: state(rng(1, 10, lo)), index: 20, pri: hi,
+		want: hi, doAC: true, new: state(),
+	}} {
+		t.Run(fmt.Sprintf("get-%d", i), func(t *testing.T) {
+			state := tt.state
+			state.checkInvariant(t)
+			pri, doAC := state.getEffectivePriority(tt.index, tt.pri)
+			require.Equal(t, tt.want, pri)
+			require.Equal(t, tt.doAC, doAC)
+			state.checkInvariant(t)
+			require.Equal(t, tt.new, state)
+		})
+	}
+}
+
+func (p *priorityInheritanceState) checkInvariant(t *testing.T) {
+	var last uint64
+	for _, interval := range p.intervals {
+		require.Greater(t, interval.first, last)
+		require.LessOrEqual(t, interval.first, interval.last)
+		last = interval.last
+	}
+}
+
 type mockReplicaForFlowControl struct {
 	t         *testing.T
 	rangeID   roachpb.RangeID
