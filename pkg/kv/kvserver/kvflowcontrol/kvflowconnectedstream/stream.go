@@ -2072,6 +2072,8 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateI
 
 func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(info FollowerStateInfo) {
 	rss.mu.AssertHeld()
+	defer rss.returnTokensUsingAdmittedLocked(info.Admitted)
+
 	if rss.parent.parent.opts.LocalReplicaID == rss.parent.desc.ReplicaID {
 		if rss.connectedState != replicate {
 			panic(fmt.Sprintf(
@@ -2131,7 +2133,6 @@ func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(info Follower
 		}
 		rss.makeConsistentWhenSnapshotToReplicateLocked(info.Next)
 	}
-	rss.returnTokensUsingAdmittedLocked(info.Admitted)
 }
 
 // While in StateReplicate, send-queue could have some elements popped

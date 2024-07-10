@@ -422,16 +422,19 @@ func (t *testingRaft) prop(pri kvflowcontrolpb.RaftPriority, size uint64) {
 	t.lastEntryIndex++
 	index := t.lastEntryIndex
 
+	// TODO(kvoli): If we stop advancing the leader Next before calling
+	// HandleRaftEvent(), move this logic below.
+	localReplica := t.replicas[t.localReplicaID]
+	localReplica.info.Next = index + 1
+	t.replicas[t.localReplicaID] = localReplica
+
 	entry := testingEncodeRaftFlowControlState(
 		index, true /* usesFlowControl */, pri, size, t.replicas[t.localReplicaID].desc.NodeID)
 	t.entries = append(t.entries, entry)
 	log.Infof(context.Background(), "prop %v", getFlowControlState(entry))
 	t.controller.HandleRaftEvent(t.ready())
 
-	// TODO(kvoli): We automatically bump the proposer (local replica) to match
-	// the index. Perhaps this should be done elsewhere.
-	localReplica := t.replicas[t.localReplicaID]
-	localReplica.info.Next = index + 1
+	localReplica = t.replicas[t.localReplicaID]
 	localReplica.info.Match = index
 	t.replicas[t.localReplicaID] = localReplica
 }
