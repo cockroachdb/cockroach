@@ -1692,6 +1692,10 @@ func (rss *replicaSendStream) scheduledLocked() (scheduleAgain bool) {
 	if !rss.sendQueue.forceFlushScheduled {
 		bytesToSend = rss.sendQueue.deductedForScheduler.tokens
 	}
+	log.VInfof(context.TODO(), 1, "scheduled replica=%v: bytes_to_send=%v [info=%v send_stream=%v]",
+		rss.parent.desc.ReplicaID, bytesToSend,
+		rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+		rss.stringLocked())
 	if bytesToSend == 0 {
 		return false
 	}
@@ -1893,13 +1897,20 @@ func (rss *replicaSendStream) notifyLocked() {
 		// notification.
 		return
 	}
+
 	pri := rss.queuePriorityLocked()
 	wc := kvflowcontrolpb.WorkClassFromRaftPriority(pri)
 	queueSize := rss.queueSizeLocked()
+
 	tokens := rss.parent.sendTokenCounter.TryDeduct(context.TODO(), wc, queueSize)
-	if tokens > 0 && rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
-		rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
-		rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
+	if tokens > 0 || queueSize == 0 {
+		// Either deducted tokens successfully or the queue was already empty,
+		// there's no tokens to wait on or deduct. Ensure that any outstanding
+		// token handle is cancelled.
+		if rss.sendQueue.watcherHandleID != InvalidStoreStreamSendTokenHandleID {
+			rss.parent.parent.opts.SendTokensWatcher.CancelHandle(rss.sendQueue.watcherHandleID)
+			rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
+		}
 		rss.sendQueue.deductedForScheduler.wc = wc
 		rss.sendQueue.deductedForScheduler.tokens = tokens
 
@@ -2267,21 +2278,29 @@ func (rss *replicaSendStream) makeConsistentWhenSnapshotToReplicateLocked(indexT
 
 func (rss *replicaSendStream) startProcessingSendQueueLocked() {
 	rss.mu.AssertHeld()
-	if !rss.isEmptySendQueueLocked() {
-		rss.notifyLocked()
-		if rss.sendQueue.deductedForScheduler.tokens == 0 {
-			// Weren't able to deduct any tokens.
-			rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
+	if rss.isEmptySendQueueLocked() {
+		// Nothing to do.
+		return
+	}
+
+	log.VInfof(context.TODO(), 1,
+		"replica=%d processing send_queue [info=%v send_stream=%v]",
+		rss.parent.desc.ReplicaID,
+		rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+		rss.stringLocked())
+
+	rss.notifyLocked()
+	if rss.sendQueue.deductedForScheduler.tokens == 0 {
+		// Weren't able to deduct any tokens.
+		if rss.sendQueue.watcherHandleID == InvalidStoreStreamSendTokenHandleID {
+			// This must be the first time we tried to process the send queue. We
+			// weren't able to deduct any tokens so create a handle to wait on for
+			// available send tokens. Otherwise, we already have a handle.
+			rss.sendQueue.watcherHandleID = rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
 				rss.parent.sendTokenCounter, admissionpb.ElasticWorkClass, rss)
-		} else {
-			scheduleAgain := rss.scheduledLocked()
-			if scheduleAgain {
-				rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
-			} else {
-				rss.parent.parent.opts.SendTokensWatcher.NotifyWhenAvailable(
-					rss.parent.sendTokenCounter, admissionpb.ElasticWorkClass, rss)
-			}
 		}
+	} else if scheduleAgain := rss.scheduledLocked(); scheduleAgain {
+		rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
 	}
 }
 
