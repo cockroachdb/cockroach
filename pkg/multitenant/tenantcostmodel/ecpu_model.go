@@ -152,10 +152,12 @@ func (m *EstimatedCPUModel) RequestCost(bri RequestInfo, ratePerNode float64) Es
 	// Add cost for the batch.
 	ecpu := m.lookupCost(m.WriteBatchCost.RatePerNode, m.WriteBatchCost.CPUPerBatch, ratePerNode)
 
-	// Add cost for the requests in the batch.
-	ecpuPerRequest := m.lookupCost(
-		m.WriteRequestCost.BatchSize, m.WriteRequestCost.CPUPerRequest, float64(bri.writeCount))
-	ecpu += ecpuPerRequest * EstimatedCPU(bri.writeCount)
+	// Add cost for additional requests in the batch, beyond the first.
+	if bri.writeCount > 1 {
+		ecpuPerRequest := m.lookupCost(
+			m.WriteRequestCost.BatchSize, m.WriteRequestCost.CPUPerRequest, float64(bri.writeCount))
+		ecpu += ecpuPerRequest * EstimatedCPU(bri.writeCount-1)
+	}
 
 	// Add cost for bytes in the requests.
 	ecpuPerByte := m.lookupCost(
@@ -178,8 +180,10 @@ func (m *EstimatedCPUModel) ResponseCost(bri ResponseInfo) EstimatedCPU {
 	// Add cost for the batch.
 	ecpu := m.ReadBatchCost
 
-	// Add cost for the requests in the batch.
-	ecpu += m.ReadRequestCost * EstimatedCPU(bri.readCount)
+	// Add cost for additional requests in the batch, beyond the first.
+	if bri.readCount > 1 {
+		ecpu += m.ReadRequestCost * EstimatedCPU(bri.readCount-1)
+	}
 
 	// Add cost for bytes in the requests.
 	ecpuPerByte := m.lookupCost(
