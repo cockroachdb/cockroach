@@ -1013,7 +1013,19 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 		//
 		// In general, we need to be prepared to deal with anything returned
 		// by FollowerState.
+		//
+		// TODO: this should not be called FollowerState since this includes
+		// the leader. It is more accurately the replica state as known to the
+		// leader.
 		info := rc.opts.RaftInterface.FollowerState(r)
+		if r == rc.opts.LocalReplicaID {
+			// Leader replica.
+			if n := len(entries); n > 0 && entries[n-1].Index+1 != info.Next {
+				// Leader is operating in push mode, so Next should have advanced.
+				panic(fmt.Sprintf("last entry index %d + 1 != %d Next at leader",
+					entries[n-1].Index, info.Next))
+			}
+		}
 		rs.handleReadyState(info, nextRaftIndexUpperBound)
 	}
 
@@ -2045,6 +2057,19 @@ func (rss *replicaSendStream) makeConsistentInStateReplicate(info FollowerStateI
 
 func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(info FollowerStateInfo) {
 	rss.mu.AssertHeld()
+	if rss.parent.parent.opts.LocalReplicaID == rss.parent.desc.ReplicaID {
+		if rss.connectedState != replicate {
+			panic(fmt.Sprintf(
+				"leader should always be in state replicate [send_stream=%v]", rss.stringLocked()))
+		}
+		if info.Match >= rss.sendQueue.indexToSend {
+			panic(fmt.Sprintf(
+				"leader unexpectedly advanced Match [info=%v send_stream=%v]", info, rss.stringLocked()))
+		}
+		// info.Next can have advanced past rss.sendQueue.indexToSend since
+		// leader operates in push mode for MsgStorageAppend.
+		return
+	}
 	switch rss.connectedState {
 	case replicate:
 		if info.Match >= rss.sendQueue.indexToSend {
@@ -2059,19 +2084,12 @@ func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(info Follower
 		} else if info.Next == rss.sendQueue.indexToSend {
 			// Everything is as expected.
 		} else if info.Next > rss.sendQueue.indexToSend {
-			// In pull-mode this can never happen, except on the raft leader. We've
-			// already covered the case where Next moves ahead, along with Match
-			// earlier.
-			//
-			// Allow the raft leader to move ahead of the index to send, as it
-			// updates next independently of the controller processing and sending
-			// entries.
-			// TODO(kvoli): double-check whether this is reasonable to allow for the
-			// leader replica.
-			if rss.parent.parent.opts.LocalReplicaID != rss.parent.desc.ReplicaID {
-				panic(fmt.Sprintf("next=%d > index_to_send=%d [info=%v send_stream=%v]",
-					info.Next, rss.sendQueue.indexToSend, info, rss.stringLocked()))
-			}
+			// In pull-mode this can never happen (on a follower). We've
+			// already covered the case where Next moves ahead, along with
+			// Match earlier.
+
+			panic(fmt.Sprintf("next=%d > index_to_send=%d [info=%v send_stream=%v]",
+				info.Next, rss.sendQueue.indexToSend, info, rss.stringLocked()))
 		} else {
 			// info.Next < rss.sendQueue.indexToSend.
 			//
