@@ -488,7 +488,7 @@ WHERE
 		return err
 	}
 
-	allowed, err := og.scanBool(
+	isIndexDropping, err := og.scanBool(
 		ctx,
 		tx,
 		`
@@ -505,7 +505,7 @@ SELECT count(*) > 0
 	if err != nil {
 		return err
 	}
-	if !allowed {
+	if isIndexDropping {
 		return ErrSchemaChangesDisallowedDueToPkSwap
 	}
 	return nil
