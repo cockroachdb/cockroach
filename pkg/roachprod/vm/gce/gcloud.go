@@ -1705,6 +1705,10 @@ func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName str
 }
 
 func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
+	if !isManaged(vms) {
+		return errors.New("growing is only supported for managed instance groups")
+	}
+
 	project := vms[0].Project
 	groupName := instanceGroupName(clusterName)
 	groups, err := listManagedInstanceGroups(project, groupName)
