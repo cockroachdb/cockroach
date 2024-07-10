@@ -180,6 +180,26 @@ func (og *operationGenerator) columnIsDependedOn(
 )`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
 }
 
+// colIsRefByComputed determines if a column is referenced by a computed column.
+func (og *operationGenerator) colIsRefByComputed(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `SELECT EXISTS(
+    SELECT
+       attrelid::REGCLASS AS table_name,
+       attname AS column_name,
+       pg_get_expr(adbin, adrelid) AS computed_formula
+    FROM
+       pg_attribute
+    JOIN
+       pg_attrdef ON attrelid = adrelid AND attnum = adnum
+    WHERE
+       atthasdef
+       AND attrelid = $1::REGCLASS
+       AND pg_get_expr(adbin, adrelid) ILIKE '%%' || $2 || '%%'
+)`, tableName.String(), columnName)
+}
+
 func (og *operationGenerator) colIsPrimaryKey(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName string,
 ) (bool, error) {
