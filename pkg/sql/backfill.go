@@ -1796,9 +1796,10 @@ func countExpectedRowsForInvertedIndex(
 	if col.IsExpressionIndexColumn() {
 		colNameOrExpr = col.GetComputeExpr()
 	} else {
-		// Wrap the column name in double-quotes because it might
-		// contain special characters, like "-".
-		colNameOrExpr = fmt.Sprintf("%q", col.ColName())
+		// Format the column name so that it can be parsed if it has special
+		// characters, like "-" or a newline.
+		name := col.ColName()
+		colNameOrExpr = tree.AsStringWithFlags(&name, tree.FmtParsable)
 	}
 
 	var expectedCount int64
