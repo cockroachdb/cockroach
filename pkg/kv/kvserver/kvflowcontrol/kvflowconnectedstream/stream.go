@@ -2059,10 +2059,19 @@ func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(info Follower
 		} else if info.Next == rss.sendQueue.indexToSend {
 			// Everything is as expected.
 		} else if info.Next > rss.sendQueue.indexToSend {
-			// In pull-mode this can never happen. We've already covered the
-			// case where Next moves ahead, along with Match earlier.
-			panic(fmt.Sprintf("next=%d > index_to_send=%d [info=%v send_stream=%v]",
-				info.Next, rss.sendQueue.indexToSend, info, rss.stringLocked()))
+			// In pull-mode this can never happen, except on the raft leader. We've
+			// already covered the case where Next moves ahead, along with Match
+			// earlier.
+			//
+			// Allow the raft leader to move ahead of the index to send, as it
+			// updates next independently of the controller processing and sending
+			// entries.
+			// TODO(kvoli): double-check whether this is reasonable to allow for the
+			// leader replica.
+			if rss.parent.parent.opts.LocalReplicaID != rss.parent.desc.ReplicaID {
+				panic(fmt.Sprintf("next=%d > index_to_send=%d [info=%v send_stream=%v]",
+					info.Next, rss.sendQueue.indexToSend, info, rss.stringLocked()))
+			}
 		} else {
 			// info.Next < rss.sendQueue.indexToSend.
 			//
