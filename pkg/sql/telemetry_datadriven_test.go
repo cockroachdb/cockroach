@@ -54,6 +54,7 @@ import (
  *    - tracing: sets the tracing status to the given value. If omitted, the tracing status is set to false.
  *    - useRealTracing: if set, the real tracing status is used instead of the stubbed one.
  *    - user: sets the user for the connection. If omitted, the root user is used.
+ *    - reset-telemetry-cluster-settings: resets the cluster settings for telemetry logging to default values.
  *
  * reset-last-sampled: resets the last sampled time.
  */
@@ -66,6 +67,7 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 	defer sc.Close(t)
 
 	appName := "telemetry-logging-datadriven"
+	ignoredAppname := "telemetry-datadriven-ignored-appname"
 	ctx := context.Background()
 	stmtSpy := logtestutils.NewStructuredLogSpy(
 		t,
@@ -73,7 +75,7 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 		[]string{"sampled_query"},
 		logtestutils.FormatEntryAsJSON,
 		func(_ logpb.Entry, logStr string) bool {
-			return strings.Contains(logStr, appName) || strings.Contains(logStr, internalConsoleAppName)
+			return !strings.Contains(logStr, ignoredAppname)
 		},
 	)
 
@@ -122,6 +124,8 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 		telemetryLogging := s.SQLServer().(*Server).TelemetryLoggingMetrics
 		setupConn := s.SQLConn(t)
 		_, err := setupConn.Exec("CREATE USER testuser")
+		require.NoError(t, err)
+		_, err = setupConn.Exec("SET application_name = $1", ignoredAppname)
 		require.NoError(t, err)
 
 		spiedConnRootUser := s.SQLConn(t)
@@ -223,6 +227,22 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 				return ""
 			case "show-skipped-transactions":
 				return strconv.FormatUint(telemetryLogging.getSkippedTransactionCount(), 10)
+			case "reset-telemetry-cluster-settings":
+				// Set the default cluster settings for telemetry logging.
+				clusterSettings := []string{
+					"sql.telemetry.query_sampling.max_event_frequency",
+					"sql.telemetry.transaction_sampling.max_event_frequency",
+					"sql.telemetry.transaction_sampling.statement_events_per_transaction.max",
+					"sql.telemetry.query_sampling.internal.enabled",
+					"sql.telemetry.query_sampling.internal_console.enabled",
+					"sql.telemetry.query_sampling.mode",
+				}
+				for _, setting := range clusterSettings {
+					if _, err := setupConn.Exec("RESET CLUSTER SETTING " + setting); err != nil {
+						return err.Error()
+					}
+				}
+				return ""
 			default:
 				t.Fatal("unknown command")
 				return ""
