@@ -223,6 +223,7 @@ message LogicalReplicationDetails {
   message ReplicationPair {
     int32 src_descriptor_id = 1 [(gogoproto.customname) = "SrcDescriptorID"];
     int32 dst_descriptor_id = 2 [(gogoproto.customname) = "DstDescriptorID"];
+    int32 function_id = 3 [(gogoproto.customname) = "SrcFunctionID"];
   }
   repeated ReplicationPair replication_pairs = 3 [(gogoproto.nullable) = false];
 
@@ -240,6 +241,17 @@ message LogicalReplicationDetails {
       (gogoproto.nullable) = false,
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
       (gogoproto.customname) = "SourceClusterID"];
+  
+  message DefaultConflictResolution{
+    enum DefaultConflictResolution {
+      LWW = 0;
+      DLQ = 1;
+      UDF = 2;
+    }
+    DefaultConflictResolution conflict_resolution_type = 1;
+    int32 function_id = 2;
+  }
+  DefaultConflictResolution default_conflict_resolution = 7 [(gogoproto.nullable) = false];
 }
 
 message LogicalReplicationProgress {
