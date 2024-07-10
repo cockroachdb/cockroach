@@ -27,7 +27,7 @@ const (
 	JWTAuthJWKSSettingName           = baseJWTAuthSettingName + "jwks"
 	JWTAuthClaimSettingName          = baseJWTAuthSettingName + "claim"
 	JWKSAutoFetchEnabledSettingName  = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
-	jwtAuthIssuerCustomCASettingName = baseJWTAuthSettingName + "issuer_custom_ca"
+	jwtAuthIssuerCustomCASettingName = baseJWTAuthSettingName + "issuers.custom_ca"
 )
 
 // JWTAuthClaim sets the JWT claim that is parsed to get the username.
@@ -77,13 +77,12 @@ var JWTAuthIssuers = settings.RegisterStringSetting(
 )
 
 // JWTAuthIssuerCustomCA is the custom root CA for verifying certificates while
-// fetching JWKS from the JWT issuer.
+// fetching JWKS from the JWT issuers.
 var JWTAuthIssuerCustomCA = settings.RegisterStringSetting(
 	settings.ApplicationLevel,
 	jwtAuthIssuerCustomCASettingName,
-	"sets the custom root CA for verifying certificates while fetching JWKS from the JWT issuer",
+	"sets the PEM encoded custom root CA for verifying certificates while fetching JWKS",
 	"",
-	settings.WithPublic,
 	settings.WithReportable(false),
 	settings.Sensitive,
 	settings.WithValidateString(validateJWTAuthIssuerCACert),
