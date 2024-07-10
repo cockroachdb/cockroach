@@ -1297,6 +1297,8 @@ func (rs *replicaState) handleReadyState(info FollowerStateInfo, nextRaftIndexUp
 			rs.replicaSendStream.mu.Unlock()
 		}
 	}
+	log.VInfof(context.TODO(), 2,
+		"post-handle raft event replica_id=%d: info=(%v) state=(%v)", rs.desc.ReplicaID, info, rs)
 }
 
 // handleReadyEntries is called when on every Ready event.
@@ -1317,8 +1319,8 @@ func (rs *replicaState) handleReadyEntries(entries []raftpb.Entry) {
 		for i := range entries {
 			entryFCState := getFlowControlState(entries[i])
 			wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
-			log.VInfof(context.TODO(), 1, "leader handle_ready_entries(%v): entryFCState=%v",
-				rs.replicaSendStream.stringLocked(), entryFCState)
+			log.VInfof(context.TODO(), 1, "leader handle_ready_entries(%v): entryFCState=%v info=%v",
+				rs.replicaSendStream.stringLocked(), entryFCState, rs.parent.opts.RaftInterface.FollowerState(r))
 			rs.replicaSendStream.advanceNextRaftIndexAndSentLocked(entryFCState)
 			if entryFCState.usesFlowControl {
 				rs.sendTokenCounter.Deduct(context.TODO(), wc, entryFCState.tokens)
@@ -1402,7 +1404,7 @@ func (rs *replicaState) handleReadyEntries(entries []raftpb.Entry) {
 			}
 
 			log.VInfof(context.TODO(), 1, "send raft message from=%d to=%d: [%d,%d)",
-				msg.From, msg.To, msg.Index, int(msg.Index)+len(msg.Entries))
+				msg.From, msg.To, msg.Index+1, int(msg.Index)+len(msg.Entries)+1)
 			rc.opts.MessageSender.SendRaftMessage(
 				context.TODO(), kvflowcontrolpb.PriorityNotInheritedForFlowControl, msg)
 		}
@@ -1600,13 +1602,16 @@ func (rss *replicaSendStream) closeLocked() {
 func (rss *replicaSendStream) advanceNextRaftIndexAndSentLocked(state entryFlowControlState) {
 	rss.mu.AssertHeld()
 	if rss.connectedState != replicate {
-		panic("")
+		panic(fmt.Sprintf("connected_state=%v != replicate",
+			rss.connectedState))
 	}
 	if state.index != rss.sendQueue.indexToSend {
-		panic("")
+		panic(fmt.Sprintf("entry_index=%v != index_to_send=%v",
+			state.index, rss.sendQueue.indexToSend))
 	}
 	if state.index != rss.sendQueue.nextRaftIndex {
-		panic("")
+		panic(fmt.Sprintf("entry_index=%v != next_raft_index=%v",
+			state.index, rss.sendQueue.nextRaftIndex))
 	}
 	rss.sendQueue.indexToSend++
 	rss.sendQueue.nextRaftIndex++
@@ -1797,7 +1802,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(msg raftpb.Message) 
 		}
 	}
 	log.VInfof(context.TODO(), 1, "send raft message from=%d to=%d: [%d,%d)",
-		msg.From, msg.To, msg.Index, int(msg.Index)+len(msg.Entries))
+		msg.From, msg.To, msg.Index+1, int(msg.Index)+len(msg.Entries)+1)
 	rss.parent.parent.opts.MessageSender.SendRaftMessage(context.TODO(), inheritedPri, msg)
 }
 
@@ -2091,8 +2096,9 @@ func (rss *replicaSendStream) makeConsistentWhenUnexpectedPopLocked(indexToSend 
 	// can't happen for any index >= nextRaftIndexInitial since these were proposed after
 	// this replicaSendStream was created.
 	if indexToSend > rss.nextRaftIndexInitial {
-		panic(fmt.Sprintf("%v: unexpected indexToSend=%d > nextRaftIndexInitial=%d",
-			rss.stringLocked(), indexToSend, rss.nextRaftIndexInitial))
+		panic(fmt.Sprintf("%v: unexpected indexToSend=%d > nextRaftIndexInitial=%d info=%v",
+			rss.stringLocked(), indexToSend, rss.nextRaftIndexInitial,
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID)))
 	}
 	// INVARIANT: indexToSend <= rss.nextRaftIndexInitial. Don't need to
 	// change any stats.
