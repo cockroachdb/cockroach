@@ -120,29 +120,8 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 		},
 	}
 
-	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
 	defer server.Stopper().Stop(ctx)
-	s := server.Server(0).ApplicationLayer()
-
-	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
-	require.NoError(t, err)
-	_, err = server.Conns[0].Exec("CREATE DATABASE a")
-	require.NoError(t, err)
-	_, err = server.Conns[0].Exec("CREATE DATABASE B")
-	require.NoError(t, err)
-
-	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
-	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
-
-	for _, s := range testClusterSettings {
-		dbA.Exec(t, s)
-	}
-
-	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
-	dbA.Exec(t, createStmt)
-	dbB.Exec(t, createStmt)
-	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
-	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
 	keyPrefix = rowenc.MakeIndexKeyPrefix(s.Codec(), desc.GetID(), desc.GetPrimaryIndexID())
@@ -477,6 +456,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
 					StreamingTestingKnobs: &sql.StreamingTestingKnobs{
 						BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
@@ -484,21 +464,9 @@ func TestLogicalAutoReplan(t *testing.T) {
 							defer addressesMu.Unlock()
 							clientAddresses[addr] = struct{}{}
 						},
-						AfterRetryIteration: func(err error) {
-							if err != nil && !alreadyReplanned.Load() {
-								retryErrorChan <- err
-								<-turnOffReplanning
-								alreadyReplanned.Swap(true)
-							}
-						},
 					},
 				},
 				Streaming: &sql.StreamingTestingKnobs{
-					BeforeClientSubscribe: func(addr string, token string, _ span.Frontier) {
-						addressesMu.Lock()
-						defer addressesMu.Unlock()
-						clientAddresses[addr] = struct{}{}
-					},
 					AfterRetryIteration: func(err error) {
 						if err != nil && !alreadyReplanned.Load() {
 							retryErrorChan <- err
@@ -511,33 +479,12 @@ func TestLogicalAutoReplan(t *testing.T) {
 		},
 	}
 
-	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
 	defer server.Stopper().Stop(ctx)
-	s := server.Server(0).ApplicationLayer()
-
-	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
-	require.NoError(t, err)
-	_, err = server.Conns[0].Exec("CREATE DATABASE a")
-	require.NoError(t, err)
-	_, err = server.Conns[0].Exec("CREATE DATABASE B")
-	require.NoError(t, err)
-
-	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
-	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
-
-	for _, s := range testClusterSettings {
-		dbA.Exec(t, s)
-	}
 
 	// Don't allow for replanning until the new nodes and scattered table have been created.
 	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_threshold", 0)
 	serverutils.SetClusterSetting(t, server, "logical_replication.replan_flow_frequency", time.Millisecond*500)
-
-	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
-	dbA.Exec(t, createStmt)
-	dbB.Exec(t, createStmt)
-	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
-	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
 
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
@@ -559,6 +506,7 @@ func TestLogicalAutoReplan(t *testing.T) {
 
 	server.AddAndStartServer(t, clusterArgs.ServerArgs)
 	server.AddAndStartServer(t, clusterArgs.ServerArgs)
+	t.Logf("New nodes added")
 
 	// Only need at least two nodes as leaseholders for test.
 	CreateScatteredTable(t, dbA, 2)
@@ -579,6 +527,102 @@ func TestLogicalAutoReplan(t *testing.T) {
 	close(turnOffReplanning)
 
 	require.Greater(t, len(clientAddresses), 1)
+}
+
+func TestHeartbeatCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "multi cluster/node config exhausts hardware")
+
+	ctx := context.Background()
+
+	// Make size of channel double the number of nodes
+	retryErrorChan := make(chan error, 4)
+	var alreadyCancelled atomic.Bool
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				Streaming: &sql.StreamingTestingKnobs{
+					AfterRetryIteration: func(err error) {
+						if err != nil && !alreadyCancelled.Load() {
+							retryErrorChan <- err
+							alreadyCancelled.Store(true)
+						}
+					},
+				},
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	defer server.Stopper().Stop(ctx)
+
+	serverutils.SetClusterSetting(t, server, "logical_replication.consumer.heartbeat_frequency", time.Second*1)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	now := server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	var prodAID jobspb.JobID
+	dbA.QueryRow(t, "SELECT job_ID FROM [SHOW JOBS] WHERE job_type='REPLICATION STREAM PRODUCER'").Scan(&prodAID)
+
+	// Cancel the producer job and wait for the hearbeat to pick up that the stream is inactive
+	t.Logf("Canceling  replication producer %s", prodAID)
+	dbA.QueryRow(t, "CANCEL JOB $1", prodAID)
+
+	// The ingestion job should eventually retry because it detects 2 nodes are dead
+	require.ErrorContains(t, <-retryErrorChan, fmt.Sprintf("replication stream %s is not running, status is STREAM_INACTIVE", prodAID))
+}
+
+func setupLogicalTestServer(
+	t *testing.T, ctx context.Context, clusterArgs base.TestClusterArgs,
+) (
+	*testcluster.TestCluster,
+	serverutils.ApplicationLayerInterface,
+	*sqlutils.SQLRunner,
+	*sqlutils.SQLRunner,
+) {
+	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	s := server.Server(0).ApplicationLayer()
+
+	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE a")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE B")
+	require.NoError(t, err)
+
+	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
+	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
+
+	for _, s := range testClusterSettings {
+		dbA.Exec(t, s)
+	}
+
+	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
+	dbA.Exec(t, createStmt)
+	dbB.Exec(t, createStmt)
+	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	return server, s, dbA, dbB
 }
 
 func compareReplicatedTables(
