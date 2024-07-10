@@ -547,6 +547,16 @@ func (rn *RawNode) LastIndex() uint64 {
 	return rn.raft.raftLog.lastIndex()
 }
 
+// NextUnstableIndex returns the index of the next entry that will be sent to
+// local storage, if there are any. All entries < this index are either stored,
+// or have been sent to storage.
+//
+// NB: NextUnstableIndex can regress when the node accepts appends or snapshots
+// from a newer leader.
+func (rn *RawNode) NextUnstableIndex() uint64 {
+	return rn.raft.raftLog.unstable.entryInProgress + 1
+}
+
 func (rn *RawNode) StableIndex() uint64 {
 	return rn.raft.raftLog.stable
 }

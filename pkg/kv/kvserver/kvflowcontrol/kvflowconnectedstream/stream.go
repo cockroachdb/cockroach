@@ -576,6 +576,10 @@ type RaftInterface interface {
 	FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo
 	// LastEntryIndex is the highest index assigned in the log.
 	LastEntryIndex() uint64
+	// NextUnstableIndex returns the index of the next entry that will be sent to
+	// local storage, if there are any. All entries < this index are either stored,
+	// or have been sent to storage.
+	NextUnstableIndex() uint64
 	// MakeMsgApp is used to construct a MsgApp for entries in [start, end).
 	// REQUIRES: start == FollowerStateInfo.Next and replicaID is in
 	// StateReplicate.
