@@ -68,10 +68,42 @@ func TestEstimatedCPUModel(t *testing.T) {
 		require.Equal(t, model, model2)
 	})
 
-	t.Run("metrics are smaller than min lookup values", func(t *testing.T) {
+	t.Run("read/write counts are 0", func(t *testing.T) {
+		reqInfo := RequestInfo{
+			writeReplicas: 3,
+			writeCount:    0,
+			writeBytes:    1,
+		}
+		require.Equal(t, EstimatedCPU(0), model.RequestCost(reqInfo, 50))
+
+		respInfo := ResponseInfo{
+			isRead:    true,
+			readCount: 0,
+			readBytes: 100,
+		}
+		require.Equal(t, EstimatedCPU(101), model.ResponseCost(respInfo))
+	})
+
+	t.Run("read/write counts are 1", func(t *testing.T) {
 		reqInfo := RequestInfo{
 			writeReplicas: 3,
 			writeCount:    1,
+			writeBytes:    1,
+		}
+		require.Equal(t, EstimatedCPU(7.5), model.RequestCost(reqInfo, 50))
+
+		respInfo := ResponseInfo{
+			isRead:    true,
+			readCount: 1,
+			readBytes: 100,
+		}
+		require.Equal(t, EstimatedCPU(101), model.ResponseCost(respInfo))
+	})
+
+	t.Run("metrics are smaller than min lookup values", func(t *testing.T) {
+		reqInfo := RequestInfo{
+			writeReplicas: 3,
+			writeCount:    2,
 			writeBytes:    1,
 		}
 		require.Equal(t, EstimatedCPU(13.5), model.RequestCost(reqInfo, 50))
@@ -81,7 +113,7 @@ func TestEstimatedCPUModel(t *testing.T) {
 			readCount: 10,
 			readBytes: 100,
 		}
-		require.Equal(t, EstimatedCPU(121), model.ResponseCost(respInfo))
+		require.Equal(t, EstimatedCPU(119), model.ResponseCost(respInfo))
 	})
 
 	t.Run("metrics are equal to min lookup values", func(t *testing.T) {
@@ -90,14 +122,14 @@ func TestEstimatedCPUModel(t *testing.T) {
 			writeCount:    3,
 			writeBytes:    256,
 		}
-		require.Equal(t, EstimatedCPU(1555.5), model.RequestCost(reqInfo, 100))
+		require.Equal(t, EstimatedCPU(1549.5), model.RequestCost(reqInfo, 100))
 
 		respInfo := ResponseInfo{
 			isRead:    true,
 			readCount: 10,
 			readBytes: 256,
 		}
-		require.Equal(t, EstimatedCPU(277), model.ResponseCost(respInfo))
+		require.Equal(t, EstimatedCPU(275), model.ResponseCost(respInfo))
 	})
 
 	t.Run("metrics between lookup values", func(t *testing.T) {
@@ -106,14 +138,14 @@ func TestEstimatedCPUModel(t *testing.T) {
 			writeCount:    9,
 			writeBytes:    640,
 		}
-		require.Equal(t, EstimatedCPU(9761.25), model.RequestCost(reqInfo, 150))
+		require.Equal(t, EstimatedCPU(9743.75), model.RequestCost(reqInfo, 150))
 
 		respInfo := ResponseInfo{
 			isRead:    true,
 			readCount: 50,
 			readBytes: 2560,
 		}
-		require.Equal(t, EstimatedCPU(6501), model.ResponseCost(respInfo))
+		require.Equal(t, EstimatedCPU(6499), model.ResponseCost(respInfo))
 	})
 
 	t.Run("metrics are equal to max lookup values", func(t *testing.T) {
@@ -122,14 +154,14 @@ func TestEstimatedCPUModel(t *testing.T) {
 			writeCount:    25,
 			writeBytes:    4096,
 		}
-		require.Equal(t, EstimatedCPU(98_685), model.RequestCost(reqInfo, 800))
+		require.Equal(t, EstimatedCPU(98_670), model.RequestCost(reqInfo, 800))
 
 		respInfo := ResponseInfo{
 			isRead:    true,
 			readCount: 100,
 			readBytes: 4096,
 		}
-		require.Equal(t, EstimatedCPU(12_489), model.ResponseCost(respInfo))
+		require.Equal(t, EstimatedCPU(12_487), model.ResponseCost(respInfo))
 	})
 
 	t.Run("metrics are larger than max lookup values", func(t *testing.T) {
@@ -138,13 +170,13 @@ func TestEstimatedCPUModel(t *testing.T) {
 			writeCount:    100,
 			writeBytes:    10000,
 		}
-		require.Equal(t, EstimatedCPU(402_510), model.RequestCost(reqInfo, 1000))
+		require.Equal(t, EstimatedCPU(402_485), model.RequestCost(reqInfo, 1000))
 
 		respInfo := ResponseInfo{
 			isRead:    true,
 			readCount: 1000,
 			readBytes: 10000,
 		}
-		require.Equal(t, EstimatedCPU(32_001), model.ResponseCost(respInfo))
+		require.Equal(t, EstimatedCPU(31_999), model.ResponseCost(respInfo))
 	})
 }
