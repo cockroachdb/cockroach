@@ -1203,11 +1203,10 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
-	hasUnsupportedTSQuery := func() bool {
-		// Check if any of the indexes have text search types involved.
+	hasVectorType := func() bool {
+		// Check if any of the indexes have PGVector types involved.
 		for _, def := range stmt.Defs {
-			if col, ok := def.(*tree.ColumnTableDef); ok &&
-				(col.Type.SQLString() == "TSQUERY" || col.Type.SQLString() == "TSVECTOR") {
+			if col, ok := def.(*tree.ColumnTableDef); ok && strings.HasPrefix(col.Type.SQLString(), "VECTOR") {
 				return true
 			}
 		}
@@ -1230,8 +1229,8 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	// Compatibility errors aren't guaranteed since the cluster version update is not
 	// fully transaction aware.
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Syntax, condition: hasUnsupportedTSQuery},
-		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
+		{code: pgcode.Syntax, condition: hasVectorType},
+		{code: pgcode.FeatureNotSupported, condition: hasVectorType},
 	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
