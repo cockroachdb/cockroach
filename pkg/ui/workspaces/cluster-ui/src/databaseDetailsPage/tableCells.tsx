@@ -25,7 +25,11 @@ import * as format from "../util/format";
 import { Breadcrumbs } from "../breadcrumbs";
 import { CaretRight } from "../icon/caretRight";
 import { CockroachCloudContext } from "../contexts";
-import { checkInfoAvailable, getNetworkErrorMessage } from "../databases";
+import {
+  checkInfoAvailable,
+  formatSQLTableName,
+  getNetworkErrorMessage,
+} from "../databases";
 import { DatabaseIcon } from "../icon/databaseIcon";
 
 import styles from "./databaseDetailsPage.module.scss";
@@ -94,10 +98,11 @@ export const TableNameCell = ({
       </Tooltip>
     );
   }
+  const displayName = formatSQLTableName(table.name);
   return (
     <Link to={linkURL} className={cx("icon__container")}>
       {icon}
-      {table.name}
+      {displayName}
     </Link>
   );
 };
