@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package targz
+package assetbundle
 
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"io"
 	"testing"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,10 +43,10 @@ func TestAsFS(t *testing.T) {
 
 	require.NoError(t, tarWriter.Close())
 	var tarGzContents bytes.Buffer
-	gzipWriter := gzip.NewWriter(&tarGzContents)
-	_, err = gzipWriter.Write(tarContents.Bytes())
+	writer, _ := zstd.NewWriter(&tarGzContents)
+	_, err = writer.Write(tarContents.Bytes())
 	require.NoError(t, err)
-	require.NoError(t, gzipWriter.Close())
+	require.NoError(t, writer.Close())
 
 	fs, err := AsFS(bytes.NewBuffer(tarGzContents.Bytes()))
 	require.NoError(t, err)

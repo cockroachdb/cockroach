@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "assetbundle",
+    srcs = ["assetbundle.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/assetbundle",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_klauspost_compress//zstd",
+        "@com_github_spf13_afero//:afero",
+    ],
+)
+
+go_test(
+    name = "assetbundle_test",
+    srcs = ["assetbundle_test.go"],
+    embed = [":assetbundle"],
+    deps = [
+        "@com_github_klauspost_compress//zstd",
+        "@com_github_stretchr_testify//require",
+    ],
+)
