@@ -1602,16 +1602,22 @@ func (rss *replicaSendStream) closeLocked() {
 func (rss *replicaSendStream) advanceNextRaftIndexAndSentLocked(state entryFlowControlState) {
 	rss.mu.AssertHeld()
 	if rss.connectedState != replicate {
-		panic(fmt.Sprintf("connected_state=%v != replicate",
-			rss.connectedState))
+		panic(fmt.Sprintf("connected_state=%v != replicate [info=%v send_stream=%v]",
+			rss.connectedState,
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+			rss.stringLocked()))
 	}
 	if state.index != rss.sendQueue.indexToSend {
-		panic(fmt.Sprintf("entry_index=%v != index_to_send=%v",
-			state.index, rss.sendQueue.indexToSend))
+		panic(fmt.Sprintf("entry_index=%v != index_to_send=%v [entry=%v info=%v send_stream=%v]",
+			state.index, rss.sendQueue.indexToSend, state,
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+			rss.stringLocked()))
 	}
 	if state.index != rss.sendQueue.nextRaftIndex {
-		panic(fmt.Sprintf("entry_index=%v != next_raft_index=%v",
-			state.index, rss.sendQueue.nextRaftIndex))
+		panic(fmt.Sprintf("entry_index=%v != next_raft_index=%v [entry=%v info=%v send_stream=%v]",
+			state.index, rss.sendQueue.nextRaftIndex, state,
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+			rss.stringLocked()))
 	}
 	rss.sendQueue.indexToSend++
 	rss.sendQueue.nextRaftIndex++
@@ -1742,7 +1748,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(msg raftpb.Message) 
 			// this before.
 			inheritedPri = rss.queuePriorityLocked()
 			if kvflowcontrolpb.WorkClassFromRaftPriority(inheritedPri) == admissionpb.ElasticWorkClass {
-				panic("")
+				panic("inherited elastic work-class from regular work-class")
 			}
 			remainingTokens[admissionpb.RegularWorkClass] = rss.sendQueue.deductedForScheduler.tokens
 		} else {
@@ -1755,7 +1761,10 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(msg raftpb.Message) 
 	var fcStates []entryFlowControlState
 	for _, entry := range msg.Entries {
 		if rss.sendQueue.indexToSend != entry.Index {
-			panic("")
+			panic(fmt.Sprintf("entry_index=%v != index_to_send=%v [entry=%v info=%v send_stream=%v]",
+				entry.Index, rss.sendQueue.indexToSend, entry,
+				rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+				rss.stringLocked()))
 		}
 		rss.sendQueue.indexToSend++
 		entryFCState := getFlowControlState(entry)
@@ -1817,8 +1826,10 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndQueuedLocked(entry entryFlo
 	rss.mu.AssertHeld()
 	if entry.index != rss.sendQueue.nextRaftIndex {
 		panic(fmt.Sprintf(
-			"expected entry index=%v (%v) == nextRaftIndex=%v (%v)",
-			entry.index, entry, rss.sendQueue.nextRaftIndex, rss.stringLocked()))
+			"entry.index=%v != next_raft_index=%v [entry=%v info=%v send_stream=%v]",
+			entry.index, rss.sendQueue.nextRaftIndex, entry,
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+			rss.stringLocked()))
 	}
 	wasEmpty := rss.isEmptySendQueueLocked()
 	// TODO: if wasEmpty, we may need to force-flush something. That decision needs to be
@@ -2041,7 +2052,8 @@ func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(info Follower
 			// MsgAppResp. Next cannot have moved past Match, since Next used
 			// to be equal to indexToSend.
 			if info.Next != info.Match+1 {
-				panic("")
+				panic(fmt.Sprintf("next=%d != match+1=%d [info=%v send_stream=%v]",
+					info.Next, info.Match+1, info, rss.stringLocked()))
 			}
 			rss.makeConsistentWhenUnexpectedPopLocked(info.Next)
 		} else if info.Next == rss.sendQueue.indexToSend {
@@ -2049,27 +2061,31 @@ func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(info Follower
 		} else if info.Next > rss.sendQueue.indexToSend {
 			// In pull-mode this can never happen. We've already covered the
 			// case where Next moves ahead, along with Match earlier.
-			panic("")
+			panic(fmt.Sprintf("next=%d > index_to_send=%d [info=%v send_stream=%v]",
+				info.Next, rss.sendQueue.indexToSend, info, rss.stringLocked()))
 		} else {
 			// info.Next < rss.sendQueue.indexToSend.
 			//
 			// Must have transitioned to StateProbe and back, and we did not
 			// observe it.
 			if info.Next != info.Match+1 {
-				panic("")
+				panic(fmt.Sprintf("next=%d != match+1=%d [info=%v send_stream=%v]",
+					info.Next, info.Match+1, info, rss.stringLocked()))
 			}
 			rss.makeConsistentWhenProbeToReplicateLocked(info.Next)
 		}
 	case probeRecentlyReplicate:
 		// Returned from StateProbe => StateReplicate.
 		if info.Next != info.Match+1 {
-			panic("")
+			panic(fmt.Sprintf("next=%d != match+1=%d [info=%v send_stream=%v]",
+				info.Next, info.Match+1, info, rss.stringLocked()))
 		}
 		rss.makeConsistentWhenProbeToReplicateLocked(info.Next)
 	case snapshot:
 		// Returned from StateSnapshot => StateReplicate
 		if info.Next != info.Match+1 {
-			panic("")
+			panic(fmt.Sprintf("next=%d != match+1=%d [info=%v send_stream=%v]",
+				info.Next, info.Match+1, info, rss.stringLocked()))
 		}
 		rss.makeConsistentWhenSnapshotToReplicateLocked(info.Next)
 	}
@@ -2096,9 +2112,10 @@ func (rss *replicaSendStream) makeConsistentWhenUnexpectedPopLocked(indexToSend 
 	// can't happen for any index >= nextRaftIndexInitial since these were proposed after
 	// this replicaSendStream was created.
 	if indexToSend > rss.nextRaftIndexInitial {
-		panic(fmt.Sprintf("%v: unexpected indexToSend=%d > nextRaftIndexInitial=%d info=%v",
-			rss.stringLocked(), indexToSend, rss.nextRaftIndexInitial,
-			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID)))
+		panic(fmt.Sprintf("(arg)index_to_send=%d > next_raft_index_initial=%d [info=%v send_stream=%v]",
+			indexToSend, rss.nextRaftIndexInitial,
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+			rss.stringLocked()))
 	}
 	// INVARIANT: indexToSend <= rss.nextRaftIndexInitial. Don't need to
 	// change any stats.
@@ -2130,7 +2147,10 @@ func (rss *replicaSendStream) makeConsistentWhenProbeToReplicateLocked(indexToSe
 		return
 	}
 	if indexToSend > rss.sendQueue.indexToSend {
-		panic("")
+		panic(fmt.Sprintf("(arg)index_to_send=%d > next_raft_index_initial=%d [info=%v send_stream=%v]",
+			indexToSend, rss.nextRaftIndexInitial,
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+			rss.stringLocked()))
 	}
 	// INVARIANT: indexToSend < rss.sendQueue.indexToSend.
 
@@ -2161,13 +2181,21 @@ func (rss *replicaSendStream) makeConsistentWhenProbeToReplicateLocked(indexToSe
 func (rss *replicaSendStream) makeConsistentWhenSnapshotToReplicateLocked(indexToSend uint64) {
 	rss.mu.AssertHeld()
 	if rss.sendQueue.nextRaftIndex < indexToSend {
-		panic("")
+		panic(fmt.Sprintf("next_raft_index=%d < (arg)index_to_send=%d [info=%v send_stream=%v]",
+			rss.sendQueue.nextRaftIndex, indexToSend,
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+			rss.stringLocked()))
 	}
 	if rss.sendQueue.indexToSend > indexToSend {
-		panic("")
+		panic(fmt.Sprintf("index_to_send=%d > (arg)index_to_send=%d [info=%v send_stream=%v]",
+			rss.sendQueue.indexToSend, indexToSend,
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+			rss.stringLocked()))
 	}
 	if rss.connectedState != snapshot {
-		panic("")
+		panic(fmt.Sprintf("connected_state=%v != snapshot [info=%v send_stream=%v]",
+			rss.connectedState, rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+			rss.stringLocked()))
 	}
 	rss.connectedState = replicate
 	// INVARIANT: rss.sendQueue.indexToSend <= indexToSend <=
@@ -2306,7 +2334,7 @@ func (cs connectedState) String() string {
 	case snapshot:
 		return "snapshot"
 	default:
-		panic("")
+		panic(fmt.Sprintf("unknown connected_state %d", cs))
 	}
 }
 
