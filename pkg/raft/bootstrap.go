@@ -37,9 +37,7 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	lastIndex, err := rn.raft.raftLog.storage.LastIndex()
 	if err != nil {
 		return err
-	}
-
-	if lastIndex != 0 {
+	} else if lastIndex != 0 {
 		return errors.New("can't bootstrap a nonempty Storage")
 	}
 

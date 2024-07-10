@@ -84,9 +84,14 @@ func newLogWithSize(
 	if err != nil {
 		panic(err) // TODO(bdarnell)
 	}
+	lastTerm, err := storage.Term(lastIndex)
+	if err != nil {
+		panic(err) // TODO(pav-kv)
+	}
+	last := entryID{term: lastTerm, index: lastIndex}
 	return &raftLog{
 		storage:             storage,
-		unstable:            newUnstable(lastIndex+1, logger),
+		unstable:            newUnstable(last, logger),
 		maxApplyingEntsSize: maxApplyingEntsSize,
 
 		// Initialize our committed and applied pointers to the time of the last compaction.
@@ -99,8 +104,27 @@ func newLogWithSize(
 }
 
 func (l *raftLog) String() string {
+	// TODO(pav-kv): clean-up this message. It will change all the datadriven
+	// tests, so do it in a contained PR.
 	return fmt.Sprintf("committed=%d, applied=%d, applying=%d, unstable.offset=%d, unstable.offsetInProgress=%d, len(unstable.Entries)=%d",
-		l.committed, l.applied, l.applying, l.unstable.offset, l.unstable.offsetInProgress, len(l.unstable.entries))
+		l.committed, l.applied, l.applying, l.unstable.prev.index+1, l.unstable.entryInProgress+1, len(l.unstable.entries))
+}
+
+// accTerm returns the term of the leader whose append was accepted into the log
+// last. Note that a rejected append does not update accTerm, by definition.
+//
+// Invariant: the log is a prefix of the accTerm's leader log
+// Invariant: lastEntryID().term <= accTerm <= raft.Term
+//
+// In steady state, accTerm == raft.Term. When someone campaigns, raft.Term
+// briefly overtakes the accTerm. However, accTerm catches up as soon as we
+// accept an append from the new leader.
+//
+// NB: the log can be partially or fully compacted. When we say "log" above, we
+// logically include all the entries that were the pre-image of a snapshot, as
+// well as the entries that are still physically in the log.
+func (l *raftLog) accTerm() uint64 {
+	return l.unstable.term
 }
 
 // maybeAppend conditionally appends the given log slice to the log, making it
@@ -113,7 +137,8 @@ func (l *raftLog) String() string {
 //
 // Returns false if the operation can not be done: entry a.prev does not match
 // the log (so this log slice is insufficient to make our log consistent with
-// the leader log), or is out of bounds (appending it would introduce a gap).
+// the leader log), the slice is out of bounds (appending it would introduce a
+// gap), or a.term is outdated.
 func (l *raftLog) maybeAppend(a logSlice) bool {
 	match, ok := l.match(a)
 	if !ok {
@@ -121,26 +146,25 @@ func (l *raftLog) maybeAppend(a logSlice) bool {
 	}
 	// Fast-forward the appended log slice to the last matching entry.
 	// NB: a.prev.index <= match <= a.lastIndex(), so the call is safe.
-	return l.append(a.forward(match))
-}
+	a = a.forward(match)
 
-// append conditionally appends the given log slice to the log. Same as
-// maybeAppend, but does not skip the already present entries.
-//
-// TODO(pav-kv): do a clearer distinction between maybeAppend and append. The
-// append method should only append at the end of the log (and verify that it's
-// the case), and maybeAppend can truncate the log.
-func (l *raftLog) append(a logSlice) bool {
 	if len(a.entries) == 0 {
+		// TODO(pav-kv): remove this clause and handle it in unstable. The log slice
+		// can carry a newer a.term, which should update our accTerm.
 		return true
 	}
 	if first := a.entries[0].Index; first <= l.committed {
 		l.logger.Panicf("entry %d is already committed [committed(%d)]", first, l.committed)
 	}
-	// TODO(pav-kv): pass the logSlice down the stack, for safety checks and
-	// bookkeeping in the unstable structure.
-	l.unstable.truncateAndAppend(a.entries)
-	return true
+	return l.unstable.truncateAndAppend(a)
+}
+
+// append adds the given log slice to the end of the log.
+//
+// Returns false if the operation can not be done: entry a.prev does not match
+// the lastEntryID of this log, or a.term is outdated.
+func (l *raftLog) append(a logSlice) bool {
+	return l.unstable.append(a)
 }
 
 // match finds the longest prefix of the given log slice that matches the log.
@@ -285,7 +309,7 @@ func (l *raftLog) hasNextCommittedEnts(allowUnstable bool) bool {
 func (l *raftLog) maxAppliableIndex(allowUnstable bool) uint64 {
 	hi := l.committed
 	if !allowUnstable {
-		hi = min(hi, l.unstable.offset-1)
+		hi = min(hi, l.unstable.prev.index)
 	}
 	return hi
 }
@@ -327,14 +351,7 @@ func (l *raftLog) firstIndex() uint64 {
 }
 
 func (l *raftLog) lastIndex() uint64 {
-	if i, ok := l.unstable.maybeLastIndex(); ok {
-		return i
-	}
-	i, err := l.storage.LastIndex()
-	if err != nil {
-		panic(err) // TODO(bdarnell)
-	}
-	return i
+	return l.unstable.lastIndex()
 }
 
 // commitTo bumps the commit index to the given value if it is higher than the
@@ -478,11 +495,14 @@ func (l *raftLog) matchTerm(id entryID) bool {
 	return t == id.term
 }
 
-func (l *raftLog) restore(s snapshot) {
+func (l *raftLog) restore(s snapshot) bool {
 	id := s.lastEntryID()
 	l.logger.Infof("log [%s] starts to restore snapshot [index: %d, term: %d]", l, id.index, id.term)
-	l.unstable.restore(s)
+	if !l.unstable.restore(s) {
+		return false
+	}
 	l.committed = id.index
+	return true
 }
 
 // scan visits all log entries in the [lo, hi) range, returning them via the
@@ -513,20 +533,21 @@ func (l *raftLog) scan(lo, hi uint64, pageSize entryEncodingSize, v func([]pb.En
 
 // slice returns a slice of log entries from lo through hi-1, inclusive.
 func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, error) {
+	// TODO(pav-kv): simplify a bunch of arithmetics below.
 	if err := l.mustCheckOutOfBounds(lo, hi); err != nil {
 		return nil, err
 	}
 	if lo == hi {
 		return nil, nil
 	}
-	if lo >= l.unstable.offset {
+	if lo > l.unstable.prev.index {
 		ents := limitSize(l.unstable.slice(lo, hi), maxSize)
 		// NB: use the full slice expression to protect the unstable slice from
 		// appends to the returned ents slice.
 		return ents[:len(ents):len(ents)], nil
 	}
 
-	cut := min(hi, l.unstable.offset)
+	cut := min(hi, l.unstable.prev.index+1)
 	ents, err := l.storage.Entries(lo, cut, uint64(maxSize))
 	if err == ErrCompacted {
 		return nil, err
@@ -535,7 +556,7 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 	} else if err != nil {
 		panic(err) // TODO(pavelkalinnikov): handle errors uniformly
 	}
-	if hi <= l.unstable.offset {
+	if hi <= l.unstable.prev.index+1 {
 		return ents, nil
 	}
 
@@ -552,7 +573,7 @@ func (l *raftLog) slice(lo, hi uint64, maxSize entryEncodingSize) ([]pb.Entry, e
 		return ents, nil
 	}
 
-	unstable := limitSize(l.unstable.slice(l.unstable.offset, hi), maxSize-size)
+	unstable := limitSize(l.unstable.slice(l.unstable.prev.index+1, hi), maxSize-size)
 	// Total size of unstable may exceed maxSize-size only if len(unstable) == 1.
 	// If this happens, ignore this extra entry.
 	if len(unstable) == 1 && size+entsSize(unstable) > maxSize {
