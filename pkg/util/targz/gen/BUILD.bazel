@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/cli/exit",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_klauspost_compress//zstd",
     ],
 )
 

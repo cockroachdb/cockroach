@@ -17,7 +17,6 @@ package main
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"io/fs"
@@ -27,7 +26,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/errors"
+	"github.com/klauspost/compress/zstd"
 )
+
+// MaxCompressedLen is the maximum allowed length of the compressed tar archive.
+//
+// N.B. We want to ensure that the packed UI assets don't grow without a bound. At the time of writing,
+// the size of the packed UI assets is 4MB, i.e, half of the max. Beyond max, the time to unpack (in the `init`)
+// is no longer negligible. Thus, we break the build if/when the new size exceeds the max.
+const MaxCompressedLen = 8 * 1024 * 1024
 
 func main() {
 	if err := run(); err != nil {
@@ -88,14 +95,22 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	gzipWriter := gzip.NewWriter(outFile)
-	_, err = gzipWriter.Write(tarContents.Bytes())
+	writer, _ := zstd.NewWriter(outFile, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
+	_, err = writer.Write(tarContents.Bytes())
 	if err != nil {
 		return err
 	}
-	err = gzipWriter.Close()
+	err = writer.Close()
 	if err != nil {
 		return err
+	}
+	stat, err := outFile.Stat()
+	if err != nil {
+		return err
+	}
+	if stat.Size() > MaxCompressedLen {
+		return errors.Newf("compressed length %d <%s> exceeds maximum allowed length %d",
+			stat.Size(), outFile.Name(), MaxCompressedLen)
 	}
 	return outFile.Close()
 }

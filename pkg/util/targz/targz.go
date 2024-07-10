@@ -16,28 +16,27 @@ package targz
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"io"
 	"io/fs"
 	"path/filepath"
 
 	"github.com/cockroachdb/errors"
+	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/afero"
 )
 
 // AsFS exposes the contents of the given reader (which is a .tar.gz file)
 // as an fs.FS.
 func AsFS(r io.Reader) (fs.FS, error) {
-	gz, err := gzip.NewReader(r)
+	gz, err := zstd.NewReader(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open .tar.gz file")
 	}
+	defer gz.Close()
+
 	var tarContents bytes.Buffer
 	if _, err := io.Copy(&tarContents, gz); err != nil {
 		return nil, errors.Wrap(err, "could not decompress .tar.gz file")
-	}
-	if err := gz.Close(); err != nil {
-		return nil, errors.Wrap(err, "could not close gzip reader")
 	}
 	tarReader := tar.NewReader(bytes.NewBuffer(tarContents.Bytes()))
 

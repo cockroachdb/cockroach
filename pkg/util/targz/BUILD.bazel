@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_klauspost_compress//zstd",
         "@com_github_spf13_afero//:afero",
     ],
 )
@@ -15,5 +16,8 @@ go_test(
     name = "targz_test",
     srcs = ["targz_test.go"],
     embed = [":targz"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "@com_github_klauspost_compress//zstd",
+        "@com_github_stretchr_testify//require",
+    ],
 )
