@@ -14,7 +14,9 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,10 +34,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// Implements the interceptor interface to intercept log entries.
+type kvproberLogSpy struct {
+	t *testing.T
+
+	entries []logpb.Entry
+	mu      syncutil.Mutex
+}
+
+func (l *kvproberLogSpy) Intercept(entry []byte) {
+	var rawLog logpb.Entry
+
+	if err := json.Unmarshal(entry, &rawLog); err != nil {
+		l.t.Errorf("failed unmarshalling entry %s: %v", entry, err)
+		return
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = append(l.entries, rawLog)
+}
+
+var _ log.Interceptor = &kvproberLogSpy{}
 
 func TestProberDoesReadsAndWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -66,6 +93,16 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 	})
 
 	t.Run("happy path", func(t *testing.T) {
+		var mu syncutil.Mutex
+		var entries []logpb.Entry
+
+		logSpy := &kvproberLogSpy{
+			t: t,
+		}
+
+		spyCleanup := log.InterceptWith(ctx, logSpy)
+		defer spyCleanup()
+
 		s, _, p, cleanup := initTestServer(t, base.TestingKnobs{})
 		defer cleanup()
 
@@ -78,6 +115,8 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 		kvprober.QuarantineEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 		kvprober.QuarantineInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
 
+		kvprober.TracingEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
 		testutils.SucceedsSoon(t, func() error {
 			if p.Metrics().ReadProbeAttempts.Count() < int64(50) {
 				return errors.Newf("read count too low: %v", p.Metrics().ReadProbeAttempts.Count())
@@ -87,9 +126,16 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 			}
 			return nil
 		})
+
 		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
 		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		// Check if the logs contain the expected log line.
+		mu.Lock()
+		defer mu.Unlock()
+		entries = append(entries, logSpy.entries...)
+		expectedPattern := `r=.+ having likely leaseholder=.+ returned success`
+		require.True(t, containsPattern(entries, expectedPattern))
 	})
 
 	t.Run("a single range is unavailable for all KV ops", func(t *testing.T) {
@@ -395,4 +441,16 @@ func initTestServer(
 	return s, sqlDB, p, func() {
 		s.Stopper().Stop(context.Background())
 	}
+}
+
+// containsPattern returns true if any of the log entries contain the given pattern.
+func containsPattern(entries []logpb.Entry, pattern string) bool {
+	expectedPattern := regexp.MustCompile(pattern)
+
+	for _, entry := range entries {
+		if expectedPattern.MatchString(entry.Message) {
+			return true
+		}
+	}
+	return false
 }
