@@ -2314,10 +2314,16 @@ ORDER BY name ASC;
 }
 
 // TestRACV2Basic tests basic functionality of replication admission control
-// V2, intializing a 1 or 3 node cluster and sending a single put.
+// V2.
 func TestRACV2Basic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	write := func(ctx context.Context, db *kv.DB, key roachpb.Key, count int) {
+		for i := 1; i <= count; i++ {
+			require.NoError(t, db.Put(ctx, key, i))
+		}
+	}
 
 	ctx := context.Background()
 	t.Run("1_node", func(t *testing.T) {
@@ -2326,7 +2332,7 @@ func TestRACV2Basic(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		k := tc.ScratchRange(t)
-		require.NoError(t, tc.Server(0).DB().Put(ctx, k, "a"))
+		write(ctx, tc.Server(0).DB(), k, 100 /* count */)
 	})
 
 	t.Run("3_node", func(t *testing.T) {
@@ -2336,7 +2342,21 @@ func TestRACV2Basic(t *testing.T) {
 
 		k := tc.ScratchRange(t)
 		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
-		require.NoError(t, tc.Server(0).DB().Put(ctx, k, "a"))
+		write(ctx, tc.Server(0).DB(), k, 100 /* count */)
+	})
+
+	t.Run("lease_transfer", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, 3,
+			base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
+		defer tc.Stopper().Stop(ctx)
+
+		k := tc.ScratchRange(t)
+		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+		desc, err := tc.LookupRange(k)
+		require.NoError(t, err)
+		tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
+		log.Info(ctx, "transferred lease to s3")
+		write(ctx, tc.Server(0).DB(), k, 10 /* count */)
 	})
 }
 
