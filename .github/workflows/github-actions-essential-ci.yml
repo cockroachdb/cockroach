@@ -344,3 +344,33 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
+  cockroach-microbench-ci:
+    runs-on: [ self-hosted, basic_runner_group ]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: Check for perf regression label
+        id: check_perf_regression_label
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const labelName = 'perf-regression-expected';
+            const labels = context.payload.pull_request.labels.map(label => label.name);
+            if (labels.includes(labelName)) {
+              core.setOutput('label_found', 'true');
+            } else {
+              core.setOutput('label_found', 'false');
+            }
+      - name: run scripts
+        run: ./build/github/cockroach-microbench-ci.sh
+        env:
+          COMPARE_THRESHOLD: "5.00"
+          PUSH_STEP: ${{ github.event_name == 'push' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          SKIP_COMPARISON: ${{ steps.check_perf_regression_label.outputs.label_found == 'true' }}
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+
