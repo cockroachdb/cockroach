@@ -16,6 +16,7 @@ import {
   getNodeIdsFromStoreIds,
   normalizePrivileges,
   normalizeRoles,
+  formatSQLTableName,
 } from "./util";
 
 describe("Getting nodes by region string", () => {
@@ -172,4 +173,39 @@ describe("Normalize roles", () => {
     const result = normalizeRoles(roles);
     expect(result).toEqual(["admin", "public"]);
   });
+});
+
+describe("formatSQLTableName", () => {
+  const tests = [
+    {
+      input: `"db"."table"`,
+      expected: `db.table`,
+    },
+    {
+      input: `"db"."schema"."table"`,
+      expected: `db.schema.table`,
+    },
+    {
+      input: `"a234ajf"."ojir__931a"`,
+      expected: `a234ajf.ojir__931a`,
+    },
+    {
+      input: `"public.hello.world"."table"`,
+      expected: `"public.hello.world".table`,
+    },
+    {
+      input: `"public"."my table"`,
+      expected: `public."my table"`,
+    },
+    {
+      input: `"db"."public. hello . world"."my.table"`,
+      expected: `db."public. hello . world"."my.table"`,
+    },
+  ];
+  it.each(tests)(
+    `removes double quotes from table name parts unless it contains a space or period`,
+    tc => {
+      expect(formatSQLTableName(tc.input)).toBe(tc.expected);
+    },
+  );
 });
