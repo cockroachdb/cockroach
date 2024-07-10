@@ -66,7 +66,7 @@ func withProgress(r *raft, visitor func(id pb.PeerID, typ ProgressType, pr track
 }
 
 func getProgressCopy(r *raft) map[pb.PeerID]tracker.Progress {
-	m := make(map[pb.PeerID]tracker.Progress)
+	m := make(map[pb.PeerID]tracker.Progress, len(r.trk.Progress))
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		p := *pr
 		p.Inflights = pr.Inflights.Clone()
@@ -107,7 +107,7 @@ func getSparseStatus(r *raft) SparseStatus {
 		BasicStatus: getBasicStatus(r),
 	}
 	if status.RaftState == StateLeader {
-		status.Progress = map[pb.PeerID]tracker.Progress{}
+		status.Progress = make(map[pb.PeerID]tracker.Progress, len(r.trk.Progress))
 		withProgress(r, func(id pb.PeerID, _ ProgressType, pr tracker.Progress) {
 			status.Progress[id] = pr
 		})
