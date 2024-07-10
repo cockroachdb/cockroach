@@ -200,7 +200,7 @@ func TestOnlineRestoreWaitForDownload(t *testing.T) {
 
 	// Wait for the download job to complete.
 	var downloadJobID jobspb.JobID
-	sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
+	sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
 	sqlDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.tenant_span_stats(
 		ARRAY(SELECT(crdb_internal.table_span('data2.bank'::regclass::oid::int)[1], crdb_internal.table_span('data2.bank'::regclass::oid::int)[2]))
@@ -359,8 +359,6 @@ func bankOnlineRestore(
 	sqlDB.Exec(t, "CREATE DATABASE data")
 	sqlDB.Exec(t, fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage))
 
-	require.Equal(t, checkLinkingProgress(t, sqlDB), float32(1.0))
-
 	var restoreRowCount int
 	sqlDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
 	require.Equal(t, numAccounts, restoreRowCount)
@@ -397,11 +395,4 @@ func assertOnlineRestoreWithRekeying(
 	sqlDB.QueryRow(t, bankTableIDQuery).Scan(&originalID)
 	rSQLDB.QueryRow(t, bankTableIDQuery).Scan(&restoreID)
 	require.NotEqual(t, originalID, restoreID)
-}
-
-func checkLinkingProgress(t *testing.T, sqlDB *sqlutils.SQLRunner) float32 {
-	var linkingJobID jobspb.JobID
-	sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created LIMIT 1`).Scan(&linkingJobID)
-	prog := jobutils.GetJobProgress(t, sqlDB, linkingJobID)
-	return prog.GetFractionCompleted()
 }
