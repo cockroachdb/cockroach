@@ -465,6 +465,7 @@ type replicaRACv2Integration struct {
 	// NOTE: raftAdmittedInterface should be called when the replica.raftMu is
 	// held.
 	raftAdmittedInterface kvflowconnectedstream.RaftAdmittedInterface
+	rawNode               *raft.RawNode
 
 	// The fields below are accessed while holding the mutex. Note that the lock
 	// ordering between this mutex and replica.RaftMu: replica.RaftMu < this.mu.
@@ -666,6 +667,7 @@ func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor)
 			rn = rr2.replica.mu.internalRaftGroup
 		}()
 		rr2.raftAdmittedInterface = kvflowconnectedstream.NewRaftNode(rn)
+		rr2.rawNode = rn
 	}
 	rr2.mu.replicas = descToReplicaSet(desc)
 	if wasUninitialized {
@@ -728,6 +730,15 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
+	if rr2.rawNode != nil {
+		// When there is a single replica in the raft group, it decides it is the
+		// leader without any external communication. We discover the leaderID
+		// here.
+		st := rr2.rawNode.BasicStatus()
+		if roachpb.ReplicaID(st.Lead) != rr2.mu.leaderID {
+			rr2.tryUpdateLeaderLocked(roachpb.ReplicaID(st.Lead), false)
+		}
+	}
 	if rr2.mu.replicas == nil {
 		return
 	}
@@ -744,9 +755,11 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
 		nextAdmitted := rr2.mu.waitingForAdmissionState.computeAdmitted(sindex)
 		if admittedIncreased(rr2.raftAdmittedInterface.GetAdmitted(), nextAdmitted) {
 			msgAppResp := rr2.raftAdmittedInterface.SetAdmitted(nextAdmitted)
-			if rr2.mu.leaderID != rr2.replica.replicaID {
+			if rr2.mu.leaderID != 0 && rr2.mu.leaderID != rr2.replica.replicaID {
 				rr2.admittedPiggybacker.AddMsgForRange(rr2.replica.RangeID, rr2.mu.leaderNodeID, rr2.mu.leaderStoreID, msgAppResp)
 			}
+			// rr2.mu.leaderID can be 0 if there is no known leader.
+			// If the local replica is the leader we have already updated admitted.
 		}
 	}()
 
