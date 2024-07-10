@@ -409,7 +409,7 @@ func advanceFrontier(t *testing.T, f Frontier, s roachpb.Span, wall int64) {
 	require.NoError(t, err)
 }
 
-// TestForwardInvertedSpan is a replay of a failure uncovered by FuzzLLRBFrontier test.
+// TestForwardInvertedSpan is a replay of a failure uncovered by fuzzLLRBFrontier test.
 // It verifies frontier behaves as expected when attempting to forward inverted span.
 func TestForwardInvertedSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
