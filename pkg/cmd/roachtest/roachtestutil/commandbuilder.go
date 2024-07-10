@@ -23,6 +23,7 @@ type Command struct {
 	Binary    string
 	Arguments []string
 	Flags     map[string]*string
+	UseEquals bool
 }
 
 // NewCommand builds a command. The format parameter can take
@@ -40,6 +41,11 @@ func NewCommand(format string, args ...interface{}) *Command {
 		Arguments: parts[1:],
 		Flags:     make(map[string]*string),
 	}
+}
+
+func (c *Command) WithEqualsSyntax() *Command {
+	c.UseEquals = true
+	return c
 }
 
 func (c *Command) Arg(format string, args ...interface{}) *Command {
@@ -103,6 +109,11 @@ func (c *Command) String() string {
 	}
 	sort.Strings(names)
 
+	flagJoinSymbol := " "
+	if c.UseEquals {
+		flagJoinSymbol = "="
+	}
+
 	for _, name := range names {
 		val := c.Flags[name]
 		prefix := "-"
@@ -115,7 +126,7 @@ func (c *Command) String() string {
 		if val != nil {
 			parts = append(parts, *val)
 		}
-		flags = append(flags, strings.Join(parts, " "))
+		flags = append(flags, strings.Join(parts, flagJoinSymbol))
 	}
 
 	cmd := append(
