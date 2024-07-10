@@ -4913,6 +4913,26 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_itchyny_gojq",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/itchyny/gojq",
+        sha256 = "32dd58e9a78bec89f06440e0f4a5a463b2bec72330aab7fe647a63fda3b49ea3",
+        strip_prefix = "github.com/itchyny/gojq@v0.12.16",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/itchyny/gojq/com_github_itchyny_gojq-v0.12.16.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_itchyny_timefmt_go",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/itchyny/timefmt-go",
+        sha256 = "a3573fb871ff55a3dcfa7c2ed1804815d386df8b4ec939c93cf1e3e7569b8266",
+        strip_prefix = "github.com/itchyny/timefmt-go@v0.1.6",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/itchyny/timefmt-go/com_github_itchyny_timefmt_go-v0.1.6.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_j_keck_arping",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/j-keck/arping",
@@ -6140,10 +6160,10 @@ def go_deps():
         name = "com_github_mattn_go_isatty",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mattn/go-isatty",
-        sha256 = "ed8a984a7931d618b677b6fd6bcc93c58bb57e67b4b3005c4012a8851b49428c",
-        strip_prefix = "github.com/mattn/go-isatty@v0.0.17",
+        sha256 = "f2d5f89ca451577e17464b9bb596dc0d0ecececb5eaa63622c41b57cd0b7b8cc",
+        strip_prefix = "github.com/mattn/go-isatty@v0.0.20",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-isatty/com_github_mattn_go_isatty-v0.0.17.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-isatty/com_github_mattn_go_isatty-v0.0.20.zip",
         ],
     )
     go_repository(
@@ -6160,10 +6180,10 @@ def go_deps():
         name = "com_github_mattn_go_runewidth",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mattn/go-runewidth",
-        sha256 = "364ef5ed31f6571dad56730305b5c2288a53da06d9832680ade5e21d97a748e7",
-        strip_prefix = "github.com/mattn/go-runewidth@v0.0.14",
+        sha256 = "d97c4f0667a14957569c932a8e2488f1c43757b4dcce313897aa001f07d149b0",
+        strip_prefix = "github.com/mattn/go-runewidth@v0.0.15",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-runewidth/com_github_mattn_go_runewidth-v0.0.14.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-runewidth/com_github_mattn_go_runewidth-v0.0.15.zip",
         ],
     )
     go_repository(
@@ -7737,10 +7757,10 @@ def go_deps():
         name = "com_github_rivo_uniseg",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/rivo/uniseg",
-        sha256 = "3199d94be50284142220662ca3b00e19ddd1debe4e80ddc745ff4203ecb601c0",
-        strip_prefix = "github.com/rivo/uniseg@v0.2.0",
+        sha256 = "b995e4aa0cc1e5779cc61138ac925cb8c1e963e40c80e4b93ee8553812ebb792",
+        strip_prefix = "github.com/rivo/uniseg@v0.4.7",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rivo/uniseg/com_github_rivo_uniseg-v0.2.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rivo/uniseg/com_github_rivo_uniseg-v0.4.7.zip",
         ],
     )
     go_repository(
@@ -11420,10 +11440,10 @@ def go_deps():
         name = "org_golang_x_sys",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/sys",
-        sha256 = "f3e06adc66b840da7719fcf496d2916a38317706509fb5beed5932cd8ae5fb6b",
-        strip_prefix = "golang.org/x/sys@v0.19.0",
+        sha256 = "3f826b191eab1ebda925feb551d334e37e1b5865d1aa790fade46598811a8b1a",
+        strip_prefix = "golang.org/x/sys@v0.20.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/sys/org_golang_x_sys-v0.19.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/sys/org_golang_x_sys-v0.20.0.zip",
         ],
     )
     go_repository(

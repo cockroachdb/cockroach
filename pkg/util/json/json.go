@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	uniq "github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
+	"github.com/itchyny/gojq"
 )
 
 // Type represents a JSON type.
@@ -2814,3 +2815,22 @@ func (j jsonTrue) HasContainerLeaf() (bool, error)   { return false, nil }
 func (j jsonFalse) HasContainerLeaf() (bool, error)  { return false, nil }
 func (j jsonString) HasContainerLeaf() (bool, error) { return false, nil }
 func (j jsonNumber) HasContainerLeaf() (bool, error) { return false, nil }
+
+// TransformJson converts a generic JSON object into a array of objects by
+// applying the jq transform.
+func TransformJson(contents any, transform string) (any, error) {
+	query, err := gojq.Parse(transform)
+	if err != nil {
+		return nil, err
+	}
+	iter := query.Run(contents)
+	v, ok := iter.Next()
+	if !ok {
+		return nil, errors.New("no record found")
+	}
+	if errors.HasType(err, (*gojq.HaltError)(nil)) {
+		return nil, errors.New("halt error")
+	}
+
+	return v, nil
+}
