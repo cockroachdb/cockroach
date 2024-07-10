@@ -530,7 +530,16 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(leaderID roachpb.Repli
 	} else {
 		rd, ok := rr2.mu.replicas[leaderID]
 		if !ok {
-			panic("leader is not in the set of replicas")
+			// TODO(racV2-integration): This is a bug. We should not be in this
+			// state. Rarely hitting this in TestRACV2Basic/relocate_range --stress.
+			//
+			//  leader=4 is not in the set of replicas=[(n1,s1):1,(n2,s2):2LEARNER,(n3,s3):3LEARNER]
+			//  desc=r69:/{Table/Max-Max} [(n1,s1):1, (n2,s2):2LEARNER, (n3,s3):3LEARNER, next=4, gen=3]
+			//
+			log.Errorf(context.TODO(),
+				"leader=%d is not in the set of replicas=%v desc=%v",
+				leaderID, rr2.mu.replicas, rr2.replica.Desc())
+			return
 		}
 		rr2.mu.leaderNodeID = rd.NodeID
 		rr2.mu.leaderStoreID = rd.StoreID
@@ -595,7 +604,19 @@ func (rr2 *replicaRACv2Integration) onDestroy() {
 	if rr2.mu.rcAtLeader != nil {
 		rr2.mu.rcAtLeader.Close()
 	}
-	*rr2 = replicaRACv2Integration{}
+
+	// We want to retain the mutex throughout this method scope. If we were to
+	// swap rr2 with replicaRACv2Integration{}, we would lose the mutex and any
+	// caller waiting on the mutex would deadlock.
+	rr2.mu.rcAtLeader = nil
+	rr2.mu.replicas = nil
+	rr2.mu.leaderID = 0
+	rr2.mu.leaderNodeID = 0
+	rr2.mu.leaderStoreID = 0
+	rr2.mu.scheduledAdmittedProcessing = false
+	rr2.mu.waitingForAdmissionState = waitingForAdmissionState{}
+	rr2.mu.priorityInheritanceState = priorityInheritanceState{}
+	rr2.mu.enqueuedPiggybackedResponses = nil
 	rr2.mu.destroyed = true
 }
 

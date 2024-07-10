@@ -2352,10 +2352,25 @@ func TestRACV2Basic(t *testing.T) {
 
 		k := tc.ScratchRange(t)
 		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+		write(ctx, tc.Server(0).DB(), k, 10 /* count */)
 		desc, err := tc.LookupRange(k)
 		require.NoError(t, err)
 		tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
 		log.Info(ctx, "transferred lease to s3")
+		write(ctx, tc.Server(0).DB(), k, 10 /* count */)
+	})
+
+	t.Run("relocate_range", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, 6,
+			base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
+		defer tc.Stopper().Stop(ctx)
+
+		k := tc.ScratchRange(t)
+		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+		write(ctx, tc.Server(0).DB(), k, 10 /* count */)
+		require.NoError(t, tc.Servers[0].DB().AdminRelocateRange(
+			ctx, k, tc.Targets(3, 4, 5), nil /* nonVoterTargets */, true))
+		log.Info(ctx, "relocated range to s4, s5, s6")
 		write(ctx, tc.Server(0).DB(), k, 10 /* count */)
 	})
 }

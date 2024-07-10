@@ -751,6 +751,21 @@ const NoReplicaID roachpb.ReplicaID = 0
 
 type ReplicaSet map[roachpb.ReplicaID]roachpb.ReplicaDescriptor
 
+func (rs ReplicaSet) String() string {
+	var buf strings.Builder
+	i := 0
+	buf.WriteString("[")
+	for _, desc := range rs {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		fmt.Fprintf(&buf, "%v", desc)
+		i++
+	}
+	buf.WriteString("]")
+	return buf.String()
+}
+
 type RangeControllerImpl struct {
 	opts       RangeControllerOptions
 	replicaSet ReplicaSet
