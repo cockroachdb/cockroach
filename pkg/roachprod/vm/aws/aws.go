@@ -61,7 +61,7 @@ func Init() error {
 		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
 	const noCredentials = "missing AWS credentials, expected ~/.aws/credentials file or AWS_ACCESS_KEY_ID env var"
 
-	configVal := awsConfigValue{awsConfig: *defaultConfig}
+	configVal := awsConfigValue{awsConfig: *DefaultConfig}
 	providerInstance.Config = &configVal.awsConfig
 	providerInstance.IAMProfile = "roachprod-testing"
 
@@ -344,7 +344,7 @@ const (
 	defaultMachineType    = "m6i.xlarge"
 )
 
-var defaultConfig = func() (cfg *awsConfig) {
+var DefaultConfig = func() (cfg *awsConfig) {
 	cfg = new(awsConfig)
 	if err := json.Unmarshal(configJson, cfg); err != nil {
 		panic(errors.Wrap(err, "failed to embedded configuration"))
@@ -450,7 +450,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
 	flags.StringVar(&providerInstance.Profile, ProviderName+"-profile", providerInstance.Profile,
 		"Profile to manage cluster in")
-	configFlagVal := awsConfigValue{awsConfig: *defaultConfig}
+	configFlagVal := awsConfigValue{awsConfig: *DefaultConfig}
 	providerInstance.Config = &configFlagVal.awsConfig
 	flags.Var(&configFlagVal, ProviderName+"-config",
 		"Path to json for aws configuration, defaults to predefined configuration")
@@ -883,9 +883,9 @@ func (p *Provider) allRegions(zones []string) (regions []string, err error) {
 			return nil, fmt.Errorf("unknown availability zone %v, please provide a "+
 				"correct value or update your config accordingly", z)
 		}
-		if _, have := byName[az.region.Name]; !have {
-			byName[az.region.Name] = struct{}{}
-			regions = append(regions, az.region.Name)
+		if _, have := byName[az.Region.Name]; !have {
+			byName[az.Region.Name] = struct{}{}
+			regions = append(regions, az.Region.Name)
 		}
 	}
 	return regions, nil
@@ -900,7 +900,7 @@ func (p *Provider) regionZones(region string, allZones []string) (zones []string
 	}
 	for _, z := range allZones {
 		for _, az := range r.AvailabilityZones {
-			if az.name == z {
+			if az.Name == z {
 				zones = append(zones, z)
 				break
 			}
@@ -1151,7 +1151,7 @@ func (p *Provider) runInstance(
 	opts vm.CreateOpts,
 	providerOpts *ProviderOpts,
 ) error {
-	az, ok := p.Config.azByName[zone]
+	az, ok := p.Config.AZByName[zone]
 	if !ok {
 		return fmt.Errorf("no region in %v corresponds to availability zone %v",
 			p.Config.regionNames(), zone)
@@ -1228,7 +1228,7 @@ func (p *Provider) runInstance(
 		}
 		return *fl
 	}
-	imageID := withFlagOverride(az.region.AMI_X86_64, &providerOpts.ImageAMI)
+	imageID := withFlagOverride(az.Region.AMI_X86_64, &providerOpts.ImageAMI)
 	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "6gd.") == 1 ||
 		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1
 	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
@@ -1236,14 +1236,14 @@ func (p *Provider) runInstance(
 	}
 	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 	if useArmAMI {
-		imageID = withFlagOverride(az.region.AMI_ARM64, &providerOpts.ImageAMI)
+		imageID = withFlagOverride(az.Region.AMI_ARM64, &providerOpts.ImageAMI)
 		// N.B. use arbitrary instanceIdx to suppress the same info for every other instance being created.
 		if instanceIdx == 0 {
 			l.Printf("Using ARM64 AMI: %s for machine type: %s", imageID, machineType)
 		}
 	}
 	if opts.Arch == string(vm.ArchFIPS) {
-		imageID = withFlagOverride(az.region.AMI_FIPS, &providerOpts.ImageAMI)
+		imageID = withFlagOverride(az.Region.AMI_FIPS, &providerOpts.ImageAMI)
 		if instanceIdx == 0 {
 			l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", imageID, machineType)
 		}
@@ -1255,9 +1255,9 @@ func (p *Provider) runInstance(
 		"--instance-type", machineType,
 		"--image-id", imageID,
 		"--key-name", keyName,
-		"--region", az.region.Name,
-		"--security-group-ids", az.region.SecurityGroup,
-		"--subnet-id", az.subnetID,
+		"--region", az.Region.Name,
+		"--security-group-ids", az.Region.SecurityGroup,
+		"--subnet-id", az.SubnetID,
 		"--tag-specifications", vmTagSpecs, volumeTagSpecs,
 		"--user-data", "file://" + filename,
 	}
@@ -1276,7 +1276,7 @@ func (p *Provider) runInstance(
 	}
 
 	if providerOpts.UseSpot {
-		return runSpotInstance(l, p, args, az.region.Name)
+		return runSpotInstance(l, p, args, az.Region.Name)
 		//todo(babusrithar): Add fallback to on-demand instances if spot instances are not available.
 	}
 	runInstancesOutput := RunInstancesOutput{}
