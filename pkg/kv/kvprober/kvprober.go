@@ -20,6 +20,7 @@ package kvprober
 import (
 	"context"
 	"math/rand"
+	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -306,6 +308,26 @@ func (p *Prober) Metrics() Metrics {
 	return p.metrics
 }
 
+// returnLeaseholderInfo searches through the given tracing recording for log messages
+// indicating leaseholder information, extracts leaseholder node ID,
+// and returns this information. Returns an empty string if leaseholder information
+// is not found.
+func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) string {
+	// Find the log message containing information about current leaseholder
+	informationLog, isPresent := recording.FindLastLogMessage("node received request")
+
+	if isPresent {
+		// Regular expression to extract leaseholder node ID
+		leaseRegex := regexp.MustCompile(`\[n(\d+)\]`)
+		leaseholder := leaseRegex.FindStringSubmatch(informationLog)
+		// Return leaseholder node ID if found
+		if len(leaseholder) > 0 {
+			return leaseholder[1]
+		}
+	}
+	return ""
+}
+
 // Start causes kvprober to start probing KV. Start returns immediately. Start
 // returns an error only if stopper.RunAsyncTask returns an error.
 func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
@@ -335,8 +357,8 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 					return
 				}
 
-				probeCtx, sp := tracing.EnsureChildSpan(ctx, p.tracer, opName+" - probe")
-				probe(probeCtx, pl)
+				_, sp := tracing.EnsureChildSpan(ctx, p.tracer, opName+" - probe")
+				probe(ctx, pl)
 				sp.Finish()
 			}
 		})
@@ -367,6 +389,12 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 	}
 
 	p.metrics.ProbePlanAttempts.Inc(1)
+	var finishAndGetRecording = func() tracingpb.Recording { return nil }
+
+	// trace kv prober requests if tracing is enabled
+	if tracingEnabled.Get(&p.settings.SV) {
+		ctx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, p.tracer, "read probe")
+	}
 
 	step, err := pl.next(ctx)
 	if err == nil && step.RangeID == 0 {
@@ -390,6 +418,8 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 	// the impact is more low visibility into possible failures than a high
 	// impact production issue.
 	p.metrics.ReadProbeAttempts.Inc(1)
+
+	ctx = logtags.AddTag(ctx, "range", step.RangeID)
 
 	start := timeutil.Now()
 
@@ -419,7 +449,14 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 	}
 
 	d := timeutil.Since(start)
-	log.Health.Infof(ctx, "kv.Get(%s), r=%v returned success in %v", step.Key, step.RangeID, d)
+	// Extract leaseholder information from the trace recording if enabled
+	if tracingEnabled.Get(&p.settings.SV) {
+		leaseholder := p.returnLeaseholderInfo(finishAndGetRecording())
+		ctx = logtags.AddTag(ctx, "leaseholder", leaseholder)
+		log.Health.Infof(ctx, "kv.Get(%s), r=%v having leaseholder=%s returned success in %v", step.Key, step.RangeID, leaseholder, d)
+	} else {
+		log.Health.Infof(ctx, "kv.Get(%s), r=%v returned success in %v", step.Key, step.RangeID, d)
+	}
 
 	// Latency of failures is not recorded. They are counted as failures tho.
 	p.metrics.ReadProbeLatency.RecordValue(d.Nanoseconds())

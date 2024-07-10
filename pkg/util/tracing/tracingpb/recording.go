@@ -219,6 +219,25 @@ func (r Recording) FindLogMessage(pattern string) (string, bool) {
 	return "", false
 }
 
+// FindLastLogMessage returns the last log message in the recording that matches
+// the given regexp. The bool return value is true if such a message is found.
+//
+// This method strips the redaction markers from all the log messages, which is
+// pretty inefficient.
+func (r Recording) FindLastLogMessage(pattern string) (string, bool) {
+	re := regexp.MustCompile(pattern)
+	for i := len(r) - 1; i >= 0; i-- {
+		sp := r[i]
+		for j := len(sp.Logs) - 1; j >= 0; j-- {
+			msg := sp.Logs[j].Msg().StripMarkers()
+			if re.MatchString(msg) {
+				return msg, true
+			}
+		}
+	}
+	return "", false
+}
+
 // FindSpan returns the Span with the given operation. The bool retval is false
 // if the Span is not found.
 func (r Recording) FindSpan(operation string) (RecordedSpan, bool) {

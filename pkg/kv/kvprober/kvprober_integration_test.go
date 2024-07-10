@@ -15,6 +15,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"os"
+	"regexp"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -90,6 +92,55 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
 		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+	})
+
+	t.Run("happy path with tracing enabled", func(t *testing.T) {
+		// Define a temporary logging directory for the kv prober logs to be written to
+		logScope := log.Scope(t)
+		defer logScope.Close(t)
+
+		s, _, p, cleanup := initTestServer(t, base.TestingKnobs{})
+		defer cleanup()
+
+		kvprober.ReadEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		kvprober.ReadInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
+
+		kvprober.WriteEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		kvprober.WriteInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
+
+		kvprober.QuarantineEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		kvprober.QuarantineInterval.Override(ctx, &s.ClusterSettings().SV, 5*time.Millisecond)
+
+		kvprober.TracingEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
+		testutils.SucceedsSoon(t, func() error {
+			if p.Metrics().ReadProbeAttempts.Count() < int64(50) {
+				return errors.Newf("read count too low: %v", p.Metrics().ReadProbeAttempts.Count())
+			}
+			if p.Metrics().WriteProbeAttempts.Count() < int64(50) {
+				return errors.Newf("write count too low: %v", p.Metrics().WriteProbeAttempts.Count())
+			}
+			return nil
+		})
+
+		// Read the health chanel log file where the kv prober logs are stored
+		buf := new(bytes.Buffer)
+		f, err := os.Open(logScope.GetDirectory() + "/kvprobertest-health.log")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = buf.ReadFrom(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+
+		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
+		require.Zero(t, p.Metrics().WriteProbeFailures.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		// Check if the log file contains the expected log line
+		expectedPattern := regexp.MustCompile(`r=.+ having leaseholder=.+ returned success`)
+		require.True(t, expectedPattern.MatchString(buf.String()))
 	})
 
 	t.Run("a single range is unavailable for all KV ops", func(t *testing.T) {
