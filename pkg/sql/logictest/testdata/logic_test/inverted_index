@@ -2060,3 +2060,16 @@ WHERE
         OR (ARRAY ['str2'] && t.links AND ARRAY ['str3'] && t.links)
     );
 ----
+
+# Regression test for #126444. The backfill should not fail when the indexed
+# column has special characters, like a newline.
+statement ok
+CREATE TABLE t126444 (
+  a INT PRIMARY KEY,
+  "b
+c" STRING
+)
+
+statement ok
+CREATE INVERTED INDEX ON t126444 ("b
+c" gin_trgm_ops)
