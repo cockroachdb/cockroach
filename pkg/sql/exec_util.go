@@ -3295,6 +3295,10 @@ func (m *sessionDataMutator) SetOptimizerUseForecasts(val bool) {
 	m.data.OptimizerUseForecasts = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseMergedPartialStatistics(val bool) {
+	m.data.OptimizerUseMergedPartialStatistics = val
+}
+
 func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {
 	m.data.OptimizerUseHistograms = val
 }

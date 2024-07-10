@@ -756,6 +756,8 @@ WHERE stat->>'name' = '__merged__';
     "row_count": 9
 }
 
+statement ok
+SET optimizer_use_merged_partial_statistics = on
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM i WHERE i = 6 OR i <= -1
@@ -1365,3 +1367,70 @@ ka_partialstat   {a}           3          2               2
 
 statement ok
 RESET CLUSTER SETTING sql.stats.histogram_samples.count
+
+# Verify that optimizer_use_merged_partial_statistics can be used to enable and
+# disable merged stat usage in the optimizer.
+statement ok
+RESET optimizer_use_merged_partial_statistics
+
+statement ok
+DELETE FROM ka
+
+statement ok
+INSERT INTO ka SELECT x, x FROM generate_series(0, 9) as g(x)
+
+statement ok
+CREATE STATISTICS ka_fullstat ON a FROM ka
+
+statement ok
+INSERT INTO ka VALUES (10, 10)
+
+statement ok
+CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
+
+query T
+EXPLAIN SELECT * FROM ka WHERE a > 5
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 4 (36% of the table; stats collected <hidden> ago)
+  table: ka@ka_a_idx
+  spans: [/6 - ]
+
+query T
+EXPLAIN SELECT * FROM ka WHERE a = 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  table: ka@ka_a_idx
+  spans: [/10 - /10]
+
+statement ok
+SET optimizer_use_merged_partial_statistics = on
+
+query T
+EXPLAIN SELECT * FROM ka WHERE a > 5
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 5 (45% of the table; stats collected <hidden> ago)
+  table: ka@ka_a_idx
+  spans: [/6 - ]
+
+query T
+EXPLAIN SELECT * FROM ka WHERE a = 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 1 (9.1% of the table; stats collected <hidden> ago)
+  table: ka@ka_a_idx
+  spans: [/10 - /10]

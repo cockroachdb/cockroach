@@ -827,6 +827,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_use_merged_partial_statistics`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_merged_partial_statistics`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_merged_partial_statistics", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseMergedPartialStatistics(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseMergedPartialStatistics), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`optimizer_use_histograms`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_histograms`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
