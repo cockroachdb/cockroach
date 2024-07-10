@@ -11,6 +11,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
+        "//pkg/util/log/severity",
         "//pkg/util/stop",
         "@com_github_cockroachdb_redact//:redact",
     ],

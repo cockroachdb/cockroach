@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -3598,7 +3599,7 @@ func (s *Store) ComputeMetricsPeriodically(
 		e := m.AsStoreStatsEvent()
 		e.NodeId = int32(s.NodeID())
 		e.StoreId = int32(s.StoreID())
-		log.StructuredEvent(ctx, &e)
+		log.StructuredEvent(ctx, severity.INFO, &e)
 	}
 	return m, nil
 }

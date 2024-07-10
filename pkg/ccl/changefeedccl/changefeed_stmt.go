@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1519,7 +1520,7 @@ func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record, isTransf
 		Transformation:               isTransformation,
 	}
 
-	log.StructuredEvent(ctx, createChangefeedEvent)
+	log.StructuredEvent(ctx, severity.INFO, createChangefeedEvent)
 }
 
 func logChangefeedFailedTelemetry(
@@ -1536,7 +1537,7 @@ func logChangefeedFailedTelemetry(
 		FailureType:                  failureType,
 	}
 
-	log.StructuredEvent(ctx, changefeedFailedEvent)
+	log.StructuredEvent(ctx, severity.INFO, changefeedFailedEvent)
 }
 
 func getCommonChangefeedEventDetails(

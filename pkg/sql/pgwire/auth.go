@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -530,7 +531,7 @@ func (p *authPipe) LogAuthOK(ctx context.Context) {
 		CommonSessionDetails:    p.authDetails,
 		Method:                  p.authMethod,
 	}
-	log.StructuredEvent(ctx, ev)
+	log.StructuredEvent(ctx, severity.INFO, ev)
 }
 
 func (p *authPipe) LogAuthInfof(ctx context.Context, msg redact.RedactableString) {
@@ -541,7 +542,7 @@ func (p *authPipe) LogAuthInfof(ctx context.Context, msg redact.RedactableString
 			Info:                    msg,
 			Method:                  p.authMethod,
 		}
-		log.StructuredEvent(ctx, ev)
+		log.StructuredEvent(ctx, severity.INFO, ev)
 	}
 }
 
@@ -552,7 +553,7 @@ func (p *authPipe) LogSessionEnd(ctx context.Context, endTime time.Time) {
 		CommonConnectionDetails: p.connDetails,
 		Duration:                endTime.Sub(p.c.startTime).Nanoseconds(),
 	}
-	log.StructuredEvent(ctx, ev)
+	log.StructuredEvent(ctx, severity.INFO, ev)
 }
 
 func (p *authPipe) LogAuthFailed(
@@ -574,7 +575,7 @@ func (p *authPipe) LogAuthFailed(
 			Detail:                  errStr,
 			Method:                  p.authMethod,
 		}
-		log.StructuredEvent(ctx, ev)
+		log.StructuredEvent(ctx, severity.INFO, ev)
 	}
 }
 

@@ -18,8 +18,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// StructuredEvent emits a structured event to the debug log.
-func StructuredEvent(ctx context.Context, event logpb.EventPayload) {
+// StructuredEvent emits a structured event log of severity sev to the channel the provided
+// event belongs to.
+func StructuredEvent(ctx context.Context, sev logpb.Severity, event logpb.EventPayload) {
+	// Note: we use depth 0 intentionally here, so that structured
+	// events can be reliably detected (their source filename will
+	// always be log/event_log.go).
+	StructuredEventDepth(ctx, sev, 0, event)
+}
+
+// StructuredEventDepth emits a structured event log of severity sev and depth to the channel the provided
+// event belongs to.
+func StructuredEventDepth(
+	ctx context.Context, sev logpb.Severity, depth int, event logpb.EventPayload,
+) {
 	// Populate the missing common fields.
 	common := event.CommonDetails()
 	if common.Timestamp == 0 {
@@ -30,12 +42,9 @@ func StructuredEvent(ctx context.Context, event logpb.EventPayload) {
 	}
 
 	entry := makeStructuredEntry(ctx,
-		severity.INFO,
+		sev,
 		event.LoggingChannel(),
-		// Note: we use depth 0 intentionally here, so that structured
-		// events can be reliably detected (their source filename will
-		// always be log/event_log.go).
-		0, /* depth */
+		depth,
 		event)
 
 	if sp := getSpan(ctx); sp != nil {
