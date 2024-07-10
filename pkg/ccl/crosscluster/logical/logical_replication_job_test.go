@@ -187,6 +187,90 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	require.Equal(t, int64(expCPuts), numCPuts.Load())
 }
 
+func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	defer server.Stopper().Stop(ctx)
+	s := server.Server(0).ApplicationLayer()
+
+	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE a")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE B")
+	require.NoError(t, err)
+
+	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
+	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
+
+	for _, s := range testClusterSettings {
+		dbA.Exec(t, s)
+	}
+
+	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
+	dbA.Exec(t, createStmt)
+	dbB.Exec(t, createStmt)
+	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	// Swap one of the URLs to external:// to verify this indirection works.
+	// TODO(dt): this create should support placeholder for URI.
+	dbB.Exec(t, "CREATE EXTERNAL CONNECTION a AS '"+dbAURL.String()+"'")
+	dbAURL = url.URL{
+		Scheme: "external",
+		Host:   "a",
+	}
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+
+	// Perform the inserts first before starting the LDR stream.
+	now := server.Server(0).Clock().Now()
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
+	dbA.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
+	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
+	// We should expect starting at the provided now() to contain the data.
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2", dbBURL.String(), now.AsOfSystemTime()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2", dbAURL.String(), now.AsOfSystemTime()).Scan(&jobBID)
+
+	now = server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	expectedRows := [][]string{
+		{"1", "goodbye, again"},
+		{"2", "potato"},
+		{"3", "celeriac"},
+	}
+	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRows)
+	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRows)
+}
+
 func TestLogicalStreamIngestionErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -89,14 +88,7 @@ func createLogicalReplicationStreamPlanHook(
 		); err != nil {
 			return err
 		}
-		if !stmt.Options.IsDefault() {
-			// TODO: update handling of the the returned options
-			_, err := evalLogicalReplicationOptions(ctx, stmt.Options, exprEval, &p.ExtendedEvalContext().Context, p.SemaCtx())
-			if err != nil {
-				return err
-			}
-			return errors.UnimplementedErrorf(issuelink.IssueLink{}, "logical replication stream options are not yet supported")
-		}
+
 		if stmt.From.Database != "" {
 			return errors.UnimplementedErrorf(issuelink.IssueLink{}, "logical replication streams on databases are unsupported")
 		}
@@ -189,6 +181,18 @@ func createLogicalReplicationStreamPlanHook(
 			repPairs[i].SrcDescriptorID = int32(spec.TableDescriptors[name].ID)
 		}
 
+		options, err := evalLogicalReplicationOptions(ctx, stmt.Options, exprEval, p)
+		if err != nil {
+			return err
+		}
+		replicationStartTime := spec.ReplicationStartTime
+		progress := jobspb.LogicalReplicationProgress{}
+		if cursor, ok := options.GetCursor(); ok {
+			replicationStartTime = cursor
+			progress.ReplicatedTime = cursor
+		}
+		// TODO: Handle the plumbing of the other options once ready.
+
 		jr := jobs.Record{
 			JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
 			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, streamAddress),
@@ -196,11 +200,12 @@ func createLogicalReplicationStreamPlanHook(
 			Details: jobspb.LogicalReplicationDetails{
 				StreamID:             uint64(spec.StreamID),
 				SourceClusterID:      spec.SourceClusterID,
-				ReplicationStartTime: spec.ReplicationStartTime,
+				ReplicationStartTime: replicationStartTime,
 				TargetClusterConnStr: string(streamAddress),
 				ReplicationPairs:     repPairs,
-				TableNames:           srcTableNames},
-			Progress: jobspb.LogicalReplicationProgress{},
+				TableNames:           srcTableNames,
+			},
+			Progress: progress,
 		}
 
 		if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, p.InternalSQLTxn()); err != nil {
@@ -248,8 +253,7 @@ func evalLogicalReplicationOptions(
 	ctx context.Context,
 	options tree.LogicalReplicationOptions,
 	eval exprutil.Evaluator,
-	evalCtx *eval.Context,
-	semaCtx *tree.SemaContext,
+	p sql.PlanHookState,
 ) (*resolvedLogicalReplicationOptions, error) {
 	r := &resolvedLogicalReplicationOptions{}
 	if options.Mode != nil {
@@ -265,7 +269,7 @@ func evalLogicalReplicationOptions(
 			return nil, err
 		}
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
-		asOf, err := asof.Eval(ctx, asOfClause, semaCtx, evalCtx)
+		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context)
 		if err != nil {
 			return nil, err
 		}
