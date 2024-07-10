@@ -111,14 +111,13 @@ const (
 )
 
 // shouldForceLogStatement returns true if the statement should be force logged to
-// TELEMETRY. Currently the criteria is if the statement is not of type DML and is
-// not BEGIN or COMMIT.
+// TELEMETRY. Currently the criteria is if the statement is not of type DML or TCL.
 func shouldForceLogStatement(ast tree.Statement) bool {
-	switch ast.(type) {
-	case *tree.BeginTransaction, *tree.CommitTransaction:
+	switch ast.StatementType() {
+	case tree.TypeDML, tree.TypeTCL:
 		return false
 	default:
-		return ast.StatementType() != tree.TypeDML
+		return true
 	}
 }
 
@@ -298,7 +297,7 @@ func (p *planner) maybeLogStatementInternal(
 		tracingEnabled := telemetryMetrics.isTracing(p.curPlan.instrumentation.Tracing())
 
 		// Always sample if one of the scenarios is true:
-		// - statement is not of type DML and is not BEGIN or COMMIT
+		// - statement is not of type DML or TCL
 		// - tracing is enabled for this statement
 		// - this is a query emitted by our console (application_name starts with `$ internal-console`) and
 		// the cluster setting to log console queries is enabled
