@@ -14,96 +14,186 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(azhu): Use WriteType as built-in database enum.
-type WriteType int
-
 const (
-	Insert WriteType = iota
-	Delete
+	// TODO(azhu): create table and enum in the db to be replicated into instead of defaultdb.
+	dlqBaseTableName = "defaultdb.crdb_replication_conflict_dlq_%d"
+	writeEnumStmt    = `CREATE TYPE IF NOT EXISTS defaultdb.crdb_replication_mutation_type AS ENUM (
+			'insert', 'update', 'delete'
+	)`
+
+	createTableStmt = `CREATE TABLE IF NOT EXISTS %s (
+			id                  INT8 DEFAULT unique_rowid(),
+			ingestion_job_id    INT8 NOT NULL,
+  		table_id    				INT8 NOT NULL,
+			dlq_timestamp     	TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+  		dlq_reason					STRING NOT NULL,
+			mutation_type				defaultdb.crdb_replication_mutation_type,       
+  		key_value_bytes			BYTES NOT NULL,
+			incoming_row     		STRING NOT NULL,
+  		-- PK should be unique based on the ID, job ID and timestamp at which the 
+  		-- row was written to the table.
+  		-- For any table being replicated in an LDR job, there should not be rows 
+  		-- where they have identical ID and were written to the table at the same 
+  		-- time.
+			PRIMARY KEY (ingestion_job_id, dlq_timestamp, id) USING HASH
+		)`
+
+	insertRowStmt = `INSERT INTO %s (
+			ingestion_job_id, 
+			table_id, 
+			dlq_reason,
+			mutation_type,
+			key_value_bytes,
+			incoming_row
+		) VALUES ($1, $2, $3, $4, $5, $6)`
 )
 
-func (t WriteType) String() string {
+type ReplicationMutationType int
+
+const (
+	Insert ReplicationMutationType = iota
+	Delete
+	Update
+)
+
+func (t ReplicationMutationType) String() string {
 	switch t {
 	case Insert:
-		return "Insert"
+		return "insert"
 	case Delete:
-		return "Delete"
+		return "delete"
+	case Update:
+		return "update"
 	default:
-		return fmt.Sprintf("Unrecognized WriteType(%d)", int(t))
+		return fmt.Sprintf("Unrecognized ReplicationMutationType(%d)", int(t))
 	}
 }
 
-type ConflictResolutionType int
-
-const (
-	Unresolved ConflictResolutionType = iota
-	ManuallyResolved
-	Applied
-	Ignored
-)
-
 type DeadLetterQueueClient interface {
-	Create() error
+	Create(ctx context.Context, tableIDs []int32) error
 
 	Log(
 		ctx context.Context,
 		ingestionJobID int64,
 		kv streampb.StreamEvent_KV,
 		cdcEventRow cdcevent.Row,
-		reason error,
+		dlqReason retryEligibility,
 	) error
 }
 
 type loggingDeadLetterQueueClient struct {
 }
 
-// TODO(azhu): Implement after V0.
-// In future iterations Create() should create a DLQ table in the database.
-func (dlq *loggingDeadLetterQueueClient) Create() error {
+func (dlq *loggingDeadLetterQueueClient) Create(ctx context.Context, tableIDs []int32) error {
 	return nil
 }
 
-// TODO(azhu): Append complete log as rows to DLQ table.
 func (dlq *loggingDeadLetterQueueClient) Log(
 	ctx context.Context,
 	ingestionJobID int64,
 	kv streampb.StreamEvent_KV,
 	cdcEventRow cdcevent.Row,
-	reason error,
+	dlqReason retryEligibility,
 ) error {
-	if !dlq.exists() {
-		return errors.New("dead letter queue table needs to be created before logs can be appended")
-	}
-
 	if !cdcEventRow.IsInitialized() {
 		return errors.New("cdc event row not initialized")
 	}
 
 	tableID := cdcEventRow.TableID
-	var writeType WriteType
-
+	var mutationType ReplicationMutationType
 	if cdcEventRow.IsDeleted() {
-		writeType = Delete
+		mutationType = Delete
 	} else {
-		writeType = Insert
+		mutationType = Insert
 	}
 
-	// TODO(azhu): once we have the actual reason passed in, replace DebugString() with reason
-	log.Infof(ctx,
-		`ingestion_job_id: %d,\n table_id: %d,\n write_type: %s,\n row: %s, \n reason: %s`,
-		ingestionJobID, tableID, writeType, cdcEventRow.DebugString(), reason.Error())
+	bytes, err := protoutil.Marshal(&kv)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal kv event")
+	}
+
+	log.Infof(ctx, `ingestion_job_id: %d,  
+		table_id: %d, 
+		dlq_reason: %s, 
+		mutation_type: %s,  
+		key_value_bytes: %v, 
+		incoming_row: %s`,
+		ingestionJobID, tableID, dlqReason.String(), mutationType.String(), bytes, cdcEventRow.DebugString())
 	return nil
 }
 
-// TODO(azhu): verify that DLQ table exists.
-func (dlq *loggingDeadLetterQueueClient) exists() bool {
-	return true
+type deadLetterQueueClient struct {
+	ie isql.Executor
 }
 
-func InitDeadLetterQueueClient() DeadLetterQueueClient {
+func (dlq *deadLetterQueueClient) Create(ctx context.Context, tableIDs []int32) error {
+	if _, err := dlq.ie.Exec(ctx, "create-enum", nil, writeEnumStmt); err != nil {
+		return errors.Wrap(err, "failed to create crdb_replication_mutation_type enum")
+	}
+
+	// Create a dlq table for each given table.
+	for _, tableID := range tableIDs {
+		tableName := fmt.Sprintf(dlqBaseTableName, tableID)
+		if _, err := dlq.ie.Exec(ctx, "create-dlq-table", nil, fmt.Sprintf(createTableStmt, tableName)); err != nil {
+			return errors.Wrapf(err, "failed to create dlq table %q", tableName)
+		}
+	}
+	return nil
+}
+
+func (dlq *deadLetterQueueClient) Log(
+	ctx context.Context,
+	ingestionJobID int64,
+	kv streampb.StreamEvent_KV,
+	cdcEventRow cdcevent.Row,
+	dlqReason retryEligibility,
+) error {
+	if !cdcEventRow.IsInitialized() {
+		return errors.New("cdc event row not initialized")
+	}
+
+	tableID := cdcEventRow.TableID
+	tableName := fmt.Sprintf(dlqBaseTableName, tableID)
+	bytes, err := protoutil.Marshal(&kv)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal kv event")
+	}
+
+	// TODO(azhu): include update type
+	var mutationType ReplicationMutationType
+	if cdcEventRow.IsDeleted() {
+		mutationType = Delete
+	} else {
+		mutationType = Insert
+	}
+
+	if _, err := dlq.ie.Exec(
+		ctx,
+		"insert-row-into-dlq-table",
+		nil, /* txn */
+		fmt.Sprintf(insertRowStmt, tableName),
+		ingestionJobID,
+		tableID,
+		dlqReason.String(),
+		mutationType.String(),
+		bytes,
+		cdcEventRow.DebugString(),
+	); err != nil {
+		return errors.Wrapf(err, "failed to insert row for table %s", tableName)
+	}
+	return nil
+}
+
+func InitDeadLetterQueueClient(ie isql.Executor) DeadLetterQueueClient {
+	return &deadLetterQueueClient{ie: ie}
+}
+
+func InitLoggingDeadLetterQueueClient() DeadLetterQueueClient {
 	return &loggingDeadLetterQueueClient{}
 }
