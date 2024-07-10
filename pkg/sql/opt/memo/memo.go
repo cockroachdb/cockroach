@@ -152,6 +152,7 @@ type Memo struct {
 	reorderJoinsLimit                          int
 	zigzagJoinEnabled                          bool
 	useForecasts                               bool
+	useMergedPartialStatistics                 bool
 	useHistograms                              bool
 	useMultiColStats                           bool
 	useNotVisibleIndex                         bool
@@ -237,6 +238,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		reorderJoinsLimit:                          int(evalCtx.SessionData().ReorderJoinsLimit),
 		zigzagJoinEnabled:                          evalCtx.SessionData().ZigzagJoinEnabled,
 		useForecasts:                               evalCtx.SessionData().OptimizerUseForecasts,
+		useMergedPartialStatistics:                 evalCtx.SessionData().OptimizerUseMergedPartialStatistics,
 		useHistograms:                              evalCtx.SessionData().OptimizerUseHistograms,
 		useMultiColStats:                           evalCtx.SessionData().OptimizerUseMultiColStats,
 		useNotVisibleIndex:                         evalCtx.SessionData().OptimizerUseNotVisibleIndexes,
@@ -400,6 +402,7 @@ func (m *Memo) IsStale(
 	if m.reorderJoinsLimit != int(evalCtx.SessionData().ReorderJoinsLimit) ||
 		m.zigzagJoinEnabled != evalCtx.SessionData().ZigzagJoinEnabled ||
 		m.useForecasts != evalCtx.SessionData().OptimizerUseForecasts ||
+		m.useMergedPartialStatistics != evalCtx.SessionData().OptimizerUseMergedPartialStatistics ||
 		m.useHistograms != evalCtx.SessionData().OptimizerUseHistograms ||
 		m.useMultiColStats != evalCtx.SessionData().OptimizerUseMultiColStats ||
 		m.useNotVisibleIndex != evalCtx.SessionData().OptimizerUseNotVisibleIndexes ||
