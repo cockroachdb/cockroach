@@ -130,11 +130,6 @@ func (r *logicalReplicationResumer) ingest(
 	}
 	defer func() { _ = client.Close(ctx) }()
 
-	dlqClient := InitDeadLetterQueueClient()
-	if err := dlqClient.Create(); err != nil {
-		return errors.Wrap(err, "failed to create dead letter queue client")
-	}
-
 	asOf := replicatedTimeAtStart
 	if asOf.IsEmpty() {
 		asOf = payload.ReplicationStartTime
@@ -313,8 +308,15 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 	}
 
 	dstToSrcDescMap := make(map[int32]descpb.TableDescriptor)
-	for _, pair := range p.payload.ReplicationPairs {
+	tableIDs := make([]int32, len(p.payload.ReplicationPairs))
+	for i, pair := range p.payload.ReplicationPairs {
 		dstToSrcDescMap[pair.DstDescriptorID] = plan.DescriptorMap[pair.SrcDescriptorID]
+		tableIDs[i] = pair.DstDescriptorID
+	}
+
+	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor())
+	if err := dlqClient.Create(ctx, tableIDs); err != nil {
+		return nil, nil, nil, errors.Wrap(err, "failed to create dead letter queue")
 	}
 
 	frontier, err := span.MakeFrontierAt(p.replicatedTimeAtStart, plan.SourceSpans...)
