@@ -395,10 +395,9 @@ func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logSt
 	}
 
 	execStmt := func(stmt string) {
+		logStmt(stmt)
 		if _, err := conn.Exec(stmt); err != nil {
 			t.Fatal(err)
-		} else {
-			logStmt(stmt)
 		}
 	}
 
