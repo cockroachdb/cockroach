@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	gosql "database/sql"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -30,6 +31,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -41,6 +43,11 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/aws/aws-sdk-go-v2/config"
+	msk "github.com/aws/aws-sdk-go-v2/service/kafka"
+	msktypes "github.com/aws/aws-sdk-go-v2/service/kafka/types"
+	"github.com/aws/aws-sdk-go/aws"
+	awslog "github.com/aws/smithy-go/logging"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -55,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -62,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -1914,6 +1923,49 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-auth-msk",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.OnlyAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+			mskMgr := newMSKManager(ctx, t, msktypes.ClusterTypeServerless)
+			mskMgr.MakeCluster(ctx)
+			defer mskMgr.TearDown()
+
+			t.Status("waiting for msk cluster to be active")
+			waitCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			brokers := mskMgr.WaitForClusterActiveAndDNSUpdated(waitCtx, c)
+			cancel()
+			t.Status("cluster is active")
+			mskMgr.CreateTopic(ctx, "auth_test_table", c)
+
+			db := c.Conn(ctx, t.L(), 1)
+			defer stopFeeds(db)
+
+			tdb := sqlutils.MakeSQLRunner(db)
+			tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
+
+			if brokers.iamConnectURI != "" {
+				t.L().Printf("creating changefeed with iam: %s", brokers.iamConnectURI)
+				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", brokers.iamConnectURI, makeDefaultFeatureFlags()).Create()
+				if err != nil {
+					t.Fatalf("creating changefeed: %v", err)
+				}
+			}
+			if brokers.scramConnectURI != "" { // Not available with serverless.
+				t.L().Printf("creating changefeed with scram: %s", brokers.scramConnectURI)
+				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", brokers.scramConnectURI, makeDefaultFeatureFlags()).Create()
+				if err != nil {
+					t.Fatalf("creating changefeed: %v", err)
+				}
+			}
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:      "cdc/kafka-oauth",
 		Owner:     `cdc`,
 		Benchmark: true,
@@ -3401,6 +3453,215 @@ func setupKafka(
 
 	kafka.start(ctx, "kafka")
 	return kafka, func() { kafka.stop(ctx) }
+}
+
+type mskManager struct {
+	t         test.Test
+	mskClient *msk.Client
+	// awsOpts lets us set the region and logger for each aws-sdk request.
+	awsOpts     func(*msk.Options)
+	clusterType msktypes.ClusterType
+
+	clusterArn  string
+	connectInfo mskConnectInfo
+}
+
+const awsRegion = "us-east-2"
+
+func newMSKManager(ctx context.Context, t test.Test, clusterType msktypes.ClusterType) *mskManager {
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithDefaultRegion(awsRegion))
+	if err != nil {
+		t.Fatalf("failed to load aws config: %v", err)
+	}
+	mskClient := msk.NewFromConfig(awsCfg)
+
+	return &mskManager{
+		t:           t,
+		mskClient:   mskClient,
+		clusterType: clusterType,
+		awsOpts: func(o *msk.Options) {
+			o.Logger = awslog.LoggerFunc(func(classification awslog.Classification, format string, v ...interface{}) {
+				format = fmt.Sprintf("msk(%v): %s", classification, format)
+				t.L().Printf(format, v...)
+			})
+			o.Region = awsRegion
+		}}
+}
+
+func (m *mskManager) getAWSRegion() roachprodaws.AWSRegion {
+	var region roachprodaws.AWSRegion
+	for _, r := range roachprodaws.DefaultConfig.Regions {
+		if r.Name == awsRegion {
+			region = r
+			break
+		}
+	}
+	if region.Name == "" {
+		m.t.Fatalf("failed to find region %s in roachprodaws.DefaultConfig.Regions", awsRegion)
+	}
+	return region
+}
+
+// MakeCluster creates a new MSK cluster.
+func (m *mskManager) MakeCluster(ctx context.Context) {
+	clusterName := fmt.Sprintf("roachtest-cdc-%v-%v", m.clusterType, timeutil.Now().Format("2006-01-02-15-04-05"))
+	clusterTags := map[string]string{"roachtest": "true"}
+
+	switch m.clusterType {
+	case msktypes.ClusterTypeProvisioned:
+		m.t.Fatalf("provisioned msk clusters are not yet supported in this utility")
+	case msktypes.ClusterTypeServerless:
+		region := m.getAWSRegion()
+		subnets := make([]string, 0, 3)
+		for _, az := range region.AvailabilityZones {
+			subnets = append(subnets, az.SubnetID)
+		}
+
+		req := &msk.CreateClusterV2Input{
+			ClusterName: aws.String(clusterName),
+			Tags:        clusterTags,
+			Serverless: &msktypes.ServerlessRequest{
+				VpcConfigs: []msktypes.VpcConfig{
+					{
+						SubnetIds:        subnets,
+						SecurityGroupIds: []string{region.SecurityGroup},
+					},
+				},
+				ClientAuthentication: &msktypes.ServerlessClientAuthentication{
+					Sasl: &msktypes.ServerlessSasl{Iam: &msktypes.Iam{Enabled: true}},
+				},
+			},
+		}
+		resp, err := m.mskClient.CreateClusterV2(ctx, req, m.awsOpts)
+		if err != nil {
+			m.t.Fatalf("failed to create msk cluster (%v): %v", m.clusterType, err)
+		}
+		m.clusterArn = *resp.ClusterArn
+	default:
+		panic("unknown cluster type: " + m.clusterType)
+	}
+}
+
+type mskConnectInfo struct {
+	scramBroker, iamBroker         string
+	scramConnectURI, iamConnectURI string
+}
+
+// WaitForClusterActiveAndDNSUpdated waits for the MSK cluster to become active and to be available via DNS.
+func (m *mskManager) WaitForClusterActiveAndDNSUpdated(
+	ctx context.Context, c cluster.Cluster,
+) mskConnectInfo {
+	testCerts, err := makeTestCerts("0.0.0.0", "aws")
+	if err != nil {
+		m.t.Fatalf("failed to make test certs: %v", err)
+	}
+
+	for ctx.Err() == nil {
+		resp, err := m.mskClient.DescribeClusterV2(ctx, &msk.DescribeClusterV2Input{ClusterArn: &m.clusterArn}, m.awsOpts)
+		if err != nil {
+			m.t.Fatalf("failed to describe msk cluster: %v", err)
+		}
+		if resp.ClusterInfo.State == msktypes.ClusterStateActive {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			m.t.Fatalf("timed out waiting for msk cluster to become active")
+		case <-time.After(5 * time.Second):
+		}
+	}
+
+	resp, err := m.mskClient.GetBootstrapBrokers(ctx, &msk.GetBootstrapBrokersInput{ClusterArn: &m.clusterArn}, m.awsOpts)
+	if err != nil {
+		m.t.Fatalf("failed to describe msk cluster: %v", err)
+	}
+	scramBroker, iamBroker := resp.BootstrapBrokerStringSaslScram, resp.BootstrapBrokerStringSaslIam
+	var scramConnectURI, iamConnectURI string
+	if scramBroker == nil {
+		scramBroker = aws.String("")
+	} else {
+		scramConnectURI = fmt.Sprintf("kafka://%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", *scramBroker, testCerts.CACertBase64())
+	}
+	if iamBroker == nil {
+		iamBroker = aws.String("")
+	} else {
+		const iamRoleArn = "arn:aws:iam::541263489771:role/roachprod-msk-full-access"
+		iamConnectURI = fmt.Sprintf("kafka://%s?tls_enabled=true&sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_region=%s&sasl_aws_iam_role_arn=%s&sasl_aws_iam_session_name=cdc-msk", *iamBroker, awsRegion, iamRoleArn)
+	}
+	connectInfo := mskConnectInfo{
+		scramBroker:     *scramBroker,
+		iamBroker:       *iamBroker,
+		scramConnectURI: scramConnectURI,
+		iamConnectURI:   iamConnectURI,
+	}
+
+	// wait for the dns to resolve
+	wait := func(host string) {
+		for ctx.Err() == nil {
+			if err := c.RunE(ctx, option.WithNodes(c.All()), "nslookup", host); err == nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				m.t.Fatalf("timed out waiting for msk dns to resolve")
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}
+	if connectInfo.scramBroker != "" {
+		m.t.L().Printf("waiting for dns to resolve for %s", connectInfo.scramBroker)
+		wait(strings.Split(connectInfo.scramBroker, ":")[0])
+	}
+	if connectInfo.iamBroker != "" {
+		m.t.L().Printf("waiting for dns to resolve for %s", connectInfo.iamBroker)
+		wait(strings.Split(connectInfo.iamBroker, ":")[0])
+	}
+
+	m.connectInfo = connectInfo
+
+	return connectInfo
+}
+
+//go:embed create-msk-topic/main.go.txt
+var createMskTopicMain string
+
+const createMSKTopicBinPath = "/tmp/create-msk-topic"
+
+var setupMskTopicScript = fmt.Sprintf(`
+#!/bin/bash
+set -e -o pipefail
+wget https://go.dev/dl/go1.22.5.linux-amd64.tar.gz -O /tmp/go.tar.gz
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+echo export PATH=$PATH:/usr/local/go/bin >> ~/.profile
+source ~/.profile
+
+cd %s
+rm -f go.mod go.sum
+go mod init create-msk-topic
+go mod tidy
+go build .
+
+./create-msk-topic --broker "$1" --topic "$2" --role-arn "$3"
+`, createMSKTopicBinPath)
+
+// CreateTopic creates a topic on the MSK cluster.
+func (m *mskManager) CreateTopic(ctx context.Context, topic string, c cluster.Cluster) {
+	createTopicNode := c.Node(1)
+	withCTN := option.WithNodes(createTopicNode)
+
+	require.NoError(m.t, c.RunE(ctx, withCTN, "mkdir", "-p", createMSKTopicBinPath))
+	require.NoError(m.t, c.PutString(ctx, createMskTopicMain, path.Join(createMSKTopicBinPath, "main.go"), 0700, createTopicNode))
+	require.NoError(m.t, c.PutString(ctx, setupMskTopicScript, path.Join(createMSKTopicBinPath, "run.sh"), 0700, createTopicNode))
+	require.NoError(m.t, c.RunE(ctx, withCTN, path.Join(createMSKTopicBinPath, "run.sh"), m.connectInfo.iamBroker, topic))
+}
+
+// TearDown deletes the MSK cluster.
+func (m *mskManager) TearDown() {
+	_, err := m.mskClient.DeleteCluster(context.Background(), &msk.DeleteClusterInput{ClusterArn: &m.clusterArn}, m.awsOpts)
+	if err != nil {
+		m.t.Fatalf("failed to delete msk cluster: %v", err)
+	}
 }
 
 type topicConsumer struct {
