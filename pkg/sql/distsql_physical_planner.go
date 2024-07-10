@@ -1574,7 +1574,16 @@ func (dsp *DistSQLPlanner) checkInstanceHealth(
 		}
 	}
 	status := NodeOK
-	if err := dsp.nodeHealth.connHealthInstance(instanceID, instanceRPCAddr); err != nil {
+	err := dsp.nodeHealth.connHealthInstance(instanceID, instanceRPCAddr)
+	if errors.Is(err, rpc.ErrNotHeartbeated) {
+		// Consider ErrNotHeartbeated as a temporary error (see its description) and
+		// avoid caching its result, as it can resolve to a more accurate result soon.
+		// It's more reasonable to plan on using this node, and if such a node is
+		// unhealthy, the retry-as-local mechanism would retry the operation on the
+		// gateway.
+		return NodeOK
+	}
+	if err != nil {
 		status = NodeUnhealthy
 	}
 
