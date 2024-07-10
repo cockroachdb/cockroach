@@ -27,6 +27,7 @@ cd go/src
 # Apply the CRL patch
 patch -p2 < /bootstrap/diff.patch
 patch -p2 < /bootstrap/a79ea27.diff
+patch -p2 < /bootstrap/c9be6ae.diff
 # add a special version modifier so we can explicitly use it in bazel
 sed -i 's/$/fips/' ../VERSION 
 ./make.bash -v
