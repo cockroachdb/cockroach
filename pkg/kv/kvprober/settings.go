@@ -134,3 +134,10 @@ var quarantineWriteInterval = settings.RegisterDurationSetting(
 		"kv.prober.write.timeout controls the max time kvprober can be blocked",
 	10*time.Second,
 	settings.PositiveDuration)
+
+var tracingEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.prober.tracing.enabled",
+	"whether the KV prober should collect traces, in order to log info about"+
+		"leaseholders of ranges probed",
+	false)
