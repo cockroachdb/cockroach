@@ -992,7 +992,7 @@ retry:
 func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 	ready := e.Ready()
 	var entries []raftpb.Entry
-	nextRaftIndexUpperBound := uint64(math.MaxUint64)
+	nextRaftIndexUpperBound := rc.opts.RaftInterface.NextUnstableIndex()
 	if ready != nil {
 		entries = ready.GetEntries()
 		if len(entries) > 0 {
@@ -1242,7 +1242,9 @@ func NewReplicaState(parent *RangeControllerImpl, desc roachpb.ReplicaDescriptor
 	}
 	info := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
 	if info.State == tracker.StateReplicate {
-		rs.createReplicaSendStream(info.Next, math.MaxUint64)
+		nextRaftIndexUpperBound := parent.opts.RaftInterface.NextUnstableIndex()
+		rs.createReplicaSendStream(
+			min(info.Next, nextRaftIndexUpperBound), nextRaftIndexUpperBound)
 	}
 	return rs
 }
@@ -1251,8 +1253,9 @@ func (rs *replicaState) createReplicaSendStream(
 	indexToSend uint64, nextRaftIndexUpperBound uint64,
 ) {
 	rss := newReplicaSendStream(rs, replicaSendStreamInitState{
-		indexToSend:   indexToSend,
-		nextRaftIndex: min(rs.parent.opts.RaftInterface.LastEntryIndex()+1, nextRaftIndexUpperBound),
+		indexToSend: indexToSend,
+		nextRaftIndex: min(rs.parent.opts.RaftInterface.NextUnstableIndex(),
+			nextRaftIndexUpperBound),
 		// TODO: these need to be based on some history observed by RangeControllerImpl.
 		approxMeanSizeBytes: 1000,
 	})
@@ -1285,7 +1288,8 @@ func (rs *replicaState) handleReadyState(info FollowerStateInfo, nextRaftIndexUp
 		}
 	case tracker.StateReplicate:
 		if rs.replicaSendStream == nil {
-			rs.createReplicaSendStream(info.Next, nextRaftIndexUpperBound)
+			rs.createReplicaSendStream(
+				min(info.Next, nextRaftIndexUpperBound), nextRaftIndexUpperBound)
 		} else {
 			// replicaSendStream already exists.
 			rs.replicaSendStream.mu.Lock()
@@ -1592,8 +1596,15 @@ func newReplicaSendStream(
 	rss.sendQueue.approxMeanSizeBytes = init.approxMeanSizeBytes
 	rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
 
-	log.VInfof(context.TODO(), 1, "init replica send stream(%v): %v next_raft_index_initial=%d next_raft_index=%d",
-		rss.parent.desc.ReplicaID, rss, rss.nextRaftIndexInitial, rss.sendQueue.nextRaftIndex)
+	log.VInfof(context.TODO(), 1,
+		"init replica send stream(%v): index_to_send=%v next_raft_index=%d "+
+			"next_unstable_index=%d last_entry_index=%d [info=%v send_stream=%v]",
+		rss.parent.desc.ReplicaID, rss.sendQueue.indexToSend,
+		rss.sendQueue.nextRaftIndex,
+		parent.parent.opts.RaftInterface.NextUnstableIndex(),
+		parent.parent.opts.RaftInterface.LastEntryIndex(),
+		parent.parent.opts.RaftInterface.FollowerState(parent.desc.ReplicaID),
+		rss.stringLocked())
 	return rss
 }
 
