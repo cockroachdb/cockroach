@@ -1,0 +1,78 @@
+// This file will be copied up to a roachprod node during roachtest setup, and built and run there.
+// It's not a .go file so that our tooling doesn't confuse it for code we want to build and run locally.
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/IBM/sarama"
+	"github.com/aws/aws-msk-iam-sasl-signer-go/signer"
+	"github.com/jessevdk/go-flags"
+)
+
+type Options struct {
+	Broker     string `short:"b" long:"broker" description:"Kafka broker for IAM access"`
+	Region     string `short:"r" long:"region" default:"us-east-2" description:"AWS region"`
+	RoleARN    string `short:"a" long:"role-arn" default:"arn:aws:iam::541263489771:role/roachprod-msk-full-access" description:"AWS IAM role ARN"`
+	Topic      string `short:"t" long:"topic" description:"Kafka topic name"`
+	Partitions int    `short:"p" long:"partitions" default:"2" description:"Number of partitions"`
+}
+
+func main() {
+	ctx := context.Background()
+
+	var opts Options
+	_, err := flags.Parse(&opts)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	if err := run(ctx, opts); err != nil {
+		log.Fatalf("failed to create kafka topic: %v", err)
+	}
+}
+
+func run(ctx context.Context, opts Options) error {
+	cfg := sarama.NewConfig()
+	cfg.Net.TLS.Enable = true
+	cfg.Net.SASL.Enable = true
+	cfg.Net.SASL.Mechanism = sarama.SASLTypeOAuth
+	cfg.Net.SASL.TokenProvider = &AwsIAMRoleSaslTokenProvider{
+		ctx:            ctx,
+		awsRegion:      opts.Region,
+		iamRoleArn:     opts.RoleARN,
+		iamSessionName: "roachtest-create-topic",
+	}
+	ac, err := sarama.NewClusterAdmin([]string{opts.Broker}, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create kafka cluster admin: %w", err)
+	}
+	defer ac.Close()
+
+	if err = ac.CreateTopic(opts.Topic, &sarama.TopicDetail{NumPartitions: 2}, false); err != nil {
+		return fmt.Errorf("failed to create kafka topic: %w", err)
+	}
+	log.Printf("created kafka topic %s", opts.Topic)
+	return nil
+}
+
+type AwsIAMRoleSaslTokenProvider struct {
+	ctx            context.Context
+	awsRegion      string
+	iamRoleArn     string
+	iamSessionName string
+}
+
+func (p *AwsIAMRoleSaslTokenProvider) Token() (*sarama.AccessToken, error) {
+	log.Printf("generating AWS IAM role-based token for region %s, role %s, session %s", p.awsRegion, p.iamRoleArn, p.iamSessionName)
+
+	token, _, err := signer.GenerateAuthTokenFromRole(
+		p.ctx, p.awsRegion, p.iamRoleArn, p.iamSessionName)
+	if err != nil {
+		return nil, err
+	}
+	return &sarama.AccessToken{Token: token}, nil
+}
