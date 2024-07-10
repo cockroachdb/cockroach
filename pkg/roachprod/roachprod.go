@@ -58,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"golang.org/x/sys/unix"
 )
 
 // MalformedClusterNameError is returned when the cluster name passed to Create is invalid.
@@ -1008,7 +1007,7 @@ func DistributeCerts(ctx context.Context, l *logger.Logger, clusterName string) 
 	if err != nil {
 		return err
 	}
-	return c.DistributeCerts(ctx, l)
+	return c.DistributeCerts(ctx, l, false)
 }
 
 // Put copies a local file to the nodes in a cluster.
@@ -1660,7 +1659,7 @@ func Grow(
 		if err != nil {
 			return err
 		}
-		err = c.RedistributeNodeCert(ctx, l)
+		err = c.DistributeCerts(ctx, l, true)
 		if err != nil {
 			return err
 		}
@@ -2642,11 +2641,6 @@ func CreateLoadBalancer(
 	// cluster's certificate.
 	if secure {
 		err = c.RedistributeNodeCert(ctx, l)
-		if err != nil {
-			return err
-		}
-		// Send a SIGHUP to the nodes to reload the certificates.
-		err = c.Signal(ctx, l, int(unix.SIGHUP))
 		if err != nil {
 			return err
 		}
