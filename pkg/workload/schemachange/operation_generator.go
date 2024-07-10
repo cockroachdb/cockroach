@@ -11,6 +11,7 @@
 package schemachange
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -1571,7 +1573,9 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	// the table.
 	stmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "%s"`, tableName, columnName)
+	var buf bytes.Buffer
+	lexbase.EncodeRestrictedSQLIdent(&buf, columnName, lexbase.EncNoFlags)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, buf.String())
 	return stmt, nil
 }
 
