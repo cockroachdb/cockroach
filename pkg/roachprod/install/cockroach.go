@@ -1389,7 +1389,7 @@ func (c *SyncedCluster) distributeCerts(ctx context.Context, l *logger.Logger) e
 	}
 	for _, node := range c.TargetNodes() {
 		if node == 1 {
-			return c.DistributeCerts(ctx, l)
+			return c.DistributeCerts(ctx, l, false)
 		}
 	}
 	return nil
