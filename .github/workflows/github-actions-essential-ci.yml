@@ -344,3 +344,29 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
+  cockroach-microbench-ci:
+    runs-on: [ self-hosted, basic_runner_group ]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: check 'regression-expected' label in title
+        id: check-title
+        uses: actions/github-script@v5
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const skipComparison = title.includes("[PERF_REGRESSION_EXPECTED]");
+            console.log(`Does PR title contain [PERF_REGRESSION_EXPECTED]? ${skipComparison}`);
+            core.exportVariable('SKIP_COMPARISON', skipComparison);
+      - name: run scripts
+        run: ./build/github/cockroach-microbench-ci.sh
+        env:
+          COMPARE_THRESHOLD: "0.05"
+          PUSH_STEP: ${{ github.event_name == 'push' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+
