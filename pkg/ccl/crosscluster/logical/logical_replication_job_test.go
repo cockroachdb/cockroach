@@ -202,6 +202,146 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	require.Equal(t, int64(expCPuts), numCPuts.Load())
 }
 
+func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	// keyPrefix will be set later, but before countPuts is set.
+	var keyPrefix []byte
+	var countPuts atomic.Bool
+	var numPuts, numCPuts atomic.Int64
+	// seenPuts and seenCPuts track which transactions have already been counted
+	// in the number of Puts and CPuts, respectively (we want to ignore any txn
+	// retries).
+	seenPuts, seenCPuts := make(map[uuid.UUID]struct{}), make(map[uuid.UUID]struct{})
+	var muSeenTxns syncutil.Mutex
+	// seenTxn returns whether we've already seen this txn and includes it into
+	// the map if not.
+	seenTxn := func(seenTxns map[uuid.UUID]struct{}, txnID uuid.UUID) bool {
+		muSeenTxns.Lock()
+		defer muSeenTxns.Unlock()
+		_, seen := seenTxns[txnID]
+		seenTxns[txnID] = struct{}{}
+		return seen
+	}
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				Store: &kvserver.StoreTestingKnobs{
+					TestingRequestFilter: func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+						if !countPuts.Load() || !ba.IsWrite() || len(ba.Requests) > 2 {
+							return nil
+						}
+						switch req := ba.Requests[0].GetInner().(type) {
+						case *kvpb.PutRequest:
+							if bytes.HasPrefix(req.Key, keyPrefix) && !seenTxn(seenPuts, ba.Txn.ID) {
+								numPuts.Add(1)
+							}
+							return nil
+						case *kvpb.ConditionalPutRequest:
+							if bytes.HasPrefix(req.Key, keyPrefix) && !seenTxn(seenCPuts, ba.Txn.ID) {
+								numCPuts.Add(1)
+							}
+							return nil
+						default:
+							return nil
+						}
+					},
+				},
+			},
+		},
+	}
+
+	server := testcluster.StartTestCluster(t, 1, clusterArgs)
+	defer server.Stopper().Stop(ctx)
+	s := server.Server(0).ApplicationLayer()
+
+	_, err := server.Conns[0].Exec("SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE a")
+	require.NoError(t, err)
+	_, err = server.Conns[0].Exec("CREATE DATABASE B")
+	require.NoError(t, err)
+
+	dbA := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("a")))
+	dbB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("b")))
+
+	for _, s := range testClusterSettings {
+		dbA.Exec(t, s)
+	}
+
+	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
+	dbA.Exec(t, createStmt)
+	dbB.Exec(t, createStmt)
+	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+
+	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
+	keyPrefix = rowenc.MakeIndexKeyPrefix(s.Codec(), desc.GetID(), desc.GetPrimaryIndexID())
+	countPuts.Store(true)
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	// Swap one of the URLs to external:// to verify this indirection works.
+	// TODO(dt): this create should support placeholder for URI.
+	dbB.Exec(t, "CREATE EXTERNAL CONNECTION a AS '"+dbAURL.String()+"'")
+	dbAURL = url.URL{
+		Scheme: "external",
+		Host:   "a",
+	}
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+
+	// Perform the inserts first before starting the LDR stream.
+	now := server.Server(0).Clock().Now()
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
+	dbA.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
+	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
+	// We should expect starting at the provided now() to contain the data.
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2", dbBURL.String(), now.AsOfSystemTime()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2", dbAURL.String(), now.AsOfSystemTime()).Scan(&jobBID)
+
+	now = server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	expectedRows := [][]string{
+		{"1", "goodbye, again"},
+		{"2", "potato"},
+		{"3", "celeriac"},
+	}
+	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRows)
+	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRows)
+
+	// Verify that we didn't have the data looping problem. We expect 2 CPuts
+	// when inserting new rows and 2 Puts when updating existing rows.
+	expPuts, expCPuts := 2, 2
+	if tryOptimisticInsertEnabled.Get(&s.ClusterSettings().SV) {
+		// When performing 1 update, we don't have the prevValue set, so if
+		// we're using the optimistic insert strategy, it would result in an
+		// additional CPut (that ultimately fails). The cluster setting is
+		// randomized in tests, so we need to handle both cases.
+		expCPuts++
+	}
+	require.Equal(t, int64(expPuts), numPuts.Load())
+	require.Equal(t, int64(expCPuts), numCPuts.Load())
+}
+
 func TestLogicalStreamIngestionErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
