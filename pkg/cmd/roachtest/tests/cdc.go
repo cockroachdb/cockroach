@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	gosql "database/sql"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -41,6 +42,11 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/aws/aws-sdk-go-v2/config"
+	msk "github.com/aws/aws-sdk-go-v2/service/kafka"
+	msktypes "github.com/aws/aws-sdk-go-v2/service/kafka/types"
+	"github.com/aws/aws-sdk-go/aws"
+	awslog "github.com/aws/smithy-go/logging"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -55,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -62,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -1914,6 +1922,56 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-auth-msk",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.OnlyAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+			mkm := NewMskManager(ctx, t, msktypes.ClusterTypeServerless)
+			mkm.MakeCluster(ctx)
+			defer mkm.Teardown()
+
+			t.Status("waiting for msk cluster to be active")
+			waitCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			brokers := mkm.WaitForClusterActiveAndDNSUpdated(waitCtx, c)
+			cancel()
+			t.Status("cluster is active")
+			mkm.CreateTopic(ctx, "auth_test_table", c)
+
+			db := c.Conn(ctx, t.L(), 1)
+			defer stopFeeds(db)
+
+			tdb := sqlutils.MakeSQLRunner(db)
+			tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
+
+			testCerts, err := makeTestCerts("0.0.0.0", "aws") // ?
+			require.NoError(t, err)
+			feeds := map[string]string{
+				"scram": fmt.Sprintf("kafka://%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", brokers.scram, testCerts.CACertBase64()),
+				"iam":   fmt.Sprintf("kafka://%s?tls_enabled=true&sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_region=us-east-2&sasl_aws_iam_role_arn=arn:aws:iam::541263489771:role/miles-msk-testing&sasl_aws_iam_session_name=miles", brokers.iam),
+			}
+
+			if brokers.iam != "" {
+				t.L().Printf("creating changefeed with iam: %s", feeds["iam"])
+				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", feeds["iam"], makeDefaultFeatureFlags()).Create()
+				if err != nil {
+					t.Fatalf("creating changefeed: %v", err)
+				}
+			}
+			if brokers.scram != "" { // not available with serverless
+				t.L().Printf("creating changefeed with scram: %s", feeds["scram"])
+				_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", feeds["scram"], makeDefaultFeatureFlags()).Create()
+				if err != nil {
+					t.Fatalf("creating changefeed: %v", err)
+				}
+			}
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:      "cdc/kafka-oauth",
 		Owner:     `cdc`,
 		Benchmark: true,
@@ -2608,6 +2666,10 @@ func (k kafkaManager) configDir() string {
 
 func (k kafkaManager) binDir() string {
 	return filepath.Join(k.basePath(), k.confluentInstallBase(), "bin")
+}
+
+func (k kafkaManager) libDir() string {
+	return filepath.Join(k.basePath(), k.confluentInstallBase(), "lib")
 }
 
 func (k kafkaManager) confluentBin() string {
@@ -3401,6 +3463,207 @@ func setupKafka(
 
 	kafka.start(ctx, "kafka")
 	return kafka, func() { kafka.stop(ctx) }
+}
+
+type mskManager struct {
+	t           test.Test
+	mskClient   *msk.Client
+	of          func(*msk.Options)
+	clusterType msktypes.ClusterType
+
+	clusterArn  string
+	brokerHosts mskBrokerHosts
+}
+
+func NewMskManager(ctx context.Context, t test.Test, clusterType msktypes.ClusterType) *mskManager {
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithDefaultRegion("us-east-2"))
+	if err != nil {
+		t.Fatalf("failed to load aws config: %v", err)
+	}
+	mskClient := msk.NewFromConfig(awsCfg)
+
+	return &mskManager{
+		t:           t,
+		mskClient:   mskClient,
+		clusterType: clusterType,
+		of: func(o *msk.Options) {
+			o.Logger = awslog.LoggerFunc(func(classification awslog.Classification, format string, v ...interface{}) {
+				format = fmt.Sprintf("msk(%v): %s", classification, format)
+				t.L().Printf(format, v...)
+			})
+			o.Region = "us-east-2"
+		}}
+}
+
+func (m *mskManager) MakeCluster(ctx context.Context) {
+	clusterName := fmt.Sprintf("roachtest-cdc-%v-%v", m.clusterType, timeutil.Now().Format("2006-01-02-15-04-05"))
+	clusterTags := map[string]string{"roachtest": "true"}
+
+	switch m.clusterType {
+	case msktypes.ClusterTypeProvisioned:
+		m.t.Fatalf("provisioned msk clusters are not yet supported in this utility")
+	case msktypes.ClusterTypeServerless:
+		var region roachprodaws.AWSRegion
+		for _, r := range roachprodaws.DefaultConfig.Regions {
+			if r.Name == "us-east-2" {
+				region = r
+				break
+			}
+		}
+		subnets := make([]string, 0, 3)
+		for _, az := range region.AvailabilityZones {
+			subnets = append(subnets, az.SubnetID)
+		}
+
+		req := &msk.CreateClusterV2Input{
+			ClusterName: aws.String(clusterName),
+			Tags:        clusterTags,
+			Serverless: &msktypes.ServerlessRequest{
+				VpcConfigs: []msktypes.VpcConfig{
+					{
+						SubnetIds:        subnets,
+						SecurityGroupIds: []string{region.SecurityGroup},
+					},
+				},
+				ClientAuthentication: &msktypes.ServerlessClientAuthentication{
+					Sasl: &msktypes.ServerlessSasl{Iam: &msktypes.Iam{Enabled: true}},
+				},
+			},
+		}
+		resp, err := m.mskClient.CreateClusterV2(ctx, req, m.of)
+		if err != nil {
+			m.t.Fatalf("failed to create msk cluster (%v): %v", m.clusterType, err)
+		}
+		m.clusterArn = *resp.ClusterArn
+	default:
+		panic("unknown cluster type: " + m.clusterType)
+	}
+
+	_, err := m.mskClient.PutClusterPolicy(ctx, &msk.PutClusterPolicyInput{
+		ClusterArn: aws.String(m.clusterArn),
+		Policy: aws.String(fmt.Sprintf(`
+	{
+		"Version": "2012-10-17",
+		"Statement": [
+		  {
+			"Effect": "Allow",
+			"Principal": {
+			  "Service": "kafka.amazonaws.com"
+			},
+			"Action": [
+			  "kafka:CreateVpcConnection",
+			  "kafka:GetBootstrapBrokers",
+			  "kafka:DescribeClusterV2"
+			],
+			"Resource": "%s"
+		  }
+		]
+	  }
+		`, m.clusterArn)),
+	}, m.of)
+	if err != nil {
+		m.t.Fatalf("failed to put msk policy: %v", err)
+	}
+}
+
+type mskBrokerHosts struct {
+	scram, iam string
+}
+
+func (m *mskManager) WaitForClusterActiveAndDNSUpdated(
+	ctx context.Context, c cluster.Cluster,
+) mskBrokerHosts {
+	for ctx.Err() == nil {
+		resp, err := m.mskClient.DescribeClusterV2(ctx, &msk.DescribeClusterV2Input{ClusterArn: &m.clusterArn}, m.of)
+		if err != nil {
+			m.t.Fatalf("failed to describe msk cluster: %v", err)
+		}
+		if resp.ClusterInfo.State == msktypes.ClusterStateActive {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			m.t.Fatalf("timed out waiting for msk cluster to become active")
+		case <-time.After(5 * time.Second):
+		}
+	}
+
+	resp, err := m.mskClient.GetBootstrapBrokers(ctx, &msk.GetBootstrapBrokersInput{ClusterArn: &m.clusterArn}, m.of)
+	if err != nil {
+		m.t.Fatalf("failed to describe msk cluster: %v", err)
+	}
+	scram, iam := resp.BootstrapBrokerStringSaslScram, resp.BootstrapBrokerStringSaslIam
+	if scram == nil {
+		scram = aws.String("")
+	}
+	if iam == nil {
+		iam = aws.String("")
+	}
+	bhs := mskBrokerHosts{scram: *scram, iam: *iam}
+
+	// wait for the dns to resolve
+	wait := func(host string) {
+		for ctx.Err() == nil {
+			if err := c.RunE(ctx, option.WithNodes(c.All()), "nslookup", host); err == nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				m.t.Fatalf("timed out waiting for msk dns to resolve")
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}
+	if bhs.scram != "" {
+		m.t.L().Printf("waiting for dns to resolve for %s", bhs.scram)
+		wait(strings.Split(bhs.scram, ":")[0])
+	}
+	if bhs.iam != "" {
+		m.t.L().Printf("waiting for dns to resolve for %s", bhs.iam)
+		wait(strings.Split(bhs.iam, ":")[0])
+	}
+
+	m.brokerHosts = bhs
+
+	return bhs
+}
+
+//go:embed create-msk-topic-main-go.txt
+var createMskTopicMain string
+
+const setupMskTopicScript = `
+#!/bin/bash
+set -e -o pipefail
+wget https://go.dev/dl/go1.22.5.linux-amd64.tar.gz -O /tmp/go.tar.gz
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+echo export PATH=$PATH:/usr/local/go/bin >> ~/.profile
+source ~/.profile
+
+cd /tmp/create-msk-topic
+rm -f go.mod go.sum
+go mod init create-msk-topic
+go mod tidy
+go build .
+
+./create-msk-topic -b "$1" -t "$2"
+`
+
+func (m *mskManager) CreateTopic(ctx context.Context, topic string, c cluster.Cluster) {
+	createTopicNode := c.Node(1)
+	withCTN := option.WithNodes(createTopicNode)
+
+	require.NoError(m.t, c.RunE(ctx, withCTN, "mkdir", "-p", "/tmp/create-msk-topic"))
+	require.NoError(m.t, c.PutString(ctx, createMskTopicMain, "/tmp/create-msk-topic/main.go", 0700, createTopicNode))
+	require.NoError(m.t, c.PutString(ctx, setupMskTopicScript, "/tmp/create-msk-topic/run.sh", 0700, createTopicNode))
+	require.NoError(m.t, c.RunE(ctx, withCTN, "/tmp/create-msk-topic/run.sh", m.brokerHosts.iam, topic))
+}
+
+func (m *mskManager) Teardown() {
+	_, err := m.mskClient.DeleteCluster(context.Background(), &msk.DeleteClusterInput{ClusterArn: &m.clusterArn}, m.of)
+	if err != nil {
+		m.t.Fatalf("failed to delete msk cluster: %v", err)
+	}
 }
 
 type topicConsumer struct {
