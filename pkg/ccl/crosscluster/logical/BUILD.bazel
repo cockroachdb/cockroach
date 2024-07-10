@@ -38,6 +38,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/exprutil",

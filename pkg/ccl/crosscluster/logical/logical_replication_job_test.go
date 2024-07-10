@@ -267,7 +267,7 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
 	dbA.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
 	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
-	// We should expect starting at the provided now() to contain the data.
+	// We should expect starting at the provided now() to replicate all the data.
 	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2", dbBURL.String(), now.AsOfSystemTime()).Scan(&jobAID)
 	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2", dbAURL.String(), now.AsOfSystemTime()).Scan(&jobBID)
 
