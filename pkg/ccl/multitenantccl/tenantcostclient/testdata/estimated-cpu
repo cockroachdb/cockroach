@@ -18,10 +18,10 @@ token-bucket
 write repeat=100 count=6 bytes=2048 networkCost=1
 ----
 
-# Expect 288 tokens to be consumed.
+# Expect ~269 tokens to be consumed.
 token-bucket
 ----
-4712.00 tokens filling @ 0.00 tokens/s
+4731.05 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -38,8 +38,8 @@ tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 0.29
-tenant.sql_usage.estimated_cpu_seconds: 0.29
+tenant.sql_usage.estimated_kv_cpu_seconds: 0.27
+tenant.sql_usage.estimated_cpu_seconds: 0.27
 
 # Wait for the token bucket response triggered by low tokens. Not doing this
 # causes a race condition, since in some cases this response arrives after the
@@ -54,10 +54,10 @@ advance wait=true
 ----
 00:00:01.000
 
-# ~31 tokens removed from bucket to account for background CPU.
+# ~29 tokens removed from bucket to account for background CPU.
 token-bucket
 ----
-4680.81 tokens filling @ 0.00 tokens/s
+4701.92 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -74,8 +74,8 @@ tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 0.29
-tenant.sql_usage.estimated_cpu_seconds: 0.32
+tenant.sql_usage.estimated_kv_cpu_seconds: 0.27
+tenant.sql_usage.estimated_cpu_seconds: 0.30
 
 # Do same writes, but with a different write batch rate. This time, the
 # estimated CPU consumption should be less.
@@ -105,10 +105,10 @@ advance wait=true
 ----
 00:00:42.000
 
-# Expect ~263 tokens to be removed, as compared to ~319 above (288 + 32).
+# Expect ~241 tokens to be removed, as compared to ~298 above (269 + 29).
 token-bucket
 ----
-4418.29 tokens filling @ 0.00 tokens/s
+4460.51 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -125,8 +125,8 @@ tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 0.52
-tenant.sql_usage.estimated_cpu_seconds: 0.58
+tenant.sql_usage.estimated_kv_cpu_seconds: 0.49
+tenant.sql_usage.estimated_cpu_seconds: 0.54
 
 # Advance time to next period and do same writes, with the same write batch
 # rate, but with a global estimated CPU rate. The estimated CPU rate should not
@@ -156,10 +156,10 @@ advance wait=true
 ----
 00:00:53.000
 
-# Expect ~263 tokens to be consumed, like above.
+# Expect ~241 tokens to be consumed, like above.
 token-bucket
 ----
-4155.77 tokens filling @ 0.00 tokens/s
+4219.10 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -176,8 +176,8 @@ tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 0.76
-tenant.sql_usage.estimated_cpu_seconds: 0.84
+tenant.sql_usage.estimated_kv_cpu_seconds: 0.70
+tenant.sql_usage.estimated_cpu_seconds: 0.78
 
 # Now perform some read operations.
 
@@ -191,7 +191,7 @@ advance wait=true
 
 token-bucket
 ----
-2739.53 tokens filling @ 0.00 tokens/s
+2827.49 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -208,8 +208,8 @@ tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 2.04
-tenant.sql_usage.estimated_cpu_seconds: 2.26
+tenant.sql_usage.estimated_kv_cpu_seconds: 1.96
+tenant.sql_usage.estimated_cpu_seconds: 2.17
 
 # KV CPU seconds should not change, only total CPU seconds. Background CPU usage
 # should be accounted for.
@@ -224,7 +224,7 @@ advance wait=true
 
 token-bucket
 ----
-1642.28 tokens filling @ 0.00 tokens/s
+1730.24 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -241,8 +241,8 @@ tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 2.04
-tenant.sql_usage.estimated_cpu_seconds: 3.36
+tenant.sql_usage.estimated_kv_cpu_seconds: 1.96
+tenant.sql_usage.estimated_cpu_seconds: 3.27
 
 # External I/O should not block or consume tokens.
 external-egress bytes=1024000
@@ -258,7 +258,7 @@ advance wait=true
 
 token-bucket
 ----
-1642.28 tokens filling @ 0.00 tokens/s
+1730.24 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -275,8 +275,8 @@ tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 1024000
 tenant.sql_usage.external_io_egress_bytes: 1024000
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 2.04
-tenant.sql_usage.estimated_cpu_seconds: 3.36
+tenant.sql_usage.estimated_kv_cpu_seconds: 1.96
+tenant.sql_usage.estimated_cpu_seconds: 3.27
 
 # PGWire egress should not block or consume tokens.
 pgwire-egress
@@ -290,7 +290,7 @@ advance wait=true
 
 token-bucket
 ----
-1642.28 tokens filling @ 0.00 tokens/s
+1730.24 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -307,8 +307,8 @@ tenant.sql_usage.pgwire_egress_bytes: 12345
 tenant.sql_usage.external_io_ingress_bytes: 1024000
 tenant.sql_usage.external_io_egress_bytes: 1024000
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 2.04
-tenant.sql_usage.estimated_cpu_seconds: 3.36
+tenant.sql_usage.estimated_kv_cpu_seconds: 1.96
+tenant.sql_usage.estimated_cpu_seconds: 3.27
 
 # Ensure that token bucket request is made after 10 seconds (though it returns
 # no tokens).
@@ -323,7 +323,7 @@ token-bucket-response
 
 token-bucket
 ----
-1642.28 tokens filling @ 0.00 tokens/s
+1730.24 tokens filling @ 0.00 tokens/s
 
 # Allow the provider to grant tokens again.
 configure
@@ -339,4 +339,4 @@ advance wait=true
 
 token-bucket
 ----
-1642.28 tokens filling @ 0.00 tokens/s
+1730.24 tokens filling @ 0.00 tokens/s
