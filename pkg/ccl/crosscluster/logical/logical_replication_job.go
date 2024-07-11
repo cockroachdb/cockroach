@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/physical"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -308,14 +310,25 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 	}
 
 	dstToSrcDescMap := make(map[int32]descpb.TableDescriptor)
-	tableIDs := make([]int32, len(p.payload.ReplicationPairs))
-	for i, pair := range p.payload.ReplicationPairs {
-		dstToSrcDescMap[pair.DstDescriptorID] = plan.DescriptorMap[pair.SrcDescriptorID]
-		tableIDs[i] = pair.DstDescriptorID
+	tableIDToPrefixMap := make(map[int32]string)
+
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
+		for _, pair := range p.payload.ReplicationPairs {
+			tableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
+			dstToSrcDescMap[pair.DstDescriptorID] = tableDesc
+			prefix, err := replicationutils.GetDbAndSchemaPrefixesForTable(ctx, txn.KV(), descriptors, tableDesc)
+			if err != nil {
+				return errors.Wrapf(err, "failed to get prefix for table %d", tableDesc.GetID())
+			}
+			tableIDToPrefixMap[pair.DstDescriptorID] = prefix
+		}
+		return nil
+	}); err != nil {
+		return nil, nil, nil, err
 	}
 
-	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor())
-	if err := dlqClient.Create(ctx, tableIDs); err != nil {
+	dlqClient := InitDeadLetterQueueClient(p.jobExecCtx.ExecCfg().InternalDB.Executor(), tableIDToPrefixMap)
+	if err := dlqClient.Create(ctx); err != nil {
 		return nil, nil, nil, errors.Wrap(err, "failed to create dead letter queue")
 	}
 
@@ -347,6 +360,7 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 		p.progress.ReplicatedTime,
 		p.progress.Checkpoint,
 		dstToSrcDescMap,
+		tableIDToPrefixMap,
 		p.jobID,
 		streampb.StreamID(p.payload.StreamID))
 	if err != nil {

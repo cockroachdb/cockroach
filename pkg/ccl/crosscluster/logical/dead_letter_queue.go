@@ -11,6 +11,7 @@ package logical
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -21,19 +22,18 @@ import (
 )
 
 const (
-	// TODO(azhu): create table and enum in the db to be replicated into instead of defaultdb.
-	dlqBaseTableName = "defaultdb.crdb_replication_conflict_dlq_%d"
-	writeEnumStmt    = `CREATE TYPE IF NOT EXISTS defaultdb.crdb_replication_mutation_type AS ENUM (
+	dlqBaseTableName   = "%s.crdb_replication_conflict_dlq_%d"
+	createEnumBaseStmt = `CREATE TYPE IF NOT EXISTS %s.crdb_replication_mutation_type AS ENUM (
 			'insert', 'update', 'delete'
 	)`
 
-	createTableStmt = `CREATE TABLE IF NOT EXISTS %s (
+	createTableBaseStmt = `CREATE TABLE IF NOT EXISTS %s (
 			id                  INT8 DEFAULT unique_rowid(),
 			ingestion_job_id    INT8 NOT NULL,
   		table_id    				INT8 NOT NULL,
 			dlq_timestamp     	TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
   		dlq_reason					STRING NOT NULL,
-			mutation_type				defaultdb.crdb_replication_mutation_type,       
+			mutation_type				%s.crdb_replication_mutation_type,       
   		key_value_bytes			BYTES NOT NULL,
 			incoming_row     		STRING NOT NULL,
   		-- PK should be unique based on the ID, job ID and timestamp at which the 
@@ -44,7 +44,7 @@ const (
 			PRIMARY KEY (ingestion_job_id, dlq_timestamp, id) USING HASH
 		)`
 
-	insertRowStmt = `INSERT INTO %s (
+	insertBaseStmt = `INSERT INTO %s (
 			ingestion_job_id, 
 			table_id, 
 			dlq_reason,
@@ -76,7 +76,7 @@ func (t ReplicationMutationType) String() string {
 }
 
 type DeadLetterQueueClient interface {
-	Create(ctx context.Context, tableIDs []int32) error
+	Create(ctx context.Context) error
 
 	Log(
 		ctx context.Context,
@@ -90,7 +90,7 @@ type DeadLetterQueueClient interface {
 type loggingDeadLetterQueueClient struct {
 }
 
-func (dlq *loggingDeadLetterQueueClient) Create(ctx context.Context, tableIDs []int32) error {
+func (dlq *loggingDeadLetterQueueClient) Create(ctx context.Context) error {
 	return nil
 }
 
@@ -129,19 +129,35 @@ func (dlq *loggingDeadLetterQueueClient) Log(
 }
 
 type deadLetterQueueClient struct {
-	ie isql.Executor
+	ie              isql.Executor
+	tableIDToPrefix map[int32]string
 }
 
-func (dlq *deadLetterQueueClient) Create(ctx context.Context, tableIDs []int32) error {
-	if _, err := dlq.ie.Exec(ctx, "create-enum", nil, writeEnumStmt); err != nil {
-		return errors.Wrap(err, "failed to create crdb_replication_mutation_type enum")
-	}
+func (dlq *deadLetterQueueClient) Create(ctx context.Context) error {
+	// Store unique db names to avoid executing identical enum statements.
+	uniqueDbNames := make(map[string]bool)
 
-	// Create a dlq table for each given table.
-	for _, tableID := range tableIDs {
-		tableName := fmt.Sprintf(dlqBaseTableName, tableID)
-		if _, err := dlq.ie.Exec(ctx, "create-dlq-table", nil, fmt.Sprintf(createTableStmt, tableName)); err != nil {
-			return errors.Wrapf(err, "failed to create dlq table %q", tableName)
+	// Create a dlq table for each table to be replicated.
+	for tableID, prefix := range dlq.tableIDToPrefix {
+		tableName := fmt.Sprintf(dlqBaseTableName, prefix, tableID)
+		prefixFields := strings.Split(prefix, ".")
+		if len(prefixFields) != 2 {
+			return errors.New("database and schema prefixes are required for dlq table creation")
+		}
+		dbName := prefixFields[0]
+		_, ok := uniqueDbNames[dbName]
+		// Run create enum statement if the current db name has not been seen before.
+		if !ok {
+			uniqueDbNames[dbName] = true
+			createEnumStmt := fmt.Sprintf(createEnumBaseStmt, dbName)
+			if _, err := dlq.ie.Exec(ctx, "create-enum", nil, createEnumStmt); err != nil {
+				return errors.Wrapf(err, "failed to create crdb_replication_mutation_type enum in database %s", dbName)
+			}
+		}
+
+		createTableStmt := fmt.Sprintf(createTableBaseStmt, tableName, dbName)
+		if _, err := dlq.ie.Exec(ctx, "create-dlq-table", nil, createTableStmt); err != nil {
+			return errors.Wrapf(err, "failed to create dlq for table %d", tableID)
 		}
 	}
 	return nil
@@ -158,8 +174,6 @@ func (dlq *deadLetterQueueClient) Log(
 		return errors.New("cdc event row not initialized")
 	}
 
-	tableID := cdcEventRow.TableID
-	tableName := fmt.Sprintf(dlqBaseTableName, tableID)
 	bytes, err := protoutil.Marshal(&kv)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal kv event")
@@ -173,11 +187,20 @@ func (dlq *deadLetterQueueClient) Log(
 		mutationType = Insert
 	}
 
+	tableID := int32(cdcEventRow.TableID)
+	prefix, ok := dlq.tableIDToPrefix[tableID]
+	if !ok {
+		return errors.Newf("failed to look up database and schema prefixes for table %d", tableID)
+	}
+
+	dlqTableName := fmt.Sprintf(dlqBaseTableName, prefix, tableID)
+	insertStmt := fmt.Sprintf(insertBaseStmt, dlqTableName)
+
 	if _, err := dlq.ie.Exec(
 		ctx,
 		"insert-row-into-dlq-table",
 		nil, /* txn */
-		fmt.Sprintf(insertRowStmt, tableName),
+		insertStmt,
 		ingestionJobID,
 		tableID,
 		dlqReason.String(),
@@ -185,13 +208,18 @@ func (dlq *deadLetterQueueClient) Log(
 		bytes,
 		cdcEventRow.DebugString(),
 	); err != nil {
-		return errors.Wrapf(err, "failed to insert row for table %s", tableName)
+		return errors.Wrapf(err, "failed to insert row for table %s", prefix)
 	}
 	return nil
 }
 
-func InitDeadLetterQueueClient(ie isql.Executor) DeadLetterQueueClient {
-	return &deadLetterQueueClient{ie: ie}
+func InitDeadLetterQueueClient(
+	ie isql.Executor, tableIDToPrefix map[int32]string,
+) DeadLetterQueueClient {
+	return &deadLetterQueueClient{
+		ie:              ie,
+		tableIDToPrefix: tableIDToPrefix,
+	}
 }
 
 func InitLoggingDeadLetterQueueClient() DeadLetterQueueClient {

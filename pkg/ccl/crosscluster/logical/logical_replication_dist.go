@@ -34,6 +34,7 @@ func constructLogicalReplicationWriterSpecs(
 	previousReplicatedTimestamp hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
 	tableDescs map[int32]descpb.TableDescriptor,
+	tablePrefixes map[int32]string,
 	jobID jobspb.JobID,
 	streamID streampb.StreamID,
 ) (map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, error) {
@@ -46,6 +47,7 @@ func constructLogicalReplicationWriterSpecs(
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
 		StreamAddress:               string(streamAddress),
 		TableDescriptors:            tableDescs,
+		TablePrefixes:               tablePrefixes,
 	}
 
 	writerSpecs := make(map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, len(destSQLInstances))

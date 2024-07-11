@@ -16,11 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -235,6 +237,25 @@ func InvestigateFingerprints(
 		return fmt.Errorf("failed revision history fingerprint: %w", err)
 	}
 	return nil
+}
+
+func GetDbAndSchemaPrefixesForTable(
+	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, tableDesc descpb.TableDescriptor,
+) (string, error) {
+	var prefixes string
+	byIDGetter := descriptors.ByID(txn).WithoutNonPublic().Get()
+	dbDesc, err := byIDGetter.Database(ctx, tableDesc.GetParentID())
+	if err != nil {
+		return "", err
+	}
+
+	scDesc, err := byIDGetter.Schema(ctx, tableDesc.GetUnexposedParentSchemaID())
+	if err != nil {
+		return "", err
+	}
+
+	prefixes = fmt.Sprintf("%s.%s", dbDesc.GetName(), scDesc.GetName())
+	return prefixes, nil
 }
 
 func fingerprintClustersByTable(

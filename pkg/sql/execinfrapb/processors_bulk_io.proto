@@ -513,4 +513,7 @@ message LogicalReplicationWriterSpec {
 
     // TableDescriptors is a map between from destination table IDs to the source table descriptor.
     map<int32, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 8 [(gogoproto.nullable) = false];
+
+    // TablePrefixes is a map between from destination table IDs to its database and schema prefixes.
+    map<int32, string> table_prefixes = 9 [(gogoproto.nullable) = false];
 }
