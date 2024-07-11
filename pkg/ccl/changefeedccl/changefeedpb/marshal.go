@@ -40,6 +40,6 @@ func (m ScheduledChangefeedExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]
 	}
 	export.SinkURI = tree.NewDString(sinkURI)
 
-	m.ChangefeedStatement = export.String()
+	m.ChangefeedStatement = tree.AsStringWithFlags(export, tree.FmtShowFullURIs)
 	return json.Marshal(m)
 }

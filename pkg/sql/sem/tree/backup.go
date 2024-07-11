@@ -232,6 +232,13 @@ func (o *KVOptions) HasKey(key Name) bool {
 
 // Format implements the NodeFormatter interface.
 func (o *KVOptions) Format(ctx *FmtCtx) {
+	o.formatEach(ctx, func(n *KVOption, ctx *FmtCtx) {
+		ctx.FormatNode(n.Value)
+	})
+}
+
+// formatEach is like Format but allows custom formatting of the value part.
+func (o *KVOptions) formatEach(ctx *FmtCtx, formatValue func(*KVOption, *FmtCtx)) {
 	for i := range *o {
 		n := &(*o)[i]
 		if i > 0 {
@@ -244,7 +251,7 @@ func (o *KVOptions) Format(ctx *FmtCtx) {
 		})
 		if n.Value != nil {
 			ctx.WriteString(` = `)
-			ctx.FormatNode(n.Value)
+			formatValue(n, ctx)
 		}
 	}
 }
