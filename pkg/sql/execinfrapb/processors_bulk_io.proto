@@ -480,6 +480,11 @@ message CloudStorageTestSpec {
   // NEXT ID: 3;
 }
 
+message TableReplicationMetadata {
+  optional cockroach.sql.sqlbase.TableDescriptor source_descriptor = 1 [(gogoproto.nullable) = false];
+  optional string database_prefix = 2 [(gogoproto.nullable) = false];
+}
+
 message LogicalReplicationWriterSpec {
     // JobID of the job that ran the replicationWriterProcessor.
     optional int64 job_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
@@ -511,7 +516,7 @@ message LogicalReplicationWriterSpec {
     // Checkpoint stores a set of resolved spans denoting completed progress.
     optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 7 [(gogoproto.nullable) = false];
 
-    // TableDescriptors is a map from destination table IDs to the source table
-    // descriptors.
-    map<int32, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 8 [(gogoproto.nullable) = false];
+    // TableReplicationMetadata is a map from destination table IDs to metadata
+    // containing source table descriptors and database prefixes.
+    map<int32, TableReplicationMetadata> table_metadata = 8 [(gogoproto.nullable) = false];
 }
