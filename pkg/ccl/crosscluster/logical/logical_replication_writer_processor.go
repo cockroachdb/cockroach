@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -122,10 +124,14 @@ func newLogicalReplicationWriterProcessor(
 		}
 	}
 
+	tableDescs := make(map[int32]catalog.TableDescriptor)
+	for dstTableDescID, desc := range spec.TableDescriptors {
+		tableDescs[dstTableDescID] = tabledesc.NewBuilder(&desc).BuildImmutableTable()
+	}
 	bhPool := make([]BatchHandler, maxWriterWorkers)
 	for i := range bhPool {
 		rp, err := makeSQLLastWriteWinsHandler(
-			ctx, flowCtx.Cfg.Settings, spec.TableDescriptors,
+			ctx, flowCtx.Cfg.Settings, tableDescs,
 			// Initialize the executor with a fresh session data - this will
 			// avoid creating a new copy on each executor usage.
 			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
@@ -143,10 +149,30 @@ func newLogicalReplicationWriterProcessor(
 
 	dlqDbExec := flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)))
 
+	var numTablesWithSecondaryIndexes int
+	for _, td := range tableDescs {
+		if len(td.NonPrimaryIndexes()) > 0 {
+			numTablesWithSecondaryIndexes++
+		}
+	}
+
 	lrw := &logicalReplicationWriterProcessor{
 		spec: spec,
 		getBatchSize: func() int {
-			if useImplicitTxns.Get(&flowCtx.Cfg.Settings.SV) {
+			// We want to decide whether to use implicit txns or not based on
+			// the schema of the target table. Benchmarking has shown that
+			// implicit txns are beneficial on tables with no secondary indexes
+			// whereas explicit txns are beneficial when at least one secondary
+			// index is present.
+			//
+			// Unfortunately, if we have multiple replication pairs, we don't
+			// know which tables will be affected by this batch before deciding
+			// on the batch size, so we'll use a heuristic such that we'll use
+			// the implicit txns if at least half of the target tables are
+			// without the secondary indexes. If we only have a single
+			// replication pair, then this heuristic gives us the precise
+			// recommendation.
+			if 2*numTablesWithSecondaryIndexes < len(tableDescs) && useImplicitTxns.Get(&flowCtx.Cfg.Settings.SV) {
 				return 1
 			}
 			return int(flushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
@@ -648,9 +674,6 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, canRetry retryEligibility,
 ) (flushStats, error) {
 	batchSize := lrw.getBatchSize()
-	// TODO(yuzefovich): we should have a better heuristic for when to use the
-	// implicit vs explicit txns (for example, depending on the presence of the
-	// secondary indexes).
 
 	var stats flushStats
 	// TODO: The batching here in production would need to be much
