@@ -2167,6 +2167,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	setConstraintFn("RANGE system", 7, 7, "")
 	setConstraintFn("RANGE liveness", 7, 7, "")
 	setConstraintFn("RANGE meta", 7, 7, "")
+	setConstraintFn("RANGE timeseries", 7, 7, "")
 	setConstraintFn("RANGE default", 7, 7, "")
 	testutils.SucceedsSoon(t, func() error {
 		if err := forceScanOnAllReplicationQueues(tc); err != nil {
