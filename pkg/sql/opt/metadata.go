@@ -799,6 +799,11 @@ func (md *Metadata) AllTables() []TableMeta {
 	return md.tables
 }
 
+// NumTables returns the number of tables in the metadata.
+func (md *Metadata) NumTables() int {
+	return len(md.tables)
+}
+
 // AddColumn assigns a new unique id to a column within the query and records
 // its alias and type. If the alias is empty, a "column<ID>" alias is created.
 func (md *Metadata) AddColumn(alias string, typ *types.T) ColumnID {

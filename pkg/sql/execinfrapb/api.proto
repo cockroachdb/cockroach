@@ -30,6 +30,7 @@ message SetupFlowRequest {
   reserved 1, 2;
 
   optional util.tracing.tracingpb.TraceInfo trace_info = 11;
+  // JobTag is only populated in distributed flows.
   optional string job_tag = 13 [(gogoproto.nullable) = false];
 
   // LeafTxnInputState is the input parameter for the *kv.Txn needed for
@@ -46,6 +47,8 @@ message SetupFlowRequest {
 
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 
+  // EvalContext contains a subset of the eval.Context that needs to be sent to
+  // remote nodes for proper execution.
   optional EvalContext eval_context = 6 [(gogoproto.nullable) = false];
 
   optional bool trace_kv = 8 [(gogoproto.nullable) = false,
