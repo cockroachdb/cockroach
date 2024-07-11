@@ -44,8 +44,9 @@ case $1 in
     fi
     case $cluster in
       "drt-large")
-        set -- start "--binary" "./cockroach" --args="--log=\"file-defaults: {dir: 'logs', max-group-size: 1GiB}\"" --store-count=16 --restart=false "$@"
-        roachprod run $cluster -- "\"sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh\""
+        shift
+        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --store-count=16 --restart=false "$@"
+        roachprod run $cluster -- "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
         ;;
       *)
         ;;
@@ -307,7 +308,7 @@ EOF"
           --clouds gce \
           --gce-managed \
           --gce-enable-multiple-stores \
-          --gce-zones "northamerica-northeast2-a:2,northamerica-northeast2-b:2,northamerica-northeast2-c:1,us-east5-a:2,us-east5-b:2,us-east5-c:1,us-central1-a:2,us-central1-b:2,us-central1-c:1" \
+          --gce-zones "northamerica-northeast2-a:2,northamerica-northeast2-b:2,northamerica-northeast2-c:1,us-east5-a:2,us-east5-b:2,us-east5-c:1,us-east1-b:2,us-east1-c:2,us-east1-d:1" \
           --gce-use-spot \
           --nodes 15 \
           --gce-machine-type n2-standard-16 \
@@ -322,7 +323,7 @@ EOF"
       "workload-large")
         roachprod create workload-large \
           --clouds gce \
-          --gce-zones "northamerica-northeast2-a,us-east5-a,us-central1-a" \
+          --gce-zones "northamerica-northeast2-a,us-east5-a,us-east1-b" \
           --nodes 3 \
           --gce-machine-type n2-standard-4 \
           --os-volume-size 100 \
