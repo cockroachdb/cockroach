@@ -507,16 +507,26 @@ type replicaRACv2Integration struct {
 // Due to the latter, we call tryUpdateLeader after calling Step, instead of
 // in handleRaftReadyRaftMuLocked.
 //
+// Must not be called during Ready processing, for it to compute the correct
+// value of nextRaftIndex.
+//
 // Replica.raftMu is held. Replica.mu is not held.
 func (rr2 *replicaRACv2Integration) tryUpdateLeader(leaderID roachpb.ReplicaID, force bool) {
 	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
-	rr2.tryUpdateLeaderLocked(leaderID, force)
+	var nextRaftIndex uint64
+	if leaderID == rr2.replica.replicaID {
+		nextRaftIndex = rr2.rawNode.NextUnstableIndex()
+	}
+	rr2.tryUpdateLeaderLocked(leaderID, force, nextRaftIndex)
 }
 
-func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(leaderID roachpb.ReplicaID, force bool) {
+// nextRaftIndex is used only if this replica has become the leader.
+func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(
+	leaderID roachpb.ReplicaID, force bool, nextRaftIndex uint64,
+) {
 	if rr2.mu.destroyed || (leaderID == rr2.mu.leaderID && !force) {
 		return
 	}
@@ -578,7 +588,7 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(leaderID roachpb.Repli
 				ReplicaSet:  rr2.mu.replicas,
 				Leaseholder: leaseholderID,
 			}
-			rr2.mu.rcAtLeader = kvflowconnectedstream.NewRangeControllerImpl(opts, state)
+			rr2.mu.rcAtLeader = kvflowconnectedstream.NewRangeControllerImpl(opts, state, nextRaftIndex)
 		}
 	}
 }
@@ -648,6 +658,9 @@ func (rr2 *replicaRACv2Integration) RangeController() kvflowconnectedstream.Rang
 }
 
 // Replica.raftMu and Replica.mu are held.
+//
+// onDescChanged must not be called during Ready processing, since it will
+// mess up the computation of the nextRaftIndex.
 func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor) {
 	rr2.replica.raftMu.AssertHeld()
 	rr2.replica.mu.AssertHeld()
@@ -672,7 +685,7 @@ func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor)
 	rr2.mu.replicas = descToReplicaSet(desc)
 	if wasUninitialized {
 		if rr2.mu.leaderID != 0 {
-			rr2.tryUpdateLeaderLocked(rr2.mu.leaderID, true)
+			rr2.tryUpdateLeaderLocked(rr2.mu.leaderID, true, rr2.rawNode.NextUnstableIndex())
 		}
 	} else {
 		if rr2.mu.rcAtLeader == nil {
@@ -736,7 +749,14 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
 		// here.
 		st := rr2.rawNode.BasicStatus()
 		if roachpb.ReplicaID(st.Lead) != rr2.mu.leaderID {
-			rr2.tryUpdateLeaderLocked(roachpb.ReplicaID(st.Lead), false)
+			var nextRaftIndex uint64
+			if roachpb.ReplicaID(st.Lead) == rr2.replica.replicaID {
+				nextRaftIndex = rr2.rawNode.NextUnstableIndex()
+				if len(entries) > 0 {
+					nextRaftIndex = entries[0].Index
+				}
+			}
+			rr2.tryUpdateLeaderLocked(roachpb.ReplicaID(st.Lead), false, nextRaftIndex)
 		}
 	}
 	if rr2.mu.replicas == nil {

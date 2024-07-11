@@ -304,7 +304,7 @@ func (ss *storesForRACv2) AdmittedLogEntry(
 ) {
 	rr := ss.lookup(rangeID)
 	if rr != nil {
-		rr.admittedLogEntry(ctx, kvflowcontrolpb.RaftPriority(pri), pos.Index)
+		rr.admittedLogEntry(ctx, kvflowcontrolpb.AdmissionPriorityToRaftPriority(pri), pos.Index)
 	}
 	// Else range does not have a replica on this store, so ignore.
 }
