@@ -2501,7 +2501,7 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Time",
 		Help:        "Weighted time spent reading from or writing to the store's disk since this process started (as reported by the OS)",
 	}
-	metaIopsInProgress = metric.Metadata{
+	metaDiskIopsInProgress = metric.Metadata{
 		Name:        "storage.disk.iopsinprogress",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
@@ -2907,15 +2907,15 @@ type StoreMetrics struct {
 	FsyncLatency     *metric.ManualWindowHistogram
 
 	// Disk metrics
-	DiskReadBytes      *metric.Gauge
-	DiskReadCount      *metric.Gauge
-	DiskReadTime       *metric.Gauge
-	DiskWriteBytes     *metric.Gauge
-	DiskWriteCount     *metric.Gauge
-	DiskWriteTime      *metric.Gauge
-	DiskIOTime         *metric.Gauge
-	DiskWeightedIOTime *metric.Gauge
-	IopsInProgress     *metric.Gauge
+	DiskReadBytes      *metric.Counter
+	DiskReadCount      *metric.Counter
+	DiskReadTime       *metric.Counter
+	DiskWriteBytes     *metric.Counter
+	DiskWriteCount     *metric.Counter
+	DiskWriteTime      *metric.Counter
+	DiskIOTime         *metric.Counter
+	DiskWeightedIOTime *metric.Counter
+	DiskIopsInProgress *metric.Gauge
 }
 
 type tenantMetricsRef struct {
@@ -3674,15 +3674,15 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaReadBatchDroppedLatchesBeforeEval: metric.NewCounter(metaReplicaReadBatchDroppedLatchesBeforeEval),
 		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),
 
-		DiskReadBytes:      metric.NewGauge(metaDiskReadBytes),
-		DiskReadCount:      metric.NewGauge(metaDiskReadCount),
-		DiskReadTime:       metric.NewGauge(metaDiskReadTime),
-		DiskWriteBytes:     metric.NewGauge(metaDiskWriteBytes),
-		DiskWriteCount:     metric.NewGauge(metaDiskWriteCount),
-		DiskWriteTime:      metric.NewGauge(metaDiskWriteTime),
-		DiskIOTime:         metric.NewGauge(metaDiskIOTime),
-		DiskWeightedIOTime: metric.NewGauge(metaDiskWeightedIOTime),
-		IopsInProgress:     metric.NewGauge(metaIopsInProgress),
+		DiskReadBytes:      metric.NewCounter(metaDiskReadBytes),
+		DiskReadCount:      metric.NewCounter(metaDiskReadCount),
+		DiskReadTime:       metric.NewCounter(metaDiskReadTime),
+		DiskWriteBytes:     metric.NewCounter(metaDiskWriteBytes),
+		DiskWriteCount:     metric.NewCounter(metaDiskWriteCount),
+		DiskWriteTime:      metric.NewCounter(metaDiskWriteTime),
+		DiskIOTime:         metric.NewCounter(metaDiskIOTime),
+		DiskWeightedIOTime: metric.NewCounter(metaDiskWeightedIOTime),
+		DiskIopsInProgress: metric.NewGauge(metaDiskIopsInProgress),
 
 		// Estimated MVCC stats in split.
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
@@ -3912,7 +3912,7 @@ func (sm *StoreMetrics) updateDiskStats(stats disk.Stats) {
 	sm.DiskWriteTime.Update(int64(stats.WritesDuration))
 	sm.DiskIOTime.Update(int64(stats.CumulativeDuration))
 	sm.DiskWeightedIOTime.Update(int64(stats.WeightedIODuration))
-	sm.IopsInProgress.Update(int64(stats.InProgressCount))
+	sm.DiskIopsInProgress.Update(int64(stats.InProgressCount))
 }
 
 func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.Metrics) {
@@ -4003,8 +4003,8 @@ func (sm *StoreMetrics) getCounterForRangeLogEventType(
 }
 
 type pebbleCategoryIterMetrics struct {
-	IterBlockBytes        *metric.Gauge
-	IterBlockBytesInCache *metric.Gauge
+	IterBlockBytes        *metric.Counter
+	IterBlockBytesInCache *metric.Counter
 }
 
 func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategoryIterMetrics {
@@ -4021,8 +4021,8 @@ func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategory
 		Unit:        metric.Unit_BYTES,
 	}
 	return &pebbleCategoryIterMetrics{
-		IterBlockBytes:        metric.NewGauge(metaBlockBytes),
-		IterBlockBytesInCache: metric.NewGauge(metaBlockBytesInCache),
+		IterBlockBytes:        metric.NewCounter(metaBlockBytes),
+		IterBlockBytesInCache: metric.NewCounter(metaBlockBytesInCache),
 	}
 }
 
