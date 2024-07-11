@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -139,6 +140,11 @@ func TestShowFingerprintsDuringSchemaChange(t *testing.T) {
 func TestShowTenantFingerprintsProtectsTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Under deadlock there isn't enough time for the CREATE TENANT txn to commit
+	// due to the intervals we lower to speed up this test. There is no difference
+	// otherwise when running this test under deadlock
+	skip.UnderDeadlock(t, 121445, "Deadlock makes txns take too long to commit")
 
 	ctx := context.Background()
 
