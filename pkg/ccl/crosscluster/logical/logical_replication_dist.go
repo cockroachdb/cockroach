@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -33,7 +32,7 @@ func constructLogicalReplicationWriterSpecs(
 	initialScanTimestamp hlc.Timestamp,
 	previousReplicatedTimestamp hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
-	tableDescs map[int32]descpb.TableDescriptor,
+	tableMd []execinfrapb.TableReplicationMetadata,
 	jobID jobspb.JobID,
 	streamID streampb.StreamID,
 ) (map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, error) {
@@ -45,7 +44,7 @@ func constructLogicalReplicationWriterSpecs(
 		InitialScanTimestamp:        initialScanTimestamp,
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
 		StreamAddress:               string(streamAddress),
-		TableDescriptors:            tableDescs,
+		TableMetadata:               tableMd,
 	}
 
 	writerSpecs := make(map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, len(destSQLInstances))

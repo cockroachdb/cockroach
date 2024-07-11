@@ -22,17 +22,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+const defaultDbName = "defaultdb"
 
 func TestLoggingDLQClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -56,9 +61,8 @@ func TestLoggingDLQClient(t *testing.T) {
 	ed, err := cdcevent.NewEventDescriptor(tableDesc, familyDesc, false, false, hlc.Timestamp{})
 	require.NoError(t, err)
 
-	tableID := int32(tableDesc.GetID())
 	dlqClient := InitLoggingDeadLetterQueueClient()
-	require.NoError(t, dlqClient.Create(ctx, []int32{tableID}))
+	require.NoError(t, dlqClient.Create(ctx))
 
 	type testCase struct {
 		name           string
@@ -111,45 +115,55 @@ func TestDLQClient(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
+	sqlDB.Exec(t, `CREATE SCHEMA baz`)
+	sqlDB.Exec(t, `CREATE TABLE baz.bar (a INT)`)
 
-	tableName := "foo"
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
+	tableNameToDesc := map[string]catalog.TableDescriptor{
+		"foo": desctestutils.TestingGetTableDescriptor(kvDB, s.Codec(), defaultDbName, "public", "foo"),
+		"bar": desctestutils.TestingGetTableDescriptor(kvDB, s.Codec(), defaultDbName, "baz", "bar"),
+	}
+
+	// Populate tableIDToPrefix with `defaultdb` as prefix for each table.
+	tableIDToPrefix := make(map[int32]string)
+	for _, desc := range tableNameToDesc {
+		tableIDToPrefix[int32(desc.GetID())] = defaultDbName
+	}
+
+	// Build family desc for cdc event row
 	familyDesc := &descpb.ColumnFamilyDescriptor{
 		ID:   descpb.FamilyID(1),
 		Name: "",
 	}
 
-	ed, err := cdcevent.NewEventDescriptor(tableDesc, familyDesc, false, false, hlc.Timestamp{})
-	require.NoError(t, err)
-
-	tableID := int32(tableDesc.GetID())
-	dlqClient := InitDeadLetterQueueClient(ie)
-	require.NoError(t, dlqClient.Create(ctx, []int32{tableID}))
-
-	var tableNameQueryResult string
-	sqlDB.QueryRow(t, `SELECT table_name FROM [SHOW TABLES FROM defaultdb]`).Scan(&tableNameQueryResult)
-	require.Equal(t, tableName, tableNameQueryResult)
+	dlqClient := InitDeadLetterQueueClient(ie, tableIDToPrefix)
+	require.NoError(t, dlqClient.Create(ctx))
 
 	type testCase struct {
 		name           string
 		expectedErrMsg string
 
-		jobID       int64
-		tableID     int32
-		tableName   string
-		kv          streampb.StreamEvent_KV
-		cdcEventRow cdcevent.Row
-		applyError  error
-		dlqReason   retryEligibility
+		jobID        int64
+		tableDesc    catalog.TableDescriptor
+		kv           streampb.StreamEvent_KV
+		dlqReason    retryEligibility
+		mutationType ReplicationMutationType
+		applyError   error
 	}
 
 	testCases := []testCase{
 		{
-			name:        "insert row into dlq table",
-			cdcEventRow: cdcevent.Row{EventDescriptor: ed},
-			tableID:     tableID,
-			tableName:   tableName,
-			dlqReason:   noSpace,
+			name:         "insert dlq fallback row for default.public.foo",
+			jobID:        1,
+			tableDesc:    tableNameToDesc["foo"],
+			dlqReason:    noSpace,
+			mutationType: Insert,
+		},
+		{
+			name:         "insert dlq fallback row for default.baz.bar",
+			jobID:        1,
+			tableDesc:    tableNameToDesc["bar"],
+			dlqReason:    tooOld,
+			mutationType: Insert,
 		},
 		{
 			name:           "expect error when given nil cdcEventRow",
@@ -157,14 +171,57 @@ func TestDLQClient(t *testing.T) {
 		},
 	}
 
+	type dlqRow struct {
+		jobID        int64
+		dlqReason    string
+		mutationType string
+		kv           []byte
+		incomingRow  *tree.DJSON
+	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.applyError == nil {
 				tc.applyError = errors.New("some error")
 			}
-			err := dlqClient.Log(ctx, tc.jobID, tc.kv, tc.cdcEventRow, tc.dlqReason)
+
+			// Build cdc event row based on the expected test case output
+			var cdcEventRow cdcevent.Row
+			if tc.expectedErrMsg == "" {
+				ed, err := cdcevent.NewEventDescriptor(tc.tableDesc, familyDesc, false, false, hlc.Timestamp{})
+				require.NoError(t, err)
+				cdcEventRow = cdcevent.Row{EventDescriptor: ed}
+			}
+
+			err := dlqClient.Log(ctx, tc.jobID, tc.kv, cdcEventRow, tc.dlqReason)
 			if tc.expectedErrMsg == "" {
 				require.NoError(t, err)
+
+				actualRow := dlqRow{}
+				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT
+						ingestion_job_id,
+						dlq_reason,
+						mutation_type,
+						key_value_bytes,
+						incoming_row
+				FROM %s`, fmt.Sprintf(dlqBaseTableName, defaultDbName, dlqSchemaName, tc.tableDesc.GetID()))).Scan(
+					&actualRow.jobID,
+					&actualRow.dlqReason,
+					&actualRow.mutationType,
+					&actualRow.kv,
+					&actualRow.incomingRow,
+				)
+
+				bytes, err := protoutil.Marshal(&tc.kv)
+				require.NoError(t, err)
+
+				expectedRow := dlqRow{
+					jobID:        tc.jobID,
+					dlqReason:    tc.dlqReason.String(),
+					mutationType: tc.mutationType.String(),
+					kv:           bytes,
+				}
+				require.Equal(t, expectedRow, actualRow)
 			} else {
 				require.ErrorContains(t, err, tc.expectedErrMsg)
 			}
@@ -211,8 +268,10 @@ func TestDLQJSONQuery(t *testing.T) {
 	defer cleanup()
 
 	tableID := int32(tableDesc.GetID())
-	dlqClient := InitDeadLetterQueueClient(ie)
-	require.NoError(t, dlqClient.Create(ctx, []int32{tableID}))
+	dlqClient := InitDeadLetterQueueClient(ie, map[int32]string{
+		tableID: defaultDbName,
+	})
+	require.NoError(t, dlqClient.Create(ctx))
 
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'hello')`)
 	row := popRow(t)
@@ -224,7 +283,7 @@ func TestDLQJSONQuery(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, dlqClient.Log(ctx, 1, streampb.StreamEvent_KV{KeyValue: kv}, updatedRow, noSpace))
 
-	dlqtableName := fmt.Sprintf(dlqBaseTableName, tableID)
+	dlqtableName := fmt.Sprintf(dlqBaseTableName, defaultDbName, dlqSchemaName, tableID)
 
 	var (
 		a     int
