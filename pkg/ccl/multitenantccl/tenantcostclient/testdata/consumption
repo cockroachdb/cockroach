@@ -28,6 +28,7 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 0
 
 # With no usage, consumption gets reported only every 40s. Advance by 30s here
 # since we're at the 10s mark.
@@ -42,13 +43,13 @@ token-bucket-response
 
 usage
 ----
-RU:  0.00
-KVRU:  0.00
-CrossRegionNetworkRU:  0.00
-Reads:  0 requests in 0 batches (0 bytes)
-Writes:  0 requests in 0 batches (0 bytes)
-SQL Pods CPU seconds:  0.00
-PGWire egress:  0 bytes
+RU: 0.00
+KVRU: 0.00
+CrossRegionNetworkRU: 0.00
+Reads: 0 requests in 0 batches (0 bytes)
+Writes: 0 requests in 0 batches (0 bytes)
+SQL Pods CPU seconds: 0.00
+PGWire egress: 0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -85,16 +86,17 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 0
 
 usage
 ----
-RU:  0.00
-KVRU:  0.00
-CrossRegionNetworkRU:  0.00
-Reads:  0 requests in 0 batches (0 bytes)
-Writes:  0 requests in 0 batches (0 bytes)
-SQL Pods CPU seconds:  0.00
-PGWire egress:  0 bytes
+RU: 0.00
+KVRU: 0.00
+CrossRegionNetworkRU: 0.00
+Reads: 0 requests in 0 batches (0 bytes)
+Writes: 0 requests in 0 batches (0 bytes)
+SQL Pods CPU seconds: 0.00
+PGWire egress: 0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -110,13 +112,13 @@ token-bucket-response
 
 usage
 ----
-RU:  16.62
-KVRU:  16.62
-CrossRegionNetworkRU:  0.00
-Reads:  1 requests in 1 batches (1048576 bytes)
-Writes:  0 requests in 0 batches (0 bytes)
-SQL Pods CPU seconds:  0.00
-PGWire egress:  0 bytes
+RU: 16.62
+KVRU: 16.62
+CrossRegionNetworkRU: 0.00
+Reads: 1 requests in 1 batches (1048576 bytes)
+Writes: 0 requests in 0 batches (0 bytes)
+SQL Pods CPU seconds: 0.00
+PGWire egress: 0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -139,6 +141,7 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 0
 
 # Test write operation consumption.
 write bytes=1024
@@ -155,13 +158,13 @@ token-bucket-response
 
 usage
 ----
-RU:  19.62
-KVRU:  19.62
-CrossRegionNetworkRU:  0.00
-Reads:  1 requests in 1 batches (1048576 bytes)
-Writes:  1 requests in 1 batches (1024 bytes)
-SQL Pods CPU seconds:  0.00
-PGWire egress:  0 bytes
+RU: 19.62
+KVRU: 19.62
+CrossRegionNetworkRU: 0.00
+Reads: 1 requests in 1 batches (1048576 bytes)
+Writes: 1 requests in 1 batches (1024 bytes)
+SQL Pods CPU seconds: 0.00
+PGWire egress: 0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -184,6 +187,10 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 4096
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 2048
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 1024
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 1024
 
 # Test CPU consumption.
 advance wait=true
@@ -209,13 +216,13 @@ token-bucket-response
 #   2. 10 seconds have elapsed since CPU was recorded (333.33 RUs).
 usage
 ----
-RU:  319.62
-KVRU:  19.62
-CrossRegionNetworkRU:  0.00
-Reads:  1 requests in 1 batches (1048576 bytes)
-Writes:  1 requests in 1 batches (1024 bytes)
-SQL Pods CPU seconds:  0.90
-PGWire egress:  0 bytes
+RU: 319.62
+KVRU: 19.62
+CrossRegionNetworkRU: 0.00
+Reads: 1 requests in 1 batches (1048576 bytes)
+Writes: 1 requests in 1 batches (1024 bytes)
+SQL Pods CPU seconds: 0.90
+PGWire egress: 0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -238,6 +245,10 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 4096
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 2048
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 1024
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 1024
 
 # Test multiple operations together.
 write bytes=4096
@@ -275,6 +286,10 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 36864
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 18432
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 9216
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 9216
 
 advance
 30s
@@ -287,13 +302,13 @@ token-bucket-response
 
 usage
 ----
-RU:  333.25
-KVRU:  33.25
-CrossRegionNetworkRU:  0.00
-Reads:  2 requests in 2 batches (1114112 bytes)
-Writes:  3 requests in 3 batches (9216 bytes)
-SQL Pods CPU seconds:  0.90
-PGWire egress:  0 bytes
+RU: 333.25
+KVRU: 33.25
+CrossRegionNetworkRU: 0.00
+Reads: 2 requests in 2 batches (1114112 bytes)
+Writes: 3 requests in 3 batches (9216 bytes)
+SQL Pods CPU seconds: 0.90
+PGWire egress: 0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -315,6 +330,10 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 36864
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 18432
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 9216
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 9216
 
 # Test larger amount of CPU usage that exceeds 100 RUs. The consumption report
 # should be sent after only 10s. In addition, the CPU usage should only be
@@ -334,13 +353,13 @@ token-bucket-response
 
 usage
 ----
-RU:  1299.92
-KVRU:  33.25
-CrossRegionNetworkRU:  0.00
-Reads:  2 requests in 2 batches (1114112 bytes)
-Writes:  3 requests in 3 batches (9216 bytes)
-SQL Pods CPU seconds:  3.80
-PGWire egress:  0 bytes
+RU: 1299.92
+KVRU: 33.25
+CrossRegionNetworkRU: 0.00
+Reads: 2 requests in 2 batches (1114112 bytes)
+Writes: 3 requests in 3 batches (9216 bytes)
+SQL Pods CPU seconds: 3.80
+PGWire egress: 0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -362,6 +381,10 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 36864
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 18432
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 9216
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 9216
 
 # Test egress.
 pgwire-egress
@@ -379,13 +402,13 @@ token-bucket-response
 
 usage
 ----
-RU:  1311.97
-KVRU:  33.25
-CrossRegionNetworkRU:  0.00
-Reads:  2 requests in 2 batches (1114112 bytes)
-Writes:  3 requests in 3 batches (9216 bytes)
-SQL Pods CPU seconds:  3.80
-PGWire egress:  12345 bytes
+RU: 1311.97
+KVRU: 33.25
+CrossRegionNetworkRU: 0.00
+Reads: 2 requests in 2 batches (1114112 bytes)
+Writes: 3 requests in 3 batches (9216 bytes)
+SQL Pods CPU seconds: 3.80
+PGWire egress: 12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -407,6 +430,10 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 36864
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 18432
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 9216
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 9216
 
 # Test multiple requests in the same batch.
 write count=2 bytes=1024
@@ -426,13 +453,13 @@ token-bucket-response
 
 usage
 ----
-RU:  1317.72
-KVRU:  39.00
-CrossRegionNetworkRU:  0.00
-Reads:  4 requests in 3 batches (1179648 bytes)
-Writes:  5 requests in 4 batches (10240 bytes)
-SQL Pods CPU seconds:  3.80
-PGWire egress:  12345 bytes
+RU: 1317.72
+KVRU: 39.00
+CrossRegionNetworkRU: 0.00
+Reads: 4 requests in 3 batches (1179648 bytes)
+Writes: 5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds: 3.80
+PGWire egress: 12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -454,6 +481,10 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 40960
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 20480
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 10240
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 10240
 
 # Test a small amount of CPU usage in a tick that has no read/write operations.
 # Anything under 30ms (3% of one CPU) should be ignored.
@@ -484,13 +515,13 @@ token-bucket-response
 
 usage
 ----
-RU:  1317.72
-KVRU:  39.00
-CrossRegionNetworkRU:  0.00
-Reads:  4 requests in 3 batches (1179648 bytes)
-Writes:  5 requests in 4 batches (10240 bytes)
-SQL Pods CPU seconds:  3.80
-PGWire egress:  12345 bytes
+RU: 1317.72
+KVRU: 39.00
+CrossRegionNetworkRU: 0.00
+Reads: 4 requests in 3 batches (1179648 bytes)
+Writes: 5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds: 3.80
+PGWire egress: 12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -512,6 +543,10 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 40960
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 20480
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 10240
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 10240
 
 # Now ensure that 30ms meets the threshold and is reported.
 cpu
@@ -535,13 +570,13 @@ token-bucket-response
 
 usage
 ----
-RU:  1324.39
-KVRU:  39.00
-CrossRegionNetworkRU:  0.00
-Reads:  4 requests in 3 batches (1179648 bytes)
-Writes:  5 requests in 4 batches (10240 bytes)
-SQL Pods CPU seconds:  3.82
-PGWire egress:  12345 bytes
+RU: 1324.39
+KVRU: 39.00
+CrossRegionNetworkRU: 0.00
+Reads: 4 requests in 3 batches (1179648 bytes)
+Writes: 5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds: 3.82
+PGWire egress: 12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 Estimated CPU seconds: 0.00
@@ -563,6 +598,10 @@ tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 40960
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 20480
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 10240
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 10240
 
 # Ensure RUs are updated for egress and ingress.
 external-egress bytes=1024000
@@ -583,13 +622,13 @@ token-bucket-response
 
 usage
 ----
-RU:  2324.39
-KVRU:  39.00
-CrossRegionNetworkRU:  0.00
-Reads:  4 requests in 3 batches (1179648 bytes)
-Writes:  5 requests in 4 batches (10240 bytes)
-SQL Pods CPU seconds:  3.82
-PGWire egress:  12345 bytes
+RU: 2324.39
+KVRU: 39.00
+CrossRegionNetworkRU: 0.00
+Reads: 4 requests in 3 batches (1179648 bytes)
+Writes: 5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds: 3.82
+PGWire egress: 12345 bytes
 ExternalIO egress: 1024000 bytes
 ExternalIO ingress: 1024000 bytes
 Estimated CPU seconds: 0.00
@@ -611,6 +650,10 @@ tenant.sql_usage.external_io_egress_bytes: 1024000
 tenant.sql_usage.cross_region_network_ru: 0.00
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 40960
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 20480
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 10240
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 10240
 
 # Read the same amount of bytes as the first subtest. Should have an increase
 # of ~10.5 RUs compared to the first test.
@@ -628,13 +671,13 @@ token-bucket-response
 
 usage
 ----
-RU:  2351.50
-KVRU:  55.62
-CrossRegionNetworkRU:  10.49
-Reads:  5 requests in 4 batches (2228224 bytes)
-Writes:  5 requests in 4 batches (10240 bytes)
-SQL Pods CPU seconds:  3.82
-PGWire egress:  12345 bytes
+RU: 2351.50
+KVRU: 55.62
+CrossRegionNetworkRU: 10.49
+Reads: 5 requests in 4 batches (2228224 bytes)
+Writes: 5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds: 3.82
+PGWire egress: 12345 bytes
 ExternalIO egress: 1024000 bytes
 ExternalIO ingress: 1024000 bytes
 Estimated CPU seconds: 0.00
@@ -656,6 +699,10 @@ tenant.sql_usage.external_io_egress_bytes: 1024000
 tenant.sql_usage.cross_region_network_ru: 10.49
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 40960
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 20480
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 10240
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 10240
 
 # This write is expected to consume an extra 5.12 RUs from network cost usage.
 write bytes=1024 networkCost=0.005
@@ -672,13 +719,13 @@ token-bucket-response
 
 usage
 ----
-RU:  2359.62
-KVRU:  58.62
-CrossRegionNetworkRU:  15.61
-Reads:  5 requests in 4 batches (2228224 bytes)
-Writes:  6 requests in 5 batches (11264 bytes)
-SQL Pods CPU seconds:  3.82
-PGWire egress:  12345 bytes
+RU: 2359.62
+KVRU: 58.62
+CrossRegionNetworkRU: 15.61
+Reads: 5 requests in 4 batches (2228224 bytes)
+Writes: 6 requests in 5 batches (11264 bytes)
+SQL Pods CPU seconds: 3.82
+PGWire egress: 12345 bytes
 ExternalIO egress: 1024000 bytes
 ExternalIO ingress: 1024000 bytes
 Estimated CPU seconds: 0.00
@@ -700,6 +747,10 @@ tenant.sql_usage.external_io_egress_bytes: 1024000
 tenant.sql_usage.cross_region_network_ru: 15.61
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 45056
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 22528
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 11264
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 11264
 
 # Test multiple requests in the same batch with RU multiplier of 1.
 write count=2 bytes=1024 networkCost=0
@@ -719,13 +770,13 @@ token-bucket-response
 
 usage
 ----
-RU:  2365.37
-KVRU:  64.38
-CrossRegionNetworkRU:  15.61
-Reads:  7 requests in 5 batches (2293760 bytes)
-Writes:  8 requests in 6 batches (12288 bytes)
-SQL Pods CPU seconds:  3.82
-PGWire egress:  12345 bytes
+RU: 2365.37
+KVRU: 64.38
+CrossRegionNetworkRU: 15.61
+Reads: 7 requests in 5 batches (2293760 bytes)
+Writes: 8 requests in 6 batches (12288 bytes)
+SQL Pods CPU seconds: 3.82
+PGWire egress: 12345 bytes
 ExternalIO egress: 1024000 bytes
 ExternalIO ingress: 1024000 bytes
 Estimated CPU seconds: 0.00
@@ -747,3 +798,7 @@ tenant.sql_usage.external_io_egress_bytes: 1024000
 tenant.sql_usage.cross_region_network_ru: 15.61
 tenant.sql_usage.estimated_kv_cpu_seconds: 0.00
 tenant.sql_usage.estimated_cpu_seconds: 0.00
+tenant.sql_usage.estimated_replication_bytes: 49152
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 24576
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 12288
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 12288
