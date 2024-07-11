@@ -240,47 +240,53 @@ func (r *logicalReplicationResumer) ingest(
 	return err
 }
 
-// measurePlanChange computes the number of node changes (addition or removal)
-// in the source and destination clusters as a fraction of the total number of
-// nodes in both clusters in the previous plan.
+// measurePlanChange computes the number of src-dest pair changes (addition or removal)
+// in the current and potential plans as a fraction of the total number of
+// pairs in both plans.
 func measurePlanChange(before, after *sql.PhysicalPlan) float64 {
 
-	getNodes := func(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount int) {
-		dst = make(map[string]struct{})
-		src = make(map[string]struct{})
+	getNodes := func(plan *sql.PhysicalPlan) (src, dst map[string]int, nodeCount int) {
+		dst = make(map[string]int)
+		src = make(map[string]int)
 		count := 0
 		for _, proc := range plan.Processors {
 			if proc.Spec.Core.LogicalReplicationWriter == nil {
 				// Skip other processors in the plan (like the Frontier processor).
 				continue
 			}
-			dst[proc.SQLInstanceID.String()] = struct{}{}
-			count += 1
-			src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.PartitionID] = struct{}{}
+			dst[proc.SQLInstanceID.String()] += 1
+			src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.SrcInstanceID.String()] += 1
 			count += 1
 		}
 		return src, dst, count
 	}
 
-	countMissingElements := func(set1, set2 map[string]struct{}) int {
+	countMissingElements := func(set1, set2 map[string]int) int {
 		diff := 0
 		for id := range set1 {
-			if _, ok := set2[id]; !ok {
-				diff++
+			count1 := set1[id]
+			if count2, ok := set2[id]; ok {
+				remainder := count1 - count2
+				if remainder > 0 {
+					diff += remainder
+				}
+			} else {
+				diff += count1
 			}
 		}
 		return diff
 	}
 
 	oldSrc, oldDst, oldCount := getNodes(before)
-	newSrc, newDst, _ := getNodes(after)
+	newSrc, newDst, newCount := getNodes(after)
+
 	diff := 0
 	// To check for both introduced nodes and removed nodes, swap input order.
 	diff += countMissingElements(oldSrc, newSrc)
 	diff += countMissingElements(newSrc, oldSrc)
 	diff += countMissingElements(oldDst, newDst)
 	diff += countMissingElements(newDst, oldDst)
-	return float64(diff) / float64(oldCount)
+	return float64(diff) / float64(oldCount+newCount)
 }
 
 // logicalReplicationPlanner generates a physical plan for logical replication.
