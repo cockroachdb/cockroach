@@ -255,8 +255,10 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 		return nil, err
 	}
 
+	var buf bytes.Buffer
+	lexbase.EncodeRestrictedSQLIdent(&buf, columnName, lexbase.EncNoFlags)
 	def := &tree.ColumnTableDef{
-		Name: tree.Name(columnName),
+		Name: tree.Name(buf.String()),
 		Type: typName,
 	}
 	def.Nullable.Nullability = tree.Nullability(og.randIntn(1 + int(tree.SilentNull)))
@@ -302,7 +304,7 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 			condition: def.Unique.IsUnique && typ != nil && !colinfo.ColumnTypeIsIndexable(typ),
 		},
 	})
-	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def))
+	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.AsStringWithFlags(def, tree.FmtBareIdentifiers))
 	return op, nil
 }
 
@@ -1092,7 +1094,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		})
 	}
 
-	stmt.sql = tree.Serialize(def)
+	stmt.sql = tree.AsStringWithFlags(def, tree.FmtBareIdentifiers)
 	return stmt, nil
 }
 
