@@ -3708,7 +3708,19 @@ func (og *operationGenerator) randType(
 		}
 		return typName, typ, nil
 	}
+
+	pgVectorNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.V24_2.Version())
+	if err != nil {
+		return nil, nil, err
+	}
+
 	typ := randgen.RandSortingType(og.params.rng)
+	for pgVectorNotSupported && typ.Family() == types.PGVectorFamily {
+		typ = randgen.RandSortingType(og.params.rng)
+	}
 	typeName := tree.MakeUnqualifiedTypeName(typ.SQLString())
 	return &typeName, typ, nil
 }
@@ -3889,6 +3901,14 @@ FROM
 		return nil, err
 	}
 
+	pgVectorNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.V24_2.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	// Generate random parameters / values for builtin types.
 	for i, typeVal := range randgen.SeedTypes {
 		// If we have types where invalid values can exist then skip over these,
@@ -3900,6 +3920,10 @@ FROM
 			typeVal.Family() == types.OidFamily {
 			continue
 		}
+		if pgVectorNotSupported && typeVal.Family() == types.PGVectorFamily {
+			continue
+		}
+
 		possibleReturnReferences = append(possibleReturnReferences, typeVal.SQLStandardName())
 		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf("val_%d %s", i+len(enums), typeVal.SQLStandardName()))
 		optionalDefaultValue := randgen.RandDatum(og.params.rng, typeVal, true)
