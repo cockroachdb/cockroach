@@ -250,9 +250,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 		return nil
 	}()
 
-	// TODO(dt): pick up tracing info in trailing meta
-	execinfra.DrainAndClose(
-		ctx, output, err, func(context.Context, execinfra.RowReceiver) {} /* pushTrailingMeta */, sp.input)
+	execinfra.DrainAndClose(ctx, sp.flowCtx, sp.input, output, err)
 }
 
 // Resume is part of the execinfra.Processor interface.

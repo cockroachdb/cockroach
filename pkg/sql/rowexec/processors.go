@@ -47,12 +47,12 @@ import (
 // error encountered.
 func emitHelper(
 	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 	procOutputHelper *execinfra.ProcOutputHelper,
 	row rowenc.EncDatumRow,
 	meta *execinfrapb.ProducerMetadata,
-	pushTrailingMeta func(context.Context, execinfra.RowReceiver),
-	inputs ...execinfra.RowSource,
 ) bool {
 	if output == nil {
 		panic("output RowReceiver is not set for emitting")
@@ -87,13 +87,11 @@ func emitHelper(
 		return false
 	case execinfra.DrainRequested:
 		log.VEventf(ctx, 1, "no more rows required. drain requested.")
-		execinfra.DrainAndClose(ctx, output, nil /* cause */, pushTrailingMeta, inputs...)
+		execinfra.DrainAndClose(ctx, flowCtx, input, output, nil /* cause */)
 		return false
 	case execinfra.ConsumerClosed:
 		log.VEventf(ctx, 1, "no more rows required. Consumer shut down.")
-		for _, input := range inputs {
-			input.ConsumerClosed()
-		}
+		input.ConsumerClosed()
 		output.ProducerDone()
 		return false
 	default:
