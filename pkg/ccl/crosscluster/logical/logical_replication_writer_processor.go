@@ -660,6 +660,24 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 	for len(chunk) > 0 {
 		batch := chunk[:min(batchSize, len(chunk))]
 		chunk = chunk[len(batch):]
+
+		// Make sure we're not ingesting events with origin TS in the future.
+		if lrw.FlowCtx != nil { // Some unit tests don't set this and that's fine.
+			hlcNow := lrw.FlowCtx.Cfg.DB.KV().Clock().Now()
+			logClock := true
+			for _, kv := range batch {
+				if ts := kv.KeyValue.Value.Timestamp; ts.After(hlcNow) {
+					if logClock || log.V(1) {
+						log.Warningf(ctx, "event timestamp %s is ahead of local clock %s; delaying batch...", ts, hlcNow)
+						logClock = false
+					}
+					if err := lrw.FlowCtx.Cfg.DB.KV().Clock().SleepUntil(ctx, ts); err != nil {
+						return flushStats{}, err
+					}
+				}
+			}
+		}
+
 		preBatchTime := timeutil.Now()
 
 		if s, err := bh.HandleBatch(ctx, batch); err != nil {
