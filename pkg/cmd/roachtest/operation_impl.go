@@ -16,7 +16,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -25,8 +27,9 @@ import (
 var errOperationFatal = errors.New("o.Fatal() was called")
 
 type operationImpl struct {
-	spec      *registry.OperationSpec
-	cockroach string // path to main cockroach binary on the cluster.
+	spec            *registry.OperationSpec
+	clusterSettings install.ClusterSettings
+	startOpts       option.StartOpts
 
 	// l is the logger that the operation will use for its output.
 	l *logger.Logger
@@ -50,7 +53,15 @@ type operationImpl struct {
 }
 
 func (o *operationImpl) ClusterCockroach() string {
-	return o.cockroach
+	return o.clusterSettings.Binary
+}
+
+func (o *operationImpl) ClusterSettings() install.ClusterSettings {
+	return o.clusterSettings
+}
+
+func (o *operationImpl) StartOpts() option.StartOpts {
+	return o.startOpts
 }
 
 func (o *operationImpl) Name() string {
