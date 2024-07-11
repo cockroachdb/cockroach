@@ -689,6 +689,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			timerDuration,
 			func() {
 				cancelQuery()
+				// Also cancel the transactions context, so that there is no danger
+				// getting stuck rolling back.
+				ex.state.txnCancelFn()
 				queryTimedOut = true
 				queryDoneAfterFunc <- struct{}{}
 			})
@@ -851,6 +854,10 @@ func (ex *connExecutor) execStmtInOpenState(
 				resToPushErr.SetError(errToPush)
 				retPayload = eventNonRetriableErrPayload{err: errToPush}
 				resErr = errToPush
+				// Cancel the txn if we are inside an implicit txn too.
+				if ex.implicitTxn() && ex.state.txnCancelFn != nil {
+					ex.state.txnCancelFn()
+				}
 			}
 		})
 
