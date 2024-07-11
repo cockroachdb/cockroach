@@ -538,17 +538,19 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 		cockroach: roachtestflags.CockroachBinaryPath,
 		l:         l,
 	}
-	c := &clusterImpl{
-		name:       clusterName,
-		cloud:      roachtestflags.Cloud,
-		spec:       cSpec,
-		f:          op,
-		l:          l,
-		expiration: cSpec.Expiration(),
-		destroyState: destroyState{
-			owned: false,
+	c := &dynamicClusterImpl{
+		&clusterImpl{
+			name:       clusterName,
+			cloud:      roachtestflags.Cloud,
+			spec:       cSpec,
+			f:          op,
+			l:          l,
+			expiration: cSpec.Expiration(),
+			destroyState: destroyState{
+				owned: false,
+			},
+			localCertsDir: roachtestflags.CertsDir,
 		},
-		localCertsDir: roachtestflags.CertsDir,
 	}
 
 	specs, err := opsToRun(r, filter)
