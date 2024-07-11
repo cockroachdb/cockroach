@@ -22,4 +22,5 @@ func RegisterOperations(r registry.Registry) {
 	registerClusterSettings(r)
 	registerBackupRestore(r)
 	registerManualCompaction(r)
+	registerResize(r)
 }
