@@ -260,6 +260,9 @@ func (sp *parquetWriterProcessor) Resume(output execinfra.RowReceiver) {
 	panic("not implemented")
 }
 
+// Close is part of the execinfra.Processor interface.
+func (*parquetWriterProcessor) Close(context.Context) {}
+
 // Resume is part of the execinfra.Processor interface.
 func (sp *parquetWriterProcessor) testingKnobsOrNil() *ExportTestingKnobs {
 	if sp.flowCtx.TestingKnobs().Export == nil {

@@ -57,6 +57,11 @@ type Processor interface {
 	// NB: this method doesn't take the context as parameter because the context
 	// was already captured on Run().
 	Resume(output RowReceiver)
+
+	// Close releases the resources of the processor and possibly its inputs.
+	// Must be called at least once on a given Processor and can be called
+	// multiple times.
+	Close(context.Context)
 }
 
 // DoesNotUseTxn is an interface implemented by some processors to mark that
@@ -733,6 +738,11 @@ func (pb *ProcessorBaseNoHelper) Resume(output RowReceiver) {
 		panic("processor output is not provided for emitting rows")
 	}
 	Run(pb.ctx, pb.self, output)
+}
+
+// Close is part of the Processor interface.
+func (pb *ProcessorBaseNoHelper) Close(context.Context) {
+	pb.self.ConsumerClosed()
 }
 
 // ProcStateOpts contains fields used by the ProcessorBase's family of functions

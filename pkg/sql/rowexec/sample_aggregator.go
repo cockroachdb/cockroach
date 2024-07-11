@@ -213,6 +213,12 @@ func (s *sampleAggregator) Run(ctx context.Context, output execinfra.RowReceiver
 	s.MoveToDraining(nil /* err */)
 }
 
+// Close is part of the execinfra.Processor interface.
+func (s *sampleAggregator) Close(context.Context) {
+	s.input.ConsumerClosed()
+	s.close()
+}
+
 func (s *sampleAggregator) close() {
 	if s.InternalClose() {
 		s.memAcc.Close(s.Ctx())

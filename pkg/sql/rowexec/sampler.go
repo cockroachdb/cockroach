@@ -488,6 +488,12 @@ func (s *samplerProcessor) sampleRow(
 	return false, nil
 }
 
+// Close is part of the execinfra.Processor interface.
+func (s *samplerProcessor) Close(context.Context) {
+	s.input.ConsumerClosed()
+	s.close()
+}
+
 func (s *samplerProcessor) close() {
 	if s.InternalClose() {
 		s.memAcc.Close(s.Ctx())
