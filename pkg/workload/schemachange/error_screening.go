@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -916,7 +917,7 @@ func (og *operationGenerator) columnContainsNull(
 		SELECT %s
 		  FROM %s
 	   WHERE %s IS NULL
-	)`, columnName, tableName.String(), columnName))
+	)`, lexbase.EscapeSQLIdent(columnName), tableName.String(), lexbase.EscapeSQLIdent(columnName)))
 }
 
 func (og *operationGenerator) constraintIsPrimary(
