@@ -103,19 +103,21 @@ func (p RaftPriority) String() string {
 }
 
 func RaftPriorityConversionForUnusedZero(pri RaftPriority) uint8 {
-	if RaftPriority(pri) > RaftHighPri && RaftPriority(pri) < NotSubjectToACForFlowControl {
-		panic(fmt.Sprintf("invalid raft priority: %d", pri))
+	rpri := RaftPriority(pri + 1)
+	if rpri > RaftHighPri && rpri < NotSubjectToACForFlowControl {
+		panic(fmt.Sprintf("invalid raft priority: %d", rpri))
 	}
-	return uint8(pri + 1)
+	return uint8(rpri)
 }
 
 // UndoRaftPriorityConversionForUnusedZero ...
 // REQUIRES: pri > 0
 func UndoRaftPriorityConversionForUnusedZero(pri uint8) RaftPriority {
-	if RaftPriority(pri) > RaftHighPri && RaftPriority(pri) < NotSubjectToACForFlowControl {
-		panic(fmt.Sprintf("invalid raft priority: %d", pri))
+	rpri := RaftPriority(pri - 1)
+	if rpri > RaftHighPri && rpri < NotSubjectToACForFlowControl {
+		panic(fmt.Sprintf("invalid raft priority: %d", rpri))
 	}
-	return RaftPriority(pri - 1)
+	return rpri
 }
 
 // AdmissionPriorityToRaftPriority maps the larger set of values in admissionpb.WorkPriority
