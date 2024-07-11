@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgtype"
@@ -76,7 +77,44 @@ func registerFollowerReads(r registry.Registry) {
 					survival:          survival,
 					deadPrimaryRegion: insufficientQuorum,
 				}
-				data := initFollowerReadsDB(ctx, t, c, topology)
+
+				// Start a shared-process tenant and change the default
+				// controller so that the test can run on the tenant without
+				// changes.
+				func() {
+					startOpts := option.StartSharedVirtualClusterOpts("app")
+					c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, install.MakeClusterSettings())
+					db := c.Conn(ctx, t.L(), 1)
+					defer db.Close()
+
+					_, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.controller.default_target_cluster = 'app'")
+					require.NoError(t, err)
+
+					time.Sleep(10 * time.Second)
+				}()
+
+				connFunc := func(vc string) func(int) *gosql.DB {
+					conns := struct {
+						mu      syncutil.Mutex
+						mapping map[int]*gosql.DB
+					}{
+						mapping: make(map[int]*gosql.DB),
+					}
+
+					return func(node int) *gosql.DB {
+						conns.mu.Lock()
+						defer conns.mu.Unlock()
+
+						if _, ok := conns.mapping[node]; !ok {
+							conn := c.Conn(ctx, t.L(), node, option.VirtualClusterName(vc))
+							conns.mapping[node] = conn
+						}
+
+						return conns.mapping[node]
+					}
+				}
+
+				data := initFollowerReadsDB(ctx, t, c, connFunc("app"), connFunc("system"), topology)
 				runFollowerReadsTest(ctx, t, c, topology, rc, data)
 			},
 		})
@@ -442,19 +480,25 @@ func runFollowerReadsTest(
 // initFollowerReadsDB initializes a database for the follower reads test.
 // Returns the data inserted into the test table.
 func initFollowerReadsDB(
-	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	connFunc func(int) *gosql.DB,
+	systemConnFunc func(int) *gosql.DB,
+	topology topologySpec,
 ) (data map[int]int64) {
-	db := c.Conn(ctx, t.L(), 1)
-	defer db.Close()
+	db := connFunc(1)
+	systemDB := systemConnFunc(1)
+
 	// Disable load based splitting and range merging because splits and merges
 	// interfere with follower reads. This test's workload regularly triggers load
 	// based splitting in the first phase creating small ranges which later
 	// in the test are merged. The merging tends to coincide with the final phase
 	// of the test which attempts to observe low latency reads leading to
 	// flakiness.
-	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'")
+	_, err := systemDB.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'")
 	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_merge.queue_enabled = 'false'")
+	_, err = systemDB.ExecContext(ctx, "SET CLUSTER SETTING kv.range_merge.queue_enabled = 'false'")
 	require.NoError(t, err)
 
 	// Check the cluster regions.
@@ -979,7 +1023,7 @@ func runFollowerReadsMixedVersionTest(
 
 	var data map[int]int64
 	runInit := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-		data = initFollowerReadsDB(ctx, t, c, topology)
+		data = initFollowerReadsDB(ctx, t, c, nil, nil, topology)
 		return nil
 	}
 
