@@ -57,6 +57,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/util/ctxgroup",
