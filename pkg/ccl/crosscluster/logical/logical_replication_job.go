@@ -156,7 +156,7 @@ func (r *logicalReplicationResumer) ingest(
 	}
 
 	replanOracle := sql.ReplanOnCustomFunc(
-		getNodes,
+		measurePlanChange,
 		func() float64 {
 			return crosscluster.LogicalReplanThreshold.Get(jobExecCtx.ExecCfg().SV())
 		},
@@ -240,21 +240,47 @@ func (r *logicalReplicationResumer) ingest(
 	return err
 }
 
-func getNodes(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount int) {
-	dst = make(map[string]struct{})
-	src = make(map[string]struct{})
-	count := 0
-	for _, proc := range plan.Processors {
-		if proc.Spec.Core.LogicalReplicationWriter == nil {
-			// Skip other processors in the plan (like the Frontier processor).
-			continue
+// measurePlanChange computes the number of node changes (addition or removal)
+// in the source and destination clusters as a fraction of the total number of
+// nodes in both clusters in the previous plan.
+func measurePlanChange(before, after *sql.PhysicalPlan) float64 {
+
+	getNodes := func(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount int) {
+		dst = make(map[string]struct{})
+		src = make(map[string]struct{})
+		count := 0
+		for _, proc := range plan.Processors {
+			if proc.Spec.Core.LogicalReplicationWriter == nil {
+				// Skip other processors in the plan (like the Frontier processor).
+				continue
+			}
+			dst[proc.SQLInstanceID.String()] = struct{}{}
+			count += 1
+			src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.PartitionID] = struct{}{}
+			count += 1
 		}
-		dst[proc.SQLInstanceID.String()] = struct{}{}
-		count += 1
-		src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.PartitionID] = struct{}{}
-		count += 1
+		return src, dst, count
 	}
-	return src, dst, count
+
+	countMissingElements := func(set1, set2 map[string]struct{}) int {
+		diff := 0
+		for id := range set1 {
+			if _, ok := set2[id]; !ok {
+				diff++
+			}
+		}
+		return diff
+	}
+
+	oldSrc, oldDst, oldCount := getNodes(before)
+	newSrc, newDst, _ := getNodes(after)
+	diff := 0
+	// To check for both introduced nodes and removed nodes, swap input order.
+	diff += countMissingElements(oldSrc, newSrc)
+	diff += countMissingElements(newSrc, oldSrc)
+	diff += countMissingElements(oldDst, newDst)
+	diff += countMissingElements(newDst, oldDst)
+	return float64(diff) / float64(oldCount)
 }
 
 // logicalReplicationPlanner generates a physical plan for logical replication.
