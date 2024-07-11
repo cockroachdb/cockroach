@@ -33,6 +33,10 @@ func TestCommand(t *testing.T) {
 	c.Flag("max-ops", 10).Flag("path", "/some/path")
 	require.Equal(t, "./cockroach workload run bank {pgurl:1} --max-ops 10 --path /some/path", c.String())
 
+	c = clone(baseCommand).WithEqualsSyntax()
+	c.Flag("max-ops", 10).Flag("path", "/some/path")
+	require.Equal(t, "./cockroach workload run bank {pgurl:1} --max-ops=10 --path=/some/path", c.String())
+
 	c = clone(baseCommand)
 	c.MaybeFlag(true, "max-ops", 10)     // included
 	c.MaybeFlag(false, "concurrency", 8) // not included
@@ -73,5 +77,6 @@ func clone(cmd *Command) *Command {
 		Binary:    cmd.Binary,
 		Arguments: append([]string{}, cmd.Arguments...),
 		Flags:     flags,
+		UseEquals: cmd.UseEquals,
 	}
 }
