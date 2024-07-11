@@ -25,7 +25,7 @@ func (node *Export) Format(ctx *FmtCtx) {
 	ctx.WriteString("EXPORT INTO ")
 	ctx.WriteString(node.FileFormat)
 	ctx.WriteString(" ")
-	ctx.FormatNode(node.File)
+	ctx.FormatURI(node.File)
 	if node.Options != nil {
 		ctx.WriteString(" WITH OPTIONS(")
 		ctx.FormatNode(&node.Options)
