@@ -254,7 +254,9 @@ func importJobDescription(
 	}
 	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
 	ann := p.ExtendedEvalContext().Annotations
-	return tree.AsStringWithFQNames(&stmt, ann), nil
+	return tree.AsStringWithFlags(
+		&stmt, tree.FmtAlwaysQualifyTableNames|tree.FmtShowFullURIs, tree.FmtAnnotations(ann),
+	), nil
 }
 
 func logSanitizedImportDestination(ctx context.Context, destination string) {
