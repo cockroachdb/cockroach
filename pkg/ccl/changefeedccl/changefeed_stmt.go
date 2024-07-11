@@ -999,7 +999,7 @@ func changefeedJobDescription(
 		return "", err
 	}
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
-	return tree.AsString(c), nil
+	return tree.AsStringWithFlags(c, tree.FmtShowFullURIs), nil
 }
 
 func logSanitizedChangefeedDestination(ctx context.Context, destination string) {
