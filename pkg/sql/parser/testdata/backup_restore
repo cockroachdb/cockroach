@@ -117,92 +117,102 @@ BACKUP TABLE foo.foo, baz.baz TO 'bar' -- passwords exposed
 parse
 SHOW BACKUP 'bar'
 ----
-SHOW BACKUP 'bar'
-SHOW BACKUP ('bar') -- fully parenthesized
+SHOW BACKUP '*****' -- normalized!
+SHOW BACKUP ('*****') -- fully parenthesized
 SHOW BACKUP '_' -- literals removed
-SHOW BACKUP 'bar' -- identifiers removed
+SHOW BACKUP '*****' -- identifiers removed
+SHOW BACKUP 'bar' -- passwords exposed
 
 parse
 SHOW BACKUP 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', CHECK_FILES
 ----
-SHOW BACKUP 'bar' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- normalized!
-SHOW BACKUP ('bar') WITH OPTIONS (check_files, encryption_passphrase = '*****') -- fully parenthesized
+SHOW BACKUP '*****' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- normalized!
+SHOW BACKUP ('*****') WITH OPTIONS (check_files, encryption_passphrase = '*****') -- fully parenthesized
 SHOW BACKUP '_' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- literals removed
-SHOW BACKUP 'bar' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- identifiers removed
+SHOW BACKUP '*****' WITH OPTIONS (check_files, encryption_passphrase = '*****') -- identifiers removed
 SHOW BACKUP 'bar' WITH OPTIONS (check_files, encryption_passphrase = 'secret') -- passwords exposed
 
 parse
 SHOW BACKUP FROM LATEST IN 'bar' WITH incremental_location = 'baz', skip size
 ----
-SHOW BACKUP FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz', skip size) -- normalized!
-SHOW BACKUP FROM ('latest') IN ('bar') WITH OPTIONS (incremental_location = ('baz'), skip size) -- fully parenthesized
+SHOW BACKUP FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****', skip size) -- normalized!
+SHOW BACKUP FROM ('latest') IN ('*****') WITH OPTIONS (incremental_location = ('*****'), skip size) -- fully parenthesized
 SHOW BACKUP FROM '_' IN '_' WITH OPTIONS (incremental_location = '_', skip size) -- literals removed
-SHOW BACKUP FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz', skip size) -- identifiers removed
+SHOW BACKUP FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****', skip size) -- identifiers removed
+SHOW BACKUP FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz', skip size) -- passwords exposed
 
 parse
 SHOW BACKUP FROM LATEST IN ('bar','bar1') WITH KMS = ('foo', 'bar'), incremental_location=('hi','hello')
 ----
-SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- normalized!
-SHOW BACKUP FROM ('latest') IN (('bar'), ('bar1')) WITH OPTIONS (incremental_location = (('hi'), ('hello')), kms = (('foo'), ('bar'))) -- fully parenthesized
+SHOW BACKUP FROM 'latest' IN ('*****', '*****') WITH OPTIONS (incremental_location = ('*****', '*****'), kms = ('*****', '*****')) -- normalized!
+SHOW BACKUP FROM ('latest') IN (('*****'), ('*****')) WITH OPTIONS (incremental_location = (('*****'), ('*****')), kms = (('*****'), ('*****'))) -- fully parenthesized
 SHOW BACKUP FROM '_' IN ('_', '_') WITH OPTIONS (incremental_location = ('_', '_'), kms = ('_', '_')) -- literals removed
-SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- identifiers removed
+SHOW BACKUP FROM 'latest' IN ('*****', '*****') WITH OPTIONS (incremental_location = ('*****', '*****'), kms = ('*****', '*****')) -- identifiers removed
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- passwords exposed
 
 
 parse
 EXPLAIN SHOW BACKUP 'bar'
 ----
-EXPLAIN SHOW BACKUP 'bar'
-EXPLAIN SHOW BACKUP ('bar') -- fully parenthesized
+EXPLAIN SHOW BACKUP '*****' -- normalized!
+EXPLAIN SHOW BACKUP ('*****') -- fully parenthesized
 EXPLAIN SHOW BACKUP '_' -- literals removed
-EXPLAIN SHOW BACKUP 'bar' -- identifiers removed
+EXPLAIN SHOW BACKUP '*****' -- identifiers removed
+EXPLAIN SHOW BACKUP 'bar' -- passwords exposed
 
 parse
 SHOW BACKUP RANGES 'bar'
 ----
-SHOW BACKUP RANGES 'bar'
-SHOW BACKUP RANGES ('bar') -- fully parenthesized
+SHOW BACKUP RANGES '*****' -- normalized!
+SHOW BACKUP RANGES ('*****') -- fully parenthesized
 SHOW BACKUP RANGES '_' -- literals removed
-SHOW BACKUP RANGES 'bar' -- identifiers removed
+SHOW BACKUP RANGES '*****' -- identifiers removed
+SHOW BACKUP RANGES 'bar' -- passwords exposed
 
 parse
 SHOW BACKUP FILES 'bar'
 ----
-SHOW BACKUP FILES 'bar'
-SHOW BACKUP FILES ('bar') -- fully parenthesized
+SHOW BACKUP FILES '*****' -- normalized!
+SHOW BACKUP FILES ('*****') -- fully parenthesized
 SHOW BACKUP FILES '_' -- literals removed
-SHOW BACKUP FILES 'bar' -- identifiers removed
+SHOW BACKUP FILES '*****' -- identifiers removed
+SHOW BACKUP FILES 'bar' -- passwords exposed
 
 parse
 SHOW BACKUP CONNECTION 'bar'
 ----
-SHOW BACKUP CONNECTION 'bar'
-SHOW BACKUP CONNECTION ('bar') -- fully parenthesized
+SHOW BACKUP CONNECTION '*****' -- normalized!
+SHOW BACKUP CONNECTION ('*****') -- fully parenthesized
 SHOW BACKUP CONNECTION '_' -- literals removed
-SHOW BACKUP CONNECTION 'bar' -- identifiers removed
+SHOW BACKUP CONNECTION '*****' -- identifiers removed
+SHOW BACKUP CONNECTION 'bar' -- passwords exposed
 
 parse
 SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = '1KiB', TIME = '1h', CONCURRENTLY = 3
 ----
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h') -- normalized!
-SHOW BACKUP CONNECTION ('bar') WITH OPTIONS (CONCURRENTLY = (3), TRANSFER = ('1KiB'), TIME = ('1h')) -- fully parenthesized
+SHOW BACKUP CONNECTION '*****' WITH OPTIONS (CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h') -- normalized!
+SHOW BACKUP CONNECTION ('*****') WITH OPTIONS (CONCURRENTLY = (3), TRANSFER = ('1KiB'), TIME = ('1h')) -- fully parenthesized
 SHOW BACKUP CONNECTION '_' WITH OPTIONS (CONCURRENTLY = _, TRANSFER = '_', TIME = '_') -- literals removed
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h') -- identifiers removed
+SHOW BACKUP CONNECTION '*****' WITH OPTIONS (CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h') -- identifiers removed
+SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = 3, TRANSFER = '1KiB', TIME = '1h') -- passwords exposed
 
 parse
 SHOW BACKUP CONNECTION 'bar' WITH TRANSFER = $1, CONCURRENTLY = $2, TIME = $3
 ----
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = $2, TRANSFER = $1, TIME = $3) -- normalized!
-SHOW BACKUP CONNECTION ('bar') WITH OPTIONS (CONCURRENTLY = ($2), TRANSFER = ($1), TIME = ($3)) -- fully parenthesized
+SHOW BACKUP CONNECTION '*****' WITH OPTIONS (CONCURRENTLY = $2, TRANSFER = $1, TIME = $3) -- normalized!
+SHOW BACKUP CONNECTION ('*****') WITH OPTIONS (CONCURRENTLY = ($2), TRANSFER = ($1), TIME = ($3)) -- fully parenthesized
 SHOW BACKUP CONNECTION '_' WITH OPTIONS (CONCURRENTLY = $1, TRANSFER = $1, TIME = $1) -- literals removed
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = $2, TRANSFER = $1, TIME = $3) -- identifiers removed
+SHOW BACKUP CONNECTION '*****' WITH OPTIONS (CONCURRENTLY = $2, TRANSFER = $1, TIME = $3) -- identifiers removed
+SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (CONCURRENTLY = $2, TRANSFER = $1, TIME = $3) -- passwords exposed
 
 parse
 SHOW BACKUPS IN 'bar'
 ----
-SHOW BACKUPS IN 'bar'
-SHOW BACKUPS IN ('bar') -- fully parenthesized
+SHOW BACKUPS IN '*****' -- normalized!
+SHOW BACKUPS IN ('*****') -- fully parenthesized
 SHOW BACKUPS IN '_' -- literals removed
-SHOW BACKUPS IN 'bar' -- identifiers removed
+SHOW BACKUPS IN '*****' -- identifiers removed
+SHOW BACKUPS IN 'bar' -- passwords exposed
 
 parse
 SHOW BACKUPS IN $1
@@ -215,10 +225,11 @@ SHOW BACKUPS IN $1 -- identifiers removed
 parse
 SHOW BACKUP 'foo' IN 'bar'
 ----
-SHOW BACKUP 'foo' IN 'bar'
-SHOW BACKUP ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP 'foo' IN '*****' -- normalized!
+SHOW BACKUP ('foo') IN ('*****') -- fully parenthesized
 SHOW BACKUP '_' IN '_' -- literals removed
-SHOW BACKUP 'foo' IN 'bar' -- identifiers removed
+SHOW BACKUP 'foo' IN '*****' -- identifiers removed
+SHOW BACKUP 'foo' IN 'bar' -- passwords exposed
 
 parse
 SHOW BACKUP FROM $1 IN $2 WITH privileges
@@ -231,26 +242,29 @@ SHOW BACKUP FROM $1 IN $2 WITH OPTIONS (privileges) -- identifiers removed
 parse
 SHOW BACKUP FILES FROM 'foo' IN 'bar'
 ----
-SHOW BACKUP FILES FROM 'foo' IN 'bar'
-SHOW BACKUP FILES FROM ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP FILES FROM 'foo' IN '*****' -- normalized!
+SHOW BACKUP FILES FROM ('foo') IN ('*****') -- fully parenthesized
 SHOW BACKUP FILES FROM '_' IN '_' -- literals removed
-SHOW BACKUP FILES FROM 'foo' IN 'bar' -- identifiers removed
+SHOW BACKUP FILES FROM 'foo' IN '*****' -- identifiers removed
+SHOW BACKUP FILES FROM 'foo' IN 'bar' -- passwords exposed
 
 parse
 SHOW BACKUP RANGES FROM 'foo' IN 'bar'
 ----
-SHOW BACKUP RANGES FROM 'foo' IN 'bar'
-SHOW BACKUP RANGES FROM ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP RANGES FROM 'foo' IN '*****' -- normalized!
+SHOW BACKUP RANGES FROM ('foo') IN ('*****') -- fully parenthesized
 SHOW BACKUP RANGES FROM '_' IN '_' -- literals removed
-SHOW BACKUP RANGES FROM 'foo' IN 'bar' -- identifiers removed
+SHOW BACKUP RANGES FROM 'foo' IN '*****' -- identifiers removed
+SHOW BACKUP RANGES FROM 'foo' IN 'bar' -- passwords exposed
 
 parse
 SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar'
 ----
-SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar'
-SHOW BACKUP SCHEMAS FROM ('foo') IN ('bar') -- fully parenthesized
+SHOW BACKUP SCHEMAS FROM 'foo' IN '*****' -- normalized!
+SHOW BACKUP SCHEMAS FROM ('foo') IN ('*****') -- fully parenthesized
 SHOW BACKUP SCHEMAS FROM '_' IN '_' -- literals removed
-SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar' -- identifiers removed
+SHOW BACKUP SCHEMAS FROM 'foo' IN '*****' -- identifiers removed
+SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar' -- passwords exposed
 
 parse
 SHOW BACKUP $1 IN $2 WITH ENCRYPTION_PASSPHRASE = 'secret', ENCRYPTION_INFO_DIR = 'long_live_backupper'
@@ -1124,7 +1138,8 @@ BACKUP INTO LATEST IN 'unlogged' WITH OPTIONS (detached = FALSE) -- passwords ex
 parse
 SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h')
 ----
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h')
-SHOW BACKUP CONNECTION ('bar') WITH OPTIONS (TIME = ('1h')) -- fully parenthesized
+SHOW BACKUP CONNECTION '*****' WITH OPTIONS (TIME = '1h') -- normalized!
+SHOW BACKUP CONNECTION ('*****') WITH OPTIONS (TIME = ('1h')) -- fully parenthesized
 SHOW BACKUP CONNECTION '_' WITH OPTIONS (TIME = '_') -- literals removed
-SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h') -- identifiers removed
+SHOW BACKUP CONNECTION '*****' WITH OPTIONS (TIME = '1h') -- identifiers removed
+SHOW BACKUP CONNECTION 'bar' WITH OPTIONS (TIME = '1h') -- passwords exposed
