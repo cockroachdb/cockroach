@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -435,7 +436,7 @@ func (s *sampleAggregator) sampleRow(
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// Turn off tracing so these writes don't affect the results of EXPLAIN
 	// ANALYZE.
-	if span := tracing.SpanFromContext(ctx); span != nil && span.IsVerbose() {
+	if span := tracing.SpanFromContext(ctx); span != nil && span.RecordingType() != tracingpb.RecordingOff {
 		// TODO(rytaft): this also hides writes in this function from SQL session
 		// traces.
 		ctx = tracing.ContextWithSpan(ctx, nil)
