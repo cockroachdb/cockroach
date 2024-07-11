@@ -30,6 +30,7 @@ go_library(
         "//pkg/upgrade/upgrades",
         "//pkg/util/buildutil",
         "//pkg/util/log",
+        "//pkg/util/randutil",
         "//pkg/util/startup",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
