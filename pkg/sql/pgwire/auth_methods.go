@@ -706,7 +706,7 @@ type JWTVerifier interface {
 		_ username.SQLUsername,
 		_ []byte,
 		_ *identmap.Conf,
-	) (detailedErrorMsg string, authError error)
+	) (detailedErrorMsg redact.RedactableString, authError error)
 }
 
 var jwtVerifier JWTVerifier
@@ -715,7 +715,7 @@ type noJWTConfigured struct{}
 
 func (c *noJWTConfigured) ValidateJWTLogin(
 	_ context.Context, _ *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
-) (detailedErrorMsg string, authError error) {
+) (detailedErrorMsg redact.RedactableString, authError error) {
 	return "", errors.New("JWT token authentication requires CCL features")
 }
 
@@ -782,8 +782,11 @@ func authJwtToken(
 			return security.NewErrPasswordUserAuthFailed(user)
 		}
 		if detailedErrors, authError := jwtVerifier.ValidateJWTLogin(ctx, execCfg.Settings, user, []byte(token), identMap); authError != nil {
-			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID,
-				errors.Join(authError, errors.Newf("%s", detailedErrors)))
+			errForLog := authError
+			if detailedErrors != "" {
+				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
+			}
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
 			return authError
 		}
 		return nil
