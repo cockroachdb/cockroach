@@ -651,6 +651,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	var first int
 	for first < tab.StatisticCount() &&
 		(tab.Statistic(first).IsPartial() ||
+			tab.Statistic(first).IsMerged() && !sb.evalCtx.SessionData().OptimizerUseMergedPartialStatistics ||
 			tab.Statistic(first).IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts) {
 		first++
 	}
@@ -674,6 +675,9 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		for i := first; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
 			if stat.IsPartial() {
+				continue
+			}
+			if stat.IsMerged() && !sb.evalCtx.SessionData().OptimizerUseMergedPartialStatistics {
 				continue
 			}
 			if stat.IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts {

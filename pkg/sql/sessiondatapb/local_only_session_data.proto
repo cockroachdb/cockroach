@@ -537,6 +537,10 @@ message LocalOnlySessionData {
   // EnableCreateStatsUsingExtremesBoolEnum, when true, allows the use of CREATE
   // STATISTICS .. USING EXTREMES on bool and enum columns.
   bool enable_create_stats_using_extremes_bool_enum = 136;
+  // OptimizerUseMergedPartialStatistics indicates whether we should use
+  // statistics merged from partial and full statistics for cardinality
+  // estimation in the optimizer.
+  bool optimizer_use_merged_partial_statistics = 137;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
