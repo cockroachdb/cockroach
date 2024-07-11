@@ -1004,7 +1004,9 @@ func restoreJobDescription(
 	}
 
 	ann := p.ExtendedEvalContext().Annotations
-	return tree.AsStringWithFQNames(r, ann), nil
+	return tree.AsStringWithFlags(
+		r, tree.FmtAlwaysQualifyTableNames|tree.FmtShowFullURIs, tree.FmtAnnotations(ann),
+	), nil
 }
 
 func restoreTypeCheck(
