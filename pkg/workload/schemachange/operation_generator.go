@@ -255,7 +255,10 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 	}
 
 	def := &tree.ColumnTableDef{
-		Name: tree.Name(columnName),
+		// This might be a bit unpleasant, but we need to ensure that even though
+		// identifiers should not be quoted due to our type-related issue, we still
+		// want to ensure that fuzzed column names get quoted if needed.
+		Name: tree.Name(lexbase.EscapeSQLIdent(columnName)),
 		Type: typName,
 	}
 	def.Nullable.Nullability = tree.Nullability(og.randIntn(1 + int(tree.SilentNull)))
@@ -301,7 +304,11 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 			condition: def.Unique.IsUnique && typ != nil && !colinfo.ColumnTypeIsIndexable(typ),
 		},
 	})
-	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def))
+	// Our type inside `def` will get quoted during
+	// lexbase.EncodeRestrictedSQLIdent down the line by default. We have to
+	// specify that identifiers should not get quoted so that our types do not
+	// get quoted (not valid SQL).
+	op.sql = fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.AsStringWithFlags(def, tree.FmtBareIdentifiers))
 	return op, nil
 }
 
@@ -1091,7 +1098,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		})
 	}
 
-	stmt.sql = tree.Serialize(def)
+	stmt.sql = tree.AsStringWithFlags(def, tree.FmtBareIdentifiers)
 	return stmt, nil
 }
 
@@ -1627,7 +1634,8 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 	if !columnExists {
 		stmt.expectedExecErrors.add(pgcode.UndefinedColumn)
 	}
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP DEFAULT`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT`, tableName,
+		lexbase.EscapeSQLIdent(columnName))
 	return stmt, nil
 }
 
@@ -1672,7 +1680,7 @@ func (og *operationGenerator) dropColumnNotNull(ctx context.Context, tx pgx.Tx) 
 		{pgcode.UndefinedColumn, !columnExists},
 		{pgcode.InvalidTableDefinition, colIsPrimaryKey},
 	})
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP NOT NULL`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP NOT NULL`, tableName, lexbase.EscapeSQLIdent(columnName))
 	return stmt, nil
 }
 
@@ -1715,7 +1723,7 @@ func (og *operationGenerator) dropColumnStored(ctx context.Context, tx pgx.Tx) (
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 	})
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP STORED`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s DROP STORED`, tableName, lexbase.EscapeSQLIdent(columnName))
 	return stmt, nil
 }
 
@@ -2029,8 +2037,8 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 		{pgcode.DependentObjectsStillExist, columnIsDependedOn},
 	})
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "%s" TO "%s"`,
-		tableName, srcColumnName, destColumnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN %s TO %s`,
+		tableName, lexbase.EscapeSQLIdent(srcColumnName), lexbase.EscapeSQLIdent(destColumnName))
 	return stmt, nil
 }
 
@@ -2269,8 +2277,7 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 	if !columnExists {
 		return makeOpStmtForSingleError(OpStmtDDL,
 			fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT "IrrelevantValue"`,
-				tableName, columnForDefault.name),
-			pgcode.UndefinedColumn), nil
+				tableName, lexbase.EscapeSQLIdent(columnForDefault.name)), pgcode.UndefinedColumn), nil
 	}
 
 	datumTyp := columnForDefault.typ
@@ -2282,7 +2289,8 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 		}
 		if newTyp == nil {
 			return makeOpStmtForSingleError(OpStmtDDL,
-				fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`, tableName, columnForDefault.name, newTypeName.SQLString()),
+				fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`,
+					tableName, lexbase.EscapeSQLIdent(columnForDefault.name), newTypeName.SQLString()),
 				pgcode.UndefinedColumn), nil
 		}
 		datumTyp = newTyp
@@ -2299,7 +2307,9 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 		stmt.expectedExecErrors.add(pgcode.InvalidTableDefinition)
 	}
 
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName, columnForDefault.name, tree.AsStringWithFlags(defaultDatum, tree.FmtParsable))
+	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName,
+		lexbase.EscapeSQLIdent(columnForDefault.name), strDefault)
 	return stmt, nil
 }
 
@@ -2357,7 +2367,7 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 	if err != nil {
 		return nil, err
 	}
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET NOT NULL`, tableName, columnName)
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET NOT NULL`, tableName, lexbase.EscapeSQLIdent(columnName))
 	return stmt, nil
 }
 
@@ -2425,8 +2435,8 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies},
 	})
 
-	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
-		setSessionVariableString, tableName, columnForTypeChange.name, newTypeName.SQLString())
+	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
+		setSessionVariableString, tableName, lexbase.EscapeSQLIdent(columnForTypeChange.name), newTypeName.SQLString())
 	return stmt, nil
 }
 
