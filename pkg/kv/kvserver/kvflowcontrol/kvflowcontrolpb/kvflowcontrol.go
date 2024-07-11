@@ -83,6 +83,9 @@ const (
 	//
 	// TODO: move these elsewhere.
 
+	// The highest value here is < math.MaxUint8 since these will be transformed
+	// using RaftPriorityConversionForUnusedZero.
+
 	NotSubjectToACForFlowControl       RaftPriority = math.MaxUint8 - 2
 	PriorityNotInheritedForFlowControl RaftPriority = math.MaxUint8 - 1
 )
@@ -102,21 +105,25 @@ func (p RaftPriority) String() string {
 	}
 }
 
-func RaftPriorityConversionForUnusedZero(pri RaftPriority) uint8 {
-	rpri := RaftPriority(pri + 1)
-	if rpri > RaftHighPri && rpri < NotSubjectToACForFlowControl {
-		panic(fmt.Sprintf("invalid raft priority: %d", rpri))
+func checkRaftPriority(pri RaftPriority) {
+	if (pri > RaftHighPri && pri < NotSubjectToACForFlowControl) || pri > PriorityNotInheritedForFlowControl {
+		panic(fmt.Sprintf("invalid raft priority: %d", pri))
 	}
-	return uint8(rpri)
+}
+func RaftPriorityConversionForUnusedZero(pri RaftPriority) uint8 {
+	checkRaftPriority(pri)
+	rpri := uint8(pri + 1)
+	return rpri
 }
 
 // UndoRaftPriorityConversionForUnusedZero ...
 // REQUIRES: pri > 0
 func UndoRaftPriorityConversionForUnusedZero(pri uint8) RaftPriority {
-	rpri := RaftPriority(pri - 1)
-	if rpri > RaftHighPri && rpri < NotSubjectToACForFlowControl {
-		panic(fmt.Sprintf("invalid raft priority: %d", rpri))
+	if pri == 0 {
+		panic("called with unused pri 0")
 	}
+	rpri := RaftPriority(pri - 1)
+	checkRaftPriority(rpri)
 	return rpri
 }
 
