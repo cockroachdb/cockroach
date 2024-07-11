@@ -1832,27 +1832,27 @@ func (n *Node) RangeLookup(
 	return resp, nil
 }
 
-// setRangeIDEventSink is an implementation of rangefeed.Stream which annotates
+// perRangeEventSink is an implementation of rangefeed.Stream which annotates
 // each response with rangeID and streamID. It is used by MuxRangeFeed.
-type setRangeIDEventSink struct {
+type perRangeEventSink struct {
 	ctx      context.Context
 	rangeID  roachpb.RangeID
 	streamID int64
 	wrapped  *rangefeed.StreamMuxer
 }
 
-var _ kvpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
+var _ kvpb.RangeFeedEventSink = (*perRangeEventSink)(nil)
 
-func (s *setRangeIDEventSink) Context() context.Context {
+func (s *perRangeEventSink) Context() context.Context {
 	return s.ctx
 }
 
 // SendIsThreadSafe is a no-op declaration method. It is a contract that the
 // Send method is thread-safe. Note that Send wraps rangefeed.StreamMuxer which
 // declares its Send method to be thread-safe.
-func (s *setRangeIDEventSink) SendIsThreadSafe() {}
+func (s *perRangeEventSink) SendIsThreadSafe() {}
 
-func (s *setRangeIDEventSink) Send(event *kvpb.RangeFeedEvent) error {
+func (s *perRangeEventSink) Send(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
 		RangeID:        s.rangeID,
@@ -1918,7 +1918,7 @@ func (n *Node) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) error {
 			streamCtx = logtags.AddTag(streamCtx, "s", req.Replica.StoreID)
 			streamCtx = logtags.AddTag(streamCtx, "sid", req.StreamID)
 
-			streamSink := &setRangeIDEventSink{
+			streamSink := &perRangeEventSink{
 				ctx:      streamCtx,
 				rangeID:  req.RangeID,
 				streamID: req.StreamID,
