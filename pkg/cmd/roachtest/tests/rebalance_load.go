@@ -99,13 +99,15 @@ func registerRebalanceLoad(r registry.Registry) {
 				mixedversion.ClusterSettingOption(
 					install.ClusterSettingsOption(settings.ClusterSettings),
 				),
-				// Multi-tenant deployments are currently unsupported. See #127378.
-				mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 			)
+			mvt.OnStartup("maybe enable split/scatter on tenant",
+				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+					return enableTenantSplitScatter(l, r, h)
+				})
 			mvt.InMixedVersion("rebalance load run",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 					return rebalanceByLoad(
-						ctx, t, c, rebalanceMode, maxDuration, concurrency, appNode, numStores, numNodes)
+						ctx, t, l, c, rebalanceMode, maxDuration, concurrency, appNode, numStores, numNodes)
 				})
 			mvt.Run()
 		} else {
@@ -122,7 +124,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			settings.ClusterSettings["server.cpu_profile.cpu_usage_combined_threshold"] = "90"
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 			require.NoError(t, rebalanceByLoad(
-				ctx, t, c, rebalanceMode, maxDuration,
+				ctx, t, t.L(), c, rebalanceMode, maxDuration,
 				concurrency, appNode, numStores, numNodes,
 			))
 		}
@@ -193,7 +195,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					concurrency = 32
-					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
+					t.L().Printf("lowering concurrency to %d in local testing", concurrency)
 				}
 				rebalanceLoadRun(
 					ctx, t, c, "leases and replicas", 10*time.Minute, concurrency, true, /* mixedVersion */
@@ -231,6 +233,7 @@ func registerRebalanceLoad(r registry.Registry) {
 func rebalanceByLoad(
 	ctx context.Context,
 	t test.Test,
+	l *logger.Logger,
 	c cluster.Cluster,
 	rebalanceMode string,
 	maxDuration time.Duration,
@@ -246,10 +249,10 @@ func rebalanceByLoad(
 	splits := (numStores * storeToRangeFactor) - 1
 	c.Run(ctx, option.WithNodes(appNode), fmt.Sprintf("./cockroach workload init kv --drop --splits=%d {pgurl:1}", splits))
 
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, l, 1)
 	defer db.Close()
 
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), db))
+	require.NoError(t, WaitFor3XReplication(ctx, t, l, db))
 
 	var m *errgroup.Group
 	m, ctx = errgroup.WithContext(ctx)
@@ -260,7 +263,7 @@ func rebalanceByLoad(
 	ctx, cancel := context.WithCancel(ctx)
 
 	m.Go(func() error {
-		t.L().Printf("starting load generator\n")
+		l.Printf("starting load generator")
 		err := c.RunE(ctx, option.WithNodes(appNode), fmt.Sprintf(
 			"./cockroach workload run kv --read-percent=95 --tolerate-errors --concurrency=%d "+
 				"--duration=%v {pgurl:1-%d}",
@@ -275,9 +278,9 @@ func rebalanceByLoad(
 	})
 
 	m.Go(func() error {
-		t.Status("checking for CPU balance")
+		l.Printf("checking for CPU balance")
 
-		storeCPUFn, err := makeStoreCPUFn(ctx, c, t, numNodes, numStores)
+		storeCPUFn, err := makeStoreCPUFn(ctx, t, l, c, numNodes, numStores)
 		if err != nil {
 			return err
 		}
@@ -297,18 +300,18 @@ func rebalanceByLoad(
 			now := timeutil.Now()
 			clusterStoresCPU, err := storeCPUFn(ctx)
 			if err != nil {
-				t.L().Printf("unable to get the cluster stores CPU %s\n", err.Error())
+				l.Printf("unable to get the cluster stores CPU: %v", err)
 				continue
 			}
 			var curIsBalanced bool
 			curIsBalanced, reason = isLoadEvenlyDistributed(clusterStoresCPU, meanCPUTolerance)
-			t.L().Printf("cpu %s", reason)
+			l.Printf("cpu %s", reason)
 			if !prevIsBalanced && curIsBalanced {
 				balancedStartTime = now
 			}
 			prevIsBalanced = curIsBalanced
 			if prevIsBalanced && now.Sub(balancedStartTime) > stableDuration {
-				t.Status("successfully achieved CPU balance; waiting for kv to finish running")
+				l.Printf("successfully achieved CPU balance; waiting for kv to finish running")
 				cancel()
 				return nil
 			}
@@ -322,9 +325,9 @@ func rebalanceByLoad(
 // the cluster stores. When there are multiple stores per node, stores on the
 // same node will report identical CPU.
 func makeStoreCPUFn(
-	octx context.Context, c cluster.Cluster, t test.Test, numNodes, numStores int,
+	ctx context.Context, t test.Test, l *logger.Logger, c cluster.Cluster, numNodes, numStores int,
 ) (func(ctx context.Context) ([]float64, error), error) {
-	adminURLs, err := c.ExternalAdminUIAddr(octx, t.L(), c.Node(1))
+	adminURLs, err := c.ExternalAdminUIAddr(ctx, l, c.Node(1))
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +345,7 @@ func makeStoreCPUFn(
 	return func(ctx context.Context) ([]float64, error) {
 		now := timeutil.Now()
 		resp, err := getMetricsWithSamplePeriod(
-			ctx, c, t, url, startTime, now, statSamplePeriod, tsQueries)
+			ctx, c, t, url, install.SystemInterfaceName, startTime, now, statSamplePeriod, tsQueries)
 		if err != nil {
 			return nil, err
 		}

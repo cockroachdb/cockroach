@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 )
 
@@ -51,10 +52,11 @@ func mustGetMetrics(
 	c cluster.Cluster,
 	t test.Test,
 	adminURL string,
+	virtualCluster string,
 	start, end time.Time,
 	tsQueries []tsQuery,
 ) tspb.TimeSeriesQueryResponse {
-	response, err := getMetrics(ctx, c, t, adminURL, start, end, tsQueries)
+	response, err := getMetrics(ctx, c, t, adminURL, virtualCluster, start, end, tsQueries)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,10 +68,11 @@ func getMetrics(
 	c cluster.Cluster,
 	t test.Test,
 	adminURL string,
+	virtualCluster string,
 	start, end time.Time,
 	tsQueries []tsQuery,
 ) (tspb.TimeSeriesQueryResponse, error) {
-	return getMetricsWithSamplePeriod(ctx, c, t, adminURL, start, end, defaultSamplePeriod, tsQueries)
+	return getMetricsWithSamplePeriod(ctx, c, t, adminURL, virtualCluster, start, end, defaultSamplePeriod, tsQueries)
 }
 
 func getMetricsWithSamplePeriod(
@@ -77,6 +80,7 @@ func getMetricsWithSamplePeriod(
 	c cluster.Cluster,
 	t test.Test,
 	adminURL string,
+	virtualCluster string,
 	start, end time.Time,
 	samplePeriod time.Duration,
 	tsQueries []tsQuery,
@@ -114,7 +118,10 @@ func getMetricsWithSamplePeriod(
 		Queries:     queries,
 	}
 	var response tspb.TimeSeriesQueryResponse
-	client := roachtestutil.DefaultHTTPClient(c, t.L(), roachtestutil.HTTPTimeout(500*time.Millisecond))
+	client := roachtestutil.DefaultHTTPClient(
+		c, t.L(), roachtestutil.HTTPTimeout(500*time.Millisecond),
+		roachtestutil.VirtualCluster(virtualCluster),
+	)
 	err := client.PostProtobuf(ctx, url, &request, &response)
 	return response, err
 
@@ -134,7 +141,7 @@ func verifyTxnPerSecond(
 		t.Fatal(err)
 	}
 	adminURL := adminUIAddrs[0]
-	response := mustGetMetrics(ctx, c, t, adminURL, start, end, []tsQuery{
+	response := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName, start, end, []tsQuery{
 		{name: "cr.node.txn.commits", queryType: rate},
 		{name: "cr.node.txn.commits", queryType: total},
 	})
@@ -185,7 +192,7 @@ func verifyLookupsPerSec(
 		t.Fatal(err)
 	}
 	adminURL := adminUIAddrs[0]
-	response := mustGetMetrics(ctx, c, t, adminURL, start, end, []tsQuery{
+	response := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName, start, end, []tsQuery{
 		{name: "cr.node.distsender.rangelookups", queryType: rate},
 	})
 
