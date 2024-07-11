@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -140,7 +139,7 @@ const (
 func makeSQLLastWriteWinsHandler(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[int32]descpb.TableDescriptor,
+	tableDescs map[int32]catalog.TableDescriptor,
 	ie isql.Executor,
 ) (*sqlLastWriteWinsRowProcessor, error) {
 	descs := make(map[catid.DescID]catalog.TableDescriptor)
@@ -150,14 +149,13 @@ func makeSQLLastWriteWinsHandler(
 	}
 	cdcEventTargets := changefeedbase.Targets{}
 	var err error
-	for name, desc := range tableDescs {
-		td := tabledesc.NewBuilder(&desc).BuildImmutableTable()
-		descs[desc.ID] = td
-		qb.deleteQueries[desc.ID], err = makeDeleteQuery(name, td)
+	for dstTableDescID, td := range tableDescs {
+		descs[td.GetID()] = td
+		qb.deleteQueries[td.GetID()], err = makeDeleteQuery(dstTableDescID, td)
 		if err != nil {
 			return nil, err
 		}
-		qb.insertQueries[desc.ID], err = makeInsertQueries(name, td)
+		qb.insertQueries[td.GetID()], err = makeInsertQueries(dstTableDescID, td)
 		if err != nil {
 			return nil, err
 		}
