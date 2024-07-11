@@ -5,6 +5,7 @@ go_library(
     testonly = 1,
     srcs = [
         "cluster.go",
+        "dynamic_cluster.go",
         "github.go",
         "main.go",
         "monitor.go",

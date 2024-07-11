@@ -4,6 +4,7 @@ go_library(
     name = "cluster",
     srcs = [
         "cluster_interface.go",
+        "dynamic_cluster_interface.go",
         "err_command_details.go",
         "monitor_interface.go",
     ],
