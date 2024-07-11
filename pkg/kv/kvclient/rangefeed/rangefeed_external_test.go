@@ -1353,8 +1353,7 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t) // too slow, times out
-	skip.UnderDeadlock(t)
+	skip.UnderDuress(t) // too slow, times out
 
 	// Use a timeout, to prevent a hung test.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
