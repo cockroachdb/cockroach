@@ -675,7 +675,7 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	if err != nil {
 		return err
 	}
-	r.raftMu.racV2Integration.tryUpdateLeader(leaderID, false)
+	r.raftMu.racV2Integration.tryUpdateLeader(context.Background(), leaderID, false)
 	return nil
 }
 
@@ -896,10 +896,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	pausedFollowers := r.mu.pausedFollowers
 	leaseholderReplicaID := r.mu.state.Lease.Replica.ReplicaID
 	r.mu.Unlock()
-	r.raftMu.racV2Integration.tryUpdateLeaseholder(leaseholderReplicaID)
+	r.raftMu.racV2Integration.tryUpdateLeaseholder(ctx, leaseholderReplicaID)
 	if kvflowconnectedstream.UseRACv2 {
 		// NB: must be called even if there was no Ready.
-		r.raftMu.racV2Integration.handleRaftEvent(readyEntries)
+		r.raftMu.racV2Integration.handleRaftEvent(ctx, readyEntries)
 	}
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.

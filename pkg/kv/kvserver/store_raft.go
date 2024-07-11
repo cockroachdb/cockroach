@@ -720,20 +720,20 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 	return exists // ready
 }
 
-func (s *Store) processRACv2RangeController(rangeID roachpb.RangeID) {
+func (s *Store) processRACv2RangeController(ctx context.Context, rangeID roachpb.RangeID) {
 	r, ok := s.mu.replicasByRangeID.Load(rangeID)
 	if !ok {
 		return
 	}
-	r.processRACv2RangeController()
+	r.processRACv2RangeController(ctx)
 }
 
-func (s *Store) processRACv2PiggybackedAdmitted(rangeID roachpb.RangeID) bool {
+func (s *Store) processRACv2PiggybackedAdmitted(ctx context.Context, rangeID roachpb.RangeID) bool {
 	r, ok := s.mu.replicasByRangeID.Load(rangeID)
 	if !ok {
 		return false
 	}
-	return r.processRACv2PiggybackedAdmitted()
+	return r.processRACv2PiggybackedAdmitted(ctx)
 }
 
 // nodeIsLiveCallback is invoked when a node transitions from non-live to live.

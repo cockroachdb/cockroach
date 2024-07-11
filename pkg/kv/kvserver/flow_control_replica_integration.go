@@ -511,7 +511,9 @@ type replicaRACv2Integration struct {
 // value of nextRaftIndex.
 //
 // Replica.raftMu is held. Replica.mu is not held.
-func (rr2 *replicaRACv2Integration) tryUpdateLeader(leaderID roachpb.ReplicaID, force bool) {
+func (rr2 *replicaRACv2Integration) tryUpdateLeader(
+	ctx context.Context, leaderID roachpb.ReplicaID, force bool,
+) {
 	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
@@ -520,12 +522,12 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeader(leaderID roachpb.ReplicaID, 
 	if leaderID == rr2.replica.replicaID {
 		nextRaftIndex = rr2.rawNode.NextUnstableIndex()
 	}
-	rr2.tryUpdateLeaderLocked(leaderID, force, nextRaftIndex)
+	rr2.tryUpdateLeaderLocked(ctx, leaderID, force, nextRaftIndex)
 }
 
 // nextRaftIndex is used only if this replica has become the leader.
 func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(
-	leaderID roachpb.ReplicaID, force bool, nextRaftIndex uint64,
+	ctx context.Context, leaderID roachpb.ReplicaID, force bool, nextRaftIndex uint64,
 ) {
 	if rr2.mu.destroyed || (leaderID == rr2.mu.leaderID && !force) {
 		return
@@ -547,7 +549,7 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(
 			//  leader=4 is not in the set of replicas=[(n1,s1):1,(n2,s2):2LEARNER,(n3,s3):3LEARNER]
 			//  desc=r69:/{Table/Max-Max} [(n1,s1):1, (n2,s2):2LEARNER, (n3,s3):3LEARNER, next=4, gen=3]
 			//
-			log.Errorf(context.TODO(),
+			log.Errorf(ctx,
 				"leader=%d is not in the set of replicas=%v desc=%v",
 				leaderID, rr2.mu.replicas, rr2.replica.Desc())
 			return
@@ -558,7 +560,7 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(
 	if rr2.mu.leaderID != rr2.replica.replicaID {
 		if rr2.mu.rcAtLeader != nil {
 			// Transition from leader to follower.
-			rr2.mu.rcAtLeader.Close()
+			rr2.mu.rcAtLeader.Close(ctx)
 			rr2.mu.rcAtLeader = nil
 		}
 	} else {
@@ -588,7 +590,7 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(
 				ReplicaSet:  rr2.mu.replicas,
 				Leaseholder: leaseholderID,
 			}
-			rr2.mu.rcAtLeader = kvflowconnectedstream.NewRangeControllerImpl(opts, state, nextRaftIndex)
+			rr2.mu.rcAtLeader = kvflowconnectedstream.NewRangeControllerImpl(ctx, opts, state, nextRaftIndex)
 		}
 	}
 }
@@ -607,13 +609,13 @@ func descToReplicaSet(desc *roachpb.RangeDescriptor) kvflowconnectedstream.Repli
 // too late in that these flow tokens may be needed by others.
 //
 // Replica.raftMu is held. Replica.mu is not held.
-func (rr2 *replicaRACv2Integration) onDestroy() {
+func (rr2 *replicaRACv2Integration) onDestroy(ctx context.Context) {
 	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
 	if rr2.mu.rcAtLeader != nil {
-		rr2.mu.rcAtLeader.Close()
+		rr2.mu.rcAtLeader.Close(ctx)
 	}
 
 	// We want to retain the mutex throughout this method scope. If we were to
@@ -638,13 +640,15 @@ func (rr2 *replicaRACv2Integration) onDestroy() {
 //
 // TODO(racV2-integration): Update naming throughout to indicate whether raft /
 // replica mu are held.
-func (rr2 *replicaRACv2Integration) tryUpdateLeaseholder(replicaID roachpb.ReplicaID) {
+func (rr2 *replicaRACv2Integration) tryUpdateLeaseholder(
+	ctx context.Context, replicaID roachpb.ReplicaID,
+) {
 	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
 	if rr2.mu.rcAtLeader != nil {
-		rr2.mu.rcAtLeader.SetLeaseholder(replicaID)
+		rr2.mu.rcAtLeader.SetLeaseholder(ctx, replicaID)
 	}
 }
 
@@ -661,7 +665,9 @@ func (rr2 *replicaRACv2Integration) RangeController() kvflowconnectedstream.Rang
 //
 // onDescChanged must not be called during Ready processing, since it will
 // mess up the computation of the nextRaftIndex.
-func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor) {
+func (rr2 *replicaRACv2Integration) onDescChanged(
+	ctx context.Context, desc *roachpb.RangeDescriptor,
+) {
 	rr2.replica.raftMu.AssertHeld()
 	rr2.replica.mu.AssertHeld()
 	rr2.mu.Lock()
@@ -685,24 +691,24 @@ func (rr2 *replicaRACv2Integration) onDescChanged(desc *roachpb.RangeDescriptor)
 	rr2.mu.replicas = descToReplicaSet(desc)
 	if wasUninitialized {
 		if rr2.mu.leaderID != 0 {
-			rr2.tryUpdateLeaderLocked(rr2.mu.leaderID, true, rr2.rawNode.NextUnstableIndex())
+			rr2.tryUpdateLeaderLocked(ctx, rr2.mu.leaderID, true, rr2.rawNode.NextUnstableIndex())
 		}
 	} else {
 		if rr2.mu.rcAtLeader == nil {
 			return
 		}
-		rr2.mu.rcAtLeader.SetReplicas(rr2.mu.replicas)
+		rr2.mu.rcAtLeader.SetReplicas(ctx, rr2.mu.replicas)
 	}
 }
 
 // raftMu is held.
-func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent() {
+func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent(ctx context.Context) {
 	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 
 	if rr2.mu.rcAtLeader != nil {
-		rr2.mu.rcAtLeader.HandleControllerSchedulerEvent()
+		rr2.mu.rcAtLeader.HandleControllerSchedulerEvent(ctx)
 	}
 }
 
@@ -715,7 +721,7 @@ func (rr2 *replicaRACv2Integration) enqueuePiggybackedAdmitted(msg raftpb.Messag
 }
 
 // raftMu is held.
-func (rr2 *replicaRACv2Integration) processPiggybackedAdmitted() bool {
+func (rr2 *replicaRACv2Integration) processPiggybackedAdmitted(ctx context.Context) bool {
 	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
@@ -727,7 +733,7 @@ func (rr2 *replicaRACv2Integration) processPiggybackedAdmitted() bool {
 		for k, m := range rr2.mu.enqueuedPiggybackedResponses {
 			err := raftGroup.Step(m)
 			if err != nil {
-				log.Errorf(context.TODO(), "%s", err)
+				log.Errorf(ctx, "%s", err)
 			}
 			delete(rr2.mu.enqueuedPiggybackedResponses, k)
 		}
@@ -738,7 +744,7 @@ func (rr2 *replicaRACv2Integration) processPiggybackedAdmitted() bool {
 
 // raftMu is held.
 // entries can be empty, and there may not have been a Ready.
-func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
+func (rr2 *replicaRACv2Integration) handleRaftEvent(ctx context.Context, entries []raftpb.Entry) {
 	rr2.replica.raftMu.AssertHeld()
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
@@ -756,7 +762,7 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
 					nextRaftIndex = entries[0].Index
 				}
 			}
-			rr2.tryUpdateLeaderLocked(roachpb.ReplicaID(st.Lead), false, nextRaftIndex)
+			rr2.tryUpdateLeaderLocked(ctx, roachpb.ReplicaID(st.Lead), false, nextRaftIndex)
 		}
 	}
 	if rr2.mu.replicas == nil {
@@ -790,7 +796,7 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(entries []raftpb.Entry) {
 	raftEvent := kvflowconnectedstream.MakeRaftEvent(&raft.Ready{
 		Entries: entries,
 	})
-	rr2.mu.rcAtLeader.HandleRaftEvent(raftEvent)
+	rr2.mu.rcAtLeader.HandleRaftEvent(ctx, raftEvent)
 }
 
 // Corresponding to raft indices [first, last].

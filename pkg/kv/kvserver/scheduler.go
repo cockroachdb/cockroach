@@ -122,8 +122,8 @@ type raftProcessor interface {
 	// Process a raft tick for the specified range.
 	// Return true if the range should be queued for ready processing.
 	processTick(context.Context, roachpb.RangeID) bool
-	processRACv2RangeController(id roachpb.RangeID)
-	processRACv2PiggybackedAdmitted(id roachpb.RangeID) bool
+	processRACv2RangeController(ctx context.Context, id roachpb.RangeID)
+	processRACv2PiggybackedAdmitted(ctx context.Context, id roachpb.RangeID) bool
 }
 
 type raftScheduleFlags int
@@ -417,7 +417,7 @@ func (ss *raftSchedulerShard) worker(
 			// processRACv2PiggybackedAdmitted returns true if the range should
 			// perform ready processing. Do not reorder this below the call to
 			// processReady.
-			if processor.processRACv2PiggybackedAdmitted(id) {
+			if processor.processRACv2PiggybackedAdmitted(ctx, id) {
 				state.flags |= stateRaftReady
 			}
 		}
@@ -425,7 +425,7 @@ func (ss *raftSchedulerShard) worker(
 			processor.processReady(id)
 		}
 		if state.flags&stateRACv2RangeController != 0 {
-			processor.processRACv2RangeController(id)
+			processor.processRACv2RangeController(ctx, id)
 		}
 
 		ss.Lock()

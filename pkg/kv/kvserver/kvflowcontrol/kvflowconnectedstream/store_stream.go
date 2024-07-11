@@ -147,7 +147,7 @@ const InvalidStoreStreamSendTokenHandleID StoreStreamSendTokenHandleID = 0
 // available.
 type TokenAvailableNotification interface {
 	// Notify is called when tokens are available to be granted.
-	Notify()
+	Notify(context.Context)
 }
 
 // StoreStreamSendTokenHandleID is a unique identifier for a handle that is
@@ -363,7 +363,7 @@ func (s *storeStreamSendTokensWatcher) watchTokens(
 				watcher.tracked[wc] = append(watcher.tracked[wc], next)
 				return s.mu.handles[next].notification
 			}(); nextNotification != nil {
-				nextNotification.Notify()
+				nextNotification.Notify(ctx)
 			}
 		}
 	})

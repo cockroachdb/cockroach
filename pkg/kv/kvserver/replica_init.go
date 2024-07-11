@@ -420,7 +420,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
 	r.mu.replicaFlowControlIntegration.onDescChanged(ctx)
-	r.raftMu.racV2Integration.onDescChanged(desc)
+	r.raftMu.racV2Integration.onDescChanged(ctx, desc)
 
 	// Give the liveness and meta ranges high priority in the Raft scheduler, to
 	// avoid head-of-line blocking and high scheduling latency.

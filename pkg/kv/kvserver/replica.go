@@ -2535,16 +2535,16 @@ func (r *Replica) GetMutexForTesting() *ReplicaMutex {
 	return &r.mu.ReplicaMutex
 }
 
-func (r *Replica) processRACv2RangeController() {
+func (r *Replica) processRACv2RangeController(ctx context.Context) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	r.raftMu.racV2Integration.processRangeControllerSchedulerEvent()
+	r.raftMu.racV2Integration.processRangeControllerSchedulerEvent(ctx)
 }
 
-func (r *Replica) processRACv2PiggybackedAdmitted() bool {
+func (r *Replica) processRACv2PiggybackedAdmitted(ctx context.Context) bool {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	return r.raftMu.racV2Integration.processPiggybackedAdmitted()
+	return r.raftMu.racV2Integration.processPiggybackedAdmitted(ctx)
 }
 
 var _ kvflowconnectedstream.MessageSender = &Replica{}

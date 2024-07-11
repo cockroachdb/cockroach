@@ -272,6 +272,8 @@ func TestRangeController(t *testing.T) {
 			return buf.String()
 		}
 
+		ctx := context.Background()
+
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
@@ -302,18 +304,18 @@ func TestRangeController(t *testing.T) {
 						ReplicaSet:  r.replicas(),
 						Leaseholder: r.localReplicaID,
 					}
-					controllers[r.rangeID] = NewRangeControllerImpl(options, init, 1 /* nextRaftIndex */)
+					controllers[r.rangeID] = NewRangeControllerImpl(ctx, options, init, 1 /* nextRaftIndex */)
 					raftImpls[r.rangeID].controller = controllers[r.rangeID]
 				}
 			case "set_replicas":
 				for _, r := range scanRanges(t, d.Input) {
 					raftImpls[r.rangeID].setReplicas(r)
-					controllers[r.rangeID].SetReplicas(r.replicas())
+					controllers[r.rangeID].SetReplicas(ctx, r.replicas())
 				}
 			case "set_leader":
 				var rangeID, leader int
 				d.ScanArgs(t, "range_id=%d replica_id=%d", &rangeID, &leader)
-				controllers[roachpb.RangeID(rangeID)].SetLeaseholder(roachpb.ReplicaID(leader))
+				controllers[roachpb.RangeID(rangeID)].SetLeaseholder(ctx, roachpb.ReplicaID(leader))
 			case "admit":
 				var lastRangeID roachpb.RangeID
 				for _, line := range strings.Split(d.Input, "\n") {
@@ -346,7 +348,7 @@ func TestRangeController(t *testing.T) {
 
 						workPriority := scanPriority(t, parts[2])
 
-						raftImpls[lastRangeID].admit(roachpb.StoreID(storeID), uint64(to), workPriority)
+						raftImpls[lastRangeID].admit(ctx, roachpb.StoreID(storeID), uint64(to), workPriority)
 					}
 				}
 			case "send":
@@ -372,7 +374,7 @@ func TestRangeController(t *testing.T) {
 					require.NoError(t, err)
 
 					log.Infof(context.Background(), "rangeID: %d, prio: %v, size: %v", rangeID, workPriority, size)
-					raftImpls[roachpb.RangeID(rangeID)].prop(kvflowcontrolpb.AdmissionPriorityToRaftPriority(workPriority), uint64(size))
+					raftImpls[roachpb.RangeID(rangeID)].prop(ctx, kvflowcontrolpb.AdmissionPriorityToRaftPriority(workPriority), uint64(size))
 				}
 			}
 			return stateString()
@@ -418,7 +420,7 @@ func (t testingRange) replicas() ReplicaSet {
 	return replicas
 }
 
-func (t *testingRaft) prop(pri kvflowcontrolpb.RaftPriority, size uint64) {
+func (t *testingRaft) prop(ctx context.Context, pri kvflowcontrolpb.RaftPriority, size uint64) {
 	t.lastEntryIndex++
 	index := t.lastEntryIndex
 
@@ -429,17 +431,19 @@ func (t *testingRaft) prop(pri kvflowcontrolpb.RaftPriority, size uint64) {
 	t.replicas[t.localReplicaID] = localReplica
 
 	entry := testingEncodeRaftFlowControlState(
-		index, true /* usesFlowControl */, pri, size, t.replicas[t.localReplicaID].desc.NodeID)
+		ctx, index, true /* usesFlowControl */, pri, size, t.replicas[t.localReplicaID].desc.NodeID)
 	t.entries = append(t.entries, entry)
 	log.Infof(context.Background(), "prop %v", getFlowControlState(entry))
-	t.controller.HandleRaftEvent(t.ready())
+	t.controller.HandleRaftEvent(ctx, t.ready())
 
 	localReplica = t.replicas[t.localReplicaID]
 	localReplica.info.Match = index
 	t.replicas[t.localReplicaID] = localReplica
 }
 
-func (t *testingRaft) admit(storeID roachpb.StoreID, to uint64, pri admissionpb.WorkPriority) {
+func (t *testingRaft) admit(
+	ctx context.Context, storeID roachpb.StoreID, to uint64, pri admissionpb.WorkPriority,
+) {
 	var replicaID roachpb.ReplicaID = -1
 	for _, replica := range t.replicas {
 		if replica.desc.StoreID == storeID {
@@ -459,7 +463,7 @@ func (t *testingRaft) admit(storeID roachpb.StoreID, to uint64, pri admissionpb.
 	}
 	t.replicas[replicaID] = replica
 	log.Infof(context.Background(), "admit store=%v to=%v pri=%v(%v) (%v)", storeID, to, pri, raftPrio, replica.info)
-	t.controller.HandleRaftEvent(t.ready())
+	t.controller.HandleRaftEvent(ctx, t.ready())
 	// There may be some number of Notify() calls that result from the
 	// HandleRaftEvent call, so we wait a short duration to ensure they finish
 	// before proceeding.
@@ -564,8 +568,9 @@ func (t *testingRaft) ScheduleControllerEvent(rangeID roachpb.RangeID) {
 		// have an associated controller.
 		return
 	}
-	log.Infof(context.Background(), "schedule rangeID=%d", rangeID)
-	if err := t.controller.HandleControllerSchedulerEvent(); err != nil {
+	ctx := context.Background()
+	log.Infof(ctx, "schedule rangeID=%d", rangeID)
+	if err := t.controller.HandleControllerSchedulerEvent(ctx); err != nil {
 		panic(err)
 	}
 }

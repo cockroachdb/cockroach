@@ -24,7 +24,7 @@ type testingTokenAvailableNotification struct {
 	onNotify func()
 }
 
-func (t *testingTokenAvailableNotification) Notify() {
+func (t *testingTokenAvailableNotification) Notify(_ context.Context) {
 	if t.onNotify != nil {
 		t.onNotify()
 	}
