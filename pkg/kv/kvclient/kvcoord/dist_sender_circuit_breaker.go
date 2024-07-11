@@ -13,7 +13,6 @@ package kvcoord
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -245,7 +244,7 @@ type DistSenderCircuitBreakers struct {
 	settings         *cluster.Settings
 	transportFactory TransportFactory
 	metrics          DistSenderMetrics
-	replicas         sync.Map // cbKey -> *ReplicaCircuitBreaker
+	replicas         syncutil.Map[cbKey, ReplicaCircuitBreaker]
 }
 
 // NewDistSenderCircuitBreakers creates new DistSender circuit breakers.
@@ -311,9 +310,7 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 		nowNanos := timeutil.Now().UnixNano()
 		probeThreshold := CircuitBreakerProbeThreshold.Get(&d.settings.SV)
 
-		d.replicas.Range(func(_, v any) bool {
-			cb := v.(*ReplicaCircuitBreaker)
-
+		d.replicas.Range(func(_ cbKey, cb *ReplicaCircuitBreaker) bool {
 			// Don't probe if the breaker is already tripped. It will be probed in
 			// response to user traffic, to reduce the number of concurrent probes.
 			if cb.stallDuration(nowNanos) >= probeThreshold && !cb.isTripped() {
@@ -350,15 +347,14 @@ func (d *DistSenderCircuitBreakers) gcLoop(ctx context.Context) {
 		nowNanos := timeutil.Now().UnixNano()
 
 		var cbs, gced int
-		d.replicas.Range(func(key, v any) bool {
-			cb := v.(*ReplicaCircuitBreaker)
+		d.replicas.Range(func(key cbKey, cb *ReplicaCircuitBreaker) bool {
 			cbs++
 
 			if idleDuration := cb.lastRequestDuration(nowNanos); idleDuration >= cbGCThreshold {
 				// Check if we raced with a concurrent delete or replace. We don't
 				// expect to, since only this loop removes circuit breakers.
-				if v, ok := d.replicas.LoadAndDelete(key); ok {
-					cb = v.(*ReplicaCircuitBreaker)
+				if cb2, ok := d.replicas.LoadAndDelete(key); ok {
+					cb = cb2
 
 					d.metrics.CircuitBreaker.Replicas.Dec(1)
 					gced++
@@ -419,17 +415,17 @@ func (d *DistSenderCircuitBreakers) ForReplica(
 	key := cbKey{rangeID: rangeDesc.RangeID, replicaID: replDesc.ReplicaID}
 
 	// Fast path: use existing circuit breaker.
-	if v, ok := d.replicas.Load(key); ok {
-		return v.(*ReplicaCircuitBreaker)
+	if cb, ok := d.replicas.Load(key); ok {
+		return cb
 	}
 
 	// Slow path: construct a new replica circuit breaker and insert it. If we
 	// race with a concurrent insert, return it instead.
-	v, loaded := d.replicas.LoadOrStore(key, newReplicaCircuitBreaker(d, rangeDesc, replDesc))
+	cb, loaded := d.replicas.LoadOrStore(key, newReplicaCircuitBreaker(d, rangeDesc, replDesc))
 	if !loaded {
 		d.metrics.CircuitBreaker.Replicas.Inc(1)
 	}
-	return v.(*ReplicaCircuitBreaker)
+	return cb
 }
 
 func (d *DistSenderCircuitBreakers) Mode() DistSenderCircuitBreakersMode {
