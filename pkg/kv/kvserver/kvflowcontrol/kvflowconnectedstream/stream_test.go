@@ -302,7 +302,7 @@ func TestRangeController(t *testing.T) {
 						ReplicaSet:  r.replicas(),
 						Leaseholder: r.localReplicaID,
 					}
-					controllers[r.rangeID] = NewRangeControllerImpl(options, init)
+					controllers[r.rangeID] = NewRangeControllerImpl(options, init, 1 /* nextRaftIndex */)
 					raftImpls[r.rangeID].controller = controllers[r.rangeID]
 				}
 			case "set_replicas":
@@ -518,6 +518,10 @@ func (t *testingRaft) FollowerState(replicaID roachpb.ReplicaID) FollowerStateIn
 
 func (t *testingRaft) LastEntryIndex() uint64 {
 	return t.lastEntryIndex
+}
+
+func (t *testingRaft) NextUnstableIndex() uint64 {
+	return t.lastEntryIndex + 1
 }
 
 func (t *testingRaft) MakeMsgApp(

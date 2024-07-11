@@ -2388,7 +2388,8 @@ func TestRACV2Basic(t *testing.T) {
 
 		k := tc.ScratchRange(t)
 		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
-		write(ctx, tc.Server(0).DB(), k, 500 /* count */, 1<<19 /* 512KiB */)
+		log.Info(ctx, "writing 500 x 256 KiB to scratch range")
+		write(ctx, tc.Server(0).DB(), k, 500 /* count */, 1<<18 /* 256KiB */)
 	})
 }
 
