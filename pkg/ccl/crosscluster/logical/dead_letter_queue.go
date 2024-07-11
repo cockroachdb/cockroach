@@ -21,19 +21,20 @@ import (
 )
 
 const (
-	// TODO(azhu): create table and enum in the db to be replicated into instead of defaultdb.
-	dlqBaseTableName = "defaultdb.crdb_replication_conflict_dlq_%d"
-	writeEnumStmt    = `CREATE TYPE IF NOT EXISTS defaultdb.crdb_replication_mutation_type AS ENUM (
+	dlqSchemaName = "crdb_replication"
+	// dlqBaseTableName is defined with the following naming convention: "db.dlqSchema.schema_table"
+	dlqBaseTableName   = "%s.%s.%s_%s"
+	createEnumBaseStmt = `CREATE TYPE IF NOT EXISTS %s.%s.mutation_type AS ENUM (
 			'insert', 'update', 'delete'
 	)`
-
-	createTableStmt = `CREATE TABLE IF NOT EXISTS %s (
+	createSchemaBaseStmt = `CREATE SCHEMA IF NOT EXISTS %s.%s`
+	createTableBaseStmt  = `CREATE TABLE IF NOT EXISTS %s (
 			id                  INT8 DEFAULT unique_rowid(),
 			ingestion_job_id    INT8 NOT NULL,
   		table_id    				INT8 NOT NULL,
 			dlq_timestamp     	TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
   		dlq_reason					STRING NOT NULL,
-			mutation_type				defaultdb.crdb_replication_mutation_type,       
+			mutation_type				%s.%s.mutation_type,       
   		key_value_bytes			BYTES NOT NULL,
 			incoming_row     		JSONB,
   		-- PK should be unique based on the ID, job ID and timestamp at which the 
@@ -43,22 +44,21 @@ const (
   		-- time.
 			PRIMARY KEY (ingestion_job_id, dlq_timestamp, id) USING HASH
 		)`
-
-	insertRowStmt = `INSERT INTO %s (
+	insertBaseStmt = `INSERT INTO %s (
 			ingestion_job_id, 
-			table_id, 
+      table_id,
 			dlq_reason,
 			mutation_type,
 			key_value_bytes,
 			incoming_row
 		) VALUES ($1, $2, $3, $4, $5, $6)`
 	insertRowStmtFallBack = `INSERT INTO %s (
-	ingestion_job_id, 
-	table_id, 
-	dlq_reason,
-	mutation_type,
-	key_value_bytes
-) VALUES ($1, $2, $3, $4, $5)`
+			ingestion_job_id,
+			table_id,
+			dlq_reason,
+			mutation_type,
+			key_value_bytes
+		) VALUES ($1, $2, $3, $4, $5)`
 )
 
 type ReplicationMutationType int
@@ -82,8 +82,14 @@ func (t ReplicationMutationType) String() string {
 	}
 }
 
+type fullyQualifiedTableName struct {
+	database string
+	schema   string
+	table    string
+}
+
 type DeadLetterQueueClient interface {
-	Create(ctx context.Context, tableIDs []int32) error
+	Create(ctx context.Context) error
 
 	Log(
 		ctx context.Context,
@@ -97,7 +103,7 @@ type DeadLetterQueueClient interface {
 type loggingDeadLetterQueueClient struct {
 }
 
-func (dlq *loggingDeadLetterQueueClient) Create(ctx context.Context, tableIDs []int32) error {
+func (dlq *loggingDeadLetterQueueClient) Create(ctx context.Context) error {
 	return nil
 }
 
@@ -136,19 +142,27 @@ func (dlq *loggingDeadLetterQueueClient) Log(
 }
 
 type deadLetterQueueClient struct {
-	ie isql.Executor
+	ie            isql.Executor
+	tableIDToName map[int32]fullyQualifiedTableName
 }
 
-func (dlq *deadLetterQueueClient) Create(ctx context.Context, tableIDs []int32) error {
-	if _, err := dlq.ie.Exec(ctx, "create-enum", nil, writeEnumStmt); err != nil {
-		return errors.Wrap(err, "failed to create crdb_replication_mutation_type enum")
-	}
+func (dlq *deadLetterQueueClient) Create(ctx context.Context) error {
+	// Create a dlq table for each table to be replicated.
+	for tableID, name := range dlq.tableIDToName {
+		dlqTableName := fmt.Sprintf(dlqBaseTableName, name.database, dlqSchemaName, name.schema, name.table)
+		createSchemaStmt := fmt.Sprintf(createSchemaBaseStmt, name.database, dlqSchemaName)
+		if _, err := dlq.ie.Exec(ctx, "create-dlq-schema", nil, createSchemaStmt); err != nil {
+			return errors.Wrapf(err, "failed to create crdb_replication schema in database %s", name.database)
+		}
 
-	// Create a dlq table for each given table.
-	for _, tableID := range tableIDs {
-		tableName := fmt.Sprintf(dlqBaseTableName, tableID)
-		if _, err := dlq.ie.Exec(ctx, "create-dlq-table", nil, fmt.Sprintf(createTableStmt, tableName)); err != nil {
-			return errors.Wrapf(err, "failed to create dlq table %q", tableName)
+		createEnumStmt := fmt.Sprintf(createEnumBaseStmt, name.database, dlqSchemaName)
+		if _, err := dlq.ie.Exec(ctx, "create-dlq-enum", nil, createEnumStmt); err != nil {
+			return errors.Wrapf(err, "failed to create mutation_type enum in database %s", name.database)
+		}
+
+		createTableStmt := fmt.Sprintf(createTableBaseStmt, dlqTableName, name.database, dlqSchemaName)
+		if _, err := dlq.ie.Exec(ctx, "create-dlq-table", nil, createTableStmt); err != nil {
+			return errors.Wrapf(err, "failed to create dlq for table %d", tableID)
 		}
 	}
 	return nil
@@ -165,8 +179,13 @@ func (dlq *deadLetterQueueClient) Log(
 		return errors.New("cdc event row not initialized")
 	}
 
-	tableID := cdcEventRow.TableID
-	tableName := fmt.Sprintf(dlqBaseTableName, tableID)
+	tableID := int32(cdcEventRow.TableID)
+	qualifiedName, ok := dlq.tableIDToName[tableID]
+	if !ok {
+		return errors.Newf("failed to look up fully qualified name for table %d", tableID)
+	}
+	dlqTableName := fmt.Sprintf(dlqBaseTableName, qualifiedName.database, dlqSchemaName, qualifiedName.schema, qualifiedName.table)
+
 	bytes, err := protoutil.Marshal(&kv)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal kv event")
@@ -187,14 +206,14 @@ func (dlq *deadLetterQueueClient) Log(
 			ctx,
 			"insert-row-into-dlq-table-fallback",
 			nil, /* txn */
-			fmt.Sprintf(insertRowStmtFallBack, tableName),
+			fmt.Sprintf(insertRowStmtFallBack, dlqTableName),
 			ingestionJobID,
 			tableID,
 			dlqReason.String(),
 			mutationType.String(),
 			bytes,
 		); err != nil {
-			return errors.Wrapf(err, "failed to insert row for table %s without json", tableName)
+			return errors.Wrapf(err, "failed to insert row for table %s without json", dlqTableName)
 		}
 		return nil
 	}
@@ -203,7 +222,7 @@ func (dlq *deadLetterQueueClient) Log(
 		ctx,
 		"insert-row-into-dlq-table",
 		nil, /* txn */
-		fmt.Sprintf(insertRowStmt, tableName),
+		fmt.Sprintf(insertBaseStmt, dlqTableName),
 		ingestionJobID,
 		tableID,
 		dlqReason.String(),
@@ -211,13 +230,18 @@ func (dlq *deadLetterQueueClient) Log(
 		bytes,
 		jsonRow,
 	); err != nil {
-		return errors.Wrapf(err, "failed to insert row for table %s", tableName)
+		return errors.Wrapf(err, "failed to insert row for table %s", dlqTableName)
 	}
 	return nil
 }
 
-func InitDeadLetterQueueClient(ie isql.Executor) DeadLetterQueueClient {
-	return &deadLetterQueueClient{ie: ie}
+func InitDeadLetterQueueClient(
+	ie isql.Executor, tableIDToName map[int32]fullyQualifiedTableName,
+) DeadLetterQueueClient {
+	return &deadLetterQueueClient{
+		ie:            ie,
+		tableIDToName: tableIDToName,
+	}
 }
 
 func InitLoggingDeadLetterQueueClient() DeadLetterQueueClient {
