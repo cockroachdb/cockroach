@@ -311,8 +311,9 @@ EOF"
           --gce-use-spot \
           --nodes 15 \
           --gce-machine-type n2-standard-16 \
-          --local-ssd=true \
-          --gce-local-ssd-count 16 \
+          --local-ssd=false
+          --gce-pd-volume-size=6000
+          --gce-pd-volume-type=pd-standard
           --os-volume-size 100 \
           --username drt \
           --lifetime 8760h
