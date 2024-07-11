@@ -129,6 +129,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/span",
         "//pkg/util/syncutil",
