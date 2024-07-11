@@ -268,7 +268,9 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			query: fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s')`, srv.URL),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "import",
-				stmt:      fmt.Sprintf(`IMPORT INTO defaultdb.public.a CSV DATA ('%s')`, srv.URL),
+				stmt: fmt.Sprintf(
+					`IMPORT INTO defaultdb.public.a CSV DATA (%s)`, tree.PasswordSubstitution,
+				),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
@@ -280,7 +282,10 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			query: fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s') WITH detached`, srv.URL),
 			sampleQueryEvent: expectedSampleQueryEvent{
 				eventType: "import",
-				stmt:      fmt.Sprintf(`IMPORT INTO defaultdb.public.a CSV DATA ('%s') WITH OPTIONS (detached)`, srv.URL),
+				stmt: fmt.Sprintf(
+					`IMPORT INTO defaultdb.public.a CSV DATA (%s) WITH OPTIONS (detached)`,
+					tree.PasswordSubstitution,
+				),
 			},
 			recoveryEvent: expectedRecoveryEvent{
 				numRows:      3,
