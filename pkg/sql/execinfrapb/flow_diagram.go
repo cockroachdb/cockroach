@@ -561,8 +561,8 @@ func (s *LogicalReplicationWriterSpec) summary() (string, []string) {
 	const spanLimit = 9
 
 	tableNames := []string{}
-	for _, desc := range s.TableDescriptors {
-		tableNames = append(tableNames, desc.Name)
+	for _, table := range s.TableMetadata {
+		tableNames = append(tableNames, table.SourceDescriptor.Name)
 	}
 
 	annotations := []string{
