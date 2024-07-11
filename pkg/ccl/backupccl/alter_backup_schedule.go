@@ -232,15 +232,15 @@ func emitAlteredSchedule(
 ) error {
 	to := make([]string, len(stmt.To))
 	for i, dest := range stmt.To {
-		to[i] = tree.AsStringWithFlags(dest, tree.FmtBareStrings)
+		to[i] = tree.AsStringWithFlags(dest, tree.FmtBareStrings|tree.FmtShowFullURIs)
 	}
 	kmsURIs := make([]string, len(stmt.Options.EncryptionKMSURI))
 	for i, kmsURI := range stmt.Options.EncryptionKMSURI {
-		kmsURIs[i] = tree.AsStringWithFlags(kmsURI, tree.FmtBareStrings)
+		kmsURIs[i] = tree.AsStringWithFlags(kmsURI, tree.FmtBareStrings|tree.FmtShowFullURIs)
 	}
 	incDests := make([]string, len(stmt.Options.IncrementalStorage))
 	for i, incDest := range stmt.Options.IncrementalStorage {
-		incDests[i] = tree.AsStringWithFlags(incDest, tree.FmtBareStrings)
+		incDests[i] = tree.AsStringWithFlags(incDest, tree.FmtBareStrings|tree.FmtShowFullURIs)
 	}
 	if err := emitSchedule(job, stmt, to, nil, /* incrementalFrom */
 		kmsURIs, incDests, resultsCh); err != nil {
