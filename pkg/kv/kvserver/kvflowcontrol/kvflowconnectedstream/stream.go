@@ -1045,8 +1045,8 @@ func (rc *RangeControllerImpl) HandleRaftEvent(e RaftEvent) error {
 			// Leader replica.
 			if n := len(entries); n > 0 && entries[n-1].Index+1 != info.Next {
 				// Leader is operating in push mode, so Next should have advanced.
-				panic(fmt.Sprintf("last entry index %d + 1 != %d Next at leader",
-					entries[n-1].Index, info.Next))
+				panic(fmt.Sprintf("last entry index %d + 1 != %d Next at leader [info=%v %v]",
+					entries[n-1].Index, info.Next, info, rs))
 			}
 		}
 		rs.handleReadyState(info, nextRaftIndex)
@@ -1454,8 +1454,11 @@ func (rs *replicaState) handleReadyEntries(entries []raftpb.Entry) {
 					rc.opts.LocalReplicaID, msg.From))
 			}
 
-			log.VInfof(context.TODO(), 1, "send raft message from=%d to=%d: [%d,%d)",
-				msg.From, msg.To, msg.Index+1, int(msg.Index)+len(msg.Entries)+1)
+			log.VInfof(context.TODO(), 1,
+				"send raft message from=%d to=%d: [%d,%d) [info=%v send_stream=%v]",
+				msg.From, msg.To, msg.Index+1, int(msg.Index)+len(msg.Entries)+1,
+				rs.parent.opts.RaftInterface.FollowerState(rs.desc.ReplicaID),
+				rs.replicaSendStream.stringLocked())
 			rc.opts.MessageSender.SendRaftMessage(
 				context.TODO(), kvflowcontrolpb.PriorityNotInheritedForFlowControl, msg)
 		}
@@ -1833,9 +1836,14 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(msg raftpb.Message) 
 		if !entryFCState.usesFlowControl {
 			continue
 		}
-		// Fix the stats since this is no longer in the send-queue.
-		rss.sendQueue.sizeSum -= entryFCState.tokens
-		rss.sendQueue.priorityCount[entryFCState.originalPri]--
+		if entryFCState.index >= rss.nextRaftIndexInitial {
+			// Fix the stats since this is no longer in the send-queue. We only do
+			// this for entries which after >= initial next raft index, as any prior
+			// entries the controller wouldn't have seen or added tokens for
+			// (estimate is used).
+			rss.sendQueue.sizeSum -= entryFCState.tokens
+			rss.sendQueue.priorityCount[entryFCState.originalPri]--
+		}
 		originalEntryWC := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
 		switch inheritedPri {
 		case kvflowcontrolpb.NotSubjectToACForFlowControl:
@@ -1872,8 +1880,11 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(msg raftpb.Message) 
 				context.TODO(), admissionpb.WorkClass(i), -remainingTokens[i])
 		}
 	}
-	log.VInfof(context.TODO(), 1, "send raft message from=%d to=%d: [%d,%d)",
-		msg.From, msg.To, msg.Index+1, int(msg.Index)+len(msg.Entries)+1)
+	log.VInfof(context.TODO(), 1,
+		"send raft message from=%d to=%d: [%d,%d) inherited_pri=%v [info=%v send_stream=%v]",
+		msg.From, msg.To, msg.Index+1, int(msg.Index)+len(msg.Entries)+1, inheritedPri,
+		rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
+		rss.stringLocked())
 	rss.parent.parent.opts.MessageSender.SendRaftMessage(context.TODO(), inheritedPri, msg)
 }
 
@@ -2035,13 +2046,16 @@ func (rss *replicaSendStream) queueSizeLocked() kvflowcontrol.Tokens {
 	size += rss.sendQueue.sizeSum
 
 	if size < 0 {
-		// The queue size should be bounded below by 0.
+		// The queue size should be bounded below by 0 in most cases, however it is
+		// possible that as entries are dequeued and sent
 		panic(fmt.Sprintf(
-			"%v: negative send queue size %v (next_raft_index_initial=%v "+
-				"index_to_send=%v approx_mean_bytes=%v send_queue_size_sum=%v)",
+			"%v: negative send queue size %v [next_raft_index_initial=%v "+
+				"next_raft_index=%v index_to_send=%v approx_mean_bytes=%v "+
+				"send_queue_size_sum=%v info=%v]",
 			rss.parent.desc.ReplicaID, size, rss.nextRaftIndexInitial,
-			rss.sendQueue.indexToSend, rss.sendQueue.approxMeanSizeBytes,
-			rss.sendQueue.sizeSum))
+			rss.sendQueue.nextRaftIndex, rss.sendQueue.indexToSend,
+			rss.sendQueue.approxMeanSizeBytes, rss.sendQueue.sizeSum,
+			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID)))
 	}
 
 	return size
