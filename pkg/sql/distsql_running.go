@@ -409,29 +409,25 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
-	getJobTag := func(ctx context.Context) string {
-		tags := logtags.FromContext(ctx)
-		if tags != nil {
-			for _, tag := range tags.Get() {
-				if tag.Key() == "job" {
-					return tag.ValueStr()
-				}
-			}
-		}
-		return ""
-	}
 	setupReq := execinfrapb.SetupFlowRequest{
-		// TODO(yuzefovich): avoid populating some fields of the SetupFlowRequest
-		// for local plans.
 		LeafTxnInputState: leafInputState,
 		Version:           execinfra.Version,
-		EvalContext:       execinfrapb.MakeEvalContext(&evalCtx.Context),
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
-		JobTag:            getJobTag(ctx),
+	}
+	if !localState.IsLocal {
+		// In distributed plans populate some extra state.
+		setupReq.EvalContext = execinfrapb.MakeEvalContext(&evalCtx.Context)
+		if jobTag, ok := logtags.FromContext(ctx).GetTag("job"); ok {
+			setupReq.JobTag = jobTag.ValueStr()
+		}
 	}
 
+	// VectorizeMode is the only field that we populate in the EvalContext in
+	// the local case since we might need to modify it, and we don't want to
+	// update the local eval context.
+	setupReq.EvalContext.SessionData.VectorizeMode = evalCtx.SessionData().VectorizeMode
 	var isVectorized bool
 	if vectorizeMode := evalCtx.SessionData().VectorizeMode; vectorizeMode != sessiondatapb.VectorizeOff {
 		// Now we determine whether the vectorized engine supports the flow
