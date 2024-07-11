@@ -48,7 +48,7 @@ type ImmediateMutationVisitor interface {
 	RemoveDroppedIndexPartialPredicate(context.Context, RemoveDroppedIndexPartialPredicate) error
 	MakeIndexAbsent(context.Context, MakeIndexAbsent) error
 	MakeAbsentColumnDeleteOnly(context.Context, MakeAbsentColumnDeleteOnly) error
-	SetAddedColumnType(context.Context, SetAddedColumnType) error
+	UpsertColumnType(context.Context, UpsertColumnType) error
 	MakeWriteOnlyColumnPublic(context.Context, MakeWriteOnlyColumnPublic) error
 	MakePublicColumnWriteOnly(context.Context, MakePublicColumnWriteOnly) error
 	MakeWriteOnlyColumnDeleteOnly(context.Context, MakeWriteOnlyColumnDeleteOnly) error
@@ -269,8 +269,8 @@ func (op MakeAbsentColumnDeleteOnly) Visit(ctx context.Context, v ImmediateMutat
 }
 
 // Visit is part of the ImmediateMutationOp interface.
-func (op SetAddedColumnType) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
-	return v.SetAddedColumnType(ctx, op)
+func (op UpsertColumnType) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpsertColumnType(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

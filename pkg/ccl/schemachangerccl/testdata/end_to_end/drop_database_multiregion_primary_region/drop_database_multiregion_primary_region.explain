@@ -53,14 +53,14 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108 (table_regional_by_table-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_table-), Name: "a", ColumnID: 1 (a-)}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (a-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (a-), TypeName: "INT8"}
  │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 0}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_table-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_table-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_table-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_table-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
@@ -167,14 +167,14 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │    │    │    ├── ABSENT  → PUBLIC ColumnFamily:{DescID: 108 (table_regional_by_table-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_table-), Name: "a", ColumnID: 1 (a-)}
- │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (a-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (a-), TypeName: "INT8"}
  │    │    │    ├── ABSENT  → PUBLIC ColumnNotNull:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 0}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_table-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_table-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_table-), ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_table-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
- │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
  │    │    │    └── ABSENT  → PUBLIC IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
@@ -224,14 +224,14 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108 (table_regional_by_table-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_table-), Name: "a", ColumnID: 1 (a-)}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (a-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (a-), TypeName: "INT8"}
  │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 0}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_table-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_table-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_table-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_table-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
- │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_table-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-), IndexID: 1 (table_regional_by_table_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_table-), IndexID: 1 (table_regional_by_table_pkey-), ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
