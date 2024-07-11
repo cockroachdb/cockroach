@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -222,9 +223,9 @@ func (lww *sqlLastWriteWinsRowProcessor) SetSyntheticFailurePercent(rate uint32)
 }
 
 var (
-	implicitTxnOverrides = sessiondata.InternalExecutorOverride{
+	forceGenericPlan = sessiondatapb.PlanCacheModeForceGeneric
+	ieOverrides      = sessiondata.InternalExecutorOverride{
 		AttributeToUser: true,
-
 		// The OriginIDForLogicalDataReplication session variable will bind the
 		// origin ID 1 to each per-statement batch request header sent by the
 		// internal executor. This metadata will be plumbed to the MVCCValueHeader
@@ -238,10 +239,16 @@ var (
 		// 2) we do not plan to use multi row insert statements during LDR ingestion
 		// via sql.
 		OriginIDForLogicalDataReplication: 1,
-	}
-	explicitTxnOverrides = sessiondata.InternalExecutorOverride{
-		AttributeToUser:                   true,
-		OriginIDForLogicalDataReplication: 1,
+		// Use generic query plans since our queries are extremely simple and
+		// won't benefit from custom plans.
+		PlanCacheMode: &forceGenericPlan,
+		// We've observed in the CPU profiles that the default goroutine stack
+		// of the connExecutor goroutine is insufficient for evaluation of the
+		// ingestion queries, so we grow the stack right away to 32KiB.
+		GrowStackSize: true,
+		// We don't get any benefits from generating plan gists for internal
+		// queries, so we disable them.
+		DisablePlanGists: true,
 	}
 )
 
@@ -258,11 +265,10 @@ func (lww *sqlLastWriteWinsRowProcessor) insertRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row, prevValue roachpb.Value,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
-	ieOverrides := implicitTxnOverrides
 	if txn != nil {
 		kvTxn = txn.KV()
-		ieOverrides = explicitTxnOverrides
 	}
+
 	insertQueriesForTable, ok := lww.queryBuffer.insertQueries[row.TableID]
 	if !ok {
 		return batchStats{}, errors.Errorf("no pre-generated insert query for table %d", row.TableID)
@@ -311,10 +317,8 @@ func (lww *sqlLastWriteWinsRowProcessor) deleteRow(
 	ctx context.Context, txn isql.Txn, row cdcevent.Row,
 ) (batchStats, error) {
 	var kvTxn *kv.Txn
-	ieOverrides := implicitTxnOverrides
 	if txn != nil {
 		kvTxn = txn.KV()
-		ieOverrides = explicitTxnOverrides
 	}
 
 	deleteQuery, ok := lww.queryBuffer.deleteQueries[row.TableID]

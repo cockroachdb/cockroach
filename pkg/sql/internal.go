@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -222,6 +223,7 @@ func (ie *InternalExecutor) runWithEx(
 	syncCallback func([]*streamingCommandResult),
 	errCallback func(error),
 	attributeToUser bool,
+	growStackSize bool,
 ) error {
 	ex, err := ie.initConnEx(ctx, txn, w, mode, sd, stmtBuf, syncCallback, attributeToUser)
 	if err != nil {
@@ -244,6 +246,11 @@ func (ie *InternalExecutor) runWithEx(
 		},
 		func(ctx context.Context) {
 			defer cleanup()
+			// TODO(yuzefovich): benchmark whether we should be growing the
+			// stack size unconditionally.
+			if growStackSize {
+				growstack.Grow()
+			}
 			if err := ex.run(
 				ctx,
 				ie.mon,
@@ -929,11 +936,14 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.OptimizerUseHistograms {
 		sd.OptimizerUseHistograms = true
 	}
-	if o.DisableChangefeedReplication {
-		sd.DisableChangefeedReplication = true
-	}
 	if o.OriginIDForLogicalDataReplication != 0 {
 		sd.OriginIDForLogicalDataReplication = o.OriginIDForLogicalDataReplication
+	}
+	if o.PlanCacheMode != nil {
+		sd.PlanCacheMode = *o.PlanCacheMode
+	}
+	if o.DisablePlanGists {
+		sd.DisablePlanGists = true
 	}
 
 	if o.MultiOverride != "" {
@@ -1148,13 +1158,11 @@ func (ie *InternalExecutor) execInternal(
 			sessionDataOverride.MultiOverride = globalOverride
 		}
 	}
-	if txn != nil && sessionDataOverride.DisableChangefeedReplication {
-		return nil, errors.AssertionFailedf("DisableChangefeedReplication session override cannot apply with non-nil txn")
-	}
 
 	applyInternalExecutorSessionExceptions(sd)
 	applyOverrides(sessionDataOverride, sd)
 	attributeToUser := sessionDataOverride.AttributeToUser && attributeToUserEnabled.Get(&ie.s.cfg.Settings.SV)
+	growStackSize := sessionDataOverride.GrowStackSize
 	if !rw.async() && (txn != nil && txn.Type() == kv.RootTxn) {
 		// If the "outer" query uses the RootTxn and the sync result channel is
 		// requested, then we must disable both DistSQL and Streamer to ensure
@@ -1266,7 +1274,7 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	err = ie.runWithEx(ctx, opName, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser)
+	err = ie.runWithEx(ctx, opName, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser, growStackSize)
 	if err != nil {
 		return nil, err
 	}
