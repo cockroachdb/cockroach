@@ -194,10 +194,6 @@ func newSampleAggregator(
 	return s, nil
 }
 
-func (s *sampleAggregator) pushTrailingMeta(ctx context.Context, output execinfra.RowReceiver) {
-	execinfra.SendTraceData(ctx, s.FlowCtx, output)
-}
-
 // Run is part of the Processor interface.
 func (s *sampleAggregator) Run(ctx context.Context, output execinfra.RowReceiver) {
 	ctx = s.StartInternal(ctx, sampleAggregatorProcName)
@@ -205,9 +201,9 @@ func (s *sampleAggregator) Run(ctx context.Context, output execinfra.RowReceiver
 
 	earlyExit, err := s.mainLoop(ctx, output)
 	if err != nil {
-		execinfra.DrainAndClose(ctx, output, err, s.pushTrailingMeta, s.input)
+		execinfra.DrainAndClose(ctx, s.FlowCtx, s.input, output, err)
 	} else if !earlyExit {
-		s.pushTrailingMeta(ctx, output)
+		execinfra.SendTraceData(ctx, s.FlowCtx, output)
 		s.input.ConsumerClosed()
 		output.ProducerDone()
 	}
@@ -285,7 +281,7 @@ func (s *sampleAggregator) mainLoop(
 						sr.Disable()
 					}
 				}
-			} else if !emitHelper(ctx, output, &s.OutputHelper, nil /* row */, meta, s.pushTrailingMeta, s.input) {
+			} else if !emitHelper(ctx, s.FlowCtx, s.input, output, &s.OutputHelper, nil /* row */, meta) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
 			}
