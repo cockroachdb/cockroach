@@ -267,10 +267,11 @@ PREPARE _ (INT8) AS RESUME JOBS SELECT $1 -- identifiers removed
 parse
 PREPARE a AS IMPORT INTO a CSV DATA ('c') WITH temp = 'd'
 ----
-PREPARE a AS IMPORT INTO a CSV DATA ('c') WITH OPTIONS (temp = 'd') -- normalized!
-PREPARE a AS IMPORT INTO a CSV DATA (('c')) WITH OPTIONS (temp = ('d')) -- fully parenthesized
+PREPARE a AS IMPORT INTO a CSV DATA ('*****') WITH OPTIONS (temp = 'd') -- normalized!
+PREPARE a AS IMPORT INTO a CSV DATA (('*****')) WITH OPTIONS (temp = ('d')) -- fully parenthesized
 PREPARE a AS IMPORT INTO a CSV DATA ('_') WITH OPTIONS (temp = '_') -- literals removed
-PREPARE _ AS IMPORT INTO _ CSV DATA ('c') WITH OPTIONS (_ = 'd') -- identifiers removed
+PREPARE _ AS IMPORT INTO _ CSV DATA ('*****') WITH OPTIONS (_ = 'd') -- identifiers removed
+PREPARE a AS IMPORT INTO a CSV DATA ('c') WITH OPTIONS (temp = 'd') -- passwords exposed
 
 parse
 PREPARE a (STRING, STRING, STRING) AS IMPORT INTO a CSV DATA ($2) WITH temp = $3
