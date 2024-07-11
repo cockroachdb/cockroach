@@ -49,9 +49,7 @@ func (i *immediateVisitor) MakeAbsentColumnDeleteOnly(
 	return nil
 }
 
-func (i *immediateVisitor) SetAddedColumnType(
-	ctx context.Context, op scop.SetAddedColumnType,
-) error {
+func (i *immediateVisitor) UpsertColumnType(ctx context.Context, op scop.UpsertColumnType) error {
 	tbl, err := i.checkOutTable(ctx, op.ColumnType.TableID)
 	if err != nil {
 		return err

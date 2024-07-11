@@ -170,7 +170,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
            │    └── PUBLIC      → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 3}
            ├── 4 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT           Column:{DescID: 104 (t), ColumnID: 2 (j-)}
-           │    ├── PUBLIC      → ABSENT           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-)}
+           │    ├── PUBLIC      → ABSENT           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-), TypeName: "INT8"}
            │    ├── DELETE_ONLY → ABSENT           PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
            │    └── PUBLIC      → ABSENT           IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
            └── 6 Mutation operations
