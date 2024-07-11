@@ -91,6 +91,7 @@ func (p *purgatory) Store(
 	}
 
 	p.levels = append(p.levels, purgatoryLevel{events: events, bytes: byteSize})
+	p.levels[len(p.levels)-1].closedAt = timeutil.Now()
 	p.bytes += byteSize
 	p.bytesGauge.Inc(byteSize)
 	p.eventsGauge.Inc(int64(len(events)))
