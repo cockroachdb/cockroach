@@ -196,9 +196,13 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	}
 	require.Greater(t, len(systemZoneIDs), 0, "expected some system zones, got none")
 	// Remove the entries in systemZoneIDs that don't get critical locality reports.
+	// The default range (zoneID=0) does get reports, but since there is no system
+	// data in the default range that is not part of a more granular zone (e.g.,
+	// the meta, liveness, timeseries, or system range), there won't be a report
+	// for it.
 	i := 0
 	for j, zid := range systemZoneIDs {
-		if zoneChangesReplication(&systemZones[j]) {
+		if zoneChangesReplication(&systemZones[j]) && zid != keys.RootNamespaceID {
 			systemZoneIDs[i] = zid
 			i++
 		}
