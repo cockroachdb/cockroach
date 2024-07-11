@@ -208,6 +208,14 @@ func (pr *Progress) AdmittedLags() bool {
 	return false
 }
 
+func (pr *Progress) SetAdmitted(marks AdmittedMarks) {
+	for i := range pr.Admitted {
+		if marks[i] > pr.Admitted[i] {
+			pr.Admitted[i] = marks[i]
+		}
+	}
+}
+
 // SentCommit updates the sentCommit.
 func (pr *Progress) SentCommit(commit uint64) {
 	pr.sentCommit = commit

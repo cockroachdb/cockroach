@@ -1422,6 +1422,9 @@ func stepLeader(r *raft, m pb.Message) error {
 		// an MsgAppResp to acknowledge the appended entries in the last Ready.
 
 		pr.RecentActive = true
+		if len(m.Admitted) == len(pr.Admitted) {
+			pr.SetAdmitted([4]uint64(m.Admitted))
+		}
 
 		if m.Reject {
 			// RejectHint is the suggested next base entry for appending (i.e.

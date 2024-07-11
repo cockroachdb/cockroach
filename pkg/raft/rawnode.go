@@ -572,6 +572,12 @@ func (rn *RawNode) SetAdmitted(marks tracker.AdmittedMarks) pb.Message {
 	if !rn.raft.adm.Set(marks) {
 		return pb.Message{}
 	}
+
+	if rn.raft.lead == rn.raft.id {
+		rn.raft.trk.Progress[rn.raft.id].Admitted = marks
+		return pb.Message{}
+	}
+
 	return pb.Message{
 		From:     rn.raft.id,
 		To:       rn.raft.lead,
