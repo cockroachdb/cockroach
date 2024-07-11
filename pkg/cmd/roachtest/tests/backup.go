@@ -1021,7 +1021,7 @@ func getAWSBackupPath(dest string) (string, error) {
 		AssumeRoleAWSKeyIDEnvVar:     amazon.AWSAccessKeyParam,
 		AssumeRoleAWSSecretKeyEnvVar: amazon.AWSSecretParam,
 		AssumeRoleAWSRoleEnvVar:      amazon.AssumeRoleParam,
-		KMSRegionAEnvVar:             amazon.KMSRegionParam,
+		KMSRegionAEnvVar:             amazon.S3RegionParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
