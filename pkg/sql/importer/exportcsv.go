@@ -312,6 +312,9 @@ func (sp *csvWriter) Resume(output execinfra.RowReceiver) {
 	panic("not implemented")
 }
 
+// Close is part of the execinfra.Processor interface.
+func (*csvWriter) Close(context.Context) {}
+
 func init() {
 	rowexec.NewCSVWriterProcessor = newCSVWriterProcessor
 }
