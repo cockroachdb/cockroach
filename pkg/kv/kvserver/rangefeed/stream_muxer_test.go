@@ -171,7 +171,7 @@ func TestStreamMuxerOnBlockingIO(t *testing.T) {
 	expectedErrEvent.MustSetValue(&kvpb.RangeFeedError{
 		Error: *kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER)),
 	})
-	// Receive the event after non-blocking.
+	// Receive the event after getting unblocked.
 	require.Truef(t, testServerStream.hasEvent(expectedErrEvent),
 		"expected event %v not found in %v", ev, testServerStream)
 }
