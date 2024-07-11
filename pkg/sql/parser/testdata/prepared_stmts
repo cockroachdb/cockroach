@@ -97,10 +97,11 @@ PREPARE _ (INT8) AS DELETE FROM _ WHERE _ = $1 -- identifiers removed
 parse
 PREPARE a AS BACKUP DATABASE a TO 'b'
 ----
-PREPARE a AS BACKUP DATABASE a TO 'b'
-PREPARE a AS BACKUP DATABASE a TO ('b') -- fully parenthesized
+PREPARE a AS BACKUP DATABASE a TO '*****' -- normalized!
+PREPARE a AS BACKUP DATABASE a TO ('*****') -- fully parenthesized
 PREPARE a AS BACKUP DATABASE a TO '_' -- literals removed
-PREPARE _ AS BACKUP DATABASE _ TO 'b' -- identifiers removed
+PREPARE _ AS BACKUP DATABASE _ TO '*****' -- identifiers removed
+PREPARE a AS BACKUP DATABASE a TO 'b' -- passwords exposed
 
 parse
 PREPARE a (STRING) AS BACKUP DATABASE a TO $1
@@ -113,10 +114,11 @@ PREPARE _ (STRING) AS BACKUP DATABASE _ TO $1 -- identifiers removed
 parse
 PREPARE a AS RESTORE DATABASE a FROM 'b'
 ----
-PREPARE a AS RESTORE DATABASE a FROM 'b'
-PREPARE a AS RESTORE DATABASE a FROM ('b') -- fully parenthesized
+PREPARE a AS RESTORE DATABASE a FROM '*****' -- normalized!
+PREPARE a AS RESTORE DATABASE a FROM ('*****') -- fully parenthesized
 PREPARE a AS RESTORE DATABASE a FROM '_' -- literals removed
-PREPARE _ AS RESTORE DATABASE _ FROM 'b' -- identifiers removed
+PREPARE _ AS RESTORE DATABASE _ FROM '*****' -- identifiers removed
+PREPARE a AS RESTORE DATABASE a FROM 'b' -- passwords exposed
 
 parse
 PREPARE a (STRING) AS RESTORE DATABASE a FROM $1

@@ -281,8 +281,8 @@ const (
 	// other things (eg. fixing #33429).
 	FmtExport = FmtBareStrings | fmtRawStrings
 
-	// fmtAlwaysQualifyNames will fully qualify various types of names.
-	fmtAlwaysQualifyNames = FmtAlwaysQualifyTableNames | FmtAlwaysQualifyUserDefinedTypeNames
+	// FmtAlwaysQualifyNames will fully qualify various types of names.
+	FmtAlwaysQualifyNames = FmtAlwaysQualifyTableNames | FmtAlwaysQualifyUserDefinedTypeNames
 )
 
 const flagsRequiringAnnotations = FmtAlwaysQualifyTableNames
@@ -722,7 +722,7 @@ func AsStringWithFlags(n NodeFormatter, fl FmtFlags, opts ...FmtCtxOption) strin
 // AsStringWithFQNames pretty prints a node to a string with the
 // FmtAlwaysQualifyTableNames flag (which requires annotations).
 func AsStringWithFQNames(n NodeFormatter, ann *Annotations) string {
-	ctx := NewFmtCtx(fmtAlwaysQualifyNames, FmtAnnotations(ann))
+	ctx := NewFmtCtx(FmtAlwaysQualifyNames, FmtAnnotations(ann))
 	ctx.FormatNode(n)
 	return ctx.CloseAndGetString()
 }
