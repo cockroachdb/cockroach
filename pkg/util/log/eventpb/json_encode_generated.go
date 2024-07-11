@@ -2724,6 +2724,58 @@ func (m *DebugSendKvBatch) AppendJSONFields(printComma bool, b redact.Redactable
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *DiskSlownessCleared) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.NodeID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NodeID\":"...)
+		b = strconv.AppendInt(b, int64(m.NodeID), 10)
+	}
+
+	if m.StoreID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StoreID\":"...)
+		b = strconv.AppendInt(b, int64(m.StoreID), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *DiskSlownessDetected) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.NodeID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NodeID\":"...)
+		b = strconv.AppendInt(b, int64(m.NodeID), 10)
+	}
+
+	if m.StoreID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StoreID\":"...)
+		b = strconv.AppendInt(b, int64(m.StoreID), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *DropDatabase) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

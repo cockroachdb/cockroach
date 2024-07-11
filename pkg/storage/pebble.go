@@ -1075,6 +1075,7 @@ type Pebble struct {
 
 	storeIDPebbleLog *base.StoreIDContainer
 	replayer         *replay.WorkloadCollector
+	diskSlowFunc     atomic.Pointer[func(vfs.DiskSlowInfo)]
 
 	singleDelLogEvery log.EveryN
 }
@@ -1097,6 +1098,13 @@ var WorkloadCollectorEnabled = envutil.EnvOrDefaultBool("COCKROACH_STORAGE_WORKL
 func (p *Pebble) SetCompactionConcurrency(n uint64) uint64 {
 	prevConcurrency := atomic.SwapUint64(&p.atomic.compactionConcurrency, n)
 	return prevConcurrency
+}
+
+// RegisterDiskSlowCallback registers a callback that will be run when a write
+// operation on the disk has been seen to be slow. Only one handler can be
+// registered per Pebble instance.
+func (p *Pebble) RegisterDiskSlowCallback(f func(vfs.DiskSlowInfo)) {
+	p.diskSlowFunc.Store(&f)
 }
 
 // AdjustCompactionConcurrency adjusts the compaction concurrency up or down by
@@ -1606,6 +1614,10 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 				return
 			}
 			atomic.AddInt64(&p.diskSlowCount, 1)
+			// Call any custom handlers registered for disk slowness.
+			if fn := p.diskSlowFunc.Load(); fn != nil {
+				(*fn)(info)
+			}
 		},
 		FlushEnd: func(info pebble.FlushInfo) {
 			if info.Err != nil {

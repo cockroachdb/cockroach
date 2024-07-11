@@ -137,6 +137,11 @@ export const UNSAFE_DELETE_NAMESPACE_ENTRY = "unsafe_delete_namespace_entry";
 export const UNSAFE_UPSERT_DESCRIPTOR = "unsafe_upsert_descriptor";
 // Recorded when crdb_internal.unsafe_upsert_namespace_entry is executed.
 export const UNSAFE_UPSERT_NAMESPACE_ENTRY = "unsafe_upsert_namespace_entry";
+// Recorded when a disk slowness event is detected on a store.
+export const DISK_SLOWNESS_DETECTED = "disk_slowness_detected";
+// Recorded when a disk slowness event is no longer detected on a store
+// after having been detected and reported previously.
+export const DISK_SLOWNESS_CLEARED = "disk_slowness_cleared";
 
 // Node Event Types
 export const nodeEvents = [
@@ -145,6 +150,8 @@ export const nodeEvents = [
   NODE_DECOMMISSIONING,
   NODE_DECOMMISSIONED,
   NODE_RECOMMISSIONED,
+  DISK_SLOWNESS_DETECTED,
+  DISK_SLOWNESS_CLEARED,
 ];
 export const databaseEvents = [CREATE_DATABASE, DROP_DATABASE];
 export const tableEvents = [
