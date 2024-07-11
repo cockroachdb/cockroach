@@ -2371,7 +2371,7 @@ func TestRACV2Basic(t *testing.T) {
 	})
 
 	t.Run("relocate_range", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, 3,
+		tc := testcluster.StartTestCluster(t, 6,
 			base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
 		defer tc.Stopper().Stop(ctx)
 
@@ -2391,7 +2391,7 @@ func TestRACV2Basic(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		kvflowconnectedstream.RegularTokensPerStream.Override(ctx, &st.SV, 4<<20 /* 4MiB*/)
 		kvflowconnectedstream.ElasticTokensPerStream.Override(ctx, &st.SV, 4<<20 /* 4MiB */)
-		tc := testcluster.StartTestCluster(t, 6, base.TestClusterArgs{
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      base.TestServerArgs{Settings: st},
 		})
