@@ -27,12 +27,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// regularTokensPerStream determines the flow tokens available for regular work
+// RegularTokensPerStream determines the flow tokens available for regular work
 // on a per-stream basis.
 //
 // TODO: Either unify these settings with kvflowcontroller settings, or rationalize the
 // naming.
-var regularTokensPerStream = settings.RegisterByteSizeSetting(
+var RegularTokensPerStream = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_controller_v2.regular_tokens_per_stream",
 	"flow tokens available for regular work on a per-stream basis",
@@ -40,9 +40,9 @@ var regularTokensPerStream = settings.RegisterByteSizeSetting(
 	validateTokenRange,
 )
 
-// elasticTokensPerStream determines the flow tokens available for elastic work
+// ElasticTokensPerStream determines the flow tokens available for elastic work
 // on a per-stream basis.
-var elasticTokensPerStream = settings.RegisterByteSizeSetting(
+var ElasticTokensPerStream = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_controller_v2.elastic_tokens_per_stream",
 	"flow tokens available for elastic work on a per-stream basis",
@@ -203,8 +203,8 @@ func newTokenCounter(settings *cluster.Settings, clock *hlc.Clock) *tokenCounter
 		settings: settings,
 	}
 
-	regularTokens := kvflowcontrol.Tokens(regularTokensPerStream.Get(&settings.SV))
-	elasticTokens := kvflowcontrol.Tokens(elasticTokensPerStream.Get(&settings.SV))
+	regularTokens := kvflowcontrol.Tokens(RegularTokensPerStream.Get(&settings.SV))
+	elasticTokens := kvflowcontrol.Tokens(ElasticTokensPerStream.Get(&settings.SV))
 	b.mu.limit = tokensPerWorkClass{
 		regular: regularTokens,
 		elastic: elasticTokens,
@@ -223,8 +223,8 @@ func newTokenCounter(settings *cluster.Settings, clock *hlc.Clock) *tokenCounter
 
 		before := b.mu.limit
 		now := tokensPerWorkClass{
-			regular: kvflowcontrol.Tokens(regularTokensPerStream.Get(&settings.SV)),
-			elastic: kvflowcontrol.Tokens(elasticTokensPerStream.Get(&settings.SV)),
+			regular: kvflowcontrol.Tokens(RegularTokensPerStream.Get(&settings.SV)),
+			elastic: kvflowcontrol.Tokens(ElasticTokensPerStream.Get(&settings.SV)),
 		}
 		adjustment := tokensPerWorkClass{
 			regular: now.regular - before.regular,
@@ -238,8 +238,8 @@ func newTokenCounter(settings *cluster.Settings, clock *hlc.Clock) *tokenCounter
 			ctx, adjustment.elastic, now.elastic, true /* admin */, b.clock.PhysicalTime())
 	}
 
-	regularTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
-	elasticTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
+	RegularTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
+	ElasticTokensPerStream.SetOnChange(&settings.SV, onChangeFunc)
 	return b
 }
 

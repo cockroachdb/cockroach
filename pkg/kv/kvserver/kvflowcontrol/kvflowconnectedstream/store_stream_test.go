@@ -53,8 +53,8 @@ func TestStoreStreamSendTokenWatcher(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClockForTesting(hlc.NewHybridManualClock())
 
-	elasticTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.elastic))
-	regularTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.regular))
+	ElasticTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.elastic))
+	RegularTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.regular))
 
 	counter := newTokenCounter(settings, clock)
 

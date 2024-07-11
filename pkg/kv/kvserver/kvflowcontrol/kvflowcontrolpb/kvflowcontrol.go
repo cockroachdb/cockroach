@@ -11,6 +11,7 @@
 package kvflowcontrolpb
 
 import (
+	fmt "fmt"
 	math "math"
 
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -102,12 +103,18 @@ func (p RaftPriority) String() string {
 }
 
 func RaftPriorityConversionForUnusedZero(pri RaftPriority) uint8 {
+	if RaftPriority(pri) > RaftHighPri && RaftPriority(pri) < NotSubjectToACForFlowControl {
+		panic(fmt.Sprintf("invalid raft priority: %d", pri))
+	}
 	return uint8(pri + 1)
 }
 
 // UndoRaftPriorityConversionForUnusedZero ...
 // REQUIRES: pri > 0
 func UndoRaftPriorityConversionForUnusedZero(pri uint8) RaftPriority {
+	if RaftPriority(pri) > RaftHighPri && RaftPriority(pri) < NotSubjectToACForFlowControl {
+		panic(fmt.Sprintf("invalid raft priority: %d", pri))
+	}
 	return RaftPriority(pri - 1)
 }
 

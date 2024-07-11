@@ -224,6 +224,9 @@ func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, er
 				kvflowcontrolpb.RaftPriority(pri),
 				kvflowcontrolpb.RaftPriority(raftAdmissionMeta.AdmissionPriority)))
 		}
+		if kvflowcontrolpb.RaftPriority(pri) > kvflowcontrolpb.RaftHighPri {
+			panic(fmt.Sprintf("invalid raft priority: %d", kvflowcontrolpb.RaftPriority(pri)))
+		}
 	}
 	return raftAdmissionMeta, nil
 }

@@ -12,6 +12,7 @@ package raftlog
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -52,6 +53,9 @@ func EncodeCommand(
 			rpri = kvflowcontrolpb.RaftPriority(raftAdmissionMeta.AdmissionPriority)
 			// TODO(racv2): Add an assertion that the admission fields on command are
 			// 0 when useRACv2 is true.
+			if rpri > kvflowcontrolpb.RaftHighPri {
+				panic(fmt.Sprintf("invalid raft priority: %d", rpri))
+			}
 		} else {
 			entryEncoding = EntryEncodingStandardWithAC
 		}
