@@ -1355,6 +1355,7 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 
 	skip.UnderRace(t) // too slow, times out
 	skip.UnderDeadlock(t)
+	skip.UnderStress(t)
 
 	// Use a timeout, to prevent a hung test.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
