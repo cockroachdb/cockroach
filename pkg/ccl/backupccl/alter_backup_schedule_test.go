@@ -128,12 +128,12 @@ INSERT INTO t1 values (1), (10), (100);
 	require.Equal(t, []string{
 		"PAUSED: Waiting for initial backup to complete",
 		"@daily",
-		"BACKUP TABLE mydb.public.t1 INTO LATEST IN 'nodelocal://1/backup/alter-schedule' WITH OPTIONS (detached)",
+		"BACKUP TABLE mydb.public.t1 INTO LATEST IN '*****' WITH OPTIONS (detached)",
 	}, []string{rows[0][2], rows[0][4], rows[0][5]})
 	require.Equal(t, []string{
 		"ACTIVE",
 		"@weekly",
-		"BACKUP TABLE mydb.public.t1 INTO 'nodelocal://1/backup/alter-schedule' WITH OPTIONS (detached)",
+		"BACKUP TABLE mydb.public.t1 INTO '*****' WITH OPTIONS (detached)",
 	}, []string{rows[1][2], rows[1][4], rows[1][5]})
 
 	trim := func(s string) string {
