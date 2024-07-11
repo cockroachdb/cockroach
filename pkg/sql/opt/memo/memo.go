@@ -520,6 +520,17 @@ func (m *Memo) IsOptimized() bool {
 	return ok && rel.RequiredPhysical() != nil
 }
 
+// OptimizationCost returns a rough estimate of the cost of optimization of the
+// memo. It is dependent on the number of tables in the metadata, based on the
+// reasoning that queries with more tables likely have more joins, which tend
+// to be the biggest contributors to optimization overhead.
+func (m *Memo) OptimizationCost() Cost {
+	// This cpuCostFactor is the same as cpuCostFactor in the coster.
+	// TODO(mgartner): Package these constants up in a shared location.
+	const cpuCostFactor = 0.01
+	return Cost(m.Metadata().NumTables()) * 1000 * cpuCostFactor
+}
+
 // NextRank returns a new rank that can be assigned to a scalar expression.
 func (m *Memo) NextRank() opt.ScalarRank {
 	m.curRank++

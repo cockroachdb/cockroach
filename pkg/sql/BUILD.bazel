@@ -687,6 +687,7 @@ go_test(
         "pg_oid_test.go",
         "pgwire_internal_test.go",
         "plan_opt_test.go",
+        "prepared_stmt_test.go",
         "privileged_accessor_test.go",
         "region_util_test.go",
         "rename_test.go",
