@@ -846,8 +846,6 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 		return nil, nil, err
 	}
 
-	// TODO(faizaanmadhani): Wrap merging behind a boolean so
-	// that it can be turned off.
 	merged := MergedStatistics(ctx, statsList, st)
 	statsList = append(merged, statsList...)
 
