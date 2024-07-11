@@ -36,8 +36,8 @@ var retryQueueBackoff = settings.RegisterDurationSetting(
 var retryQueueSizeLimit = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.retry_queue_partition_size_limit",
-	"byte size of retry queue per partition of replication stream above which events are sent to DLQ on failure to apply",
-	4<<20,
+	"total byte size of all retry queues for all replication streams after which events must be sent to DLQ on failure to apply",
+	16<<20,
 )
 
 // purgatory is an ordered list of purgatory levels, each consisting of some
@@ -91,6 +91,7 @@ func (p *purgatory) Store(
 	}
 
 	p.levels = append(p.levels, purgatoryLevel{events: events, bytes: byteSize})
+	p.levels[len(p.levels)-1].closedAt = timeutil.Now()
 	p.bytes += byteSize
 	p.bytesGauge.Inc(byteSize)
 	p.eventsGauge.Inc(int64(len(events)))
@@ -156,8 +157,8 @@ func (p purgatory) Empty() bool {
 }
 
 func (p *purgatory) full() bool {
-	if p.byteLimit == nil {
+	if p.byteLimit == nil || p.bytesGauge == nil {
 		return false
 	}
-	return p.bytes >= p.byteLimit()
+	return p.bytesGauge.Value() >= p.byteLimit()
 }
