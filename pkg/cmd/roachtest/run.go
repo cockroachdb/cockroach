@@ -26,6 +26,7 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/operations"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 )
 
 type testResult int
@@ -613,10 +615,30 @@ func runOperation(register func(registry.Registry), filter string, clusterName s
 		return errors.Wrap(err, "roachtest: run-operation: error when getting number of nodes")
 	}
 
+	config := struct {
+		ClusterSettings install.ClusterSettings
+		StartOpts       option.StartOpts
+		ClusterSpec     spec.ClusterSpec
+	}{
+		ClusterSettings: install.MakeClusterSettings(),
+		StartOpts:       option.NewStartOpts(option.NoBackupSchedule),
+		ClusterSpec:     spec.ClusterSpec{NodeCount: len(nodes)},
+	}
+	if roachtestflags.ConfigPath != "" {
+		configFileData, err := os.ReadFile(roachtestflags.ConfigPath)
+		if err != nil {
+			return errors.Wrap(err, "failed to read config")
+		}
+		if err = yaml.UnmarshalStrict(configFileData, &config); err != nil {
+			return errors.Wrapf(err, "failed to unmarshal config: %s", roachtestflags.ConfigPath)
+		}
+	}
+
 	cSpec := spec.ClusterSpec{NodeCount: len(nodes)}
 	op := &operationImpl{
-		cockroach: roachtestflags.CockroachBinaryPath,
-		l:         l,
+		clusterSettings: config.ClusterSettings,
+		startOpts:       config.StartOpts,
+		l:               l,
 	}
 	c := &dynamicClusterImpl{
 		&clusterImpl{
