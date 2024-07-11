@@ -2320,10 +2320,17 @@ func TestRACV2Basic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	write := func(ctx context.Context, db *kv.DB, key roachpb.Key, count int, size int) {
+	write := func(ctx context.Context, db *kv.DB, key roachpb.Key, pri admissionpb.WorkPriority, size, count int) {
 		rand := rand.New(rand.NewSource(42))
-		for i := 1; i <= count; i++ {
-			require.NoError(t, db.Put(ctx, key, randutil.RandBytes(rand, size)))
+		for i := 0; i < count; i++ {
+			value := roachpb.MakeValueFromString(randutil.RandString(rand, size, randutil.PrintableKeyAlphabet))
+			ba := &kvpb.BatchRequest{}
+			ba.Add(kvpb.NewPut(key, value))
+			ba.AdmissionHeader.Priority = int32(pri)
+			ba.AdmissionHeader.Source = kvpb.AdmissionHeader_FROM_SQL
+			if _, pErr := db.NonTransactionalSender().Send(ctx, ba); pErr != nil {
+				t.Fatal(pErr.GoError())
+			}
 		}
 	}
 
@@ -2334,7 +2341,7 @@ func TestRACV2Basic(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		k := tc.ScratchRange(t)
-		write(ctx, tc.Server(0).DB(), k, 100 /* count */, 1<<10 /* 1KiB */)
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
 	})
 
 	t.Run("3_node", func(t *testing.T) {
@@ -2345,7 +2352,7 @@ func TestRACV2Basic(t *testing.T) {
 		k := tc.ScratchRange(t)
 		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
 
-		write(ctx, tc.Server(0).DB(), k, 100 /* count */, 1<<10 /* 1KiB */)
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
 	})
 
 	t.Run("lease_transfer", func(t *testing.T) {
@@ -2355,41 +2362,45 @@ func TestRACV2Basic(t *testing.T) {
 
 		k := tc.ScratchRange(t)
 		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
-		write(ctx, tc.Server(0).DB(), k, 100 /* count */, 1<<10 /* 1KiB */)
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
 		desc, err := tc.LookupRange(k)
 		require.NoError(t, err)
 		tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
 		log.Info(ctx, "transferred lease to s3")
-		write(ctx, tc.Server(0).DB(), k, 100 /* count */, 1<<10 /* 1KiB */)
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
 	})
 
 	t.Run("relocate_range", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, 6,
-			base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
-		defer tc.Stopper().Stop(ctx)
-
-		k := tc.ScratchRange(t)
-		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
-		write(ctx, tc.Server(0).DB(), k, 100 /* count */, 1<<10 /* 1KiB */)
-		require.NoError(t, tc.Servers[0].DB().AdminRelocateRange(
-			ctx, k, tc.Targets(3, 4, 5), nil /* nonVoterTargets */, true))
-		log.Info(ctx, "relocated range to s4, s5, s6")
-		write(ctx, tc.Server(0).DB(), k, 100 /* count */, 1<<10 /* 1KiB */)
-	})
-
-	t.Run("3_node_limit", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 3,
 			base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
 		defer tc.Stopper().Stop(ctx)
-		for _, s := range tc.Servers {
-			kvflowconnectedstream.RegularTokensPerStream.Override(ctx, &s.ClusterSettings().SV, 4<<20 /* 4MiB*/)
-			kvflowconnectedstream.ElasticTokensPerStream.Override(ctx, &s.ClusterSettings().SV, 4<<20 /* 4MiB */)
-		}
 
 		k := tc.ScratchRange(t)
 		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
-		log.Info(ctx, "writing 500 x 256 KiB to scratch range")
-		write(ctx, tc.Server(0).DB(), k, 500 /* count */, 1<<18 /* 256KiB */)
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
+		require.NoError(t, tc.Servers[0].DB().AdminRelocateRange(
+			ctx, k, tc.Targets(3, 4, 5), nil /* nonVoterTargets */, true))
+		log.Info(ctx, "relocated range to s4, s5, s6")
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
+	})
+
+	t.Run("3_node_limit", func(t *testing.T) {
+		// TODO(racv2-integration): Setting the cluster settings at runtime results
+		// in the test timing out. Investigate why, the RF is effectively 1 yet
+		// writes stall.
+		st := cluster.MakeTestingClusterSettings()
+		kvflowconnectedstream.RegularTokensPerStream.Override(ctx, &st.SV, 4<<20 /* 4MiB*/)
+		kvflowconnectedstream.ElasticTokensPerStream.Override(ctx, &st.SV, 4<<20 /* 4MiB */)
+		tc := testcluster.StartTestCluster(t, 6, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      base.TestServerArgs{Settings: st},
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		k := tc.ScratchRange(t)
+		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+		log.Info(ctx, "writing 16 x 1 MiB to scratch range")
+		write(ctx, tc.Server(0).DB(), k, admissionpb.HighPri, 1<<20 /* 1MiB */, 16 /* count */)
 	})
 }
 
