@@ -177,7 +177,7 @@ func (e *MutableExternalConnection) UnredactedConnectionStatement() string {
 		},
 		As: tree.NewDString(e.rec.ConnectionDetails.UnredactedURI()),
 	}
-	return tree.AsString(ecNode)
+	return tree.AsStringWithFlags(ecNode, tree.FmtShowFullURIs)
 }
 
 // datumToNative is a helper to convert tree.Datum into Go native types.  We
