@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLWWInsertQueryQuoting(t *testing.T) {
+func TestLWWInsertQueryGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -60,7 +60,7 @@ func TestLWWInsertQueryQuoting(t *testing.T) {
 	}
 
 	tableNumber := 0
-	createTable := func(stmt string) string {
+	createTable := func(t *testing.T, stmt string) string {
 		tableName := fmt.Sprintf("tab%d", tableNumber)
 		runner.Exec(t, fmt.Sprintf(stmt, tableName))
 		runner.Exec(t, fmt.Sprintf(
@@ -70,33 +70,47 @@ func TestLWWInsertQueryQuoting(t *testing.T) {
 		return tableName
 	}
 
+	setup := func(t *testing.T, schemaTmpl string) (*sqlLastWriteWinsRowProcessor, func(...interface{}) roachpb.KeyValue) {
+		tableNameSrc := createTable(t, schemaTmpl)
+		tableNameDst := createTable(t, schemaTmpl)
+		srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameSrc)
+		dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableNameDst)
+		rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
+			int32(dstDesc.GetID()): *srcDesc.TableDesc(),
+		}, s.InternalExecutor().(isql.Executor))
+		require.NoError(t, err)
+		return rp, func(datums ...interface{}) roachpb.KeyValue {
+			kv := replicationtestutils.EncodeKV(t, s.Codec(), srcDesc, datums...)
+			kv.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			return kv
+		}
+	}
+
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s/insert", tc.name), func(t *testing.T) {
-			tableName := createTable(tc.schemaTmpl)
-			desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
-			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
-				int32(desc.GetID()): *desc.TableDesc(),
-			}, s.InternalExecutor().(isql.Executor))
-			require.NoError(t, err)
-
-			keyValue := replicationtestutils.EncodeKV(t, s.Codec(), desc, tc.row...)
-			keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			runner.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=true")
+			defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
+			rp, encoder := setup(t, tc.schemaTmpl)
+			keyValue := encoder(tc.row...)
+			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
+				return err
+			}))
+		})
+		t.Run(fmt.Sprintf("%s/insert-without-optimistic-insert", tc.name), func(t *testing.T) {
+			runner.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled=false")
+			defer runner.Exec(t, "RESET CLUSTER SETTING logical_replication.consumer.try_optimistic_insert.enabled")
+			rp, encoder := setup(t, tc.schemaTmpl)
+			keyValue := encoder(tc.row...)
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
 				return err
 			}))
 		})
 		t.Run(fmt.Sprintf("%s/delete", tc.name), func(t *testing.T) {
-			tableName := createTable(tc.schemaTmpl)
-			desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
-			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
-				int32(desc.GetID()): *desc.TableDesc(),
-			}, s.InternalExecutor().(isql.Executor))
-			require.NoError(t, err)
-
-			keyValue := replicationtestutils.EncodeKV(t, s.Codec(), desc, tc.row...)
+			rp, encoder := setup(t, tc.schemaTmpl)
+			keyValue := encoder(tc.row...)
 			keyValue.Value.RawBytes = nil
-			keyValue.Value.Timestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				_, err := rp.ProcessRow(ctx, txn, keyValue, roachpb.Value{})
 				return err
