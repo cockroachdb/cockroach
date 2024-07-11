@@ -178,7 +178,7 @@ func (e *MutableExternalConnection) UnredactedConnectionStatement() string {
 		},
 		As: tree.NewDString(e.rec.ConnectionDetails.UnredactedURI()),
 	}
-	return tree.AsString(ecNode)
+	return tree.AsStringWithFlags(ecNode, tree.FmtShowFullURIs)
 }
 
 // RedactedConnectionURI implements the ExternalConnection interface and
