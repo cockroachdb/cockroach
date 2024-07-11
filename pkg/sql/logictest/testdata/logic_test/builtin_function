@@ -195,6 +195,14 @@ SELECT concat('RoacH', NULL)
 ----
 RoacH
 
+statement ok
+CREATE TYPE concat_enum AS ENUM ('foo', 'bar', 'baz')
+
+query T
+SELECT concat('foo'::concat_enum, ' ', 'bar'::concat_enum, ' ', 'baz'::concat_enum)
+----
+foo bar baz
+
 statement error unknown signature: concat\(string, bool, decimal, bool\)
 SELECT concat('RoacH', false, 64.532, TRUE)
 
@@ -4304,6 +4312,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
 ORDER BY 1, 2;
 ----
 Schema  Name             Description
+public  concat_enum      ·
 public  custom_typ       ·
 public  roach_dwellings  ·
 public  testenum         ·

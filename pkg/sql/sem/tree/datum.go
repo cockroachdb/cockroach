@@ -1194,6 +1194,8 @@ func AsDString(e Expr) (DString, bool) {
 	switch t := e.(type) {
 	case *DString:
 		return *t, true
+	case *DEnum:
+		return DString(t.LogicalRep), true
 	case *DOidWrapper:
 		return AsDString(t.Wrapped)
 	}

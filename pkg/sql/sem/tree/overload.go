@@ -1042,6 +1042,9 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		}
 		rt := typ.ResolvedType()
 		filter := makeFilter(i, func(params TypeList, ordinal int) bool {
+			if rt.Family() == types.EnumFamily && params.MatchAt(types.String, ordinal) {
+				return true
+			}
 			return params.MatchAt(rt, ordinal)
 		})
 		s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
