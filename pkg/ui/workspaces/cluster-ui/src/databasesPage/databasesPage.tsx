@@ -51,7 +51,7 @@ import {
   SqlApiQueryResponse,
   SqlExecutionErrorMessage,
 } from "../api";
-import { checkInfoAvailable } from "../databases";
+import { LoadingCell } from "../databases";
 
 import {
   DatabaseNameCell,
@@ -562,12 +562,16 @@ export class DatabasesPage extends React.Component<
             Tables
           </Tooltip>
         ),
-        cell: database =>
-          checkInfoAvailable(
-            database.detailsRequestError,
-            database.tables?.error,
-            database.tables?.tables?.length,
-          ),
+        cell: database => (
+          <LoadingCell
+            requestError={database.detailsRequestError}
+            queryError={database.tables?.error}
+            loading={database.detailsLoading}
+            errorClassName={cx("databases-table__cell-error")}
+          >
+            {database.tables?.tables?.length}
+          </LoadingCell>
+        ),
         sort: database => database.tables?.tables.length ?? 0,
         className: cx("databases-table__col-table-count"),
         name: "tableCount",
@@ -581,12 +585,16 @@ export class DatabasesPage extends React.Component<
             Range Count
           </Tooltip>
         ),
-        cell: database =>
-          checkInfoAvailable(
-            database.spanStatsRequestError,
-            database.spanStats?.error,
-            database.spanStats?.range_count,
-          ),
+        cell: database => (
+          <LoadingCell
+            requestError={database.spanStatsRequestError}
+            queryError={database.spanStats?.error}
+            loading={database.spanStatsLoading}
+            errorClassName={cx("databases-table__cell-error")}
+          >
+            {database.spanStats?.range_count}
+          </LoadingCell>
+        ),
         sort: database => database.spanStats?.range_count,
         className: cx("databases-table__col-range-count"),
         name: "rangeCount",
@@ -600,12 +608,15 @@ export class DatabasesPage extends React.Component<
             {this.props.isTenant ? "Regions" : "Regions/Nodes"}
           </Tooltip>
         ),
-        cell: database =>
-          checkInfoAvailable(
-            database.detailsRequestError,
-            null,
-            database.nodesByRegionString ? database.nodesByRegionString : null,
-          ),
+        cell: database => (
+          <LoadingCell
+            requestError={database.detailsRequestError}
+            loading={database.detailsLoading}
+            errorClassName={cx("databases-table__cell-error")}
+          >
+            {database.nodesByRegionString ? database.nodesByRegionString : null}
+          </LoadingCell>
+        ),
         sort: database => database.nodesByRegionString,
         className: cx("databases-table__col-node-regions"),
         name: "nodeRegions",
