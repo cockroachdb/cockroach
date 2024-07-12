@@ -606,7 +606,7 @@ type RuntimeStatSampler struct {
 
 	// Metric gauges maintained by the sampler.
 	// Go runtime stats.
-	CgoCalls                 *metric.Gauge
+	CgoCalls                 *metric.Counter
 	Goroutines               *metric.Gauge
 	RunnableGoroutinesPerCPU *metric.GaugeFloat64
 	GoAllocBytes             *metric.Gauge
@@ -615,23 +615,23 @@ type RuntimeStatSampler struct {
 	GoHeapFragmentBytes      *metric.Gauge
 	GoHeapReservedBytes      *metric.Gauge
 	GoHeapReleasedBytes      *metric.Gauge
-	GoTotalAllocBytes        *metric.Gauge
+	GoTotalAllocBytes        *metric.Counter
 	CgoAllocBytes            *metric.Gauge
 	CgoTotalBytes            *metric.Gauge
-	GcCount                  *metric.Gauge
-	GcPauseNS                *metric.Gauge
+	GcCount                  *metric.Counter
+	GcPauseNS                *metric.Counter
 	NonGcPauseNS             *metric.Gauge
 	GcStopNS                 *metric.Gauge
 	NonGcStopNS              *metric.Gauge
 	GcPausePercent           *metric.GaugeFloat64
-	GcAssistNS               *metric.Gauge
+	GcAssistNS               *metric.Counter
 	// CPU stats for the CRDB process usage.
-	CPUUserNS              *metric.Gauge
+	CPUUserNS              *metric.Counter
 	CPUUserPercent         *metric.GaugeFloat64
-	CPUSysNS               *metric.Gauge
+	CPUSysNS               *metric.Counter
 	CPUSysPercent          *metric.GaugeFloat64
 	CPUCombinedPercentNorm *metric.GaugeFloat64
-	CPUNowNS               *metric.Gauge
+	CPUNowNS               *metric.Counter
 	// CPU stats for the CRDB process usage.
 	HostCPUCombinedPercentNorm *metric.GaugeFloat64
 	// Memory stats.
@@ -641,25 +641,25 @@ type RuntimeStatSampler struct {
 	FDOpen      *metric.Gauge
 	FDSoftLimit *metric.Gauge
 	// Disk and network stats.
-	HostDiskReadBytes      *metric.Gauge
-	HostDiskReadCount      *metric.Gauge
-	HostDiskReadTime       *metric.Gauge
-	HostDiskWriteBytes     *metric.Gauge
-	HostDiskWriteCount     *metric.Gauge
-	HostDiskWriteTime      *metric.Gauge
-	HostDiskIOTime         *metric.Gauge
-	HostDiskWeightedIOTime *metric.Gauge
+	HostDiskReadBytes      *metric.Counter
+	HostDiskReadCount      *metric.Counter
+	HostDiskReadTime       *metric.Counter
+	HostDiskWriteBytes     *metric.Counter
+	HostDiskWriteCount     *metric.Counter
+	HostDiskWriteTime      *metric.Counter
+	HostDiskIOTime         *metric.Counter
+	HostDiskWeightedIOTime *metric.Counter
 	IopsInProgress         *metric.Gauge
-	HostNetRecvBytes       *metric.Gauge
-	HostNetRecvPackets     *metric.Gauge
-	HostNetRecvErr         *metric.Gauge
-	HostNetRecvDrop        *metric.Gauge
-	HostNetSendBytes       *metric.Gauge
-	HostNetSendPackets     *metric.Gauge
-	HostNetSendErr         *metric.Gauge
-	HostNetSendDrop        *metric.Gauge
+	HostNetRecvBytes       *metric.Counter
+	HostNetRecvPackets     *metric.Counter
+	HostNetRecvErr         *metric.Counter
+	HostNetRecvDrop        *metric.Counter
+	HostNetSendBytes       *metric.Counter
+	HostNetSendPackets     *metric.Counter
+	HostNetSendErr         *metric.Counter
+	HostNetSendDrop        *metric.Counter
 	// Uptime and build.
-	Uptime         *metric.Gauge // We use a gauge to be able to call Update.
+	Uptime         *metric.Counter
 	BuildTimestamp *metric.Gauge
 }
 
@@ -702,7 +702,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		initialNetCounters:       netCounters,
 		initialDiskCounters:      diskCounters,
 		goRuntimeSampler:         NewGoRuntimeSampler(runtimeMetrics),
-		CgoCalls:                 metric.NewGauge(metaCgoCalls),
+		CgoCalls:                 metric.NewCounter(metaCgoCalls),
 		Goroutines:               metric.NewGauge(metaGoroutines),
 		RunnableGoroutinesPerCPU: metric.NewGaugeFloat64(metaRunnableGoroutinesPerCPU),
 		GoAllocBytes:             metric.NewGauge(metaGoAllocBytes),
@@ -711,48 +711,48 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		GoHeapFragmentBytes:      metric.NewGauge(metaGoHeapFragmentBytes),
 		GoHeapReservedBytes:      metric.NewGauge(metaGoHeapReservedBytes),
 		GoHeapReleasedBytes:      metric.NewGauge(metaGoHeapReleasedBytes),
-		GoTotalAllocBytes:        metric.NewGauge(metaGoTotalAllocBytes),
+		GoTotalAllocBytes:        metric.NewCounter(metaGoTotalAllocBytes),
 		CgoAllocBytes:            metric.NewGauge(metaCgoAllocBytes),
 		CgoTotalBytes:            metric.NewGauge(metaCgoTotalBytes),
-		GcCount:                  metric.NewGauge(metaGCCount),
-		GcPauseNS:                metric.NewGauge(metaGCPauseNS),
+		GcCount:                  metric.NewCounter(metaGCCount),
+		GcPauseNS:                metric.NewCounter(metaGCPauseNS),
 		GcStopNS:                 metric.NewGauge(metaGCStopNS),
 		GcPausePercent:           metric.NewGaugeFloat64(metaGCPausePercent),
-		GcAssistNS:               metric.NewGauge(metaGCAssistNS),
+		GcAssistNS:               metric.NewCounter(metaGCAssistNS),
 		NonGcPauseNS:             metric.NewGauge(metaNonGCPauseNS),
 		NonGcStopNS:              metric.NewGauge(metaNonGCStopNS),
 
-		CPUUserNS:              metric.NewGauge(metaCPUUserNS),
+		CPUUserNS:              metric.NewCounter(metaCPUUserNS),
 		CPUUserPercent:         metric.NewGaugeFloat64(metaCPUUserPercent),
-		CPUSysNS:               metric.NewGauge(metaCPUSysNS),
+		CPUSysNS:               metric.NewCounter(metaCPUSysNS),
 		CPUSysPercent:          metric.NewGaugeFloat64(metaCPUSysPercent),
 		CPUCombinedPercentNorm: metric.NewGaugeFloat64(metaCPUCombinedPercentNorm),
-		CPUNowNS:               metric.NewGauge(metaCPUNowNS),
+		CPUNowNS:               metric.NewCounter(metaCPUNowNS),
 
 		HostCPUCombinedPercentNorm: metric.NewGaugeFloat64(metaHostCPUCombinedPercentNorm),
 
 		RSSBytes:               metric.NewGauge(metaRSSBytes),
 		TotalMemBytes:          metric.NewGauge(metaTotalMemBytes),
-		HostDiskReadBytes:      metric.NewGauge(metaHostDiskReadBytes),
-		HostDiskReadCount:      metric.NewGauge(metaHostDiskReadCount),
-		HostDiskReadTime:       metric.NewGauge(metaHostDiskReadTime),
-		HostDiskWriteBytes:     metric.NewGauge(metaHostDiskWriteBytes),
-		HostDiskWriteCount:     metric.NewGauge(metaHostDiskWriteCount),
-		HostDiskWriteTime:      metric.NewGauge(metaHostDiskWriteTime),
-		HostDiskIOTime:         metric.NewGauge(metaHostDiskIOTime),
-		HostDiskWeightedIOTime: metric.NewGauge(metaHostDiskWeightedIOTime),
+		HostDiskReadBytes:      metric.NewCounter(metaHostDiskReadBytes),
+		HostDiskReadCount:      metric.NewCounter(metaHostDiskReadCount),
+		HostDiskReadTime:       metric.NewCounter(metaHostDiskReadTime),
+		HostDiskWriteBytes:     metric.NewCounter(metaHostDiskWriteBytes),
+		HostDiskWriteCount:     metric.NewCounter(metaHostDiskWriteCount),
+		HostDiskWriteTime:      metric.NewCounter(metaHostDiskWriteTime),
+		HostDiskIOTime:         metric.NewCounter(metaHostDiskIOTime),
+		HostDiskWeightedIOTime: metric.NewCounter(metaHostDiskWeightedIOTime),
 		IopsInProgress:         metric.NewGauge(metaHostIopsInProgress),
-		HostNetRecvBytes:       metric.NewGauge(metaHostNetRecvBytes),
-		HostNetRecvPackets:     metric.NewGauge(metaHostNetRecvPackets),
-		HostNetRecvErr:         metric.NewGauge(metaHostNetRecvErr),
-		HostNetRecvDrop:        metric.NewGauge(metaHostNetRecvDrop),
-		HostNetSendBytes:       metric.NewGauge(metaHostNetSendBytes),
-		HostNetSendPackets:     metric.NewGauge(metaHostNetSendPackets),
-		HostNetSendErr:         metric.NewGauge(metaHostNetSendErr),
-		HostNetSendDrop:        metric.NewGauge(metaHostNetSendDrop),
+		HostNetRecvBytes:       metric.NewCounter(metaHostNetRecvBytes),
+		HostNetRecvPackets:     metric.NewCounter(metaHostNetRecvPackets),
+		HostNetRecvErr:         metric.NewCounter(metaHostNetRecvErr),
+		HostNetRecvDrop:        metric.NewCounter(metaHostNetRecvDrop),
+		HostNetSendBytes:       metric.NewCounter(metaHostNetSendBytes),
+		HostNetSendPackets:     metric.NewCounter(metaHostNetSendPackets),
+		HostNetSendErr:         metric.NewCounter(metaHostNetSendErr),
+		HostNetSendDrop:        metric.NewCounter(metaHostNetSendDrop),
 		FDOpen:                 metric.NewGauge(metaFDOpen),
 		FDSoftLimit:            metric.NewGauge(metaFDSoftLimit),
-		Uptime:                 metric.NewGauge(metaUptime),
+		Uptime:                 metric.NewCounter(metaUptime),
 		BuildTimestamp:         buildTimestamp,
 	}
 	rsr.last.disk = rsr.initialDiskCounters
