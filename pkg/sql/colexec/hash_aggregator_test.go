@@ -434,7 +434,6 @@ func TestHashAggregator(t *testing.T) {
 			func(sources []colexecop.Operator) (colexecop.Operator, error) {
 				args := &colexecagg.NewAggregatorArgs{
 					Allocator:      testAllocator,
-					MemAccount:     testMemAcc,
 					Input:          sources[0],
 					InputTypes:     tc.typs,
 					Spec:           tc.spec,

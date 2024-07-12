@@ -827,7 +827,6 @@ func TestAggregators(t *testing.T) {
 				func(input []colexecop.Operator) (colexecop.Operator, error) {
 					args := &colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
-						MemAccount:     testMemAcc,
 						Input:          input[0],
 						InputTypes:     tc.typs,
 						Spec:           tc.spec,
@@ -956,7 +955,6 @@ func TestAggregatorRandom(t *testing.T) {
 					require.NoError(t, err)
 					args := &colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
-						MemAccount:     testMemAcc,
 						Input:          source,
 						InputTypes:     tc.typs,
 						Spec:           tc.spec,
@@ -1174,7 +1172,6 @@ func benchmarkAggregateFunction(
 			for i := 0; i < b.N; i++ {
 				a := agg.new(ctx, &colexecagg.NewAggregatorArgs{
 					Allocator:         testAllocator,
-					MemAccount:        testMemAcc,
 					Input:             source,
 					InputTypes:        tc.typs,
 					Spec:              tc.spec,
