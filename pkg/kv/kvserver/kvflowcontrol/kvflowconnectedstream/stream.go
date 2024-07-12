@@ -2278,8 +2278,8 @@ func (rss *replicaSendStream) makeConsistentWhenProbeToReplicateLocked(
 	}
 	if indexToSend > rss.sendQueue.indexToSend {
 		log.Fatalf(ctx, "%v", errors.AssertionFailedf(
-			"(arg)index_to_send=%d > next_raft_index_initial=%d [info=%v send_stream=%v]",
-			indexToSend, rss.nextRaftIndexInitial,
+			"(arg)index_to_send=%d > queue.index_to_send=%d [info=%v send_stream=%v]",
+			indexToSend, rss.sendQueue.indexToSend,
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
 			rss.stringLocked()))
 	}
