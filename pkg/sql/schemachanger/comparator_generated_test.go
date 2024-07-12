@@ -1683,6 +1683,11 @@ func TestSchemaChangeComparator_sqllite(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/sqllite"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_sqlliveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/sqlliveness"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_sqlsmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/sqlsmith"

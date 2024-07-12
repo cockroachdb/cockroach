@@ -1929,6 +1929,13 @@ func TestTenantLogic_sqllite(
 	runLogicTest(t, "sqllite")
 }
 
+func TestTenantLogic_sqlliveness(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "sqlliveness")
+}
+
 func TestTenantLogic_sqlsmith(
 	t *testing.T,
 ) {
