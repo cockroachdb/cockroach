@@ -1204,9 +1204,9 @@ func newBackupRestoreTestDriver(
 }
 
 func (mvb *mixedVersionBackup) initBackupRestoreTestDriver(
-	ctx context.Context, l *logger.Logger, rng *rand.Rand,
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	u, err := mvb.CommonTestUtils(ctx)
+	u, err := mvb.CommonTestUtils(ctx, h)
 	if err != nil {
 		return err
 	}
@@ -1227,15 +1227,19 @@ func (mvb *mixedVersionBackup) initBackupRestoreTestDriver(
 
 // newBackupScope chooses a random backup type (table, database,
 // cluster) with equal probability.
-func (d *BackupRestoreTestDriver) newBackupScope(rng *rand.Rand) backupScope {
+func (d *BackupRestoreTestDriver) newBackupScope(rng *rand.Rand, isMultitenant bool) backupScope {
 	possibleTypes := []backupScope{
 		newTableBackup(rng, d.dbs, d.tables),
 		newDatabaseBackup(rng, d.dbs, d.tables),
 	}
-	if !d.cluster.IsLocal() {
-		// Cluster backups cannot be restored on nodelocal because the cluster is
-		// wiped before cluster restore.
-		possibleTypes = append(possibleTypes, newClusterBackup(rng, d.dbs, d.tables))
+	if !d.cluster.IsLocal() && !isMultitenant {
+		// Cluster backups cannot be restored on nodelocal because the
+		// cluster is wiped before cluster restore. Cluster restores in
+		// multitenant deployments are also not supported by this test at
+		// the moment.
+		possibleTypes = append(
+			possibleTypes, newClusterBackup(rng, d.dbs, d.tables),
+		)
 	}
 
 	return possibleTypes[rng.Intn(len(possibleTypes))]
@@ -1463,7 +1467,7 @@ func (u *CommonTestUtils) setMaxRangeSizeAndDependentSettings(
 // cluster settings is not supported in mixed-version, so we don't
 // test that scenario.
 func (u *CommonTestUtils) setClusterSettings(
-	ctx context.Context, l *logger.Logger, rng *rand.Rand,
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, rng *rand.Rand,
 ) error {
 	const numCustomSettings = 3
 	const defaultSettingsProbability = 0.2
@@ -1473,6 +1477,14 @@ func (u *CommonTestUtils) setClusterSettings(
 		return nil
 	}
 
+	// Make sure to use a connection to the system tenant as most of
+	// the cluster settings modified in this test are SystemOnly.
+	conn, err := c.ConnE(ctx, l, 1, option.VirtualClusterName(install.SystemInterfaceName))
+	if err != nil {
+		return errors.Wrap(err, "failed to connect to system tenant")
+	}
+	defer conn.Close()
+
 	for j := 0; j < numCustomSettings; j++ {
 		setting := systemSettingNames[rng.Intn(len(systemSettingNames))]
 		possibleValues := systemSettingValues[setting]
@@ -1480,7 +1492,7 @@ func (u *CommonTestUtils) setClusterSettings(
 
 		l.Printf("setting cluster setting %q to %q", setting, value)
 		stmt := fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", setting, value)
-		if err := u.Exec(ctx, rng, stmt); err != nil {
+		if _, err := conn.ExecContext(ctx, stmt); err != nil {
 			return err
 		}
 	}
@@ -1491,7 +1503,7 @@ func (u *CommonTestUtils) setClusterSettings(
 func (mvb *mixedVersionBackup) setShortJobIntervals(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	u, err := mvb.CommonTestUtils(ctx)
+	u, err := mvb.CommonTestUtils(ctx, h)
 	if err != nil {
 		return err
 	}
@@ -1507,7 +1519,7 @@ func (mvb *mixedVersionBackup) systemTableWriter(
 	}
 	l.Printf("user tables loaded, starting random inserts")
 
-	u, err := mvb.CommonTestUtils(ctx)
+	u, err := mvb.CommonTestUtils(ctx, h)
 	if err != nil {
 		return err
 	}
@@ -1518,11 +1530,11 @@ func (mvb *mixedVersionBackup) systemTableWriter(
 func (mvb *mixedVersionBackup) setClusterSettings(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	u, err := mvb.CommonTestUtils(ctx)
+	u, err := mvb.CommonTestUtils(ctx, h)
 	if err != nil {
 		return err
 	}
-	return u.setClusterSettings(ctx, l, rng)
+	return u.setClusterSettings(ctx, l, mvb.cluster, rng)
 }
 
 // waitForDBs waits until every database in the `dbs` field
@@ -1579,7 +1591,7 @@ func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 		return err
 	}
 
-	if err := mvb.initBackupRestoreTestDriver(ctx, l, rng); err != nil {
+	if err := mvb.initBackupRestoreTestDriver(ctx, l, rng, h); err != nil {
 		return err
 	}
 
@@ -1790,6 +1802,7 @@ func (d *BackupRestoreTestDriver) runBackup(
 	pauseProbability float64,
 	bType fmt.Stringer,
 	internalSystemJobs bool,
+	isMultitenant bool,
 ) (backupCollection, string, error) {
 	pauseAfter := 1024 * time.Hour // infinity
 	var pauseResumeDB *gosql.DB
@@ -1815,7 +1828,7 @@ func (d *BackupRestoreTestDriver) runBackup(
 	var collection backupCollection
 	switch b := bType.(type) {
 	case fullBackup:
-		btype := d.newBackupScope(rng)
+		btype := d.newBackupScope(rng, isMultitenant)
 		name := d.backupCollectionName(d.nextBackupID(), b.namePrefix, btype)
 		createOptions := newBackupOptions(rng, d.testUtils.onlineRestore)
 		collection = newBackupCollection(name, btype, createOptions, d.cluster.IsLocal())
@@ -1952,7 +1965,10 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 		return err
 	}
 
-	collection, err := mvb.backupRestoreTestDriver.createBackupCollection(ctx, l, rng, fullBackupSpec, incBackupSpec, backupNamePrefix, internalSystemJobs)
+	collection, err := mvb.backupRestoreTestDriver.createBackupCollection(
+		ctx, l, rng, fullBackupSpec, incBackupSpec, backupNamePrefix,
+		internalSystemJobs, h.IsMultitenant(),
+	)
 	if err != nil {
 		return err
 	}
@@ -1974,6 +1990,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	incBackupSpec backupSpec,
 	backupNamePrefix string,
 	internalSystemJobs bool,
+	isMultitenant bool,
 ) (*backupCollection, error) {
 	var collection backupCollection
 	var latestIncBackupEndTime string
@@ -1983,7 +2000,8 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	if err := d.testUtils.runJobOnOneOf(ctx, l, fullBackupSpec.Execute.Nodes, func() error {
 		var err error
 		collection, fullBackupEndTime, err = d.runBackup(
-			ctx, l, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability, fullBackup{backupNamePrefix}, internalSystemJobs,
+			ctx, l, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability,
+			fullBackup{backupNamePrefix}, internalSystemJobs, isMultitenant,
 		)
 		return err
 	}); err != nil {
@@ -2004,7 +2022,8 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		if err := d.testUtils.runJobOnOneOf(ctx, l, incBackupSpec.Execute.Nodes, func() error {
 			var err error
 			collection, latestIncBackupEndTime, err = d.runBackup(
-				ctx, l, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability, incrementalBackup{collection: collection, incNum: i + 1}, internalSystemJobs,
+				ctx, l, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
+				incrementalBackup{collection: collection, incNum: i + 1}, internalSystemJobs, isMultitenant,
 			)
 			return err
 		}); err != nil {
@@ -2465,7 +2484,7 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 	l.Printf("stopping background functions and workloads")
 	mvb.stopBackground()
 
-	u, err := mvb.CommonTestUtils(ctx)
+	u, err := mvb.CommonTestUtils(ctx, h)
 	if err != nil {
 		return err
 	}
@@ -2775,17 +2794,17 @@ func newCommonTestUtils(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
+	connectFunc func(int) (*gosql.DB, error),
 	nodes option.NodeListOption,
 	mock bool,
 	onlineRestore bool,
 ) (*CommonTestUtils, error) {
 	cc := make([]*gosql.DB, len(nodes))
 	for _, node := range nodes {
-		conn, err := c.ConnE(ctx, t.L(), node)
+		conn, err := connectFunc(node)
 		if err != nil {
-			return nil, fmt.Errorf("failed to connect to node %d: %w", node, err)
+			return nil, err
 		}
-
 		cc[node-1] = conn
 	}
 
@@ -2804,16 +2823,27 @@ func newCommonTestUtils(
 	return u, nil
 }
 
-func (mvb *mixedVersionBackup) CommonTestUtils(ctx context.Context) (*CommonTestUtils, error) {
+func (mvb *mixedVersionBackup) CommonTestUtils(
+	ctx context.Context, h *mixedversion.Helper,
+) (*CommonTestUtils, error) {
 	var err error
 	mvb.utilsOnce.Do(func() {
-		mvb.commonTestUtils, err = newCommonTestUtils(ctx, mvb.t, mvb.cluster, mvb.roachNodes, false, false)
+		connectFunc := func(node int) (*gosql.DB, error) { return h.Connect(node), nil }
+		mvb.commonTestUtils, err = newCommonTestUtils(
+			ctx, mvb.t, mvb.cluster, connectFunc, mvb.roachNodes, false, false,
+		)
 	})
 	return mvb.commonTestUtils, err
 }
 
 func (mvb *mixedVersionBackup) cleanUp(ctx context.Context) error {
-	u, err := mvb.CommonTestUtils(ctx)
+	if mvb.commonTestUtils == nil {
+		return nil
+	}
+
+	// The helper should not be necessary if we already set up a
+	// `commonTestUtils`.
+	u, err := mvb.CommonTestUtils(ctx, nil /* helper */)
 	if err != nil {
 		return err
 	}
