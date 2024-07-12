@@ -72,7 +72,7 @@ WITH data (%s)
 AS (VALUES (%s))
 SELECT (res).decision, (res).row FROM
 (
-	SELECT %s('%s', data, existing, (%s), existing.crdb_internal_mvcc_timestamp) AS res
+	SELECT %s('%s', data, existing, (%s), existing.crdb_internal_mvcc_timestamp, %d, %d) AS res
 	FROM data LEFT JOIN [%d as existing]
 	%s
 )`
@@ -105,6 +105,10 @@ type applierQuerier struct {
 	settings    *cluster.Settings
 	queryBuffer queryBuffer
 	sd          sessiondata.InternalExecutorOverride
+
+	// Used for the applier query to reduce allocations.
+	proposedMVCCTs     tree.DDecimal
+	proposedPrevMVCCTs tree.DDecimal
 }
 
 func makeUDFApplierProcessor(
@@ -237,7 +241,10 @@ func (aq *applierQuerier) applyUDF(
 		return noDecision, nil, err
 	}
 
-	decisionRow, err := aq.queryRowExParsed(ctx, "replicated-apply-udf", txn, ie, stmt, datums...)
+	aq.proposedMVCCTs.Decimal = eval.TimestampToDecimal(row.MvccTimestamp)
+	aq.proposedPrevMVCCTs.Decimal = eval.TimestampToDecimal(prevRow.MvccTimestamp)
+
+	decisionRow, err := aq.queryRowExParsed(ctx, "replicated-apply-udf", txn, ie, stmt, append(datums, &aq.proposedMVCCTs, &aq.proposedPrevMVCCTs)...)
 	if err != nil {
 		return noDecision, nil, err
 	}
@@ -425,10 +432,16 @@ func makeApplierApplyQueries(
 	for i := range visColumns {
 		inputColumnNames[i] = visColumns[i].GetName()
 	}
-	colCount := len(inputColumnNames)
-	colNames := escapedColumnNameList(inputColumnNames)
-	valStr := valueStringForNumItems(colCount, 1)
-	prevValStr := valueStringForNumItems(colCount, colCount+1)
+
+	var (
+		colCount          = len(inputColumnNames)
+		colNames          = escapedColumnNameList(inputColumnNames)
+		valStr            = valueStringForNumItems(colCount, 1)
+		prevValStr        = valueStringForNumItems(colCount, colCount+1)
+		remoteMVCCIdx     = (colCount * 2) + 1
+		remotePrevMVCCIdx = remoteMVCCIdx + 1
+	)
+
 	joinClause := makeApplierJoinClause(td.TableDesc().PrimaryIndex.KeyColumnNames)
 
 	statements := make([]statements.Statement[tree.Statement], 3)
@@ -443,6 +456,8 @@ func makeApplierApplyQueries(
 			udfName,
 			mutType,
 			prevValStr,
+			remoteMVCCIdx,
+			remotePrevMVCCIdx,
 			dstTableDescID,
 			joinClause,
 		)
@@ -513,8 +528,9 @@ func makeApplierDeleteQuery(
 	}
 
 	return queryBuilder{
-		stmts:         []statements.Statement[tree.Statement]{stmt},
-		inputColumns:  names,
-		scratchDatums: make([]interface{}, len(names)),
+		stmts:        []statements.Statement[tree.Statement]{stmt},
+		inputColumns: names,
+		// 2 extra datum slots for the proposed and previous MVCC timestamp.
+		scratchDatums: make([]interface{}, len(names)+2),
 	}, nil
 }

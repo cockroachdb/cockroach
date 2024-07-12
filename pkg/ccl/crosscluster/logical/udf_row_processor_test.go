@@ -56,7 +56,7 @@ func TestUDFWithRandomTables(t *testing.T) {
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, applierTypes)
 	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, data rand_table, existing rand_table, prev rand_table, existing_mvcc_timestamp DECIMAL)
+		CREATE OR REPLACE FUNCTION repl_apply(action STRING, data rand_table, existing rand_table, prev rand_table, existing_mvcc_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
 		RETURNS crdb_replication_applier_decision
 		AS $$
 		BEGIN
@@ -105,7 +105,7 @@ func TestUDFApplieSpecified(t *testing.T) {
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, applierTypes)
 	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL)
+		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
 		RETURNS crdb_replication_applier_decision
 		AS $$
 		BEGIN
@@ -152,7 +152,7 @@ func TestUDFInsertOnly(t *testing.T) {
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, applierTypes)
 	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL)
+		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
 		RETURNS crdb_replication_applier_decision
 		AS $$
 		BEGIN
@@ -207,7 +207,7 @@ func TestUDFPreviousValue(t *testing.T) {
 	runnerB.Exec(t, "INSERT INTO tallies VALUES (1, 20)")
 	runnerB.Exec(t, applierTypes)
 	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL)
+		CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tallies, existing tallies, prev tallies, existing_mvcc_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
 		RETURNS crdb_replication_applier_decision
 		AS $$
 		BEGIN
