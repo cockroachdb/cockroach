@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -689,12 +690,15 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 func newTestServer() *Server {
 	sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval)
-	return &Server{
-		tenantMetrics: metrics,
+	s := &Server{
+		tenantMetrics:      metrics,
+		destinationMetrics: newDestinationMetrics(),
 		execCfg: &sql.ExecutorConfig{
 			Settings: cluster.MakeTestingClusterSettings(),
 		},
 	}
+	s.mu.destinations = make(map[string]destinationMetrics)
+	return s
 }
 
 // waitForClientConn blocks until a client connects and performs the pgwire
@@ -742,7 +746,10 @@ func getSessionArgs(
 			// Implement a fake pgwire connection handshake. Send the response
 			// after parsing the client-sent parameters.
 			c := &conn{conn: netConn}
-			c.msgBuilder.init(metric.NewCounter(metric.Metadata{}))
+			aggCounter := aggmetric.NewCounter(MetaBytesIn, "remote")
+			c.metrics.DestinationMetrics.BytesOutCount = aggCounter.AddChild("local")
+
+			c.msgBuilder.init()
 			if err := c.authOKMessage(); err != nil {
 				retErr = errors.CombineErrors(retErr, err)
 				return
@@ -794,7 +801,7 @@ func sendResult(
 			c.msgBuilder.writeTextDatum(ctx, col, defaultConv, defaultLoc, cols[i].Typ)
 		}
 
-		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+		if err := c.msgBuilder.finishMsg(c.conn, func(int64) {}); err != nil {
 			return err
 		}
 	}
@@ -1043,13 +1050,13 @@ func finishQuery(t finishType, c *conn) error {
 		c.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldMsgPrimary)
 		c.msgBuilder.writeTerminatedString("injected")
 		c.msgBuilder.nullTerminate()
-		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+		if err := c.msgBuilder.finishMsg(c.conn, func(int64) {}); err != nil {
 			return err
 		}
 	}
 
 	if !skipFinish {
-		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+		if err := c.msgBuilder.finishMsg(c.conn, func(int64) {}); err != nil {
 			return err
 		}
 	}
@@ -1057,7 +1064,7 @@ func finishQuery(t finishType, c *conn) error {
 	if t != cmdComplete && t != bind && t != prepare {
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 		c.msgBuilder.writeByte('I') // transaction status: no txn
-		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+		if err := c.msgBuilder.finishMsg(c.conn, func(int64) {}); err != nil {
 			return err
 		}
 	}
