@@ -574,16 +574,21 @@ func (rn *RawNode) SetAdmitted(marks tracker.AdmittedMarks) pb.Message {
 	}
 
 	if rn.raft.lead == rn.raft.id {
-		rn.raft.trk.Progress[rn.raft.id].Admitted = marks
+		for i := range marks {
+			rn.raft.trk.Progress(rn.raft.id).Admitted[i] = rn.raft.adm.Marks[i]
+		}
 		return pb.Message{}
 	}
+
+	cp := []uint64{}
+	copy(cp, marks[:])
 
 	return pb.Message{
 		From:     rn.raft.id,
 		To:       rn.raft.lead,
 		Type:     pb.MsgAppResp,
 		Index:    rn.StableIndex(),
-		Admitted: marks[:],
+		Admitted: cp,
 	}
 }
 

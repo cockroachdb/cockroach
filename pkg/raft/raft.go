@@ -529,7 +529,7 @@ func (r *raft) send(m pb.Message) {
 		}
 	}
 	if m.Type == pb.MsgAppResp && !m.Reject {
-		m.Admitted = r.adm.Marks[:]
+		copy(m.Admitted, r.adm.Marks[:])
 	}
 	if m.Type == pb.MsgAppResp || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVoteResp {
 		// If async storage writes are enabled, messages added to the msgs slice
