@@ -43,6 +43,7 @@ import {
   SqlExecutionErrorMessage,
   TableHeuristicDetailsRow,
   TableIndexUsageStats,
+  TableNameParts,
   TableSchemaDetailsRow,
   TableSpanStatsRow,
 } from "../api";
@@ -128,7 +129,9 @@ export interface DatabaseDetailsPageData {
 }
 
 export interface DatabaseDetailsPageDataTable {
-  name: string;
+  name: TableNameParts;
+  // Display name containing unquoted, unescaped schema and table name parts.
+  qualifedDisplayName: string;
   loading: boolean;
   loaded: boolean;
   // Request error when getting table details.
@@ -195,7 +198,7 @@ function filterBySearchQuery(
   table: DatabaseDetailsPageDataTable,
   search: string,
 ): boolean {
-  const matchString = table.name.toLowerCase();
+  const matchString = table.qualifedDisplayName.toLowerCase();
 
   if (search.startsWith('"') && search.endsWith('"')) {
     search = search.substring(1, search.length - 1);
@@ -352,7 +355,7 @@ export class DatabaseDetailsPage extends React.Component<
       if (!table.loaded && !table.loading && table.requestError === undefined) {
         this.props.refreshTableDetails(
           this.props.name,
-          table.name,
+          table.name.qualifiedNameWithSchemaAndTable,
           this.props.csIndexUnusedDuration,
         );
       }
@@ -702,16 +705,19 @@ export class DatabaseDetailsPage extends React.Component<
         cell: table => (
           <Link
             to={
-              EncodeDatabaseTableUri(this.props.name, table.name) +
-              `?tab=grants`
+              EncodeDatabaseTableUri(
+                this.props.name,
+                table.name.qualifiedNameWithSchemaAndTable,
+              ) + `?tab=grants`
             }
             className={cx("icon__container")}
           >
             <DatabaseIcon className={cx("icon--s")} />
-            {table.name}
+            <span className={cx("schema-name")}>{table.name.schema}.</span>
+            <span>{table.name.table}</span>
           </Link>
         ),
-        sort: table => table.name,
+        sort: table => table.qualifedDisplayName,
         className: cx("database-table__col-name"),
         name: "name",
       },
