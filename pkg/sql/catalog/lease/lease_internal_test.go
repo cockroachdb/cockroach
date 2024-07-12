@@ -1709,8 +1709,8 @@ func TestLeaseCountDetailSessionBased(t *testing.T) {
 		version := 1
 		region := enum.One
 		_, err := executor.Exec(ctx, "add-rows-for-test", nil,
-			fmt.Sprintf("INSERT INTO system.lease VALUES (%d, %d, %s, '%s', '\\x%x')",
-				descID, version, nodeID, session.ID(), region))
+			fmt.Sprintf("INSERT INTO system.lease VALUES (%d, %d, %s, '\\x%x', '\\x%x')",
+				descID, version, nodeID, session.ID().UnsafeBytes(), region))
 		if err != nil {
 			return err
 		}
