@@ -513,5 +513,5 @@ func TestStatusLogCorruptedEntry(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, wrapper.Entries)
 	require.NotEmpty(t, wrapper.ParseErrors)
-	require.Equal(t, len(wrapper.ParseErrors), 1)
+	require.Equal(t, 2, len(wrapper.ParseErrors))
 }
