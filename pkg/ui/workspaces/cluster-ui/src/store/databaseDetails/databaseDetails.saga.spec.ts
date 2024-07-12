@@ -63,7 +63,25 @@ describe("DatabaseDetails sagas", () => {
           },
         ],
       },
-      tablesResp: { tables: ["yet", "another", "table"] },
+      tablesResp: {
+        tables: [
+          {
+            schema: "schema",
+            table: "table",
+            qualifiedNameWithSchemaAndTable: `"schema"."table"`,
+          },
+          {
+            schema: "schema2",
+            table: "table2",
+            qualifiedNameWithSchemaAndTable: `"schema"."table"`,
+          },
+          {
+            table: "tabble",
+            schema: "schema",
+            qualifiedNameWithSchemaAndTable: `"schema2j"."table2"`,
+          },
+        ],
+      },
       zoneConfigResp: {
         zone_config: new ZoneConfig({
           inherited_constraints: true,
