@@ -503,6 +503,9 @@ func (ibm *IndexBackfillMerger) Resume(output execinfra.RowReceiver) {
 	panic("not implemented")
 }
 
+// Close is part of the execinfra.Processor interface.
+func (*IndexBackfillMerger) Close(context.Context) {}
+
 // NewIndexBackfillMerger creates a new IndexBackfillMerger.
 func NewIndexBackfillMerger(
 	flowCtx *execinfra.FlowCtx, processorID int32, spec execinfrapb.IndexBackfillMergerSpec,

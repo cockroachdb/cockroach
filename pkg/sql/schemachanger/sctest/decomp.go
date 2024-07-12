@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
@@ -83,6 +84,14 @@ func runDecomposeTest(
 			return nil
 		})
 		require.NotNilf(t, desc, "descriptor with name %q not found", name)
+
+		// Resolve all types from the descriptors we just read. This is required so
+		// that the ColumnType element, which contains the type name, includes the
+		// proper name.
+		testState := sctestdeps.NewTestDependencies(sctestdeps.WithDescriptors(allDescs.Catalog))
+		err := typedesc.HydrateTypesInDescriptor(ctx, desc, testState)
+		require.NoError(t, err)
+
 		m := make(map[scpb.Element]scpb.Status)
 		visitor := func(status scpb.Status, element scpb.Element) {
 			m[element] = status

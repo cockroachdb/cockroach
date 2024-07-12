@@ -658,6 +658,12 @@ func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 	if err != nil {
 		panic(err)
 	}
+	// Ensure that any types in the descriptor we read are hydrated. This is
+	// required to correctly print out TypeName in the ColumnType element.
+	err = typedesc.HydrateTypesInDescriptor(ctx, desc, s)
+	if err != nil {
+		panic(err)
+	}
 	return desc
 }
 

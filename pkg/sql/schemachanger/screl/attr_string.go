@@ -29,7 +29,8 @@ func _() {
 	_ = x[ReferencedFunctionIDs-19]
 	_ = x[ReferencedColumnIDs-20]
 	_ = x[Expr-21]
-	_ = x[AttrMax-21]
+	_ = x[TypeName-22]
+	_ = x[AttrMax-22]
 }
 
 func (i Attr) String() string {
@@ -76,6 +77,8 @@ func (i Attr) String() string {
 		return "ReferencedColumnIDs"
 	case Expr:
 		return "Expr"
+	case TypeName:
+		return "TypeName"
 	default:
 		return "Attr(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

@@ -151,6 +151,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -178,6 +179,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -205,6 +207,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: JSONB
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -232,6 +235,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: OID
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -259,6 +263,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: DECIMAL
   Status: PUBLIC
 - IndexColumn:
     columnId: 1
@@ -549,6 +554,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -576,6 +582,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+    typeName: INT8
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -603,6 +610,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: OID
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
@@ -630,6 +638,7 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+    typeName: DECIMAL
   Status: PUBLIC
 - IndexColumn:
     columnId: 1

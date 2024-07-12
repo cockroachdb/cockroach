@@ -81,7 +81,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_16-)}
-           │    └── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_16-)}
+           │    └── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_16-), TypeName: "INT8"}
            └── 3 Mutation operations
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}

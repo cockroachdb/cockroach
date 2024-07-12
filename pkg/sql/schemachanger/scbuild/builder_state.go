@@ -662,7 +662,7 @@ func (b *builderState) ResolveTypeRef(ref tree.ResolvableTypeReference) scpb.Typ
 }
 
 func newTypeT(t *types.T) scpb.TypeT {
-	return scpb.TypeT{Type: t, ClosedTypeIDs: typedesc.GetTypeDescriptorClosure(t).Ordered()}
+	return scpb.TypeT{Type: t, ClosedTypeIDs: typedesc.GetTypeDescriptorClosure(t).Ordered(), TypeName: t.SQLString()}
 }
 
 // WrapExpression implements the scbuildstmt.TableHelpers interface.

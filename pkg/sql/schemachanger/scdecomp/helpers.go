@@ -133,6 +133,7 @@ func newTypeT(t *types.T) *scpb.TypeT {
 	return &scpb.TypeT{
 		Type:          t,
 		ClosedTypeIDs: typedesc.GetTypeDescriptorClosure(t).Ordered(),
+		TypeName:      t.SQLString(),
 	}
 }
 

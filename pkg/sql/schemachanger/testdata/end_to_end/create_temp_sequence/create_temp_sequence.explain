@@ -17,7 +17,7 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.�
  │         │    ├── ABSENT → PUBLIC TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START"}
  │         │    ├── ABSENT → PUBLIC Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
- │         │    ├── ABSENT → PUBLIC ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+ │         │    ├── ABSENT → PUBLIC ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
  │         │    ├── ABSENT → PUBLIC ColumnName:{DescID: 105 (sq1+), Name: "value", ColumnID: 1 (value+)}
  │         │    ├── ABSENT → PUBLIC PrimaryIndex:{DescID: 105 (sq1+), IndexID: 1 (primary+)}
@@ -35,7 +35,7 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.�
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":104}}
  │              ├── SetSequenceOptions {"Key":"START","SequenceID":105,"Value":"32"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":105}}
- │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":1,"TableID":105}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":105}}
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":105}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"IndexID":1,"IsUnique":true,"TableID":105}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":1,"TableID":105}
@@ -66,7 +66,7 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.�
       │    │    ├── PUBLIC → ABSENT TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
       │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 105 (sq1+), Name: "START"}
       │    │    ├── PUBLIC → ABSENT Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
-      │    │    ├── PUBLIC → ABSENT ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+      │    │    ├── PUBLIC → ABSENT ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
       │    │    ├── PUBLIC → ABSENT ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
       │    │    ├── PUBLIC → ABSENT ColumnName:{DescID: 105 (sq1+), Name: "value", ColumnID: 1 (value+)}
       │    │    ├── PUBLIC → ABSENT PrimaryIndex:{DescID: 105 (sq1+), IndexID: 1 (primary+)}
@@ -88,7 +88,7 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.�
            │    ├── ABSENT → PUBLIC TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
            │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START"}
            │    ├── ABSENT → PUBLIC Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
-           │    ├── ABSENT → PUBLIC ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+)}
+           │    ├── ABSENT → PUBLIC ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
            │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
            │    ├── ABSENT → PUBLIC ColumnName:{DescID: 105 (sq1+), Name: "value", ColumnID: 1 (value+)}
            │    ├── ABSENT → PUBLIC PrimaryIndex:{DescID: 105 (sq1+), IndexID: 1 (primary+)}
@@ -106,7 +106,7 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.�
                 ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":104}}
                 ├── SetSequenceOptions {"Key":"START","SequenceID":105,"Value":"32"}
                 ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":105}}
-                ├── SetAddedColumnType {"ColumnType":{"ColumnID":1,"TableID":105}}
+                ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":105}}
                 ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":105}
                 ├── MakeAbsentIndexBackfilling {"Index":{"IndexID":1,"IsUnique":true,"TableID":105}}
                 ├── AddColumnToIndex {"ColumnID":1,"IndexID":1,"TableID":105}

@@ -23,8 +23,8 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ColumnType) *scop.SetAddedColumnType {
-					return &scop.SetAddedColumnType{
+				emit(func(this *scpb.ColumnType) *scop.UpsertColumnType {
+					return &scop.UpsertColumnType{
 						ColumnType: *protoutil.Clone(this).(*scpb.ColumnType),
 					}
 				}),

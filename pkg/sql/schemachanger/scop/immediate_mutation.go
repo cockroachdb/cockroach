@@ -227,8 +227,8 @@ type MakeAbsentColumnDeleteOnly struct {
 	Column scpb.Column
 }
 
-// SetAddedColumnType sets the type of a new column.
-type SetAddedColumnType struct {
+// UpsertColumnType sets the type of a new column.
+type UpsertColumnType struct {
 	immediateMutationOp
 	ColumnType scpb.ColumnType
 }
