@@ -237,7 +237,7 @@ func (c *conn) handleAuthentication(
 func (c *conn) authOKMessage() error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
-	return c.msgBuilder.finishMsg(c.conn)
+	return c.msgBuilder.finishMsg(c.conn, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 }
 
 // checkClientUsernameMatchesMapping uses the provided RoleMapper to
@@ -592,10 +592,10 @@ func (p *authPipe) SendAuthRequest(authType int32, data []byte) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authType)
 	c.msgBuilder.write(data)
-	return c.msgBuilder.finishMsg(c.conn)
+	return c.msgBuilder.finishMsg(c.conn, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 }
 
 // GetTenantSpecificMetrics is part of the AuthConn interface.
 func (p *authPipe) GetTenantSpecificMetrics() *tenantSpecificMetrics {
-	return p.c.metrics
+	return p.c.metrics.tenantSpecificMetrics
 }

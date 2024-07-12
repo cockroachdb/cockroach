@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // writeBuffer is a wrapper around bytes.Buffer that provides a convenient interface
@@ -35,22 +34,16 @@ type writeBuffer struct {
 
 	textFormatter   *tree.FmtCtx
 	simpleFormatter *tree.FmtCtx
-
-	// bytecount counts the number of bytes written across all pgwire connections, not just this
-	// buffer. This is passed in so that finishMsg can track all messages we've sent to a network
-	// socket, reducing the onus on the many callers of finishMsg.
-	bytecount *metric.Counter
 }
 
-func newWriteBuffer(bytecount *metric.Counter) *writeBuffer {
+func newWriteBuffer() *writeBuffer {
 	b := new(writeBuffer)
-	b.init(bytecount)
+	b.init()
 	return b
 }
 
 // init exists to avoid the allocation imposed by newWriteBuffer.
-func (b *writeBuffer) init(bytecount *metric.Counter) {
-	b.bytecount = bytecount
+func (b *writeBuffer) init() {
 	b.textFormatter = tree.NewFmtCtx(tree.FmtPgwireText)
 	b.simpleFormatter = tree.NewFmtCtx(tree.FmtSimple)
 }
@@ -169,15 +162,16 @@ func (b *writeBuffer) initMsg(typ pgwirebase.ServerMessageType) {
 // finishMsg attempts to write the data it has accumulated to the provided io.Writer.
 // If the writeBuffer previously encountered an error since the last call to initMsg,
 // or if it encounters an error while writing to w, it will return an error.
-func (b *writeBuffer) finishMsg(w io.Writer) error {
+func (b *writeBuffer) finishMsg(w io.Writer, count func(int64)) error {
 	defer b.reset()
 	if b.err != nil {
 		return b.err
 	}
 	bytes := b.wrapped.Bytes()
 	binary.BigEndian.PutUint32(bytes[1:5], uint32(b.wrapped.Len()-1))
+
 	n, err := w.Write(bytes)
-	b.bytecount.Inc(int64(n))
+	count(int64(n))
 	return err
 }
 

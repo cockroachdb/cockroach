@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -229,6 +230,8 @@ type Server struct {
 
 	tenantMetrics *tenantSpecificMetrics
 
+	destinationMetrics destinationAggMetrics
+
 	mu struct {
 		syncutil.Mutex
 		// connCancelMap entries represent connections started when the server
@@ -248,6 +251,9 @@ type Server struct {
 		// SQL connections, e.g. when the draining process enters the phase whose
 		// duration is specified by the server.shutdown.connections.timeout.
 		rejectNewConnections bool
+
+		// destinations tracks the metrics for each destination.
+		destinations map[string]destinationMetrics
 	}
 
 	auth struct {
@@ -271,11 +277,27 @@ type Server struct {
 	testingAuthLogEnabled atomic.Bool
 }
 
+type connMetrics struct {
+	*tenantSpecificMetrics
+	DestinationMetrics destinationMetrics
+}
+
+type destinationAggMetrics struct {
+	BytesInCount  *aggmetric.AggCounter
+	BytesOutCount *aggmetric.AggCounter
+}
+
+// destinationMetrics is the set of metrics to a specific destination. A
+// destination can be defined based on a CIDR block and is enabled using a
+// cluster setting XXX.
+type destinationMetrics struct {
+	BytesInCount  *aggmetric.Counter
+	BytesOutCount *aggmetric.Counter
+}
+
 // tenantSpecificMetrics is the set of metrics for a pgwire server
 // bound to a specific tenant.
 type tenantSpecificMetrics struct {
-	BytesInCount                *metric.Counter
-	BytesOutCount               *metric.Counter
 	Conns                       *metric.Gauge
 	NewConns                    *metric.Counter
 	ConnsWaitingToHash          *metric.Gauge
@@ -289,12 +311,17 @@ type tenantSpecificMetrics struct {
 	SQLMemMetrics               sql.MemoryMetrics
 }
 
+func newDestinationMetrics() destinationAggMetrics {
+	return destinationAggMetrics{
+		BytesInCount:  aggmetric.NewCounter(MetaBytesIn, "remote"),
+		BytesOutCount: aggmetric.NewCounter(MetaBytesOut, "remote"),
+	}
+}
+
 func newTenantSpecificMetrics(
 	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
 ) *tenantSpecificMetrics {
 	return &tenantSpecificMetrics{
-		BytesInCount:        metric.NewCounter(MetaBytesIn),
-		BytesOutCount:       metric.NewCounter(MetaBytesOut),
 		Conns:               metric.NewGauge(MetaConns),
 		NewConns:            metric.NewCounter(MetaNewConns),
 		ConnsWaitingToHash:  metric.NewGauge(MetaConnsWaitingToHash),
@@ -332,7 +359,8 @@ func MakeServer(
 		cfg:        cfg,
 		execCfg:    executorConfig,
 
-		tenantMetrics: newTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
+		tenantMetrics:      newTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
+		destinationMetrics: newDestinationMetrics(),
 	}
 	server.sqlMemoryPool = mon.NewMonitor(mon.Options{
 		Name: "sql",
@@ -363,6 +391,7 @@ func MakeServer(
 	server.mu.Lock()
 	server.mu.connCancelMap = make(cancelChanMap)
 	server.mu.drainCh = make(chan struct{})
+	server.mu.destinations = make(map[string]destinationMetrics)
 	server.mu.Unlock()
 
 	connAuthConf.SetOnChange(&st.SV, func(ctx context.Context) {
@@ -377,7 +406,7 @@ func MakeServer(
 
 // BytesOut returns the total number of bytes transmitted from this server.
 func (s *Server) BytesOut() uint64 {
-	return uint64(s.tenantMetrics.BytesOutCount.Count())
+	return uint64(s.destinationMetrics.BytesOutCount.Count())
 }
 
 // Match returns true if rd appears to be a Postgres connection.
@@ -411,6 +440,7 @@ func (s *Server) IsDraining() bool {
 func (s *Server) Metrics() []interface{} {
 	return []interface{}{
 		s.tenantMetrics,
+		s.destinationMetrics,
 		&s.SQLServer.Metrics.StartedStatementCounters,
 		&s.SQLServer.Metrics.ExecutedStatementCounters,
 		&s.SQLServer.Metrics.EngineMetrics,
@@ -854,6 +884,21 @@ func (s *Server) ServeConn(
 	return nil
 }
 
+func (s *Server) lookup(ctx context.Context, ip net.IP) destinationMetrics {
+	destination := s.execCfg.IpLookup(ip)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ret, ok := s.mu.destinations[destination]; ok {
+		return ret
+	}
+	ret := destinationMetrics{
+		BytesInCount:  s.destinationMetrics.BytesInCount.AddChild(destination),
+		BytesOutCount: s.destinationMetrics.BytesOutCount.AddChild(destination),
+	}
+	s.mu.destinations[destination] = ret
+	return ret
+}
+
 func (s *Server) newConn(
 	ctx context.Context,
 	cancelConn context.CancelFunc,
@@ -862,11 +907,22 @@ func (s *Server) newConn(
 	connStart time.Time,
 ) *conn {
 	sv := &s.execCfg.Settings.SV
+
+	ip := net.IPv4zero
+	if addr, ok := netConn.RemoteAddr().(*net.TCPAddr); ok {
+		ip = addr.IP
+	}
+
+	dm := s.lookup(ctx, ip)
+	cm := connMetrics{
+		s.tenantMetrics,
+		dm,
+	}
 	c := &conn{
 		conn:                  netConn,
 		cancelConn:            cancelConn,
 		sessionArgs:           sArgs,
-		metrics:               s.tenantMetrics,
+		metrics:               cm,
 		startTime:             connStart,
 		rd:                    *bufio.NewReader(netConn),
 		sv:                    sv,
@@ -878,7 +934,7 @@ func (s *Server) newConn(
 	c.res.released = true
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
-	c.msgBuilder.init(s.tenantMetrics.BytesOutCount)
+	c.msgBuilder.init()
 	c.errWriter.sv = sv
 	c.errWriter.msgBuilder = &c.msgBuilder
 	return c
@@ -1076,7 +1132,7 @@ func (s *Server) serveImpl(
 	for {
 		breakLoop, isSimpleQuery, err := func() (bool, bool, error) {
 			typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
-			c.metrics.BytesInCount.Inc(int64(n))
+			c.metrics.DestinationMetrics.BytesInCount.Inc(int64(n))
 			if err == nil {
 				if knobs := s.execCfg.PGWireTestingKnobs; knobs != nil {
 					if afterReadMsgTestingKnob := knobs.AfterReadMsgTestingKnob; afterReadMsgTestingKnob != nil {
@@ -1091,7 +1147,7 @@ func (s *Server) serveImpl(
 
 					// Slurp the remaining bytes.
 					slurpN, slurpErr := c.readBuf.SlurpBytes(&c.rd, pgwirebase.GetMessageTooBigSize(err))
-					c.metrics.BytesInCount.Inc(int64(slurpN))
+					c.metrics.DestinationMetrics.BytesInCount.Inc(int64(slurpN))
 					if slurpErr != nil {
 						return false, isSimpleQuery, errors.Wrap(slurpErr, "pgwire: error slurping remaining bytes")
 					}
@@ -1159,7 +1215,7 @@ func (s *Server) serveImpl(
 			case pgwirebase.ClientMsgPassword:
 				// This messages are only acceptable during the auth phase, handled above.
 				err = pgwirebase.NewProtocolViolationErrorf("unexpected authentication data")
-				return true, isSimpleQuery, c.writeErr(ctx, err, &c.writerState.buf)
+				return true, isSimpleQuery, c.writeErr(ctx, err, &c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 			case pgwirebase.ClientMsgSimpleQuery:
 				if err = c.handleSimpleQuery(
 					ctx, &c.readBuf, timeReceived, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)),
@@ -1303,7 +1359,7 @@ func (s *Server) serveImpl(
 		// NOTE: If a query is canceled due to draining, the conn_executor already
 		// will have sent a QueryCanceled error as a response to the query.
 		log.Ops.Info(ctx, "closing existing connection while server is draining")
-		_ /* err */ = c.writeErr(ctx, newAdminShutdownErr(ErrDrainingExistingConn), &c.writerState.buf)
+		_ /* err */ = c.writeErr(ctx, newAdminShutdownErr(ErrDrainingExistingConn), &c.writerState.buf, c.metrics.DestinationMetrics.BytesOutCount.Inc)
 		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 	}
 }
@@ -1439,13 +1495,16 @@ func (s *Server) sendErr(
 ) error {
 	w := errWriter{
 		sv:         &st.SV,
-		msgBuilder: newWriteBuffer(s.tenantMetrics.BytesOutCount),
+		msgBuilder: newWriteBuffer(),
 	}
 	// We could, but do not, report server-side network errors while
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
-	_ /* err */ = w.writeErr(ctx, err, conn)
+	// TODO(baptist): Look up the correct destinationMetrics for this connection.
+	_ /* err */ = w.writeErr(ctx, err, conn, func(n int64) {
+		//		s.tenantMetrics.BytesOutCount.Inc(n)
+	})
 	return err
 }
 
