@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -689,10 +690,12 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 func newTestServer() *Server {
 	sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval)
+	st := cluster.MakeTestingClusterSettings()
 	return &Server{
 		tenantMetrics: metrics,
 		execCfg: &sql.ExecutorConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
+			Settings:   st,
+			CidrLookup: cidr.NewLookup(&st.SV),
 		},
 	}
 }
