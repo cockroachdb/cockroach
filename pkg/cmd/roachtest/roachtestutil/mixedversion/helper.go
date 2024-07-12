@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/errors"
 )
 
@@ -295,6 +296,20 @@ func (h *Helper) loggerFor(name string) (*logger.Logger, error) {
 	fileName = path.Join(logPrefix, fileName)
 
 	return prefixedLogger(h.runner.logger, fileName)
+}
+
+// IsSkipVersionUpgrade returns if the current upgrade is a skip
+// version upgrade. This can be used to gate steps that are
+// incompatible with version skipping, i.e. the schema change workload.
+//
+// N.B. Calling this in a startup step may lead to unexpected results,
+// as there is no upgrade going on.
+func (h *Helper) IsSkipVersionUpgrade() bool {
+	// N.B.: it is safe to ignore the error here as we should always be
+	// able to determine the number of releases between two binaries
+	// used when upgrading: we keep release data starting from 21.2.
+	numReleases, _ := release.MajorReleasesBetween(&h.testContext.FromVersion().Version, &h.testContext.ToVersion().Version)
+	return numReleases > 1
 }
 
 // logSQL standardizes the logging when a SQL statement or query is
