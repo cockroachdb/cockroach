@@ -22,7 +22,9 @@ rm pkg/sql/pgwire/fuzz.go
 mv ./pkg/util/span/frontier_test.go pkg/util/span/frontier_test_fuzz.go
 
 # Build the native go fuzz targets
-compile_native_go_fuzzer ./pkg/keys FuzzPrettyPrint fuzzPrettyPrint
+
+# Runs into a race condition and panics (bug in go-118-fuzz-build)
+#compile_native_go_fuzzer ./pkg/keys FuzzPrettyPrint fuzzPrettyPrint
 
 compile_native_go_fuzzer ./pkg/sql/sqlliveness/slstorage FuzzSessionIDEncoding fuzzSessionIDEncoding
 
@@ -39,6 +41,8 @@ compile_native_go_fuzzer ./pkg/storage FuzzEngineKeysInvariants fuzzEngineKeysIn
 # Build old fuzz targets which used `gofuzz`
 compile_go_fuzzer /src/cockroach/pkg/util/uuid Fuzz fuzzuuid
 
+# Generate seed corpus, from native go format to oss-fuzz format
+go run github.com/orijtech/otils/corpus2ossfuzz@latest -o "$OUT"/fuzzPrettyPrint_seed_corpus.zip -corpus ./pkg/keys/testdata/fuzz/FuzzPrettyPrint
+
 # Generate seed corpus
-zip -r $OUT/fuzzPrettyPrint_seed_corpus.zip ./pkg/keys/testdata/fuzz/FuzzPrettyPrint || true
 zip -r $OUT/fuzzuuid_seed_corpus.zip ./pkg/util/uuid/testdata/corpus || true
