@@ -1580,6 +1580,14 @@ func (r *Replica) RaftStatus() *raft.Status {
 	return r.raftStatusRLocked()
 }
 
+// RaftBasicStatus returns the current raft basic status of the replica. An empty
+// BasicStatus is returned if the Raft group hasn't been initialized.
+func (r *Replica) RaftBasicStatus() raft.BasicStatus {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.raftBasicStatusRLocked()
+}
+
 // raftStatusRLocked returns the current raft status of the replica, or
 // nil if the Raft group has not been initialized yet.
 //
