@@ -1362,7 +1362,7 @@ func (rs *replicaState) handleReadyState(
 				case probeRecentlyReplicate:
 					rs.replicaSendStream.makeConsistentWhenProbeToReplicateLocked(ctx, info.Next)
 				case snapshot:
-					rs.replicaSendStream.makeConsistentWhenProbeToReplicateLocked(ctx, info.Next)
+					rs.replicaSendStream.makeConsistentWhenSnapshotToReplicateLocked(ctx, info.Next)
 				}
 			}()
 		}
