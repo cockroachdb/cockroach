@@ -161,9 +161,21 @@ const getDatabaseGrantsQuery: DatabaseDetailsQuery<DatabaseGrantsRow> = {
   },
 };
 
+export type TableNameParts = {
+  // Raw unquoted, unescaped schema name.
+  schema: string;
+  // Raw unquoted, unescaped table name.
+  table: string;
+
+  // qualifiedNameWithSchemaAndTable is the qualifed
+  // table name containing escaped, quoted schema and
+  // table name parts.
+  qualifiedNameWithSchemaAndTable: string;
+};
+
 // Database Tables
 export type DatabaseTablesResponse = {
-  tables: string[];
+  tables: TableNameParts[];
 };
 
 type DatabaseTablesRow = {
@@ -197,7 +209,11 @@ const getDatabaseTablesQuery: DatabaseDetailsQuery<DatabaseTablesRow> = {
           row.table_schema,
           row.table_name,
         ]).sqlString();
-        return resp.tablesResp.tables.push(escTableName);
+        resp.tablesResp.tables.push({
+          schema: row.table_schema,
+          table: row.table_name,
+          qualifiedNameWithSchemaAndTable: escTableName,
+        });
       });
     }
     if (txnResult.error) {
