@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -229,6 +230,8 @@ type Server struct {
 
 	tenantMetrics *tenantSpecificMetrics
 
+	destinationMetrics destinationAggMetrics
+
 	mu struct {
 		syncutil.Mutex
 		// connCancelMap entries represent connections started when the server
@@ -248,6 +251,9 @@ type Server struct {
 		// SQL connections, e.g. when the draining process enters the phase whose
 		// duration is specified by the server.shutdown.connections.timeout.
 		rejectNewConnections bool
+
+		// destinations tracks the metrics for each destination.
+		destinations map[string]*destinationMetrics
 	}
 
 	auth struct {
@@ -271,11 +277,41 @@ type Server struct {
 	testingAuthLogEnabled atomic.Bool
 }
 
+// destMetrics returns the destination metrics for the given connection given
+// the current cidr mapping. For performance we cache a metrics object on the
+// connection. but we need to check if it is still valid. If its invalid, we
+// call lookup and update the cache.
+func (s *Server) destMetrics(ctx context.Context, c *conn) *destinationMetrics {
+	dm := c.curDestMetrics.Load()
+	if dm != nil && !dm.invalid.Load() {
+		return dm
+	}
+	dm = s.lookup(ctx, c.conn)
+	c.curDestMetrics.Store(dm)
+	return dm
+}
+
+type destinationAggMetrics struct {
+	BytesInCount  *aggmetric.AggCounter
+	BytesOutCount *aggmetric.AggCounter
+}
+
+// destinationMetrics is the set of metrics to a specific destination. A
+// destination can be defined based on a CIDR block. The invalid flag is used to
+// protect against CIDR mapping changes. When the CIDR mapping changes, the
+// destination metrics are invalidated and a new struct is created.
+type destinationMetrics struct {
+	// NB: The transition from valid to invalid is one way.
+	invalid atomic.Bool
+	// The counters should never be accessed directly, only through the
+	// functions.
+	BytesInCount  *aggmetric.Counter
+	BytesOutCount *aggmetric.Counter
+}
+
 // tenantSpecificMetrics is the set of metrics for a pgwire server
 // bound to a specific tenant.
 type tenantSpecificMetrics struct {
-	BytesInCount                *metric.Counter
-	BytesOutCount               *metric.Counter
 	Conns                       *metric.Gauge
 	NewConns                    *metric.Counter
 	ConnsWaitingToHash          *metric.Gauge
@@ -293,8 +329,6 @@ func newTenantSpecificMetrics(
 	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
 ) *tenantSpecificMetrics {
 	return &tenantSpecificMetrics{
-		BytesInCount:        metric.NewCounter(MetaBytesIn),
-		BytesOutCount:       metric.NewCounter(MetaBytesOut),
 		Conns:               metric.NewGauge(MetaConns),
 		NewConns:            metric.NewCounter(MetaNewConns),
 		ConnsWaitingToHash:  metric.NewGauge(MetaConnsWaitingToHash),
@@ -333,6 +367,10 @@ func MakeServer(
 		execCfg:    executorConfig,
 
 		tenantMetrics: newTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
+		destinationMetrics: destinationAggMetrics{
+			BytesInCount:  aggmetric.NewCounter(MetaBytesIn, "remote"),
+			BytesOutCount: aggmetric.NewCounter(MetaBytesOut, "remote"),
+		},
 	}
 	server.sqlMemoryPool = mon.NewMonitor(mon.Options{
 		Name: "sql",
@@ -363,7 +401,9 @@ func MakeServer(
 	server.mu.Lock()
 	server.mu.connCancelMap = make(cancelChanMap)
 	server.mu.drainCh = make(chan struct{})
+	server.mu.destinations = make(map[string]*destinationMetrics)
 	server.mu.Unlock()
+	executorConfig.CidrLookup.SetOnChange(server.onCidrChange)
 
 	connAuthConf.SetOnChange(&st.SV, func(ctx context.Context) {
 		loadLocalHBAConfigUponRemoteSettingChange(ctx, server, st)
@@ -377,7 +417,7 @@ func MakeServer(
 
 // BytesOut returns the total number of bytes transmitted from this server.
 func (s *Server) BytesOut() uint64 {
-	return uint64(s.tenantMetrics.BytesOutCount.Count())
+	return uint64(s.destinationMetrics.BytesOutCount.Count())
 }
 
 // Match returns true if rd appears to be a Postgres connection.
@@ -411,6 +451,7 @@ func (s *Server) IsDraining() bool {
 func (s *Server) Metrics() []interface{} {
 	return []interface{}{
 		s.tenantMetrics,
+		s.destinationMetrics,
 		&s.SQLServer.Metrics.StartedStatementCounters,
 		&s.SQLServer.Metrics.ExecutedStatementCounters,
 		&s.SQLServer.Metrics.EngineMetrics,
@@ -870,6 +911,48 @@ func (s *Server) ServeConn(
 	return nil
 }
 
+// onCidrChange is called when the cluster setting for the CIDR lookup table
+// changes. We invalidate all existing metric mappings as it is possible that
+// they changed. On each connection, the next call to lookup will recompute the
+// current mapping for that connection.
+func (s *Server) onCidrChange(ctx context.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, dest := range s.mu.destinations {
+		dest.invalid.Store(true)
+	}
+}
+
+// lookup returns the destination metrics for a given connection.
+func (s *Server) lookup(ctx context.Context, netConn net.Conn) *destinationMetrics {
+	ip := net.IPv4zero
+	if addr, ok := netConn.RemoteAddr().(*net.TCPAddr); ok {
+		ip = addr.IP
+	}
+	destination := s.execCfg.CidrLookup.LookupIP(ip)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ret, ok := s.mu.destinations[destination]; ok {
+		// If there is an existing invalid entry, create a new valid entry. All
+		// the existing connections will still reference the old entry, but will
+		// get updated when they next attempt to use it. Note that we can't call
+		// AddChild again for the same destination name.
+		if ret.invalid.Load() {
+			ret = &destinationMetrics{
+				BytesInCount:  ret.BytesInCount,
+				BytesOutCount: ret.BytesOutCount,
+			}
+		}
+		return ret
+	}
+	ret := &destinationMetrics{
+		BytesInCount:  s.destinationMetrics.BytesInCount.AddChild(destination),
+		BytesOutCount: s.destinationMetrics.BytesOutCount.AddChild(destination),
+	}
+	s.mu.destinations[destination] = ret
+	return ret
+}
+
 func (s *Server) newConn(
 	ctx context.Context,
 	cancelConn context.CancelFunc,
@@ -889,12 +972,13 @@ func (s *Server) newConn(
 		readBuf:               pgwirebase.MakeReadBuffer(pgwirebase.ReadBufferOptionWithClusterSettings(sv)),
 		alwaysLogAuthActivity: s.testingAuthLogEnabled.Load(),
 	}
+	c.destMetrics = func() *destinationMetrics { return s.destMetrics(ctx, c) }
 	c.stmtBuf.Init()
 	c.stmtBuf.PipelineCount = s.tenantMetrics.PGWirePipelineCount
 	c.res.released = true
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
-	c.msgBuilder.init(s.tenantMetrics.BytesOutCount.Inc)
+	c.msgBuilder.init(func(i int64) { c.destMetrics().BytesOutCount.Inc(i) })
 	c.errWriter.sv = sv
 	c.errWriter.msgBuilder = &c.msgBuilder
 	return c
@@ -1092,7 +1176,7 @@ func (s *Server) serveImpl(
 	for {
 		breakLoop, isSimpleQuery, err := func() (bool, bool, error) {
 			typ, n, err := c.readBuf.ReadTypedMsg(&c.rd)
-			c.metrics.BytesInCount.Inc(int64(n))
+			s.destMetrics(ctx, c).BytesInCount.Inc(int64(n))
 			if err == nil {
 				if knobs := s.execCfg.PGWireTestingKnobs; knobs != nil {
 					if afterReadMsgTestingKnob := knobs.AfterReadMsgTestingKnob; afterReadMsgTestingKnob != nil {
@@ -1107,7 +1191,7 @@ func (s *Server) serveImpl(
 
 					// Slurp the remaining bytes.
 					slurpN, slurpErr := c.readBuf.SlurpBytes(&c.rd, pgwirebase.GetMessageTooBigSize(err))
-					c.metrics.BytesInCount.Inc(int64(slurpN))
+					s.destMetrics(ctx, c).BytesInCount.Inc(int64(slurpN))
 					if slurpErr != nil {
 						return false, isSimpleQuery, errors.Wrap(slurpErr, "pgwire: error slurping remaining bytes")
 					}
@@ -1454,8 +1538,10 @@ func (s *Server) sendErr(
 	ctx context.Context, st *cluster.Settings, conn net.Conn, err error,
 ) error {
 	w := errWriter{
-		sv:         &st.SV,
-		msgBuilder: newWriteBuffer(s.tenantMetrics.BytesOutCount.Inc),
+		sv: &st.SV,
+		msgBuilder: newWriteBuffer(func(n int64) {
+			s.lookup(ctx, conn).BytesOutCount.Inc(n)
+		}),
 	}
 	// We could, but do not, report server-side network errors while
 	// trying to send the client error. This is because clients that
