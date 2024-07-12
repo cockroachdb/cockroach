@@ -580,7 +580,7 @@ func (rn *RawNode) SetAdmitted(marks tracker.AdmittedMarks) pb.Message {
 		return pb.Message{}
 	}
 
-	cp := []uint64{}
+	cp := make([]uint64, len(marks))
 	copy(cp, marks[:])
 
 	return pb.Message{

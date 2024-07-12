@@ -389,10 +389,9 @@ func (n *controllerImpl) AdmitKVWork(
 						AdmissionOriginNode: n.nodeID.Get(),
 					}
 					admitted = true
-				} else {
-					// Else, must not be leader
-					// Will do above-raft, leaseholder-only AC.
 				}
+				// Else, must not be leader
+				// Will do above-raft, leaseholder-only AC.
 			}
 		}
 		// If flow control is disabled or if work bypasses flow control, we still

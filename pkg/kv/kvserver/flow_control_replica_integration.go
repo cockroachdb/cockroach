@@ -702,7 +702,9 @@ func (rr2 *replicaRACv2Integration) onDescChanged(
 		if rr2.mu.rcAtLeader == nil {
 			return
 		}
-		rr2.mu.rcAtLeader.SetReplicas(ctx, rr2.mu.replicas)
+		if err := rr2.mu.rcAtLeader.SetReplicas(ctx, rr2.mu.replicas); err != nil {
+			log.Errorf(ctx, "error setting replicas: %v", err)
+		}
 	}
 }
 
@@ -713,7 +715,9 @@ func (rr2 *replicaRACv2Integration) processRangeControllerSchedulerEvent(ctx con
 	defer rr2.mu.Unlock()
 
 	if rr2.mu.rcAtLeader != nil {
-		rr2.mu.rcAtLeader.HandleControllerSchedulerEvent(ctx)
+		if err := rr2.mu.rcAtLeader.HandleControllerSchedulerEvent(ctx); err != nil {
+			log.Errorf(ctx, "error handling controller scheduler event: %v", err)
+		}
 	}
 }
 
@@ -801,7 +805,9 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(ctx context.Context, entries
 	raftEvent := kvflowconnectedstream.MakeRaftEvent(&raft.Ready{
 		Entries: entries,
 	})
-	rr2.mu.rcAtLeader.HandleRaftEvent(ctx, raftEvent)
+	if err := rr2.mu.rcAtLeader.HandleRaftEvent(ctx, raftEvent); err != nil {
+		log.Errorf(ctx, "error handling raft event: %v", err)
+	}
 }
 
 // Corresponding to raft indices [first, last].
@@ -881,7 +887,7 @@ func (rr2 *replicaRACv2Integration) admitRaftEntry(
 	rr2.replica.raftMu.AssertHeld()
 	typ, priBits, err := raftlog.EncodingOf(entry)
 	if err != nil {
-		panic(errors.AssertionFailedf("unable to determine raft command encoding: %v", err))
+		panic(errors.Wrap(err, "unable to determine raft command encoding"))
 	}
 	if !typ.UsesAdmissionControl() {
 		return // nothing to do
@@ -892,7 +898,7 @@ func (rr2 *replicaRACv2Integration) admitRaftEntry(
 	}
 	meta, err := raftlog.DecodeRaftAdmissionMeta(entry.Data)
 	if err != nil {
-		panic(errors.AssertionFailedf("unable to decode raft command admission data: %v", err))
+		panic(errors.Wrap(err, "unable to decode raft command admission data: %v"))
 	}
 	if kvflowcontrolpb.RaftPriority(meta.AdmissionPriority) != priBits {
 		panic("inconsistent priorities")
@@ -1026,7 +1032,7 @@ func (w *waitingForAdmissionState) add(index uint64, pri kvflowcontrolpb.RaftPri
 	if found {
 		return
 	}
-	slices.Insert(w.waiting[pri], pos, index)
+	w.waiting[pri] = slices.Insert(w.waiting[pri], pos, index)
 }
 
 func (w *waitingForAdmissionState) computeAdmitted(

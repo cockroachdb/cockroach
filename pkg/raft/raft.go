@@ -529,6 +529,7 @@ func (r *raft) send(m pb.Message) {
 		}
 	}
 	if m.Type == pb.MsgAppResp && !m.Reject {
+		m.Admitted = make([]uint64, len(r.adm.Marks))
 		copy(m.Admitted, r.adm.Marks[:])
 	}
 	if m.Type == pb.MsgAppResp || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVoteResp {
