@@ -10,7 +10,8 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import React from "react";
-import { Tooltip } from "antd";
+import { Skeleton, Tooltip } from "antd";
+import { Caution } from "@cockroachlabs/icons";
 
 import {
   isMaxSizeError,
@@ -240,21 +241,32 @@ export function buildIndexStatToRecommendationsMap(
   return recommendationsMap;
 }
 
-export function checkInfoAvailable(
-  requestError: Error,
-  queryError: Error,
-  cell: React.ReactNode,
-): React.ReactNode {
+interface LoadingCellProps {
+  requestError: Error;
+  queryError?: Error;
+  loading: boolean;
+}
+
+export const LoadingCell: React.FunctionComponent<LoadingCellProps> = ({
+  loading,
+  requestError,
+  queryError,
+  children,
+}) => {
+  if (loading) {
+    return (
+      <Skeleton loading={true} active={true} paragraph={false} title={true} />
+    );
+  }
+
   let tooltipMsg = "";
   if (requestError) {
     tooltipMsg = `Encountered a network error fetching data for this cell: ${requestError.name}`;
   } else if (queryError) {
     tooltipMsg = getQueryErrorMessage(queryError);
-  } else if (cell == null) {
-    tooltipMsg = "Empty result";
   }
   // If we encounter an error gathering data for this cell,
-  // render it "unavailable" with a tooltip message for the error.
+  // render a warning icon with a tooltip message for the error.
   if (tooltipMsg !== "") {
     return (
       <Tooltip
@@ -262,12 +274,16 @@ export function checkInfoAvailable(
         placement="bottom"
         title={tooltipMsg}
       >
-        (unavailable)
+        <Caution role={"status"} />
       </Tooltip>
     );
   }
-  return cell;
-}
+
+  if (children === null) {
+    return <>{"No data"}</>;
+  }
+  return <>{children}</>;
+};
 
 export const getNetworkErrorMessage = (requestError: Error): string => {
   return `Encountered a network error: ${requestError.message}`;
