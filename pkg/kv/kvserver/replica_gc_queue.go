@@ -163,8 +163,8 @@ func replicaIsSuspect(repl *Replica) bool {
 	// because it has probably already been removed from its raft group but
 	// doesn't know it. Without this, node decommissioning can stall on such
 	// dormant ranges.
-	raftStatus := repl.RaftStatus()
-	if raftStatus == nil {
+	raftStatus := repl.RaftBasicStatus()
+	if raftStatus.Empty() {
 		liveness, ok := repl.store.cfg.NodeLiveness.Self()
 		return ok && !liveness.Membership.Active()
 	}

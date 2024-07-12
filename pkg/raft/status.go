@@ -51,6 +51,12 @@ type SparseStatus struct {
 	Progress map[pb.PeerID]tracker.Progress
 }
 
+// Empty returns true if the receiver is empty.
+func (b *BasicStatus) Empty() bool {
+	empty := BasicStatus{}
+	return *b == empty
+}
+
 // withProgress calls the supplied visitor to introspect the progress for the
 // supplied raft group. Cannot be used to introspect p.Inflights.
 func withProgress(r *raft, visitor func(id pb.PeerID, typ ProgressType, pr tracker.Progress)) {
