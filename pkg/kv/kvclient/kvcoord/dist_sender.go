@@ -16,7 +16,6 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -44,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -721,7 +721,7 @@ type DistSender struct {
 	dontConsiderConnHealth bool
 
 	// Currently executing range feeds.
-	activeRangeFeeds sync.Map // // map[*rangeFeedRegistry]nil
+	activeRangeFeeds syncutil.Map[*rangeFeedRegistry, struct{}]
 }
 
 var _ kv.Sender = &DistSender{}
