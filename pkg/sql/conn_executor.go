@@ -3740,6 +3740,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			JobsProfiler:                   p,
 			ULIDEntropy:                    ulid.Monotonic(crypto_rand.Reader, 0),
 			RNGFactory:                     &ex.rng.external,
+			CidrLookup:                     p.execCfg.CidrLookup,
 		},
 		Tracing:              &ex.sessionTracing,
 		MemMetrics:           &ex.memMetrics,
