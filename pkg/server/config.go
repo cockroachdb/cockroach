@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -273,6 +274,9 @@ type BaseConfig struct {
 	// listeners. This is set by in-memory tenants if the user has
 	// specified port range preferences.
 	RPCListenerFactory RPCListenerFactory
+
+	// CidrLookup is used to look up the tag name for a given IP address.
+	CidrLookup *cidr.Lookup
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -321,6 +325,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.AmbientCtx.AddLogTag("n", cfg.IDContainer)
 	cfg.Config.InitDefaults()
 	cfg.InitTestingKnobs()
+	cfg.CidrLookup = cidr.NewLookup(&st.SV)
 	cfg.ExternalStorageAccessor = cloud.NewExternalStorageAccessor()
 }
 
