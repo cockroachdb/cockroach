@@ -279,14 +279,48 @@ subtest corrupted_log
 
 # Check that entries after corrupted line is parsed.
 log
-.
 I210116 17:49:17.073282-020000 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
-.
-.
-.
+panic: invalid tenant ID 0
+
+goroutine 6603729 [running]:
 I210116 19:49:17.073282 14 server/node.go:464 ⋮ [-] 23  last line
 ----
 logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+malformed entry:logpb.Entry{Severity:1, Time:946684800000000000, Goroutine:0, File:" ", Line:0, Message:"panic: invalid tenant ID 0", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+malformed entry:logpb.Entry{Severity:1, Time:946684800000000000, Goroutine:0, File:" ", Line:0, Message:"", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+malformed entry:logpb.Entry{Severity:1, Time:946684800000000000, Goroutine:0, File:" ", Line:0, Message:"goroutine 6603729 [running]:", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"last line", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+
+
+subtest end
+
+subtest corrupted_log_at_end
+
+# Check that entries after corrupted at end are getting parsed
+log
+I210116 17:49:17.073282-020000 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
+panic: invalid tenant ID 0
+
+goroutine 6603729 [running]:
+----
+logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+malformed entry:logpb.Entry{Severity:1, Time:946684800000000000, Goroutine:0, File:" ", Line:0, Message:"panic: invalid tenant ID 0", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+malformed entry:logpb.Entry{Severity:1, Time:946684800000000000, Goroutine:0, File:" ", Line:0, Message:"", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+malformed entry:logpb.Entry{Severity:1, Time:946684800000000000, Goroutine:0, File:" ", Line:0, Message:"goroutine 6603729 [running]:", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
+
+
+subtest end
+
+
+subtest corrupted_log_at_start
+
+# Check that entries after corrupted at start are getting parsed
+log
+goroutine 6603729 [running]:
+panic: invalid tenant ID 0
+I210116 19:49:17.073282 14 server/node.go:464 ⋮ [-] 23  last line
+----
+malformed entry:logpb.Entry{Severity:1, Time:946684800000000000, Goroutine:0, File:" ", Line:0, Message:"panic: invalid tenant ID 0", Tags:"", Counter:0x0, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 logpb.Entry{Severity:1, Time:1610826557073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"last line", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1", TenantName:""}
 
 

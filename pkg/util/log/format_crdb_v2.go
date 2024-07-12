@@ -460,6 +460,7 @@ func (buf *buffer) maybeMultiLine(
 var startRedactionMarker = string(redact.StartMarker())
 var endRedactionMarker = string(redact.EndMarker())
 var markersStartWithMultiByteRune = startRedactionMarker[0] >= utf8.RuneSelf && endRedactionMarker[0] >= utf8.RuneSelf
+var defaultCrdbV2Format = "I000101 00:00:00.000000 0  :0 ⋮ [-] 0  %s"
 
 var (
 	entryREV2 = regexp.MustCompile(
@@ -495,13 +496,16 @@ var (
 const tenantDetailsTags = string(tenantIDLogTagKey) + string(tenantNameLogTagKey)
 
 type entryDecoderV2 struct {
-	lines           int // number of lines read from reader
-	reader          *bufio.Reader
-	nextFragment    entryDecoderV2Fragment
-	sensitiveEditor redactEditor
+	lines               int // number of lines read from reader
+	reader              *bufio.Reader
+	nextFragment        entryDecoderV2Fragment
+	sensitiveEditor     redactEditor
+	isMalformedFragment bool
 }
 
 // Decode decodes the next log entry into the provided protobuf message.
+// If we encounter any malformed line then we are updating log entry along with
+// MalformedLogEntry error
 func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 	defer func() {
 		if err != nil && !errors.Is(err, io.EOF) {
@@ -509,13 +513,22 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 		}
 	}()
 	frag, err := d.peekNextFragment()
+
 	if err != nil {
 		return err
 	}
-	d.popFragment()
-	if err = d.initEntryFromFirstLine(entry, frag); err != nil {
-		return err
+
+	// construct the log entry from malformed fragment and return it along
+	// with malformed log entry error
+	if d.isMalformedFragment {
+		d.popFragment()
+		d.initEntryFromFirstLine(entry, frag)
+		entry.Message = string(frag.getMsg())
+		return ErrMalformedLogEntry
 	}
+
+	d.popFragment()
+	d.initEntryFromFirstLine(entry, frag)
 
 	// Process the message.
 	var entryMsg bytes.Buffer
@@ -524,8 +537,8 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 	// While the entry has additional lines, collect the full message.
 	for {
 		frag, err = d.peekNextFragment()
-		if err != nil || !frag.isContinuation() {
-			// Ignore this error as it is relevant to the next line and we don't
+		if err != nil || d.isMalformedFragment || !frag.isContinuation() {
+			// Ignore the error or malformed fragment as it is relevant to the next line and we don't
 			// know if it is continuation line or not.
 			break
 		}
@@ -595,7 +608,10 @@ func (d *entryDecoderV2) peekNextFragment() (entryDecoderV2Fragment, error) {
 			if d.lines == 1 { // allow non-matching lines if we've never seen a line
 				continue
 			}
-			return nil, ErrMalformedLogEntry
+			// construct fragment based on malformed line in crdbV2 format with default values
+			d.nextFragment = entryREV2.FindSubmatch([]byte((fmt.Sprintf(defaultCrdbV2Format, nextLine))))
+			d.isMalformedFragment = true
+			return d.nextFragment, nil
 		}
 		d.nextFragment = m
 	}
@@ -607,11 +623,10 @@ func (d *entryDecoderV2) popFragment() {
 		panic(errors.AssertionFailedf("cannot pop unpopulated fragment"))
 	}
 	d.nextFragment = nil
+	d.isMalformedFragment = false
 }
 
-func (d *entryDecoderV2) initEntryFromFirstLine(
-	entry *logpb.Entry, m entryDecoderV2Fragment,
-) (err error) {
+func (d *entryDecoderV2) initEntryFromFirstLine(entry *logpb.Entry, m entryDecoderV2Fragment) {
 	// Erase all the fields, to be sure.
 	tenantID, tenantName := m.getTenantDetails()
 	*entry = logpb.Entry{
@@ -631,7 +646,6 @@ func (d *entryDecoderV2) initEntryFromFirstLine(
 		entry.StructuredStart = 0
 		entry.StructuredEnd = uint32(len(m.getMsg()))
 	}
-	return nil
 }
 
 // entryDecoderV2Fragment is a line which is part of a v2 log entry.
