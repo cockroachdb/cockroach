@@ -1,6 +1,6 @@
 # We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
 # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
-FROM us-east1-docker.pkg.dev/crl-docker-sync/docker-mirror/docker.io/library/ubuntu:focal
+FROM us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:noble
 ARG TARGETPLATFORM
 
 RUN apt-get update \
@@ -9,7 +9,7 @@ RUN apt-get update \
     autoconf \
     bison \
     ca-certificates \
-    clang-10 \
+    clang-18 \
     cmake \
     curl \
     flex \
@@ -19,60 +19,42 @@ RUN apt-get update \
     libncurses-dev \
     libtinfo-dev \
     llvm \
+    lsb-release \
     lsof \
     make \
     netbase \
     openjdk-8-jre \
     openssh-client \
+    patch \
     patchelf \
     python-is-python3 \
     python3 \
-    python3.8-venv \
+    python3.12-venv \
     unzip \
     zip \
- && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
+ && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 \
+    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-18 \
  && apt-get clean
 
-# We need a newer version of cmake.
-#
-# NOTE: When upgrading cmake, bump the rebuild counters in
-# c-deps/*-rebuild to force recreating the makefiles. This prevents
-# strange build errors caused by those makefiles depending on the
-# installed version of cmake.
-RUN case ${TARGETPLATFORM} in \
-    "linux/amd64") ARCH=x86_64; SHASUM=97bf730372f9900b2dfb9206fccbcf92f5c7f3b502148b832e77451aa0f9e0e6 ;; \
-    "linux/arm64") ARCH=aarch64; SHASUM=77620f99e9d5f39cf4a49294c6a68c89a978ecef144894618974b9958efe3c2a ;; \
-  esac \
- && curl -fsSL "https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-3.20.3-linux-$ARCH.tar.gz" -o cmake.tar.gz \
- && echo "$SHASUM cmake.tar.gz" | sha256sum -c - \
- && tar --strip-components=1 -C /usr -xzf cmake.tar.gz \
- && rm cmake.tar.gz
+RUN mkdir -p /etc/apt/keyrings
 
-# git - Upgrade to a more modern version
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
-    apt-get clean && \
-    curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
-    unzip "git-2.29.2.zip" && \
-    cd git-2.29.2 && \
-    make configure && \
-    ./configure && \
-    make && \
-    make install && \
-    cd .. && \
-    rm -rf git-2.29.2.zip git-2.29.2
+# Note that we "should be" downloading this key from https://packages.microsoft.com/keys/microsoft.asc.
+# However, as of this writing, that fails when trying to curl the file from
+# our CI machines. I don't know why. We work around it by simply checking the
+# key in and copying it from our source control.
+COPY microsoft.gpg /etc/apt/keyrings/microsoft.gpg
 
-RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
- && echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' | tee /etc/apt/sources.list.d/gcloud.list \
- && curl -fsLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add - \
- && echo "deb https://packages.microsoft.com/repos/azure-cli/ focal main" > /etc/apt/sources.list.d/azure-cli.list \
+RUN chmod go+r /etc/apt/keyrings/microsoft.gpg \
+ && echo "Types: deb\nURIs: https://packages.microsoft.com/repos/azure-cli/\nSuites: $(lsb_release -cs)\nComponents: main\nArchitectures: $(dpkg --print-architecture)\nSigned-by: /etc/apt/keyrings/microsoft.gpg" | tee /etc/apt/sources.list.d/azure-cli.sources \
  && apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    azure-cli \
-    google-cloud-sdk \
-    google-cloud-cli-gke-gcloud-auth-plugin \
-    && apt-get clean
+ && apt-get install azure-cli \
+ && apt-get clean
+
+RUN curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz -o google-cloud-cli.tar.gz \
+ && tar -xf google-cloud-cli-linux-x86_64.tar.gz \
+ && ./google-cloud-sdk/install.sh --quiet --usage-reporting false --command-completion false --path-update false --additional-components gke-gcloud-auth-plugin --no-compile-python
+
+ENV PATH="$PATH:/google-cloud-sdk/bin"
 
 RUN apt-get purge -y \
     apt-transport-https \
