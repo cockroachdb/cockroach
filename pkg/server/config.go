@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -283,6 +284,9 @@ type BaseConfig struct {
 
 	// DiskWriteStats is used to categorically track disk write metrics.
 	DiskWriteStats disk.WriteStatsManager
+
+	// CidrLookup is used to look up the tag name for a given IP address.
+	CidrLookup *cidr.Lookup
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -331,6 +335,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.AmbientCtx.AddLogTag("n", cfg.IDContainer)
 	cfg.Config.InitDefaults()
 	cfg.InitTestingKnobs()
+	cfg.CidrLookup = cidr.NewLookup(&st.SV)
 	cfg.EarlyBootExternalStorageAccessor = cloud.NewEarlyBootExternalStorageAccessor(st, cfg.ExternalIODirConfig)
 	cfg.DiskMonitorManager = disk.NewMonitorManager(vfs.Default)
 	cfg.DiskWriteStats = disk.NewWriteStatsManager(vfs.Default)

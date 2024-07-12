@@ -160,6 +160,8 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	cfg.AmbientCtx.Tracer = nil
 	cfgExpected.Tracer = nil
 	cfgExpected.AmbientCtx.Tracer = nil
+	cfg.CidrLookup = nil
+	cfgExpected.CidrLookup = nil
 	cfg.EarlyBootExternalStorageAccessor = nil
 	cfgExpected.EarlyBootExternalStorageAccessor = nil
 	// Temp storage disk monitors will have slightly different names, so we
