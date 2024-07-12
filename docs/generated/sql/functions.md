@@ -2880,7 +2880,7 @@ Can be used to define the tile bounds required by ST_AsMVTGeom to convert geomet
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="compress"></a><code>compress(data: <a href="bytes.html">bytes</a>, codec: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Compress <code>data</code> with the specified <code>codec</code> (<code>gzip</code>, ‘lz4’, ‘snappy’, 'zstd).</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="concat"></a><code>concat(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Concatenates a comma-separated list of strings.</p>
+<tr><td><a name="concat"></a><code>concat(anyelement...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Concatenates a comma-separated list of strings.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="concat_ws"></a><code>concat_ws(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Uses the first argument as a separator between the concatenation of the subsequent arguments.</p>
 <p>For example <code>concat_ws('!','wow','great')</code> returns <code>wow!great</code>.</p>
