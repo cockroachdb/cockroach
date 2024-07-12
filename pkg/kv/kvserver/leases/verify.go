@@ -102,16 +102,11 @@ func verifyAcquisition(ctx context.Context, st Settings, i VerifyInput) error {
 	// Thus, we do one of two things:
 	// - if the leader is known, we reject this proposal and make sure the request
 	// that needed the lease is redirected to the leaseholder;
-	// - if the leader is not known [^1], we don't do anything special here to
-	// terminate the proposal, but we know that Raft will reject it with a
-	// ErrProposalDropped. We'll eventually re-propose it once a leader is known,
-	// at which point it will either go through or be rejected based on whether it
-	// is this replica that became the leader.
-	//
-	// [^1]: however, if the leader is not known and RejectLeaseOnLeaderUnknown
-	// cluster setting is true, we reject the proposal.
-	// TODO(pav-kv): make this behaviour default. Right now, it is hidden behind
-	// the experimental cluster setting. See #120073 and #118435.
+	// - if the leader is not known, we also reject the proposal, but we don't
+	// provide a hint about who the leaseholder is. This is because we don't know
+	// who the likely leaseholder is. However, we know it's not us and we don't
+	// want to block the request on our local replica establishing connectivity to
+	// its quorum. Better to allow the request's DistSender to try another replica.
 	//
 	// A special case is when the leader is known, but is ineligible to get the
 	// lease. In that case, we have no choice but to continue with the proposal.
@@ -129,6 +124,25 @@ func verifyAcquisition(ctx context.Context, st Settings, i VerifyInput) error {
 	// If the local replica is the raft leader, it can proceed with the lease
 	// acquisition.
 	if iAmTheLeader || st.AllowLeaseProposalWhenNotLeader {
+		return nil
+	}
+
+	// If the local replica is the only replica in the range, it can proceed with
+	// the lease acquisition, regardless of whether it currently considers itself
+	// the raft leader. This is because the replica can become the leader without
+	// any remote votes, so it has the ability to grant itself leadership whenever
+	// it wants.
+	//
+	// This affordance for single-replica ranges is important for unit tests, many
+	// of which are written with a single-replica range and are not prepared to
+	// retry NotLeaseHolderErrors.
+	//
+	// Note that it is not possible for the local replica to think that it is the
+	// only replica in the range but for that not to be the case due to staleness
+	// and for an available quorum to exist elsewhere. This is because the replica
+	// in a single-replica range must be responsible for any upreplication that
+	// might create such a quorum.
+	if len(i.Desc.Replicas().VoterDescriptors()) == 1 {
 		return nil
 	}
 

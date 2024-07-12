@@ -25,6 +25,7 @@ import (
 var (
 	repl1 = roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	repl2 = roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
+	repl3 = roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
 	desc  = roachpb.RangeDescriptor{InternalReplicas: []roachpb.ReplicaDescriptor{repl1, repl2}}
 	cts10 = hlc.ClockTimestamp{WallTime: 10}
 	cts20 = hlc.ClockTimestamp{WallTime: 20}
@@ -175,7 +176,7 @@ func defaultSettings() Settings {
 	return Settings{
 		UseExpirationLeases:        false,
 		TransferExpirationLeases:   true,
-		RejectLeaseOnLeaderUnknown: false,
+		RejectLeaseOnLeaderUnknown: true,
 		ExpToEpochEquiv:            true,
 		MinExpirationSupported:     true,
 		RangeLeaseDuration:         20,
