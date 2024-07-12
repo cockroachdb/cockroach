@@ -2370,7 +2370,21 @@ func TestRACV2Basic(t *testing.T) {
 		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
 	})
 
-	t.Run("relocate_range", func(t *testing.T) {
+	t.Run("relocate_range_no_transfer", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, 5,
+			base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
+		defer tc.Stopper().Stop(ctx)
+
+		k := tc.ScratchRange(t)
+		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
+		require.NoError(t, tc.Servers[0].DB().AdminRelocateRange(
+			ctx, k, tc.Targets(1, 3, 4), nil /* nonVoterTargets */, true))
+		log.Info(ctx, "relocated range to s1*, s2, s3 -> s1*, s4, s5")
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
+	})
+
+	t.Run("relocate_range_with_transfer", func(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 6,
 			base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
 		defer tc.Stopper().Stop(ctx)
@@ -2380,7 +2394,7 @@ func TestRACV2Basic(t *testing.T) {
 		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
 		require.NoError(t, tc.Servers[0].DB().AdminRelocateRange(
 			ctx, k, tc.Targets(3, 4, 5), nil /* nonVoterTargets */, true))
-		log.Info(ctx, "relocated range to s4, s5, s6")
+		log.Info(ctx, "relocated range to s1*, s2, s3 -> s4*, s5, s6")
 		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 100 /* count */)
 	})
 

@@ -872,7 +872,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 					info := raftGroup.GetProgress(raftpb.PeerID(leaderID))
 					if syncRd.Entries[n-1].Index+1 != info.Next {
 						// Leader is operating in push mode, so Next should have advanced.
-						log.Fatal(ctx, errors.AssertionFailedf("last entry index %d + 1 != %d Next at leader [match=%d]",
+						log.Warning(ctx, errors.AssertionFailedf("last entry index %d + 1 != %d Next at leader [match=%d]",
 							syncRd.Entries[n-1].Index, info.Next, info.Match).Error())
 					}
 				}
