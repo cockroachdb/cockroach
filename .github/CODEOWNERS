@@ -140,8 +140,8 @@
 /pkg/cli/convert_url*        @cockroachdb/sql-foundations   @cockroachdb/cli-prs
 /pkg/cli/debug*.go           @cockroachdb/kv-prs         @cockroachdb/cli-prs
 /pkg/cli/debug_job_trace*.go @cockroachdb/jobs-prs       @cockroachdb/disaster-recovery
-/pkg/cli/debug_logconfig.go  @cockroachdb/obs-prs    @cockroachdb/cli-prs
-/pkg/cli/debug_merg_logs*.go @cockroachdb/obs-prs    @cockroachdb/cli-prs
+/pkg/cli/debug_logconfig.go  @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
+/pkg/cli/debug_merge_logs*.go @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
 /pkg/cli/declarative_*       @cockroachdb/sql-foundations
 /pkg/cli/decode*.go          @cockroachdb/kv-prs         @cockroachdb/cli-prs
 /pkg/cli/demo*.go            @cockroachdb/sql-foundations   @cockroachdb/server-prs @cockroachdb/cli-prs
@@ -149,9 +149,9 @@
 /pkg/cli/doctor*.go          @cockroachdb/sql-foundations     @cockroachdb/cli-prs
 /pkg/cli/flags*.go           @cockroachdb/cli-prs
 /pkg/cli/import*.go          @cockroachdb/sql-foundations   @cockroachdb/cli-prs
-/pkg/cli/inflight_trace_dump/ @cockroachdb/obs-prs @cockroachdb/cli-prs
+/pkg/cli/inflight_trace_dump/ @cockroachdb/obs-prs @cockroachdb/cli-prs @cockroachdb/obs-india-prs
 /pkg/cli/init.go             @cockroachdb/kv-prs         @cockroachdb/cli-prs
-/pkg/cli/log*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs
+/pkg/cli/log*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
 /pkg/cli/mt_cert*            @cockroachdb/prodsec
 /pkg/cli/mt_proxy.go         @cockroachdb/sqlproxy-prs   @cockroachdb/server-prs
 /pkg/cli/mt_start_sql.go     @cockroachdb/sqlproxy-prs   @cockroachdb/server-prs
@@ -167,7 +167,7 @@
 /pkg/cli/tsdump.go           @cockroachdb/obs-prs
 /pkg/cli/userfile.go         @cockroachdb/disaster-recovery
 /pkg/cli/workload*           @cockroachdb/sql-foundations
-/pkg/cli/zip*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs
+/pkg/cli/zip*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
 
 # Beware to not assign the entire server package directory to a single
 # team, at least until we heavily refactor the package to extract
@@ -568,9 +568,9 @@
 /pkg/ts/catalog/             @cockroachdb/obs-prs
 #!/pkg/util/                 @cockroachdb/unowned
 /pkg/util/addr/              @cockroachdb/obs-prs
-/pkg/util/log/               @cockroachdb/obs-prs
-/pkg/util/metric/            @cockroachdb/obs-prs
-/pkg/util/tracing            @cockroachdb/obs-prs
+/pkg/util/log/               @cockroachdb/obs-prs @cockroachdb/obs-india-prs
+/pkg/util/metric/            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
+/pkg/util/tracing            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/util/stop/              @cockroachdb/kv-prs
 /pkg/util/grunning/          @cockroachdb/admission-control
 /pkg/util/admission/         @cockroachdb/admission-control
