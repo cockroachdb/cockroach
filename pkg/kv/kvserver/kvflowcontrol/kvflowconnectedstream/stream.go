@@ -1327,8 +1327,14 @@ func (rs *replicaState) handleReadyState(
 	ctx context.Context, info FollowerStateInfo, nextRaftIndex uint64,
 ) {
 	state := info.State
-	log.VInfof(ctx, 1,
-		"handle raft event replica_id=%d: info=(%v) state=(%v)", rs.desc.ReplicaID, info, rs)
+	if log.V(3) {
+		log.Infof(ctx,
+			"handle raft event replica_id=%d: info=(%v) state=(%v)", rs.desc.ReplicaID, info, rs)
+	} else if log.V(2) {
+		log.Infof(ctx,
+			"handle raft event replica_id=%d: info=(%v)", rs.desc.ReplicaID, info)
+	}
+
 	switch state {
 	case tracker.StateProbe:
 		if rs.replicaSendStream != nil {
@@ -1366,7 +1372,7 @@ func (rs *replicaState) handleReadyState(
 			rs.replicaSendStream.mu.Unlock()
 		}
 	}
-	log.VInfof(ctx, 2,
+	log.VInfof(ctx, 3,
 		"post-handle raft event replica_id=%d: info=(%v) state=(%v)", rs.desc.ReplicaID, info, rs)
 }
 
@@ -1388,7 +1394,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []raftpb
 		for i := range entries {
 			entryFCState := getFlowControlState(ctx, entries[i])
 			wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
-			log.VInfof(ctx, 1, "leader handle_ready_entries(%v): entryFCState=%v info=%v",
+			log.VInfof(ctx, 3, "leader handle_ready_entries(%v): entryFCState=%v info=%v",
 				rs.replicaSendStream.stringLocked(), entryFCState, rs.parent.opts.RaftInterface.FollowerState(r))
 			rs.replicaSendStream.advanceNextRaftIndexAndSentLocked(ctx, entryFCState)
 			if entryFCState.usesFlowControl {
@@ -1409,7 +1415,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []raftpb
 		toIsFinalized := false
 		for i := range entries {
 			entryFCState := getFlowControlState(ctx, entries[i])
-			log.VInfof(ctx, 1, "follower handle_ready_entries(%v): entryFCState=%v",
+			log.VInfof(ctx, 3, "follower handle_ready_entries(%v): entryFCState=%v",
 				rs.replicaSendStream.stringLocked(), entryFCState)
 			if toIsFinalized {
 				if entries[i].Index == to && !entryFCState.usesFlowControl {
@@ -1474,7 +1480,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []raftpb
 					rc.opts.LocalReplicaID, msg.From).Error())
 			}
 
-			log.VInfof(ctx, 1,
+			log.VInfof(ctx, 2,
 				"send raft message from=%d to=%d: [%d,%d) [info=%v send_stream=%v]",
 				msg.From, msg.To, msg.Index+1, int(msg.Index)+len(msg.Entries)+1,
 				rs.parent.opts.RaftInterface.FollowerState(rs.desc.ReplicaID),
@@ -1766,7 +1772,7 @@ func (rss *replicaSendStream) scheduledLocked(ctx context.Context) (scheduleAgai
 	if !rss.sendQueue.forceFlushScheduled {
 		bytesToSend = rss.sendQueue.deductedForScheduler.tokens
 	}
-	log.VInfof(ctx, 1, "scheduled replica=%v: bytes_to_send=%v [info=%v send_stream=%v]",
+	log.VInfof(ctx, 2, "scheduled replica=%v: bytes_to_send=%v [info=%v send_stream=%v]",
 		rss.parent.desc.ReplicaID, bytesToSend,
 		rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
 		rss.stringLocked())
@@ -1908,7 +1914,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 				ctx, admissionpb.WorkClass(i), -remainingTokens[i])
 		}
 	}
-	log.VInfof(ctx, 1,
+	log.VInfof(ctx, 2,
 		"send raft message from=%d to=%d: [%d,%d) inherited_pri=%v [info=%v send_stream=%v]",
 		msg.From, msg.To, msg.Index+1, int(msg.Index)+len(msg.Entries)+1, inheritedPri,
 		rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
@@ -2411,7 +2417,7 @@ func (rss *replicaSendStream) returnTokensForPri(
 				rss.eval.tokensDeducted[originalWC] -= tokens
 				rss.parent.evalTokenCounter.Return(ctx, originalWC, tokens)
 			}
-			log.VInfof(ctx, 1, "returnTokensForPri(%v): wc=%v original_wc=%v index=%v tokens=%v",
+			log.VInfof(ctx, 2, "returnTokensForPri(%v): wc=%v original_wc=%v index=%v tokens=%v",
 				rss.parent.desc.ReplicaID, wc, originalWC, index, tokens)
 			rss.parent.sendTokenCounter.Return(ctx, wc, tokens)
 		})
