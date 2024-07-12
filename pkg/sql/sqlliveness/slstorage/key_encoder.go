@@ -24,6 +24,7 @@ import (
 type keyCodec interface {
 	encode(sid sqlliveness.SessionID) (roachpb.Key, string, error)
 	decode(key roachpb.Key) (sqlliveness.SessionID, error)
+	validate(session sqlliveness.SessionID) error
 
 	// indexPrefix returns the prefix for an encoded key. encode() will return
 	// something with the prefix and decode will expect a key with this prefix.
@@ -35,6 +36,10 @@ type keyCodec interface {
 
 type rbrEncoder struct {
 	rbrIndex roachpb.Key
+}
+
+func (e *rbrEncoder) validate(session sqlliveness.SessionID) error {
+	return ValidateSessionID(session)
 }
 
 func (e *rbrEncoder) encode(session sqlliveness.SessionID) (roachpb.Key, string, error) {
