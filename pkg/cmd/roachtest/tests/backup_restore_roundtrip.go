@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -34,11 +35,11 @@ var (
 	// sizes that may get set for all user databases.
 	maxRangeSizeBytes = []int64{4 << 20 /* 4 MiB*/, 32 << 20 /* 32 MiB */, 128 << 20}
 
-	// SystemSettingsValuesBoundOnRangeSize defines the cluster settings that
+	// clusterSettingsValuesBoundOnRangeSize defines the cluster settings that
 	// should scale in proportion to the range size. For example, if the range
 	// size is halved, all the values of these cluster settings should also be
 	// halved.
-	systemSettingsScaledOnRangeSize = []string{
+	clusterSettingsScaledOnRangeSize = []string{
 		"backup.restore_span.target_size",
 		"bulkio.backup.file_size",
 		"kv.bulk_sst.target_size",
@@ -120,7 +121,15 @@ func backupRestoreRoundTrip(
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 
 	m.Go(func(ctx context.Context) error {
-		testUtils, err := newCommonTestUtils(ctx, t, c, c.CRDBNodes(), sp.mock, sp.onlineRestore)
+		connectFunc := func(node int) (*gosql.DB, error) {
+			conn, err := c.ConnE(ctx, t.L(), node)
+			if err != nil {
+				return nil, fmt.Errorf("failed to connect to node %d: %w", node, err)
+			}
+
+			return conn, err
+		}
+		testUtils, err := newCommonTestUtils(ctx, t, c, connectFunc, c.CRDBNodes(), sp.mock, sp.onlineRestore)
 		if err != nil {
 			return err
 		}
@@ -142,7 +151,7 @@ func backupRestoreRoundTrip(
 		if err := testUtils.setShortJobIntervals(ctx, testRNG); err != nil {
 			return err
 		}
-		if err := testUtils.setClusterSettings(ctx, t.L(), testRNG); err != nil {
+		if err := testUtils.setClusterSettings(ctx, t.L(), c, testRNG); err != nil {
 			return err
 		}
 		if sp.metamorphicRangeSize {
@@ -166,7 +175,10 @@ func backupRestoreRoundTrip(
 
 			// Run backups.
 			t.L().Printf("starting backup %d", i+1)
-			collection, err := d.createBackupCollection(ctx, t.L(), testRNG, bspec, bspec, "round-trip-test-backup", true)
+			collection, err := d.createBackupCollection(
+				ctx, t.L(), testRNG, bspec, bspec, "round-trip-test-backup",
+				true /* internalSystemsJobs */, false, /* isMultitenant */
+			)
 			if err != nil {
 				return err
 			}

@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -91,8 +92,13 @@ func executeSupportedDDLs(
 			nodes = helper.Context().NodesInPreviousVersion() // N.B. this is the set of oldNodes.
 		}
 	}
-	testUtils, err := newCommonTestUtils(ctx, t, c, helper.DefaultService().Descriptor.Nodes, false, false)
-	defer testUtils.CloseConnections()
+	connectFunc := func(node int) (*gosql.DB, error) { return helper.Connect(node), nil }
+	// NOTE: we intentionally don't call `testutils.CloseConnections()`
+	// here because these connnections are managed by the mixedversion
+	// framework, which already closes them at the end of the test.
+	testUtils, err := newCommonTestUtils(
+		ctx, t, c, connectFunc, helper.DefaultService().Descriptor.Nodes, false, false,
+	)
 	if err != nil {
 		return err
 	}
