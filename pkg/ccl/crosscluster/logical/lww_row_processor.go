@@ -48,6 +48,8 @@ const (
 	udfApplierProcessor = "applier-udf"
 )
 
+// TODO(ssd): Thread through from job
+var udfName string
 var defaultSQLProcessor = lwwProcessor
 
 // A sqlRowProcessor is a RowProcessor that handles rows using the
@@ -350,14 +352,24 @@ func makeSQLLastWriteWinsHandler(
 	tableDescs map[int32]descpb.TableDescriptor,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
+	var fallbackQuerier querier
+	if udfName != "" {
+		var err error
+		fallbackQuerier, err = makeApplierQuerier(ctx, settings, tableDescs, ie)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	qb := queryBuffer{
 		deleteQueries: make(map[catid.DescID]queryBuilder, len(tableDescs)),
 		insertQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
 	}
 	return makeSQLProcessorFromQuerier(ctx, settings, tableDescs, ie,
 		&lwwQuerier{
-			settings:    settings,
-			queryBuffer: qb,
+			settings:        settings,
+			queryBuffer:     qb,
+			fallbackQuerier: fallbackQuerier,
 		})
 }
 
@@ -378,8 +390,9 @@ func makeSQLLastWriteWinsHandler(
 //
 // See the design document for possible solutions to both of these problems.
 type lwwQuerier struct {
-	settings    *cluster.Settings
-	queryBuffer queryBuffer
+	settings        *cluster.Settings
+	queryBuffer     queryBuffer
+	fallbackQuerier querier
 }
 
 func (lww *lwwQuerier) AddTable(targetDescID int32, td catalog.TableDescriptor) error {
@@ -389,10 +402,24 @@ func (lww *lwwQuerier) AddTable(targetDescID int32, td catalog.TableDescriptor) 
 		return err
 	}
 	lww.queryBuffer.deleteQueries[td.GetID()], err = makeLWWDeleteQuery(targetDescID, td)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if lww.fallbackQuerier != nil {
+		if err := lww.fallbackQuerier.AddTable(targetDescID, td); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (lww *lwwQuerier) RequiresParsedBeforeRow() bool { return false }
+func (lww *lwwQuerier) RequiresParsedBeforeRow() bool {
+	if lww.fallbackQuerier != nil {
+		return lww.fallbackQuerier.RequiresParsedBeforeRow()
+	}
+	return false
+}
 
 func (lww *lwwQuerier) InsertRow(
 	ctx context.Context,
@@ -413,8 +440,12 @@ func (lww *lwwQuerier) InsertRow(
 	if err := insertQueryBuilder.AddRow(row); err != nil {
 		return batchStats{}, err
 	}
+
+	fallbackSpecified := lww.fallbackQuerier != nil
+	shouldTryOptimisticInsert := likelyInsert && tryOptimisticInsertEnabled.Get(&lww.settings.SV)
+	shouldTryOptimisticInsert = shouldTryOptimisticInsert || fallbackSpecified
 	var optimisticInsertConflicts int64
-	if likelyInsert && tryOptimisticInsertEnabled.Get(&lww.settings.SV) {
+	if shouldTryOptimisticInsert {
 		stmt, datums, err := insertQueryBuilder.Query(insertQueriesOptimisticIndex)
 		if err != nil {
 			return batchStats{}, err
@@ -432,6 +463,15 @@ func (lww *lwwQuerier) InsertRow(
 			// There was no conflict - we're done.
 			return batchStats{}, nil
 		}
+	}
+
+	if fallbackSpecified {
+		s, err := lww.fallbackQuerier.InsertRow(ctx, txn, ie, row, prevRow, likelyInsert)
+		if err != nil {
+			return batchStats{}, err
+		}
+		s.optimisticInsertConflicts += optimisticInsertConflicts
+		return s, err
 	}
 
 	stmt, datums, err := insertQueryBuilder.Query(insertQueriesPessimisticIndex)

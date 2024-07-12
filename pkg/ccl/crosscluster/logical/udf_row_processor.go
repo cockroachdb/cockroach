@@ -65,14 +65,14 @@ const (
 -- function. The row field is the row to be insert when the decision is upsert_specified.
 -- Note that users need to take special care that the columns returned in row are in canonical
 -- order. It isn't particularly clear how the user is going to do this easily.
-CREATE TYPE crdb_replication_applier_decision AS (decision STRING, row RECORD)`
+CREATE TYPE IF NOT EXISTS crdb_replication_applier_decision AS (decision STRING, row RECORD)`
 
 	applierQueryBase = `
 WITH data (%s)
 AS (VALUES (%s))
 SELECT (res).decision, (res).row FROM
 (
-	SELECT %s('%s', data, existing, (%s), existing.crdb_internal_mvcc_timestamp, %d, %d) AS res
+	SELECT %s('%s', data, existing, (%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d, $%d) AS res
 	FROM data LEFT JOIN [%d as existing]
 	%s
 )`
@@ -111,18 +111,19 @@ type applierQuerier struct {
 	proposedPrevMVCCTs tree.DDecimal
 }
 
-func makeUDFApplierProcessor(
+func makeApplierQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
 	tableDescs map[int32]descpb.TableDescriptor,
 	ie isql.Executor,
-) (*sqlRowProcessor, error) {
+) (*applierQuerier, error) {
 	qb := queryBuffer{
 		deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableDescs)),
 		insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
 		applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
 	}
 
+	// TODO(ssd): We should improve this once we are passing the function in for real.
 	getDatabaseNameQuery := `SELECT name FROM system.namespace WHERE id IN (SELECT "parentID" FROM system.namespace where id = $1)`
 	var tableID int32
 	for t := range tableDescs {
@@ -141,14 +142,26 @@ func makeUDFApplierProcessor(
 
 	sd := ieOverrides
 	sd.Database = string(*databaseName)
-
-	return makeSQLProcessorFromQuerier(ctx, settings, tableDescs, ie, &applierQuerier{
+	return &applierQuerier{
 		queryBuffer: qb,
 		settings:    settings,
 		sd:          sd,
 		// TODO(ssd): Thread this name through from the SQL statement.
-		udfName: "repl_apply",
-	})
+		udfName: udfName,
+	}, nil
+}
+
+func makeUDFApplierProcessor(
+	ctx context.Context,
+	settings *cluster.Settings,
+	tableDescs map[int32]descpb.TableDescriptor,
+	ie isql.Executor,
+) (*sqlRowProcessor, error) {
+	aq, err := makeApplierQuerier(ctx, settings, tableDescs, ie)
+	if err != nil {
+		return nil, err
+	}
+	return makeSQLProcessorFromQuerier(ctx, settings, tableDescs, ie, aq)
 }
 
 func (aq *applierQuerier) AddTable(targetDescID int32, td catalog.TableDescriptor) error {
@@ -244,7 +257,8 @@ func (aq *applierQuerier) applyUDF(
 	aq.proposedMVCCTs.Decimal = eval.TimestampToDecimal(row.MvccTimestamp)
 	aq.proposedPrevMVCCTs.Decimal = eval.TimestampToDecimal(prevRow.MvccTimestamp)
 
-	decisionRow, err := aq.queryRowExParsed(ctx, "replicated-apply-udf", txn, ie, stmt, append(datums, &aq.proposedMVCCTs, &aq.proposedPrevMVCCTs)...)
+	decisionRow, err := aq.queryRowExParsed(ctx, "replicated-apply-udf", txn, ie, stmt,
+		append(datums, &aq.proposedMVCCTs, &aq.proposedPrevMVCCTs)...)
 	if err != nil {
 		return noDecision, nil, err
 	}
@@ -271,7 +285,6 @@ func (aq *applierQuerier) applyUDF(
 			decision = upsertProposed
 		}
 	}
-
 	return decision, mutatedDatums, nil
 }
 
