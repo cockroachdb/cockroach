@@ -19,7 +19,7 @@ import { EncodeDatabaseUri } from "../util";
 import { StackIcon } from "../icon/stackIcon";
 import { CockroachCloudContext } from "../contexts";
 import {
-  checkInfoAvailable,
+  LoadingCell,
   getNetworkErrorMessage,
   getQueryErrorMessage,
 } from "../databases";
@@ -34,19 +34,18 @@ interface CellProps {
   database: DatabasesPageDataDatabase;
 }
 
-export const DiskSizeCell = ({ database }: CellProps): JSX.Element => {
-  return (
-    <>
-      {checkInfoAvailable(
-        database.spanStatsRequestError,
-        database.spanStats?.error,
-        database.spanStats?.approximate_disk_bytes
-          ? format.Bytes(database.spanStats?.approximate_disk_bytes)
-          : null,
-      )}
-    </>
-  );
-};
+export const DiskSizeCell = ({ database }: CellProps) => (
+  <LoadingCell
+    requestError={database.spanStatsRequestError}
+    queryError={database.spanStats?.error}
+    loading={database.spanStatsLoading}
+    errorClassName={cx("databases-table__cell-error")}
+  >
+    {database.spanStats?.approximate_disk_bytes
+      ? format.Bytes(database.spanStats?.approximate_disk_bytes)
+      : null}
+  </LoadingCell>
+);
 
 export const IndexRecCell = ({ database }: CellProps): JSX.Element => {
   const text =
