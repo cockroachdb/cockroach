@@ -84,3 +84,10 @@ func TestCCLLogic_mixed_version_pgvector(
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "mixed_version_pgvector")
 }
+
+func TestCCLLogic_mixed_version_rangefeed_split(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "mixed_version_rangefeed_split")
+}

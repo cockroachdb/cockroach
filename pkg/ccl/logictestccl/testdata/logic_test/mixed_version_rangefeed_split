@@ -1,0 +1,60 @@
+# LogicTest: cockroach-go-testserver-23.2
+
+# This is a regression test for #127029, where a rangefeed server on a 24.1+
+# node issues a retryable manual split error which a 23.2 rangefeed client
+# cannot handle causing it to crash.
+
+# Verify that all nodes are running the previous version.
+
+query T nodeidx=0
+SELECT crdb_internal.node_executable_version()
+----
+23.2
+
+query T nodeidx=1
+SELECT crdb_internal.node_executable_version()
+----
+23.2
+
+query T nodeidx=2
+SELECT crdb_internal.node_executable_version()
+----
+23.2
+
+# Set three unrelated cluster settings so they appear in system.settings and split
+# the system table on the middle one to ensure SPLIT AT does not noop.
+
+statement ok
+set cluster setting bulkio.backup.read_retry_delay = '30s';
+
+statement ok
+set cluster setting bulkio.backup.read_timeout = '10m';
+
+statement ok
+set cluster setting bulkio.backup.read_with_priority_after = '30s';
+
+
+# Upgrade one node to 24.2
+
+upgrade 0
+
+# Verify that node index 0 is now running 24.2 binary.
+
+query T nodeidx=0
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+24.2
+
+user root
+
+statement ok
+ALTER TABLE system.settings SPLIT AT VALUES ('bulkio.backup.read_timeout')
+
+# update the keys again and allow some time for the rangefeed client to restart.
+
+statement ok
+set cluster setting bulkio.backup.read_with_priority_after = '1m';
+
+statement ok
+set cluster setting bulkio.backup.read_retry_delay = '1m';
+
