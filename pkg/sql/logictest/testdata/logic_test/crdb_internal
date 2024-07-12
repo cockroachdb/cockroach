@@ -1497,6 +1497,7 @@ test  public  f   CREATE FUNCTION public.f(INT8)
                     NOT LEAKPROOF
                     CALLED ON NULL INPUT
                     LANGUAGE SQL
+                    SECURITY INVOKER
                     AS $$
                     SELECT 1;
                   $$
@@ -1506,6 +1507,7 @@ test  public  f   CREATE FUNCTION public.f(STRING, b INT8)
                     LEAKPROOF
                     STRICT
                     LANGUAGE SQL
+                    SECURITY INVOKER
                     AS $$
                     SELECT 'hello';
                   $$
@@ -1515,6 +1517,7 @@ test  sc      f2  CREATE FUNCTION sc.f2(STRING)
                     NOT LEAKPROOF
                     CALLED ON NULL INPUT
                     LANGUAGE SQL
+                    SECURITY INVOKER
                     AS $$
                     SELECT 'hello';
                   $$
@@ -1537,6 +1540,7 @@ test           public  f           CREATE FUNCTION public.f(INT8)
                                      NOT LEAKPROOF
                                      CALLED ON NULL INPUT
                                      LANGUAGE SQL
+                                     SECURITY INVOKER
                                      AS $$
                                      SELECT 1;
                                    $$
@@ -1546,6 +1550,7 @@ test           public  f           CREATE FUNCTION public.f(STRING, b INT8)
                                      LEAKPROOF
                                      STRICT
                                      LANGUAGE SQL
+                                     SECURITY INVOKER
                                      AS $$
                                      SELECT 'hello';
                                    $$
@@ -1555,6 +1560,7 @@ test           sc      f2          CREATE FUNCTION sc.f2(STRING)
                                      NOT LEAKPROOF
                                      CALLED ON NULL INPUT
                                      LANGUAGE SQL
+                                     SECURITY INVOKER
                                      AS $$
                                      SELECT 'hello';
                                    $$
@@ -1564,6 +1570,7 @@ test_cross_db  public  f_cross_db  CREATE FUNCTION public.f_cross_db()
                                      NOT LEAKPROOF
                                      CALLED ON NULL INPUT
                                      LANGUAGE SQL
+                                     SECURITY INVOKER
                                      AS $$
                                      SELECT 1;
                                    $$
@@ -1611,16 +1618,19 @@ ORDER BY procedure_id;
 ----
 104  test  105  public  139  p   CREATE PROCEDURE public.p(INT8)
                                    LANGUAGE SQL
+                                   SECURITY INVOKER
                                    AS $$
                                    SELECT 1;
                                  $$
 104  test  105  public  140  p   CREATE PROCEDURE public.p(STRING, b INT8)
                                    LANGUAGE SQL
+                                   SECURITY INVOKER
                                    AS $$
                                    SELECT 'hello';
                                  $$
 104  test  142  sc      143  p2  CREATE PROCEDURE sc.p2(STRING)
                                    LANGUAGE SQL
+                                   SECURITY INVOKER
                                    AS $$
                                    SELECT 'hello';
                                  $$
@@ -1639,21 +1649,25 @@ ORDER BY procedure_id;
 ----
 104  test           105  public  139  p           CREATE PROCEDURE public.p(INT8)
                                                     LANGUAGE SQL
+                                                    SECURITY INVOKER
                                                     AS $$
                                                     SELECT 1;
                                                   $$
 104  test           105  public  140  p           CREATE PROCEDURE public.p(STRING, b INT8)
                                                     LANGUAGE SQL
+                                                    SECURITY INVOKER
                                                     AS $$
                                                     SELECT 'hello';
                                                   $$
 104  test           142  sc      143  p2          CREATE PROCEDURE sc.p2(STRING)
                                                     LANGUAGE SQL
+                                                    SECURITY INVOKER
                                                     AS $$
                                                     SELECT 'hello';
                                                   $$
 144  test_cross_db  145  public  146  p_cross_db  CREATE PROCEDURE public.p_cross_db()
                                                     LANGUAGE SQL
+                                                    SECURITY INVOKER
                                                     AS $$
                                                     SELECT 1;
                                                   $$

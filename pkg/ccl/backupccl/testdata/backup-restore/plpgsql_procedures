@@ -94,6 +94,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
 CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
+	SECURITY INVOKER
 	AS $$
 	DECLARE
 	foobar sc1.enum1;
@@ -134,6 +135,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
 CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
+	SECURITY INVOKER
 	AS $$
 	DECLARE
 	foobar sc1.enum1;
@@ -300,6 +302,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
 CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
+	SECURITY INVOKER
 	AS $$
 	DECLARE
 	foobar sc1.enum1;
@@ -341,6 +344,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
 CREATE PROCEDURE sc1.p1(a sc1.enum1)
 	LANGUAGE plpgsql
+	SECURITY INVOKER
 	AS $$
 	DECLARE
 	foobar sc1.enum1;

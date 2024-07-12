@@ -1732,7 +1732,10 @@ message FunctionDescriptor {
   // depends on.
   repeated uint32 depends_on_functions = 22  [(gogoproto.casttype) = "ID"];
 
-  // Next field id is 23
+  // Security
+  optional cockroach.sql.catalog.catpb.FunctionRoutineSecurity security = 23 [(gogoproto.nullable) = false];
+
+  // Next field id is 24
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,

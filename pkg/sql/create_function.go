@@ -575,6 +575,12 @@ func setFuncOptions(
 			// Handle the body after the loop, since we don't yet know what language
 			// it is.
 			body = string(t)
+		case tree.RoutineSecurity:
+			sec, err := funcinfo.SecurityToProto(t)
+			if err != nil {
+				return err
+			}
+			udfDesc.SetSecurity(sec)
 		default:
 			return pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function option %q", t)
 		}

@@ -371,6 +371,7 @@ func (b *Builder) buildRoutine(
 		if err != nil {
 			panic(err)
 		}
+		// hi
 		// Add a VALUES (NULL) statement if the return type of the function is
 		// VOID. We cannot simply project NULL from the last statement because
 		// all columns would be pruned and the contents of last statement would

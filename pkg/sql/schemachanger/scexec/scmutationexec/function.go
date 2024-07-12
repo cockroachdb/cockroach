@@ -103,3 +103,14 @@ func (i *immediateVisitor) SetFunctionBody(ctx context.Context, op scop.SetFunct
 
 	return nil
 }
+
+func (i *immediateVisitor) SetFunctionSecurity(
+	ctx context.Context, op scop.SetFunctionSecurity,
+) error {
+	fn, err := i.checkOutFunction(ctx, op.FunctionID)
+	if err != nil {
+		return err
+	}
+	fn.SetSecurity(op.Security)
+	return nil
+}
