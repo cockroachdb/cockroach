@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/redact"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"
@@ -184,7 +185,7 @@ func TestJWTSingleKey(t *testing.T) {
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	detailedErrorMsg, err := verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: unable to validate token")
-	require.EqualValues(t, "unable to fetch jwks: Get \"issuer1/.well-known/openid-configuration\": unsupported protocol scheme \"\"", detailedErrorMsg)
+	require.EqualValues(t, redact.RedactableString(`unable to fetch jwks: ‹Get "issuer1/.well-known/openid-configuration"›: ‹unsupported protocol scheme ""›`), detailedErrorMsg)
 
 	// Set the JWKS cluster setting.
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, false)

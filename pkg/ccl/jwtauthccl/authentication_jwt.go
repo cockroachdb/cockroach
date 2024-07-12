@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"
 )
@@ -145,7 +146,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	user username.SQLUsername,
 	tokenBytes []byte,
 	identMap *identmap.Conf,
-) (detailedErrorMsg string, authError error) {
+) (detailedErrorMsg redact.RedactableString, authError error) {
 	authenticator.mu.Lock()
 	defer authenticator.mu.Unlock()
 
@@ -185,7 +186,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	if authenticator.mu.conf.jwksAutoFetchEnabled {
 		jwkSet, err = authenticator.remoteFetchJWKS(ctx, issuerUrl)
 		if err != nil {
-			return fmt.Sprintf("unable to fetch jwks: %v", err),
+			return redact.Sprintf("unable to fetch jwks: %v", err),
 				errors.Newf("JWT authentication: unable to validate token")
 		}
 	} else {

@@ -9,10 +9,12 @@ CREATE SCHEMA s2;
 statement ok
 GRANT SELECT ON ALL TABLES IN SCHEMA s TO testuser
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+test           public       NULL         schema       public   CREATE          false
+test           public       NULL         schema       public   USAGE           false
 
 statement ok
 CREATE TABLE s.t();
@@ -21,10 +23,12 @@ CREATE TABLE s2.t();
 statement ok
 GRANT SELECT ON ALL TABLES IN SCHEMA s TO testuser
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  object_name  object_type  grantee   privilege_type  is_grantable
+test           public       NULL         schema       public    CREATE          false
+test           public       NULL         schema       public    USAGE           false
 test           s            t            table        testuser  SELECT          false
 
 statement ok
@@ -34,6 +38,8 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
 test           s            t            table        testuser   SELECT          false
 test           s            t            table        testuser2  SELECT          false
 test           s2           t            table        testuser   SELECT          false
@@ -46,6 +52,8 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
 test           s            t            table        testuser   ALL             false
 test           s            t            table        testuser2  ALL             false
 test           s2           t            table        testuser   ALL             false
@@ -58,6 +66,8 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  object_name  object_type  grantee    privilege_type  is_grantable
+test           public       NULL         schema       public     CREATE          false
+test           public       NULL         schema       public     USAGE           false
 test           s            t            table        testuser   BACKUP          false
 test           s            t            table        testuser   CHANGEFEED      false
 test           s            t            table        testuser   CREATE          false
@@ -94,10 +104,12 @@ test           s2           t            table        testuser2  ZONECONFIG     
 statement ok
 REVOKE ALL ON ALL TABLES IN SCHEMA s, s2 FROM testuser, testuser2
 
-query TTTTTTB colnames
+query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser, testuser2
 ----
 database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+test           public       NULL         schema       public   CREATE          false
+test           public       NULL         schema       public   USAGE           false
 
 # Verify that the database name is resolved correctly if specified.
 statement ok
