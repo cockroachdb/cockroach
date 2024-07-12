@@ -9,7 +9,6 @@
 // licenses/APL.txt.
 
 import { createMemoryHistory } from "history";
-import _ from "lodash";
 import { RouteComponentProps } from "react-router-dom";
 import { bindActionCreators, Store } from "redux";
 import {
@@ -130,7 +129,9 @@ class TestDriver {
   }
 
   private findTable(name: string) {
-    return _.find(this.properties().tables, { name });
+    return this.properties().tables.find(
+      t => t.name.qualifiedNameWithSchemaAndTable === name,
+    );
   }
 }
 
@@ -209,7 +210,12 @@ describe("Database Details Page", function () {
       sortSettingGrants: { ascending: true, columnTitle: "name" },
       tables: [
         {
-          name: `"public"."foo"`,
+          name: {
+            schema: "public",
+            table: "foo",
+            qualifiedNameWithSchemaAndTable: `"public"."foo"`,
+          },
+          qualifiedDisplayName: `public.foo`,
           loading: false,
           loaded: false,
           requestError: undefined,
@@ -229,7 +235,12 @@ describe("Database Details Page", function () {
           },
         },
         {
-          name: `"public"."bar"`,
+          name: {
+            schema: "public",
+            table: "bar",
+            qualifiedNameWithSchemaAndTable: `"public"."bar"`,
+          },
+          qualifiedDisplayName: `public.bar`,
           loading: false,
           loaded: false,
           requestError: undefined,
@@ -404,7 +415,12 @@ describe("Database Details Page", function () {
     await driver.refreshNodes();
 
     driver.assertTableDetails(`"public"."foo"`, {
-      name: `"public"."foo"`,
+      name: {
+        schema: "public",
+        table: "foo",
+        qualifiedNameWithSchemaAndTable: `"public"."foo"`,
+      },
+      qualifiedDisplayName: `public.foo`,
       loading: false,
       loaded: true,
       requestError: null,
@@ -436,7 +452,12 @@ describe("Database Details Page", function () {
     });
 
     driver.assertTableDetails(`"public"."bar"`, {
-      name: `"public"."bar"`,
+      name: {
+        schema: "public",
+        table: "bar",
+        qualifiedNameWithSchemaAndTable: `"public"."bar"`,
+      },
+      qualifiedDisplayName: `public.bar`,
       loading: false,
       loaded: true,
       requestError: null,
