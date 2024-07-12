@@ -2416,6 +2416,29 @@ func TestRACV2Basic(t *testing.T) {
 		log.Info(ctx, "writing 16 x 1 MiB to scratch range")
 		write(ctx, tc.Server(0).DB(), k, admissionpb.HighPri, 1<<20 /* 1MiB */, 16 /* count */)
 	})
+
+	t.Run("3_node_restart", func(t *testing.T) {
+		tc := testcluster.StartTestCluster(t, 3,
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					RaftConfig: base.RaftConfig{
+						RaftMaxInflightBytes: 0, /* unbounded */
+						RaftMaxInflightMsgs:  4048,
+					},
+				},
+			})
+		defer tc.Stopper().Stop(ctx)
+
+		k := tc.ScratchRange(t)
+		tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 50 /* count */)
+		// Stop node3 and write some data before restarting it.
+		tc.StopServer(2)
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 1000 /* count */)
+		tc.RestartServer(2)
+		write(ctx, tc.Server(0).DB(), k, admissionpb.NormalPri, 1<<10 /* 1KiB */, 50 /* count */)
+	})
 }
 
 type flowControlTestHelper struct {
