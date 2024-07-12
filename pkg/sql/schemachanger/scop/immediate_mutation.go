@@ -839,6 +839,12 @@ type SetFunctionBody struct {
 	Body scpb.FunctionBody
 }
 
+type SetFunctionSecurity struct {
+	immediateMutationOp
+	FunctionID descpb.ID
+	Security   catpb.Function_Security
+}
+
 type UpdateFunctionTypeReferences struct {
 	immediateMutationOp
 	FunctionID descpb.ID

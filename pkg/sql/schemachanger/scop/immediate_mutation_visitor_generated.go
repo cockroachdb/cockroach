@@ -126,6 +126,7 @@ type ImmediateMutationVisitor interface {
 	SetFunctionLeakProof(context.Context, SetFunctionLeakProof) error
 	SetFunctionNullInputBehavior(context.Context, SetFunctionNullInputBehavior) error
 	SetFunctionBody(context.Context, SetFunctionBody) error
+	SetFunctionSecurity(context.Context, SetFunctionSecurity) error
 	UpdateFunctionTypeReferences(context.Context, UpdateFunctionTypeReferences) error
 	UpdateFunctionRelationReferences(context.Context, UpdateFunctionRelationReferences) error
 	SetObjectParentID(context.Context, SetObjectParentID) error
@@ -658,6 +659,11 @@ func (op SetFunctionNullInputBehavior) Visit(ctx context.Context, v ImmediateMut
 // Visit is part of the ImmediateMutationOp interface.
 func (op SetFunctionBody) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.SetFunctionBody(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetFunctionSecurity) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetFunctionSecurity(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

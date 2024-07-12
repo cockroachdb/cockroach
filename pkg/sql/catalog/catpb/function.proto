@@ -46,6 +46,11 @@ message Function {
       VARIADIC = 4;
     }
   }
+
+  enum Security {
+    INVOKER = 0;
+    DEFINER = 1;
+  }
 }
 
 // These wrappers are for the convenience of referencing the enum types from a
@@ -68,4 +73,10 @@ message FunctionLanguage {
 message FunctionParamClass {
   option (gogoproto.equal) = true;
   optional Function.Param.Class class = 1 [(gogoproto.nullable) = false];
+}
+
+message FunctionSecurity {
+  option (gogoproto.equal) = true;
+  // If security is not explicitly set, the default security mode is INVOKER.
+  optional Function.Security security = 1 [(gogoproto.nullable) = false];
 }
