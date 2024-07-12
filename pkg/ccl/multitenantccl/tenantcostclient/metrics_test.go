@@ -32,7 +32,7 @@ func TestMetrics_getEstimatedReplicationBytes(t *testing.T) {
 
 	assertCachedPathMetricsSize := func(size int) {
 		count := 0
-		m.cachedPathMetrics.Range(func(key, value any) bool {
+		m.cachedPathMetrics.Range(func(_ networkPath, _ *networkPathMetrics) bool {
 			count++
 			return true
 		})
