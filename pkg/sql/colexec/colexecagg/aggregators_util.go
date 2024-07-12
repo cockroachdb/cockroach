@@ -18,16 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // NewAggregatorArgs encompasses all arguments necessary to instantiate either
 // of the aggregators.
 type NewAggregatorArgs struct {
-	Allocator *colmem.Allocator
-	// MemAccount should be the same as the one used by Allocator and will be
-	// used by aggregatorHelper to handle DISTINCT clause.
-	MemAccount     *mon.BoundAccount
+	Allocator      *colmem.Allocator
 	Input          colexecop.Operator
 	InputTypes     []*types.T
 	Spec           *execinfrapb.AggregatorSpec
