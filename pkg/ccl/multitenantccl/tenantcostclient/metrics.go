@@ -11,7 +11,6 @@ package tenantcostclient
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -150,7 +149,7 @@ type metrics struct {
 	// cachedPathMetrics stores a cache of network paths to the metrics which
 	// have been initialized. Having this layer of caching prevents us from
 	// needing to compute the normalized locality on every request.
-	cachedPathMetrics sync.Map // map[networkPath]*networkPathMetrics
+	cachedPathMetrics syncutil.Map[networkPath, networkPathMetrics]
 
 	mu struct {
 		syncutil.Mutex
@@ -254,7 +253,7 @@ func (m *metrics) getEstimatedReplicationBytes(
 	// Check if we have cached values.
 	np := networkPath{fromNodeID: fromNodeID, toNodeID: toNodeID}
 	if cached, ok := m.cachedPathMetrics.Load(np); ok {
-		return (cached.(*networkPathMetrics)).EstimatedReplicationBytes
+		return cached.EstimatedReplicationBytes
 	}
 
 	pm := m.ensureNetworkPathMetrics(fromLocality, toLocality)
