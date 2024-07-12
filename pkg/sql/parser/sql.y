@@ -4594,12 +4594,13 @@ create_stmt:
 // %Category: Experimental
 // %Text:
 // CREATE LOGICAL REPLICATION STREAM 
-//  FROM 'stream_uri' 
-//  ON <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
+//  FROM <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name> 
+//  ON 'stream_uri'
 //  INTO <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
 //  [WITH
-//  < MODE= immediate | transactional > |
+//  < MODE = immediate | transactional > |
 //  < CURSOR = start_time > |
+//  < DEFAULT FUNCTION = lww | dlq | udf
 //  < FUNCTION 'udf' FOR TABLE local_name  , ... >
 // ]
 create_logical_replication_stream_stmt:

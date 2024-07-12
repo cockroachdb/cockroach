@@ -187,6 +187,82 @@ func TestLogicalStreamIngestionJob(t *testing.T) {
 	require.Equal(t, int64(expCPuts), numCPuts.Load())
 }
 
+func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	defer server.Stopper().Stop(ctx)
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'goodbye')")
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	// Swap one of the URLs to external:// to verify this indirection works.
+	// TODO(dt): this create should support placeholder for URI.
+	dbB.Exec(t, "CREATE EXTERNAL CONNECTION a AS '"+dbAURL.String()+"'")
+	dbAURL = url.URL{
+		Scheme: "external",
+		Host:   "a",
+	}
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+
+	// Perform inserts that should not be replicated since
+	// they will be before the cursor time.
+	dbA.Exec(t, "INSERT INTO tab VALUES (7, 'do not replicate')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (8, 'do not replicate')")
+	// Perform the inserts first before starting the LDR stream.
+	now := server.Server(0).Clock().Now()
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
+	dbA.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
+	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
+	// We should expect starting at the provided now() to replicate all the data from that time.
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2", dbBURL.String(), now.AsOfSystemTime()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2", dbAURL.String(), now.AsOfSystemTime()).Scan(&jobBID)
+
+	now = server.Server(0).Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	// The rows added before the now time should remain only
+	// on their respective side and not replicate.
+	expectedRowsA := [][]string{
+		{"1", "goodbye, again"},
+		{"2", "potato"},
+		{"3", "celeriac"},
+		{"7", "do not replicate"},
+	}
+	expectedRowsB := [][]string{
+		{"1", "goodbye, again"},
+		{"2", "potato"},
+		{"3", "celeriac"},
+		{"8", "do not replicate"},
+	}
+	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRowsA)
+	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRowsB)
+}
+
 func TestLogicalStreamIngestionErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
