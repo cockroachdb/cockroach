@@ -37,7 +37,7 @@ import (
 // separate Mutex or RWMutex.
 //
 // Nil values are not supported; to use an Map as a set store a dummy non-nil
-// pointer instead of nil.
+// pointer instead of nil. The Set type is provided for this purpose.
 //
 // The zero Map is valid and empty.
 //
