@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -73,7 +72,7 @@ type Controller struct {
 		// streams get closed permanently (tenants get deleted, nodes removed)
 		// or when completely inactive (no tokens deducted/returned over 30+
 		// minutes), clear these out.
-		buckets     sync.Map // kvflowcontrol.Stream => *bucket
+		buckets     syncutil.Map[kvflowcontrol.Stream, bucket]
 		bucketCount int
 	}
 	metrics  *metrics
@@ -96,7 +95,6 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 		regular: regularTokens,
 		elastic: elasticTokens,
 	}
-	c.mu.buckets = sync.Map{}
 	onChangeFunc := func(ctx context.Context) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -111,11 +109,10 @@ func New(registry *metric.Registry, settings *cluster.Settings, clock *hlc.Clock
 			elastic: now.elastic - before.elastic,
 		}
 		c.mu.limit = now
-		c.mu.buckets.Range(func(_, value any) bool {
+		c.mu.buckets.Range(func(_ kvflowcontrol.Stream, b *bucket) bool {
 			// NB: We're holding the controller mutex here, which guards against
 			// new buckets being added, synchronization we don't get out of
-			// sync.Map.Range() directly.
-			b := value.(*bucket)
+			// syncutil.Map.Range() directly.
 			adj, _ := b.adjust(
 				ctx, admissionpb.RegularWorkClass, adjustment.regular, now, true, c.clock.PhysicalTime())
 			if adj.elastic != 0 {
@@ -252,10 +249,7 @@ func (c *Controller) Inspect(ctx context.Context) []kvflowinspectpb.Stream {
 	// NB: we are not acquiring c.mu since we don't care about streams that are
 	// being concurrently added to the map.
 	var streams []kvflowinspectpb.Stream
-	c.mu.buckets.Range(func(key, value any) bool {
-		stream := key.(kvflowcontrol.Stream)
-		b := value.(*bucket)
-
+	c.mu.buckets.Range(func(stream kvflowcontrol.Stream, b *bucket) bool {
 		b.mu.RLock()
 		streams = append(streams, kvflowinspectpb.Stream{
 			TenantID:               stream.TenantID,
@@ -317,10 +311,10 @@ func (c *Controller) adjustTokens(
 }
 
 func (c *Controller) getBucket(stream kvflowcontrol.Stream) *bucket {
-	// NB: sync.map is more expensive CPU wise as per BenchmarkController
+	// NB: syncutil.Map is more expensive CPU wise as per BenchmarkController
 	// for reads, ~250ns vs. ~350ns, though better for mutex contention when
-	// looking at kv0/enc=false/nodes=3/cpu=9. The sync.Map does show up in CPU
-	// profiles more prominently though. If we want to go back to it being a
+	// looking at kv0/enc=false/nodes=3/cpu=9. The syncutil.Map does show up in
+	// CPU profiles more prominently though. If we want to go back to it being a
 	// mutex-backed map, we could use a read-Lock when trying to read the bucket
 	// and then swapping for a write-lock when optionally creating the bucket.
 	b, ok := c.mu.buckets.Load(stream)
@@ -333,7 +327,7 @@ func (c *Controller) getBucket(stream kvflowcontrol.Stream) *bucket {
 		}
 		c.mu.Unlock()
 	}
-	return b.(*bucket)
+	return b
 }
 
 // bucketPerWorkClass is a helper struct for implementing bucket. tokens and
