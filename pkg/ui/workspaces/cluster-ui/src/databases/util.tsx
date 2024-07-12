@@ -298,21 +298,3 @@ const checkPrivilegeError = (
   // If the error message includes any mention of privilege, consider it a privilege error.
   return err.message.includes("privilege");
 };
-
-// formatSQLTableName formats a SQL table name to a more readable format by
-// removing double quotes around the name parts if that 'part' does not contain
-// any spaces or periods.
-// e.g.
-//  "public"."table" -> public.table
-//  "public"."table" -> public.table
-//  "public"."table with space" -> public."table with space"
-//  "public"."table.with.period" -> public."table.with.period"
-export const formatSQLTableName = (tableName: string): string => {
-  return tableName.replace(/"([^"]+)"/g, (_, part) => {
-    // If it has a space or period keep it in quotes.
-    if (part.match(/[\s.]/)) {
-      return `"${part}"`;
-    }
-    return part;
-  });
-};

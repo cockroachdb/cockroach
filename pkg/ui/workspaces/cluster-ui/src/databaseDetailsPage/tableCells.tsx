@@ -25,11 +25,7 @@ import * as format from "../util/format";
 import { Breadcrumbs } from "../breadcrumbs";
 import { CaretRight } from "../icon/caretRight";
 import { CockroachCloudContext } from "../contexts";
-import {
-  checkInfoAvailable,
-  formatSQLTableName,
-  getNetworkErrorMessage,
-} from "../databases";
+import { checkInfoAvailable, getNetworkErrorMessage } from "../databases";
 import { DatabaseIcon } from "../icon/databaseIcon";
 
 import styles from "./databaseDetailsPage.module.scss";
@@ -72,12 +68,15 @@ export const TableNameCell = ({
   if (isCockroachCloud) {
     linkURL = `${location.pathname}/${EncodeUriName(
       getMatchParamByName(dbDetails.match, schemaNameAttr),
-    )}/${EncodeUriName(table.name)}`;
+    )}/${EncodeUriName(table.name.qualifiedNameWithSchemaAndTable)}`;
     if (dbDetails.viewMode === ViewMode.Grants) {
       linkURL += `?viewMode=${ViewMode.Grants}`;
     }
   } else {
-    linkURL = EncodeDatabaseTableUri(dbDetails.name, table.name);
+    linkURL = EncodeDatabaseTableUri(
+      dbDetails.name,
+      table.name.qualifiedNameWithSchemaAndTable,
+    );
     if (dbDetails.viewMode === ViewMode.Grants) {
       linkURL += `?tab=grants`;
     }
@@ -98,11 +97,11 @@ export const TableNameCell = ({
       </Tooltip>
     );
   }
-  const displayName = formatSQLTableName(table.name);
   return (
     <Link to={linkURL} className={cx("icon__container")}>
       {icon}
-      {displayName}
+      <span className={cx("schema-name")}>{table.name.schema}.</span>
+      <span>{table.name.table}</span>
     </Link>
   );
 };
