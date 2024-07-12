@@ -482,12 +482,8 @@ func (reg *registry) PublishToOverlapping(
 	case *kvpb.RangeFeedDeleteRange:
 		minTS = t.Timestamp
 	case *kvpb.RangeFeedCheckpoint:
-		// Always publish checkpoint notifications, regardless of a registration's
-		// starting timestamp.
-		//
-		// TODO(dan): It's unclear if this is the right contract, it's certainly
-		// surprising. Revisit this once RangeFeed has more users.
-		minTS = hlc.MaxTimestamp
+		// Only publish checkpoint notifications > registration starting timestamp.
+		minTS = t.ResolvedTS
 	default:
 		log.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
