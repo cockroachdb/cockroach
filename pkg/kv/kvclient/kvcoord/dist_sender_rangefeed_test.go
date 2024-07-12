@@ -616,7 +616,7 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 		}, 10*time.Second)
 	}
 
-	var observedStreams syncutil.Map[int64, struct{}]
+	var observedStreams syncutil.Set[int64]
 	var capturedSender atomic.Value
 
 	ignoreValues := func(event kvcoord.RangeFeedMessage) {}
@@ -633,7 +633,7 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 			func(ctx context.Context, s roachpb.Span, streamID int64, event *kvpb.RangeFeedEvent) (skip bool, _ error) {
 				switch t := event.GetValue().(type) {
 				case *kvpb.RangeFeedCheckpoint:
-					observedStreams.Store(streamID, &struct{}{})
+					observedStreams.Add(streamID)
 					_, err := frontier.Forward(t.Span, t.ResolvedTS)
 					if err != nil {
 						return true, err
@@ -676,7 +676,7 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 		initialClosed := numRestartStreams.Load()
 		numToCancel := 1 + rand.Int31n(3)
 		var numCancelled int32 = 0
-		observedStreams.Range(func(streamID int64, _ *struct{}) bool {
+		observedStreams.Range(func(streamID int64) bool {
 			if _, wasCancelled := cancelledStreams[streamID]; wasCancelled {
 				return true // try another stream.
 			}
