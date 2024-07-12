@@ -203,6 +203,8 @@ func (RoutineVolatility) routineOption()        {}
 func (RoutineLeakproof) routineOption()         {}
 func (RoutineBodyStr) routineOption()           {}
 func (RoutineLanguage) routineOption()          {}
+func (routineSecurityOptions) routineOption()   {}
+func (RoutineSecurity) routineOption()          {}
 
 // RoutineNullInputBehavior represent the UDF property on null parameters.
 type RoutineNullInputBehavior int
@@ -308,6 +310,47 @@ func AsRoutineLanguage(lang string) (RoutineLanguage, error) {
 		return RoutineLangC, nil
 	}
 	return RoutineLanguage(lang), nil
+}
+
+// routineSecurityOptions indicates the mode of security that the routine will
+// be executed with.
+type routineSecurityOptions int
+
+// Format implements the NodeFormatter interface.
+func (node routineSecurityOptions) Format(ctx *FmtCtx) {
+	switch node {
+	case RoutineInvoker:
+		ctx.WriteString("INVOKER")
+	case RoutineDefiner:
+		ctx.WriteString("DEFINER")
+	default:
+		panic(pgerror.New(pgcode.InvalidParameterValue, "unknown routine option"))
+	}
+}
+
+const (
+	// RoutineInvoker indicates that the routine is run with the privileges of
+	// the user invoking it.
+	RoutineInvoker routineSecurityOptions = iota
+	// RoutineDefiner indicates that the routine is run with the privileges of
+	// the user who defined it.
+	RoutineDefiner
+)
+
+// RoutineSecurity indicates the security mode of the routine, along with an
+// optional external mode used for SQL conformity.
+type RoutineSecurity struct {
+	Security routineSecurityOptions
+	External bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node RoutineSecurity) Format(ctx *FmtCtx) {
+	if node.External {
+		ctx.WriteString("EXTERNAL ")
+	}
+	ctx.WriteString("SECURITY ")
+	node.Security.Format(ctx)
 }
 
 // RoutineBodyStr is a string containing all statements in a UDF body.
@@ -640,7 +683,7 @@ func ComputedColumnExprContext(isVirtual bool) SchemaExprContext {
 // ValidateRoutineOptions checks whether there are conflicting or redundant
 // routine options in the given slice.
 func ValidateRoutineOptions(options RoutineOptions, isProc bool) error {
-	var hasLang, hasBody, hasLeakProof, hasVolatility, hasNullInputBehavior bool
+	var hasLang, hasBody, hasLeakProof, hasVolatility, hasNullInputBehavior, hasSecurity bool
 	conflictingErr := func(opt RoutineOption) error {
 		return errors.Wrapf(ErrConflictingRoutineOption, "%s", AsString(opt))
 	}
@@ -680,6 +723,11 @@ func ValidateRoutineOptions(options RoutineOptions, isProc bool) error {
 				return conflictingErr(option)
 			}
 			hasNullInputBehavior = true
+		case RoutineSecurity:
+			if hasSecurity {
+				return conflictingErr(option)
+			}
+			hasSecurity = true
 		default:
 			return pgerror.Newf(pgcode.InvalidParameterValue, "unknown function option: ", AsString(option))
 		}

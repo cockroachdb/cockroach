@@ -1732,7 +1732,11 @@ message FunctionDescriptor {
   // depends on.
   repeated uint32 depends_on_functions = 22  [(gogoproto.casttype) = "ID"];
 
-  // Next field id is 23
+  // Security contains the security mode that this function gets executed with,
+  // along with an optional "external" specification for SQL conformance.
+  optional cockroach.sql.catalog.catpb.FunctionSecurity security = 23 [(gogoproto.nullable) = false];
+
+  // Next field id is 24
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,

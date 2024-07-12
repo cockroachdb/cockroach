@@ -87,6 +87,7 @@ upsert descriptor #110
   +      family: IntFamily
   +      oid: 20
   +      width: 64
+  +  security: {}
   +  version: "1"
   +  volatility: VOLATILE
 upsert descriptor #101
@@ -230,6 +231,7 @@ upsert descriptor #110
   +      family: IntFamily
   +      oid: 20
   +      width: 64
+  +  security: {}
   +  version: "1"
   +  volatility: VOLATILE
 upsert descriptor #101

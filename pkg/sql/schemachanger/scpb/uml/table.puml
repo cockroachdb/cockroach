@@ -204,6 +204,11 @@ object FunctionNullInputBehavior
 FunctionNullInputBehavior :  FunctionID
 FunctionNullInputBehavior :  NullInputBehavior
 
+object FunctionSecurity
+
+FunctionSecurity :  FunctionID
+FunctionSecurity :  Security
+
 object FunctionVolatility
 
 FunctionVolatility :  FunctionID
@@ -447,6 +452,7 @@ Function <|-- FunctionBody
 Function <|-- FunctionLeakProof
 Function <|-- FunctionName
 Function <|-- FunctionNullInputBehavior
+Function <|-- FunctionSecurity
 Function <|-- FunctionVolatility
 PrimaryIndex <|-- IndexColumn
 SecondaryIndex <|-- IndexColumn

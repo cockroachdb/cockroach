@@ -30,8 +30,8 @@ upsert descriptor #104
      functionBody: SELECT 1;
      id: 104
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "2"
   +  version: "3"
      volatility: VOLATILE
@@ -72,8 +72,8 @@ upsert descriptor #104
      functionBody: SELECT 1;
      id: 104
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "2"
   +  version: "3"
      volatility: VOLATILE
@@ -129,8 +129,8 @@ upsert descriptor #104
      functionBody: SELECT 1;
      id: 104
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "3"
   +  version: "4"
      volatility: VOLATILE

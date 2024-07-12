@@ -122,6 +122,12 @@ ElementState:
     nullInputBehavior:
       nullInputBehavior: CALLED_ON_NULL_INPUT
   Status: PUBLIC
+- FunctionSecurity:
+    functionId: 110
+    security:
+      external: false
+      security: INVOKER
+  Status: PUBLIC
 - FunctionVolatility:
     functionId: 110
     volatility:

@@ -864,6 +864,10 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 		FunctionID:        fnDesc.GetID(),
 		NullInputBehavior: catpb.FunctionNullInputBehavior{NullInputBehavior: fnDesc.GetNullInputBehavior()},
 	})
+	w.ev(scpb.Status_PUBLIC, &scpb.FunctionSecurity{
+		FunctionID: fnDesc.GetID(),
+		Security:   fnDesc.GetSecurity(),
+	})
 
 	fnBody := &scpb.FunctionBody{
 		FunctionID:  fnDesc.GetID(),

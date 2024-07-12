@@ -147,6 +147,7 @@ message ElementProto {
     FunctionLeakProof function_leak_proof = 162 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionNullInputBehavior function_null_input_behavior = 163 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionBody function_body = 164 [(gogoproto.moretags) = "parent:\"Function\""];
+    FunctionSecurity function_security = 165 [(gogoproto.moretags) = "parent:\"Function\""];
 
     // Type elements.
     TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType\""];
@@ -758,6 +759,11 @@ message FunctionBody {
   repeated uint32 uses_sequence_ids = 6 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_type_ids = 7 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_function_ids = 8   [(gogoproto.customname) = "UsesFunctionIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+message FunctionSecurity {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.sql.catalog.catpb.FunctionSecurity security = 2 [(gogoproto.nullable) = false];
 }
 
 message ElementCreationMetadata {

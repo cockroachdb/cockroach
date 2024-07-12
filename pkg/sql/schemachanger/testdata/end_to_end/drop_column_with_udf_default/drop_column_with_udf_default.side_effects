@@ -150,8 +150,8 @@ upsert descriptor #104
      dependedOnBy:
      - columnIds:
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "2"
   +  version: "3"
      volatility: VOLATILE
@@ -303,8 +303,8 @@ begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "3"
   +  version: "4"
      volatility: VOLATILE
@@ -332,8 +332,8 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "4"
   +  version: "5"
      volatility: VOLATILE
@@ -357,8 +357,8 @@ begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "5"
   +  version: "6"
      volatility: VOLATILE
@@ -386,8 +386,8 @@ begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 5 MutationType ops
 upsert descriptor #104
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "6"
   +  version: "7"
      volatility: VOLATILE
@@ -430,8 +430,8 @@ upsert descriptor #104
      dependedOnBy:
      - columnIds:
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "7"
   +  version: "8"
      volatility: VOLATILE
@@ -540,8 +540,8 @@ begin transaction #11
 ## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
 upsert descriptor #104
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "8"
   +  version: "9"
      volatility: VOLATILE
@@ -579,8 +579,8 @@ upsert descriptor #104
      functionBody: SELECT 1;
      id: 104
   ...
-         oid: 20
          width: 64
+     security: {}
   -  version: "9"
   +  version: "10"
      volatility: VOLATILE

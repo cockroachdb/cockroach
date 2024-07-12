@@ -127,6 +127,9 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		return true
 	case *scpb.TypeComment, *scpb.DatabaseZoneConfig:
 		return version.IsActive(clusterversion.V24_2)
+	// TODO(before merge): gate v24_3
+	case *scpb.FunctionSecurity:
+		return version.IsActive(clusterversion.V24_2)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
