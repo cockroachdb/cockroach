@@ -150,7 +150,7 @@ func TestVerify(t *testing.T) {
 				// that its descriptor doesn't contain the leader replica.
 				input: func() VerifyInput {
 					in := defaultFollowerInput()
-					in.Desc.InternalReplicas = in.Desc.InternalReplicas[:1]
+					in.Desc.InternalReplicas[1] = repl3
 					return in
 				}(),
 				// We assume that the leader is eligible, and redirect. However, we
@@ -166,16 +166,30 @@ func TestVerify(t *testing.T) {
 					in.RaftStatus.Lead = raft.None
 					return in
 				}(),
-				// No rejection if the leader is unknown. See comments in
-				// leases.verifyAcquisition.
+				// Rejection if the leader is unknown. However, we don't know who to
+				// redirect to, so we don't include a hint.
+				expErr:      `\[NotLeaseHolderError\] refusing to acquire lease on follower`,
+				expRedirect: roachpb.ReplicaDescriptor{},
+			},
+			{
+				name: "follower, unknown leader, 1x replication",
+				// Unknown leader.
+				input: func() VerifyInput {
+					in := defaultFollowerInput()
+					in.RaftStatus.Lead = raft.None
+					in.Desc.InternalReplicas = in.Desc.InternalReplicas[:1]
+					return in
+				}(),
+				// No rejection if the leader is unknown with 1x replication. See
+				// comments in leases.verifyAcquisition.
 				expErr: ``,
 			},
 			{
-				name: "follower, unknown leader, reject lease on leader unknown",
+				name: "follower, unknown leader, don't reject lease on leader unknown",
 				// Unknown leader.
 				st: func() Settings {
 					st := defaultSettings()
-					st.RejectLeaseOnLeaderUnknown = true
+					st.RejectLeaseOnLeaderUnknown = false
 					return st
 				}(),
 				input: func() VerifyInput {
@@ -183,10 +197,8 @@ func TestVerify(t *testing.T) {
 					in.RaftStatus.Lead = raft.None
 					return in
 				}(),
-				// Rejection if the leader is unknown and the setting is set. However,
-				// we don't know who to redirect to, so we don't include a hint.
-				expErr:      `\[NotLeaseHolderError\] refusing to acquire lease on follower`,
-				expRedirect: roachpb.ReplicaDescriptor{},
+				// No rejection if the leader is unknown due to the non-default setting.
+				expErr: ``,
 			},
 		})
 	})

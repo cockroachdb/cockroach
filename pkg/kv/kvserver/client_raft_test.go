@@ -1308,8 +1308,17 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 			t.Logf("got %s, retrying", nlhe)
 			continue
 		}
-		require.False(t, nlhe.Lease.Empty(), "expected NotLeaseholderError with a lease, got: %s", pErr)
-		require.NotNil(t, nlhe.Lease.Replica, "expected NotLeaseholderError with a known leaseholder, got: %s", pErr)
+		// When the old leader is partitioned, it will step down due to CheckQuorum.
+		// Immediately after the partition is healed, the replica will not know who
+		// the new leader is, so it will return a NotLeaseholderError with an empty
+		// lease. This is expected and better than blocking. Still, we have the test
+		// retry to make sure that the new leader is eventually discovered and that
+		// after that point, the NotLeaseholderErrors start including a lease which
+		// points to the new leader.
+		if nlhe.Lease.Empty() {
+			t.Logf("got %s, retrying", nlhe)
+			continue
+		}
 		require.Equal(t, leaderReplicaID, nlhe.Lease.Replica.ReplicaID)
 		break
 	}

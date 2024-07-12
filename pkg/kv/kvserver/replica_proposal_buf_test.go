@@ -235,12 +235,18 @@ func (t *testProposer) verifyLeaseRequestSafetyRLocked(
 ) error {
 	st := leases.Settings{}
 	raftStatus := raftGroup.Status()
-	desc := &roachpb.RangeDescriptor{}
+	desc := &roachpb.RangeDescriptor{
+		// TestProposalBufferRejectLeaseAcqOnFollower configures raftStatus.Lead to
+		// be either replica 1 or 2. Add a few more replicas to the descriptor to
+		// avoid a single-replica range, which bypasses some safety checks during
+		// lease acquisition.
+		InternalReplicas: []roachpb.ReplicaDescriptor{{ReplicaID: 3}, {ReplicaID: 4}},
+	}
 	if t.leaderReplicaInDescriptor {
-		desc.InternalReplicas = []roachpb.ReplicaDescriptor{{
+		desc.InternalReplicas = append(desc.InternalReplicas, roachpb.ReplicaDescriptor{
 			ReplicaID: roachpb.ReplicaID(raftStatus.Lead),
 			Type:      t.leaderReplicaType,
-		}}
+		})
 	}
 	in := leases.VerifyInput{
 		LocalStoreID:       t.getStoreID(),
