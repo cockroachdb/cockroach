@@ -379,6 +379,9 @@ func registerBackup(r registry.Registry) {
 			CompatibleClouds:  registry.Clouds(cloudProvider),
 			Suites:            registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if cloudProvider == spec.AWS {
+					t.Skip("roachtest env does not have proper credentials. See issue 127062")
+				}
 				rows := 100
 
 				dest := importBankData(ctx, rows, t, c)
