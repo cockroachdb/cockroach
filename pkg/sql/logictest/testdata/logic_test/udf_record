@@ -80,6 +80,7 @@ f_table  CREATE FUNCTION public.f_table()
            NOT LEAKPROOF
            CALLED ON NULL INPUT
            LANGUAGE SQL
+           SECURITY INVOKER
            AS $$
            SELECT t.a, t.b FROM test.public.t ORDER BY a LIMIT 1;
          $$

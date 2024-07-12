@@ -1725,7 +1725,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.ObjectNamePrefixList>  opt_in_schemas
 %type <privilege.TargetObjectType> target_object_type
 
-// User defined function relevant components.
+// Routine (UDF/SP) relevant components.
 %type <bool> opt_or_replace opt_return_table opt_return_set opt_no
 %type <str> param_name routine_as
 %type <tree.RoutineParams> opt_routine_param_with_default_list routine_param_with_default_list func_params func_params_list
@@ -4884,6 +4884,7 @@ create_extension_stmt:
 //    | [ NOT ] LEAKPROOF
 //    | { CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT }
 //    | AS 'definition'
+//    | { [ EXTERNAL ] SECURITY DEFINER }
 //  } ...
 // %SeeAlso: WEBDOCS/create-function.html
 create_func_stmt:
@@ -5099,19 +5100,19 @@ common_routine_opt_item:
   }
 | EXTERNAL SECURITY DEFINER
   {
-    return unimplemented(sqllex, "create function...security")
+    $$.val = tree.RoutineDefiner
   }
 | EXTERNAL SECURITY INVOKER
   {
-    return unimplemented(sqllex, "create function...security")
+    $$.val = tree.RoutineInvoker
   }
 | SECURITY DEFINER
   {
-    return unimplemented(sqllex, "create function...security")
+    $$.val = tree.RoutineDefiner
   }
 | SECURITY INVOKER
   {
-    return unimplemented(sqllex, "create function...security")
+    $$.val = tree.RoutineInvoker
   }
 | LEAKPROOF
   {

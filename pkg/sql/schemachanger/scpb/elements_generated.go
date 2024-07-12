@@ -1199,6 +1199,43 @@ func (c *ElementCollection[E]) FilterFunctionNullInputBehavior() *ElementCollect
 	return (*ElementCollection[*FunctionNullInputBehavior])(ret)
 }
 
+func (e FunctionSecurity) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_FunctionSecurity) Element() Element {
+	return e.FunctionSecurity
+}
+
+// ForEachFunctionSecurity iterates over elements of type FunctionSecurity.
+// Deprecated
+func ForEachFunctionSecurity(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *FunctionSecurity),
+) {
+  c.FilterFunctionSecurity().ForEach(fn)
+}
+
+// FindFunctionSecurity finds the first element of type FunctionSecurity.
+// Deprecated
+func FindFunctionSecurity(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *FunctionSecurity) {
+	if tc := c.FilterFunctionSecurity(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*FunctionSecurity)
+	}
+	return current, target, element
+}
+
+// FunctionSecurityElements filters elements of type FunctionSecurity.
+func (c *ElementCollection[E]) FilterFunctionSecurity() *ElementCollection[*FunctionSecurity] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*FunctionSecurity)
+		return ok
+	})
+	return (*ElementCollection[*FunctionSecurity])(ret)
+}
+
 func (e FunctionVolatility) element() {}
 
 // Element implements ElementGetter.
@@ -2600,6 +2637,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_FunctionName{ FunctionName: t}
 		case *FunctionNullInputBehavior:
 			e.ElementOneOf = &ElementProto_FunctionNullInputBehavior{ FunctionNullInputBehavior: t}
+		case *FunctionSecurity:
+			e.ElementOneOf = &ElementProto_FunctionSecurity{ FunctionSecurity: t}
 		case *FunctionVolatility:
 			e.ElementOneOf = &ElementProto_FunctionVolatility{ FunctionVolatility: t}
 		case *IndexColumn:
@@ -2710,6 +2749,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_FunctionLeakProof)(nil)),
 	((*ElementProto_FunctionName)(nil)),
 	((*ElementProto_FunctionNullInputBehavior)(nil)),
+	((*ElementProto_FunctionSecurity)(nil)),
 	((*ElementProto_FunctionVolatility)(nil)),
 	((*ElementProto_IndexColumn)(nil)),
 	((*ElementProto_IndexComment)(nil)),
@@ -2785,6 +2825,7 @@ func GetElementTypes() []interface{} {
 	((*FunctionLeakProof)(nil)),
 	((*FunctionName)(nil)),
 	((*FunctionNullInputBehavior)(nil)),
+	((*FunctionSecurity)(nil)),
 	((*FunctionVolatility)(nil)),
 	((*IndexColumn)(nil)),
 	((*IndexComment)(nil)),

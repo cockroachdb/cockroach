@@ -114,27 +114,6 @@ We appreciate your feedback.
 ----
 
 error
-CREATE PROCEDURE f() EXTERNAL SECURITY DEFINER AS 'SELECT 1' LANGUAGE SQL
-----
-----
-at or near "definer": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
-CREATE PROCEDURE f() EXTERNAL SECURITY DEFINER AS 'SELECT 1' LANGUAGE SQL
-                                       ^
-HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
-
-error
 CREATE PROCEDURE f() SET a = 123 AS 'SELECT 1' LANGUAGE SQL
 ----
 ----
@@ -212,3 +191,83 @@ CREATE PROCEDURE "family"()
 	BEGIN ATOMIC START TRANSACTION; COMMIT TRANSACTION; END -- literals removed
 CREATE PROCEDURE _()
 	BEGIN ATOMIC START TRANSACTION; COMMIT TRANSACTION; END -- identifiers removed
+
+parse
+CREATE PROCEDURE f() EXTERNAL SECURITY DEFINER AS 'SELECT 1' LANGUAGE SQL
+----
+CREATE PROCEDURE f()
+	SECURITY DEFINER
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- normalized!
+CREATE PROCEDURE f()
+	SECURITY DEFINER
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- fully parenthesized
+CREATE PROCEDURE f()
+	SECURITY DEFINER
+	LANGUAGE SQL
+	AS $$_$$ -- literals removed
+CREATE PROCEDURE _()
+	SECURITY DEFINER
+	LANGUAGE SQL
+	AS $$_$$ -- identifiers removed
+
+parse
+CREATE PROCEDURE f() EXTERNAL SECURITY INVOKER AS 'SELECT 1' LANGUAGE SQL
+----
+CREATE PROCEDURE f()
+	SECURITY INVOKER
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- normalized!
+CREATE PROCEDURE f()
+	SECURITY INVOKER
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- fully parenthesized
+CREATE PROCEDURE f()
+	SECURITY INVOKER
+	LANGUAGE SQL
+	AS $$_$$ -- literals removed
+CREATE PROCEDURE _()
+	SECURITY INVOKER
+	LANGUAGE SQL
+	AS $$_$$ -- identifiers removed
+
+parse
+CREATE PROCEDURE f() SECURITY DEFINER AS 'SELECT 1' LANGUAGE SQL
+----
+CREATE PROCEDURE f()
+	SECURITY DEFINER
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- normalized!
+CREATE PROCEDURE f()
+	SECURITY DEFINER
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- fully parenthesized
+CREATE PROCEDURE f()
+	SECURITY DEFINER
+	LANGUAGE SQL
+	AS $$_$$ -- literals removed
+CREATE PROCEDURE _()
+	SECURITY DEFINER
+	LANGUAGE SQL
+	AS $$_$$ -- identifiers removed
+
+parse
+CREATE PROCEDURE f() SECURITY INVOKER AS 'SELECT 1' LANGUAGE SQL
+----
+CREATE PROCEDURE f()
+	SECURITY INVOKER
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- normalized!
+CREATE PROCEDURE f()
+	SECURITY INVOKER
+	LANGUAGE SQL
+	AS $$SELECT 1$$ -- fully parenthesized
+CREATE PROCEDURE f()
+	SECURITY INVOKER
+	LANGUAGE SQL
+	AS $$_$$ -- literals removed
+CREATE PROCEDURE _()
+	SECURITY INVOKER
+	LANGUAGE SQL
+	AS $$_$$ -- identifiers removed

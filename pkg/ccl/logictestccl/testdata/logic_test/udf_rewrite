@@ -94,6 +94,7 @@ f_rewrite  CREATE FUNCTION public.f_rewrite()
              NOT LEAKPROOF
              CALLED ON NULL INPUT
              LANGUAGE plpgsql
+             SECURITY INVOKER
              AS $$
              DECLARE
              i INT8 := nextval('public.seq'::REGCLASS);
@@ -157,6 +158,7 @@ f_rewrite  CREATE FUNCTION public.f_rewrite()
              NOT LEAKPROOF
              CALLED ON NULL INPUT
              LANGUAGE plpgsql
+             SECURITY INVOKER
              AS $$
              DECLARE
              i INT8 := nextval('public.renamed'::REGCLASS);
@@ -289,6 +291,7 @@ f_rewrite  CREATE FUNCTION public.f_rewrite()
              NOT LEAKPROOF
              CALLED ON NULL INPUT
              LANGUAGE plpgsql
+             SECURITY INVOKER
              AS $$
              DECLARE
              day public.weekday := 'wednesday':::public.weekday;
@@ -355,6 +358,7 @@ f_rewrite  CREATE FUNCTION public.f_rewrite()
              NOT LEAKPROOF
              CALLED ON NULL INPUT
              LANGUAGE plpgsql
+             SECURITY INVOKER
              AS $$
              DECLARE
              day public.workday := 'humpday':::public.workday;
@@ -434,6 +438,7 @@ f_rewrite  CREATE FUNCTION public.f_rewrite(INOUT param1 public.weekday, OUT par
              NOT LEAKPROOF
              CALLED ON NULL INPUT
              LANGUAGE plpgsql
+             SECURITY INVOKER
              AS $$
              BEGIN
              param2 := param1;
@@ -461,6 +466,7 @@ f_rewrite  CREATE FUNCTION public.f_rewrite(INOUT param1 public.workday, OUT par
              NOT LEAKPROOF
              CALLED ON NULL INPUT
              LANGUAGE plpgsql
+             SECURITY INVOKER
              AS $$
              BEGIN
              param2 := param1;
@@ -533,6 +539,7 @@ SHOW CREATE PROCEDURE p_rewrite;
 ----
 p_rewrite  CREATE PROCEDURE public.p_rewrite(INOUT param1 public.weekday, OUT param2 public.weekday)
              LANGUAGE plpgsql
+             SECURITY INVOKER
              AS $$
              BEGIN
              param2 := param1;
@@ -556,6 +563,7 @@ SHOW CREATE PROCEDURE p_rewrite;
 ----
 p_rewrite  CREATE PROCEDURE public.p_rewrite(INOUT param1 public.workday, OUT param2 public.workday)
              LANGUAGE plpgsql
+             SECURITY INVOKER
              AS $$
              BEGIN
              param2 := param1;

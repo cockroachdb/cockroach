@@ -576,6 +576,11 @@ func (desc *Mutable) SetFuncBody(v string) {
 	desc.FunctionBody = v
 }
 
+// SetSecurity sets the Security attribute.
+func (desc *Mutable) SetSecurity(v catpb.Function_Security) {
+	desc.Security = v
+}
+
 // SetName sets the function name.
 func (desc *Mutable) SetName(n string) {
 	desc.Name = n
@@ -775,6 +780,10 @@ func (desc *immutable) GetLanguage() catpb.Function_Language {
 	return desc.Lang
 }
 
+func (desc *immutable) GetSecurity() catpb.Function_Security {
+	return desc.Security
+}
+
 func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	routineType := tree.UDFRoutine
 	if desc.IsProcedure() {
@@ -885,14 +894,15 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 			}
 		}
 	}
-	// We only store 5 function attributes at the moment. We may extend the
+	// We only store 6 function attributes at the moment. We may extend the
 	// pre-allocated capacity in the future.
-	ret.Options = make(tree.RoutineOptions, 0, 5)
+	ret.Options = make(tree.RoutineOptions, 0, 6)
 	ret.Options = append(ret.Options, desc.getCreateExprVolatility())
 	ret.Options = append(ret.Options, tree.RoutineLeakproof(desc.LeakProof))
 	ret.Options = append(ret.Options, desc.getCreateExprNullInputBehavior())
 	ret.Options = append(ret.Options, tree.RoutineBodyStr(desc.FunctionBody))
 	ret.Options = append(ret.Options, desc.getCreateExprLang())
+	ret.Options = append(ret.Options, desc.getCreateExprSecurity())
 	return ret, nil
 }
 
@@ -935,7 +945,17 @@ func (desc *immutable) getCreateExprNullInputBehavior() tree.RoutineNullInputBeh
 	return 0
 }
 
-// ToTreeRoutineParamClass converts the proto enum value to the correspoding
+func (desc *immutable) getCreateExprSecurity() tree.RoutineSecurity {
+	switch desc.Security {
+	case catpb.Function_INVOKER:
+		return tree.RoutineInvoker
+	case catpb.Function_DEFINER:
+		return tree.RoutineDefiner
+	}
+	return 0
+}
+
+// ToTreeRoutineParamClass converts the proto enum value to the corresponding
 // tree.RoutineParamClass.
 func ToTreeRoutineParamClass(class catpb.Function_Param_Class) tree.RoutineParamClass {
 	switch class {

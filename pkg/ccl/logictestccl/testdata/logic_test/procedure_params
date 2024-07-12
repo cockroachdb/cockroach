@@ -347,6 +347,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE p_param_types];
 ----
 CREATE PROCEDURE public.p_param_types(IN p1 INT8, INOUT p2 INT8, INOUT p3 INT8, OUT p4 INT8)
   LANGUAGE plpgsql
+  SECURITY INVOKER
   AS $$
   BEGIN
   SELECT p2, p3, p1;
@@ -368,6 +369,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE p_param_types];
 ----
 CREATE PROCEDURE public.p_param_types(OUT param INT8)
   LANGUAGE plpgsql
+  SECURITY INVOKER
   AS $$
   BEGIN
   SELECT 1;
@@ -480,6 +482,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE p_default_names];
 ----
 CREATE PROCEDURE public.p_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT column3 INT8)
   LANGUAGE plpgsql
+  SECURITY INVOKER
   AS $$
   BEGIN
   SELECT 3 INTO column3;
@@ -505,6 +508,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE p_default_names];
 ----
 CREATE PROCEDURE public.p_default_names(OUT INT8, OUT param2 INT8, IN INT8, OUT INT8)
   LANGUAGE plpgsql
+  SECURITY INVOKER
   AS $$
   BEGIN
   param2 := 2;
@@ -526,6 +530,7 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE p_default_names];
 ----
 CREATE PROCEDURE public.p_default_names(OUT INT8, OUT param2 INT8, IN in_param INT8, OUT INT8)
   LANGUAGE plpgsql
+  SECURITY INVOKER
   AS $$
   BEGIN
   SELECT in_param INTO param2;

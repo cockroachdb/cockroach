@@ -330,6 +330,7 @@ var validationMap = []struct {
 			"Version":                       {status: thisFieldReferencesNoObjects},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"IsProcedure":                   {status: thisFieldReferencesNoObjects},
+			"Security":                      {status: thisFieldReferencesNoObjects},
 		},
 	},
 }
