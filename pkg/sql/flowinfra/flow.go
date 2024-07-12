@@ -672,17 +672,14 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 
 	// Ensure that all processors are closed. Usually this is done automatically
 	// (when a processor is exhausted or at the end of execinfra.Run loop), but
-	// in edge cases we need to do it here. ConsumerClosed can be called
-	// multiple times.
+	// in edge cases we need to do it here. Close can be called multiple times.
 	//
-	// Note that ConsumerClosed is not thread-safe, but at this point if the
-	// processor wasn't fused and ran in its own goroutine, that goroutine must
-	// have exited since Cleanup is called after having waited for all started
+	// Note that Close is not thread-safe, but at this point if the processor
+	// wasn't fused and ran in its own goroutine, that goroutine must have
+	// exited since Cleanup is called after having waited for all started
 	// goroutines to exit.
 	for _, proc := range f.processors {
-		if rs, ok := proc.(execinfra.RowSource); ok {
-			rs.ConsumerClosed()
-		}
+		proc.Close(ctx)
 	}
 
 	// Release any descriptors accessed by this flow.

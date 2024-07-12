@@ -10,7 +10,7 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ReferencedTypeIDs: [105 106], ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ReferencedTypeIDs: [105 106], ColumnFamilyID: 0, ColumnID: 2, TypeName: public.footyp}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.MakeAbsentColumnDeleteOnly
@@ -21,7 +21,7 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
       ColumnID: 2
       Name: j
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
@@ -37,6 +37,7 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
             oid: 100105
             udtMetadata:
               arrayTypeOid: 100106
+          TypeName: public.footyp
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 104
       TypeIDs:
@@ -51,7 +52,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 104, ReferencedTypeIDs: [105 106], ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ReferencedTypeIDs: [105 106], ColumnFamilyID: 0, ColumnID: 2, TypeName: public.footyp}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
@@ -60,7 +61,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ReferencedTypeIDs: [105 106], ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ReferencedTypeIDs: [105 106], ColumnFamilyID: 0, ColumnID: 2, TypeName: public.footyp}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.MakeAbsentColumnDeleteOnly
@@ -71,7 +72,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
       ColumnID: 2
       Name: j
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
@@ -87,6 +88,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
             oid: 100105
             udtMetadata:
               arrayTypeOid: 100106
+          TypeName: public.footyp
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 104
       TypeIDs:
@@ -169,7 +171,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, Expr: 123:::INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -187,7 +189,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       ColumnID: 2
       Name: j
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
@@ -198,6 +200,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnDefaultExpression
       Default:
         ColumnID: 2
@@ -241,7 +244,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, Expr: 123:::INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
@@ -257,7 +260,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, Expr: 123:::INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -275,7 +278,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       ColumnID: 2
       Name: j
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
@@ -286,6 +289,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnDefaultExpression
       Default:
         ColumnID: 2
@@ -535,7 +539,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, Expr: 123:::INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -546,7 +550,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3, Expr: 456:::INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
@@ -559,7 +563,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
       ColumnID: 2
       Name: j
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
@@ -571,6 +575,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnDefaultExpression
       Default:
         ColumnID: 2
@@ -585,7 +590,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
       ColumnID: 3
       Name: k
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 3
         ElementCreationMetadata:
@@ -597,6 +602,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnDefaultExpression
       Default:
         ColumnID: 3
@@ -652,7 +658,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, Expr: 123:::INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
@@ -663,7 +669,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3, Expr: 456:::INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
@@ -674,7 +680,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, Expr: 123:::INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -685,7 +691,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3, Expr: 456:::INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
@@ -698,7 +704,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
       ColumnID: 2
       Name: j
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
@@ -710,6 +716,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnDefaultExpression
       Default:
         ColumnID: 2
@@ -724,7 +731,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
       ColumnID: 3
       Name: k
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 3
         ElementCreationMetadata:
@@ -736,6 +743,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnDefaultExpression
       Default:
         ColumnID: 3
@@ -1003,7 +1011,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -1020,7 +1028,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
       ColumnID: 2
       Name: a
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ComputeExpr:
@@ -1036,6 +1044,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.MakeAbsentIndexBackfilling
       Index:
         ConstraintID: 2
@@ -1073,7 +1082,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
@@ -1088,7 +1097,7 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -1105,7 +1114,7 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
       ColumnID: 2
       Name: a
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ComputeExpr:
@@ -1121,6 +1130,7 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.MakeAbsentIndexBackfilling
       Index:
         ConstraintID: 2
@@ -1356,11 +1366,11 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[Column:{DescID: 107, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 107, Name: b, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.MakeAbsentColumnDeleteOnly
@@ -1371,7 +1381,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
       ColumnID: 2
       Name: a
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
@@ -1383,6 +1393,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 1
@@ -1396,7 +1407,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
       ColumnID: 3
       Name: b
       TableID: 107
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 3
         ElementCreationMetadata:
@@ -1408,6 +1419,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnToIndex
       ColumnID: 3
       IndexID: 1
@@ -1418,11 +1430,11 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], PUBLIC] -> ABSENT
     [[Column:{DescID: 107, ColumnID: 3}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 107, Name: b, ColumnID: 3}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
@@ -1431,11 +1443,11 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[Column:{DescID: 107, ColumnID: 3}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 107, Name: b, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.MakeAbsentColumnDeleteOnly
@@ -1446,7 +1458,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       ColumnID: 2
       Name: a
       TableID: 104
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
@@ -1458,6 +1470,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 1
@@ -1471,7 +1484,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       ColumnID: 3
       Name: b
       TableID: 107
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 3
         ElementCreationMetadata:
@@ -1483,6 +1496,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnToIndex
       ColumnID: 3
       IndexID: 1
@@ -2009,7 +2023,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[Column:{DescID: 109, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 109, Name: g, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 109, ColumnID: 2, Expr: 1:::INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
@@ -2027,7 +2041,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       ColumnID: 2
       Name: g
       TableID: 109
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
@@ -2039,6 +2053,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnDefaultExpression
       Default:
         ColumnID: 2
@@ -2082,7 +2097,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Column:{DescID: 109, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 109, Name: g, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 109, ColumnID: 2, Expr: 1:::INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 4}, PUBLIC], PUBLIC] -> ABSENT
@@ -2098,7 +2113,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
   transitions:
     [[Column:{DescID: 109, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 109, Name: g, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 109, ColumnID: 2, Expr: 1:::INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
@@ -2116,7 +2131,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       ColumnID: 2
       Name: g
       TableID: 109
-    *scop.SetAddedColumnType
+    *scop.UpsertColumnType
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
@@ -2128,6 +2143,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
             family: IntFamily
             oid: 20
             width: 64
+          TypeName: INT8
     *scop.AddColumnDefaultExpression
       Default:
         ColumnID: 2
@@ -2527,7 +2543,7 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   kind: SameStagePrecedence
   rules: [column existence precedes column dependents; column name and type set right after column existence]
 - from: [Column:{DescID: 109, ColumnID: 2}, DELETE_ONLY]
-  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC]
+  to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC]
   kind: SameStagePrecedence
   rules: [column existence precedes column dependents; column name and type set right after column existence]
 - from: [Column:{DescID: 109, ColumnID: 2}, DELETE_ONLY]
@@ -2586,7 +2602,7 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   to:   [Column:{DescID: 109, ColumnID: 2}, PUBLIC]
   kind: Precedence
   rule: column dependents exist before column becomes public
-- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC]
+- from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC]
   to:   [Column:{DescID: 109, ColumnID: 2}, PUBLIC]
   kind: Precedence
   rule: column dependents exist before column becomes public

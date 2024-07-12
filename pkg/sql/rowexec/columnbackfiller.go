@@ -110,6 +110,9 @@ func (*columnBackfiller) Resume(output execinfra.RowReceiver) {
 	panic("not implemented")
 }
 
+// Close is part of the execinfra.Processor interface.
+func (*columnBackfiller) Close(context.Context) {}
+
 func (cb *columnBackfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	finishedSpans, err := cb.mainLoop(ctx)
 	if err != nil {

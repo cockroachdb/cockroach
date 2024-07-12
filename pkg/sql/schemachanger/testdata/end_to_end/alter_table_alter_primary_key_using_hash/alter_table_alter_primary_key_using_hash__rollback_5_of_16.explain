@@ -41,7 +41,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
            │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 6, SourceIndexID: 1 (t_pkey+)}
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 5}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (crdb_internal_j_shard_3-)}
-           │    └── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3-)}
+           │    └── PUBLIC      → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (crdb_internal_j_shard_3-), TypeName: "INT8"}
            └── 7 Mutation operations
                 ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
                 ├── CreateGCJobForIndex {"IndexID":4,"TableID":104}
