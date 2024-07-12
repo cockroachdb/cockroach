@@ -2843,7 +2843,7 @@ func (s *systemStatusServer) HotRangesV2(
 		}
 	}
 
-	tableMetaCache := sync.Map{}
+	var tableMetaCache syncutil.Map[roachpb.RangeID, tableMeta]
 
 	response := &serverpb.HotRangesResponseV2{
 		ErrorsByNodeID: make(map[roachpb.NodeID]string),
@@ -2864,7 +2864,7 @@ func (s *systemStatusServer) HotRangesV2(
 						dbName, tableName, indexName, schemaName string
 						replicaNodeIDs                           []roachpb.NodeID
 					)
-					rangeID := uint32(r.Desc.RangeID)
+					rangeID := r.Desc.RangeID
 					for _, repl := range r.Desc.Replicas().Descriptors() {
 						replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
 					}
@@ -2872,10 +2872,10 @@ func (s *systemStatusServer) HotRangesV2(
 						dbName = "system"
 						tableName = r.Desc.StartKey.String()
 					} else if meta, ok := tableMetaCache.Load(rangeID); ok {
-						dbName = meta.(tableMeta).dbName
-						tableName = meta.(tableMeta).tableName
-						schemaName = meta.(tableMeta).schemaName
-						indexName = meta.(tableMeta).indexName
+						dbName = meta.dbName
+						tableName = meta.tableName
+						schemaName = meta.schemaName
+						indexName = meta.indexName
 					} else {
 						if err = s.sqlServer.distSQLServer.DB.DescsTxn(
 							ctx, func(ctx context.Context, txn descs.Txn) error {
@@ -2915,7 +2915,7 @@ func (s *systemStatusServer) HotRangesV2(
 							continue
 						}
 
-						tableMetaCache.Store(rangeID, tableMeta{
+						tableMetaCache.Store(rangeID, &tableMeta{
 							dbName:     dbName,
 							tableName:  tableName,
 							schemaName: schemaName,
