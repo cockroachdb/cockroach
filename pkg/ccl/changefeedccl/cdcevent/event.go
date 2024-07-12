@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -25,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -171,6 +174,26 @@ func (r Row) DebugString() string {
 	}
 	sb.WriteByte('}')
 	return sb.String()
+}
+
+func (r Row) ToJSON() (*tree.DJSON, error) {
+	builder := json.NewObjectBuilder(len(r.cols))
+	err := r.ForAllColumns().Datum(func(d tree.Datum, col ResultColumn) error {
+		val, err := tree.AsJSON(
+			d,
+			sessiondatapb.DataConversionConfig{},
+			time.UTC,
+		)
+		if err != nil {
+			return err
+		}
+		builder.Add(col.Name, val)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDJSON(builder.Build()), nil
 }
 
 // forEachColumn is a helper which invokes fn for reach column in the ordColumn list.

@@ -35,7 +35,7 @@ const (
   		dlq_reason					STRING NOT NULL,
 			mutation_type				defaultdb.crdb_replication_mutation_type,       
   		key_value_bytes			BYTES NOT NULL,
-			incoming_row     		STRING NOT NULL,
+			incoming_row     		JSONB,
   		-- PK should be unique based on the ID, job ID and timestamp at which the 
   		-- row was written to the table.
   		-- For any table being replicated in an LDR job, there should not be rows 
@@ -52,6 +52,13 @@ const (
 			key_value_bytes,
 			incoming_row
 		) VALUES ($1, $2, $3, $4, $5, $6)`
+	insertRowStmtFallBack = `INSERT INTO %s (
+	ingestion_job_id, 
+	table_id, 
+	dlq_reason,
+	mutation_type,
+	key_value_bytes
+) VALUES ($1, $2, $3, $4, $5)`
 )
 
 type ReplicationMutationType int
@@ -173,6 +180,25 @@ func (dlq *deadLetterQueueClient) Log(
 		mutationType = Insert
 	}
 
+	jsonRow, err := cdcEventRow.ToJSON()
+	if err != nil {
+		log.Warningf(ctx, "failed to convert cdc event row to json: %v", err)
+		if _, err := dlq.ie.Exec(
+			ctx,
+			"insert-row-into-dlq-table-fallback",
+			nil, /* txn */
+			fmt.Sprintf(insertRowStmtFallBack, tableName),
+			ingestionJobID,
+			tableID,
+			dlqReason.String(),
+			mutationType.String(),
+			bytes,
+		); err != nil {
+			return errors.Wrapf(err, "failed to insert row for table %s without json", tableName)
+		}
+		return nil
+	}
+
 	if _, err := dlq.ie.Exec(
 		ctx,
 		"insert-row-into-dlq-table",
@@ -183,7 +209,7 @@ func (dlq *deadLetterQueueClient) Log(
 		dlqReason.String(),
 		mutationType.String(),
 		bytes,
-		cdcEventRow.DebugString(),
+		jsonRow,
 	); err != nil {
 		return errors.Wrapf(err, "failed to insert row for table %s", tableName)
 	}

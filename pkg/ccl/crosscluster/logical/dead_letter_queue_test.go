@@ -10,11 +10,17 @@ package logical
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -164,4 +170,69 @@ func TestDLQClient(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDLQJSONQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
+	defer srv.Stopper().Stop(ctx)
+
+	for _, l := range []serverutils.ApplicationLayerInterface{srv.ApplicationLayer(), srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `
+	CREATE TABLE foo (
+		a INT, 
+		b STRING, 
+		rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC)
+	)`)
+	tableDesc := cdctest.GetHydratedTableDescriptor(t, execCfg, "foo")
+	targets := changefeedbase.Targets{}
+	targets.Add(changefeedbase.Target{
+		Type:       jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
+		TableID:    tableDesc.GetID(),
+		FamilyName: "primary",
+	})
+
+	decoder, err := cdcevent.NewEventDecoder(ctx, &execCfg, targets, false, false)
+	require.NoError(t, err)
+
+	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, srv.ExecutorConfig(), tableDesc)
+	ie := srv.InternalDB().(isql.DB).Executor()
+	defer cleanup()
+
+	tableID := int32(tableDesc.GetID())
+	dlqClient := InitDeadLetterQueueClient(ie)
+	require.NoError(t, dlqClient.Create(ctx, []int32{tableID}))
+
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'hello')`)
+	row := popRow(t)
+
+	kv := roachpb.KeyValue{Key: row.Key, Value: row.Value}
+	updatedRow, err := decoder.DecodeKV(
+		ctx, kv, cdcevent.CurrentRow, row.Timestamp(), false)
+
+	require.NoError(t, err)
+	require.NoError(t, dlqClient.Log(ctx, 1, streampb.StreamEvent_KV{KeyValue: kv}, updatedRow, noSpace))
+
+	dlqtableName := fmt.Sprintf(dlqBaseTableName, tableID)
+
+	var (
+		a     int
+		b     string
+		rowID int
+	)
+	sqlDB.QueryRow(t, fmt.Sprintf(`SELECT incoming_row->>'a', incoming_row->>'b', incoming_row->>'rowid' FROM %s LIMIT 1`, dlqtableName)).Scan(&a, &b, &rowID)
+	require.Equal(t, 1, a)
+	require.Equal(t, "hello", b)
+	require.NotZero(t, rowID)
 }
