@@ -63,16 +63,12 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 
 // InitEnvsFromStoreSpecs constructs Envs for all the provided store specs.
 func InitEnvsFromStoreSpecs(
-	ctx context.Context,
-	specs []base.StoreSpec,
-	rw RWMode,
-	stickyRegistry StickyRegistry,
-	statsCollector *vfs.DiskWriteStatsCollector,
+	ctx context.Context, specs []base.StoreSpec, rw RWMode, stickyRegistry StickyRegistry,
 ) (Envs, error) {
 	envs := make(Envs, len(specs))
 	for i := range specs {
 		var err error
-		envs[i], err = InitEnvFromStoreSpec(ctx, specs[i], rw, stickyRegistry, statsCollector)
+		envs[i], err = InitEnvFromStoreSpec(ctx, specs[i], rw, stickyRegistry)
 		if err != nil {
 			envs.CloseAll()
 			return nil, err
@@ -98,11 +94,7 @@ func (e Envs) CloseAll() {
 //
 // stickyRegistry may be nil iff the spec's StickyVFSID field is unset.
 func InitEnvFromStoreSpec(
-	ctx context.Context,
-	spec base.StoreSpec,
-	rw RWMode,
-	stickyRegistry StickyRegistry,
-	statsCollector *vfs.DiskWriteStatsCollector,
+	ctx context.Context, spec base.StoreSpec, rw RWMode, stickyRegistry StickyRegistry,
 ) (*Env, error) {
 	fs := vfs.Default
 	dir := spec.Path
@@ -119,7 +111,7 @@ func InitEnvFromStoreSpec(
 	return InitEnv(ctx, fs, dir, EnvConfig{
 		RW:                rw,
 		EncryptionOptions: spec.EncryptionOptions,
-	}, statsCollector)
+	}, vfs.NewDiskWriteStatsCollector())
 }
 
 // EnvConfig provides additional configuration settings for Envs.
@@ -139,7 +131,7 @@ func InitEnv(
 	cfg EnvConfig,
 	statsCollector *vfs.DiskWriteStatsCollector,
 ) (*Env, error) {
-	e := &Env{Dir: dir, UnencryptedFS: fs, rw: cfg.RW}
+	e := &Env{Dir: dir, UnencryptedFS: fs, rw: cfg.RW, StatsCollector: statsCollector}
 	e.refs.Store(1)
 	// Defer the Close(). The Close() will only actually release resources if we
 	// error out early without adding an additional ref just before returning.
@@ -234,6 +226,8 @@ type Env struct {
 	// Encryption is non-nil if encryption-at-rest has ever been enabled on
 	// the store. It provides access to encryption-at-rest stats, etc.
 	Encryption *EncryptionEnv
+	// DiskWriteStatsCollector will be used to categorically track disk write metrics.
+	StatsCollector *vfs.DiskWriteStatsCollector
 
 	// defaultFS is the primary VFS that most users should use. If
 	// encryption-at-rest is enabled, this VFS will handle transparently

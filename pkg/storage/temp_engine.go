@@ -24,12 +24,9 @@ import (
 // NewTempEngine creates a new engine for DistSQL processors to use when
 // the working set is larger than can be stored in memory.
 func NewTempEngine(
-	ctx context.Context,
-	tempStorage base.TempStorageConfig,
-	storeSpec base.StoreSpec,
-	statsCollector *vfs.DiskWriteStatsCollector,
+	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, vfs.FS, error) {
-	return NewPebbleTempEngine(ctx, tempStorage, storeSpec, statsCollector)
+	return NewPebbleTempEngine(ctx, tempStorage, storeSpec)
 }
 
 type pebbleTempEngine struct {
@@ -58,19 +55,13 @@ func (r *pebbleTempEngine) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
 // NewPebbleTempEngine creates a new Pebble engine for DistSQL processors to use
 // when the working set is larger than can be stored in memory.
 func NewPebbleTempEngine(
-	ctx context.Context,
-	tempStorage base.TempStorageConfig,
-	storeSpec base.StoreSpec,
-	statsCollector *vfs.DiskWriteStatsCollector,
+	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (diskmap.Factory, vfs.FS, error) {
-	return newPebbleTempEngine(ctx, tempStorage, storeSpec, statsCollector)
+	return newPebbleTempEngine(ctx, tempStorage, storeSpec)
 }
 
 func newPebbleTempEngine(
-	ctx context.Context,
-	tempStorage base.TempStorageConfig,
-	storeSpec base.StoreSpec,
-	statsCollector *vfs.DiskWriteStatsCollector,
+	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (*pebbleTempEngine, vfs.FS, error) {
 	var baseFS vfs.FS
 	var dir string
@@ -82,6 +73,7 @@ func newPebbleTempEngine(
 		baseFS = vfs.Default
 		dir = tempStorage.Path
 	}
+	statsCollector := vfs.NewDiskWriteStatsCollector()
 	env, err := fs.InitEnv(ctx, baseFS, dir, fs.EnvConfig{
 		RW: fs.ReadWrite,
 		// Adopt the encryption options of the provided store spec so that

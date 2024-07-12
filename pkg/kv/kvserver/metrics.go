@@ -4098,7 +4098,7 @@ func (m *pebbleCategoryIterMetricsContainer) update(stats []sstable.CategoryStat
 }
 
 type pebbleCategoryDiskWriteMetrics struct {
-	BytesWritten *metric.Gauge
+	BytesWritten *metric.Counter
 }
 
 func makePebbleCategorizedWriteMetrics(
@@ -4110,7 +4110,7 @@ func makePebbleCategorizedWriteMetrics(
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
-	return &pebbleCategoryDiskWriteMetrics{BytesWritten: metric.NewGauge(metaDiskBytesWritten)}
+	return &pebbleCategoryDiskWriteMetrics{BytesWritten: metric.NewCounter(metaDiskBytesWritten)}
 }
 
 // MetricStruct implements the metric.Struct interface.
