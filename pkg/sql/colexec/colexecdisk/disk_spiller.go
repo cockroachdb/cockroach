@@ -79,13 +79,19 @@ func NewOneInputDiskSpiller(
 	diskBackedOpConstructor func(input colexecop.Operator) colexecop.Operator,
 	spillingCallbackFn func(),
 ) colexecop.ClosableOperator {
-	diskBackedOpInput := newBufferExportingOperator(inMemoryOp, input)
+	var diskBackedOp colexecop.Operator
 	return &diskSpillerBase{
 		inputs:                  []colexecop.Operator{input},
 		inMemoryOp:              inMemoryOp,
 		inMemoryMemMonitorNames: []string{string(inMemoryMemMonitorName)},
-		diskBackedOp:            diskBackedOpConstructor(diskBackedOpInput),
-		spillingCallbackFn:      spillingCallbackFn,
+		getDiskBackedOp: func(createIfNotExistent bool) colexecop.Operator {
+			if createIfNotExistent && diskBackedOp == nil {
+				diskBackedOpInput := newBufferExportingOperator(inMemoryOp, input)
+				diskBackedOp = diskBackedOpConstructor(diskBackedOpInput)
+			}
+			return diskBackedOp
+		},
+		spillingCallbackFn: spillingCallbackFn,
 	}
 }
 
@@ -146,18 +152,24 @@ func NewTwoInputDiskSpiller(
 	diskBackedOpConstructor func(inputOne, inputTwo colexecop.Operator) colexecop.Operator,
 	spillingCallbackFn func(),
 ) colexecop.ClosableOperator {
-	diskBackedOpInputOne := newBufferExportingOperator(inMemoryOp, inputOne)
-	diskBackedOpInputTwo := newBufferExportingOperator(inMemoryOp, inputTwo)
 	names := make([]string, len(inMemoryMemMonitorNames))
 	for i := range names {
 		names[i] = string(inMemoryMemMonitorNames[i])
 	}
+	var diskBackedOp colexecop.Operator
 	return &diskSpillerBase{
 		inputs:                  []colexecop.Operator{inputOne, inputTwo},
 		inMemoryOp:              inMemoryOp,
 		inMemoryMemMonitorNames: names,
-		diskBackedOp:            diskBackedOpConstructor(diskBackedOpInputOne, diskBackedOpInputTwo),
-		spillingCallbackFn:      spillingCallbackFn,
+		getDiskBackedOp: func(createIfNotExistent bool) colexecop.Operator {
+			if diskBackedOp == nil && createIfNotExistent {
+				diskBackedOpInputOne := newBufferExportingOperator(inMemoryOp, inputOne)
+				diskBackedOpInputTwo := newBufferExportingOperator(inMemoryOp, inputTwo)
+				diskBackedOp = diskBackedOpConstructor(diskBackedOpInputOne, diskBackedOpInputTwo)
+			}
+			return diskBackedOp
+		},
+		spillingCallbackFn: spillingCallbackFn,
 	}
 }
 
@@ -173,8 +185,7 @@ type diskSpillerBase struct {
 
 	inMemoryOp              colexecop.BufferingInMemoryOperator
 	inMemoryMemMonitorNames []string
-	diskBackedOp            colexecop.Operator
-	diskBackedOpInitialized bool
+	getDiskBackedOp         func(createIfNotExistent bool) colexecop.Operator
 	spillingCallbackFn      func()
 }
 
@@ -194,7 +205,7 @@ func (d *diskSpillerBase) Init(ctx context.Context) {
 
 func (d *diskSpillerBase) Next() coldata.Batch {
 	if d.spilled {
-		return d.diskBackedOp.Next()
+		return d.getDiskBackedOp(false /* createIfNotExistent */).Next()
 	}
 	var batch coldata.Batch
 	if err := colexecerror.CatchVectorizedRuntimeError(
@@ -216,11 +227,11 @@ func (d *diskSpillerBase) Next() coldata.Batch {
 				if d.spillingCallbackFn != nil {
 					d.spillingCallbackFn()
 				}
+				diskBackedOp := d.getDiskBackedOp(true /* createIfNotExistent */)
 				// It is ok if we call Init() multiple times (once after every
 				// Reset) since all calls except for the first one are noops.
-				d.diskBackedOp.Init(d.Ctx)
-				d.diskBackedOpInitialized = true
-				return d.diskBackedOp.Next()
+				diskBackedOp.Init(d.Ctx)
+				return diskBackedOp.Next()
 			}
 		}
 		// Either not an out of memory error or an OOM error coming from a
@@ -239,10 +250,8 @@ func (d *diskSpillerBase) Reset(ctx context.Context) {
 	if r, ok := d.inMemoryOp.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}
-	if d.diskBackedOpInitialized {
-		if r, ok := d.diskBackedOp.(colexecop.Resetter); ok {
-			r.Reset(ctx)
-		}
+	if r, ok := d.getDiskBackedOp(false /* createIfNotExistent */).(colexecop.Resetter); ok {
+		r.Reset(ctx)
 	}
 	d.spilled = false
 }
@@ -265,7 +274,7 @@ func (d *diskSpillerBase) Close(ctx context.Context) error {
 			retErr = err
 		}
 	}
-	if c, ok := d.diskBackedOp.(colexecop.Closer); ok {
+	if c, ok := d.getDiskBackedOp(false /* createIfNotExistent */).(colexecop.Closer); ok {
 		if err := c.Close(ctx); err != nil {
 			retErr = err
 		}
@@ -290,7 +299,7 @@ func (d *diskSpillerBase) Child(nth int, verbose bool) execopnode.OpNode {
 		case 0:
 			return d.inMemoryOp
 		case len(d.inputs) + 1:
-			return d.diskBackedOp
+			return d.getDiskBackedOp(true /* createIfNotExistent */)
 		default:
 			return d.inputs[nth-1]
 		}

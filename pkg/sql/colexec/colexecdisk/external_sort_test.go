@@ -139,7 +139,8 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	require.True(t, spilled)
 	require.Zero(t, sem.GetCount(), "sem still reports open FDs")
 
-	externalSorter := colexec.MaybeUnwrapInvariantsChecker(sorter).(*diskSpillerBase).diskBackedOp.(*externalSorter)
+	ds := colexec.MaybeUnwrapInvariantsChecker(sorter).(*diskSpillerBase)
+	externalSorter := ds.getDiskBackedOp(false /* createIfNotExistent */).(*externalSorter)
 	numPartitionsCreated := externalSorter.currentPartitionIdx
 	// This maximum can be achieved when we have minimum required number of FDs
 	// as follows: we expect that each newly created partition contains about
