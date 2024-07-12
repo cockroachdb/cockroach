@@ -1750,8 +1750,8 @@ func addName(name string, meta metric.Metadata) metric.Metadata {
 // instead of by setting values.
 type WorkQueueMetrics struct {
 	name       string
-	total      workQueueMetricsSingle
-	byPriority sync.Map
+	total      *workQueueMetricsSingle
+	byPriority syncutil.Map[admissionpb.WorkPriority, workQueueMetricsSingle]
 	registry   *metric.Registry
 }
 
@@ -1760,7 +1760,7 @@ type WorkQueueMetrics struct {
 // TODO(abaptist): Until https://github.com/cockroachdb/cockroach/issues/88846
 // is fixed, this code is not useful since late registered metrics are not
 // visible.
-func (m *WorkQueueMetrics) getOrCreate(priority admissionpb.WorkPriority) workQueueMetricsSingle {
+func (m *WorkQueueMetrics) getOrCreate(priority admissionpb.WorkPriority) *workQueueMetricsSingle {
 	// Try loading from the map first.
 	val, ok := m.byPriority.Load(priority)
 	if !ok {
@@ -1775,7 +1775,7 @@ func (m *WorkQueueMetrics) getOrCreate(priority admissionpb.WorkPriority) workQu
 			m.registry.AddMetricStruct(val)
 		}
 	}
-	return val.(workQueueMetricsSingle)
+	return val
 }
 
 type workQueueMetricsSingle struct {
@@ -1858,8 +1858,8 @@ func makeWorkQueueMetrics(
 	return wqm
 }
 
-func makeWorkQueueMetricsSingle(name string) workQueueMetricsSingle {
-	return workQueueMetricsSingle{
+func makeWorkQueueMetricsSingle(name string) *workQueueMetricsSingle {
+	return &workQueueMetricsSingle{
 		Requested: metric.NewCounter(addName(name, requestedMeta)),
 		Admitted:  metric.NewCounter(addName(name, admittedMeta)),
 		Errored:   metric.NewCounter(addName(name, erroredMeta)),
