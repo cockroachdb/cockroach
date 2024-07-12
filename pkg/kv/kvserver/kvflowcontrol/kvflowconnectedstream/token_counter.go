@@ -363,7 +363,9 @@ func WaitForEval(
 ) (state WaitEndState, scratch2 []reflect.SelectCase) {
 	scratch = scratch[:0]
 	if len(handles) < requiredQuorum || requiredQuorum == 0 {
-		panic(errors.AssertionFailedf("invalid arguments to WaitForEval"))
+		log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+			"invalid arguments to WaitForEval: len(handles)=%d required_quorum=%d",
+			len(handles), requiredQuorum))
 	}
 
 	scratch = append(scratch,
