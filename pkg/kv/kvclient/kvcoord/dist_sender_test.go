@@ -4450,7 +4450,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 
 	waitForInitialPuts := makeBarrier(2)
 	waitForInitialMeta2Scans := makeBarrier(2)
-	var queriedMetaKeys syncutil.Map[string, struct{}]
+	var queriedMetaKeys syncutil.Set[string]
 	var ds *DistSender
 	testFn := func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 		rs, err := keys.Range(ba.Requests)
@@ -4494,7 +4494,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 		br.Add(r)
 		// The first query for each batch request key of the meta1 range should be
 		// in separate requests because there is no prior eviction token.
-		if _, ok := queriedMetaKeys.Load(string(rs.Key)); ok {
+		if queriedMetaKeys.Contains(string(rs.Key)) {
 			// Wait until we have two in-flight requests.
 			if err := testutils.SucceedsSoonError(func() error {
 				// Since the previously fetched RangeDescriptor was ["a", "d"), the request keys
@@ -4509,7 +4509,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 				return br, nil
 			}
 		}
-		queriedMetaKeys.Store(string(rs.Key), &struct{}{})
+		queriedMetaKeys.Add(string(rs.Key))
 		return br, nil
 	}
 
