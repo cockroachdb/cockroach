@@ -4623,6 +4623,26 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_huandu_go_assert",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/huandu/go-assert",
+        sha256 = "3200f97168bb9c477de1866a002ca1dfe28fc82212591e6437f12afef9b2e564",
+        strip_prefix = "github.com/huandu/go-assert@v1.1.5",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/huandu/go-assert/com_github_huandu_go_assert-v1.1.5.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_huandu_skiplist",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/huandu/skiplist",
+        sha256 = "08ba556e0864fb32b6a65ccb2ba61c457dd396e61bb71eddc71eec98ceaa42c8",
+        strip_prefix = "github.com/huandu/skiplist@v1.2.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/huandu/skiplist/com_github_huandu_skiplist-v1.2.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_huandu_xstrings",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/huandu/xstrings",
