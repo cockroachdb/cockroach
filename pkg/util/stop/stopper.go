@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -177,7 +176,7 @@ type Stopper struct {
 		// idAlloc is incremented atomically under the read lock when adding a
 		// context to be canceled.
 		idAlloc  int64 // allocates index into qCancels
-		qCancels sync.Map
+		qCancels syncutil.Map[int64, context.CancelFunc]
 	}
 }
 
@@ -279,7 +278,7 @@ func (s *Stopper) AddCloser(c Closer) {
 // Canceling this context releases resources associated with it, so code should
 // call cancel as soon as the operations running in this Context complete.
 func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, func()) {
-	var cancel func()
+	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -288,7 +287,7 @@ func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, fun
 		return ctx, func() {}
 	}
 	id := atomic.AddInt64(&s.mu.idAlloc, 1)
-	s.mu.qCancels.Store(id, cancel)
+	s.mu.qCancels.Store(id, &cancel)
 	return ctx, func() {
 		cancel()
 		s.mu.qCancels.Delete(id)
@@ -584,10 +583,9 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 			close(s.quiescer)
 		}
 
-		s.mu.qCancels.Range(func(k, v interface{}) (wantMore bool) {
-			cancel := v.(func())
-			cancel()
-			s.mu.qCancels.Delete(k)
+		s.mu.qCancels.Range(func(id int64, cancel *context.CancelFunc) (wantMore bool) {
+			(*cancel)()
+			s.mu.qCancels.Delete(id)
 			return true
 		})
 		for _, f := range s.mu.quiescers {
