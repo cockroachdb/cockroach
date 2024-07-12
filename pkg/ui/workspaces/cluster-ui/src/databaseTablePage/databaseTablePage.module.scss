@@ -40,6 +40,15 @@
     @include text--body;
     overflow-wrap: anywhere;
   }
+
+  &__error-cell{
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    svg {
+      fill: $colors--warning;
+    }
+  }
 }
 
 .icon {
