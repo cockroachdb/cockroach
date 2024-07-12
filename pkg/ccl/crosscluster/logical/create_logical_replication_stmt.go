@@ -11,6 +11,7 @@ package logical
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
@@ -23,13 +24,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/issuelink"
@@ -87,9 +91,6 @@ func createLogicalReplicationStreamPlanHook(
 			return err
 		}
 
-		if !stmt.Options.IsDefault() {
-			return errors.UnimplementedErrorf(issuelink.IssueLink{}, "logical replication stream options are not yet supported")
-		}
 		if stmt.From.Database != "" {
 			return errors.UnimplementedErrorf(issuelink.IssueLink{}, "logical replication streams on databases are unsupported")
 		}
@@ -132,7 +133,7 @@ func createLogicalReplicationStreamPlanHook(
 				return errors.WithHintf(errors.Newf(
 					"tables written to by logical replication currently require a %q DECIMAL column",
 					originTimestampColumnName,
-				), "try 'ALTER %s ADD COLUMN %s DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL",
+				), "try 'ALTER TABLE %s ADD COLUMN %s DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL'",
 					dstObjName.String(), originTimestampColumnName,
 				)
 			}
@@ -182,18 +183,44 @@ func createLogicalReplicationStreamPlanHook(
 			repPairs[i].SrcDescriptorID = int32(spec.TableDescriptors[name].ID)
 		}
 
+		options, err := evalLogicalReplicationOptions(ctx, stmt.Options, exprEval, p)
+		if err != nil {
+			return err
+		}
+		replicationStartTime := spec.ReplicationStartTime
+		progress := jobspb.LogicalReplicationProgress{}
+		if cursor, ok := options.GetCursor(); ok {
+			replicationStartTime = cursor
+			progress.ReplicatedTime = cursor
+		}
+
+		if uf, ok := options.GetUserFunctions(); ok {
+			for i, name := range srcTableNames {
+				repPairs[i].SrcFunctionID = uf[name]
+			}
+		}
+		// Default conflict resolution if not set will be LWW
+		defaultConflictResolution := jobspb.LogicalReplicationDetails_DefaultConflictResolution{
+			ConflictResolutionType: jobspb.LogicalReplicationDetails_DefaultConflictResolution_LWW,
+		}
+		if cr, ok := options.GetDefaultFunction(); ok {
+			defaultConflictResolution = *cr
+		}
+
 		jr := jobs.Record{
 			JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
 			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, streamAddress),
 			Username:    p.User(),
 			Details: jobspb.LogicalReplicationDetails{
-				StreamID:             uint64(spec.StreamID),
-				SourceClusterID:      spec.SourceClusterID,
-				ReplicationStartTime: spec.ReplicationStartTime,
-				TargetClusterConnStr: string(streamAddress),
-				ReplicationPairs:     repPairs,
-				TableNames:           srcTableNames},
-			Progress: jobspb.LogicalReplicationProgress{},
+				StreamID:                  uint64(spec.StreamID),
+				SourceClusterID:           spec.SourceClusterID,
+				ReplicationStartTime:      replicationStartTime,
+				TargetClusterConnStr:      string(streamAddress),
+				ReplicationPairs:          repPairs,
+				TableNames:                srcTableNames,
+				DefaultConflictResolution: defaultConflictResolution,
+			},
+			Progress: progress,
 		}
 
 		if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, p.InternalSQLTxn()); err != nil {
@@ -213,11 +240,146 @@ func createLogicalReplicationStreamTypeCheck(
 	if !ok {
 		return false, nil, nil
 	}
-	if err := exprutil.TypeCheck(ctx, "LOGICAL REPLICATION STREAM", p.SemaCtx(),
+	toTypeCheck := []exprutil.ToTypeCheck{
 		exprutil.Strings{stmt.PGURL},
+		exprutil.Strings{
+			stmt.Options.Cursor,
+			stmt.Options.DefaultFunction,
+			stmt.Options.Mode,
+		},
+	}
+	if err := exprutil.TypeCheck(ctx, "LOGICAL REPLICATION STREAM", p.SemaCtx(),
+		toTypeCheck...,
 	); err != nil {
 		return false, nil, err
 	}
 
 	return true, streamCreationHeader, nil
+}
+
+type resolvedLogicalReplicationOptions struct {
+	cursor          *hlc.Timestamp
+	mode            *string
+	defaultFunction *jobspb.LogicalReplicationDetails_DefaultConflictResolution
+	// Mapping of table name to function descriptor
+	userFunctions map[string]int32
+}
+
+func evalLogicalReplicationOptions(
+	ctx context.Context,
+	options tree.LogicalReplicationOptions,
+	eval exprutil.Evaluator,
+	p sql.PlanHookState,
+) (*resolvedLogicalReplicationOptions, error) {
+	r := &resolvedLogicalReplicationOptions{}
+	if options.Mode != nil {
+		mode, err := eval.String(ctx, options.Mode)
+		if err != nil {
+			return nil, err
+		}
+		r.mode = &mode
+	}
+	if options.Cursor != nil {
+		cursor, err := eval.String(ctx, options.Cursor)
+		if err != nil {
+			return nil, err
+		}
+		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
+		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context)
+		if err != nil {
+			return nil, err
+		}
+		r.cursor = &asOf.Timestamp
+	}
+	if options.DefaultFunction != nil {
+		defaultResolution := &jobspb.LogicalReplicationDetails_DefaultConflictResolution{}
+		defaultFnc, err := eval.String(ctx, options.DefaultFunction)
+		if err != nil {
+			return nil, err
+		}
+		switch strings.ToLower(defaultFnc) {
+		case "lww":
+			defaultResolution.ConflictResolutionType = jobspb.LogicalReplicationDetails_DefaultConflictResolution_LWW
+		case "dlq":
+			defaultResolution.ConflictResolutionType = jobspb.LogicalReplicationDetails_DefaultConflictResolution_DLQ
+		// This case will assume that a function name was passed in
+		// and we will try to resolve it.
+		default:
+			urn := tree.MakeUnresolvedName(defaultFnc)
+			descID, err := lookupFunctionID(ctx, p, urn)
+			if err != nil {
+				return nil, err
+			}
+			defaultResolution.ConflictResolutionType = jobspb.LogicalReplicationDetails_DefaultConflictResolution_UDF
+			defaultResolution.FunctionId = descID
+		}
+
+		r.defaultFunction = defaultResolution
+	}
+	if options.UserFunctions != nil {
+		r.userFunctions = make(map[string]int32)
+		for tb, fnc := range options.UserFunctions {
+			objName, err := tb.ToUnresolvedObjectName(tree.NoAnnotation)
+			if err != nil {
+				return nil, err
+			}
+
+			urn := tree.MakeUnresolvedName(fnc.String())
+			descID, err := lookupFunctionID(ctx, p, urn)
+			if err != nil {
+				return nil, err
+			}
+			r.userFunctions[objName.String()] = descID
+		}
+	}
+	return r, nil
+}
+
+func lookupFunctionID(
+	ctx context.Context, p sql.PlanHookState, u tree.UnresolvedName,
+) (int32, error) {
+	rf, err := p.ResolveFunction(ctx, tree.MakeUnresolvedFunctionName(&u), &p.SessionData().SearchPath)
+	if err != nil {
+		return 0, err
+	}
+	if len(rf.Overloads) > 1 {
+		return 0, errors.Newf("function '%s' has more than 1 overload", u.String())
+	}
+	fnOID := rf.Overloads[0].Oid
+	var descID int32
+	if descID := typedesc.UserDefinedTypeOIDToID(fnOID); descID == 0 {
+		return 0, errors.Newf("function '%s' is not a user defined type", u.String())
+	}
+	return descID, nil
+}
+
+func (r *resolvedLogicalReplicationOptions) GetCursor() (hlc.Timestamp, bool) {
+	if r == nil || r.cursor == nil {
+		return hlc.Timestamp{}, false
+	}
+	return *r.cursor, true
+}
+
+func (r *resolvedLogicalReplicationOptions) GetMode() (string, bool) {
+	if r == nil || r.mode == nil {
+		return "", false
+	}
+	return *r.mode, true
+}
+
+func (r *resolvedLogicalReplicationOptions) GetDefaultFunction() (
+	*jobspb.LogicalReplicationDetails_DefaultConflictResolution,
+	bool,
+) {
+	if r == nil || r.defaultFunction == nil {
+		return &jobspb.LogicalReplicationDetails_DefaultConflictResolution{}, false
+	}
+	return r.defaultFunction, true
+}
+
+func (r *resolvedLogicalReplicationOptions) GetUserFunctions() (map[string]int32, bool) {
+	if r == nil || r.userFunctions == nil {
+		return map[string]int32{}, false
+	}
+	return r.userFunctions, true
 }
