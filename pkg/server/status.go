@@ -1367,6 +1367,8 @@ func (s *statusServer) LogFile(
 			}
 			if errors.Is(err, log.ErrMalformedLogEntry) {
 				resp.ParseErrors = append(resp.ParseErrors, err.Error())
+				//Append log generated from malformed line.
+				resp.Entries = append(resp.Entries, entry)
 				// Proceed decoding next entry, as we want to retrieve as much logs
 				// as possible.
 				continue
