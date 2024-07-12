@@ -24,6 +24,29 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
+      title="Age of Applied Row Updates"
+      isKvGraph={false}
+      tenantSource={tenantSource}
+      tooltip={"The difference in row update commit times between the source cluster and the destination cluster"}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="latency">
+        <Metric
+          name="cr.node.logical_replication.commit_latency-p50"
+          title={"p50"}
+          aggregateMax
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.logical_replication.commit_latency-p99"
+          title={"p99"}
+          aggregateMax
+          downsampleMax
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Age of Oldest Row Pending Replication"
       sources={storeSources}
       tenantSource={tenantSource}
@@ -49,29 +72,6 @@ export default function (props: GraphDashboardProps) {
                   : d,
               )
           }
-        />
-      </Axis>
-    </LineGraph>,
-    
-    <LineGraph
-      title="Age of Applied Row Updates"
-      isKvGraph={false}
-      tenantSource={tenantSource}
-      tooltip={"The difference in row update commit times between the source cluster and the destination cluster"}
-      showMetricsInTooltip={true}
-    >
-      <Axis units={AxisUnits.Duration} label="latency">
-        <Metric
-          name="cr.node.logical_replication.commit_latency-p50"
-          title={"p50"}
-          aggregateMax
-          downsampleMax
-        />
-        <Metric
-          name="cr.node.logical_replication.commit_latency-p99"
-          title={"p99"}
-          aggregateMax
-          downsampleMax
         />
       </Axis>
     </LineGraph>,
