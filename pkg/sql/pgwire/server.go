@@ -883,8 +883,7 @@ func (s *Server) ServeConn(
 }
 
 func (s *Server) lookup(ctx context.Context, ip net.IP) destinationMetrics {
-	// TODO(baptist): Look up the correct cidr block.
-	destination := ""
+	destination := s.execCfg.CidrLookup.LookupIP(ip)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ret, ok := s.mu.destinations[destination]; ok {
