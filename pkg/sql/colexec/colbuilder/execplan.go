@@ -698,7 +698,6 @@ func makeNewHashAggregatorArgs(
 		ctx, flowCtx, opName, args.Spec.ProcessorID, 5, /* numAccounts */
 	)
 	newAggArgs.Allocator = colmem.NewLimitedAllocator(ctx, hashAggregatorMemAccount, accounts[0], factory)
-	newAggArgs.MemAccount = hashAggregatorMemAccount
 	return &colexecagg.NewHashAggregatorArgs{
 			NewAggregatorArgs:        newAggArgs,
 			HashTableAllocator:       colmem.NewLimitedAllocator(ctx, hashTableMemAccount, accounts[1], factory),
@@ -998,7 +997,6 @@ func NewColOperator(
 					newAggArgs.Allocator = colmem.NewAllocator(
 						ctx, hashAggregatorUnlimitedMemAccount, factory,
 					)
-					newAggArgs.MemAccount = hashAggregatorUnlimitedMemAccount
 					evalCtx.SingleDatumAggMemAccount = hashAggregatorUnlimitedMemAccount
 					newHashAggArgs := &colexecagg.NewHashAggregatorArgs{
 						NewAggregatorArgs:        newAggArgs,
@@ -1042,7 +1040,6 @@ func NewColOperator(
 							// in-memory hash aggregator fit under the limit, so
 							// we use an unlimited allocator.
 							newAggArgs.Allocator = colmem.NewAllocator(ctx, ehaMemAccount, factory)
-							newAggArgs.MemAccount = ehaMemAccount
 							newAggArgs.Input = input
 							eha, toClose := colexecdisk.NewExternalHashAggregator(
 								ctx,
@@ -1070,7 +1067,6 @@ func NewColOperator(
 			} else {
 				evalCtx.SingleDatumAggMemAccount = getStreamingMemAccount(args, flowCtx)
 				newAggArgs.Allocator = getStreamingAllocator(ctx, args, flowCtx)
-				newAggArgs.MemAccount = getStreamingMemAccount(args, flowCtx)
 				result.Root = colexec.NewOrderedAggregator(ctx, newAggArgs)
 				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 			}
@@ -1382,7 +1378,6 @@ func NewColOperator(
 					// partitions to process using the in-memory hash aggregator
 					// fit under the limit, so we use an unlimited allocator.
 					newAggArgs.Allocator = colmem.NewAllocator(ctx, ehaMemAccount, factory)
-					newAggArgs.MemAccount = ehaMemAccount
 					newAggArgs.Input = aggInput
 					eha, toClose := colexecdisk.NewExternalHashAggregator(
 						ctx,
