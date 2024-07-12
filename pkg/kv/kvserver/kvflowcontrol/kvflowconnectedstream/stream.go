@@ -1050,8 +1050,8 @@ func (rc *RangeControllerImpl) HandleRaftEvent(ctx context.Context, e RaftEvent)
 			// Leader replica.
 			if n := len(entries); n > 0 && entries[n-1].Index+1 != info.Next {
 				// Leader is operating in push mode, so Next should have advanced.
-				panic(fmt.Sprintf("last entry index %d + 1 != %d Next at leader [info=%v %v]",
-					entries[n-1].Index, info.Next, info, rs))
+				log.Warning(ctx, errors.AssertionFailedf("last entry index %d + 1 != %d Next at leader [info=%v %v]",
+					entries[n-1].Index, info.Next, info, rs).Error())
 			}
 		}
 		rs.handleReadyState(ctx, info, nextRaftIndex)
@@ -1134,7 +1134,7 @@ func testingEncodeRaftFlowControlState(
 
 	data, err := raftlog.EncodeCommand(ctx, cmd, idKey, admissionMeta, usesFlowControl)
 	if err != nil {
-		panic(err)
+		log.Fatal(ctx, err.Error())
 	}
 
 	entry := raftpb.Entry{
@@ -1144,10 +1144,10 @@ func testingEncodeRaftFlowControlState(
 	return entry
 }
 
-func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
+func getFlowControlState(ctx context.Context, entry raftpb.Entry) entryFlowControlState {
 	typ, priBits, err := raftlog.EncodingOf(entry)
 	if err != nil {
-		panic(errors.AssertionFailedf("unable to determine raft command encoding: %v", err))
+		log.Fatal(ctx, err.Error())
 	}
 
 	entryFCState := entryFlowControlState{
@@ -1158,18 +1158,18 @@ func getFlowControlState(entry raftpb.Entry) entryFlowControlState {
 	if typ.UsesAdmissionControl() {
 		if typ != raftlog.EntryEncodingStandardWithRaftPriority &&
 			typ != raftlog.EntryEncodingSideloadedWithRaftPriority {
-			panic("expected a RACv2 encoding")
+			log.Fatalf(ctx, errors.AssertionFailedf("expected a RACv2 encoding").Error())
 		}
 		// REMINDER: this decoding is for a costly assertion only for the prototype and for
 		// CrdbTestBuild.
 		meta, err := raftlog.DecodeRaftAdmissionMeta(entry.Data)
 		if err != nil {
-			panic(errors.AssertionFailedf("unable to decode raft command admission data: %v", err))
+			log.Fatalf(ctx, errors.AssertionFailedf(
+				"unable to decode raft command admission data: %v", err).Error())
 		}
 		if kvflowcontrolpb.RaftPriority(meta.AdmissionPriority) != priBits {
-			panic(
-				errors.AssertionFailedf("inconsistent priorities: pri bits=%v admission pri=%v",
-					priBits, kvflowcontrolpb.RaftPriority(meta.AdmissionPriority)))
+			log.Fatalf(ctx, errors.AssertionFailedf("inconsistent priorities: pri bits=%v admission pri=%v",
+				priBits, kvflowcontrolpb.RaftPriority(meta.AdmissionPriority)).Error())
 		}
 		entryFCState.originalPri = kvflowcontrolpb.RaftPriority(meta.AdmissionPriority)
 		entryFCState.tokens = kvflowcontrol.Tokens(len(entry.Data))
@@ -1213,6 +1213,10 @@ func (rc *RangeControllerImpl) SetLeaseholder(ctx context.Context, replica roach
 	if replica == rc.leaseholder {
 		return
 	}
+	log.VInfof(ctx, 1, "leaseholder change: old=%v [info=%v] new=%v [info=%v]",
+		rc.leaseholder, rc.opts.RaftInterface.FollowerState(rc.leaseholder),
+		replica, rc.opts.RaftInterface.FollowerState(replica))
+
 	rc.leaseholder = replica
 	rc.updateVoterSets()
 	rs, ok := rc.replicaMap[replica]
@@ -1293,8 +1297,9 @@ func (rs *replicaState) createReplicaSendStream(
 	// leader or follower.
 	indexToSend := min(infoNext, nextRaftIndex)
 	if rs.desc.ReplicaID == rs.parent.opts.LocalReplicaID && indexToSend != nextRaftIndex {
-		panic(fmt.Sprintf("leader should not have send-queue info.Next %d indexToSend %d nextRaftIndex %d",
-			infoNext, indexToSend, nextRaftIndex))
+		log.Fatalf(ctx, errors.AssertionFailedf(
+			"leader should not have send-queue info.Next %d indexToSend %d nextRaftIndex %d",
+			infoNext, indexToSend, nextRaftIndex).Error())
 	}
 	rss := newReplicaSendStream(ctx, rs, replicaSendStreamInitState{
 		indexToSend:   indexToSend,
@@ -1381,7 +1386,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []raftpb
 		// MsgStorageAppend that is not mediated here, but we do need to account
 		// for tokens.
 		for i := range entries {
-			entryFCState := getFlowControlState(entries[i])
+			entryFCState := getFlowControlState(ctx, entries[i])
 			wc := kvflowcontrolpb.WorkClassFromRaftPriority(entryFCState.originalPri)
 			log.VInfof(ctx, 1, "leader handle_ready_entries(%v): entryFCState=%v info=%v",
 				rs.replicaSendStream.stringLocked(), entryFCState, rs.parent.opts.RaftInterface.FollowerState(r))
@@ -1403,7 +1408,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []raftpb
 		to := entries[0].Index
 		toIsFinalized := false
 		for i := range entries {
-			entryFCState := getFlowControlState(entries[i])
+			entryFCState := getFlowControlState(ctx, entries[i])
 			log.VInfof(ctx, 1, "follower handle_ready_entries(%v): entryFCState=%v",
 				rs.replicaSendStream.stringLocked(), entryFCState)
 			if toIsFinalized {
@@ -1454,17 +1459,19 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []raftpb
 			// TODO: use configuration of a limit on max inflight entries.
 			msg, err := rc.opts.RaftInterface.MakeMsgApp(r, from, to, math.MaxInt64)
 			if err != nil {
-				panic("in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated")
+				log.Fatal(ctx, errors.AssertionFailedf(
+					"in Ready.Entries, but unable to create MsgApp -- couldn't have been truncated").Error())
 			}
 			// Check that the sender and receiver replica IDs are correct, if not
 			// crash.
 			if roachpb.ReplicaID(msg.To) != r {
-				panic(fmt.Sprintf("created msg with incorrect recepient replica id expected %v got %v",
-					r, msg.To))
+				log.Fatal(ctx, errors.AssertionFailedf(
+					"created msg with incorrect recepient replica id expected %v got %v",
+					r, msg.To).Error())
 			}
 			if roachpb.ReplicaID(msg.From) != rc.opts.LocalReplicaID {
-				panic(fmt.Sprintf("created msg with incorrect sender replica id expected %v got %v",
-					rc.opts.LocalReplicaID, msg.From))
+				log.Fatalf(ctx, errors.AssertionFailedf("created msg with incorrect sender replica id expected %v got %v",
+					rc.opts.LocalReplicaID, msg.From).Error())
 			}
 
 			log.VInfof(ctx, 1,
@@ -1479,7 +1486,7 @@ func (rs *replicaState) handleReadyEntries(ctx context.Context, entries []raftpb
 	} else {
 		// Not in StateReplicate, or have an existing send-queue. Need to queue.
 		for i := range entries {
-			entryFCState := getFlowControlState(entries[i])
+			entryFCState := getFlowControlState(ctx, entries[i])
 			rs.replicaSendStream.advanceNextRaftIndexAndQueuedLocked(ctx, entryFCState)
 		}
 	}
@@ -1678,22 +1685,25 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndSentLocked(
 ) {
 	rss.mu.AssertHeld()
 	if rss.connectedState != replicate {
-		panic(fmt.Sprintf("connected_state=%v != replicate [info=%v send_stream=%v]",
+		log.Fatalf(ctx, errors.AssertionFailedf(
+			"connected_state=%v != replicate [info=%v send_stream=%v]",
 			rss.connectedState,
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-			rss.stringLocked()))
+			rss.stringLocked()).Error())
 	}
 	if state.index != rss.sendQueue.indexToSend {
-		panic(fmt.Sprintf("entry_index=%v != index_to_send=%v [entry=%v info=%v send_stream=%v]",
+		log.Fatalf(ctx, errors.AssertionFailedf(
+			"entry_index=%v != index_to_send=%v [entry=%v info=%v send_stream=%v]",
 			state.index, rss.sendQueue.indexToSend, state,
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-			rss.stringLocked()))
+			rss.stringLocked()).Error())
 	}
 	if state.index != rss.sendQueue.nextRaftIndex {
-		panic(fmt.Sprintf("entry_index=%v != next_raft_index=%v [entry=%v info=%v send_stream=%v]",
+		log.Fatalf(ctx, errors.AssertionFailedf(
+			"entry_index=%v != next_raft_index=%v [entry=%v info=%v send_stream=%v]",
 			state.index, rss.sendQueue.nextRaftIndex, state,
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-			rss.stringLocked()))
+			rss.stringLocked()).Error())
 	}
 	rss.sendQueue.indexToSend++
 	rss.sendQueue.nextRaftIndex++
@@ -1785,7 +1795,7 @@ func (rss *replicaSendStream) scheduledLocked(ctx context.Context) (scheduleAgai
 		int64(bytesToSend))
 	if err != nil {
 		if !errors.Is(err, raft.ErrCompacted) {
-			panic(err)
+			log.Fatal(ctx, err.Error())
 		}
 		rss.changeToStateSnapshotLocked(ctx)
 		return
@@ -1830,7 +1840,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 			// this before.
 			inheritedPri = rss.queuePriorityLocked()
 			if kvflowcontrolpb.WorkClassFromRaftPriority(inheritedPri) == admissionpb.ElasticWorkClass {
-				panic("inherited elastic work-class from regular work-class")
+				log.Fatal(ctx, errors.AssertionFailedf("inherited elastic work-class from regular work-class").Error())
 			}
 			remainingTokens[admissionpb.RegularWorkClass] = rss.sendQueue.deductedForScheduler.tokens
 		} else {
@@ -1843,13 +1853,14 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 	var fcStates []entryFlowControlState
 	for _, entry := range msg.Entries {
 		if rss.sendQueue.indexToSend != entry.Index {
-			panic(fmt.Sprintf("entry_index=%v != index_to_send=%v [entry=%v info=%v send_stream=%v]",
+			log.Fatalf(ctx, errors.AssertionFailedf(
+				"entry_index=%v != index_to_send=%v [entry=%v info=%v send_stream=%v]",
 				entry.Index, rss.sendQueue.indexToSend, entry,
 				rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-				rss.stringLocked()))
+				rss.stringLocked()).Error())
 		}
 		rss.sendQueue.indexToSend++
-		entryFCState := getFlowControlState(entry)
+		entryFCState := getFlowControlState(ctx, entry)
 		if !entryFCState.usesFlowControl {
 			continue
 		}
@@ -1910,11 +1921,11 @@ func (rss *replicaSendStream) advanceNextRaftIndexAndQueuedLocked(
 ) {
 	rss.mu.AssertHeld()
 	if entry.index != rss.sendQueue.nextRaftIndex {
-		panic(fmt.Sprintf(
+		log.Fatalf(ctx, errors.AssertionFailedf(
 			"entry.index=%v != next_raft_index=%v [entry=%v info=%v send_stream=%v]",
 			entry.index, rss.sendQueue.nextRaftIndex, entry,
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-			rss.stringLocked()))
+			rss.stringLocked()).Error())
 	}
 	wasEmpty := rss.isEmptySendQueueLocked()
 	// TODO: if wasEmpty, we may need to force-flush something. That decision needs to be
@@ -2125,12 +2136,14 @@ func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(
 
 	if rss.parent.parent.opts.LocalReplicaID == rss.parent.desc.ReplicaID {
 		if rss.connectedState != replicate {
-			panic(fmt.Sprintf(
-				"leader should always be in state replicate [send_stream=%v]", rss.stringLocked()))
+			log.Fatalf(ctx, errors.AssertionFailedf(
+				"leader should always be in state replicate [send_stream=%v]",
+				rss.stringLocked()).Error())
 		}
 		if info.Match >= rss.sendQueue.indexToSend {
-			panic(fmt.Sprintf(
-				"leader unexpectedly advanced Match [info=%v send_stream=%v]", info, rss.stringLocked()))
+			log.Fatalf(ctx, errors.AssertionFailedf(
+				"leader unexpectedly advanced Match [info=%v send_stream=%v]",
+				info, rss.stringLocked()).Error())
 		}
 		// info.Next can have advanced past rss.sendQueue.indexToSend since
 		// leader operates in push mode for MsgStorageAppend.
@@ -2143,8 +2156,9 @@ func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(
 			// MsgAppResp. Next cannot have moved past Match, since Next used
 			// to be equal to indexToSend.
 			if info.Next != info.Match+1 {
-				panic(fmt.Sprintf("next=%d != match+1=%d [info=%v send_stream=%v]",
-					info.Next, info.Match+1, info, rss.stringLocked()))
+				log.Fatalf(ctx, errors.AssertionFailedf(
+					"next=%d != match+1=%d [info=%v send_stream=%v]",
+					info.Next, info.Match+1, info, rss.stringLocked()).Error())
 			}
 			rss.makeConsistentWhenUnexpectedPopLocked(ctx, info.Next)
 		} else if info.Next == rss.sendQueue.indexToSend {
@@ -2154,31 +2168,35 @@ func (rss *replicaSendStream) makeConsistentInStateReplicateLocked(
 			// already covered the case where Next moves ahead, along with
 			// Match earlier.
 
-			panic(fmt.Sprintf("next=%d > index_to_send=%d [info=%v send_stream=%v]",
-				info.Next, rss.sendQueue.indexToSend, info, rss.stringLocked()))
+			log.Fatalf(ctx, errors.AssertionFailedf(
+				"next=%d > index_to_send=%d [info=%v send_stream=%v]",
+				info.Next, rss.sendQueue.indexToSend, info, rss.stringLocked()).Error())
 		} else {
 			// info.Next < rss.sendQueue.indexToSend.
 			//
 			// Must have transitioned to StateProbe and back, and we did not
 			// observe it.
 			if info.Next != info.Match+1 {
-				panic(fmt.Sprintf("next=%d != match+1=%d [info=%v send_stream=%v]",
-					info.Next, info.Match+1, info, rss.stringLocked()))
+				log.Fatalf(ctx, errors.AssertionFailedf(
+					"next=%d != match+1=%d [info=%v send_stream=%v]",
+					info.Next, info.Match+1, info, rss.stringLocked()).Error())
 			}
 			rss.makeConsistentWhenProbeToReplicateLocked(ctx, info.Next)
 		}
 	case probeRecentlyReplicate:
 		// Returned from StateProbe => StateReplicate.
 		if info.Next != info.Match+1 {
-			panic(fmt.Sprintf("next=%d != match+1=%d [info=%v send_stream=%v]",
-				info.Next, info.Match+1, info, rss.stringLocked()))
+			log.Fatal(ctx, errors.AssertionFailedf(
+				"next=%d != match+1=%d [info=%v send_stream=%v]",
+				info.Next, info.Match+1, info, rss.stringLocked()).Error())
 		}
 		rss.makeConsistentWhenProbeToReplicateLocked(ctx, info.Next)
 	case snapshot:
 		// Returned from StateSnapshot => StateReplicate
 		if info.Next != info.Match+1 {
-			panic(fmt.Sprintf("next=%d != match+1=%d [info=%v send_stream=%v]",
-				info.Next, info.Match+1, info, rss.stringLocked()))
+			log.Fatalf(ctx, errors.AssertionFailedf(
+				"next=%d != match+1=%d [info=%v send_stream=%v]",
+				info.Next, info.Match+1, info, rss.stringLocked()).Error())
 		}
 		rss.makeConsistentWhenSnapshotToReplicateLocked(ctx, info.Next)
 	}
@@ -2206,10 +2224,11 @@ func (rss *replicaSendStream) makeConsistentWhenUnexpectedPopLocked(
 	// can't happen for any index >= nextRaftIndexInitial since these were proposed after
 	// this replicaSendStream was created.
 	if indexToSend > rss.nextRaftIndexInitial {
-		panic(fmt.Sprintf("(arg)index_to_send=%d > next_raft_index_initial=%d [info=%v send_stream=%v]",
+		log.Fatalf(ctx, errors.AssertionFailedf(
+			"(arg)index_to_send=%d > next_raft_index_initial=%d [info=%v send_stream=%v]",
 			indexToSend, rss.nextRaftIndexInitial,
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-			rss.stringLocked()))
+			rss.stringLocked()).Error())
 	}
 	// INVARIANT: indexToSend <= rss.nextRaftIndexInitial. Don't need to
 	// change any stats.
@@ -2245,17 +2264,19 @@ func (rss *replicaSendStream) makeConsistentWhenProbeToReplicateLocked(
 		return
 	}
 	if indexToSend > rss.sendQueue.indexToSend {
-		panic(fmt.Sprintf("(arg)index_to_send=%d > next_raft_index_initial=%d [info=%v send_stream=%v]",
+		log.Fatalf(ctx, errors.AssertionFailedf(
+			"(arg)index_to_send=%d > next_raft_index_initial=%d [info=%v send_stream=%v]",
 			indexToSend, rss.nextRaftIndexInitial,
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-			rss.stringLocked()))
+			rss.stringLocked()).Error())
 	}
 	// INVARIANT: indexToSend < rss.sendQueue.indexToSend.
 
 	// A regression in indexToSend necessarily means a MsgApp constructed by
 	// this replicaSendStream was dropped.
 	if indexToSend < rss.indexToSendInitial {
-		panic("did not construct MsgApp in this replicaSendStream")
+		log.Fatalf(ctx, errors.AssertionFailedf(
+			"did not construct MsgApp in this replicaSendStream").Error())
 	}
 	// The messages in [indexToSend, rss.sendQueue.indexToSend) must be in
 	// the tracker. They can't have been removed since Match < indexToSend.
@@ -2281,21 +2302,24 @@ func (rss *replicaSendStream) makeConsistentWhenSnapshotToReplicateLocked(
 ) {
 	rss.mu.AssertHeld()
 	if rss.sendQueue.nextRaftIndex < indexToSend {
-		panic(fmt.Sprintf("next_raft_index=%d < (arg)index_to_send=%d [info=%v send_stream=%v]",
+		log.Fatalf(ctx, errors.AssertionFailedf(
+			"next_raft_index=%d < (arg)index_to_send=%d [info=%v send_stream=%v]",
 			rss.sendQueue.nextRaftIndex, indexToSend,
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-			rss.stringLocked()))
+			rss.stringLocked()).Error())
 	}
 	if rss.sendQueue.indexToSend > indexToSend {
-		panic(fmt.Sprintf("index_to_send=%d > (arg)index_to_send=%d [info=%v send_stream=%v]",
+		log.Fatalf(ctx, errors.AssertionFailedf(
+			"index_to_send=%d > (arg)index_to_send=%d [info=%v send_stream=%v]",
 			rss.sendQueue.indexToSend, indexToSend,
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-			rss.stringLocked()))
+			rss.stringLocked()).Error())
 	}
 	if rss.connectedState != snapshot {
-		panic(fmt.Sprintf("connected_state=%v != snapshot [info=%v send_stream=%v]",
+		log.Fatalf(ctx, errors.AssertionFailedf(
+			"connected_state=%v != snapshot [info=%v send_stream=%v]",
 			rss.connectedState, rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-			rss.stringLocked()))
+			rss.stringLocked()).Error())
 	}
 	rss.connectedState = replicate
 	// INVARIANT: rss.sendQueue.indexToSend <= indexToSend <=

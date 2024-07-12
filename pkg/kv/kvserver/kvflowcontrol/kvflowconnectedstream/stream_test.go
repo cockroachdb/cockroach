@@ -433,7 +433,7 @@ func (t *testingRaft) prop(ctx context.Context, pri kvflowcontrolpb.RaftPriority
 	entry := testingEncodeRaftFlowControlState(
 		ctx, index, true /* usesFlowControl */, pri, size, t.replicas[t.localReplicaID].desc.NodeID)
 	t.entries = append(t.entries, entry)
-	log.Infof(context.Background(), "prop %v", getFlowControlState(entry))
+	log.Infof(ctx, "prop %v", getFlowControlState(ctx, entry))
 	t.controller.HandleRaftEvent(ctx, t.ready())
 
 	localReplica = t.replicas[t.localReplicaID]

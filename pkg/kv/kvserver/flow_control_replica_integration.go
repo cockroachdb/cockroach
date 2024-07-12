@@ -655,6 +655,11 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaseholder(
 // RangeController implements kvadmission.RangeControllerProvider. This is
 // needed for eval.
 func (rr2 *replicaRACv2Integration) RangeController() kvflowconnectedstream.RangeController {
+	if rr2 == nil {
+		// TODO(racV2-integration): This is a bug. Hit this running kv0 @ 1k rate
+		// on a 3 node cluster.
+		return nil
+	}
 	rr2.mu.Lock()
 	defer rr2.mu.Unlock()
 

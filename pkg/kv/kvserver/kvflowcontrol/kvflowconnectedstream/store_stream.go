@@ -280,9 +280,9 @@ func (s *storeStreamSendTokensWatcher) UpdateHandle(
 	}
 
 	// Update the work class and move the handle to the new work class watcher.
-	handle.wc = wc
 	watcher := s.mu.watchers[handle.stc]
 	watcher.removeHandleLocked(*handle)
+	handle.wc = wc
 	watcher.tracked[handle.wc] = append(watcher.tracked[handle.wc], handleID)
 
 	// This is the first token for the work class, counter pair, launch a new

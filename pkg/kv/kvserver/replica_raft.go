@@ -866,6 +866,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// this bytesAccount.
 			syncRd := raftGroup.Ready()
 			if kvflowconnectedstream.UseRACv2 {
+				if n := len(syncRd.Entries); n > 0 && leaderID == r.replicaID {
+					// TODO(racv2): Handle Next advancing between here and
+					// HandleRaftEvent on the range controller and remove this assertion.
+					info := raftGroup.GetProgress(raftpb.PeerID(leaderID))
+					if syncRd.Entries[n-1].Index+1 != info.Next {
+						// Leader is operating in push mode, so Next should have advanced.
+						log.Fatal(ctx, errors.AssertionFailedf("last entry index %d + 1 != %d Next at leader [match=%d]",
+							syncRd.Entries[n-1].Index, info.Next, info.Match).Error())
+					}
+				}
 				readyEntries = syncRd.Entries
 			}
 			// We apply committed entries during this handleRaftReady, so it is ok to
