@@ -2953,12 +2953,11 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		)
 	}
 
-	status := r.RaftStatus()
-	if status == nil {
-		// This code path is sometimes hit during scatter for replicas that
-		// haven't woken up yet.
-		retErr = benignerror.New(errors.Wrap(errMarkSnapshotError, "raft status not initialized"))
-		return
+	status := r.RaftBasicStatus()
+	if status.Empty() {
+		// This code path is sometimes hit during scatter for replicas that haven't
+		// woken up yet.
+		return benignerror.New(errors.Wrap(errMarkSnapshotError, "raft status not initialized"))
 	}
 
 	snapUUID := uuid.MakeV4()
@@ -3113,12 +3112,12 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// that is also needs a snapshot, then any snapshot it sends will be useless.
 	r.mu.RLock()
 	replIdx := r.mu.state.RaftAppliedIndex + 1
-	status := r.raftStatusRLocked()
+	status := r.raftBasicStatusRLocked()
 	r.mu.RUnlock()
 
-	if status == nil {
-		// This code path is sometimes hit during scatter for replicas that
-		// haven't woken up yet.
+	if status.Empty() {
+		// This code path is sometimes hit during scatter for replicas that haven't
+		// woken up yet.
 		return errors.Errorf("raft status not initialized")
 	}
 	replTerm := kvpb.RaftTerm(status.Term)
