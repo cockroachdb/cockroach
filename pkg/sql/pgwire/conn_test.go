@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -693,13 +694,19 @@ func newTestServer() *Server {
 	sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval)
 	st := cluster.MakeTestingClusterSettings()
-	return &Server{
+	s := &Server{
 		tenantMetrics: metrics,
+		destinationMetrics: destinationAggMetrics{
+			BytesInCount:  aggmetric.NewCounter(MetaBytesIn, "remote"),
+			BytesOutCount: aggmetric.NewCounter(MetaBytesOut, "remote"),
+		},
 		execCfg: &sql.ExecutorConfig{
 			Settings:   st,
 			CidrLookup: cidr.NewLookup(&st.SV),
 		},
 	}
+	s.mu.destinations = make(map[string]*destinationMetrics)
+	return s
 }
 
 // waitForClientConn blocks until a client connects and performs the pgwire
