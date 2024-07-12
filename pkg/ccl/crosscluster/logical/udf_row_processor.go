@@ -72,7 +72,7 @@ WITH data (%s)
 AS (VALUES (%s))
 SELECT (res).decision, (res).row FROM
 (
-	SELECT %s('%s', data, existing, (%s)) AS res
+	SELECT %s('%s', data, existing, (%s), existing.crdb_internal_mvcc_timestamp) AS res
 	FROM data LEFT JOIN [%d as existing]
 	%s
 )`
