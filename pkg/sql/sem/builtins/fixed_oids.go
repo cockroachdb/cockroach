@@ -2601,6 +2601,7 @@ var builtinOidsArray = []string{
 	2633: `inner_product(v1: vector, v2: vector) -> float`,
 	2634: `vector_dims(vector: vector) -> int`,
 	2635: `vector_norm(vector: vector) -> float`,
+	2636: `crdb_internal.log(msg: string) -> void`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
