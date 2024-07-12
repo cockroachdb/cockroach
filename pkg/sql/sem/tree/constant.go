@@ -631,6 +631,9 @@ func (expr *StrVal) ResolveAsType(
 
 	// Typing a string literal constant into some value type.
 	switch typ.Family() {
+	// If we don't care about output type, just pick the low effort conversion.
+	case types.AnyFamily:
+		fallthrough
 	case types.StringFamily:
 		if typ.Oid() == oid.T_name {
 			expr.resString = DString(expr.s)
