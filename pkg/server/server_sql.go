@@ -1056,6 +1056,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
+		CidrLookup:                 cfg.BaseConfig.CidrLookup,
 	}
 
 	if codec.ForSystemTenant() {
