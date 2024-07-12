@@ -304,8 +304,8 @@ func (p *deprecatedPubsubSink) Topics() []string {
 }
 
 func (p *deprecatedGcpPubsubClient) cacheTopicLocked(name string, topic *pubsub.Topic) {
-	//TODO (zinger): Investigate whether changing topics to a sync.Map would be
-	//faster here, I think it would.
+	// TODO(zinger): Investigate whether changing topics to a syncutil.Map would
+	// be faster here, I think it would.
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.mu.topics[name] = topic

@@ -671,8 +671,8 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 		// we know the rangefeed is started, all ranges are running.
 		expectFrontierAdvance()
 
-		// Pick some number of streams to close. Since sync.Map iteration order is non-deterministic,
-		// we'll pick few random streams.
+		// Pick some number of streams to close. Since syncutil.Map iteration order
+		// is non-deterministic, we'll pick few random streams.
 		initialClosed := numRestartStreams.Load()
 		numToCancel := 1 + rand.Int31n(3)
 		var numCancelled int32 = 0
