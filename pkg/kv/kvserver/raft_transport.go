@@ -460,7 +460,8 @@ func (t *RaftTransport) handleRaftRequest(
 		// keep the latest message from each replica).
 		t.racV2.piggybackedProcessor.ProcessAdmittedForRangeRACv2(req.AdmittedRACv2)
 	}
-	if req.ToReplica.StoreID == roachpb.StoreID(0) && len(req.AdmittedRaftLogEntries) > 0 {
+	if req.ToReplica.StoreID == roachpb.StoreID(0) &&
+		(len(req.AdmittedRaftLogEntries) > 0 || len(req.AdmittedRACv2) > 0) {
 		// The fallback token dispatch mechanism does not specify a destination
 		// replica, and as such, there's no handler for it. We don't want to
 		// return StoreNotFoundErrors in such cases.
