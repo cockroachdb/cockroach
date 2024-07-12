@@ -1388,6 +1388,7 @@ func makeTenantSQLServerArgs(
 		rangeDescIteratorFactory: tenantConnect,
 		tenantTimeSeriesServer:   sTS,
 		tenantCapabilitiesReader: sql.EmptySystemTenantOnly[tenantcapabilities.Reader](),
+		ipLookup:                 func(ip net.IP) string { return "" }, // not used by tenants
 	}, nil
 }
 

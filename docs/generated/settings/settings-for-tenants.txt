@@ -71,6 +71,8 @@ kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, t
 kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.enabled (alias: kv.transaction.write_pipelining_enabled)	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.max_batch_size (alias: kv.transaction.write_pipelining_max_batch_size)	integer	128	if non-zero, defines that maximum size batch that will be pipelined through Raft consensus	application
+metrics.cidr_mapping_transform	string		optional transform to apply to the JSON content	application
+metrics.cidr_mapping_url	string		url of a JSON file containing a list of CIDR blocks (file:// or http://)	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
 security.client_cert.subject_required.enabled	boolean	false	mandates a requirement for subject role to be set for db user	system-visible
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application

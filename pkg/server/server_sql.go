@@ -119,6 +119,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrademanager"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -415,6 +416,8 @@ type sqlServerArgs struct {
 	tenantTimeSeriesServer *ts.TenantServer
 
 	tenantCapabilitiesReader sql.SystemTenantOnly[tenantcapabilities.Reader]
+
+	ipLookup cidr.IpLookup
 }
 
 type monitorAndMetrics struct {
@@ -1055,6 +1058,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
+		IpLookup:                   cfg.ipLookup,
 	}
 
 	if codec.ForSystemTenant() {

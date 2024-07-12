@@ -693,6 +693,7 @@ func newTestServer() *Server {
 		tenantMetrics: metrics,
 		execCfg: &sql.ExecutorConfig{
 			Settings: cluster.MakeTestingClusterSettings(),
+			IpLookup: func(ip net.IP) string { return "" },
 		},
 	}
 }
