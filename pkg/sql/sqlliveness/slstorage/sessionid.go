@@ -67,18 +67,8 @@ func MakeSessionID(region []byte, id uuid.UUID) (sqlliveness.SessionID, error) {
 // not be mutated.
 func UnsafeDecodeSessionID(session sqlliveness.SessionID) (region, id []byte, err error) {
 	b := session.UnsafeBytes()
-	if len(b) == legacyLen {
-		return nil, nil, errors.Newf("unexpected legacy SessionID format")
-	}
-	if len(b) < minimumNonLegacyLen {
-		// The smallest valid v1 session id is a [version, 1, single_byte_region, uuid...],
-		// which is three bytes larger than a uuid.
-		return nil, nil, errors.New("session id is too short")
-	}
-
-	// Decode the version.
-	if b[0] != sessionIDVersion {
-		return nil, nil, errors.Newf("invalid session id version: %d", b[0])
+	if err = ValidateSessionID(sqlliveness.SessionID(b)); err != nil {
+		return nil, nil, err
 	}
 	regionLen := int(b[1])
 	rest := b[2:]
@@ -91,24 +81,30 @@ func UnsafeDecodeSessionID(session sqlliveness.SessionID) (region, id []byte, er
 	return rest[:regionLen], rest[regionLen:], nil
 }
 
-// SafeDecodeSessionID decodes the region and id from the SessionID.
-func SafeDecodeSessionID(session sqlliveness.SessionID) (region, id string, err error) {
+// ValidateSessionID validates that the SessionID has the correct format.
+func ValidateSessionID(session sqlliveness.SessionID) error {
 	if len(session) == legacyLen {
-		return "", "", errors.Newf("unexpected legacy SessionID format")
+		return errors.Newf("unexpected legacy SessionID format")
 	}
 	if len(session) < minimumNonLegacyLen {
 		// The smallest valid v1 session id is a [version, 1, single_byte_region, uuid...],
 		// which is three bytes larger than a uuid.
-		return "", "", errors.New("session id is too short")
+		return errors.New("session id is too short")
 	}
-
 	// Decode the version.
 	if session[0] != sessionIDVersion {
-		return "", "", errors.Newf("invalid session id version: %d", session[0])
+		return errors.Newf("invalid session id version: %d", session[0])
+	}
+	return nil
+}
+
+// SafeDecodeSessionID decodes the region and id from the SessionID.
+func SafeDecodeSessionID(session sqlliveness.SessionID) (region, id string, err error) {
+	if err = ValidateSessionID(session); err != nil {
+		return "", "", err
 	}
 	regionLen := int(session[1])
 	rest := session[2:]
-
 	// Decode and validate the length of the region.
 	if len(rest) != regionLen+uuid.Size {
 		return "", "", errors.Newf("session id with length %d is the wrong size to include a region with length %d", len(session), regionLen)
