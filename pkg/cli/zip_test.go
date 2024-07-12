@@ -435,6 +435,9 @@ func TestZipSpecialNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderShort(t)
+	skip.UnderRace(t)
+
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
