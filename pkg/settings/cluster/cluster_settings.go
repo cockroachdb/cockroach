@@ -12,7 +12,6 @@ package cluster
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,7 +53,7 @@ type Settings struct {
 
 	// Cache can be used for arbitrary caching, e.g. to cache decoded
 	// enterprises licenses for utilccl.CheckEnterpriseEnabled().
-	Cache sync.Map
+	Cache syncutil.Map[any, any]
 
 	// OverridesInformer can be nil.
 	OverridesInformer OverridesInformer
