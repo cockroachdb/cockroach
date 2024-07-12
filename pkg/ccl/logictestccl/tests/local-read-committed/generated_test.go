@@ -1948,6 +1948,13 @@ func TestReadCommittedLogic_sqllite(
 	runLogicTest(t, "sqllite")
 }
 
+func TestReadCommittedLogic_sqlliveness(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "sqlliveness")
+}
+
 func TestReadCommittedLogic_sqlsmith(
 	t *testing.T,
 ) {
