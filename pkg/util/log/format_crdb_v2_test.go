@@ -268,6 +268,7 @@ func TestCrdbV2Decode(t *testing.T) {
 							break
 						}
 						if errors.Is(err, ErrMalformedLogEntry) {
+							fmt.Fprintf(&out, "%# v\n", pretty.Formatter(e))
 							continue
 						}
 						td.Fatalf(t, "error while decoding: %v", err)

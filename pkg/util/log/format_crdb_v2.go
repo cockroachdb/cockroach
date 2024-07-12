@@ -499,6 +499,7 @@ type entryDecoderV2 struct {
 	reader          *bufio.Reader
 	nextFragment    entryDecoderV2Fragment
 	sensitiveEditor redactEditor
+	malformedLine   []byte
 }
 
 // Decode decodes the next log entry into the provided protobuf message.
@@ -509,7 +510,20 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 		}
 	}()
 	frag, err := d.peekNextFragment()
+
+	//Construct the log from unstructured line which was identified in
+	//log continuation.
+	if err == nil && len(frag) == 0 {
+		entry.Message = string(d.malformedLine)
+		d.popFragment()
+		return err
+	}
+
 	if err != nil {
+		if errors.Is(err, ErrMalformedLogEntry) {
+			//Construct log entry based on unstructured line.
+			entry.Message = string(d.malformedLine)
+		}
 		return err
 	}
 	d.popFragment()
@@ -525,6 +539,11 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 	for {
 		frag, err = d.peekNextFragment()
 		if err != nil || !frag.isContinuation() {
+			if err != nil && errors.Is(err, ErrMalformedLogEntry) {
+				//Treat unstructured log entry as empty fragment so that next
+				//peekNextFragment call would construct log based on it.
+				d.nextFragment = entryDecoderV2Fragment{}
+			}
 			// Ignore this error as it is relevant to the next line and we don't
 			// know if it is continuation line or not.
 			break
@@ -595,6 +614,11 @@ func (d *entryDecoderV2) peekNextFragment() (entryDecoderV2Fragment, error) {
 			if d.lines == 1 { // allow non-matching lines if we've never seen a line
 				continue
 			}
+			/*
+				It is a malformed log entry in the log. This might contain useful unstructured log information
+				which we need to return back as part of decode.
+			*/
+			d.malformedLine = nextLine
 			return nil, ErrMalformedLogEntry
 		}
 		d.nextFragment = m
