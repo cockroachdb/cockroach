@@ -2377,6 +2377,13 @@ func TestTenantLogic_udf_schema_change(
 	runLogicTest(t, "udf_schema_change")
 }
 
+func TestTenantLogic_udf_security(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_security")
+}
+
 func TestTenantLogic_udf_setof(
 	t *testing.T,
 ) {

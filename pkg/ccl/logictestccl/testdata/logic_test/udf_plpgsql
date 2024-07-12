@@ -2721,3 +2721,14 @@ CREATE FUNCTION f(y ANYELEMENT) RETURNS ANYELEMENT AS $$
 $$ LANGUAGE PLpgSQL;
 
 subtest end
+
+subtest security_definer
+
+statement error pgcode 0A000 unimplemented: attempted to use a PL/pgSQL statement that is not yet supported
+CREATE FUNCTION create_secret_role() RETURNS VOID SECURITY DEFINER AS $$
+    BEGIN
+        EXECUTE 'CREATE ROLE secret_role';
+    END;
+$$ LANGUAGE plpgsql;
+
+subtest end

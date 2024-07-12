@@ -831,6 +831,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	if desc.ReturnType.ReturnSet {
 		ret.Class = tree.GeneratorClass
 	}
+	ret.UsesSecurityDefiner = desc.Security == catpb.Function_DEFINER
 
 	return ret, nil
 }

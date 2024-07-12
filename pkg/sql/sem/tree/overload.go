@@ -295,6 +295,10 @@ type Overload struct {
 	// UDFContainsOnlySignature is false, then DEFAULT expressions are included
 	// into RoutineParams.
 	DefaultExprs Exprs
+
+	// UsesSecurityDefiner is true when privilege checks for function execution
+	// should be performed against a specific role rather than the invoking user.
+	UsesSecurityDefiner bool
 }
 
 // params implements the overloadImpl interface.

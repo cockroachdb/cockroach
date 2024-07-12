@@ -184,6 +184,11 @@ type Builder struct {
 	// subqueryNameIdx helps generate unique subquery names during star
 	// expansion.
 	subqueryNameIdx int
+
+	// routineOid helps identify the function being built. This is particularly
+	// useful when checking privileges against the creator of the routine,
+	// specified by creating a function with SECURITY DEFINER.
+	routineOid *oid.Oid
 }
 
 // New creates a new Builder structure initialized with the given
