@@ -42,15 +42,25 @@ query TTTTTB colnames,rowsort
 SHOW GRANTS ON TYPE schema_a.enum_b, enum_a, int4 FOR user1
 ----
 database_name  schema_name  type_name  grantee  privilege_type  is_grantable
+test           public       enum_a     public   USAGE           false
 test           public       enum_a     user1    USAGE           false
+test           schema_a     enum_b     public   USAGE           false
 test           schema_a     enum_b     user1    ALL             false
 
 query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR user1
 ----
 database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+test           public       NULL         schema       public   CREATE          false
+test           public       NULL         schema       public   USAGE           false
+test           public       _enum_a      type         public   USAGE           false
+test           public       _enum_a+b    type         public   USAGE           false
+test           public       enum_a       type         public   USAGE           false
 test           public       enum_a       type         user1    USAGE           false
+test           public       enum_a+b     type         public   USAGE           false
 test           public       enum_a+b     type         user1    USAGE           false
+test           schema_a     _enum_b      type         public   USAGE           false
+test           schema_a     enum_b       type         public   USAGE           false
 test           schema_a     enum_b       type         user1    ALL             false
 
 statement error type "non_existent" does not exist
@@ -71,10 +81,11 @@ other  public  typ  public  USAGE  false
 other  public  typ  root    ALL    true
 other  public  typ  user1   ALL    false
 
-query TTTTTB
+query TTTTTB rowsort
 SHOW GRANTS ON TYPE other.typ FOR user1
 ----
-other  public  typ  user1  ALL  false
+other  public  typ  public  USAGE  false
+other  public  typ  user1   ALL    false
 
 # Verify that owner and child of owner have is_grantable implicitly.
 
@@ -145,7 +156,23 @@ select description from [show jobs] where description LIKE '%type%'
 query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR roach
 ----
-database_name  schema_name  object_name   object_type  grantee  privilege_type  is_grantable
-test           public       custom_type1  type         roach    ALL             false
-test           public       custom_type2  type         roach    ALL             false
-test           public       custom_type3  type         roach    ALL             false
+database_name  schema_name  object_name          object_type  grantee  privilege_type  is_grantable
+test           public       NULL                 schema       public   CREATE          false
+test           public       NULL                 schema       public   USAGE           false
+test           public       _custom_type1        type         public   USAGE           false
+test           public       _custom_type2        type         public   USAGE           false
+test           public       _custom_type3        type         public   USAGE           false
+test           public       _enum_a              type         public   USAGE           false
+test           public       _enum_a+b            type         public   USAGE           false
+test           public       _owner_grant_option  type         public   USAGE           false
+test           public       custom_type1         type         public   USAGE           false
+test           public       custom_type1         type         roach    ALL             false
+test           public       custom_type2         type         public   USAGE           false
+test           public       custom_type2         type         roach    ALL             false
+test           public       custom_type3         type         public   USAGE           false
+test           public       custom_type3         type         roach    ALL             false
+test           public       enum_a               type         public   USAGE           false
+test           public       enum_a+b             type         public   USAGE           false
+test           public       owner_grant_option   type         public   USAGE           false
+test           schema_a     _enum_b              type         public   USAGE           false
+test           schema_a     enum_b               type         public   USAGE           false
