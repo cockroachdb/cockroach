@@ -157,6 +157,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
+        "//pkg/util/cidr",
         "//pkg/util/ctxgroup",
         "//pkg/util/duration",
         "//pkg/util/leaktest",
