@@ -420,17 +420,10 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			`unmarshalling resolved timestamp: %x`, raw)
 	}
 
-	advanced := false
 	for _, sp := range resolvedSpans.ResolvedSpans {
-		adv, err := rh.frontier.Forward(sp.Span, sp.Timestamp)
-		if err != nil {
+		if _, err := rh.frontier.Forward(sp.Span, sp.Timestamp); err != nil {
 			return err
 		}
-		advanced = advanced || adv
-	}
-
-	if !advanced {
-		return nil
 	}
 
 	updateFreq := jobCheckpointFrequency.Get(rh.settings)
