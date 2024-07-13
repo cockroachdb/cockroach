@@ -679,29 +679,6 @@ func wrapFilesystemMiddleware(opts *pebble.Options) (vfs.FS, io.Closer) {
 	return fs, closer
 }
 
-type pebbleLogger struct {
-	ctx   context.Context
-	depth int
-}
-
-var _ pebble.LoggerAndTracer = pebbleLogger{}
-
-func (l pebbleLogger) Infof(format string, args ...interface{}) {
-	log.Storage.InfofDepth(l.ctx, l.depth, format, args...)
-}
-
-func (l pebbleLogger) Fatalf(format string, args ...interface{}) {
-	log.Storage.FatalfDepth(l.ctx, l.depth, format, args...)
-}
-
-func (l pebbleLogger) Eventf(ctx context.Context, format string, args ...interface{}) {
-	log.Eventf(ctx, format, args...)
-}
-
-func (l pebbleLogger) IsTracingEnabled(ctx context.Context) bool {
-	return log.HasSpanOrEvent(ctx)
-}
-
 // PebbleConfig holds all configuration parameters and knobs used in setting up
 // a new Pebble instance.
 type PebbleConfig struct {
