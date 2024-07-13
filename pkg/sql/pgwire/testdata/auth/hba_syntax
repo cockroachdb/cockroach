@@ -20,7 +20,7 @@ host all all 0.0.0.0/0 invalid
 ERROR: unimplemented: unknown auth method "invalid" (SQLSTATE 0A000)
 HINT: You have attempted to use a feature that is not yet implemented.<STANDARD REFERRAL>
 --
-Supported methods: cert, cert-password, cert-scram-sha-256, password, reject, scram-sha-256, trust
+Supported methods: cert, cert-password, cert-scram-sha-256, ldap, password, reject, scram-sha-256, trust
 
 
 # CockroachDB does not (yet?) support per-db HBA rules.
