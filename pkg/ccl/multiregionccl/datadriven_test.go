@@ -47,7 +47,31 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TestMultiRegionDataDriven is a data-driven test to test various multi-region
+func TestMultiRegionDataDriven_global_tables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testMultiRegionDataDriven(t, "global_tables")
+}
+
+func TestMultiRegionDataDriven_regional_by_row(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testMultiRegionDataDriven(t, "regional_by_row")
+}
+
+func TestMultiRegionDataDriven_regional_by_table(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testMultiRegionDataDriven(t, "regional_by_table")
+}
+
+func TestMultiRegionDataDriven_secondary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testMultiRegionDataDriven(t, "secondary_region")
+}
+
+// testMultiRegionDataDriven is a data-driven test to test various multi-region
 // invariants at a high level. This is accomplished by allowing custom cluster
 // configurations when creating the test cluster and providing directives to
 // assert expectations in query traces.
@@ -112,10 +136,7 @@ import (
 //
 // "cleanup-cluster": destroys the cluster. Must be done before creating a new
 // cluster.
-func TestMultiRegionDataDriven(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
+func testMultiRegionDataDriven(t *testing.T, testPath string) {
 	// This test speeds up replication changes by proactively enqueuing replicas
 	// into various queues. This has the benefit of reducing the time taken after
 	// zone config changes, however the downside of added overhead. Disable the
@@ -124,7 +145,7 @@ func TestMultiRegionDataDriven(t *testing.T) {
 	skip.UnderRace(t, "flaky test")
 	skip.UnderDeadlock(t, "flaky test")
 	ctx := context.Background()
-	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t, testPath), func(t *testing.T, path string) {
 		ds := datadrivenTestState{}
 		defer ds.cleanup(ctx)
 		var mu syncutil.Mutex
