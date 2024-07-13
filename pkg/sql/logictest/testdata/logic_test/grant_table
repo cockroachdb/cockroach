@@ -805,6 +805,8 @@ test           pg_catalog   void            type         admin    ALL           
 test           pg_catalog   void            type         root     ALL             false
 test           public       NULL            schema       admin    ALL             true
 test           public       NULL            schema       root     ALL             true
+test           public       NULL            schema       public   CREATE          false
+test           public       NULL            schema       public   USAGE           false
 
 # With no database set, we show the grants everywhere
 statement ok
@@ -1420,6 +1422,8 @@ a              pg_catalog   vector[]                         type         root  
 a              pg_catalog   void                             type         admin    ALL             false
 a              pg_catalog   void                             type         root     ALL             false
 a              public       NULL                             schema       admin    ALL             true
+a              public       NULL                             schema       public   CREATE          false
+a              public       NULL                             schema       public   USAGE           false
 a              public       NULL                             schema       root     ALL             true
 defaultdb      NULL         NULL                             database     admin    ALL             true
 defaultdb      NULL         NULL                             database     root     ALL             true
@@ -1600,6 +1604,8 @@ defaultdb      pg_catalog   vector[]                         type         root  
 defaultdb      pg_catalog   void                             type         admin    ALL             false
 defaultdb      pg_catalog   void                             type         root     ALL             false
 defaultdb      public       NULL                             schema       admin    ALL             true
+defaultdb      public       NULL                             schema       public   CREATE          false
+defaultdb      public       NULL                             schema       public   USAGE           false
 defaultdb      public       NULL                             schema       root     ALL             true
 postgres       NULL         NULL                             database     admin    ALL             true
 postgres       NULL         NULL                             database     root     ALL             true
@@ -1780,6 +1786,8 @@ postgres       pg_catalog   vector[]                         type         root  
 postgres       pg_catalog   void                             type         admin    ALL             false
 postgres       pg_catalog   void                             type         root     ALL             false
 postgres       public       NULL                             schema       admin    ALL             true
+postgres       public       NULL                             schema       public   CREATE          false
+postgres       public       NULL                             schema       public   USAGE           false
 postgres       public       NULL                             schema       root     ALL             true
 system         NULL         NULL                             database     admin    CONNECT         true
 system         NULL         NULL                             database     root     CONNECT         true
@@ -1960,11 +1968,14 @@ system         pg_catalog   vector[]                         type         root  
 system         pg_catalog   void                             type         admin    ALL             false
 system         pg_catalog   void                             type         root     ALL             false
 system         public       NULL                             schema       admin    ALL             true
+system         public       NULL                             schema       public   CREATE          false
+system         public       NULL                             schema       public   USAGE           false
 system         public       NULL                             schema       root     ALL             true
 system         public       comments                         table        admin    DELETE          true
 system         public       comments                         table        admin    INSERT          true
 system         public       comments                         table        admin    SELECT          true
 system         public       comments                         table        admin    UPDATE          true
+system         public       comments                         table        public   SELECT          false
 system         public       comments                         table        root     DELETE          true
 system         public       comments                         table        root     INSERT          true
 system         public       comments                         table        root     SELECT          true
@@ -2520,7 +2531,10 @@ test           pg_catalog   vector[]                         type         root  
 test           pg_catalog   void                             type         admin    ALL             false
 test           pg_catalog   void                             type         root     ALL             false
 test           public       NULL                             schema       admin    ALL             true
+test           public       NULL                             schema       public   CREATE          false
+test           public       NULL                             schema       public   USAGE           false
 test           public       NULL                             schema       root     ALL             true
+
 
 statement error pgcode 42P01 relation "a.t" does not exist
 SHOW GRANTS ON a.t
@@ -2787,6 +2801,8 @@ query TTTTTTB rowsort
 SHOW GRANTS FOR readwrite, "test-user"
 ----
 a  NULL    NULL  database  readwrite  ALL         false
+a  public  NULL  schema    public     CREATE      false
+a  public  NULL  schema    public     USAGE       false
 a  public  v     table     readwrite  BACKUP      false
 a  public  v     table     readwrite  CHANGEFEED  false
 a  public  v     table     readwrite  CREATE      false
@@ -2810,14 +2826,16 @@ SHOW GRANTS ON v
 a  public  v  admin  ALL  true
 a  public  v  root   ALL  true
 
-query TTTTTB
+query TTTTTB rowsort
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
 
-query TTTTTTB
+query TTTTTTB rowsort
 SHOW GRANTS FOR readwrite, "test-user"
 ----
-a  NULL  NULL  database  readwrite  ALL  false
+a  NULL    NULL  database  readwrite  ALL     false
+a  public  NULL  schema    public     CREATE  false
+a  public  NULL  schema    public     USAGE   false
 
 # Verify that the DB privileges have not changed.
 query TTTB colnames,rowsort
@@ -2946,7 +2964,7 @@ b              public       t2          root     ALL             true
 statement ok
 CREATE DATABASE empty
 
-query TTTTTB colnames
+query TTTTTB colnames,rowsort
 SHOW GRANTS ON empty.*
 ----
 database_name  schema_name  table_name  grantee  privilege_type  is_grantable
@@ -3022,5 +3040,7 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR roach
 ----
 database_name  schema_name  object_name  object_type  grantee  privilege_type  is_grantable
+db             public       NULL         schema       public   CREATE          false
+db             public       NULL         schema       public   USAGE           false
 db             public       table1       table        roach    ALL             false
 db             public       table2       table        roach    ALL             false
