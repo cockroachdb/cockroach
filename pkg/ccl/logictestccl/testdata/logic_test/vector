@@ -72,11 +72,11 @@ query error pgcode 22000 infinite value not allowed in vector
 select '[3,-Inf]'::vector
 
 statement ok
-CREATE TABLE x (a float[], b real[])
+CREATE TABLE x (a float[], b real[], c float4[])
 
 # Test implicit cast from vector to array.
 statement ok
-INSERT INTO x VALUES('[1,2]'::vector, '[3,4]'::vector)
+INSERT INTO x VALUES('[1,2]'::vector, '[3,4]'::vector, '[5,6]'::vector)
 
 statement ok
 CREATE TABLE v3 (v1 vector(1), v2 vector(1));
@@ -107,3 +107,7 @@ query T
 SELECT json_build_object('[1, 2]':::VECTOR, 1);
 ----
 {"[1,2]": 1}
+
+# Regression test for incorrectly supporting VECTOR -> TEXT[] cast (#126964).
+statement error pgcode 42846 invalid cast: vector -> string\[\]
+SELECT '[0]'::VECTOR::TEXT[];
