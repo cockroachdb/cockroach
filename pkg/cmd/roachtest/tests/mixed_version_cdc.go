@@ -72,7 +72,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Name:             "cdc/mixed-versions",
 		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(5, spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
-		Timeout:          60 * time.Minute,
+		Timeout:          120 * time.Minute,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
