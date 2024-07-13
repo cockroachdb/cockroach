@@ -791,6 +791,8 @@ func TestStatementCancelRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderDuress(t)
+	// Flaky test.
+	skip.WithIssue(t, 127032)
 
 	for _, useStatementTimeout := range []bool{true, false} {
 		t.Run(fmt.Sprintf("Cancel with statement timeout=%t", useStatementTimeout),
