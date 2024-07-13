@@ -258,13 +258,6 @@ func LookupCast(src, tgt *types.T) (Cast, bool) {
 		}, true
 	}
 
-	if srcFamily == types.PGVectorFamily && tgtFamily == types.ArrayFamily {
-		return Cast{
-			MaxContext: ContextAssignment,
-			Volatility: volatility.Stable,
-		}, true
-	}
-
 	// Casts from array and tuple types to string types are immutable and
 	// allowed in assignment contexts.
 	// TODO(mgartner): Tuple to string casts should be stable. They are
