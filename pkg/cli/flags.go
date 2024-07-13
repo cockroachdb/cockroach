@@ -209,7 +209,7 @@ var errClusterNameInvalidFormat = errors.New(`cluster name must contain only let
 // clusterNameRe matches valid cluster names.
 // For example, "a", "a123" and "a-b" are OK,
 // but "0123", "a-" and "123a" are not OK.
-var clusterNameRe = regexp.MustCompile(`^[a-zA-Z](?:[-a-zA-Z0-9]*[a-zA-Z0-9]|)$`)
+var clusterNameRe = regexp.MustCompile(`^[a-zA-Z](?:[-.a-zA-Z0-9]*[a-zA-Z0-9]|)$`)
 
 const maxClusterNameLength = 256
 
