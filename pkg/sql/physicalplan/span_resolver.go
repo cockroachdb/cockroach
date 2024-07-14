@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -137,7 +138,7 @@ var _ SpanResolver = &spanResolver{}
 func NewSpanResolver(
 	st *cluster.Settings,
 	distSender *kvcoord.DistSender,
-	nodeDescs kvcoord.NodeDescStore,
+	nodeDescs kvclient.NodeDescStore,
 	nodeID roachpb.NodeID,
 	locality roachpb.Locality,
 	clock *hlc.Clock,
