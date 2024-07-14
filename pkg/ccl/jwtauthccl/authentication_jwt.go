@@ -87,6 +87,7 @@ func (authenticator *jwtAuthenticator) reloadConfig(ctx context.Context, st *clu
 func (authenticator *jwtAuthenticator) reloadConfigLocked(
 	ctx context.Context, st *cluster.Settings,
 ) {
+	clientTimeout := JWTAuthClientTimeout.Get(&st.SV)
 	conf := jwtAuthenticatorConf{
 		audience:             mustParseValueOrArray(JWTAuthAudience.Get(&st.SV)),
 		enabled:              JWTAuthEnabled.Get(&st.SV),
@@ -96,8 +97,8 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 		claim:                JWTAuthClaim.Get(&st.SV),
 		jwksAutoFetchEnabled: JWKSAutoFetchEnabled.Get(&st.SV),
 		httpClient: httputil.NewClient(
-			httputil.WithClientTimeout(httputil.StandardHTTPTimeout),
-			httputil.WithDialerTimeout(httputil.StandardHTTPTimeout),
+			httputil.WithClientTimeout(clientTimeout),
+			httputil.WithDialerTimeout(clientTimeout),
 			httputil.WithCustomCAPEM(JWTAuthIssuerCustomCA.Get(&st.SV)),
 		),
 	}

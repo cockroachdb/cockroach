@@ -17,11 +17,13 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -948,4 +950,95 @@ func TestJWTAuthWithCustomCACert(t *testing.T) {
 			testCase.assertFn(t, err)
 		})
 	}
+}
+
+func TestJWTAuthClientTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Initiate a test JWKS server locally.
+	testServer := httptest.NewUnstartedServer(nil)
+	waitChan := make(chan struct{}, 1)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(
+		"GET /jwks",
+		func(w http.ResponseWriter, r *http.Request) {
+			// Hang the request handler to enforce HTTP client timeout.
+			<-waitChan
+		},
+	)
+
+	testServer.Config = &http.Server{
+		Handler: mux,
+	}
+	testServer.Start()
+	defer func() {
+		waitChan <- struct{}{}
+		close(waitChan)
+		testServer.Close()
+	}()
+
+	mockGetHttpResponse := func(ctx context.Context, url string, authenticator *jwtAuthenticator) ([]byte, error) {
+		if strings.Contains(url, "/.well-known/openid-configuration") {
+			return mockGetHttpResponseWithLocalFileContent(ctx, url, authenticator)
+		} else if strings.Contains(url, "/oauth2/v3/certs") {
+			// For fetching JWKS, point to the local test server.
+			resp, err := authenticator.mu.conf.httpClient.Get(
+				context.Background(),
+				testServer.URL+"/jwks",
+			)
+			if err != nil {
+				return nil, err
+			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			return body, nil
+		}
+		return nil, errors.Newf("unsupported route: %s", url)
+	}
+	getHttpResponseTestHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponse)
+	defer getHttpResponseTestHook()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	identMapString := ""
+	identMap, err := identmap.From(strings.NewReader(identMapString))
+	require.NoError(t, err)
+
+	// Create a key to sign the token using testdata.
+	// The same will be fetched through the JWKS URL to verify the token.
+	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
+	key, _ := keySet.Get(0)
+	validIssuer := "https://accounts.idp1.com"
+	token := createJWT(
+		t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+
+	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, validIssuer)
+	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
+	JWTAuthClientTimeout.Override(ctx, &s.ClusterSettings().SV, time.Millisecond)
+
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	errMsg, err := verifier.ValidateJWTLogin(
+		ctx,
+		s.ClusterSettings(),
+		username.MakeSQLUsernameFromPreNormalizedString(username1),
+		token,
+		identMap,
+	)
+	require.Regexp(
+		t,
+		regexp.MustCompile(`unable to fetch jwks:.*\(Client.Timeout exceeded while awaiting headers\)`),
+		errMsg,
+	)
+	require.ErrorContains(t, err, "JWT authentication: unable to validate token")
 }

@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/json"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
@@ -28,6 +29,7 @@ const (
 	JWTAuthClaimSettingName          = baseJWTAuthSettingName + "claim"
 	JWKSAutoFetchEnabledSettingName  = baseJWTAuthSettingName + "jwks_auto_fetch.enabled"
 	jwtAuthIssuerCustomCASettingName = baseJWTAuthSettingName + "issuers.custom_ca"
+	jwtAuthClientTimeoutSettingName  = baseJWTAuthSettingName + "client.timeout"
 )
 
 // JWTAuthClaim sets the JWT claim that is parsed to get the username.
@@ -96,6 +98,18 @@ var JWKSAutoFetchEnabled = settings.RegisterBoolSetting(
 		"If this is enabled, the server.jwt_authentication.jwks will be ignored.",
 	false,
 	settings.WithReportable(true),
+)
+
+// JWTAuthClientTimeout is the client timeout for all the external calls made
+// during JWT authentication (e.g. fetching JWKS, etc.).
+var JWTAuthClientTimeout = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	jwtAuthClientTimeoutSettingName,
+	"sets the client timeout for external calls made during JWT authentication "+
+		"(e.g. fetching JWKS, etc.)",
+	30*time.Second,
+	settings.NonNegativeDuration,
+	settings.WithPublic,
 )
 
 func validateJWTAuthIssuers(values *settings.Values, s string) error {
