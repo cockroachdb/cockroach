@@ -111,11 +111,13 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 	t.Status("installing cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-	err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), allNodes[0]))
-	require.NoError(t, err)
+	if len(roachNodes) >= 3 {
+		err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), allNodes[0]))
+		require.NoError(t, err)
+	}
 
 	t.Status("installing haproxy")
-	if err = c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
+	if err := c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
 		t.Fatal(err)
 	}
 	// cockroach gen haproxy does not support specifying a non root user
@@ -174,28 +176,30 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 func registerSysbench(r registry.Registry) {
 	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
-		const n = 3
-		const cpus = 32
-		const conc = 8 * cpus
-		opts := sysbenchOptions{
-			workload:     w,
-			duration:     10 * time.Minute,
-			concurrency:  conc,
-			tables:       10,
-			rowsPerTable: 10000000,
-		}
+		for _, n := range []int{1, 3} {
+			const cpus = 32
+			concPerCPU := n*3 - 1
+			conc := cpus * concPerCPU
+			opts := sysbenchOptions{
+				workload:     w,
+				duration:     10 * time.Minute,
+				concurrency:  conc,
+				tables:       10,
+				rowsPerTable: 10000000,
+			}
 
-		r.Add(registry.TestSpec{
-			Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
-			Benchmark:        true,
-			Owner:            registry.OwnerTestEng,
-			Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus)),
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runSysbench(ctx, t, c, opts)
-			},
-		})
+			r.Add(registry.TestSpec{
+				Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
+				Benchmark:        true,
+				Owner:            registry.OwnerTestEng,
+				Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus)),
+				CompatibleClouds: registry.OnlyGCE,
+				Suites:           registry.Suites(registry.Nightly),
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runSysbench(ctx, t, c, opts)
+				},
+			})
+		}
 	}
 }
 
