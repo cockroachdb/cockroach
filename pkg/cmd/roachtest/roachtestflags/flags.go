@@ -21,8 +21,8 @@ import (
 
 // This block defines all roachtest flags (for the list and run/bench commands).
 var (
-	Cloud string = spec.GCE
-	_            = registerListFlag(&Cloud, FlagInfo{
+	Cloud spec.Cloud = spec.GCE
+	_                = registerListFlag(&Cloud, FlagInfo{
 		Name: "cloud",
 		Usage: `List only tests compatible with the given cloud ("local", "gce",
 		        "aws", "azure", or "all")`,
