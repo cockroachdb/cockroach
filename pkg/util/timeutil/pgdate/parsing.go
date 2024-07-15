@@ -66,20 +66,16 @@ var (
 // https://www.postgresql.org/docs/10/static/datatype-datetime.html#DATATYPE-DATETIME-SPECIAL-TABLE
 var (
 	TimeEpoch = timeutil.Unix(0, 0)
-	// TimeInfinity represents the "highest" possible time.
-	// TODO (#41564): this should actually behave as infinity, i.e. any operator
-	// leaves this as infinity. This time should always be greater than any other time.
-	// We should probably use the next microsecond after this value, i.e. timeutil.Unix(9224318016000, 0).
-	// Postgres uses math.MaxInt64 microseconds as the infinity value.
-	// See: https://github.com/postgres/postgres/blob/42aa1f0ab321fd43cbfdd875dd9e13940b485900/src/include/datatype/timestamp.h#L107.
-	TimeInfinity = timeutil.Unix(9224318016000-1, 999999000)
-	// TimeNegativeInfinity represents the "lowest" possible time.
-	// TODO (#41564): this should actually behave as -infinity, i.e. any operator
-	// leaves this as -infinity. This time should always be less than any other time.
-	// We should probably use the next microsecond before this value, i.e. timeutil.Unix(9224318016000-1, 999999000).
-	// Postgres uses math.MinInt64 microseconds as the -infinity value.
-	// See: https://github.com/postgres/postgres/blob/42aa1f0ab321fd43cbfdd875dd9e13940b485900/src/include/datatype/timestamp.h#L107.
-	TimeNegativeInfinity = timeutil.Unix(-210866803200, 0)
+	// 24 hours after "MaxSupportedTime". (294277-01-01 23:59:59.999999 +0000 UTC)
+	// We keep the "time" part as "23:59:59.999999" to keep the behavior of 'Infinity'::time
+	// intact. (In the previous implementation, 'Infinity'::time becomes '23:59:59.999999')
+	TimeInfinity    = timeutil.Unix(9224318102399, 999999000)
+	TimeInfinitySec = float64(TimeInfinity.Unix())
+	// 24 hours before "MinSupportedTime". (-4714-11-23 00:00:00 +0000 UTC)
+	// We keep the "time" part as "00:00:00" to keep the behavior of '-Infinity'::time
+	// intact. (In the previous implementation, '-Infinity'::time becomes '00:00:00')
+	TimeNegativeInfinity    = timeutil.Unix(-210898425600, 0)
+	TimeNegativeInfinitySec = float64(TimeNegativeInfinity.Unix())
 )
 
 type ParseHelper struct {
