@@ -547,6 +547,10 @@ func TestRejectedLeaseDoesntDictateClosedTimestamp(t *testing.T) {
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableConsistencyQueue: true,
+					// We set AllowLeaseRequestProposalsWhenNotLeader to true so that the
+					// lease acquisition request (TestingAcquireLease) can be proposed
+					// regardless of the raft state.
+					AllowLeaseRequestProposalsWhenNotLeader: true,
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 						TestingPostEvalFilter: func(args kvserverbase.FilterArgs) *kvpb.Error {
 							blockWrites(args)
