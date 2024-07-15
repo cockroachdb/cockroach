@@ -117,12 +117,15 @@ func (p *ScheduledProcessor) Start(
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue.
 	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+		rtsIter, err := rtsIterFunc()
+		if err != nil {
+			p.scheduler.StopProcessor()
+			return err
+		}
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		// TODO(oleg): we need to cap number of tasks that we can fire up across
 		// all feeds as they could potentially generate O(n) tasks during start.
-		err := stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
-		if err != nil {
+		if err := stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run); err != nil {
 			initScan.Cancel()
 			p.scheduler.StopProcessor()
 			return err

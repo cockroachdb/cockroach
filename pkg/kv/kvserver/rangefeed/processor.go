@@ -368,7 +368,7 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 // IntentScannerConstructor is used to construct an IntentScanner. It
 // should be called from underneath a stopper task to ensure that the
 // engine has not been closed.
-type IntentScannerConstructor func() IntentScanner
+type IntentScannerConstructor func() (IntentScanner, error)
 
 // Start implements Processor interface.
 //
@@ -411,11 +411,14 @@ func (p *LegacyProcessor) run(
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
 	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
-		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
-		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
+		rtsIter, err := rtsIterFunc()
 		if err != nil {
-			initScan.Cancel()
+			p.StopWithErr(kvpb.NewError(err))
+		} else {
+			initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
+			if err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run); err != nil {
+				initScan.Cancel()
+			}
 		}
 	} else {
 		p.initResolvedTS(ctx)
