@@ -53,7 +53,7 @@ type Changer struct {
 // [1]: https://github.com/ongardie/dissertation/blob/master/online-trim.pdf
 func (c Changer) EnterJoint(
 	autoLeave bool, ccs ...pb.ConfChangeSingle,
-) (tracker.Config, tracker.ProgressMap, error) {
+) (quorum.Config, tracker.ProgressMap, error) {
 	cfg, trk, err := c.checkAndCopy()
 	if err != nil {
 		return c.err(err)
@@ -96,7 +96,7 @@ func (c Changer) EnterJoint(
 // inserted into Learners.
 //
 // [1]: https://github.com/ongardie/dissertation/blob/master/online-trim.pdf
-func (c Changer) LeaveJoint() (tracker.Config, tracker.ProgressMap, error) {
+func (c Changer) LeaveJoint() (quorum.Config, tracker.ProgressMap, error) {
 	cfg, trk, err := c.checkAndCopy()
 	if err != nil {
 		return c.err(err)
@@ -130,7 +130,7 @@ func (c Changer) LeaveJoint() (tracker.Config, tracker.ProgressMap, error) {
 // will return an error if that is not the case, if the resulting quorum is
 // zero, or if the configuration is in a joint state (i.e. if there is an
 // outgoing configuration).
-func (c Changer) Simple(ccs ...pb.ConfChangeSingle) (tracker.Config, tracker.ProgressMap, error) {
+func (c Changer) Simple(ccs ...pb.ConfChangeSingle) (quorum.Config, tracker.ProgressMap, error) {
 	cfg, trk, err := c.checkAndCopy()
 	if err != nil {
 		return c.err(err)
@@ -142,8 +142,8 @@ func (c Changer) Simple(ccs ...pb.ConfChangeSingle) (tracker.Config, tracker.Pro
 	if err := c.apply(&cfg, trk, ccs...); err != nil {
 		return c.err(err)
 	}
-	if n := symdiff(incoming(c.Tracker.Voters), incoming(cfg.Voters)); n > 1 {
-		return tracker.Config{}, nil, errors.New("more than one voter changed without entering joint config")
+	if n := symdiff(incoming(c.Tracker.Config.Voters), incoming(cfg.Voters)); n > 1 {
+		return quorum.Config{}, nil, errors.New("more than one voter changed without entering joint config")
 	}
 
 	return checkAndReturn(cfg, trk)
@@ -153,7 +153,7 @@ func (c Changer) Simple(ccs ...pb.ConfChangeSingle) (tracker.Config, tracker.Pro
 // always made to the incoming majority config Voters[0]. Voters[1] is either
 // empty or preserves the outgoing majority configuration while in a joint state.
 func (c Changer) apply(
-	cfg *tracker.Config, trk tracker.ProgressMap, ccs ...pb.ConfChangeSingle,
+	cfg *quorum.Config, trk tracker.ProgressMap, ccs ...pb.ConfChangeSingle,
 ) error {
 	for _, cc := range ccs {
 		if cc.NodeID == 0 {
@@ -182,7 +182,7 @@ func (c Changer) apply(
 
 // makeVoter adds or promotes the given ID to be a voter in the incoming
 // majority config.
-func (c Changer) makeVoter(cfg *tracker.Config, trk tracker.ProgressMap, id pb.PeerID) {
+func (c Changer) makeVoter(cfg *quorum.Config, trk tracker.ProgressMap, id pb.PeerID) {
 	pr := trk[id]
 	if pr == nil {
 		c.initProgress(cfg, trk, id, false /* isLearner */)
@@ -208,7 +208,7 @@ func (c Changer) makeVoter(cfg *tracker.Config, trk tracker.ProgressMap, id pb.P
 // simultaneously. Instead, we add the learner to LearnersNext, so that it will
 // be added to Learners the moment the outgoing config is removed by
 // LeaveJoint().
-func (c Changer) makeLearner(cfg *tracker.Config, trk tracker.ProgressMap, id pb.PeerID) {
+func (c Changer) makeLearner(cfg *quorum.Config, trk tracker.ProgressMap, id pb.PeerID) {
 	pr := trk[id]
 	if pr == nil {
 		c.initProgress(cfg, trk, id, true /* isLearner */)
@@ -235,7 +235,7 @@ func (c Changer) makeLearner(cfg *tracker.Config, trk tracker.ProgressMap, id pb
 }
 
 // remove this peer as a voter or learner from the incoming config.
-func (c Changer) remove(cfg *tracker.Config, trk tracker.ProgressMap, id pb.PeerID) {
+func (c Changer) remove(cfg *quorum.Config, trk tracker.ProgressMap, id pb.PeerID) {
 	if _, ok := trk[id]; !ok {
 		return
 	}
@@ -252,7 +252,7 @@ func (c Changer) remove(cfg *tracker.Config, trk tracker.ProgressMap, id pb.Peer
 
 // initProgress initializes a new progress for the given node or learner.
 func (c Changer) initProgress(
-	cfg *tracker.Config, trk tracker.ProgressMap, id pb.PeerID, isLearner bool,
+	cfg *quorum.Config, trk tracker.ProgressMap, id pb.PeerID, isLearner bool,
 ) {
 	if !isLearner {
 		incoming(cfg.Voters)[id] = struct{}{}
@@ -282,7 +282,7 @@ func (c Changer) initProgress(
 // checkInvariants makes sure that the config and progress are compatible with
 // each other. This is used to check both what the Changer is initialized with,
 // as well as what it returns.
-func checkInvariants(cfg tracker.Config, trk tracker.ProgressMap) error {
+func checkInvariants(cfg quorum.Config, trk tracker.ProgressMap) error {
 	// NB: intentionally allow the empty config. In production we'll never see a
 	// non-empty config (we prevent it from being created) but we will need to
 	// be able to *create* an initial config, for example during bootstrap (or
@@ -343,7 +343,7 @@ func checkInvariants(cfg tracker.Config, trk tracker.ProgressMap) error {
 // checkAndCopy copies the tracker's config and progress map (deeply enough for
 // the purposes of the Changer) and returns those copies. It returns an error
 // if checkInvariants does.
-func (c Changer) checkAndCopy() (tracker.Config, tracker.ProgressMap, error) {
+func (c Changer) checkAndCopy() (quorum.Config, tracker.ProgressMap, error) {
 	cfg := c.Tracker.Config.Clone()
 	trk := tracker.ProgressMap{}
 
@@ -358,17 +358,17 @@ func (c Changer) checkAndCopy() (tracker.Config, tracker.ProgressMap, error) {
 // checkAndReturn calls checkInvariants on the input and returns either the
 // resulting error or the input.
 func checkAndReturn(
-	cfg tracker.Config, trk tracker.ProgressMap,
-) (tracker.Config, tracker.ProgressMap, error) {
+	cfg quorum.Config, trk tracker.ProgressMap,
+) (quorum.Config, tracker.ProgressMap, error) {
 	if err := checkInvariants(cfg, trk); err != nil {
-		return tracker.Config{}, tracker.ProgressMap{}, err
+		return quorum.Config{}, tracker.ProgressMap{}, err
 	}
 	return cfg, trk, nil
 }
 
 // err returns zero values and an error.
-func (c Changer) err(err error) (tracker.Config, tracker.ProgressMap, error) {
-	return tracker.Config{}, nil, err
+func (c Changer) err(err error) (quorum.Config, tracker.ProgressMap, error) {
+	return quorum.Config{}, nil, err
 }
 
 // nilAwareAdd populates a map entry, creating the map if necessary.
@@ -408,7 +408,7 @@ func symdiff(l, r map[pb.PeerID]struct{}) int {
 	return n
 }
 
-func joint(cfg tracker.Config) bool {
+func joint(cfg quorum.Config) bool {
 	return len(outgoing(cfg.Voters)) > 0
 }
 

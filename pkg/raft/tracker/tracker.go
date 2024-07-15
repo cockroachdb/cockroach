@@ -18,108 +18,18 @@
 package tracker
 
 import (
-	"fmt"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
-// Config reflects the configuration tracked in a ProgressTracker.
-type Config struct {
-	Voters quorum.JointConfig
-	// AutoLeave is true if the configuration is joint and a transition to the
-	// incoming configuration should be carried out automatically by Raft when
-	// this is possible. If false, the configuration will be joint until the
-	// application initiates the transition manually.
-	AutoLeave bool
-	// Learners is a set of IDs corresponding to the learners active in the
-	// current configuration.
-	//
-	// Invariant: Learners and Voters does not intersect, i.e. if a peer is in
-	// either half of the joint config, it can't be a learner; if it is a
-	// learner it can't be in either half of the joint config. This invariant
-	// simplifies the implementation since it allows peers to have clarity about
-	// its current role without taking into account joint consensus.
-	Learners map[pb.PeerID]struct{}
-	// When we turn a voter into a learner during a joint consensus transition,
-	// we cannot add the learner directly when entering the joint state. This is
-	// because this would violate the invariant that the intersection of
-	// voters and learners is empty. For example, assume a Voter is removed and
-	// immediately re-added as a learner (or in other words, it is demoted):
-	//
-	// Initially, the configuration will be
-	//
-	//   voters:   {1 2 3}
-	//   learners: {}
-	//
-	// and we want to demote 3. Entering the joint configuration, we naively get
-	//
-	//   voters:   {1 2} & {1 2 3}
-	//   learners: {3}
-	//
-	// but this violates the invariant (3 is both voter and learner). Instead,
-	// we get
-	//
-	//   voters:   {1 2} & {1 2 3}
-	//   learners: {}
-	//   next_learners: {3}
-	//
-	// Where 3 is now still purely a voter, but we are remembering the intention
-	// to make it a learner upon transitioning into the final configuration:
-	//
-	//   voters:   {1 2}
-	//   learners: {3}
-	//   next_learners: {}
-	//
-	// Note that next_learners is not used while adding a learner that is not
-	// also a voter in the joint config. In this case, the learner is added
-	// right away when entering the joint configuration, so that it is caught up
-	// as soon as possible.
-	LearnersNext map[pb.PeerID]struct{}
-}
-
-func (c Config) String() string {
-	var buf strings.Builder
-	fmt.Fprintf(&buf, "voters=%s", c.Voters)
-	if c.Learners != nil {
-		fmt.Fprintf(&buf, " learners=%s", quorum.MajorityConfig(c.Learners).String())
-	}
-	if c.LearnersNext != nil {
-		fmt.Fprintf(&buf, " learners_next=%s", quorum.MajorityConfig(c.LearnersNext).String())
-	}
-	if c.AutoLeave {
-		fmt.Fprint(&buf, " autoleave")
-	}
-	return buf.String()
-}
-
-// Clone returns a copy of the Config that shares no memory with the original.
-func (c *Config) Clone() Config {
-	clone := func(m map[pb.PeerID]struct{}) map[pb.PeerID]struct{} {
-		if m == nil {
-			return nil
-		}
-		mm := make(map[pb.PeerID]struct{}, len(m))
-		for k := range m {
-			mm[k] = struct{}{}
-		}
-		return mm
-	}
-	return Config{
-		Voters:       quorum.JointConfig{clone(c.Voters[0]), clone(c.Voters[1])},
-		Learners:     clone(c.Learners),
-		LearnersNext: clone(c.LearnersNext),
-	}
-}
-
 // ProgressTracker tracks the currently active configuration and the information
 // known about the nodes and learners in it. In particular, it tracks the match
 // index for each peer which in turn allows reasoning about the committed index.
 type ProgressTracker struct {
-	Config
+	Config quorum.Config
 
 	Progress ProgressMap
 
@@ -134,7 +44,7 @@ func MakeProgressTracker(maxInflight int, maxBytes uint64) ProgressTracker {
 	p := ProgressTracker{
 		MaxInflight:      maxInflight,
 		MaxInflightBytes: maxBytes,
-		Config: Config{
+		Config: quorum.Config{
 			Voters: quorum.JointConfig{
 				quorum.MajorityConfig{},
 				nil, // only populated when used
@@ -151,18 +61,18 @@ func MakeProgressTracker(maxInflight int, maxBytes uint64) ProgressTracker {
 // ConfState returns a ConfState representing the active configuration.
 func (p *ProgressTracker) ConfState() pb.ConfState {
 	return pb.ConfState{
-		Voters:         p.Voters[0].Slice(),
-		VotersOutgoing: p.Voters[1].Slice(),
-		Learners:       quorum.MajorityConfig(p.Learners).Slice(),
-		LearnersNext:   quorum.MajorityConfig(p.LearnersNext).Slice(),
-		AutoLeave:      p.AutoLeave,
+		Voters:         p.Config.Voters[0].Slice(),
+		VotersOutgoing: p.Config.Voters[1].Slice(),
+		Learners:       quorum.MajorityConfig(p.Config.Learners).Slice(),
+		LearnersNext:   quorum.MajorityConfig(p.Config.LearnersNext).Slice(),
+		AutoLeave:      p.Config.AutoLeave,
 	}
 }
 
 // IsSingleton returns true if (and only if) there is only one voting member
 // (i.e. the leader) in the current configuration.
 func (p *ProgressTracker) IsSingleton() bool {
-	return len(p.Voters[0]) == 1 && len(p.Voters[1]) == 0
+	return len(p.Config.Voters[0]) == 1 && len(p.Config.Voters[1]) == 0
 }
 
 type matchAckIndexer map[pb.PeerID]*Progress
@@ -181,7 +91,7 @@ func (l matchAckIndexer) AckedIndex(id pb.PeerID) (quorum.Index, bool) {
 // Committed returns the largest log index known to be committed based on what
 // the voting members of the group have acknowledged.
 func (p *ProgressTracker) Committed() uint64 {
-	return uint64(p.Voters.CommittedIndex(matchAckIndexer(p.Progress)))
+	return uint64(p.Config.Voters.CommittedIndex(matchAckIndexer(p.Progress)))
 }
 
 // Visit invokes the supplied closure for all tracked progresses in stable order.
@@ -218,12 +128,12 @@ func (p *ProgressTracker) QuorumActive() bool {
 		votes[id] = pr.RecentActive
 	})
 
-	return p.Voters.VoteResult(votes) == quorum.VoteWon
+	return p.Config.Voters.VoteResult(votes) == quorum.VoteWon
 }
 
 // VoterNodes returns a sorted slice of voters.
 func (p *ProgressTracker) VoterNodes() []pb.PeerID {
-	m := p.Voters.IDs()
+	m := p.Config.Voters.IDs()
 	nodes := make([]pb.PeerID, 0, len(m))
 	for id := range m {
 		nodes = append(nodes, id)
@@ -234,11 +144,11 @@ func (p *ProgressTracker) VoterNodes() []pb.PeerID {
 
 // LearnerNodes returns a sorted slice of learners.
 func (p *ProgressTracker) LearnerNodes() []pb.PeerID {
-	if len(p.Learners) == 0 {
+	if len(p.Config.Learners) == 0 {
 		return nil
 	}
-	nodes := make([]pb.PeerID, 0, len(p.Learners))
-	for id := range p.Learners {
+	nodes := make([]pb.PeerID, 0, len(p.Config.Learners))
+	for id := range p.Config.Learners {
 		nodes = append(nodes, id)
 	}
 	sort.Slice(nodes, func(i, j int) bool { return nodes[i] < nodes[j] })
@@ -280,6 +190,6 @@ func (p *ProgressTracker) TallyVotes() (granted int, rejected int, _ quorum.Vote
 			rejected++
 		}
 	}
-	result := p.Voters.VoteResult(p.Votes)
+	result := p.Config.Voters.VoteResult(p.Votes)
 	return granted, rejected, result
 }
