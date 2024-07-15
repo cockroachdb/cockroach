@@ -248,20 +248,6 @@ ts_http_archive(
 # TODO(ricky): We should add a lint check to ensure it does match.
 load("@aspect_rules_js//npm:repositories.bzl", "npm_import", "npm_translate_lock")
 
-npm_import(
-    name = "pnpm",
-    # Declare an @pnpm//:pnpm rule that can be called externally.
-    # Copied from https://github.com/aspect-build/rules_js/blob/14724d9b27b2c45f088aa003c091cbe628108170/npm/private/pnpm_repository.bzl#L27-L30
-    extra_build_content = "\n".join([
-        """load("@aspect_rules_js//js:defs.bzl", "js_binary")""",
-        """js_binary(name = "pnpm", entry_point = "package/dist/pnpm.cjs", visibility = ["//visibility:public"])""",
-    ]),
-    integrity = "sha512-W6elL7Nww0a/MCICkzpkbxW6f99TQuX4DuJoDjWp39X08PKDkEpg4cgj3d6EtgYADcdQWl/eM8NdlLJVE3RgpA==",
-    package = "pnpm",
-    url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
-    version = "8.5.1",
-)
-
 load("@aspect_rules_js//js:repositories.bzl", "rules_js_dependencies")
 
 rules_js_dependencies()
