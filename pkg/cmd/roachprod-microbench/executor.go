@@ -39,13 +39,10 @@ type executorConfig struct {
 	excludeList       []string
 	ignorePackageList []string
 	outputDir         string
-	libDir            string
-	remoteDir         string
 	timeout           string
 	shellCommand      string
 	testArgs          []string
 	iterations        int
-	copyBinaries      bool
 	lenient           bool
 	affinity          bool
 	quiet             bool
@@ -54,9 +51,9 @@ type executorConfig struct {
 
 type executor struct {
 	executorConfig
-	binariesList           []string
+	remoteBinariesList     []string
 	excludeBenchmarksRegex [][]*regexp.Regexp
-	packages               []string
+	ignorePackages         map[string]struct{}
 	runOptions             install.RunOptions
 	log                    *logger.Logger
 }
@@ -78,12 +75,6 @@ type benchmarkExtractionResult struct {
 }
 
 func newExecutor(config executorConfig) (*executor, error) {
-	// Gather package info from the primary binary.
-	archivePackages, err := readArchivePackages(config.binaries)
-	if err != nil {
-		return nil, err
-	}
-
 	// Exclude packages that should not to be probed. This is useful for excluding
 	// packages that have known issues and unable to list its benchmarks, or are
 	// not relevant to the current benchmarking effort.
@@ -91,19 +82,13 @@ func newExecutor(config executorConfig) (*executor, error) {
 	for _, pkg := range config.ignorePackageList {
 		ignorePackages[pkg] = struct{}{}
 	}
-	packages := make([]string, 0, len(archivePackages))
-	for _, pkg := range archivePackages {
-		if _, ok := ignorePackages[pkg]; !ok {
-			packages = append(packages, pkg)
-		}
-	}
 
 	config.outputDir = strings.TrimRight(config.outputDir, "/")
-	err = os.MkdirAll(config.outputDir, os.ModePerm)
+	err := os.MkdirAll(config.outputDir, os.ModePerm)
 	if err != nil {
 		return nil, err
 	}
-	err = verifyPathFlag("outputdir", config.outputDir, true)
+	err = verifyPathFlag("output-dir", config.outputDir, true)
 	if err != nil {
 		return nil, err
 	}
@@ -123,16 +108,7 @@ func newExecutor(config executorConfig) (*executor, error) {
 
 	remoteBinariesList := []string{config.binaries}
 	if config.compareBinaries != "" {
-		binariesList = append(binariesList, config.compareBinaries)
-	}
-
-	for _, binariesName := range binariesList {
-		if err = verifyPathFlag("binaries", binariesName, false); err != nil {
-			return nil, err
-		}
-		if !strings.HasSuffix(binariesName, ".tar") && !strings.HasSuffix(binariesName, ".tar.gz") {
-			return nil, fmt.Errorf("the binaries archive %s must have the extension .tar or .tar.gz", binariesName)
-		}
+		remoteBinariesList = append(remoteBinariesList, config.compareBinaries)
 	}
 
 	if config.iterations < 1 {
@@ -147,8 +123,8 @@ func newExecutor(config executorConfig) (*executor, error) {
 	return &executor{
 		executorConfig:         config,
 		excludeBenchmarksRegex: excludeBenchmarks,
-		binariesList:           binariesList,
-		packages:               packages,
+		remoteBinariesList:     remoteBinariesList,
+		ignorePackages:         ignorePackages,
 		runOptions:             runOptions,
 		log:                    l,
 	}, nil
@@ -156,71 +132,13 @@ func newExecutor(config executorConfig) (*executor, error) {
 
 func defaultExecutorConfig() executorConfig {
 	return executorConfig{
-		binaries:     "bin/test_binaries.tar.gz",
+		binaries:     "new",
 		outputDir:    "artifacts/roachprod-microbench",
-		libDir:       "bin/lib",
-		remoteDir:    "/mnt/data1/microbench",
 		timeout:      "10m",
 		shellCommand: "COCKROACH_RANDOM_SEED=1",
 		iterations:   1,
-		copyBinaries: true,
 		lenient:      true,
-		affinity:     false,
-		quiet:        false,
 	}
-}
-
-// prepareCluster prepares the cluster for executing microbenchmarks. It copies
-// the binaries to the remote cluster and extracts it. It also copies the lib
-// directory to the remote cluster. The number of nodes in the cluster is
-// returned, or -1 if the node count could not be determined.
-func (e *executor) prepareCluster() (int, error) {
-	e.log.Printf("Setting up roachprod")
-	if err := initRoachprod(e.log); err != nil {
-		return -1, err
-	}
-
-	statuses, err := roachprod.Status(context.Background(), e.log, e.cluster, "")
-	if err != nil {
-		return -1, err
-	}
-	numNodes := len(statuses)
-	e.log.Printf("Number of nodes: %d", numNodes)
-
-	// Clear old artifacts, copy and extract new artifacts on to the cluster.
-	if e.copyBinaries {
-		if fi, cmdErr := os.Stat(e.libDir); cmdErr == nil && fi.IsDir() {
-			if putErr := roachprod.Put(context.Background(), e.log, e.cluster, e.libDir, "lib", true); putErr != nil {
-				return numNodes, putErr
-			}
-		}
-
-		for binIndex, bin := range e.binariesList {
-			// Specify the binaries' tarball remote location.
-			remoteBinSrc := fmt.Sprintf("%d_%s", binIndex, filepath.Base(bin))
-			remoteBinDest := filepath.Join(e.remoteDir, strconv.Itoa(binIndex))
-			if rpErr := roachprod.Put(context.Background(), e.log, e.cluster, bin, remoteBinSrc, true); rpErr != nil {
-				return numNodes, rpErr
-			}
-			if rpErr := roachprodRun(e.cluster, e.log, []string{"rm", "-rf", remoteBinDest}); rpErr != nil {
-				return numNodes, rpErr
-			}
-			if rpErr := roachprodRun(e.cluster, e.log, []string{"mkdir", "-p", remoteBinDest}); rpErr != nil {
-				return numNodes, rpErr
-			}
-			extractFlags := "-xf"
-			if filepath.Ext(bin) == ".gz" {
-				extractFlags = "-xzf"
-			}
-			if rpErr := roachprodRun(e.cluster, e.log, []string{"tar", extractFlags, remoteBinSrc, "-C", remoteBinDest}); rpErr != nil {
-				return numNodes, rpErr
-			}
-			if rpErr := roachprodRun(e.cluster, e.log, []string{"rm", "-rf", remoteBinSrc}); rpErr != nil {
-				return numNodes, rpErr
-			}
-		}
-	}
-	return numNodes, nil
 }
 
 // listBenchmarks distributes a listing command to test package binaries across
@@ -233,8 +151,8 @@ func (e *executor) listBenchmarks(
 	// Generate commands for listing benchmarks.
 	commands := make([][]cluster.RemoteCommand, 0)
 	for _, pkg := range packages {
-		for binIndex := range e.binariesList {
-			remoteBinDir := fmt.Sprintf("%s/%d/%s/bin", e.remoteDir, binIndex, pkg)
+		for _, bin := range e.remoteBinariesList {
+			remoteBinDir := fmt.Sprintf("%s/%s/bin", bin, pkg)
 			// The command will not fail if the directory does not exist.
 			command := cluster.RemoteCommand{
 				Args: []string{"sh", "-c",
@@ -304,11 +222,11 @@ func (e *executor) listBenchmarks(
 	for k, v := range benchmarkCounts {
 		// Some packages override TestMain to run the tests twice or more thus
 		// appearing more than once in the listing logic.
-		if v >= len(e.binariesList) {
+		if v >= len(e.remoteBinariesList) {
 			packageCounts[k.pkg]++
 			benchmarks = append(benchmarks, k)
 		} else {
-			e.log.Printf("Ignoring benchmark %s/%s, missing from %d binaries", k.pkg, k.name, len(e.binariesList)-v)
+			e.log.Printf("Ignoring benchmark %s/%s, missing from %d binaries", k.pkg, k.name, len(e.remoteBinariesList)-v)
 		}
 	}
 
@@ -318,6 +236,34 @@ func (e *executor) listBenchmarks(
 		validPackages = append(validPackages, pkg)
 	}
 	return validPackages, benchmarks, nil
+}
+
+// listRemotePackages returns a list of packages containing benchmarks on the remote
+// cluster by inspecting the given remote directory.
+func (e *executor) listRemotePackages(log *logger.Logger, dir string) ([]string, error) {
+	ctx := context.Background()
+	results, err := roachprod.RunWithDetails(ctx, log, e.cluster, "", "", false,
+		[]string{"find", dir, "-name", "run.sh"}, install.WithNodes(install.Nodes{1}))
+	if err != nil {
+		return nil, err
+	}
+	result := results[0]
+	if result.Err != nil {
+		return nil, result.Err
+	}
+	packages := make([]string, 0)
+	binRunSuffix := "/bin/run.sh"
+	for _, line := range strings.Split(result.Stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.HasSuffix(line, binRunSuffix) {
+			continue
+		}
+		line = strings.TrimPrefix(line, dir)
+		line = strings.TrimPrefix(line, "/")
+		line = strings.TrimSuffix(line, binRunSuffix)
+		packages = append(packages, line)
+	}
+	return packages, nil
 }
 
 // executeBenchmarks executes the microbenchmarks on the remote cluster. Reports
@@ -336,12 +282,36 @@ func (e *executor) executeBenchmarks() error {
 		return err
 	}
 
-	numNodes, err := e.prepareCluster()
+	// Init roachprod and get the number of nodes in the cluster.
+	if err := initRoachprod(e.log); err != nil {
+		return err
+	}
+	statuses, err := roachprod.Status(context.Background(), e.log, e.cluster, "")
 	if err != nil {
 		return err
 	}
+	numNodes := len(statuses)
+	e.log.Printf("number of nodes to execute benchmarks on: %d", numNodes)
 
-	validPackages, benchmarks, err := e.listBenchmarks(muteLogger, e.packages, numNodes)
+	// List packages containing benchmarks on the remote cluster for the first
+	// remote binaries' directory.
+	remotePackageDir := e.remoteBinariesList[0]
+	remotePackages, err := e.listRemotePackages(muteLogger, remotePackageDir)
+	if err != nil {
+		return err
+	}
+	if len(remotePackages) == 0 {
+		return errors.Newf("No benchmarks found in the remote working directory %s", remotePackageDir)
+	}
+
+	packages := make([]string, 0, len(remotePackages))
+	for _, pkg := range remotePackages {
+		if _, ok := e.ignorePackages[pkg]; !ok {
+			packages = append(packages, pkg)
+		}
+	}
+
+	validPackages, benchmarks, err := e.listBenchmarks(muteLogger, packages, numNodes)
 	if err != nil {
 		return err
 	}
@@ -357,7 +327,7 @@ func (e *executor) executeBenchmarks() error {
 			report.closeReports()
 		}
 	}()
-	for index := range e.binariesList {
+	for index := range e.remoteBinariesList {
 		report := &report{}
 		dir := path.Join(e.outputDir, strconv.Itoa(index))
 		err = os.MkdirAll(dir, os.ModePerm)
@@ -385,8 +355,8 @@ func (e *executor) executeBenchmarks() error {
 		commandGroup := make([]cluster.RemoteCommand, 0)
 		// Weave the commands between binaries and iterations.
 		for i := 0; i < e.iterations; i++ {
-			for binIndex := range e.binariesList {
-				shellCommand := fmt.Sprintf(`"cd %s/%d/%s/bin && %s"`, e.remoteDir, binIndex, bench.pkg, runCommand)
+			for binIndex, bin := range e.remoteBinariesList {
+				shellCommand := fmt.Sprintf(`"cd %s/%s/bin && %s"`, bin, bench.pkg, runCommand)
 				command := cluster.RemoteCommand{
 					Args:     []string{"sh", "-c", shellCommand},
 					Metadata: benchmarkIndexed{bench, binIndex},
