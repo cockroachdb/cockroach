@@ -3192,7 +3192,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 						if _, ok := s.(*externalConnectionKafkaSink); ok {
 							return s
 						}
-						return &externalConnectionKafkaSink{sink: s}
+						return &externalConnectionKafkaSink{sink: s, ignoreDialError: true}
 					},
 				},
 			},
