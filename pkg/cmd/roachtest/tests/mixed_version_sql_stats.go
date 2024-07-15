@@ -179,7 +179,7 @@ type sqlStatsRequestHelper struct {
 func createSQLStatsRequestHelper(
 	cluster cluster.Cluster, logger *logger.Logger,
 ) *sqlStatsRequestHelper {
-	client := roachtestutil.DefaultHTTPClient(cluster, logger)
+	client := roachtestutil.DefaultHTTPClient(cluster, logger, roachtestutil.HTTPTimeout(15*time.Second))
 	return &sqlStatsRequestHelper{
 		cluster: cluster,
 		logger:  logger,
