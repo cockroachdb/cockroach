@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import * as $protobuf from "protobufjs";
+import { SqlTxnResult } from "@cockroachlabs/cluster-ui/dist/types/api";
 
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "src/js/protos";
@@ -106,7 +107,17 @@ export function stubSqlApiCall<T>(
   mockTxnResults: mockSqlTxnResult<T>[],
   times: number = 1,
 ) {
-  const response = buildSqlExecutionResponse(mockTxnResults);
+  const firstError = mockTxnResults.find(mock => mock.error != null)?.error;
+  let err: clusterUiApi.SqlExecutionErrorMessage;
+  if (firstError != null) {
+    err = {
+      message: firstError.message,
+      code: "123",
+      severity: "ERROR",
+      source: { file: "myfile.go", line: 111, function: "myFn" },
+    };
+  }
+  const response = buildSqlExecutionResponse(mockTxnResults, err);
   fetchMock.mock({
     headers: {
       Accept: "application/json",
@@ -185,3 +196,23 @@ function buildSqlTxnResult<RowType>(
     error: mock.error,
   };
 }
+
+const mockStmtExecErrorResponse = <T>(
+  res: Partial<SqlTxnResult<T>>,
+): SqlTxnResult<T> => ({
+  statement: res?.statement ?? 1,
+  tag: "SELECT",
+  start: "2022-01-01T00:00:00Z",
+  end: "2022-01-01T00:00:01Z",
+  error: new Error("error"),
+  rows_affected: 0,
+  ...res,
+});
+
+export const mockExecSQLErrors = <T>(
+  statements: number,
+): mockSqlTxnResult<T>[] => {
+  return Array.from({ length: statements }, (_, i) =>
+    mockStmtExecErrorResponse<T>({ statement: i + 1 }),
+  );
+};
