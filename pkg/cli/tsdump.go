@@ -64,10 +64,11 @@ var debugTimeSeriesDumpCmd = &cobra.Command{
 	Use:   "tsdump",
 	Short: "dump all the raw timeseries values in a cluster",
 	Long: `
-Dumps all of the raw timeseries values in a cluster. Only the default resolution
-is retrieved, i.e. typically datapoints older than the value of the
-'timeseries.storage.resolution_10s.ttl' cluster setting will be absent from the
-output.
+Dumps all of the raw timeseries values in a cluster. If the supplied time range
+is within the 'timeseries.storage.resolution_10s.ttl', metrics will be dumped
+as it is with 10s resolution. If the time range extends outside of the TTL, the
+timeseries downsampled to 30m resolution will be dumped for the time beyond
+the TTL.
 
 When an input file is provided instead (as an argument), this input file
 must previously have been created with the --format=raw switch. The command
@@ -153,6 +154,9 @@ will then convert it to the --format requested in the current invocation.
 				StartNanos: time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
 				EndNanos:   time.Time(debugTimeSeriesDumpOpts.to).UnixNano(),
 				Names:      names,
+				Resolutions: []tspb.TimeSeriesResolution{
+					tspb.TimeSeriesResolution_RESOLUTION_30M, tspb.TimeSeriesResolution_RESOLUTION_10S,
+				},
 			}
 			tsClient := tspb.NewTimeSeriesClient(conn)
 
