@@ -1832,8 +1832,35 @@ func listHealthChecks(project string) ([]jsonHealthCheck, error) {
 // load balancers can be associated with a single cluster, so we need to delete
 // all of them. Health checks associated with the cluster are also deleted.
 func deleteLoadBalancerResources(project, clusterName, portFilter string) error {
-	// Convenience function to determine if a load balancer resource should be
-	// excluded from deletion.
+	// List all the components of the load balancer resources tied to the project.
+	var g errgroup.Group
+	var services []jsonBackendService
+	var proxies []jsonTargetTCPProxy
+	var rules []jsonForwardingRule
+	var healthChecks []jsonHealthCheck
+	g.Go(func() (err error) {
+		services, err = listBackendServices(project)
+		return
+	})
+	g.Go(func() (err error) {
+		proxies, err = listTargetTCPProxies(project)
+		return
+	})
+	g.Go(func() (err error) {
+		rules, err = listForwardingRules(project)
+		return
+	})
+	g.Go(func() (err error) {
+		healthChecks, err = listHealthChecks(project)
+		return
+	})
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	// Determine if a load balancer resource should be excluded from deletion. The
+	// gcloud commands support a filter flag, but since it does client side only
+	// filtering it makes more sense for us to filter the resources ourselves.
 	shouldExclude := func(name string, expectedResourceType string) bool {
 		cluster, resourceType, port, ok := loadBalancerNameParts(name)
 		if !ok || cluster != clusterName || resourceType != expectedResourceType {
@@ -1844,55 +1871,26 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 		}
 		return false
 	}
-	// List all the components of the load balancer resources tied to the cluster.
-	services, err := listBackendServices(project)
-	if err != nil {
-		return err
-	}
 	filteredServices := make([]jsonBackendService, 0)
-	// Find all backend services tied to the managed instance group.
 	for _, service := range services {
 		if shouldExclude(service.Name, "load-balancer") {
 			continue
 		}
-		for _, backend := range service.Backends {
-			if strings.HasSuffix(backend.Group, fmt.Sprintf("instanceGroups/%s", instanceGroupName(clusterName))) {
-				filteredServices = append(filteredServices, service)
-				break
-			}
-		}
-	}
-	proxies, err := listTargetTCPProxies(project)
-	if err != nil {
-		return err
+		filteredServices = append(filteredServices, service)
 	}
 	filteredProxies := make([]jsonTargetTCPProxy, 0)
 	for _, proxy := range proxies {
 		if shouldExclude(proxy.Name, "proxy") {
 			continue
 		}
-		for _, service := range filteredServices {
-			if proxy.Service == service.SelfLink {
-				filteredProxies = append(filteredProxies, proxy)
-				break
-			}
-		}
-	}
-	rules, err := listForwardingRules(project)
-	if err != nil {
-		return err
+		filteredProxies = append(filteredProxies, proxy)
 	}
 	filteredForwardingRules := make([]jsonForwardingRule, 0)
 	for _, rule := range rules {
-		for _, proxy := range filteredProxies {
-			if rule.Target == proxy.SelfLink {
-				filteredForwardingRules = append(filteredForwardingRules, rule)
-			}
+		if shouldExclude(rule.Name, "forwarding-rule") {
+			continue
 		}
-	}
-	healthChecks, err := listHealthChecks(project)
-	if err != nil {
-		return err
+		filteredForwardingRules = append(filteredForwardingRules, rule)
 	}
 	filteredHealthChecks := make([]jsonHealthCheck, 0)
 	for _, healthCheck := range healthChecks {
@@ -1902,8 +1900,9 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 		filteredHealthChecks = append(filteredHealthChecks, healthCheck)
 	}
 
-	// Delete all the components of the load balancer.
-	var g errgroup.Group
+	// Delete all the components of the load balancer. Resources must be deleted
+	// in the correct order to avoid dependency errors.
+	g = errgroup.Group{}
 	for _, rule := range filteredForwardingRules {
 		args := []string{"compute", "forwarding-rules", "delete",
 			rule.Name,
@@ -1920,7 +1919,7 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 			return nil
 		})
 	}
-	if err = g.Wait(); err != nil {
+	if err := g.Wait(); err != nil {
 		return err
 	}
 	g = errgroup.Group{}
@@ -1939,7 +1938,7 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 			return nil
 		})
 	}
-	if err = g.Wait(); err != nil {
+	if err := g.Wait(); err != nil {
 		return err
 	}
 	g = errgroup.Group{}
@@ -1959,7 +1958,7 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 			return nil
 		})
 	}
-	if err = g.Wait(); err != nil {
+	if err := g.Wait(); err != nil {
 		return err
 	}
 	g = errgroup.Group{}
@@ -2040,7 +2039,7 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 	var args []string
 	healthCheckName := loadBalancerResourceName(clusterName, port, "health-check")
 	output, err := func() ([]byte, error) {
-		defer ui.NewDefaultSpinner(l, "created health check").Start()()
+		defer ui.NewDefaultSpinner(l, "create health check").Start()()
 		args = []string{"compute", "health-checks", "create", "tcp",
 			healthCheckName,
 			"--project", project,
