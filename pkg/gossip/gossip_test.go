@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"reflect"
 	"strconv"
@@ -54,6 +55,49 @@ func TestGossipInfoStore(t *testing.T) {
 	if _, err := g.GetInfo("s2"); err == nil {
 		t.Errorf("expected error fetching nonexistent key \"s2\"")
 	}
+
+	g.mu.Lock()
+	if info := g.mu.is.getInfo("s"); info == nil || info.TTLStamp == math.MaxInt64 {
+		t.Errorf("expected info to be present and have finite TTL: %+v", info)
+	}
+	g.mu.Unlock()
+
+	if err := g.AddInfoIfNotRedundant("s", slice); err != nil {
+		t.Error(err)
+	}
+	if val, err := g.GetInfo("s"); !bytes.Equal(val, slice) || err != nil {
+		t.Errorf("error fetching string: %v", err)
+	}
+
+	g.mu.Lock()
+	if info := g.mu.is.getInfo("s"); info == nil || info.TTLStamp != math.MaxInt64 {
+		t.Errorf("expected info be updated with an infinite TTL: %+v", info)
+	}
+	g.mu.Unlock()
+
+	slice2 := []byte("b2")
+	err := g.BulkAddInfoIfNotRedundant([]InfoToAdd{
+		{Key: "s", Val: slice},
+		{Key: "s2", Val: slice2},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	if val, err := g.GetInfo("s"); !bytes.Equal(val, slice) || err != nil {
+		t.Errorf("error fetching string: %v", err)
+	}
+	if val, err := g.GetInfo("s2"); !bytes.Equal(val, slice2) || err != nil {
+		t.Errorf("error fetching string: %v", err)
+	}
+
+	g.mu.Lock()
+	if info := g.mu.is.getInfo("s"); info == nil || info.TTLStamp != math.MaxInt64 {
+		t.Errorf("expected info be updated with an infinite TTL: %+v", info)
+	}
+	if info := g.mu.is.getInfo("s2"); info == nil || info.TTLStamp != math.MaxInt64 {
+		t.Errorf("expected info be written with an infinite TTL: %+v", info)
+	}
+	g.mu.Unlock()
 }
 
 // TestGossipMoveNode verifies that if a node is moved to a new address, it

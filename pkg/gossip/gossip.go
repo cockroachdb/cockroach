@@ -47,6 +47,7 @@ the system with minimal total hops. The algorithm is as follows:
 package gossip
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -909,6 +910,60 @@ func (g *Gossip) AddInfoProto(key string, msg protoutil.Message, ttl time.Durati
 	return g.AddInfo(key, bytes, ttl)
 }
 
+// AddInfoIfNotRedundant adds or updates an info object if it isn't already
+// present in the local infoStore with exactly the same value and with this
+// node as the source. Motivated by the node liveness range's desire to only
+// gossip changed entries.
+//
+// Assumes the values have a TTL of 0 (always adding the gossip anew if the
+// stored value wasn't added with a TTL of 0), because if a value had a non-0
+// TTL then we'd have to make some sort of value judgment about whether it's
+// worth re-gossiping yet given how old the existing matching info was.
+func (g *Gossip) AddInfoIfNotRedundant(key string, val []byte) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	return g.addInfoIfNotRedundantLocked(key, val)
+}
+
+// addInfoIfNotRedundantLocked implements AddInfoIfNotRedundant.
+func (g *Gossip) addInfoIfNotRedundantLocked(key string, val []byte) error {
+	info := g.mu.is.getInfo(key)
+
+	if info != nil {
+		infoBytes, err := info.Value.GetBytes()
+		if err == nil && bytes.Equal(infoBytes, val) && g.infoOriginatedHere(info) && info.TTLStamp == math.MaxInt64 {
+			// Nothing has changed, so no need to re-gossip.
+			return nil
+		}
+	}
+
+	// Something is different, so we do need to add the provided key/value.
+	return g.addInfoLocked(key, val, 0 /* ttl */)
+}
+
+// InfoToAdd contains a single Gossip info to be added to the network.
+type InfoToAdd struct {
+	Key string
+	Val []byte
+}
+
+// BulkAddInfoIfNotRedundant matches the semantics of AddInfoIfNotRedundant
+// except for a batch of gossip infos rather than for a single info. The
+// benefit of batching is not needing to repeatedly lock and unlock the gossip
+// mutex for each info.
+func (g *Gossip) BulkAddInfoIfNotRedundant(toAdd []InfoToAdd) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	for i := range toAdd {
+		if err := g.addInfoIfNotRedundantLocked(toAdd[i].Key, toAdd[i].Val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // AddClusterID is a convenience method for gossipping the cluster ID. There's
 // no TTL - the record lives forever.
 func (g *Gossip) AddClusterID(val uuid.UUID) error {
@@ -1001,6 +1056,12 @@ func (g *Gossip) InfoOriginatedHere(key string) bool {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	info := g.mu.is.getInfo(key)
+	return g.infoOriginatedHere(info)
+}
+
+// infoOriginatedHere is a simple reusable helper for InfoOriginatedHere that
+// doesn't involve taking the mutex.
+func (g *Gossip) infoOriginatedHere(info *Info) bool {
 	return info != nil && info.NodeID == g.NodeID.Get()
 }
 
