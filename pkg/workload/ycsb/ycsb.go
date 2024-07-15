@@ -717,7 +717,7 @@ func keyNameFromOrder(keynum uint64, zeroPadding int) string {
 // close together.
 // See YCSB paper section 5.3 for a complete description of how keys are chosen.
 func (yw *ycsbWorker) nextReadKey() string {
-	rowCount := yw.rowCounter.Last()
+	rowCount := yw.rowCounter.Last() - uint64(yw.config.insertStart)
 	// TODO(jeffreyxiao): The official YCSB implementation creates a very large
 	// key space for the zipfian distribution, hashes, mods it by the number of
 	// expected number of keys at the end of the workload to obtain the key index
@@ -736,6 +736,7 @@ func (yw *ycsbWorker) nextReadKey() string {
 	// distribution, so it might be worthwhile to exactly emulate what they're
 	// doing.
 	rowIndex := yw.requestGen.Uint64() % rowCount
+	rowIndex += uint64(yw.config.insertStart)
 	return yw.buildKeyName(rowIndex)
 }
 
