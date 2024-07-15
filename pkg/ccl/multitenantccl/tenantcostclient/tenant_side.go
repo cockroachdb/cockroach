@@ -936,6 +936,110 @@ func (c *tenantSideCostController) Metrics() metric.Struct {
 	return &c.metrics
 }
 
+// computeNetworkCost calculates the network cost multiplier for a read or
+// write operation. The network cost accounts for the logical byte traffic
+// between the client region and the replica regions.
+func (ds *DistSender) computeNetworkCost(
+	ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	targetReplica *roachpb.ReplicaDescriptor,
+	isWrite bool,
+) tenantcostmodel.NetworkCost {
+	// It is unfortunate that we hardcode a particular locality tier name here.
+	// Ideally, we would have a cluster setting that specifies the name or some
+	// other way to configure it.
+	clientRegion, _ := ds.locality.Find("region")
+	if clientRegion == "" {
+		// If we do not have the source, there is no way to find the multiplier.
+		log.VErrEventf(ctx, 2, "missing region tier in current node: locality=%s",
+			ds.locality.String())
+		return tenantcostmodel.NetworkCost(0)
+	}
+
+	costCfg := ds.getCostControllerConfig(ctx)
+	if costCfg == nil {
+		// This case is unlikely to happen since this method will only be
+		// called through tenant processes, which has a KV interceptor.
+		return tenantcostmodel.NetworkCost(0)
+	}
+
+	cost := tenantcostmodel.NetworkCost(0)
+	if isWrite {
+		for i := range desc.Replicas().Descriptors() {
+			if replicaRegion, ok := ds.getReplicaRegion(ctx, &desc.Replicas().Descriptors()[i]); ok {
+				cost += costCfg.NetworkCost(tenantcostmodel.NetworkPath{
+					ToRegion:   replicaRegion,
+					FromRegion: clientRegion,
+				})
+			}
+		}
+	} else {
+		if replicaRegion, ok := ds.getReplicaRegion(ctx, targetReplica); ok {
+			cost = costCfg.NetworkCost(tenantcostmodel.NetworkPath{
+				ToRegion:   clientRegion,
+				FromRegion: replicaRegion,
+			})
+		}
+	}
+
+	return cost
+}
+
+func (ds *DistSender) getReplicaRegion(
+	ctx context.Context, replica *roachpb.ReplicaDescriptor,
+) (region string, ok bool) {
+	nodeDesc, err := ds.nodeDescs.GetNodeDescriptor(replica.NodeID)
+	if err != nil {
+		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
+		// If we don't know where a node is, we can't determine the network cost
+		// for the operation.
+		return "", false
+	}
+
+	region, ok = nodeDesc.Locality.Find("region")
+	if !ok {
+		log.VErrEventf(ctx, 2, "missing region locality for n %d", nodeDesc.NodeID)
+		return "", false
+	}
+
+	return region, true
+}
+
+// computeWriteReplicationNetworkPaths computes all the network paths taken by
+// the leaseholder when it replicates writes to the other replicas for the given
+// range.
+func (ds *DistSender) computeWriteReplicationNetworkPaths(
+	ctx context.Context, desc *roachpb.RangeDescriptor, leaseholderReplica *roachpb.ReplicaDescriptor,
+) []tenantcostmodel.LocalityNetworkPath {
+	np := []tenantcostmodel.LocalityNetworkPath{}
+	fromNode, err := ds.nodeDescs.GetNodeDescriptor(leaseholderReplica.NodeID)
+	if err != nil {
+		// If we don't know where a node is, we can't determine the network
+		// path for the operation.
+		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", leaseholderReplica.NodeID, err)
+		return np
+	}
+	for _, replica := range desc.Replicas().Descriptors() {
+		if replica.ReplicaID == leaseholderReplica.ReplicaID {
+			continue
+		}
+		toNode, err := ds.nodeDescs.GetNodeDescriptor(replica.NodeID)
+		if err != nil {
+			// If we don't know where a node is, we can't determine the network
+			// path for the operation.
+			log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
+			continue
+		}
+		np = append(np, tenantcostmodel.LocalityNetworkPath{
+			FromNodeID:   leaseholderReplica.NodeID,
+			FromLocality: fromNode.Locality,
+			ToNodeID:     replica.NodeID,
+			ToLocality:   toNode.Locality,
+		})
+	}
+	return np
+}
+
 // calculateBackgroundCPUSecs returns the number of CPU seconds estimated to
 // have been consumed by background work triggered by this node during the given
 // interval. This is proportional to the amount of estimated CPU consumed by
