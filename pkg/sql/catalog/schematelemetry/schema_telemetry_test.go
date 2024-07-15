@@ -186,7 +186,7 @@ UPDATE system.namespace SET id = %d WHERE id = %d;
 
 	// Ensure that a log line is emitted for each invalid object, with a loose
 	// enforcement of the log structure.
-	errorRE := regexp.MustCompile(`found invalid object with ID \d+: ".+"`)
+	errorRE := regexp.MustCompile(`found invalid object with ID \d+: .+`)
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1000, errorRE, log.SelectEditMode(false, false))
 	require.NoError(t, err)
 	require.Len(t, entries, 9)
