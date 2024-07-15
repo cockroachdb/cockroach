@@ -157,9 +157,7 @@ func defaultExecutorConfig() executorConfig {
 // returned, or -1 if the node count could not be determined.
 func (e *executor) prepareCluster() (int, error) {
 	e.log.Printf("Setting up roachprod")
-	if err := initRoachprod(e.log); err != nil {
-		return -1, err
-	}
+	initRoachprod()
 
 	statuses, err := roachprod.Status(context.Background(), e.log, e.cluster, "")
 	if err != nil {

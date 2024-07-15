@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/spf13/cobra"
 )
 
@@ -77,10 +76,8 @@ func getRegexExclusionPairs(excludeList []string) [][]*regexp.Regexp {
 	return excludeRegexes
 }
 
-func initRoachprod(l *logger.Logger) error {
+func initRoachprod() {
 	_ = roachprod.InitProviders()
-	_, err := roachprod.Sync(l, vm.ListOptions{})
-	return err
 }
 
 func roachprodRun(clusterName string, l *logger.Logger, cmdArray []string) error {
