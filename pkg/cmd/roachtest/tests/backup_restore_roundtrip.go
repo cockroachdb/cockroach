@@ -175,7 +175,7 @@ func backupRestoreRoundTrip(
 					m.ExpectDeaths(int32(n))
 				}
 
-				if err := testUtils.resetCluster(ctx, t.L(), clusterupgrade.CurrentVersion(), expectDeathsFn); err != nil {
+				if err := testUtils.resetCluster(ctx, t.L(), clusterupgrade.CurrentVersion(), expectDeathsFn, []install.ClusterSettingOption{}); err != nil {
 					return err
 				}
 			}

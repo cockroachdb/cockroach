@@ -55,6 +55,44 @@ func parseReleases() (map[string]Series, error) {
 	return result, nil
 }
 
+// MajorReleasesBetween returns the number of major releases between
+// any two versions passed. Returns an error when there is no
+// predecessor information for a release in the chain (which should
+// only happen if one of the versions passed is very old).
+func MajorReleasesBetween(v1, v2 *version.Version) (int, error) {
+	older, newer := v1, v2
+	if v1.AtLeast(v2) {
+		older, newer = v2, v1
+	}
+
+	var count int
+	currentSeries := VersionSeries(newer)
+
+	for currentSeries != VersionSeries(older) {
+		count++
+		seriesData, ok := releaseData[currentSeries]
+		if !ok {
+			return -1, fmt.Errorf("no release data for release series: %s", currentSeries)
+		}
+
+		currentSeries = seriesData.Predecessor
+	}
+
+	return count, nil
+}
+
+// LatestPatch returns the latest non-withdrawn patch release of
+// the series passed. For example, if the series is "23.1", this
+// will return the latest 23.1 patch release.
+func LatestPatch(seriesStr string) (string, error) {
+	series, ok := releaseData[seriesStr]
+	if !ok {
+		return "", fmt.Errorf("no release information for %q series", seriesStr)
+	}
+	activeReleases := activePatchReleases(series)
+	return activeReleases[len(activeReleases)-1], nil
+}
+
 // LatestPredecessor returns the latest non-withdrawn predecessor of
 // the version passed. For example, if the version is "v19.2.0", this
 // will return the latest 19.1 patch release.
@@ -149,7 +187,7 @@ func activePatchReleases(releaseSeries Series) []string {
 // version passed. Returns an error if the data is not available.
 func predecessorSeries(v *version.Version) (Series, error) {
 	var empty Series
-	seriesStr := versionSeries(v)
+	seriesStr := VersionSeries(v)
 	series, ok := releaseData[seriesStr]
 	if !ok {
 		return empty, fmt.Errorf("no release information for %q (%q series)", v, seriesStr)
@@ -171,6 +209,6 @@ func mustParseVersion(str string) *version.Version {
 	return version.MustParse("v" + str)
 }
 
-func versionSeries(v *version.Version) string {
+func VersionSeries(v *version.Version) string {
 	return fmt.Sprintf("%d.%d", v.Major(), v.Minor())
 }
