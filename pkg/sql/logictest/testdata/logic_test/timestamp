@@ -1,4 +1,9 @@
 query T
+SELECT 'infinity':::TIMESTAMP
+----
+'infinity'
+
+query T
 SELECT '2000-05-05 10:00:00+03':::TIMESTAMP
 ----
 2000-05-05 10:00:00 +0000 +0000

@@ -2591,6 +2591,10 @@ type DTimestamp struct {
 
 // MakeDTimestamp creates a DTimestamp with specified precision.
 func MakeDTimestamp(t time.Time, precision time.Duration) (*DTimestamp, error) {
+	if t == pgdate.TimeInfinity {
+		return &DTimestamp{Time: t}, nil
+	}
+
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
 		return nil, NewTimestampExceedsBoundsError(ret)

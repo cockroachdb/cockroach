@@ -905,6 +905,10 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 // is represented as the number of microseconds between the given time and Jan 1, 2000
 // (dubbed the PGEpochJDate), stored within an int64.
 func timeToPgBinary(t time.Time, offset *time.Location) int64 {
+	if t == pgdate.TimeInfinity {
+		return math.MaxInt64
+	}
+
 	if offset != nil {
 		t = t.In(offset)
 	} else {
