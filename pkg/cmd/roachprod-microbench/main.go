@@ -109,17 +109,14 @@ func makeRunCommand() *cobra.Command {
 		},
 		RunE: runCmdFunc,
 	}
-	cmd.Flags().StringVar(&config.binaries, "binaries", config.binaries, "portable test binaries archive built with dev test-binaries")
-	cmd.Flags().StringVar(&config.compareBinaries, "compare-binaries", "", "run additional binaries from this archive and compare the results")
+	cmd.Flags().StringVar(&config.binaries, "binaries", config.binaries, "remote path of the test binaries")
+	cmd.Flags().StringVar(&config.compareBinaries, "compare-binaries", "", "run additional binaries on this remote path and compare the results")
 	cmd.Flags().StringVar(&config.outputDir, "output-dir", config.outputDir, "output directory for run log and microbenchmark results")
-	cmd.Flags().StringVar(&config.libDir, "lib-dir", config.libDir, "location of libraries required by test binaries")
-	cmd.Flags().StringVar(&config.remoteDir, "remote-dir", config.remoteDir, "working directory on the target cluster")
 	cmd.Flags().StringVar(&config.timeout, "timeout", config.timeout, "timeout for each benchmark e.g. 10m")
 	cmd.Flags().StringVar(&config.shellCommand, "shell", config.shellCommand, "additional shell command to run on node before benchmark execution")
 	cmd.Flags().StringSliceVar(&config.excludeList, "exclude", []string{}, "benchmarks to exclude, in the form <pkg regex:benchmark regex> e.g. 'pkg/util/.*:BenchmarkIntPool,pkg/sql:.*'")
 	cmd.Flags().StringSliceVar(&config.ignorePackageList, "ignore-package", []string{}, "packages to completely exclude from listing or execution'")
 	cmd.Flags().IntVar(&config.iterations, "iterations", config.iterations, "number of iterations to run each benchmark")
-	cmd.Flags().BoolVar(&config.copyBinaries, "copy", config.copyBinaries, "copy and extract test binaries and libraries to the target cluster")
 	cmd.Flags().BoolVar(&config.lenient, "lenient", config.lenient, "tolerate errors while running benchmarks")
 	cmd.Flags().BoolVar(&config.affinity, "affinity", config.affinity, "run benchmarks with iterations and binaries having affinity to the same node, only applies when more than one archive is specified")
 	cmd.Flags().BoolVar(&config.quiet, "quiet", config.quiet, "suppress roachprod progress output")
