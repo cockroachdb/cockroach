@@ -26,8 +26,36 @@ changefeed.protect_timestamp_interval	duration	10m0s	controls how often the chan
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	application
 changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value	application
 cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload	application
+cloudstorage.azure.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.azure.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.azure.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.azure.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.gs.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.gs.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.gs.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.gs.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage	application
+cloudstorage.http.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.http.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.http.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.http.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nodelocal.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nodelocal.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nodelocal.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nodelocal.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nullsink.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nullsink.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nullsink.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.nullsink.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.s3.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.s3.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.s3.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.s3.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
 cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations	application
+cloudstorage.userfile.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.userfile.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.userfile.write.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
+cloudstorage.userfile.write.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
 cluster.auto_upgrade.enabled	boolean	true	disable automatic cluster version upgrade until reset	application
 cluster.organization	string		organization name	system-visible
 cluster.preserve_downgrade_option	string		disable (automatic or manual) cluster version upgrade from the specified version until reset	application
