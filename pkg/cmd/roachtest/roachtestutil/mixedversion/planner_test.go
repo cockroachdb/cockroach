@@ -80,6 +80,7 @@ func TestTestPlanner(t *testing.T) {
 	}()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "planner"), func(t *testing.T, path string) {
+		defer withTestBuildVersion("v24.3.0")()
 		resetMutators()
 		// Unless specified, treat every test as a non-UA deployment
 		// test. Tests can use the deployment-mode option in the
