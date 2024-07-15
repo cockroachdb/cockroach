@@ -198,9 +198,9 @@ func randBounds(colType *types.T, rng *rand.Rand, num int) tree.Datums {
 	case types.TimestampFamily, types.TimestampTZFamily:
 		roundTo := tree.TimeFamilyPrecisionToRoundDuration(colType.Precision())
 		var lo, hi int
-		if quantileMaxTimestampSec < math.MaxInt/2 {
-			lo = int(quantileMinTimestampSec)
-			hi = int(quantileMaxTimestampSec)
+		if pgdate.TimeInfinitySec < math.MaxInt/2 {
+			lo = int(pgdate.TimeNegativeInfinitySec)
+			hi = int(pgdate.TimeInfinitySec)
 		} else {
 			// Make sure we won't overflow in randInts (i.e. make sure that
 			// hi - lo + 1 <= math.MaxInt which requires -2 for hi).
@@ -798,13 +798,13 @@ func TestQuantileValueRoundTrip(t *testing.T) {
 		},
 		{
 			typ: types.Timestamp,
-			dat: &tree.DTimestamp{Time: quantileMinTimestamp},
-			val: quantileMinTimestampSec,
+			dat: &tree.DTimestamp{Time: pgdate.TimeNegativeInfinity},
+			val: pgdate.TimeNegativeInfinitySec,
 		},
 		{
 			typ: types.Timestamp,
-			dat: &tree.DTimestamp{Time: quantileMaxTimestamp},
-			val: quantileMaxTimestampSec,
+			dat: &tree.DTimestamp{Time: pgdate.TimeInfinity},
+			val: pgdate.TimeInfinitySec,
 		},
 		{
 			typ: types.Timestamp,
@@ -823,13 +823,13 @@ func TestQuantileValueRoundTrip(t *testing.T) {
 		},
 		{
 			typ: types.TimestampTZ,
-			dat: &tree.DTimestampTZ{Time: quantileMinTimestamp},
-			val: quantileMinTimestampSec,
+			dat: &tree.DTimestampTZ{Time: pgdate.TimeNegativeInfinity},
+			val: pgdate.TimeNegativeInfinitySec,
 		},
 		{
 			typ: types.TimestampTZ,
-			dat: &tree.DTimestampTZ{Time: quantileMaxTimestamp},
-			val: quantileMaxTimestampSec,
+			dat: &tree.DTimestampTZ{Time: pgdate.TimeInfinity},
+			val: pgdate.TimeInfinitySec,
 		},
 		{
 			typ: types.TimestampTZ,
@@ -1074,50 +1074,50 @@ func TestQuantileValueRoundTripOverflow(t *testing.T) {
 		{
 			typ: types.Timestamp,
 			val: float64(pgdate.TimeNegativeInfinity.Unix()),
-			dat: &tree.DTimestamp{Time: quantileMinTimestamp},
-			res: quantileMinTimestampSec,
+			dat: &tree.DTimestamp{Time: pgdate.TimeNegativeInfinity},
+			res: pgdate.TimeNegativeInfinitySec,
 		},
 		{
 			typ: types.Timestamp,
 			val: float64(pgdate.TimeInfinity.Unix()),
-			dat: &tree.DTimestamp{Time: quantileMaxTimestamp},
-			res: quantileMaxTimestampSec,
+			dat: &tree.DTimestamp{Time: pgdate.TimeInfinity},
+			res: pgdate.TimeInfinitySec,
 		},
 		{
 			typ: types.Timestamp,
 			val: -math.MaxFloat64,
-			dat: &tree.DTimestamp{Time: quantileMinTimestamp},
-			res: quantileMinTimestampSec,
+			dat: &tree.DTimestamp{Time: pgdate.TimeNegativeInfinity},
+			res: pgdate.TimeNegativeInfinitySec,
 		},
 		{
 			typ: types.Timestamp,
 			val: math.MaxFloat64,
-			dat: &tree.DTimestamp{Time: quantileMaxTimestamp},
-			res: quantileMaxTimestampSec,
+			dat: &tree.DTimestamp{Time: pgdate.TimeInfinity},
+			res: pgdate.TimeInfinitySec,
 		},
 		{
 			typ: types.TimestampTZ,
 			val: float64(pgdate.TimeNegativeInfinity.Unix()),
-			dat: &tree.DTimestampTZ{Time: quantileMinTimestamp},
-			res: quantileMinTimestampSec,
+			dat: &tree.DTimestampTZ{Time: pgdate.TimeNegativeInfinity},
+			res: pgdate.TimeNegativeInfinitySec,
 		},
 		{
 			typ: types.TimestampTZ,
 			val: float64(pgdate.TimeInfinity.Unix()),
-			dat: &tree.DTimestampTZ{Time: quantileMaxTimestamp},
-			res: quantileMaxTimestampSec,
+			dat: &tree.DTimestampTZ{Time: pgdate.TimeInfinity},
+			res: pgdate.TimeInfinitySec,
 		},
 		{
 			typ: types.TimestampTZ,
 			val: -math.MaxFloat64,
-			dat: &tree.DTimestampTZ{Time: quantileMinTimestamp},
-			res: quantileMinTimestampSec,
+			dat: &tree.DTimestampTZ{Time: pgdate.TimeNegativeInfinity},
+			res: pgdate.TimeNegativeInfinitySec,
 		},
 		{
 			typ: types.TimestampTZ,
 			val: math.MaxFloat64,
-			dat: &tree.DTimestampTZ{Time: quantileMaxTimestamp},
-			res: quantileMaxTimestampSec,
+			dat: &tree.DTimestampTZ{Time: pgdate.TimeInfinity},
+			res: pgdate.TimeInfinitySec,
 		},
 	}
 	ctx := context.Background()
