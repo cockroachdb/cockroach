@@ -27,6 +27,7 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/vm",
+        "//pkg/util/retry",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
