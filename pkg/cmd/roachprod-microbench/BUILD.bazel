@@ -12,6 +12,7 @@ go_library(
         "metadata.go",
         "report.go",
         "slack.go",
+        "stage.go",
         "util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench",

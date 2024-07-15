@@ -50,6 +50,7 @@ Typical usage:
 	command.AddCommand(makeExportCommand())
 	command.AddCommand(makeCleanCommand())
 	command.AddCommand(makeCompressCommand())
+	command.AddCommand(makeStageCommand())
 
 	return command
 }
@@ -122,7 +123,28 @@ func makeRunCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&config.lenient, "lenient", config.lenient, "tolerate errors while running benchmarks")
 	cmd.Flags().BoolVar(&config.affinity, "affinity", config.affinity, "run benchmarks with iterations and binaries having affinity to the same node, only applies when more than one archive is specified")
 	cmd.Flags().BoolVar(&config.quiet, "quiet", config.quiet, "suppress roachprod progress output")
+	return cmd
+}
 
+func makeStageCommand() *cobra.Command {
+	runCmdFunc := func(cmd *cobra.Command, commandLine []string) error {
+		args, _ := splitArgsAtDash(cmd, commandLine)
+		cluster := args[0]
+		src := args[1]
+		dest := args[2]
+		return stage(cluster, src, dest)
+	}
+
+	cmd := &cobra.Command{
+		Use:   "stage <cluster> <src> <dest>",
+		Short: "Stage a given test binaries archive on a roachprod cluster.",
+		Long: `Copy and extract a portable test binaries archive to all nodes on the specified cluster and destination.
+
+The destination should be a directory where the binaries archive will be extracted.
+The source can be a local path or a GCS URI.`,
+		Args: cobra.ExactArgs(3),
+		RunE: runCmdFunc,
+	}
 	return cmd
 }
 
