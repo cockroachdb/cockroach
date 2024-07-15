@@ -153,6 +153,9 @@ will then convert it to the --format requested in the current invocation.
 				StartNanos: time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
 				EndNanos:   time.Time(debugTimeSeriesDumpOpts.to).UnixNano(),
 				Names:      names,
+				Resolutions: []tspb.TimeSeriesResolution{
+					tspb.TimeSeriesResolution_RESOLUTION_30M, tspb.TimeSeriesResolution_RESOLUTION_10S,
+				},
 			}
 			tsClient := tspb.NewTimeSeriesClient(conn)
 
