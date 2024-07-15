@@ -283,8 +283,8 @@ func withMetrics(m *Metrics) option {
 func withRtsScanner(scanner IntentScanner) option {
 	return func(config *testConfig) {
 		if scanner != nil {
-			config.isc = func() IntentScanner {
-				return scanner
+			config.isc = func() (IntentScanner, error) {
+				return scanner, nil
 			}
 		}
 	}
