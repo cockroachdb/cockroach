@@ -54,6 +54,7 @@ func TestInputValidation(t *testing.T) {
 			input: BuildInput{
 				LocalStoreID:    repl1.StoreID,
 				Now:             cts20,
+				RaftStatus:      &raft.Status{},
 				PrevLease:       roachpb.Lease{Replica: repl2, Expiration: &ts30},
 				NextLeaseHolder: repl2,
 			},
@@ -64,6 +65,7 @@ func TestInputValidation(t *testing.T) {
 			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
 				Now:              cts20,
+				RaftStatus:       &raft.Status{},
 				PrevLease:        roachpb.Lease{Replica: repl2, Epoch: 3},
 				PrevLeaseExpired: true,
 				NextLeaseHolder:  repl1,
@@ -75,6 +77,7 @@ func TestInputValidation(t *testing.T) {
 			input: BuildInput{
 				LocalStoreID:          repl1.StoreID,
 				Now:                   cts20,
+				RaftStatus:            &raft.Status{},
 				PrevLease:             roachpb.Lease{Replica: repl2, Expiration: &ts30},
 				PrevLeaseNodeLiveness: defaultNodeLivenessRecord(repl2.NodeID).Liveness,
 				PrevLeaseExpired:      true,
@@ -87,6 +90,7 @@ func TestInputValidation(t *testing.T) {
 			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
 				Now:              cts20,
+				RaftStatus:       &raft.Status{},
 				PrevLease:        roachpb.Lease{Replica: repl2, Expiration: &ts30},
 				PrevLeaseExpired: true,
 				NextLeaseHolder:  repl1,
@@ -98,6 +102,7 @@ func TestInputValidation(t *testing.T) {
 			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
 				Now:              cts20,
+				RaftStatus:       &raft.Status{},
 				PrevLease:        roachpb.Lease{Replica: repl2, Expiration: &ts10},
 				PrevLeaseExpired: false,
 				NextLeaseHolder:  repl1,
@@ -109,6 +114,7 @@ func TestInputValidation(t *testing.T) {
 			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
 				Now:              cts20,
+				RaftStatus:       &raft.Status{},
 				PrevLease:        roachpb.Lease{Replica: repl2, Expiration: &ts30},
 				PrevLeaseExpired: false,
 				NextLeaseHolder:  repl1,
@@ -120,6 +126,7 @@ func TestInputValidation(t *testing.T) {
 			input: BuildInput{
 				LocalStoreID:       repl1.StoreID,
 				Now:                cts20,
+				RaftStatus:         &raft.Status{},
 				PrevLease:          roachpb.Lease{Replica: repl2, Expiration: &ts10},
 				PrevLeaseExpired:   true,
 				NextLeaseHolder:    repl1,
@@ -132,6 +139,7 @@ func TestInputValidation(t *testing.T) {
 			input: BuildInput{
 				LocalStoreID:     repl1.StoreID,
 				Now:              cts20,
+				RaftStatus:       &raft.Status{},
 				PrevLease:        roachpb.Lease{Replica: repl2, Expiration: &ts10},
 				PrevLeaseExpired: true,
 				NextLeaseHolder:  repl1,
@@ -143,6 +151,7 @@ func TestInputValidation(t *testing.T) {
 			input: BuildInput{
 				LocalStoreID:    repl1.StoreID,
 				Now:             cts20,
+				RaftStatus:      &raft.Status{},
 				PrevLease:       roachpb.Lease{Replica: repl1, Expiration: &ts30},
 				NextLeaseHolder: repl1,
 			},
@@ -153,6 +162,7 @@ func TestInputValidation(t *testing.T) {
 			input: BuildInput{
 				LocalStoreID:    repl1.StoreID,
 				Now:             cts20,
+				RaftStatus:      &raft.Status{},
 				PrevLease:       roachpb.Lease{Replica: repl1, Expiration: &ts30},
 				NextLeaseHolder: repl2,
 			},
