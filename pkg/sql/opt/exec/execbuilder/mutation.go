@@ -223,6 +223,11 @@ func (b *Builder) tryBuildFastPathInsert(
 			}
 		}
 		uniqCheck := &ins.UniqueChecks[i]
+		// TODO(mgartner): We shouldn't keep references to md, uniqCheck, and
+		// execFastPathCheck. Ideally, the query plan for the constraint would
+		// produce the constraint column names as output columns. Then, the
+		// error message could be constructed without needing to access the
+		// catalog or metadata.
 		execFastPathCheck.MkErr = func(values tree.Datums) error {
 			return mkFastPathUniqueCheckErr(md, uniqCheck, values, execFastPathCheck.ReferencedIndex)
 		}
@@ -896,6 +901,41 @@ func mkUniqueCheckErr(md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.D
 	)
 }
 
+// mkUniqueCheckErrWithoutColNames is a simpler version of mkUniqueCheckErr that
+// omits column names from the error details.
+func mkUniqueCheckErrWithoutColNames(
+	md *opt.Metadata, c *memo.UniqueChecksItem, keyVals tree.Datums,
+) error {
+	tabMeta := md.TableMeta(c.Table)
+	uc := tabMeta.Table.Unique(c.CheckOrdinal)
+	constraintName := uc.Name()
+	var msg, details bytes.Buffer
+
+	// Generate an error of the form:
+	//   ERROR:  duplicate key value violates unique constraint "foo"
+	//   DETAIL: Key (2) already exists.
+	msg.WriteString("duplicate key value violates unique constraint ")
+	lexbase.EncodeEscapedSQLIdent(&msg, constraintName)
+
+	details.WriteString("Key (")
+	for i, d := range keyVals {
+		if i > 0 {
+			details.WriteString(", ")
+		}
+		details.WriteString(d.String())
+	}
+
+	details.WriteString(") already exists.")
+
+	return errors.WithDetail(
+		pgerror.WithConstraintName(
+			pgerror.Newf(pgcode.UniqueViolation, "%s", msg.String()),
+			constraintName,
+		),
+		details.String(),
+	)
+}
+
 // mkFastPathUniqueCheckErr is a wrapper for mkUniqueCheckErr in the insert fast
 // path flow, which reorders the keyVals row according to the ordering of the
 // key columns in index `idx`. This is needed because mkUniqueCheckErr assumes
@@ -913,7 +953,7 @@ func mkFastPathUniqueCheckErr(
 	for i := 0; i < uc.ColumnCount(); i++ {
 		ord := uc.ColumnOrdinal(tabMeta.Table, i)
 		found := false
-		for j := 0; j < idx.ColumnCount(); j++ {
+		for j := 0; j < idx.KeyColumnCount() && j < len(keyVals); j++ {
 			keyCol := idx.Column(j)
 			keyColOrd := keyCol.Column.Ordinal()
 			if ord == keyColOrd {
@@ -923,10 +963,11 @@ func mkFastPathUniqueCheckErr(
 			}
 		}
 		if !found {
-			// We still need to return an error, even if the key values could not be
-			// determined.
-			return errors.AssertionFailedf(
-				"insert fast path failed uniqueness check, but could not find unique columns for row, %v", keyVals)
+			// The unique constraint columns could not be matched to the index
+			// key columns. This can happen when the index columns are computed
+			// columns that map to the unique constraint columns (see #126988).
+			// When this happens, produce a simpler error message.
+			return mkUniqueCheckErrWithoutColNames(md, c, keyVals)
 		}
 	}
 	return mkUniqueCheckErr(md, c, newKeyVals)
