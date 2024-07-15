@@ -152,6 +152,9 @@ func (i BuildInput) validate() error {
 	if i.Now.IsEmpty() {
 		return errors.AssertionFailedf("no clock timestamp provided")
 	}
+	if i.RaftStatus == nil {
+		return errors.AssertionFailedf("no raft status provided")
+	}
 	if i.Remote() {
 		return errors.AssertionFailedf("cannot acquire/extend lease for remote "+
 			"replica: %v -> %v", i.PrevLease, i.NextLeaseHolder)
