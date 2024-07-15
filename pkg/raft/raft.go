@@ -1010,7 +1010,7 @@ func (r *raft) campaign(t CampaignType) {
 	}
 	var ids []pb.PeerID
 	{
-		idMap := r.trk.Voters.IDs()
+		idMap := r.trk.Config.Voters.IDs()
 		ids = make([]pb.PeerID, 0, len(idMap))
 		for id := range idMap {
 			ids = append(ids, id)
@@ -1927,7 +1927,7 @@ func (r *raft) promotable() bool {
 }
 
 func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
-	cfg, trk, err := func() (tracker.Config, tracker.ProgressMap, error) {
+	cfg, trk, err := func() (quorum.Config, tracker.ProgressMap, error) {
 		changer := confchange.Changer{
 			Tracker:   r.trk,
 			LastIndex: r.raftLog.lastIndex(),
@@ -1954,7 +1954,7 @@ func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 // requirements.
 //
 // The inputs usually result from restoring a ConfState or applying a ConfChange.
-func (r *raft) switchToConfig(cfg tracker.Config, trk tracker.ProgressMap) pb.ConfState {
+func (r *raft) switchToConfig(cfg quorum.Config, trk tracker.ProgressMap) pb.ConfState {
 	r.trk.Config = cfg
 	r.trk.Progress = trk
 
