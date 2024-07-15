@@ -2138,9 +2138,10 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 		}
 
 		// Update replication gauges for all stores and verify we have 1 each of
-		// expiration and epoch leases.
+		// expiration and epoch leases. Also verify that we have no leader leases.
 		var expirationLeases int64
 		var epochLeases int64
+		var leaderLeases int64
 		for i := range tc.Servers {
 			if err := tc.GetFirstStoreFromServer(t, i).ComputeMetrics(context.Background()); err != nil {
 				return err
@@ -2148,12 +2149,16 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			metrics = tc.GetFirstStoreFromServer(t, i).Metrics()
 			expirationLeases += metrics.LeaseExpirationCount.Value()
 			epochLeases += metrics.LeaseEpochCount.Value()
+			leaderLeases += metrics.LeaseLeaderCount.Value()
 		}
 		if a, e := expirationLeases, int64(1); a != e {
 			return errors.Errorf("expected %d expiration lease count; got %d", e, a)
 		}
 		if a, e := epochLeases, int64(1); a < e {
 			return errors.Errorf("expected greater than %d epoch lease count; got %d", e, a)
+		}
+		if a, e := leaderLeases, int64(0); a != e {
+			return errors.Errorf("expected exactly %d leader lease count; got %d", e, a)
 		}
 		return nil
 	})
