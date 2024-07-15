@@ -49,6 +49,7 @@ Typical usage:
 	command.AddCommand(makeRunCommand())
 	command.AddCommand(makeExportCommand())
 	command.AddCommand(makeCleanCommand())
+	command.AddCommand(makeCompressCommand())
 
 	return command
 }
@@ -188,6 +189,19 @@ func makeExportCommand() *cobra.Command {
 	}
 	cmd.Flags().StringToStringVar(&labels, "labels", nil, "comma-separated list of key=value pair labels to add to the metrics")
 	cmd.Flags().Int64Var(&ts, "timestamp", timeutil.Now().Unix(), "unix timestamp to use for the metrics, defaults to now")
+	return cmd
+}
+
+func makeCompressCommand() *cobra.Command {
+	runCmdFunc := func(cmd *cobra.Command, commandLine []string) error {
+		return compress(cmd.OutOrStdout(), cmd.InOrStdin())
+	}
+	cmd := &cobra.Command{
+		Use:   "compress",
+		Short: "Compress data from stdin and output to stdout",
+		Args:  cobra.ExactArgs(0),
+		RunE:  runCmdFunc,
+	}
 	return cmd
 }
 

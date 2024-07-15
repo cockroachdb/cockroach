@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "clean.go",
         "compare.go",
+        "compress.go",
         "executor.go",
         "export.go",
         "main.go",
@@ -28,7 +29,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
-        "@com_github_klauspost_compress//gzip",
+        "@com_github_klauspost_pgzip//:pgzip",
         "@com_github_slack_go_slack//:slack",
         "@com_github_spf13_cobra//:cobra",
         "@org_golang_x_exp//maps",
