@@ -24,6 +24,7 @@ go_library(
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",
+        "//pkg/util/hlc",
     ],
 )
 
