@@ -297,11 +297,15 @@ func newTenantServer(
 	// case, DelayedSetTenantID will be set and should be used to populate
 	// TenantID in the config. We call it here as we need a valid TenantID below.
 	if sqlCfg.DelayedSetTenantID != nil {
-		cfgTenantID, err := sqlCfg.DelayedSetTenantID(ctx)
+		cfgTenantID, cfgLocality, err := sqlCfg.DelayedSetTenantID(ctx)
 		if err != nil {
 			return nil, err
 		}
+		// We need to update sqlCfg and baseCfg here explicitly since copies
+		// were passed into newTenantServer instead of the original serverCfg
+		// object.
 		sqlCfg.TenantID = cfgTenantID
+		baseCfg.Locality = cfgLocality
 	}
 	log.Ops.Infof(ctx, "server starting for tenant %q", redact.Safe(sqlCfg.TenantID))
 	// Inform the server identity provider that we're operating
