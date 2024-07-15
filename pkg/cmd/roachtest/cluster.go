@@ -631,7 +631,7 @@ type nodeSelector interface {
 type clusterImpl struct {
 	name  string
 	tag   string
-	cloud string
+	cloud spec.Cloud
 	spec  spec.ClusterSpec
 	t     test.Test
 	f     roachtestutil.Fataler
@@ -936,8 +936,8 @@ func (f *clusterFactory) newCluster(
 		return nil, nil, err
 	}
 	if clusterCloud != spec.Local {
-		providerOptsContainer.SetProviderOpts(clusterCloud, providerOpts)
-		workloadProviderOptsContainer.SetProviderOpts(clusterCloud, workloadProviderOpts)
+		providerOptsContainer.SetProviderOpts(clusterCloud.String(), providerOpts)
+		workloadProviderOptsContainer.SetProviderOpts(clusterCloud.String(), workloadProviderOpts)
 	}
 
 	createFlagsOverride(&createVMOpts)
@@ -1892,11 +1892,11 @@ func (c *clusterImpl) removeLabels(labels []string) error {
 func (c *clusterImpl) ListSnapshots(
 	ctx context.Context, vslo vm.VolumeSnapshotListOpts,
 ) ([]vm.VolumeSnapshot, error) {
-	return roachprod.ListSnapshots(ctx, c.l, c.Cloud(), vslo)
+	return roachprod.ListSnapshots(ctx, c.l, c.Cloud().String(), vslo)
 }
 
 func (c *clusterImpl) DeleteSnapshots(ctx context.Context, snapshots ...vm.VolumeSnapshot) error {
-	return roachprod.DeleteSnapshots(ctx, c.l, c.Cloud(), snapshots...)
+	return roachprod.DeleteSnapshots(ctx, c.l, c.Cloud().String(), snapshots...)
 }
 
 func (c *clusterImpl) CreateSnapshot(
@@ -2929,7 +2929,7 @@ func (c *clusterImpl) MakeNodes(opts ...option.Option) string {
 	return c.name + r.String()
 }
 
-func (c *clusterImpl) Cloud() string {
+func (c *clusterImpl) Cloud() spec.Cloud {
 	return c.cloud
 }
 

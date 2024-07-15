@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	sf "github.com/snowflakedb/gosnowflake"
 )
 
@@ -55,16 +56,19 @@ type TestDetails struct {
 
 // SelectTestsReq is the request for CategoriseTests
 type SelectTestsReq struct {
-	ForPastDays, // number of days data to consider for test selection
-	FirstRunOn, // number of days to consider for the first time the test is run
-	LastRunOn, // number of days to consider for the last time the test is run
-	SelectFromSuccessPct int //percentage of tests to be Selected for running from the successful test list sorted by number of runs
-	Cloud, // the cloud where the tests were run
-	Suite string // the test suite for which the selection is done
+	ForPastDays          int // number of days data to consider for test selection
+	FirstRunOn           int // number of days to consider for the first time the test is run
+	LastRunOn            int // number of days to consider for the last time the test is run
+	SelectFromSuccessPct int // percentage of tests to be Selected for running from the successful test list sorted by number of runs
+
+	Cloud spec.Cloud // the cloud where the tests were run
+	Suite string     // the test suite for which the selection is done
 }
 
 // NewDefaultSelectTestsReq returns a new SelectTestsReq with default values populated
-func NewDefaultSelectTestsReq(selectFromSuccessPct int, cloud, suite string) *SelectTestsReq {
+func NewDefaultSelectTestsReq(
+	selectFromSuccessPct int, cloud spec.Cloud, suite string,
+) *SelectTestsReq {
 	return &SelectTestsReq{
 		ForPastDays:          defaultForPastDays,
 		FirstRunOn:           defaultFirstRunOn,

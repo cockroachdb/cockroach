@@ -52,7 +52,7 @@ func roachtestPrefix(p string) string {
 
 // generateHelpCommand creates a HelpCommand for createPostRequest
 func generateHelpCommand(
-	testName string, clusterName string, cloud string, start time.Time, end time.Time,
+	testName string, clusterName string, cloud spec.Cloud, start time.Time, end time.Time,
 ) func(renderer *issues.Renderer) {
 	return func(renderer *issues.Renderer) {
 		issues.HelpCommandAsLink(
@@ -246,7 +246,7 @@ func (g *githubIssues) createPostRequest(
 	artifacts := fmt.Sprintf("/%s", testName)
 
 	clusterParams := map[string]string{
-		roachtestPrefix("cloud"):            roachtestflags.Cloud,
+		roachtestPrefix("cloud"):            roachtestflags.Cloud.String(),
 		roachtestPrefix("cpu"):              fmt.Sprintf("%d", spec.Cluster.CPUs),
 		roachtestPrefix("ssd"):              fmt.Sprintf("%d", spec.Cluster.SSDs),
 		roachtestPrefix("metamorphicBuild"): fmt.Sprintf("%t", metamorphicBuild),

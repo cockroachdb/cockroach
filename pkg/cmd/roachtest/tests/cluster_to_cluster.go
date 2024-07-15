@@ -854,7 +854,7 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 		rd.t.L().Printf("skip taking backups of tenants on azure, bucket not configured yet")
 		return nil
 	}
-	cloudPrefixes := map[string]string{
+	cloudPrefixes := map[spec.Cloud]string{
 		spec.GCE:   "gs",
 		spec.AWS:   "s3",
 		spec.Azure: "azure",
