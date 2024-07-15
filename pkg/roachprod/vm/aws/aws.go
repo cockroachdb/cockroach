@@ -462,6 +462,10 @@ func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
 		"AWS account ids as a comma-separated string")
 }
 
+// ConfigureDnsHostFlags is part of ProviderOpts. This implementation is a no-op.
+func (o *ProviderOpts) ConfigureDnsHostFlags(_ *pflag.FlagSet) {
+}
+
 // CleanSSH is part of vm.Provider.  This implementation is a no-op,
 // since we depend on the user's local identity file.
 func (p *Provider) CleanSSH(l *logger.Logger) error {

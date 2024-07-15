@@ -1933,6 +1933,24 @@ var opentelemetryStopCmd = &cobra.Command{
 	}),
 }
 
+var dnsHostCmd = &cobra.Command{
+	Use:   "dns-host <cluster> [create|update|delete|<optional>] [flags]",
+	Short: "manages dns host for the cluster",
+	Long: `Manages dns host for the cluster.
+The command creates/updates/deletes the DNS record sets.
+If no action is provided it creates if it does not exist, or it updates the same.
+`,
+	Args: cobra.MaximumNArgs(2),
+	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
+		clusterName := args[0]
+		action := "" // action is optional
+		if len(args) == 2 {
+			action = args[1]
+		}
+		return roachprod.ConfigureDnsHost(context.Background(), config.Logger, clusterName, action)
+	}),
+}
+
 func main() {
 	_ = roachprod.InitProviders()
 	providerOptsContainer = vm.CreateProviderOptionsContainer()
@@ -1950,6 +1968,7 @@ func main() {
 		loadBalancerCmd,
 		listCmd,
 		syncCmd,
+		dnsHostCmd,
 		gcCmd,
 		setupSSHCmd,
 		statusCmd,

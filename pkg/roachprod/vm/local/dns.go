@@ -189,3 +189,10 @@ func (n *dnsProvider) dnsFileName() string {
 func dnsKey(record vm.DNSRecord) string {
 	return fmt.Sprintf("%s:%s:%s", record.Name, record.Type, record.Data)
 }
+
+// ConfigureDnsHost is a no-op for local
+func (n *dnsProvider) ConfigureDnsHost(
+	ctx context.Context, clusterName, action string, hosts []string,
+) error {
+	return nil
+}

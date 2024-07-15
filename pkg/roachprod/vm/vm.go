@@ -356,6 +356,9 @@ type ProviderOpts interface {
 	// ConfigureClusterCleanupFlags configures a FlagSet with any options relevant to
 	// commands (`gc`)
 	ConfigureClusterCleanupFlags(*pflag.FlagSet)
+	// ConfigureDnsHostFlags configures a FlagSet with any options relevant to
+	// commands (`dns-host`)
+	ConfigureDnsHostFlags(*pflag.FlagSet)
 }
 
 // VolumeSnapshot is an abstract representation of a specific volume snapshot.
