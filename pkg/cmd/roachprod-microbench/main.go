@@ -123,6 +123,7 @@ func makeRunCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&config.lenient, "lenient", config.lenient, "tolerate errors while running benchmarks")
 	cmd.Flags().BoolVar(&config.affinity, "affinity", config.affinity, "run benchmarks with iterations and binaries having affinity to the same node, only applies when more than one archive is specified")
 	cmd.Flags().BoolVar(&config.quiet, "quiet", config.quiet, "suppress roachprod progress output")
+	cmd.Flags().BoolVar(&config.recoverable, "recoverable", config.recoverable, "VMs are able to recover from transient failures (e.g., running spot instances on a MIG in GCE)")
 	return cmd
 }
 
