@@ -483,9 +483,9 @@ func (r *Replica) leasePostApplyLocked(
 		// We've received and applied an expiration lease for a range that shouldn't
 		// keep using it, most likely as part of a lease transfer (which is always
 		// expiration-based). The lease is also still valid. Upgrade this lease to
-		// the more efficient epoch-based one.
+		// the more efficient epoch or leader lease.
 		if log.V(1) {
-			log.VEventf(ctx, 1, "upgrading expiration lease %s to an epoch-based one", newLease)
+			log.VEventf(ctx, 1, "upgrading expiration lease %s to an epoch/leader lease", newLease)
 		}
 
 		if r.store.TestingKnobs().LeaseUpgradeInterceptor != nil {
@@ -626,7 +626,7 @@ func (r *Replica) maybeLogLeaseAcquisition(
 				"been delayed [lease=%v prev=%v acquisition-type=%s]",
 			newLeaseAppDelay.Seconds(), newLease, prevLease, newLease.AcquisitionType)
 	} else if prevLease.Type() == roachpb.LeaseExpiration &&
-		newLease.Type() == roachpb.LeaseEpoch &&
+		newLease.Type() != roachpb.LeaseExpiration &&
 		prevLease.Expiration != nil && // nil when there is no previous lease
 		prevLease.Expiration.LessEq(newLease.Start.ToTimestamp()) {
 		// If the previous lease is expiration-based, but the new lease is not and
@@ -636,8 +636,8 @@ func (r *Replica) maybeLogLeaseAcquisition(
 		// actually serve any traffic). The result was likely an outage which
 		// resolves right now, so log to point this out.
 		log.Health.Warningf(ctx,
-			"lease expired before epoch lease upgrade, client traffic may have "+
-				"been delayed [lease=%v prev=%v acquisition-type=%s]",
+			"lease expired before epoch/leader lease upgrade, client traffic may "+
+				"have been delayed [lease=%v prev=%v acquisition-type=%s]",
 			newLease, prevLease, newLease.AcquisitionType)
 	}
 }

@@ -22,14 +22,30 @@ import (
 
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // Status contains information about this Raft peer and its view of the system.
 // The Progress is only populated on the leader.
 type Status struct {
 	BasicStatus
-	Config   tracker.Config
+	Config           tracker.Config
+	Progress         map[pb.PeerID]tracker.Progress
+	LeadSupportUntil hlc.Timestamp
+}
+
+// SparseStatus is a variant of Status without Config or Progress.Inflights,
+// which are expensive to copy.
+type SparseStatus struct {
+	BasicStatus
 	Progress map[pb.PeerID]tracker.Progress
+}
+
+// LeadSupportStatus is a variant of Status without Config or Progress, which
+// are expensive to copy.
+type LeadSupportStatus struct {
+	BasicStatus
+	LeadSupportUntil hlc.Timestamp
 }
 
 // BasicStatus contains basic information about the Raft peer. It does not allocate.
@@ -42,13 +58,6 @@ type BasicStatus struct {
 	Applied uint64
 
 	LeadTransferee pb.PeerID
-}
-
-// SparseStatus is a variant of Status without Config and Progress.Inflights,
-// which are expensive to copy.
-type SparseStatus struct {
-	BasicStatus
-	Progress map[pb.PeerID]tracker.Progress
 }
 
 // Empty returns true if the receiver is empty.
@@ -101,6 +110,10 @@ func getStatus(r *raft) Status {
 		s.Progress = getProgressCopy(r)
 	}
 	s.Config = r.trk.Config.Clone()
+	// NOTE: we assign to LeadSupportUntil even if RaftState is not currently
+	// StateLeader. The replica may have been the leader and stepped down to a
+	// follower before its lead support ran out.
+	s.LeadSupportUntil = hlc.Timestamp{} // TODO(arul): populate this field
 	return s
 }
 
@@ -108,16 +121,24 @@ func getStatus(r *raft) Status {
 //
 // [*] See struct definition for what this entails.
 func getSparseStatus(r *raft) SparseStatus {
-	status := SparseStatus{
-		BasicStatus: getBasicStatus(r),
-	}
-	if status.RaftState == StateLeader {
-		status.Progress = make(map[pb.PeerID]tracker.Progress, len(r.trk.Progress))
+	var s SparseStatus
+	s.BasicStatus = getBasicStatus(r)
+	if s.RaftState == StateLeader {
+		s.Progress = make(map[pb.PeerID]tracker.Progress, len(r.trk.Progress))
 		withProgress(r, func(id pb.PeerID, _ ProgressType, pr tracker.Progress) {
-			status.Progress[id] = pr
+			s.Progress[id] = pr
 		})
 	}
-	return status
+	return s
+}
+
+// getLeadSupportStatus gets a copy of the current raft status with only the
+// leader support information included.
+func getLeadSupportStatus(r *raft) LeadSupportStatus {
+	var s LeadSupportStatus
+	s.BasicStatus = getBasicStatus(r)
+	s.LeadSupportUntil = hlc.Timestamp{} // TODO(arul): populate this field
+	return s
 }
 
 // MarshalJSON translates the raft status into JSON.

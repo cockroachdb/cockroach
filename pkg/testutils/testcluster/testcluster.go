@@ -1136,7 +1136,7 @@ func (tc *TestCluster) WaitForLeaseUpgrade(
 		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
 		require.NoError(t, err)
 		l = li.Current()
-		if l.Type() != roachpb.LeaseEpoch {
+		if l.Type() == roachpb.LeaseExpiration {
 			return errors.Errorf("lease still an expiration based lease")
 		}
 		require.Equal(t, int64(1), l.Epoch)
