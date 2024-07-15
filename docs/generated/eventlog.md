@@ -53,6 +53,43 @@ reloaded/rotated from disk.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+### `disk_slowness_cleared`
+
+An event of type `disk_slowness_cleared` is recorded when disk slowness in a store has cleared.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NodeID` | The node ID where the event was originated. | no |
+| `StoreID` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
+### `disk_slowness_detected`
+
+An event of type `disk_slowness_detected` is recorded when a store observes disk slowness
+events.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NodeID` | The node ID where the event was originated. | no |
+| `StoreID` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ### `node_decommissioned`
 
 An event of type `node_decommissioned` is recorded when a node is marked as

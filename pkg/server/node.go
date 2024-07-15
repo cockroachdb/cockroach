@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -79,6 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -415,6 +417,14 @@ type Node struct {
 		updateCh       chan struct{}
 	}
 	proxySender kv.Sender
+
+	diskSlowCoalescerMu struct {
+		syncutil.Mutex
+		lastDiskSlow map[roachpb.StoreID]time.Time
+	}
+
+	// Event handler called in logStructuredEvent. Used in tests only.
+	onStructuredEvent func(ctx context.Context, event logpb.EventPayload)
 }
 
 var _ kvpb.InternalServer = &Node{}
@@ -587,6 +597,7 @@ func NewNode(
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
 		proxySender:           proxySender,
 	}
+	n.diskSlowCoalescerMu.lastDiskSlow = make(map[roachpb.StoreID]time.Time)
 	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
@@ -858,8 +869,86 @@ func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
 		// initialization process.
 		log.Fatal(ctx, "attempting to add a store without a version")
 	}
+	store.TODOEngine().RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
+		n.onStoreDiskSlow(ctx, store.StoreID(), info)
+	})
 	n.stores.AddStore(store)
 	n.recorder.AddStore(store)
+}
+
+func (n *Node) onStoreDiskSlow(
+	ctx context.Context, storeID roachpb.StoreID, info pebble.DiskSlowInfo,
+) {
+	// Emit a disk slow event for each slow store that reports a disk slow event.
+	// After diskSlowClearInterval since the last disk slow event, we emit a disk
+	// slowness cleared event. Any other disk slow events for the same store in
+	// between are ignored as duplicates.
+	//
+	// We reuse the maxSyncInterval, as it's unlikely for slow events to last longer
+	// than this without significant corrective action (eg. crashes).
+	//
+	// TODO(bilal): Store stats on events observed and coalesced events.
+	diskSlowClearInterval := fs.MaxSyncDuration.Get(&n.storeCfg.Settings.SV)
+	if storeID == 0 {
+		// Uninitialized store; cannot coalesce events for an unknown store.
+		return
+	}
+	n.diskSlowCoalescerMu.Lock()
+	last, ok := n.diskSlowCoalescerMu.lastDiskSlow[storeID]
+	n.diskSlowCoalescerMu.lastDiskSlow[storeID] = timeutil.Now()
+	n.diskSlowCoalescerMu.Unlock()
+	// NB: A zero / nonexistent value for last means that we are not currently running
+	// the below async task, and this is a new disk slowness event that needs a
+	// start/clear pair emitted for it.
+	if ok && last != (time.Time{}) {
+		// This is a duplicate event for this store.
+		return
+	}
+
+	_ = n.stopper.RunAsyncTask(ctx, "clear-disk-slow", func(ctx context.Context) {
+		ev := &eventpb.DiskSlownessDetected{}
+		ev.StoreID = int32(storeID)
+		ev.NodeID = int32(n.Descriptor.NodeID)
+		ev.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+
+		// logStructuredEvent does an async write to system.eventlog, however it could
+		// do a synchronous log write to the node logger, so we call it within this async
+		// task as opposed to outside it.
+		n.logStructuredEvent(ctx, logpb.EventPayload(ev))
+
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				clearing := false
+				n.diskSlowCoalescerMu.Lock()
+				last := n.diskSlowCoalescerMu.lastDiskSlow[storeID]
+				if timeutil.Since(last) > diskSlowClearInterval {
+					clearing = true
+					delete(n.diskSlowCoalescerMu.lastDiskSlow, storeID)
+				}
+				n.diskSlowCoalescerMu.Unlock()
+
+				if !clearing {
+					continue
+				}
+
+				// Clear the event and break out of the loop.
+				ev := &eventpb.DiskSlownessCleared{}
+				ev.StoreID = int32(storeID)
+				ev.NodeID = int32(n.Descriptor.NodeID)
+				ev.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+
+				n.logStructuredEvent(ctx, logpb.EventPayload(ev))
+
+				return
+			case <-n.stopper.ShouldQuiesce():
+				return
+			}
+		}
+	})
+
 }
 
 // validateStores iterates over all stores, verifying they agree on node ID.
@@ -1367,6 +1456,10 @@ func (n *Node) logStructuredEvent(ctx context.Context, event logpb.EventPayload)
 		sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* not LogExternally: we already call log.StructuredEvent above */
 		event,
 	)
+
+	if n.onStructuredEvent != nil {
+		n.onStructuredEvent(ctx, event)
+	}
 }
 
 // If we receive a (proto-marshaled) kvpb.BatchRequest whose Requests contain
