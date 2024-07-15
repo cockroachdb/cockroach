@@ -16,6 +16,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"math"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
@@ -84,6 +85,13 @@ func loadDefaultMethods() {
 	// The "trust" method accepts any connection attempt that matches
 	// the current rule.
 	RegisterAuthMethod("trust", authTrust, hba.ConnAny, NoOptionsAllowed)
+	// The "ldap" method requires a clear text password which will be used to bind
+	// with a LDAP server. The remaining connection parameters are provided in hba
+	// conf options
+	//
+	// Care should be taken by administrators to only accept this auth
+	// method over secure connections, e.g. those encrypted using SSL.
+	RegisterAuthMethod("ldap", authLDAP, hba.ConnAny, nil)
 }
 
 // AuthMethod is a top-level factory for composing the various
@@ -106,6 +114,7 @@ var _ AuthMethod = authTrust
 var _ AuthMethod = authReject
 var _ AuthMethod = authSessionRevivalToken([]byte{})
 var _ AuthMethod = authJwtToken
+var _ AuthMethod = authLDAP
 
 // authPassword is the AuthMethod constructor for HBA method
 // "password": authenticate using a cleartext password received from
@@ -784,6 +793,114 @@ func authJwtToken(
 		if detailedErrors, authError := jwtVerifier.ValidateJWTLogin(ctx, execCfg.Settings, user, []byte(token), identMap); authError != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID,
 				errors.Join(authError, errors.Newf("%s", detailedErrors)))
+			return authError
+		}
+		return nil
+	})
+	return b, nil
+}
+
+// LDAPVerifier is an interface for `ldapauthccl` pkg to add ldap login support.
+type LDAPVerifier interface {
+	// ValidateLDAPLogin validates whether the password supplied could be used to
+	// bind to ldap server with a distinguished name obtained from performing a
+	// search operation using options provided in the hba conf and supplied sql
+	// username in db connection string.
+	ValidateLDAPLogin(_ context.Context, _ *cluster.Settings,
+		_ username.SQLUsername,
+		_ string,
+		_ *hba.Entry,
+		_ *identmap.Conf,
+	) (detailedErrorMsg redact.RedactableString, authError error)
+}
+
+// ldapVerifier is a singleton global pgwire object which gets initialized from
+// authLDAP method whenever an LDAP auth attempt happens. It depends on ldapccl
+// module to be imported properly to override its default ConfigureLDAPAuth
+// constructor.
+var ldapVerifier = struct {
+	sync.Once
+	v LDAPVerifier
+}{}
+
+type noLDAPConfigured struct{}
+
+func (c *noLDAPConfigured) ValidateLDAPLogin(
+	_ context.Context,
+	_ *cluster.Settings,
+	_ username.SQLUsername,
+	_ string,
+	_ *hba.Entry,
+	_ *identmap.Conf,
+) (detailedErrorMsg redact.RedactableString, authError error) {
+	return "", errors.New("LDAP based authentication requires CCL features")
+}
+
+// ConfigureLDAPAuth is a hook for the `ldapauthccl` library to add LDAP login
+// support. It's called to setup the LDAPVerifier just as it is needed.
+var ConfigureLDAPAuth = func(
+	serverCtx context.Context,
+	ambientCtx log.AmbientContext,
+	st *cluster.Settings,
+	clusterUUID uuid.UUID,
+) LDAPVerifier {
+	return &noLDAPConfigured{}
+}
+
+// authLDAP is the AuthMethod constructor for the CRDB-specific
+// ldap auth mechanism.
+func authLDAP(
+	sCtx context.Context,
+	c AuthConn,
+	_ tls.ConnectionState,
+	execCfg *sql.ExecutorConfig,
+	entry *hba.Entry,
+	identMap *identmap.Conf,
+) (*AuthBehaviors, error) {
+	ldapVerifier.Do(func() {
+		if ldapVerifier.v == nil {
+			ldapVerifier.v = ConfigureLDAPAuth(sCtx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+		}
+	})
+
+	b := &AuthBehaviors{}
+	b.SetRoleMapper(UseProvidedIdentity)
+	b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, clientConnection bool, _ PasswordRetrievalFn, _ *ldap.DN) error {
+		c.LogAuthInfof(ctx, "LDAP password provided; attempting to bind to domain")
+		if !clientConnection {
+			err := errors.New("LDAP authentication is only available for client connections")
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+		// Request password from client.
+		if err := c.SendAuthRequest(authCleartextPassword, nil /* data */); err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+		// Wait for the password response from the client.
+		pwdData, err := c.GetPwdData()
+		if err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+
+		// Extract the LDAP password.
+		ldapPwd, err := passwordString(pwdData)
+		if err != nil {
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+			return err
+		}
+		// If there is no ldap pwd, send the Password Auth Failed error to make the
+		// client prompt for a password.
+		if len(ldapPwd) == 0 {
+			return security.NewErrPasswordUserAuthFailed(user)
+		}
+		if detailedErrors, authError := ldapVerifier.v.ValidateLDAPLogin(ctx, execCfg.Settings, user, ldapPwd, entry, identMap); authError != nil {
+			errForLog := authError
+			if detailedErrors != "" {
+				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
+			}
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
 			return authError
 		}
 		return nil
