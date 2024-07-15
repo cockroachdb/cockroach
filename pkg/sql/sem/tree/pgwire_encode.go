@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/lib/pq/oid"
 )
 
@@ -334,6 +335,13 @@ func PGWireFormatTimeTZ(t timetz.TimeTZ, tmp []byte) []byte {
 // PGWireFormatTimestamp formats t into a format lib/pq understands.
 // If offset is not nil, it will not display the timezone offset.
 func PGWireFormatTimestamp(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
+	if t == pgdate.TimeInfinity {
+		return []byte("infinity")
+	}
+	if t == pgdate.TimeNegativeInfinity{
+		return []byte("-infinity")
+	}
+
 	format := PGTimeStampFormatNoOffset
 	if offset != nil {
 		format = PGTimeStampFormat

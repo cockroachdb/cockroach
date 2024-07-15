@@ -2590,12 +2590,11 @@ type DTimestamp struct {
 }
 
 // MakeDTimestamp creates a DTimestamp with specified precision.
-func MakeDTimestamp(t time.Time, precision time.Duration) (*DTimestamp, error) {
-	ret := t.Round(precision)
-	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, NewTimestampExceedsBoundsError(ret)
+func MakeDTimestamp(t time.Time, precision time.Duration) (_ *DTimestamp, err error) {
+	if t, err = checkTimeBounds(t, precision); err != nil {
+		return nil, err
 	}
-	return &DTimestamp{Time: ret}, nil
+	return &DTimestamp{Time: t}, nil
 }
 
 // MustMakeDTimestamp wraps MakeDTimestamp but panics if there is an error.
@@ -2869,6 +2868,10 @@ type DTimestampTZ struct {
 func checkTimeBounds(t time.Time, precision time.Duration) (time.Time, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
+		if t == pgdate.TimeInfinity || t == pgdate.TimeNegativeInfinity {
+			return t, nil
+		}
+
 		return time.Time{}, NewTimestampExceedsBoundsError(ret)
 	}
 	return ret, nil

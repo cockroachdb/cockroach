@@ -72,14 +72,14 @@ var (
 	// We should probably use the next microsecond after this value, i.e. timeutil.Unix(9224318016000, 0).
 	// Postgres uses math.MaxInt64 microseconds as the infinity value.
 	// See: https://github.com/postgres/postgres/blob/42aa1f0ab321fd43cbfdd875dd9e13940b485900/src/include/datatype/timestamp.h#L107.
-	TimeInfinity = timeutil.Unix(9224318016000-1, 999999000)
+	TimeInfinity = timeutil.Unix(9224318016000, 0)
 	// TimeNegativeInfinity represents the "lowest" possible time.
 	// TODO (#41564): this should actually behave as -infinity, i.e. any operator
 	// leaves this as -infinity. This time should always be less than any other time.
 	// We should probably use the next microsecond before this value, i.e. timeutil.Unix(9224318016000-1, 999999000).
 	// Postgres uses math.MinInt64 microseconds as the -infinity value.
 	// See: https://github.com/postgres/postgres/blob/42aa1f0ab321fd43cbfdd875dd9e13940b485900/src/include/datatype/timestamp.h#L107.
-	TimeNegativeInfinity = timeutil.Unix(-210866803200, 0)
+	TimeNegativeInfinity = timeutil.Unix(-210866803201, 999999000)
 )
 
 type ParseHelper struct {
