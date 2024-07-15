@@ -139,6 +139,7 @@ const (
 	dropTable    // DROP TABLE <table>
 	dropView     // DROP VIEW <view>
 
+	createTypeComposite
 	// Unimplemented operations. TODO(sql-foundations): Audit and/or implement these operations.
 	// alterDatabaseOwner
 	// alterDatabasePlacement
@@ -237,6 +238,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	createTable:                       (*operationGenerator).createTable,
 	createTableAs:                     (*operationGenerator).createTableAs,
 	createTypeEnum:                    (*operationGenerator).createEnum,
+	createTypeComposite:               (*operationGenerator).createCompositeType,
 	createView:                        (*operationGenerator).createView,
 	dropFunction:                      (*operationGenerator).dropFunction,
 	dropIndex:                         (*operationGenerator).dropIndex,
@@ -287,6 +289,7 @@ var opWeights = []int{
 	createTable:                       1,
 	createTableAs:                     1,
 	createTypeEnum:                    1,
+	createTypeComposite:               1,
 	createView:                        1,
 	dropFunction:                      1,
 	dropIndex:                         1,

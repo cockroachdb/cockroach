@@ -150,7 +150,7 @@ func randTablesN(r *rand.Rand, n int, prefix string, isMultiRegion bool) []strin
 	numTypes := r.Intn(5) + 1
 	for i := 0; i < numTypes; i++ {
 		name := fmt.Sprintf("rand_typ_%d", i)
-		stmt := randgen.RandCreateType(r, name, letters)
+		stmt := randgen.RandCreateEnumType(r, name, letters)
 		stmts = append(stmts, stmt.String())
 	}
 	return stmts

@@ -53,6 +53,7 @@ func _() {
 	_ = x[dropSequence-42]
 	_ = x[dropTable-43]
 	_ = x[dropView-44]
+	_ = x[createTypeComposite-45]
 }
 
 func (i opType) String() string {
@@ -147,6 +148,8 @@ func (i opType) String() string {
 		return "dropTable"
 	case dropView:
 		return "dropView"
+	case createTypeComposite:
+		return "createTypeComposite"
 	default:
 		return "opType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
