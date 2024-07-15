@@ -20,11 +20,14 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	roachprodConfig "github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -46,6 +49,7 @@ type executorConfig struct {
 	lenient           bool
 	affinity          bool
 	quiet             bool
+	recoverable       bool
 }
 
 type executor struct {
@@ -53,6 +57,7 @@ type executor struct {
 	binariesList           []string
 	excludeBenchmarksRegex [][]*regexp.Regexp
 	packages               []string
+	runOptions             install.RunOptions
 	log                    *logger.Logger
 }
 
@@ -103,6 +108,22 @@ func newExecutor(config executorConfig) (*executor, error) {
 		return nil, err
 	}
 
+	runOptions := install.DefaultRunOptions().WithRetryDisabled()
+	if config.recoverable {
+		// For VMs that have started failing with transient errors we'll want to
+		// introduce a longer retry, since the `recoverable` flag indicates these
+		// may still be recoverable (usually due to preemption, but running on a
+		// managed instance group that will try and recover the VM). But since it's
+		// possible a node may never come back up (due to resources exhaustion),
+		// we'll want to limit the number of retries.
+		runOptions = runOptions.WithRetryOpts(retry.Options{
+			InitialBackoff: 1 * time.Minute,
+			MaxBackoff:     5 * time.Minute,
+			Multiplier:     2,
+			MaxRetries:     10,
+		})
+	}
+
 	binariesList := []string{config.binaries}
 	if config.compareBinaries != "" {
 		binariesList = append(binariesList, config.compareBinaries)
@@ -131,6 +152,7 @@ func newExecutor(config executorConfig) (*executor, error) {
 		excludeBenchmarksRegex: excludeBenchmarks,
 		binariesList:           binariesList,
 		packages:               packages,
+		runOptions:             runOptions,
 		log:                    l,
 	}, nil
 }
@@ -148,6 +170,7 @@ func defaultExecutorConfig() executorConfig {
 		lenient:      true,
 		affinity:     false,
 		quiet:        false,
+		recoverable:  true,
 	}
 }
 
@@ -268,7 +291,7 @@ func (e *executor) listBenchmarks(
 	}
 	e.log.Printf("Distributing and running benchmark listings across cluster %s", e.cluster)
 	_ = cluster.ExecuteRemoteCommands(
-		roachprodLog, roachprod.RunWithDetails, e.cluster, commands, numNodes, true, callback,
+		roachprodLog, roachprod.RunWithDetails, e.cluster, commands, numNodes, true, e.runOptions, callback,
 	)
 	if !e.quiet {
 		fmt.Println()
@@ -440,7 +463,7 @@ func (e *executor) executeBenchmarks() error {
 	e.log.Printf("Found %d benchmarks, distributing and running benchmarks for %d iteration(s) across cluster %s",
 		len(benchmarks), e.iterations, e.cluster)
 	_ = cluster.ExecuteRemoteCommands(
-		muteLogger, roachprod.RunWithDetails, e.cluster, commands, numNodes, !e.lenient, callback,
+		muteLogger, roachprod.RunWithDetails, e.cluster, commands, numNodes, !e.lenient, e.runOptions, callback,
 	)
 
 	if !e.quiet {
