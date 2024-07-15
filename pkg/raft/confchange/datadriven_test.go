@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/datadriven"
@@ -81,7 +82,7 @@ func TestConfChangeDataDriven(t *testing.T) {
 				ccs = append(ccs, cc)
 			}
 
-			var cfg tracker.Config
+			var cfg quorum.Config
 			var trk tracker.ProgressMap
 			var err error
 			switch d.Cmd {
