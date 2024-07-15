@@ -63,6 +63,10 @@ type DNSProvider interface {
 	DeleteRecordsByName(ctx context.Context, names ...string) error
 	// Domain returns the domain name (zone) of the DNS provider.
 	Domain() string
+	// ConfigureDNSHost creates, updates, delete the DNS host records based on the action
+	// if the action is not provided, it checks if the record sets exist. Based on this, it
+	// either creates or updates the record set.
+	ConfigureDNSHost(ctx context.Context, clusterName, action string, hosts []string) error
 }
 
 // FanOutDNS collates a collection of VMs by their DNS providers and invoke the
