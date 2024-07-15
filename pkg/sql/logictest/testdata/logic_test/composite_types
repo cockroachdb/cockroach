@@ -64,7 +64,7 @@ query TT
 SHOW CREATE TABLE atyp
 ----
 atyp  CREATE TABLE public.atyp (
-        a T[] NULL,
+        a public.t[] NULL,
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
         CONSTRAINT atyp_pkey PRIMARY KEY (rowid ASC)
       )
