@@ -105,11 +105,12 @@ type ycsb struct {
 	sfu         bool
 	splits      int
 
-	workload                                                        string
-	requestDistribution                                             string
-	scanLengthDistribution                                          string
-	minScanLength, maxScanLength                                    uint64
-	readFreq, insertFreq, updateFreq, scanFreq, readModifyWriteFreq float32
+	workload                                                string
+	requestDistribution                                     string
+	scanLengthDistribution                                  string
+	minScanLength, maxScanLength                            uint64
+	readFreq, scanFreq                                      float32
+	insertFreq, updateFreq, readModifyWriteFreq, deleteFreq float32
 }
 
 func init() {
@@ -128,6 +129,7 @@ var ycsbMeta = workload.Meta{
 			`read-modify-write-in-txn`: {RuntimeOnly: true},
 			`workload`:                 {RuntimeOnly: true},
 			`read-freq`:                {RuntimeOnly: true},
+			`delete-freq`:              {RuntimeOnly: true},
 			`insert-freq`:              {RuntimeOnly: true},
 			`update-freq`:              {RuntimeOnly: true},
 			`scan-freq`:                {RuntimeOnly: true},
@@ -154,6 +156,7 @@ var ycsbMeta = workload.Meta{
 		g.flags.Float32Var(&g.updateFreq, `update-freq`, 0.0, `Percentage of updates in the workload. Used in conjunction with --workload=CUSTOM to specify an alternative workload mix. (default 0.0)`)
 		g.flags.Float32Var(&g.scanFreq, `scan-freq`, 0.0, `Percentage of scans in the workload. Used in conjunction with --workload=CUSTOM to specify an alternative workload mix. (default 0.0)`)
 		g.flags.Float32Var(&g.readModifyWriteFreq, `read-modify-write-freq`, 0.0, `Percentage of read-modify-writes in the workload. Used in conjunction with --workload=CUSTOM to specify an alternative workload mix. (default 0.0)`)
+		g.flags.Float32Var(&g.deleteFreq, `delete-freq`, 0.0, `Percentage of deletes in the workload. Used in conjunction with --workload=CUSTOM to specify an alternative workload mix. (default 0.0)`)
 		RandomSeed.AddFlag(&g.flags)
 
 		// TODO(dan): g.flags.Uint64Var(&g.maxWrites, `max-writes`,
@@ -180,7 +183,7 @@ func (g *ycsb) Hooks() workload.Hooks {
 		Validate: func() error {
 			g.workload = strings.ToUpper(g.workload)
 			var defaultReqDist string
-			incomingFreqSum := g.readFreq + g.insertFreq + g.updateFreq + g.scanFreq + g.readModifyWriteFreq
+			incomingFreqSum := g.readFreq + g.insertFreq + g.updateFreq + g.deleteFreq + g.scanFreq + g.readModifyWriteFreq
 			if g.workload == "CUSTOM" {
 				if incomingFreqSum != 1.0 {
 					return errors.Errorf("Custom workload frequencies do not sum to 1.0")
@@ -406,6 +409,7 @@ func (g *ycsb) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
 	const readStmtStr = `SELECT * FROM usertable WHERE ycsb_key = $1`
+	const deleteStmtStr = `DELETE FROM usertable WHERE ycsb_key = $1`
 
 	readFieldForUpdateStmtStrs := make([]string, numTableFields)
 	for i := range readFieldForUpdateStmtStrs {
@@ -500,6 +504,7 @@ func (g *ycsb) Ops(
 	const (
 		readStmt                     stmtKey = "read"
 		scanStmt                     stmtKey = "scan"
+		deleteStmt                   stmtKey = "delete"
 		insertStmt                   stmtKey = "insert"
 		readFieldForUpdateStmtFormat         = "readFieldForUpdate%d"
 		updateStmtFormat                     = "update%d"
@@ -512,6 +517,7 @@ func (g *ycsb) Ops(
 		readFieldForUpdateStmts[i] = key
 	}
 	pool.AddPreparedStatement(scanStmt, scanStmtStr)
+	pool.AddPreparedStatement(deleteStmt, deleteStmtStr)
 	pool.AddPreparedStatement(insertStmt, insertStmtStr)
 	updateStmts := make([]stmtKey, len(updateStmtStrs))
 	for i, q := range updateStmtStrs {
@@ -556,6 +562,7 @@ func (g *ycsb) Ops(
 			readStmt:                readStmt,
 			readFieldForUpdateStmts: readFieldForUpdateStmts,
 			scanStmt:                scanStmt,
+			deleteStmt:              deleteStmt,
 			insertStmt:              insertStmt,
 			updateStmts:             updateStmts,
 			rowIndex:                &rowIndex,
@@ -589,6 +596,12 @@ type ycsbWorker struct {
 	// updating it. Used for read-modify-write requests.
 	readFieldForUpdateStmts []stmtKey
 	scanStmt, insertStmt    stmtKey
+
+	// Statement to use for deletes. Deletes are NOT part of the yscb benchmark
+	// standard, but are added here for testing purposes only. Deletes can only
+	// be triggered under workload=CUSTOM.
+	deleteStmt stmtKey
+
 	// In normal mode this is one statement per field, since the field name
 	// cannot be parametrized. In JSON mode it's a single statement.
 	updateStmts []stmtKey
@@ -629,6 +642,8 @@ func (yw *ycsbWorker) run(ctx context.Context) error {
 		err = yw.readRow(ctx)
 	case insertOp:
 		err = yw.insertRow(ctx)
+	case deleteOp:
+		err = yw.deleteRow(ctx)
 	case scanOp:
 		err = yw.scanRows(ctx)
 	case readModifyWriteOp:
@@ -666,6 +681,7 @@ type operation string
 const (
 	updateOp          operation = `update`
 	insertOp          operation = `insert`
+	deleteOp          operation = `delete`
 	readOp            operation = `read`
 	scanOp            operation = `scan`
 	readModifyWriteOp operation = `readModifyWrite`
@@ -825,6 +841,15 @@ func (yw *ycsbWorker) updateRow(ctx context.Context) error {
 	return nil
 }
 
+func (yw *ycsbWorker) deleteRow(ctx context.Context) error {
+	key := yw.nextReadKey()
+	_, err := yw.conn.Exec(ctx, yw.deleteStmt, key)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (yw *ycsbWorker) readRow(ctx context.Context) error {
 	key := yw.nextReadKey()
 	res, err := yw.conn.Query(ctx, yw.readStmt, key)
@@ -937,6 +962,10 @@ func (yw *ycsbWorker) chooseOp() operation {
 		return insertOp
 	}
 	p -= yw.config.insertFreq
+	if readOnly.Load() == 0 && p <= yw.config.deleteFreq {
+		return deleteOp
+	}
+	p -= yw.config.deleteFreq
 	if readOnly.Load() == 0 && p <= yw.config.readModifyWriteFreq {
 		return readModifyWriteOp
 	}
