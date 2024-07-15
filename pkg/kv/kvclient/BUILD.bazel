@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "kvclient",
     srcs = [
+        "node_store.go",
         "placeholder.go",
         "revision_reader.go",
         "scan_meta.go",

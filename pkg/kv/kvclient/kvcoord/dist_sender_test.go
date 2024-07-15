@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -36,13 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -6165,63 +6161,6 @@ func (m mockFirstRangeProvider) GetFirstRangeDescriptor() (*roachpb.RangeDescrip
 func (m mockFirstRangeProvider) OnFirstRangeChanged(f func(*roachpb.RangeDescriptor)) {}
 
 var _ FirstRangeProvider = (*mockFirstRangeProvider)(nil)
-
-// mockTenantSideCostController is an implementation of TenantSideCostController
-// that has model objects.
-type mockTenantSideCostController struct {
-	ruModel  *tenantcostmodel.RequestUnitModel
-	cpuModel *tenantcostmodel.EstimatedCPUModel
-}
-
-var _ multitenant.TenantSideCostController = &mockTenantSideCostController{}
-
-func (mockTenantSideCostController) Start(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	instanceID base.SQLInstanceID,
-	sessionID sqlliveness.SessionID,
-	externalUsageFn multitenant.ExternalUsageFn,
-	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn,
-) error {
-	return nil
-}
-
-func (mockTenantSideCostController) OnRequestWait(ctx context.Context) error {
-	return nil
-}
-
-func (mockTenantSideCostController) OnResponseWait(
-	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
-) error {
-	return nil
-}
-
-func (mockTenantSideCostController) OnExternalIOWait(
-	ctx context.Context, usage multitenant.ExternalIOUsage,
-) error {
-	return nil
-}
-
-func (mockTenantSideCostController) OnExternalIO(
-	ctx context.Context, usage multitenant.ExternalIOUsage,
-) {
-}
-
-func (mockTenantSideCostController) GetCPUMovingAvg() float64 {
-	return 0
-}
-
-func (m *mockTenantSideCostController) GetRequestUnitModel() *tenantcostmodel.RequestUnitModel {
-	return m.ruModel
-}
-
-func (m *mockTenantSideCostController) GetEstimatedCPUModel() *tenantcostmodel.EstimatedCPUModel {
-	return m.cpuModel
-}
-
-func (m *mockTenantSideCostController) Metrics() metric.Struct {
-	return nil
-}
 
 // benchNodeStore mocks out the looking up for node descriptors. On a real
 // system this is done through gossip, but we don't want to include the time to
