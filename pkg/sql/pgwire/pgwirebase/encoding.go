@@ -921,6 +921,12 @@ type PGNumeric struct {
 // for a timestamp. To create a timestamp from this value, it takes the microseconds
 // delta and adds it to PGEpochJDate.
 func pgBinaryToTime(i int64) time.Time {
+	if i == math.MaxInt64 {
+		return pgdate.TimeInfinity
+	}
+	if i == math.MinInt64 {
+		return pgdate.TimeNegativeInfinity
+	}
 	return duration.AddMicros(PGEpochJDate, i)
 }
 

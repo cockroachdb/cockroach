@@ -396,6 +396,8 @@ func toQuantileValue(d tree.Datum) (float64, error) {
 }
 
 var (
+	// TODO(xiaochen): remove quantileMinTimestamp and quantileMaxTimestamp
+	// 
 	// quantileMinTimestamp is an alternative minimum finite DTimestamp value to
 	// avoid the problems around TimeNegativeInfinity, see #41564.
 	quantileMinTimestamp    = tree.MinSupportedTime.Add(time.Second)

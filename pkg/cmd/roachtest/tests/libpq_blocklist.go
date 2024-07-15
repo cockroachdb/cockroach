@@ -22,7 +22,6 @@ var libPQBlocklist = blocklist{
 	"pq.TestCopyInRaiseStmtTrigger":                  "5807",
 	"pq.TestCopyInTypes":                             "5807",
 	"pq.TestCopyRespLoopConnectionError":             "5807",
-	"pq.TestInfinityTimestamp":                       "41564",
 	"pq.TestIssue186":                                "41558",
 	"pq.TestIssue196":                                "41689",
 	"pq.TestIssue282":                                "12137",
