@@ -18,6 +18,7 @@ import (
 	"runtime/pprof"
 	"sort"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -39,9 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
@@ -457,6 +460,62 @@ func compareNodeStatus(
 	}
 
 	return nodeStatus
+}
+
+// TestNodeEmitsDiskSlowEvents verifies that disk slow events are emitted for
+// each store that is slow.
+func TestNodeEmitsDiskSlowEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// ========================================
+	// Start test server and wait for full initialization.
+	// ========================================
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer ts.Stopper().Stop(ctx)
+
+	// Retrieve the first store from the Node.
+	s, err := ts.GetStores().(*kvserver.Stores).GetStore(roachpb.StoreID(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.WaitForInit()
+	n := ts.Node().(*Node)
+	var diskSlowStarted, diskSlowCleared atomic.Int32
+	n.onStructuredEvent = func(ctx context.Context, event logpb.EventPayload) {
+		if event.CommonDetails().EventType == "disk_slowness_detected" {
+			diskSlowStarted.Add(1)
+		} else if event.CommonDetails().EventType == "disk_slowness_cleared" {
+			diskSlowCleared.Add(1)
+		}
+	}
+
+	n.onStoreDiskSlow(ctx, roachpb.StoreID(1), pebble.DiskSlowInfo{})
+	n.onStoreDiskSlow(ctx, roachpb.StoreID(1), pebble.DiskSlowInfo{})
+	n.onStoreDiskSlow(ctx, roachpb.StoreID(1), pebble.DiskSlowInfo{})
+
+	testutils.SucceedsSoon(t, func() error {
+		if diskSlowStarted.Load() < 1 {
+			return errors.New("waiting for disk slow event to be emitted")
+		}
+		if diskSlowStarted.Load() > 1 {
+			return errors.New("emitted too many disk slow events")
+		}
+		return nil
+	})
+	testutils.SucceedsSoon(t, func() error {
+		if diskSlowCleared.Load() < 1 {
+			return errors.New("waiting for disk slow event to be cleared")
+		}
+		if diskSlowCleared.Load() > 1 {
+			return errors.New("emitted too many disk slow cleared events")
+		}
+		return nil
+	})
 }
 
 // TestNodeStatusWritten verifies that status summaries are written correctly for

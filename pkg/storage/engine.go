@@ -1128,6 +1128,12 @@ type Engine interface {
 	// just copies the backing bytes to a local file of if it rewrites the file
 	// key-by-key to a new file.
 	Download(ctx context.Context, span roachpb.Span, copy bool) error
+
+	// RegisterDiskSlowCallback registers a callback that will be run when a
+	// write operation on the disk has been seen to be slow. This callback
+	// needs to be thread-safe as it could be called repeatedly in multiple threads
+	// over a short period of time.
+	RegisterDiskSlowCallback(cb func(info pebble.DiskSlowInfo))
 }
 
 // Batch is the interface for batch specific operations.
