@@ -439,3 +439,97 @@ func (p *dnsProvider) syncPublicDNS(l *logger.Logger, vms vm.List) (err error) {
 		cmd, output, zoneBuilder.String(),
 	)
 }
+
+// ConfigureDNSHost configures the DNS host for the cluster based on the action
+func (p *dnsProvider) ConfigureDNSHost(
+	ctx context.Context, action string, dnsInfos []vm.DNSInfo,
+) error {
+	switch action {
+	case "delete":
+		return p.deleteDNSHostRecords(ctx, dnsInfos)
+	case "sync":
+		return p.syncDNSHostRecords(ctx, dnsInfos)
+	}
+	return errors.Newf("invalid action <%s> for configuring dns host", action)
+}
+
+func (p *dnsProvider) syncDNSHostRecords(ctx context.Context, dnsInfos []vm.DNSInfo) error {
+	for _, dnsInfo := range dnsInfos {
+		name := fmt.Sprintf("%s.", dnsInfo.PublicDNS)
+		task := "create"
+		existingRecords, err := listRecordSets(ctx, p.dnsProject, name, p.publicZone)
+		if err != nil {
+			return err
+		}
+		if len(existingRecords) > 0 {
+			// update as record is already present
+			// checking for more than one record is not necessary as these records
+			// are created by the same code
+			task = "update"
+		}
+		if err = createOrUpdateRecord(ctx, p.dnsProject, name, p.publicZone, task, dnsInfo.PublicIP, 60); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *dnsProvider) deleteDNSHostRecords(ctx context.Context, dnsInfos []vm.DNSInfo) error {
+	for _, dnsInfo := range dnsInfos {
+		if err := deleteRecord(ctx, p.dnsProject, fmt.Sprintf("%s.", dnsInfo.PublicDNS), p.publicZone); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func createOrUpdateRecord(
+	ctx context.Context, dnsProject, name, zone, action, ip string, ttl int,
+) error {
+	args := []string{"--project", dnsProject, "dns", "record-sets", action, name,
+		"--type", "A",
+		"--ttl", strconv.Itoa(ttl),
+		"--zone", zone,
+		"--rrdatas", ip,
+	}
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	_, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "failed to list dns records")
+	}
+	return nil
+}
+
+func listRecordSets(ctx context.Context, dnsProject, name, zone string) ([]vm.DNSRecord, error) {
+	args := []string{"--project", dnsProject, "dns", "record-sets", "list",
+		"--limit", strconv.Itoa(dnsMaxResults),
+		"--page-size", strconv.Itoa(dnsMaxResults),
+		"--zone", zone,
+		"--filter", name,
+		"--format", "json",
+	}
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	res, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "failed to list dns records")
+	}
+	var jsonList []vm.DNSRecord
+	err = json.Unmarshal(res, &jsonList)
+	if err != nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "failed to unlarshall dns records")
+	}
+	return jsonList, nil
+}
+
+func deleteRecord(ctx context.Context, dnsProject, name, zone string) error {
+	args := []string{"--project", dnsProject, "dns", "record-sets", "delete", name,
+		"--type", "A",
+		"--zone", zone,
+	}
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	_, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "failed to list dns records")
+	}
+	return nil
+}

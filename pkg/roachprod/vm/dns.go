@@ -33,6 +33,14 @@ const (
 	SRV DNSType = "SRV"
 )
 
+// DNSInfo provides the information for DNS configuration
+type DNSInfo struct {
+	// Public DNS of the VM
+	PublicDNS string
+	// Public IP of the VM
+	PublicIP string
+}
+
 // DNSRecord represents a DNS record.
 type DNSRecord struct {
 	// Name is the name of the DNS record.
@@ -63,6 +71,10 @@ type DNSProvider interface {
 	DeleteRecordsByName(ctx context.Context, names ...string) error
 	// Domain returns the domain name (zone) of the DNS provider.
 	Domain() string
+	// ConfigureDNSHost creates, updates, delete the DNS host records based on the action as
+	// sync:   creates the record if it does not exist, or it updates the same.
+	// delete: deletes the record.
+	ConfigureDNSHost(ctx context.Context, action string, dnsInfo []DNSInfo) error
 }
 
 // FanOutDNS collates a collection of VMs by their DNS providers and invoke the

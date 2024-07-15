@@ -162,6 +162,9 @@ func initFlags() {
 				providerOptsContainer[providerName].ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
 			}
 
+			// set up dns flags for dnsHostCmd
+			providerOptsContainer[providerName].ConfigureDNSHostFlags(dnsHostCmd.Flags())
+
 			// createCmd only accepts a single GCE project, as opposed to all the other
 			// commands.
 			providerOptsContainer[providerName].ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)

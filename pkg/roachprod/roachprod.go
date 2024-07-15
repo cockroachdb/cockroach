@@ -2442,6 +2442,28 @@ func DestroyDNS(ctx context.Context, l *logger.Logger, clusterName string) error
 	})
 }
 
+// ConfigureDNSHost creates, updates or deletes the DNS host records
+func ConfigureDNSHost(ctx context.Context, l *logger.Logger, clusterName, action string) error {
+	c, err := getClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+	// all DNS host configuration is in GCE
+	p, ok := vm.Providers[gce.ProviderName]
+	if !ok {
+		return errors.Errorf("provider %s is not present", gce.ProviderName)
+	}
+	dnsProvider, ok := p.(vm.DNSProvider)
+	if !ok {
+		return errors.Errorf("provider %s is not a DNS provider", gce.ProviderName)
+	}
+	dnsInfos := make([]vm.DNSInfo, 0)
+	for _, v := range c.VMs {
+		dnsInfos = append(dnsInfos, vm.DNSInfo{PublicDNS: v.PublicDNS, PublicIP: v.PublicIP})
+	}
+	return dnsProvider.ConfigureDNSHost(ctx, action, dnsInfos)
+}
+
 // StorageCollectionPerformAction either starts or stops workload collection on
 // a target cluster.
 //
