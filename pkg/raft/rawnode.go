@@ -490,6 +490,15 @@ func (rn *RawNode) SparseStatus() SparseStatus {
 	return getSparseStatus(rn.raft)
 }
 
+// LeadSupportStatus returns a LeadSupportStatus. Notably, it only includes
+// leader support information.
+func (rn *RawNode) LeadSupportStatus() LeadSupportStatus {
+	return getLeadSupportStatus(rn.raft)
+}
+
+// TODO(nvanbenschoten): remove this one the method is used.
+var _ = (*RawNode).LeadSupportStatus
+
 // ProgressType indicates the type of replica a Progress corresponds to.
 type ProgressType byte
 
