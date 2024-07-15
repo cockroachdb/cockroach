@@ -185,7 +185,7 @@ func (g *ycsb) Hooks() workload.Hooks {
 			var defaultReqDist string
 			incomingFreqSum := g.readFreq + g.insertFreq + g.updateFreq + g.deleteFreq + g.scanFreq + g.readModifyWriteFreq
 			if g.workload == "CUSTOM" {
-				if incomingFreqSum != 1.0 {
+				if math.Abs(float64(incomingFreqSum)-1.0) > 0.000001 {
 					return errors.Errorf("Custom workload frequencies do not sum to 1.0")
 				}
 			} else {
