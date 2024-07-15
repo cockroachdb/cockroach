@@ -369,7 +369,9 @@ func registerBackup(r registry.Registry) {
 		},
 	})
 
-	for _, cloudProvider := range []string{spec.GCE, spec.AWS} {
+	// Skip running on aws because the roachtest env does not have the proper
+	// credentials. See 127062
+	for _, cloudProvider := range []string{spec.GCE} {
 		r.Add(registry.TestSpec{
 			Name:              fmt.Sprintf("backup/assume-role/%s", cloudProvider),
 			Owner:             registry.OwnerDisasterRecovery,
