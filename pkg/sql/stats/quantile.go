@@ -358,11 +358,12 @@ func isValidCount(x float64) bool {
 
 // toQuantileValue converts from a datum to a float suitable for use in a quantile
 // function. It differs from eval.PerformCast in a few ways:
-// 1. It supports conversions that are not legal casts (e.g. DATE to FLOAT).
-// 2. It errors on NaN and infinite values because they will break our model.
-// fromQuantileValue is the inverse of this function, and together they should
-// support round-trip conversions.
-// TODO(michae2): Add support for DECIMAL, TIME, TIMETZ, and INTERVAL.
+//  1. It supports conversions that are not legal casts (e.g. DATE to FLOAT).
+//  2. It errors on NaN and infinite values because they will break our model.
+//     fromQuantileValue is the inverse of this function, and together they should
+//     support round-trip conversions.
+//
+// TODO(michae2): Add support for DECIMAL and INTERVAL.
 func toQuantileValue(d tree.Datum) (float64, error) {
 	switch v := d.(type) {
 	case *tree.DInt:
@@ -380,31 +381,26 @@ func toQuantileValue(d tree.Datum) (float64, error) {
 		// converting back.
 		return float64(v.PGEpochDays()), nil
 	case *tree.DTimestamp:
-		if v.Equal(pgdate.TimeInfinity) || v.Equal(pgdate.TimeNegativeInfinity) {
-			return 0, tree.ErrFloatOutOfRange
+		if v.Equal(pgdate.TimeInfinity) {
+			return pgdate.TimeInfinitySec, nil
+		}
+		if v.Equal(pgdate.TimeNegativeInfinity) {
+			return pgdate.TimeNegativeInfinitySec, nil
 		}
 		return float64(v.Unix()) + float64(v.Nanosecond())*1e-9, nil
 	case *tree.DTimestampTZ:
 		// TIMESTAMPTZ doesn't store a timezone, so this is the same as TIMESTAMP.
-		if v.Equal(pgdate.TimeInfinity) || v.Equal(pgdate.TimeNegativeInfinity) {
-			return 0, tree.ErrFloatOutOfRange
+		if v.Equal(pgdate.TimeInfinity) {
+			return pgdate.TimeInfinitySec, nil
+		}
+		if v.Equal(pgdate.TimeNegativeInfinity) {
+			return pgdate.TimeNegativeInfinitySec, nil
 		}
 		return float64(v.Unix()) + float64(v.Nanosecond())*1e-9, nil
 	default:
 		return 0, errors.Errorf("cannot make quantile value from %v", d)
 	}
 }
-
-var (
-	// quantileMinTimestamp is an alternative minimum finite DTimestamp value to
-	// avoid the problems around TimeNegativeInfinity, see #41564.
-	quantileMinTimestamp    = tree.MinSupportedTime.Add(time.Second)
-	quantileMinTimestampSec = float64(quantileMinTimestamp.Unix())
-	// quantileMaxTimestamp is an alternative maximum finite DTimestamp value to
-	// avoid the problems around TimeInfinity, see #41564.
-	quantileMaxTimestamp    = tree.MaxSupportedTime.Add(-1 * time.Second).Truncate(time.Second)
-	quantileMaxTimestampSec = float64(quantileMaxTimestamp.Unix())
-)
 
 // fromQuantileValue converts from a quantile value back to a datum suitable for
 // use in a histogram. It is the inverse of toQuantileValue. It differs from
@@ -415,7 +411,7 @@ var (
 //  3. On overflow or underflow it clamps to maximum or minimum finite values
 //     rather than failing the conversion (and thus the entire histogram).
 //
-// TODO(michae2): Add support for DECIMAL, TIME, TIMETZ, and INTERVAL.
+// TODO(michae2): Add support for DECIMAL and INTERVAL.
 func fromQuantileValue(colType *types.T, val float64) (tree.Datum, error) {
 	if math.IsNaN(val) || math.IsInf(val, 0) {
 		return nil, tree.ErrFloatOutOfRange
@@ -471,11 +467,11 @@ func fromQuantileValue(colType *types.T, val float64) (tree.Datum, error) {
 	case types.TimestampFamily, types.TimestampTZFamily:
 		sec, frac := math.Modf(val)
 		var t time.Time
-		// Clamp to (our alternative finite) DTimestamp bounds.
-		if sec <= quantileMinTimestampSec {
-			t = quantileMinTimestamp
-		} else if sec >= quantileMaxTimestampSec {
-			t = quantileMaxTimestamp
+		// Clamp to DTimestamp bounds.
+		if sec <= pgdate.TimeNegativeInfinitySec {
+			t = pgdate.TimeNegativeInfinity
+		} else if sec >= pgdate.TimeInfinitySec {
+			t = pgdate.TimeInfinity
 		} else {
 			t = timeutil.Unix(int64(sec), int64(frac*1e9))
 		}
