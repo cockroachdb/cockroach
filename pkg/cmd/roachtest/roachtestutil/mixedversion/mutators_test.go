@@ -37,18 +37,20 @@ func TestPreserveDowngradeOptionRandomizerMutator(t *testing.T) {
 	require.NotEmpty(t, mutations)
 	require.True(t, len(mutations)%2 == 0, "should produce even number of mutations") // one removal and one insertion per upgrade
 
-	// First half of mutations should be the removals of the existing
-	// `allowUpgradeStep`s.
-	for j := 0; j < numUpgrades/2; j++ {
+	// Mutations should be a removal (of the existing
+	// `allowUpgradeStep`), followed by an insertion of the same step in
+	// a different spot.
+	var j int
+	for j < len(mutations) {
+		// Removal
 		require.Equal(t, mutationRemove, mutations[j].op)
 		require.IsType(t, allowUpgradeStep{}, mutations[j].reference.impl)
-	}
 
-	// Second half of mutations should be insertions of new
-	// `allowUpgradeStep`s.
-	for j := numUpgrades / 2; j < len(mutations); j++ {
-		require.Equal(t, mutationInsertBefore, mutations[j].op)
-		require.IsType(t, allowUpgradeStep{}, mutations[j].impl)
+		// Insertion
+		require.Equal(t, mutationInsertBefore, mutations[j+1].op)
+		require.IsType(t, allowUpgradeStep{}, mutations[j+1].impl)
+
+		j += 2 // check next pair
 	}
 }
 
@@ -92,11 +94,6 @@ func TestClusterSettingMutator(t *testing.T) {
 		numUpgrades int, possibleValues []interface{}, options []clusterSettingMutatorOption,
 	) bool {
 		mvt := newBasicUpgradeTest(NumUpgrades(numUpgrades))
-		mvt.predecessorFunc = func(rng *rand.Rand, v *clusterupgrade.Version, n int) ([]*clusterupgrade.Version, error) {
-			// NB: we need at least `maxUpgrades` (defined in the generator
-			// below) versions here.
-			return parseVersions([]string{"v19.2.0", "v22.1.28", "v22.2.2", "v23.1.9", "v23.2.7", "v24.1.3"}), nil
-		}
 
 		plan, err := mvt.plan()
 		require.NoError(t, err)
