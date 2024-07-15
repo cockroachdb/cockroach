@@ -224,6 +224,31 @@ func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddre
 	return nil, nil
 }
 
+func (p *Provider) createVM(clusterName string, index int, creationTime time.Time) (vm.VM, error) {
+	cVM := vm.VM{
+		Name:             "localhost",
+		CreatedAt:        creationTime,
+		Lifetime:         time.Hour,
+		PrivateIP:        "127.0.0.1",
+		Provider:         ProviderName,
+		DNSProvider:      ProviderName,
+		ProviderID:       ProviderName,
+		PublicIP:         "127.0.0.1",
+		PublicDNS:        "localhost",
+		RemoteUser:       config.OSUser.Username,
+		VPC:              ProviderName,
+		MachineType:      ProviderName,
+		Zone:             ProviderName,
+		LocalClusterName: clusterName,
+	}
+	path := VMDir(clusterName, index+1)
+	err := os.MkdirAll(path, 0755)
+	if err != nil {
+		return vm.VM{}, err
+	}
+	return cVM, nil
+}
+
 // Create just creates fake host-info entries in the local filesystem
 func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, unusedProviderOpts vm.ProviderOpts,
@@ -241,24 +266,8 @@ func (p *Provider) Create(
 	}
 
 	for i := range names {
-		c.VMs[i] = vm.VM{
-			Name:             "localhost",
-			CreatedAt:        now,
-			Lifetime:         time.Hour,
-			PrivateIP:        "127.0.0.1",
-			Provider:         ProviderName,
-			DNSProvider:      ProviderName,
-			ProviderID:       ProviderName,
-			PublicIP:         "127.0.0.1",
-			PublicDNS:        "localhost",
-			RemoteUser:       config.OSUser.Username,
-			VPC:              ProviderName,
-			MachineType:      ProviderName,
-			Zone:             ProviderName,
-			LocalClusterName: c.Name,
-		}
-		path := VMDir(c.Name, i+1)
-		err := os.MkdirAll(path, 0755)
+		var err error
+		c.VMs[i], err = p.createVM(c.Name, i, now)
 		if err != nil {
 			return err
 		}
@@ -271,11 +280,31 @@ func (p *Provider) Create(
 }
 
 func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names []string) error {
-	return errors.New("unimplemented")
+	now := timeutil.Now()
+	offset := p.clusters[clusterName].VMs.Len()
+	for i := range names {
+		cVM, err := p.createVM(clusterName, i+offset, now)
+		if err != nil {
+			return err
+		}
+		p.clusters[clusterName].VMs = append(p.clusters[clusterName].VMs, cVM)
+	}
+	return p.storage.SaveCluster(l, p.clusters[clusterName])
 }
 
 func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName string) error {
-	return errors.New("unimplemented")
+	keepCount := p.clusters[clusterName].VMs.Len() - len(vmsToDelete)
+	for i := 0; i < p.clusters[clusterName].VMs.Len(); i++ {
+		if i < keepCount {
+			continue
+		}
+		path := VMDir(clusterName, i+1)
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+	}
+	p.clusters[clusterName].VMs = p.clusters[clusterName].VMs[:keepCount]
+	return p.storage.SaveCluster(l, p.clusters[clusterName])
 }
 
 // Delete is part of the vm.Provider interface.
