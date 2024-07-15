@@ -395,17 +395,6 @@ func toQuantileValue(d tree.Datum) (float64, error) {
 	}
 }
 
-var (
-	// quantileMinTimestamp is an alternative minimum finite DTimestamp value to
-	// avoid the problems around TimeNegativeInfinity, see #41564.
-	quantileMinTimestamp    = tree.MinSupportedTime.Add(time.Second)
-	quantileMinTimestampSec = float64(quantileMinTimestamp.Unix())
-	// quantileMaxTimestamp is an alternative maximum finite DTimestamp value to
-	// avoid the problems around TimeInfinity, see #41564.
-	quantileMaxTimestamp    = tree.MaxSupportedTime.Add(-1 * time.Second).Truncate(time.Second)
-	quantileMaxTimestampSec = float64(quantileMaxTimestamp.Unix())
-)
-
 // fromQuantileValue converts from a quantile value back to a datum suitable for
 // use in a histogram. It is the inverse of toQuantileValue. It differs from
 // eval.PerformCast in a few ways:
@@ -472,10 +461,10 @@ func fromQuantileValue(colType *types.T, val float64) (tree.Datum, error) {
 		sec, frac := math.Modf(val)
 		var t time.Time
 		// Clamp to (our alternative finite) DTimestamp bounds.
-		if sec <= quantileMinTimestampSec {
-			t = quantileMinTimestamp
-		} else if sec >= quantileMaxTimestampSec {
-			t = quantileMaxTimestamp
+		if sec <= pgdate.TimeNegativeInfinitySec {
+			t = pgdate.TimeNegativeInfinity
+		} else if sec >= pgdate.TimeInfinitySec {
+			t = pgdate.TimeInfinity
 		} else {
 			t = timeutil.Unix(int64(sec), int64(frac*1e9))
 		}
