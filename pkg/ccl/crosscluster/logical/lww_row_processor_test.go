@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -74,8 +74,8 @@ func TestLWWInsertQueryQuoting(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/insert", tc.name), func(t *testing.T) {
 			tableName := createTable(tc.schemaTmpl)
 			desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
-			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
-				int32(desc.GetID()): *desc.TableDesc(),
+			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]catalog.TableDescriptor{
+				int32(desc.GetID()): desc,
 			}, s.InternalExecutor().(isql.Executor))
 			require.NoError(t, err)
 
@@ -89,8 +89,8 @@ func TestLWWInsertQueryQuoting(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/delete", tc.name), func(t *testing.T) {
 			tableName := createTable(tc.schemaTmpl)
 			desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", tableName)
-			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
-				int32(desc.GetID()): *desc.TableDesc(),
+			rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]catalog.TableDescriptor{
+				int32(desc.GetID()): desc,
 			}, s.InternalExecutor().(isql.Executor))
 			require.NoError(t, err)
 
@@ -128,8 +128,8 @@ func BenchmarkLWWInsertBatch(b *testing.B) {
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
 	// Simulate how we set up the row processor on the main code path.
 	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
-	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]descpb.TableDescriptor{
-		int32(desc.GetID()): *desc.TableDesc(),
+	rp, err := makeSQLLastWriteWinsHandler(ctx, s.ClusterSettings(), map[int32]catalog.TableDescriptor{
+		int32(desc.GetID()): desc,
 	}, s.InternalDB().(isql.DB).Executor(isql.WithSessionData(sd)))
 	require.NoError(b, err)
 
