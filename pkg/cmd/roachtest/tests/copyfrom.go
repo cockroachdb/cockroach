@@ -106,6 +106,7 @@ func runTest(ctx context.Context, t test.Test, c cluster.Cluster, pg string) {
 			break
 		}
 		if pgerror.GetPGCode(err) != pgcode.SerializationFailure {
+			t.L().Printf("err: %v\n", err)
 			t.L().Printf("stdout:\n%v\n", det.Stdout)
 			t.L().Printf("stderr:\n%v\n", det.Stderr)
 			t.Fatal(err)
