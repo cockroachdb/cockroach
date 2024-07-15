@@ -1,0 +1,50 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package storage
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble"
+)
+
+type pebbleLogger struct {
+	ctx   context.Context
+	depth int
+}
+
+var _ pebble.LoggerAndTracer = pebbleLogger{}
+
+func (l pebbleLogger) Infof(format string, args ...interface{}) {
+	log.Storage.InfofDepth(l.ctx, l.depth, format, args...)
+}
+
+func (l pebbleLogger) Fatalf(format string, args ...interface{}) {
+	log.Storage.FatalfDepth(l.ctx, l.depth, format, args...)
+}
+
+// pebble.LoggerAndTracer does not expose verbosity levels in its logging
+// interface, and Pebble logs go to a separate STORAGE channel.
+//
+// The tracing part of the interface is meant for user-facing activities, so
+// in addition to outputting the event when tracing is enabled, we also log.
+// The eventAlsoLogVerbosityLevel of 2 is chosen semi-arbitrarily since this
+// is the only verbosity level in this file.
+const eventAlsoLogVerbosityLevel = 2
+
+func (l pebbleLogger) Eventf(ctx context.Context, format string, args ...interface{}) {
+	log.VEventf(ctx, eventAlsoLogVerbosityLevel, format, args...)
+}
+
+func (l pebbleLogger) IsTracingEnabled(ctx context.Context) bool {
+	return log.HasSpanOrEvent(ctx) || log.ExpensiveLogEnabled(ctx, eventAlsoLogVerbosityLevel)
+}
