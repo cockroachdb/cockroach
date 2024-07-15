@@ -407,7 +407,7 @@ func (p *testPlanner) changeVersionSteps(
 	for j, node := range previousVersionNodes {
 		steps = append(steps, p.newSingleStep(
 			restartWithNewBinaryStep{
-				version: to, node: node, rt: p.rt,
+				version: to, node: node, rt: p.rt, settings: p.clusterSettings(),
 			},
 		))
 		err := p.currentContext.System.changeVersion(node, to)
