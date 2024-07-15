@@ -125,7 +125,23 @@ including fewer. For example:
 <PRE>
 
   --locality=cloud=gce,region=us-west1,zone=us-west-1b
-  --locality=cloud=aws,region=us-east,zone=us-east-2</PRE>`,
+  --locality=cloud=aws,region=us-east,zone=us-east-2
+
+</PRE>
+This flag is incompatible with --locality-file.`,
+	}
+
+	LocalityFile = FlagInfo{
+		Name: "locality-file",
+		Description: `
+File name to read locality data from. Using this flag has the same effect as
+providing the file's contents directly via the --locality flag. Any leading or
+trailing whitespace characters, as defined by Unicode, will be automatically
+trimmed.
+<PRE>
+
+</PRE>
+This flag is incompatible with --locality.`,
 	}
 
 	Background = FlagInfo{

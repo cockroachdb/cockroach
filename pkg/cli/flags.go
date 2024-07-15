@@ -65,6 +65,7 @@ var startBackground bool
 var storeSpecs base.StoreSpecList
 var goMemLimit int64
 var tenantIDFile string
+var localityFile string
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
@@ -97,6 +98,7 @@ func initPreFlagsDefaults() {
 	goMemLimit = 0
 
 	tenantIDFile = ""
+	localityFile = ""
 }
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
@@ -469,6 +471,7 @@ func init() {
 		}
 
 		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
+		cliflagcfg.StringFlag(f, &localityFile, cliflags.LocalityFile)
 
 		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
 		cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
@@ -1258,6 +1261,53 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	// Ensure that diagnostic reporting is enabled for server startup commands.
 	serverCfg.StartDiagnosticsReporting = true
 
+	// --locality-file and --locality cannot be used together.
+	if changed(fs, cliflags.LocalityFile.Name) && changed(fs, cliflags.Locality.Name) {
+		return errors.Newf(
+			"--%s is incompatible with --%s",
+			cliflags.Locality.Name,
+			cliflags.LocalityFile.Name,
+		)
+	}
+
+	// Only read locality-file if tenant-id-file is not present. The presence
+	// of the tenant-id-file flag (which only exists in `mt start-sql`) will
+	// defer reading the locality-file until the tenant ID has been read.
+	if !changed(fs, cliflags.TenantIDFile.Name) {
+		if err := tryReadLocalityFileFlag(fs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// tryReadLocalityFileFlag reads the file from the --locality-file flag if
+// specified, and populates the server config's Locality field.
+func tryReadLocalityFileFlag(fs *pflag.FlagSet) error {
+	fl := fs.Lookup(cliflags.LocalityFile.Name)
+	if fl != nil && fl.Changed {
+		localityFileName := fl.Value.String()
+
+		content, err := os.ReadFile(localityFileName)
+		if err != nil {
+			return errors.Wrapf(
+				err,
+				"invalid argument %q for %q flag",
+				localityFileName,
+				cliflags.LocalityFile.Name,
+			)
+		}
+		s := strings.TrimSpace(string(content))
+		if err := serverCfg.Locality.Set(s); err != nil {
+			return errors.Wrapf(
+				err,
+				"invalid locality data %q in %q for %q flag",
+				s,
+				localityFileName,
+				cliflags.LocalityFile.Name,
+			)
+		}
+	}
 	return nil
 }
 
