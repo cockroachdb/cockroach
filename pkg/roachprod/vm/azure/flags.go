@@ -93,3 +93,7 @@ func (o *ProviderOpts) ConfigureClusterFlags(*pflag.FlagSet, vm.MultipleProjects
 // ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
 func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
 }
+
+// ConfigureDNSHostFlags is part of ProviderOpts. This implementation is a no-op.
+func (o *ProviderOpts) ConfigureDNSHostFlags(_ *pflag.FlagSet) {
+}

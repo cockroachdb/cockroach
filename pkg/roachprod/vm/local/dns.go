@@ -189,3 +189,8 @@ func (n *dnsProvider) dnsFileName() string {
 func dnsKey(record vm.DNSRecord) string {
 	return fmt.Sprintf("%s:%s:%s", record.Name, record.Type, record.Data)
 }
+
+// ConfigureDNSHost is a no-op for local
+func (n *dnsProvider) ConfigureDNSHost(_ context.Context, _ string, _ []vm.DNSInfo) error {
+	return nil
+}

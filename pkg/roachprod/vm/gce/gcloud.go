@@ -1097,27 +1097,12 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
 			config.SharedUser, config.OSUser.Username))
 
+	o.ConfigureDNSHostFlags(flags)
+
 	// Flags about DNS override the default values in
 	// providerInstance.dnsProvider.
 
 	dnsProviderInstance := providerInstance.dnsProvider
-	flags.StringVar(
-		&dnsProviderInstance.dnsProject, ProviderName+"-dns-project",
-		dnsProviderInstance.dnsProject,
-		"project to use to set up DNS",
-	)
-	flags.StringVar(
-		&dnsProviderInstance.publicZone,
-		ProviderName+"-dns-zone",
-		dnsProviderInstance.publicZone,
-		"zone file in gcloud project to use to set up public DNS records",
-	)
-	flags.StringVar(
-		&dnsProviderInstance.publicDomain,
-		ProviderName+"-dns-domain",
-		dnsProviderInstance.publicDomain,
-		"zone domian in gcloud project to use to set up public DNS records",
-	)
 	flags.StringVar(
 		&dnsProviderInstance.managedZone,
 		ProviderName+"managed-dns-zone",
@@ -1143,6 +1128,28 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 		&providerInstance.defaultProject, ProviderName+"-default-project",
 		providerInstance.defaultProject,
 		"google cloud project to use to run core roachprod services",
+	)
+}
+
+// ConfigureDNSHostFlags implements vm.ProviderFlags.
+func (o *ProviderOpts) ConfigureDNSHostFlags(flags *pflag.FlagSet) {
+	dnsProviderInstance := providerInstance.dnsProvider
+	flags.StringVar(
+		&dnsProviderInstance.dnsProject, ProviderName+"-dns-project",
+		dnsProviderInstance.dnsProject,
+		"project to use to set up DNS",
+	)
+	flags.StringVar(
+		&dnsProviderInstance.publicZone,
+		ProviderName+"-dns-zone",
+		dnsProviderInstance.publicZone,
+		"zone file in gcloud project to use to set up public DNS records",
+	)
+	flags.StringVar(
+		&dnsProviderInstance.publicDomain,
+		ProviderName+"-dns-domain",
+		dnsProviderInstance.publicDomain,
+		"zone domian in gcloud project to use to set up public DNS records",
 	)
 }
 
