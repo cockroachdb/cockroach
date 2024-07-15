@@ -120,7 +120,6 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				numSchemasForDatabase = min(numSchemasForDatabase, MaxSchemasForDatabase)
 				databaseIdx += 1
 			}
-
 			// Create all the databases based on our lists of active vs inactive
 			// ones.
 			const inactiveDbListType = 1
