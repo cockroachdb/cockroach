@@ -64,19 +64,21 @@ var rangeLeaseRenewalDuration = func() time.Duration {
 // https://github.com/cockroachdb/cockroach/issues/103654
 func registerFailover(r registry.Registry) {
 	for _, leases := range []registry.LeaseType{registry.EpochLeases, registry.ExpirationLeases} {
-		var suffix string
+		var leasesStr string
 		if leases == registry.ExpirationLeases {
-			suffix = "/lease=expiration"
+			leasesStr = "/lease=expiration"
 		}
 
 		for _, readOnly := range []bool{false, true} {
+			var readOnlyStr string
 			if readOnly {
-				suffix = "/read-only" + suffix
+				readOnlyStr = "/read-only"
 			} else {
-				suffix = "/read-write" + suffix
+				readOnlyStr = "/read-write"
 			}
+
 			r.Add(registry.TestSpec{
-				Name:                "failover/chaos" + suffix,
+				Name:                "failover/chaos" + readOnlyStr + leasesStr,
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
 				Timeout:             90 * time.Minute,
@@ -92,7 +94,7 @@ func registerFailover(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:             "failover/partial/lease-gateway" + suffix,
+			Name:             "failover/partial/lease-gateway" + leasesStr,
 			Owner:            registry.OwnerKV,
 			Benchmark:        true,
 			Timeout:          30 * time.Minute,
@@ -104,7 +106,7 @@ func registerFailover(r registry.Registry) {
 		})
 
 		r.Add(registry.TestSpec{
-			Name:             "failover/partial/lease-leader" + suffix,
+			Name:             "failover/partial/lease-leader" + leasesStr,
 			Owner:            registry.OwnerKV,
 			Benchmark:        true,
 			Timeout:          30 * time.Minute,
@@ -116,7 +118,7 @@ func registerFailover(r registry.Registry) {
 		})
 
 		r.Add(registry.TestSpec{
-			Name:             "failover/partial/lease-liveness" + suffix,
+			Name:             "failover/partial/lease-liveness" + leasesStr,
 			Owner:            registry.OwnerKV,
 			Benchmark:        true,
 			Timeout:          30 * time.Minute,
@@ -145,7 +147,7 @@ func registerFailover(r registry.Registry) {
 				clouds = registry.OnlyGCE
 			}
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/non-system/%s%s", failureMode, suffix),
+				Name:                fmt.Sprintf("failover/non-system/%s%s", failureMode, leasesStr),
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
@@ -159,7 +161,7 @@ func registerFailover(r registry.Registry) {
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
+				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, leasesStr),
 				Owner:               registry.OwnerKV,
 				CompatibleClouds:    registry.AllExceptAWS,
 				Suites:              registry.Suites(registry.Weekly),
@@ -173,7 +175,7 @@ func registerFailover(r registry.Registry) {
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
+				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, leasesStr),
 				Owner:               registry.OwnerKV,
 				CompatibleClouds:    registry.AllExceptAWS,
 				Suites:              registry.Suites(registry.Weekly),
