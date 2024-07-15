@@ -153,18 +153,23 @@ type Processor interface {
 	// It is ok to start registering streams before background initialization
 	// completes.
 	//
-	// The provided iterator is used to initialize the rangefeed's resolved
-	// timestamp. It must obey the contract of an iterator used for an
-	// initResolvedTSScan. The Processor promises to clean up the iterator by
-	// calling its Close method when it is finished.
+	// The provided IntentScannerConstructor is used to construct a lock table
+	// iterator which will be used to initialize rangefeed's resolved timestamp.
+	// It must be called under the same raftMu lock as first registration to
+	// ensure that there would be no missing events. For LegacyProcessor, this is
+	// currently achieved by Register function synchronizing with the work loop
+	// before the lock is released. For ScheduledProcessor, this is achieved by
+	// calling IntentScannerConstructor synchronously during Start.
 	//
-	// Note that newRtsIter must be called under the same lock as first
-	// registration to ensure that all there would be no missing events.
-	// This is currently achieved by Register function synchronizing with
-	// the work loop before the lock is released.
+	// If IntentScannerConstructor returns a non-nil error, the processor will be
+	// stopped. Otherwise, the intent scanner is successfully initialized. It must
+	// obey the contract of an iterator used for an initResolvedTSScan. The
+	// processor promises to clean up the iterator by calling its Close method when
+	// it's finished.
 	//
-	// If the iterator is nil then no initialization scan will be performed and
-	// the resolved timestamp will immediately be considered initialized.
+	// If the provided IntentScannerConstructor itself is nil then no
+	// initialization scan will be performed and the resolved timestamp will
+	// immediately be considered initialized. This is only possible in tests.
 	Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error
 	// Stop processor and close all registrations.
 	//
@@ -366,7 +371,7 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 // IntentScannerConstructor is used to construct an IntentScanner. It
 // should be called from underneath a stopper task to ensure that the
 // engine has not been closed.
-type IntentScannerConstructor func() IntentScanner
+type IntentScannerConstructor func() (IntentScanner, error)
 
 // Start implements Processor interface.
 //
@@ -389,7 +394,8 @@ func (p *LegacyProcessor) Start(stopper *stop.Stopper, newRtsIter IntentScannerC
 	return nil
 }
 
-// run is called from Start and runs the rangefeed.
+// run is called from Start and runs the rangefeed. It is important to call
+// IntentScannerConstructor before firing async initialScan.Run.
 func (p *LegacyProcessor) run(
 	ctx context.Context,
 	_forStacks roachpb.RangeID,
@@ -409,13 +415,18 @@ func (p *LegacyProcessor) run(
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
 	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
-		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
-		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
+		rtsIter, err := rtsIterFunc()
 		if err != nil {
-			initScan.Cancel()
+			// No need to close rtsIter if error is non-nil.
+			p.StopWithErr(kvpb.NewError(err))
+		} else {
+			initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
+			if err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run); err != nil {
+				initScan.Cancel()
+			}
 		}
 	} else {
+		// Only possible in tests.
 		p.initResolvedTS(ctx)
 	}
 
