@@ -2233,10 +2233,6 @@ def go_deps():
         name = "com_github_datadog_zstd",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/DataDog/zstd",
-        patch_args = ["-p1"],
-        patches = [
-            "@com_github_cockroachdb_cockroach//build/patches:com_github_datadog_zstd.patch",
-        ],
         sha256 = "e4924158bd1abf765a016d2c728fc367b32d20b86a268ef25743ba404c55e097",
         strip_prefix = "github.com/DataDog/zstd@v1.5.6-0.20230824185856-869dae002e5e",
         urls = [
