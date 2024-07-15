@@ -42,6 +42,7 @@ var JWTAuthClaim = settings.RegisterStringSetting(
 	"sets the JWT claim that is parsed to get the username",
 	"",
 	settings.WithReportable(true),
+	settings.WithPublic,
 )
 
 // JWTAuthAudience sets accepted audience values for JWT logins over the SQL interface.
@@ -51,6 +52,7 @@ var JWTAuthAudience = settings.RegisterStringSetting(
 	"sets accepted audience values for JWT logins over the SQL interface",
 	"",
 	settings.WithValidateString(validateJWTAuthAudiences),
+	settings.WithPublic,
 )
 
 // JWTAuthEnabled enables or disabled JWT login over the SQL interface.
@@ -60,6 +62,7 @@ var JWTAuthEnabled = settings.RegisterBoolSetting(
 	"enables or disables JWT login for the SQL interface",
 	false,
 	settings.WithReportable(true),
+	settings.WithPublic,
 )
 
 // JWTAuthJWKS is the public key set for JWT logins over the SQL interface.
@@ -69,6 +72,7 @@ var JWTAuthJWKS = settings.RegisterStringSetting(
 	"sets the public key set for JWT logins over the SQL interface (JWKS format)",
 	"{\"keys\":[]}",
 	settings.WithValidateString(validateJWTAuthJWKS),
+	settings.WithPublic,
 )
 
 // JWTAuthIssuersConfig contains the configuration of all JWT issuers  whose
@@ -102,6 +106,7 @@ var JWTAuthIssuersConfig = settings.RegisterStringSetting(
 	"",
 	settings.WithValidateString(validateJWTAuthIssuersConf),
 	settings.WithName(jwtAuthIssuersConfigSettingName),
+	settings.WithPublic,
 )
 
 // JWTAuthIssuerCustomCA is the custom root CA for verifying certificates while
@@ -114,6 +119,7 @@ var JWTAuthIssuerCustomCA = settings.RegisterStringSetting(
 	settings.WithReportable(false),
 	settings.Sensitive,
 	settings.WithValidateString(validateJWTAuthIssuerCACert),
+	settings.WithPublic,
 )
 
 // JWKSAutoFetchEnabled enables or disables automatic fetching of JWKS either
@@ -128,6 +134,7 @@ var JWKSAutoFetchEnabled = settings.RegisterBoolSetting(
 		"server.jwt_authentication.jwks will be ignored.",
 	false,
 	settings.WithReportable(true),
+	settings.WithPublic,
 )
 
 // JWTAuthClientTimeout is the client timeout for all the external calls made
