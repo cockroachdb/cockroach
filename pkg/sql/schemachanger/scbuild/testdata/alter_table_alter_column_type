@@ -1,0 +1,13 @@
+setup
+CREATE TABLE t (c1 INT, c2 CHAR(10))
+----
+
+build
+ALTER TABLE t ALTER COLUMN c2 SET DATA TYPE CHAR(100)
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: CHAR(100)}, PUBLIC], ABSENT]
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 104, type: {family: StringFamily, oid: 1042, visibleType: 8, width: 100}, typeName: CHAR(100)}
