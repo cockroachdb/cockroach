@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -184,12 +185,13 @@ func TestInputValidation(t *testing.T) {
 
 func defaultSettings() Settings {
 	return Settings{
-		UseExpirationLeases:        false,
-		TransferExpirationLeases:   true,
-		RejectLeaseOnLeaderUnknown: true,
-		ExpToEpochEquiv:            true,
-		MinExpirationSupported:     true,
-		RangeLeaseDuration:         20,
+		UseExpirationLeases:               false,
+		TransferExpirationLeases:          true,
+		PreferLeaderLeasesOverEpochLeases: false,
+		RejectLeaseOnLeaderUnknown:        true,
+		ExpToEpochEquiv:                   true,
+		MinExpirationSupported:            true,
+		RangeLeaseDuration:                20,
 	}
 }
 
@@ -197,6 +199,27 @@ func useExpirationSettings() Settings {
 	st := defaultSettings()
 	st.UseExpirationLeases = true
 	return st
+}
+
+func useLeaderSettings() Settings {
+	st := defaultSettings()
+	st.PreferLeaderLeasesOverEpochLeases = true
+	return st
+}
+
+func raftStatusFollower(replicaID roachpb.ReplicaID) *raft.Status {
+	s := &raft.Status{}
+	s.ID = raftpb.PeerID(replicaID)
+	s.Term = 5
+	s.RaftState = raft.StateFollower
+	return s
+}
+
+func raftStatusLeader(replicaID roachpb.ReplicaID) *raft.Status {
+	s := raftStatusFollower(replicaID)
+	s.RaftState = raft.StateLeader
+	s.LeadSupportUntil = ts30
+	return s
 }
 
 // mockNodeLiveness implements the NodeLiveness interface.
@@ -249,6 +272,7 @@ func TestBuild(t *testing.T) {
 				if nl == nil {
 					nl = defaultNodeLiveness()
 				}
+				require.NoError(t, tt.input.validate())
 				out, err := build(st, nl, tt.input)
 				if tt.expErr == "" {
 					require.NoError(t, err)
@@ -266,6 +290,7 @@ func TestBuild(t *testing.T) {
 		defaultInput := BuildInput{
 			LocalStoreID: repl1.StoreID,
 			Now:          cts20,
+			RaftStatus:   raftStatusLeader(repl1.ReplicaID),
 			PrevLease: roachpb.Lease{
 				Replica:  repl2,
 				Epoch:    2,
@@ -390,6 +415,82 @@ func TestBuild(t *testing.T) {
 				},
 			},
 			{
+				name:  "acquire leader lease",
+				st:    useLeaderSettings(),
+				input: defaultInput,
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:         repl1,
+						Start:           cts20,
+						ProposedTS:      cts20,
+						Term:            5,
+						Sequence:        8,
+						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
+						MinExpiration:   ts40,
+					},
+				},
+			},
+			{
+				name:  "replace expiration, acquire lease lease",
+				st:    useLeaderSettings(),
+				input: expirationInput,
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica: repl1,
+						// Start time backdated to the expiration of the previous lease.
+						Start:           hlc.ClockTimestamp{WallTime: 10, Logical: 1},
+						ProposedTS:      cts20,
+						Term:            5,
+						Sequence:        8,
+						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
+						MinExpiration:   ts40,
+					},
+				},
+			},
+			{
+				name: "acquire leader lease, as raft follower",
+				st:   useLeaderSettings(),
+				input: func() BuildInput {
+					i := defaultInput
+					i.RaftStatus = raftStatusFollower(repl1.ReplicaID)
+					return i
+				}(),
+				// The replica is a follower, so it gets an expiration-based lease.
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts20,
+						ProposedTS:            cts20,
+						Expiration:            &ts40,
+						DeprecatedStartStasis: &ts40,
+						Sequence:              8,
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+				},
+			},
+			{
+				name: "replace expiration, acquire lease lease, as raft follower",
+				st:   useLeaderSettings(),
+				input: func() BuildInput {
+					i := expirationInput
+					i.RaftStatus = raftStatusFollower(repl1.ReplicaID)
+					return i
+				}(),
+				// The replica is a follower, so it gets an expiration-based lease.
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica: repl1,
+						// Start time backdated to the expiration of the previous lease.
+						Start:                 hlc.ClockTimestamp{WallTime: 10, Logical: 1},
+						ProposedTS:            cts20,
+						Expiration:            &ts40,
+						DeprecatedStartStasis: &ts40,
+						Sequence:              8,
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+				},
+			},
+			{
 				name:   "missing node liveness",
 				nl:     missingNodeLiveness(),
 				input:  defaultInput,
@@ -402,6 +503,7 @@ func TestBuild(t *testing.T) {
 		defaultInput := BuildInput{
 			LocalStoreID: repl1.StoreID,
 			Now:          cts20,
+			RaftStatus:   raftStatusLeader(repl1.ReplicaID),
 			PrevLease: roachpb.Lease{
 				Replica:  repl1,
 				Start:    cts10,
@@ -414,6 +516,14 @@ func TestBuild(t *testing.T) {
 		expirationInput := func() BuildInput {
 			i := defaultInput
 			i.PrevLease.Expiration = &ts30
+			i.PrevLease.Epoch = 0
+			i.PrevLeaseNodeLiveness = livenesspb.Liveness{}
+			return i
+		}()
+		leaderInput := func() BuildInput {
+			i := defaultInput
+			i.PrevLease.Term = 5
+			i.PrevLease.MinExpiration = ts30
 			i.PrevLease.Epoch = 0
 			i.PrevLeaseNodeLiveness = livenesspb.Liveness{}
 			return i
@@ -540,6 +650,44 @@ func TestBuild(t *testing.T) {
 				},
 			},
 			{
+				name:  "promote expiration to leader lease",
+				st:    useLeaderSettings(),
+				input: expirationInput,
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:         repl1,
+						Start:           cts10,
+						ProposedTS:      cts20,
+						Term:            5,
+						Sequence:        7, // sequence not changed
+						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
+						MinExpiration:   ts40,
+					},
+				},
+			},
+			{
+				name: "promote expiration to leader lease, as raft follower",
+				st:   useLeaderSettings(),
+				input: func() BuildInput {
+					i := expirationInput
+					i.RaftStatus = raftStatusFollower(repl1.ReplicaID)
+					return i
+				}(),
+				// The replica is a follower, so it gets an (extended) expiration-based
+				// lease.
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts20,
+						Expiration:            &ts40,
+						DeprecatedStartStasis: &ts40,
+						Sequence:              7, // sequence not changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+				},
+			},
+			{
 				name:  "extend expiration",
 				st:    useExpirationSettings(),
 				input: expirationInput,
@@ -576,6 +724,89 @@ func TestBuild(t *testing.T) {
 				},
 			},
 			{
+				name:  "extend leader lease",
+				st:    useLeaderSettings(),
+				input: leaderInput,
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:         repl1,
+						Start:           cts10,
+						ProposedTS:      cts20,
+						Term:            5,
+						Sequence:        7, // sequence not changed
+						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
+						MinExpiration:   ts40,
+					},
+				},
+			},
+			{
+				name: "extend leader lease, avoid shortening",
+				st:   useLeaderSettings(),
+				input: func() BuildInput {
+					i := leaderInput
+					i.PrevLease.MinExpiration = ts50
+					return i
+				}(),
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:         repl1,
+						Start:           cts10,
+						ProposedTS:      cts20,
+						Term:            5,
+						Sequence:        7, // sequence not changed
+						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
+						MinExpiration:   ts50,
+					},
+				},
+			},
+			{
+				name: "extend leader lease, avoid shortening, as follower",
+				st:   useLeaderSettings(),
+				input: func() BuildInput {
+					i := leaderInput
+					i.PrevLease.MinExpiration = ts50
+					i.RaftStatus = raftStatusFollower(repl1.ReplicaID)
+					return i
+				}(),
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts20,
+						Expiration:            &ts50,
+						DeprecatedStartStasis: &ts50,
+						Sequence:              8, // sequence not changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+				},
+			},
+			{
+				name: "extend leader lease, avoid shortening, as follower with remaining lead support",
+				st:   useLeaderSettings(),
+				input: func() BuildInput {
+					i := leaderInput
+					i.PrevLease.MinExpiration = ts40
+					// NOTE: even though the replica is a follower, it still has remaining
+					// lead support from when it was the leader. It has stepped down and
+					// is waiting out the remainder of its lead support before campaigning
+					// at a later term.
+					i.RaftStatus = raftStatusFollower(repl1.ReplicaID)
+					i.RaftStatus.LeadSupportUntil = ts50
+					return i
+				}(),
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts20,
+						Expiration:            &ts50,
+						DeprecatedStartStasis: &ts50,
+						Sequence:              8, // sequence not changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+				},
+			},
+			{
 				name: "min proposed timestamp",
 				input: func() BuildInput {
 					i := defaultInput
@@ -606,6 +837,7 @@ func TestBuild(t *testing.T) {
 		defaultInput := BuildInput{
 			LocalStoreID: repl1.StoreID,
 			Now:          cts20,
+			RaftStatus:   raftStatusLeader(repl1.ReplicaID),
 			PrevLease: roachpb.Lease{
 				Replica:  repl1,
 				Start:    cts10,
@@ -618,6 +850,14 @@ func TestBuild(t *testing.T) {
 		expirationInput := func() BuildInput {
 			i := defaultInput
 			i.PrevLease.Expiration = &ts30
+			i.PrevLease.Epoch = 0
+			i.PrevLeaseNodeLiveness = livenesspb.Liveness{}
+			return i
+		}()
+		leaderInput := func() BuildInput {
+			i := defaultInput
+			i.PrevLease.Term = 5
+			i.PrevLease.MinExpiration = ts30
 			i.PrevLease.Epoch = 0
 			i.PrevLeaseNodeLiveness = livenesspb.Liveness{}
 			return i
@@ -641,6 +881,20 @@ func TestBuild(t *testing.T) {
 			{
 				name:  "transfer from expiration",
 				input: expirationInput,
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:         repl2,
+						Start:           cts20,
+						ProposedTS:      cts20,
+						Expiration:      &ts40,
+						Sequence:        8,
+						AcquisitionType: roachpb.LeaseAcquisitionType_Transfer,
+					},
+				},
+			},
+			{
+				name:  "transfer from leader lease",
+				input: leaderInput,
 				expOutput: Output{
 					NextLease: roachpb.Lease{
 						Replica:         repl2,
@@ -681,6 +935,28 @@ func TestBuild(t *testing.T) {
 				nl:     missingNodeLiveness(),
 				input:  expirationInput,
 				expErr: "liveness record not found in cache",
+			},
+			{
+				name: "cannot transfer to leader lease",
+				st: func() Settings {
+					st := defaultSettings()
+					st.TransferExpirationLeases = false
+					st.PreferLeaderLeasesOverEpochLeases = true
+					return st
+				}(),
+				input: defaultInput,
+				// PreferLeaderLeasesOverEpochLeases takes precedence over
+				// TransferExpirationLeases. We never transfer to a leader lease.
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:         repl2,
+						Start:           cts20,
+						ProposedTS:      cts20,
+						Expiration:      &ts40,
+						Sequence:        8,
+						AcquisitionType: roachpb.LeaseAcquisitionType_Transfer,
+					},
+				},
 			},
 		})
 	})

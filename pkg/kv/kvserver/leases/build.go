@@ -34,6 +34,9 @@ type Settings struct {
 	// leases that are later upgraded to epoch-based ones or whether we transfer
 	// epoch-based leases directly.
 	TransferExpirationLeases bool
+	// PreferLeaderLeasesOverEpochLeases controls whether leader leases are
+	// preferred over epoch-based leases for this range.
+	PreferLeaderLeasesOverEpochLeases bool
 	// RejectLeaseOnLeaderUnknown controls whether a replica that does not know
 	// the current raft leader rejects a lease request.
 	RejectLeaseOnLeaderUnknown bool
@@ -139,10 +142,17 @@ func (i BuildInput) Remote() bool { return !i.PrevLocal() && !i.NextLocal() }
 
 // PrevLeaseExpiration returns the expiration time of the previous lease.
 func (i BuildInput) PrevLeaseExpiration() hlc.Timestamp {
-	return kvserverpb.LeaseStatus{
+	st := kvserverpb.LeaseStatus{
 		Lease:    i.PrevLease,
 		Liveness: i.PrevLeaseNodeLiveness,
-	}.Expiration()
+	}
+	if i.PrevLease.Replica.StoreID == i.LocalStoreID {
+		st.LeaderSupport = kvserverpb.RaftLeaderSupport{
+			Term:             i.RaftStatus.Term,
+			LeadSupportUntil: i.RaftStatus.LeadSupportUntil,
+		}
+	}
+	return st.Expiration()
 }
 
 func (i BuildInput) validate() error {
@@ -301,6 +311,9 @@ func build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
 		nextLeaseLiveness = &l.Liveness
 
 		nextLease.MinExpiration = leaseMinTimestamp(st, i, nextLeaseType)
+	case roachpb.LeaseLeader:
+		nextLease.Term = leaseTerm(i, nextLeaseType)
+		nextLease.MinExpiration = leaseMinTimestamp(st, i, nextLeaseType)
 	default:
 		panic("unexpected")
 	}
@@ -326,12 +339,16 @@ func build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
 }
 
 func leaseType(st Settings, i BuildInput) roachpb.LeaseType {
-	if st.UseExpirationLeases || (i.Transfer() && st.TransferExpirationLeases) {
+	if st.UseExpirationLeases {
+		// If the range should use expiration-based leases, construct one.
+		return roachpb.LeaseExpiration
+	}
+	if i.Transfer() && (st.TransferExpirationLeases || st.PreferLeaderLeasesOverEpochLeases) {
 		// In addition to ranges that should be using expiration-based leases
 		// (typically the meta and liveness ranges), we also use them during lease
 		// transfers for all other ranges. After acquiring these expiration based
 		// leases, the leaseholders are expected to upgrade them to the more
-		// efficient epoch-based ones. But by transferring an expiration-based
+		// efficient epoch/leader leases. But by transferring an expiration-based
 		// lease, we can limit the effect of an ill-advised lease transfer since the
 		// incoming leaseholder needs to recognize itself as such within a few
 		// seconds; if it doesn't (we accidentally sent the lease to a replica in
@@ -340,9 +357,33 @@ func leaseType(st Settings, i BuildInput) roachpb.LeaseType {
 		// leaseholder that's delayed in applying the lease transfer to maintain its
 		// lease (assuming the node it's on is able to heartbeat its liveness
 		// record).
+		//
+		// This safety concern is not a problem with leader leases. However, at the
+		// time of initiating a lease transfer, the target is (typically) not the
+		// raft leader, so we have no term to associate a leader lease with, so we
+		// have no choice but to transfer an expiration-based lease and let the
+		// recipient upgrade it to a leader lease when it becomes leader.
 		return roachpb.LeaseExpiration
 	}
-	return roachpb.LeaseEpoch
+	if !st.PreferLeaderLeasesOverEpochLeases {
+		// If this range is not preferring leader leases over epoch leases, we
+		// construct an epoch-based lease.
+		return roachpb.LeaseEpoch
+	}
+	if i.RaftStatus.RaftState != raft.StateLeader {
+		// If this range wants to use a leader lease, but it is not currently the
+		// raft leader, we construct an expiration-based lease. It is highly likely
+		// that the lease acquisition will be rejected before being proposed by the
+		// lease safety checks in verifyAcquisition. If not (e.g. because the
+		// kv.lease.reject_on_leader_unknown.enabled setting is set to a non-default
+		// value of false), we may end up with an expiration-based lease, which is
+		// safe and can be upgraded to a leader lease when the range becomes the
+		// leader.
+		return roachpb.LeaseExpiration
+	}
+	// We're the leader and we prefer leader leases, so we construct a leader
+	// lease associated with the current raft term.
+	return roachpb.LeaseLeader
 }
 
 func leaseReplica(i BuildInput) roachpb.ReplicaDescriptor {
@@ -427,22 +468,48 @@ func leaseEpoch(
 }
 
 func leaseMinTimestamp(st Settings, i BuildInput, nextType roachpb.LeaseType) hlc.Timestamp {
-	if nextType != roachpb.LeaseEpoch {
-		panic("leaseMinTimestamp called for non-epoch lease")
-	}
-	if !st.MinExpirationSupported {
+	switch nextType {
+	case roachpb.LeaseEpoch:
+		if !st.MinExpirationSupported {
+			return hlc.Timestamp{}
+		}
+		// If we are promoting an expiration-based lease to an epoch-based lease, we
+		// must make sure the expiration does not regress. Do so by assigning a
+		// minimum expiration time to the new lease, which sets a lower bound for the
+		// lease's expiration, independent of the expiration stored indirectly in the
+		// liveness record.
+		expPromo := i.Extension() && i.PrevLease.Type() == roachpb.LeaseExpiration
+		if expPromo {
+			return *i.PrevLease.Expiration
+		}
 		return hlc.Timestamp{}
+	case roachpb.LeaseLeader:
+		if !st.MinExpirationSupported {
+			panic("cannot construct leader lease without minimum expiration support")
+		}
+		// If we are constructing a leader lease, always set a minimum expiration
+		// time, regardless of whether this is a promotion from an expiration-based
+		// lease or not. This provides a lower bound for the lease's expiration,
+		// independent of the leader fortification.
+		minExp := i.Now.ToTimestamp().Add(int64(st.RangeLeaseDuration), 0)
+		minExp.Forward(i.PrevLeaseExpiration())
+		return minExp
+	default:
+		panic("leaseMinTimestamp called for non-epoch and non-leader lease")
 	}
-	// If we are promoting an expiration-based lease to an epoch-based lease, we
-	// must make sure the expiration does not regress. Do so by assigning a
-	// minimum expiration time to the new lease, which sets a lower bound for the
-	// lease's expiration, independent of the expiration stored indirectly in the
-	// liveness record.
-	expPromo := i.Extension() && i.PrevLease.Type() == roachpb.LeaseExpiration
-	if expPromo {
-		return *i.PrevLease.Expiration
+}
+
+func leaseTerm(i BuildInput, nextType roachpb.LeaseType) uint64 {
+	if nextType != roachpb.LeaseLeader {
+		panic("leaseTerm called for non-leader lease")
 	}
-	return hlc.Timestamp{}
+	if i.RaftStatus.RaftState != raft.StateLeader {
+		panic("leaseTerm called when not leader")
+	}
+	if i.RaftStatus.Term == 0 {
+		panic("leaseTerm called with term 0")
+	}
+	return i.RaftStatus.Term
 }
 
 func leaseDeprecatedStartStasis(i BuildInput, nextExpiration *hlc.Timestamp) *hlc.Timestamp {
@@ -538,6 +605,7 @@ var leaseValidationFuncs = []func(i BuildInput, nextLease roachpb.Lease) error{
 	validateExpiration,
 	validateAcquisitionType,
 	validateSequence,
+	validateMinExpiration,
 }
 
 func validateReplica(_ BuildInput, nextLease roachpb.Lease) error {
@@ -584,6 +652,10 @@ func validateExpiration(_ BuildInput, nextLease roachpb.Lease) error {
 		if nextLease.Expiration != nil {
 			return errors.AssertionFailedf("expiration assigned to epoch-based lease")
 		}
+	case roachpb.LeaseLeader:
+		if nextLease.Expiration != nil {
+			return errors.AssertionFailedf("expiration assigned to leader lease")
+		}
 	default:
 		panic("unexpected")
 	}
@@ -596,6 +668,22 @@ func validateAcquisitionType(_ BuildInput, nextLease roachpb.Lease) error {
 
 func validateSequence(_ BuildInput, nextLease roachpb.Lease) error {
 	return validateNonZero(nextLease.Sequence, "sequence")
+}
+
+func validateMinExpiration(_ BuildInput, nextLease roachpb.Lease) error {
+	switch nextLease.Type() {
+	case roachpb.LeaseExpiration:
+		if !nextLease.MinExpiration.IsEmpty() {
+			return errors.AssertionFailedf("minimum expiration assigned to expiration-based lease")
+		}
+	case roachpb.LeaseEpoch:
+		// Epoch-based leases may or may not have a minimum expiration time set.
+	case roachpb.LeaseLeader:
+		// Leader leases may or may not have a minimum expiration time set.
+	default:
+		panic("unexpected")
+	}
+	return nil
 }
 
 func validateNonZero[T comparable](field T, name string) error {

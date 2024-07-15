@@ -76,14 +76,15 @@ import (
 
 var TransferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kv.transfer_expiration_leases_first.enabled",
+	"kv.lease.transfer_expiration_leases_first.enabled",
 	"controls whether we transfer expiration-based leases that are later upgraded to epoch-based ones",
 	true,
+	settings.WithRetiredName("kv.transfer_expiration_leases_first.enabled"),
 )
 
 var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kv.expiration_leases_only.enabled",
+	"kv.lease.expiration_leases_only.enabled",
 	"only use expiration-based leases never epoch-based ones "+
 		"when there are less than kv.lease.expiration_max_replicas_per_node on the node, "+
 		"(experimental, affects performance)",
@@ -91,7 +92,15 @@ var ExpirationLeasesOnly = settings.RegisterBoolSetting(
 	// builds because TestClusters are usually so slow that they're unable
 	// to maintain leases/leadership/liveness.
 	!syncutil.DeadlockEnabled &&
-		metamorphic.ConstantWithTestBool("kv.expiration_leases_only.enabled", false),
+		metamorphic.ConstantWithTestBool("kv.lease.expiration_leases_only.enabled", false),
+	settings.WithRetiredName("kv.expiration_leases_only.enabled"),
+)
+
+var PreferLeaderLeasesOverEpochLeases = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lease.prefer_leader_leases_over_epoch_leases.enabled",
+	"controls whether leader leases are preferred over epoch-based leases",
+	envutil.EnvOrDefaultBool("COCKROACH_LEADER_LEASES", false),
 )
 
 // ExpirationLeasesMaxReplicasPerNode converts from expiration back to epoch
@@ -695,6 +704,14 @@ func (r *Replica) leaseStatusForRequestRLocked(
 		RequestTs:          reqTS,
 		Lease:              *r.mu.state.Lease,
 	}
+	// TODO(nvanbenschoten): evaluate whether this is too expensive to compute for
+	// every lease status request. We may need to cache this result. If, at that
+	// time, we determine that it is sufficiently cheap, we should either compute
+	// it unconditionally, regardless of the lease type or let leases.Status
+	// decide when to compute it.
+	if in.Lease.Type() == roachpb.LeaseLeader {
+		in.RaftStatus = r.raftLeadSupportStatusRLocked()
+	}
 	return leases.Status(ctx, r.store.cfg.NodeLiveness, in)
 }
 
@@ -719,6 +736,7 @@ func (r *Replica) leaseSettings(ctx context.Context) leases.Settings {
 	return leases.Settings{
 		UseExpirationLeases:                       r.shouldUseExpirationLeaseRLocked(),
 		TransferExpirationLeases:                  TransferExpirationLeasesFirstEnabled.Get(&r.store.ClusterSettings().SV),
+		PreferLeaderLeasesOverEpochLeases:         PreferLeaderLeasesOverEpochLeases.Get(&r.store.ClusterSettings().SV),
 		RejectLeaseOnLeaderUnknown:                RejectLeaseOnLeaderUnknown.Get(&r.store.ClusterSettings().SV),
 		DisableAboveRaftLeaseTransferSafetyChecks: r.store.cfg.TestingKnobs.DisableAboveRaftLeaseTransferSafetyChecks,
 		AllowLeaseProposalWhenNotLeader:           r.store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader,
@@ -1189,6 +1207,10 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					msg = "lease state could not be determined"
 				}
 				log.VEventf(ctx, 2, "%s", msg)
+				// TODO(nvanbenschoten): now that leader leases are going to return an
+				// ERROR status on follower replicas instead of a VALID status, we will
+				// hit this path more. Do we need to add the lease to this
+				// NotLeaseHolder error to ensure fast redirection?
 				return nil, kvserverpb.LeaseStatus{}, false, kvpb.NewError(
 					kvpb.NewNotLeaseHolderError(roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc, msg))
 

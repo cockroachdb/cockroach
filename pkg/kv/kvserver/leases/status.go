@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,6 +30,9 @@ type StatusInput struct {
 	MaxOffset          time.Duration
 	MinProposedTs      hlc.ClockTimestamp
 	MinValidObservedTs hlc.ClockTimestamp
+
+	// Information about raft.
+	RaftStatus raft.LeadSupportStatus
 
 	// The current time and the time of the request to evaluate the lease for.
 	Now       hlc.ClockTimestamp
@@ -113,7 +117,10 @@ func Status(ctx context.Context, nl NodeLiveness, i StatusInput) kvserverpb.Leas
 		RequestTime:               i.RequestTs,
 		MinValidObservedTimestamp: i.MinValidObservedTs,
 	}
-	if lease.Type() == roachpb.LeaseEpoch {
+	switch lease.Type() {
+	case roachpb.LeaseExpiration:
+		// lease.Expiration is the only field we need to evaluate the lease.
+	case roachpb.LeaseEpoch:
 		// For epoch-based leases, retrieve the node liveness record associated with
 		// the lease.
 		l, ok := nl.GetLiveness(lease.Replica.NodeID)
@@ -141,6 +148,52 @@ func Status(ctx context.Context, nl NodeLiveness, i StatusInput) kvserverpb.Leas
 		// liveness record's expiration to determine the expiration of the lease. If
 		// not, the lease is likely expired, but its minimum expiration may still be
 		// in the future (also consulted in status.Expiration), so we check below.
+	case roachpb.LeaseLeader:
+		// For leader leases, evaluate the Raft leader support information
+		// associated with the lease.
+		if lease.Replica.StoreID == i.LocalStoreID {
+			// If the leader lease is held locally, we compare the term of the lease
+			// to the term of the Raft leader below in the call to status.Expiration
+			// to determine whether the current LeadSupportUntil contributes to the
+			// lease's expiration.
+			status.LeaderSupport = kvserverpb.RaftLeaderSupport{
+				Term:             i.RaftStatus.Term,
+				LeadSupportUntil: i.RaftStatus.LeadSupportUntil,
+			}
+		} else {
+			// If the leader lease is not held locally, we can't determine the leader
+			// support status of the lease unless we know of a Raft leader at a later
+			// term (which may be ourselves). Knowledge of a Raft leader at a later
+			// term proves that the support for this earlier term (which the lease is
+			// associated with) has been lost, otherwise no new leader could have been
+			// elected.
+			//
+			// If we do not know of a leader at a later term, the leader's term may
+			// still be supported and the lease may still be valid. We cannot say for
+			// sure. In cases where the leaseholder crashes, we must wait for raft to
+			// elect a new leader before any other replica (typically the new leader)
+			// can determine the validity of the old lease and replace it.
+			knownSuccessor := i.RaftStatus.Term > lease.Term && i.RaftStatus.Lead != raft.None
+			knownValid := i.Now.ToTimestamp().Less(lease.MinExpiration)
+			if !knownSuccessor && !knownValid {
+				// TODO(nvanbenschoten): we could introduce a new INDETERMINATE state
+				// for this case, instead of using ERROR. This would look a bit less
+				// unexpected.
+				status.State = kvserverpb.LeaseState_ERROR
+				status.ErrInfo = "leader lease is not held locally, cannot determine validity"
+				return status
+			}
+			// Otherwise, we still don't know the exact extent of the leader support
+			// for the lease, but we know that it has either already expired or was
+			// never even established due to a failure of the raft leader to fortify.
+			// Either way, the leader of lease.Term cannot think this lease's leader
+			// support is in the future.
+			//
+			// However, the lease's minimum expiration may still be in the future
+			// (also consulted in status.Expiration), so we check below.
+		}
+	default:
+		panic("unexpected lease type")
 	}
 	expiration := status.Expiration()
 	maxOffset := i.MaxOffset
