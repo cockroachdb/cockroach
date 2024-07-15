@@ -14,6 +14,7 @@ import (
 	"log"
 	"os"
 
+	roachprodConfig "github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/spf13/cobra"
@@ -50,6 +51,7 @@ Typical usage:
 	command.AddCommand(makeExportCommand())
 	command.AddCommand(makeCleanCommand())
 	command.AddCommand(makeCompressCommand())
+	command.AddCommand(makeStageCommand())
 
 	return command
 }
@@ -121,7 +123,28 @@ func makeRunCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&config.lenient, "lenient", config.lenient, "tolerate errors while running benchmarks")
 	cmd.Flags().BoolVar(&config.affinity, "affinity", config.affinity, "run benchmarks with iterations and binaries having affinity to the same node, only applies when more than one archive is specified")
 	cmd.Flags().BoolVar(&config.quiet, "quiet", config.quiet, "suppress roachprod progress output")
+	return cmd
+}
 
+func makeStageCommand() *cobra.Command {
+	runCmdFunc := func(cmd *cobra.Command, args []string) error {
+		cluster := args[0]
+		src := args[1]
+		dest := args[2]
+		return stage(cluster, src, dest)
+	}
+
+	cmd := &cobra.Command{
+		Use:   "stage <cluster> <src> <dest>",
+		Short: "Stage a given test binaries archive on a roachprod cluster.",
+		Long: `Copy and extract a portable test binaries archive to all nodes on the specified cluster and destination.
+
+the destination is a directory created by this command where the binaries archive will be extracted.
+The source can be a local path or a GCS URI.`,
+		Args: cobra.ExactArgs(3),
+		RunE: runCmdFunc,
+	}
+	cmd.Flags().BoolVar(&roachprodConfig.Quiet, "quiet", roachprodConfig.Quiet, "suppress roachprod progress output")
 	return cmd
 }
 
