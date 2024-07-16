@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -81,8 +82,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	spans := make([]roachpb.Span, 0, len(req.TableNames))
 	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
 	for _, name := range req.TableNames {
-		un := tree.MakeUnresolvedName(name)
-		uon, err := un.ToUnresolvedObjectName(tree.NoAnnotation)
+		uon, err := parser.ParseTableName(name)
 		if err != nil {
 			return streampb.ReplicationProducerSpec{}, err
 		}
