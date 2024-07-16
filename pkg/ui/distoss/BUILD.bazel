@@ -3,9 +3,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 genrule(
     name = "genassets",
     srcs = ["//pkg/ui/workspaces/db-console:db-console-oss"],
-    outs = ["assets.tar.gz"],
-    cmd = """$(location //pkg/util/targz/gen) $@ $(SRCS)""",
-    exec_tools = ["//pkg/util/targz/gen"],
+    outs = ["assets.tar.zst"],
+    cmd = """$(location //pkg/util/assetbundle/gen) $@ $(SRCS)""",
+    exec_tools = ["//pkg/util/assetbundle/gen"],
     visibility = ["//pkg/gen:__subpackages__"],
 )
 
@@ -17,6 +17,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ui",
-        "//pkg/util/targz",
+        "//pkg/util/assetbundle",
     ],
 )

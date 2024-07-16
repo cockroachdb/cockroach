@@ -19,14 +19,14 @@ import (
 	_ "embed"
 
 	"github.com/cockroachdb/cockroach/pkg/ui"
-	"github.com/cockroachdb/cockroach/pkg/util/targz"
+	"github.com/cockroachdb/cockroach/pkg/util/assetbundle"
 )
 
-//go:embed assets.tar.gz
+//go:embed assets.tar.zst
 var assets []byte
 
 func init() {
-	fs, err := targz.AsFS(bytes.NewBuffer(assets))
+	fs, err := assetbundle.AsFS(bytes.NewBuffer(assets))
 	if err != nil {
 		panic(err)
 	}
