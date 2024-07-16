@@ -122,7 +122,6 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, r.txn); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
-
 	return streampb.ReplicationProducerSpec{
 		StreamID:             streampb.StreamID(jr.JobID),
 		SourceClusterID:      r.evalCtx.ClusterID,
@@ -170,9 +169,18 @@ func (r *replicationStreamManagerImpl) HeartbeatReplicationStream(
 
 // StreamPartition implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) StreamPartition(
-	streamID streampb.StreamID, opaqueSpec []byte,
+	ctx context.Context, streamID streampb.StreamID, opaqueSpec []byte,
 ) (eval.ValueGenerator, error) {
 	if err := r.checkLicense(); err != nil {
+		return nil, err
+	}
+	// We release the descriptor collection state because stream_partitions
+	// runs forever.
+	r.txn.Descriptors().ReleaseAll(ctx)
+
+	// We also commit the planner's transaction. Nothing should be using it after
+	// this point and the stream itself is non-transactional.
+	if err := r.txn.KV().Commit(ctx); err != nil {
 		return nil, err
 	}
 	return streamPartition(r.evalCtx, streamID, opaqueSpec)
