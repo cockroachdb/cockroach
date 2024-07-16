@@ -76,6 +76,95 @@ var (
 	lwwColumnAdd = "ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL"
 )
 
+func TestLogicalStreamIngestionJobNameResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	type testCase struct {
+		name                string
+		setup               func(*testing.T, *sqlutils.SQLRunner, *sqlutils.SQLRunner)
+		localStmtTableName  string
+		remoteStmtTableName string
+		expectedErr         string
+	}
+	cases := []testCase{
+		{
+			name: "table in schema",
+			setup: func(t *testing.T, dbA *sqlutils.SQLRunner, dbB *sqlutils.SQLRunner) {
+				dbA.Exec(t, `CREATE SCHEMA foo`)
+				createBasicTable(t, dbA, "foo.bar")
+				dbB.Exec(t, `CREATE SCHEMA foo`)
+				createBasicTable(t, dbB, "foo.bar")
+			},
+			localStmtTableName:  "foo.bar",
+			remoteStmtTableName: "foo.bar",
+		},
+		{
+			name: "table in schema with special characters",
+			setup: func(t *testing.T, dbA *sqlutils.SQLRunner, dbB *sqlutils.SQLRunner) {
+				dbA.Exec(t, `CREATE SCHEMA "foo-bar"`)
+				createBasicTable(t, dbA, `"foo-bar".bar`)
+				dbB.Exec(t, `CREATE SCHEMA "foo-bar"`)
+				createBasicTable(t, dbB, `"foo-bar".bar`)
+			},
+			localStmtTableName:  `"foo-bar".bar`,
+			remoteStmtTableName: `"foo-bar".bar`,
+		},
+		{
+			name: "table with special characters in schema with special characters",
+			setup: func(t *testing.T, dbA *sqlutils.SQLRunner, dbB *sqlutils.SQLRunner) {
+				dbA.Exec(t, `CREATE SCHEMA "foo-bar2"`)
+				createBasicTable(t, dbA, `"foo-bar2"."baz-bat"`)
+				dbB.Exec(t, `CREATE SCHEMA "foo-bar2"`)
+				createBasicTable(t, dbB, `"foo-bar2"."baz-bat"`)
+			},
+			localStmtTableName:  `"foo-bar2"."baz-bat"`,
+			remoteStmtTableName: `"foo-bar2"."baz-bat"`,
+		},
+		{
+			name: "table with periods in schema with periods",
+			setup: func(t *testing.T, dbA *sqlutils.SQLRunner, dbB *sqlutils.SQLRunner) {
+				dbA.Exec(t, `CREATE SCHEMA "foo.bar"`)
+				createBasicTable(t, dbA, `"foo.bar"."baz.bat"`)
+				dbB.Exec(t, `CREATE SCHEMA "foo.bar"`)
+				createBasicTable(t, dbB, `"foo.bar"."baz.bat"`)
+			},
+			localStmtTableName:  `"foo.bar"."baz.bat"`,
+			remoteStmtTableName: `"foo.bar"."baz.bat"`,
+		},
+		{
+			name: "table in public schema",
+			setup: func(t *testing.T, dbA *sqlutils.SQLRunner, dbB *sqlutils.SQLRunner) {
+				createBasicTable(t, dbA, "bar")
+				createBasicTable(t, dbB, "bar")
+			},
+			localStmtTableName:  "public.bar",
+			remoteStmtTableName: "public.bar",
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs)
+	defer server.Stopper().Stop(ctx)
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			c.setup(t, dbA, dbB)
+			query := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %s ON $1 INTO TABLE %s",
+				c.remoteStmtTableName, c.localStmtTableName)
+			if c.expectedErr != "" {
+				dbA.ExpectErr(t, c.expectedErr, query, dbBURL.String())
+			} else {
+				var unusedID int
+				dbA.QueryRow(t, query, dbBURL.String()).Scan(&unusedID)
+			}
+		})
+	}
+}
+
 func TestLogicalStreamIngestionJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
