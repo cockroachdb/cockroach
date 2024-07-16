@@ -188,13 +188,11 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	}); err != nil {
 		return errors.Wrap(err, "unable to create log directory")
 	}
-
-	logBytesWritten := serverCfg.DiskWriteStatsCollector.CreateStat(fs.CRDBLogWriteCategory)
 	// Configuration ready and directories exist; apply it.
 	fatalOnLogStall := func() bool {
 		return fs.MaxSyncDurationFatalOnExceeded.Get(&serverCfg.Settings.SV)
 	}
-	logShutdownFn, err := log.ApplyConfig(h.Config, log.FileSinkMetrics{LogBytesWritten: logBytesWritten}, fatalOnLogStall)
+	logShutdownFn, err := log.ApplyConfig(h.Config, serverCfg.DiskWriteStats, fatalOnLogStall)
 	if err != nil {
 		return err
 	}
