@@ -59,6 +59,8 @@ func registerClearRange(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runClearRange(ctx, t, c, true /* checks */)
 		},
+		Skip:        "#126777",
+		SkipDetails: "Issue setting up ZFS filesystem.",
 	})
 }
 
