@@ -141,25 +141,11 @@ type Statement interface {
 	StatementTag() string
 }
 
-// canModifySchema is to be implemented by statements that can modify
-// the database schema but may have StatementReturnType() != DDL.
-// See CanModifySchema() below.
-type canModifySchema interface {
-	modifiesSchema() bool
-}
-
 // CanModifySchema returns true if the statement can modify
 // the database schema.
 func CanModifySchema(stmt Statement) bool {
-	if stmt == nil {
-		// Some drivers send empty queries to test the connection.
-		return false
-	}
-	if stmt.StatementReturnType() == DDL || stmt.StatementType() == TypeDDL {
-		return true
-	}
-	scm, ok := stmt.(canModifySchema)
-	return ok && scm.modifiesSchema()
+	return stmt != nil &&
+		(stmt.StatementReturnType() == DDL || stmt.StatementType() == TypeDDL)
 }
 
 // CanWriteData returns true if the statement can modify data.
@@ -969,9 +955,6 @@ func (n *CreateSchema) StatementTag() string {
 	return CreateSchemaTag
 }
 
-// modifiesSchema implements the canModifySchema interface.
-func (*CreateSchema) modifiesSchema() bool { return true }
-
 // StatementReturnType implements the Statement interface.
 func (n *CreateTable) StatementReturnType() StatementReturnType { return DDL }
 
@@ -986,9 +969,6 @@ func (n *CreateTable) StatementTag() string {
 	return "CREATE TABLE"
 }
 
-// modifiesSchema implements the canModifySchema interface.
-func (*CreateTable) modifiesSchema() bool { return true }
-
 // StatementReturnType implements the Statement interface.
 func (*CreateType) StatementReturnType() StatementReturnType { return DDL }
 
@@ -997,8 +977,6 @@ func (*CreateType) StatementType() StatementType { return TypeDDL }
 
 // StatementTag implements the Statement interface.
 func (*CreateType) StatementTag() string { return "CREATE TYPE" }
-
-func (*CreateType) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
 func (*CreateRole) StatementReturnType() StatementReturnType { return DDL }
@@ -1067,9 +1045,6 @@ func (d *Discard) StatementTag() string {
 	}
 	return "DISCARD"
 }
-
-// modifiesSchema implements the canModifySchema interface.
-func (*Discard) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
 func (n *DeclareCursor) StatementReturnType() StatementReturnType { return Ack }
@@ -2140,9 +2115,6 @@ func (*Truncate) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Truncate) StatementTag() string { return "TRUNCATE" }
-
-// modifiesSchema implements the canModifySchema interface.
-func (*Truncate) modifiesSchema() bool { return true }
 
 // StatementReturnType implements the Statement interface.
 func (n *Update) StatementReturnType() StatementReturnType { return n.Returning.statementReturnType() }
