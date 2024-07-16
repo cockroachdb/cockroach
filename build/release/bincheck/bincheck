@@ -17,6 +17,31 @@ readonly sha="$3"
 readonly urlfile=cockroach-url
 readonly pidfile=/tmp/server_pid
 
+# Verify that the startup time is within a reasonable upper-bound. 
+# At the time of writing, the total `init` time is well under 200ms on m1pro.
+init_time=`GODEBUG=inittrace=1 $cockroach version 2>&1|grep init|awk '{print $5}' |awk '{sum += $0} END {printf("%d\n", sum)}'`
+if [[ $init_time -gt 500 ]]
+then
+  echo "'init' time is unreasonably high: $init_time"
+  exit 1
+fi
+
+echo ""
+echo "Total 'init' time: $init_time ms"
+
+# Verify that the total heap-allocated bytes inside 'init' functions is within a reasonable upper-bound.
+# At the time of writing, the total heap-allocated bytes is ~265MB (of which ~198MB is used by UI assets).
+total_bytes=`GODEBUG=inittrace=1 $cockroach version 2>&1|grep init|awk '{print $8}' |awk '{sum += $0} END {printf("%d\n", sum)}'`
+if [[ $total_bytes -gt 536870912 ]]
+then
+  echo "Total 'init' heap-allocated bytes is unreasonably high: $total_bytes"
+  exit 1
+fi
+
+echo "Total 'init' heap-allocated bytes: $total_bytes"
+echo ""
+
+
 # Display build information.
 echo ""
 "$cockroach" version
