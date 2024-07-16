@@ -49,6 +49,7 @@ case $1 in
         roachprod run $cluster -- "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
         ;;
       "drt-ldr1"|"drt-ldr2")
+        shift
         set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --restart=false "$@"
         ;;
       *)
@@ -528,12 +529,12 @@ EOF"
         $0 ssh drt-ldr2:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 {pgurl:1}"
 
         # tell the clusters about eachother.
-        ldr2="$(roachprod ssh drt-ldr2:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1} | sed 's,postgresql://postgres://,postgres://,')"
-        ldr1="$(roachprod ssh drt-ldr1:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1} | sed 's,postgresql://postgres://,postgres://,')"
+        ldr2="$(roachprod ssh drt-ldr2:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1} | sed 's,postgresql://postgres://,postgres://,' | sed 's/roachprod:cockroachdb/root/' | sed 's/defaultdb/ycsb/')"
+        ldr1="$(roachprod ssh drt-ldr1:1 -- ./cockroach encode-uri --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt {pgurl:1} | sed 's,postgresql://postgres://,postgres://,' | sed 's/roachprod:cockroachdb/root/' | sed 's/defaultdb/ycsb/')"
         $0 sql drt-ldr1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr2' AS '${ldr2}'"
         $0 sql drt-ldr2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr1' AS '${ldr1}'"
-        roachprod sql drt-ldr1:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE ycsb.usertable ON 'external://drt-ldr2' INTO TABLE ycsb.public.usertable;"
-        roachprod sql drt-ldr2:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE ycsb.usertable ON 'external://drt-ldr1' INTO TABLE ycsb.public.usertable;"
+        roachprod sql drt-ldr1:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://drt-ldr2' INTO TABLE ycsb.public.usertable;"
+        roachprod sql drt-ldr2:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://drt-ldr1' INTO TABLE ycsb.public.usertable;"
 
         echo
         echo "Completed setup of ldr1 and ldr2, with logical data replication between them on table ycsb.usertable."
@@ -573,7 +574,7 @@ EOF"
         ln -sf pgurls.ldr1.txt pgurls.txt"
 
         # Set up a changefeed in one of the two clusters.
-        $0 sql drt-ldr1:1 -- -e "CREATE CHANGEFEED FOR TABLE ycsb.usertable INTO 'null://' WITH OPTIONS (initial_scan = 'no', resolved, updated)"
+        $0 sql drt-ldr1:1 -- -e "CREATE CHANGEFEED FOR TABLE ycsb.usertable INTO 'null://' WITH OPTIONS (initial_scan = 'no', resolved, updated, split_column_families)"
 
         # Setup the ycsb workload runner as a script invoked by systemd.
         # The runner cycles through all lettered ycsb workloads in a
