@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -110,9 +111,13 @@ type DistSQLPlanner struct {
 	// sqlInstanceDialer handles communication between SQL nodes/pods.
 	sqlInstanceDialer *nodedialer.Dialer
 
-	// nodeHealth encapsulates the various node health checks to avoid planning
-	// on unhealthy nodes.
-	nodeHealth distSQLNodeHealth
+	// kvNodeAvailable encapsulates the various node health checks to avoid
+	// planning on unhealthy nodes.
+	kvNodeAvailable func(nodeID roachpb.NodeID) bool
+
+	// sqlNodeAvailable encapsulates the various node health checks to avoid
+	// planning on unhealthy nodes.
+	sqlNodeAvailable func(base.SQLInstanceID, string) bool
 
 	// parallelLocalScansSem is a node-wide semaphore on the number of
 	// additional goroutines that can be used to run concurrent TableReaders
@@ -174,9 +179,8 @@ func NewDistSQLPlanner(
 	nodeDescs kvcoord.NodeDescStore,
 	gw gossip.OptionalGossip,
 	stopper *stop.Stopper,
-	isAvailable func(base.SQLInstanceID) bool,
-	connHealthCheckerSystem func(roachpb.NodeID, rpc.ConnectionClass) error, // will only be used by the system tenant
-	instanceConnHealthChecker func(base.SQLInstanceID, string) error,
+	kvNodeAvailable func(nodeID roachpb.NodeID) bool,
+	sqlNodeAvailable func(base.SQLInstanceID, string) bool,
 	sqlInstanceDialer *nodedialer.Dialer,
 	codec keys.SQLCodec,
 	sqlAddressResolver sqlinstance.AddressResolver,
@@ -189,18 +193,14 @@ func NewDistSQLPlanner(
 		distSQLSrv:           distSQLSrv,
 		gossip:               gw,
 		sqlInstanceDialer:    sqlInstanceDialer,
-		nodeHealth: distSQLNodeHealth{
-			gossip:             gw,
-			connHealthSystem:   connHealthCheckerSystem,
-			connHealthInstance: instanceConnHealthChecker,
-			isAvailable:        isAvailable,
-		},
-		distSender:         distSender,
-		nodeDescs:          nodeDescs,
-		rpcCtx:             rpcCtx,
-		sqlAddressResolver: sqlAddressResolver,
-		codec:              codec,
-		clock:              clock,
+		kvNodeAvailable:      kvNodeAvailable,
+		sqlNodeAvailable:     sqlNodeAvailable,
+		distSender:           distSender,
+		nodeDescs:            nodeDescs,
+		rpcCtx:               rpcCtx,
+		sqlAddressResolver:   sqlAddressResolver,
+		codec:                codec,
+		clock:                clock,
 	}
 
 	dsp.parallelLocalScansSem = quotapool.NewIntPool("parallel local scans concurrency",
@@ -1247,77 +1247,98 @@ func MakeSpanPartitionWithRangeCount(
 	}
 }
 
-type distSQLNodeHealth struct {
-	gossip             gossip.OptionalGossip
-	isAvailable        func(base.SQLInstanceID) bool
-	connHealthSystem   func(roachpb.NodeID, rpc.ConnectionClass) error
-	connHealthInstance func(base.SQLInstanceID, string) error
+// CheckSQLNodeHealth returns whether a SQL node is considered healthy.
+func CheckSQLNodeHealth(
+	ctx context.Context,
+	sqlInstanceID base.SQLInstanceID,
+	addr string,
+	sqlConnHealth func(base.SQLInstanceID, string) error,
+) bool {
+	// Consider ErrNotHeartbeated as a temporary error (see its description)
+	// and avoid caching its result, as it can resolve to a more accurate
+	// result soon. It's more reasonable to plan on using this node, and if
+	// such a node is unhealthy, the retry-as-local mechanism would retry
+	// the operation on the gateway.
+	if err := sqlConnHealth(sqlInstanceID, addr); err != nil && !errors.Is(err, rpc.ErrNotHeartbeated) {
+		log.VEventf(ctx, 2, "not using n%d since it is not connected %v", sqlInstanceID, err)
+		return false
+	}
+	return true
 }
 
-func (h *distSQLNodeHealth) checkSystem(
-	ctx context.Context, sqlInstanceID base.SQLInstanceID,
-) error {
-	{
-		// NB: as of #22658, connHealthSystem does not work as expected; see the
-		// comment within. We still keep this code for now because in
-		// practice, once the node is down it will prevent using this node
-		// 90% of the time (it gets used around once per second as an
-		// artifact of rpcContext's reconnection mechanism at the time of
-		// writing). This is better than having it used in 100% of cases
-		// (until the liveness check below kicks in).
-		if err := h.connHealthSystem(roachpb.NodeID(sqlInstanceID), rpc.DefaultClass); err != nil {
-			// This host isn't known to be healthy. Don't use it (use the gateway
-			// instead). Note: this can never happen for our sqlInstanceID (which
-			// always has its address in the nodeMap).
-			log.VEventf(ctx, 1, "marking n%d as unhealthy for this plan: %v", sqlInstanceID, err)
-			return err
-		}
+// CheckKVNodeHealth returns whether the node with the given SQLInstanceID is
+// available for DistSQL planning based on a number of factors. This function
+// checks either the kvConnHealth or the sqlConnHealth depending on whether an
+// explict address is provided.
+//
+// TODO(baptist): Move this code into NodeVitality.IsLive for DistSQL.
+func CheckKVNodeHealth(
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	kvConnHealth func(roachpb.NodeID, rpc.ConnectionClass) error,
+	nodeLiveness livenesspb.NodeVitalityInterface,
+	optGossip gossip.OptionalGossip,
+) bool {
+	// NB: as of #22658, Dialer.ConnHealthTryDial does not work as expected; see
+	// the comment within. We still keep this code for now because in practice,
+	// once the node is down it will prevent using this node 90% of the time (it
+	// gets used around once per second as an artifact of rpcContext's
+	// reconnection mechanism at the time of writing). This is better than
+	// having it used in 100% of cases (until the liveness check below kicks
+	// in).
+	if err := kvConnHealth(nodeID, rpc.DefaultClass); err != nil {
+		// This host isn't known to be healthy. Don't use it (use the gateway
+		// instead). Note: this can never happen for our sqlInstanceID (which
+		// always has its address in the nodeMap).
+		log.VEventf(ctx, 2, "marking n%d as unhealthy for this plan: %v", nodeID, err)
+		return false
 	}
-	if !h.isAvailable(sqlInstanceID) {
-		return pgerror.Newf(pgcode.CannotConnectNow, "not using n%d since it is not available", sqlInstanceID)
+	if nodeLiveness != nil {
+		if !nodeLiveness.GetNodeVitalityFromCache(nodeID).IsLive(livenesspb.DistSQL) {
+			log.VEventf(ctx, 2, "not using n%d since it is not available", nodeID)
+			return false
+		}
 	}
 
 	// Check that the node is not draining.
-	g, ok := h.gossip.Optional(distsql.MultiTenancyIssueNo)
+	g, ok := optGossip.Optional(distsql.MultiTenancyIssueNo)
 	if !ok {
-		return errors.AssertionFailedf("gossip is expected to be available for the system tenant")
+		log.VEventf(ctx, 1, "gossip is expected to be available for dist SQL planning")
+		return false
 	}
 	drainingInfo := &execinfrapb.DistSQLDrainingInfo{}
-	if err := g.GetInfoProto(gossip.MakeDistSQLDrainingKey(sqlInstanceID), drainingInfo); err != nil {
-		// Because draining info has no expiration, an error
-		// implies that we have not yet received a node's
-		// draining information. Since this information is
-		// written on startup, the most likely scenario is
-		// that the node is ready. We therefore return no
-		// error.
+	if err := g.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
+		// Because draining info has no expiration, an error implies that we
+		// have not yet received a node's draining information. Since this
+		// information is written on startup, the most likely scenario is that
+		// the node is ready. We therefore return no error.
 		// TODO(ajwerner): Determine the expected error types and only filter those.
-		return nil //nolint:returnerrcheck
+		log.VEventf(ctx, 2, "problem getting draining key %v", err)
+		return true
 	}
 
 	if drainingInfo.Draining {
-		err := errors.Newf("not using n%d because it is draining", sqlInstanceID)
-		log.VEventf(ctx, 1, "%v", err)
-		return err
+		log.VEventf(ctx, 2, "not using n%d because it is draining", nodeID)
+		return false
 	}
-
-	return nil
+	return true
 }
 
 // checkInstanceHealthAndVersionSystem returns information about a node's health
 // and compatibility. The info is also recorded in planCtx.nodeStatuses. It
 // should only be used by the system tenant.
 func (dsp *DistSQLPlanner) checkInstanceHealthAndVersionSystem(
-	ctx context.Context, planCtx *PlanningCtx, sqlInstanceID base.SQLInstanceID,
+	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID,
 ) NodeStatus {
-	if status, ok := planCtx.nodeStatuses[sqlInstanceID]; ok {
+	if status, ok := planCtx.nodeStatuses[base.SQLInstanceID(nodeID)]; ok {
 		return status
 	}
 
 	status := NodeOK
-	if err := dsp.nodeHealth.checkSystem(ctx, sqlInstanceID); err != nil {
+	if !dsp.kvNodeAvailable(nodeID) {
 		status = NodeUnhealthy
 	}
-	planCtx.nodeStatuses[sqlInstanceID] = status
+	planCtx.nodeStatuses[base.SQLInstanceID(nodeID)] = status
 	return status
 }
 
@@ -1548,7 +1569,7 @@ func (dsp *DistSQLPlanner) deprecatedHealthySQLInstanceIDForKVNodeIDSystem(
 	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID,
 ) (base.SQLInstanceID, SpanPartitionReason) {
 	sqlInstanceID := base.SQLInstanceID(nodeID)
-	status := dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, sqlInstanceID)
+	status := dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, nodeID)
 	// If the node is unhealthy or its DistSQL version is incompatible, use the
 	// gateway to process this span instead of the unhealthy host. An empty
 	// address indicates an unhealthy host.
@@ -1574,15 +1595,7 @@ func (dsp *DistSQLPlanner) checkInstanceHealth(
 		}
 	}
 	status := NodeOK
-	if err := dsp.nodeHealth.connHealthInstance(instanceID, instanceRPCAddr); err != nil {
-		if errors.Is(err, rpc.ErrNotHeartbeated) {
-			// Consider ErrNotHeartbeated as a temporary error (see its description) and
-			// avoid caching its result, as it can resolve to a more accurate result soon.
-			// It's more reasonable to plan on using this node, and if such a node is
-			// unhealthy, the retry-as-local mechanism would retry the operation on the
-			// gateway.
-			return NodeOK
-		}
+	if !dsp.sqlNodeAvailable(instanceID, instanceRPCAddr) {
 		status = NodeUnhealthy
 	}
 
