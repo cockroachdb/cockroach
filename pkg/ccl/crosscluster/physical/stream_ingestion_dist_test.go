@@ -54,25 +54,6 @@ func TestMeasurePlanChange(t *testing.T) {
 		return plan
 	}
 
-	getNodes := func(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount int) {
-		dst = make(map[string]struct{})
-		src = make(map[string]struct{})
-		count := 0
-		for _, proc := range plan.Processors {
-			if proc.Spec.Core.StreamIngestionData == nil {
-				// Skip other processors in the plan (like the Frontier processor).
-				continue
-			}
-			dst[proc.SQLInstanceID.String()] = struct{}{}
-			count += 1
-			for id := range proc.Spec.Core.StreamIngestionData.PartitionSpecs {
-				src[id] = struct{}{}
-				count += 1
-			}
-		}
-		return src, dst, count
-	}
-
 	for _, tc := range []struct {
 		name   string
 		before sql.PhysicalPlan
@@ -144,6 +125,12 @@ func TestMeasurePlanChange(t *testing.T) {
 			before: makePlan(makeProc(1, []int{1}), makeProc(2, []int{2})),
 			after:  makePlan(makeProc(1, []int{2}), makeProc(2, []int{1})),
 			frac:   0,
+		},
+		{
+			name:   "lots of processors",
+			before: makePlan(makeProc(1, []int{1}), makeProc(1, []int{1}), makeProc(1, []int{1})),
+			after:  makePlan(makeProc(1, []int{1}), makeProc(1, []int{1}), makeProc(1, []int{1}), makeProc(2, []int{1})),
+			frac:   0.5,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
