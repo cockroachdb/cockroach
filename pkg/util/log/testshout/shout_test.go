@@ -33,7 +33,7 @@ func Example_shout_before_log() {
 		panic(err)
 	}
 	cfg.Sinks.Stderr.Filter = severity.WARNING
-	cleanup, err := log.ApplyConfig(cfg, log.FileSinkMetrics{}, nil /* fatalOnLogStall */)
+	cleanup, err := log.ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 	if err != nil {
 		panic(err)
 	}

@@ -61,11 +61,10 @@ func NewMonitorManager(fs vfs.FS) *MonitorManager {
 // goroutine to track its disk stats, otherwise it returns a Monitor handle
 // to access the stats.
 func (m *MonitorManager) Monitor(path string) (*Monitor, error) {
-	finfo, err := m.fs.Stat(path)
+	dev, err := getDeviceIDFromPath(m.fs, path)
 	if err != nil {
 		return nil, errors.Wrapf(err, "fstat(%s)", path)
 	}
-	dev := deviceIDFromFileInfo(finfo)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -292,4 +291,12 @@ func (m *Monitor) Close() {
 		m.manager.unrefDisk(m.monitoredDisk)
 		m.monitoredDisk = nil
 	}
+}
+
+func getDeviceIDFromPath(fs vfs.FS, path string) (DeviceID, error) {
+	finfo, err := fs.Stat(path)
+	if err != nil {
+		return DeviceID{}, errors.Wrapf(err, "fstat(%s)", path)
+	}
+	return deviceIDFromFileInfo(finfo), nil
 }

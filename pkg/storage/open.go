@@ -259,7 +259,7 @@ func makeExternalWALDir(
 	engineCfg *engineConfig,
 	externalDir base.ExternalPath,
 	defaultFS vfs.FS,
-	statsCollector *vfs.DiskWriteStatsCollector,
+	diskWriteStats disk.WriteStatsManager,
 ) (wal.Dir, error) {
 	// If the store is encrypted, we require that all the WAL failover dirs also
 	// be encrypted so that the user doesn't accidentally leak data unencrypted
@@ -275,7 +275,7 @@ func makeExternalWALDir(
 	env, err := fs.InitEnv(context.Background(), defaultFS, externalDir.Path, fs.EnvConfig{
 		RW:                engineCfg.env.RWMode(),
 		EncryptionOptions: externalDir.EncryptionOptions,
-	}, statsCollector)
+	}, diskWriteStats)
 	if err != nil {
 		return wal.Dir{}, err
 	}
@@ -293,7 +293,7 @@ func WALFailover(
 	walCfg base.WALFailoverConfig,
 	storeEnvs fs.Envs,
 	defaultFS vfs.FS,
-	statsCollector *vfs.DiskWriteStatsCollector,
+	diskWriteStats disk.WriteStatsManager,
 ) ConfigOption {
 	// The set of options available in single-store versus multi-store
 	// configurations vary. This is in part due to the need to store the multiple
@@ -310,7 +310,7 @@ func WALFailover(
 			// We need to add the explicilt path to WALRecoveryDirs.
 			if walCfg.PrevPath.IsSet() {
 				return func(cfg *engineConfig) error {
-					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS, statsCollector)
+					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS, diskWriteStats)
 					if err != nil {
 						return err
 					}
@@ -327,13 +327,13 @@ func WALFailover(
 		case base.WALFailoverExplicitPath:
 			// The user has provided an explicit path to which we should fail over WALs.
 			return func(cfg *engineConfig) error {
-				walDir, err := makeExternalWALDir(cfg, walCfg.Path, defaultFS, statsCollector)
+				walDir, err := makeExternalWALDir(cfg, walCfg.Path, defaultFS, diskWriteStats)
 				if err != nil {
 					return err
 				}
 				cfg.opts.WALFailover = makePebbleWALFailoverOptsForDir(cfg.settings, walDir)
 				if walCfg.PrevPath.IsSet() {
-					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS, statsCollector)
+					walDir, err := makeExternalWALDir(cfg, walCfg.PrevPath, defaultFS, diskWriteStats)
 					if err != nil {
 						return err
 					}
