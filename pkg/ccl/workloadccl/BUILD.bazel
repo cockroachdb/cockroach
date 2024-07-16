@@ -23,6 +23,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/workload",
+        "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_pflag//:pflag",
     ],

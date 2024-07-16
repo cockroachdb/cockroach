@@ -479,14 +479,14 @@ func (w *tpcc) Hooks() workload.Hooks {
 			var stmts []string
 			for i, region := range w.multiRegionCfg.regions {
 				var stmt string
+				// Region additions should be idempotent.
+				if _, ok := regions[region]; ok {
+					continue
+				}
 				// The first region is the PRIMARY region.
 				if i == 0 {
 					stmt = fmt.Sprintf(`alter database %s set primary region %q`, dbName, region)
 				} else {
-					// Region additions should be idempotent.
-					if _, ok := regions[region]; ok {
-						continue
-					}
 					stmt = fmt.Sprintf(`alter database %s add region %q`, dbName, region)
 				}
 				stmts = append(stmts, stmt)
