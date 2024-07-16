@@ -560,7 +560,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		args.sinkType, args.targets, feedOptions,
 	))
 	db := ct.DB()
-	jobID, err := newChangefeedCreator(db, ct.logger, globalRand, targetsStr, sinkURI, makeDefaultFeatureFlags()).
+	jobID, err := newChangefeedCreator(db, db, ct.logger, globalRand, targetsStr, sinkURI, makeDefaultFeatureFlags()).
 		With(feedOptions).Create()
 	if err != nil {
 		ct.t.Fatalf("failed to create changefeed: %s", err.Error())
@@ -779,7 +779,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"min_checkpoint_frequency": "'2s'",
 		"diff":                     "",
 	}
-	_, err := newChangefeedCreator(db, t.L(), globalRand, "bank.bank", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
+	_, err := newChangefeedCreator(db, db, t.L(), globalRand, "bank.bank", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
 		With(options).
 		Create()
 	if err != nil {
@@ -1142,7 +1142,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"diff":                      "",
 	}
 
-	_, err := newChangefeedCreator(db, t.L(), globalRand, "foo", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
+	_, err := newChangefeedCreator(db, db, t.L(), globalRand, "foo", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
 		With(options).
 		Args(kafka.schemaRegistryURL(ctx)).
 		Create()
@@ -1284,7 +1284,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	for _, f := range feeds {
 		t.Status(fmt.Sprintf("running:%s, query:%s", f.desc, f.queryArg))
-		_, err := newChangefeedCreator(db, t.L(), globalRand, "auth_test_table", f.queryArg, makeDefaultFeatureFlags()).Create()
+		_, err := newChangefeedCreator(db, db, t.L(), globalRand, "auth_test_table", f.queryArg, makeDefaultFeatureFlags()).Create()
 		if err != nil {
 			t.Fatalf("%s: %s", f.desc, err.Error())
 		}
@@ -3235,6 +3235,7 @@ func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDu
 // different options and sinks
 type changefeedCreator struct {
 	db              *gosql.DB
+	systemDB        *gosql.DB
 	logger          *logger.Logger
 	targets         string
 	sinkURL         string
@@ -3246,16 +3247,21 @@ type changefeedCreator struct {
 }
 
 func newChangefeedCreator(
-	db *gosql.DB, logger *logger.Logger, r *rand.Rand, targets, sinkURL string, flags cdcFeatureFlags,
+	db, systemDB *gosql.DB,
+	logger *logger.Logger,
+	r *rand.Rand,
+	targets, sinkURL string,
+	flags cdcFeatureFlags,
 ) *changefeedCreator {
 	return &changefeedCreator{
-		db:      db,
-		logger:  logger,
-		targets: targets,
-		sinkURL: sinkURL,
-		options: make(map[string]string),
-		flags:   flags,
-		rng:     enthropy{Rand: r},
+		db:       db,
+		systemDB: systemDB,
+		logger:   logger,
+		targets:  targets,
+		sinkURL:  sinkURL,
+		options:  make(map[string]string),
+		flags:    flags,
+		rng:      enthropy{Rand: r},
 	}
 }
 
@@ -3290,14 +3296,14 @@ func (cfc *changefeedCreator) applySettings() error {
 		return nil
 	}
 	// kv.rangefeed.enabled is required for changefeeds to run
-	if _, err := cfc.db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+	if _, err := cfc.systemDB.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 		return err
 	}
 
 	schedEnabled := cfc.flags.RangeFeedScheduler.enabled(cfc.rng)
 	if schedEnabled != featureUnset {
 		cfc.logger.Printf("Setting kv.rangefeed.scheduler.enabled to %t", schedEnabled == featureEnabled)
-		if _, err := cfc.db.Exec(
+		if _, err := cfc.systemDB.Exec(
 			"SET CLUSTER SETTING kv.rangefeed.scheduler.enabled = $1", schedEnabled == featureEnabled,
 		); err != nil {
 			return err
