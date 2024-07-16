@@ -763,7 +763,7 @@ func (ie *InternalExecutor) QueryRowEx(
 	return rows, err
 }
 
-// QueryRowEx is like QueryRowExParssed, but takes a parsed statement.
+// QueryRowExParsed is like QueryRowEx, but takes a parsed statement.
 func (ie *InternalExecutor) QueryRowExParsed(
 	ctx context.Context,
 	opName string,
