@@ -1008,7 +1008,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// as stored columns.
 	stmt := makeOpStmt(OpStmtDDL)
 	duplicateStore := false
-	virtualComputedStored := false
+	isStoringVirtualComputed := false
 	regionColStored := false
 	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
@@ -1022,13 +1022,13 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			}
 
 			// Virtual computed columns are not allowed to be indexed
-			if columnNames[i].generated && !virtualComputedStored {
-				isStored, err := og.columnIsStoredComputed(ctx, tx, tableName, columnNames[i].name)
+			if columnNames[i].generated && !isStoringVirtualComputed {
+				isVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnNames[i].name)
 				if err != nil {
 					return nil, err
 				}
-				if !isStored {
-					virtualComputedStored = true
+				if isVirtualComputed {
+					isStoringVirtualComputed = true
 				}
 			}
 
@@ -1090,7 +1090,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
 			{code: pgcode.FeatureNotSupported, condition: regionColStored},
 			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
-			{code: pgcode.Uncategorized, condition: virtualComputedStored},
+			{code: pgcode.FeatureNotSupported, condition: isStoringVirtualComputed},
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
 		}.add(stmt.expectedExecErrors)
 	}
