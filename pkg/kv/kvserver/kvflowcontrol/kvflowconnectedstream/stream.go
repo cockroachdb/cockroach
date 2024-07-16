@@ -1623,7 +1623,8 @@ type replicaSendStream struct {
 		// grab in deductedForScheduler.tokens.
 		approxMeanSizeBytes kvflowcontrol.Tokens
 
-		// Precise stats for send-queue. For indices >= nextRaftIndexInitial.
+		// Precise stats for send-queue. For indices that satisfy both >=
+		// nextRaftIndexInitial and >= indexToSend.
 		priorityCount [kvflowcontrolpb.NumRaftPriorities]int64
 		// sizeSum is only for entries subject to AC.
 		sizeSum kvflowcontrol.Tokens
@@ -2306,20 +2307,25 @@ func (rss *replicaSendStream) makeConsistentWhenUnexpectedPopLocked(
 	rss.returnDeductedFromSchedulerTokensLocked(ctx)
 	rss.sendQueue.forceFlushScheduled = false
 
-	// We have accurate stats for indices >= nextRaftIndexInitial. This unexpected pop
-	// can't happen for any index >= nextRaftIndexInitial since these were proposed after
-	// this replicaSendStream was created.
+	// We have accurate stats for indices that are both >= nextRaftIndexInitial
+	// and >= indexToSend. This unexpected pop should typically not happen for
+	// any index >= nextRaftIndexInitial since these were proposed after this
+	// replicaSendStream was created. However, it may be rarely possible for
+	// this to happen: we advance nextRaftIndexInitial on snapshot application,
+	// and if an old (pre-snapshot) message that comes after the snapshot shows
+	// up at the follower, it could advance Match.
+	//
+	// In either case, we have to fix the send-queue stats, since we have popped
+	// from it.
 	if indexToSend > rss.nextRaftIndexInitial {
-		log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+		// Keeping this as a warning, just for now.
+		log.Warningf(ctx, "%v", errors.AssertionFailedf(
 			"(arg)index_to_send=%d > next_raft_index_initial=%d [info=%v send_stream=%v]",
 			indexToSend, rss.nextRaftIndexInitial,
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
 			rss.stringLocked()))
 	}
-	// INVARIANT: indexToSend <= rss.nextRaftIndexInitial. Don't need to
-	// change any stats.
-	rss.sendQueue.indexToSend = indexToSend
-
+	rss.advanceIndexToSendAndFixStats(ctx, indexToSend)
 	rss.startProcessingSendQueueLocked(ctx)
 }
 
@@ -2421,6 +2427,13 @@ func (rss *replicaSendStream) makeConsistentWhenSnapshotToReplicateLocked(
 	// remaining members to precisely figure out what to deduct from
 	// eval-tokens, since that may require reading from storage.
 
+	rss.advanceIndexToSendAndFixStats(ctx, indexToSend)
+	rss.startProcessingSendQueueLocked(ctx)
+}
+
+func (rss *replicaSendStream) advanceIndexToSendAndFixStats(
+	ctx context.Context, indexToSend uint64,
+) {
 	rss.indexToSendInitial = indexToSend
 	rss.sendQueue.indexToSend = indexToSend
 	totalCount := int64(0)
@@ -2445,7 +2458,6 @@ func (rss *replicaSendStream) makeConsistentWhenSnapshotToReplicateLocked(
 	rss.sendQueue.approxMeanSizeBytes = meanSizeBytes
 	rss.sendQueue.sizeSum = 0
 	rss.nextRaftIndexInitial = rss.sendQueue.nextRaftIndex
-	rss.startProcessingSendQueueLocked(ctx)
 }
 
 func (rss *replicaSendStream) startProcessingSendQueueLocked(ctx context.Context) {
