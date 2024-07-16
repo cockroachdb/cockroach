@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/gpq"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -3423,6 +3424,12 @@ var varGen = map[string]sessionVar{
 					sessiondatapb.PlanCacheModeForceGeneric.String(),
 					sessiondatapb.PlanCacheModeAuto.String(),
 				)
+			}
+			if mode == sessiondatapb.PlanCacheModeForceGeneric ||
+				mode == sessiondatapb.PlanCacheModeAuto {
+				if err := gpq.CheckClusterSupportsGenericQueryPlans(m.settings); err != nil {
+					return err
+				}
 			}
 			m.SetPlanCacheMode(mode)
 			return nil
