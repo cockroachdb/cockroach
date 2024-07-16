@@ -1255,3 +1255,28 @@ SELECT (ROW() AS a) IS NOT UNKNOWN
 
 statement error pgcode 42601 mismatch in tuple definition: 0 expressions, 1 labels
 SELECT CASE WHEN False THEN ROW() ELSE (ROW() AS a) END
+
+# Regression test for incorrect handling of IS NOT NULL filter in the vectorized
+# engine (#126769).
+query T
+SELECT * FROM (SELECT (NULL, NULL) AS a) AS b WHERE a IS NOT NULL;
+----
+
+query T
+SELECT * FROM (SELECT (1, NULL) AS a) AS b WHERE a IS NOT NULL;
+----
+
+query T
+SELECT * FROM (SELECT (1, 2) AS a) AS b WHERE a IS NOT NULL;
+----
+(1,2)
+
+query B
+SELECT ROW() IS NULL;
+----
+true
+
+query B
+SELECT ROW() IS NOT NULL;
+----
+true
