@@ -1,0 +1,107 @@
+# -------------------------------------------------------------
+# In this test a store (n1, s1) acts as a provider of
+# support from another store (n2, s2).
+# -------------------------------------------------------------
+
+# -------------------------------------------------------------
+# Store (n1, s1) provides support.
+# -------------------------------------------------------------
+
+handle-heartbeats
+  msg type=0 from-node-id=2 from-store-id=2 epoch=1 expiration=100
+----
+responses:
+{Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:100.000000000,0}
+
+support-for node-id=2 store-id=2
+----
+supporter state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:100.000000000,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) extends support.
+# -------------------------------------------------------------
+
+handle-heartbeats
+  msg type=0 from-node-id=2 from-store-id=2 epoch=1 expiration=200
+----
+responses:
+{Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:200.000000000,0}
+
+support-for node-id=2 store-id=2
+----
+supporter state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:200.000000000,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) attempts to withdraw support but doesn't.
+# -------------------------------------------------------------
+
+withdraw-support now=199
+----
+
+support-for node-id=2 store-id=2
+----
+supporter state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:200.000000000,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) withdraws support.
+# -------------------------------------------------------------
+
+withdraw-support now=201
+----
+
+support-for node-id=2 store-id=2
+----
+supporter state: {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:0,0}
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:201.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:0,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) provides support at a higher epoch.
+# TODO(mira): the expiration can regress here wrt the previous
+# supported expiration but it won't be possible after clocks are
+# integrated into this test.
+# -------------------------------------------------------------
+
+handle-heartbeats
+  msg type=0 from-node-id=2 from-store-id=2 epoch=2 expiration=300
+----
+responses:
+{Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+
+support-for node-id=2 store-id=2
+----
+supporter state: {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) does not regress support epoch or expiration.
+# -------------------------------------------------------------
+
+handle-heartbeats
+  msg type=0 from-node-id=2 from-store-id=2 epoch=1 expiration=301
+----
+responses:
+{Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+
+support-for node-id=2 store-id=2
+----
+supporter state: {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+
+handle-heartbeats
+  msg type=0 from-node-id=2 from-store-id=2 epoch=2 expiration=299
+----
+responses:
+{Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+
+support-for node-id=2 store-id=2
+----
+supporter state: {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}

@@ -1,0 +1,54 @@
+# -------------------------------------------------------------
+# A basic test that includes store (n1, s1):
+# - requesting support from another store,
+# - providing support for another store,
+# - querying supportFor and supportFrom,
+# - withdrawing support.
+# -------------------------------------------------------------
+
+add-store node-id=2 store-id=2
+----
+
+send-heartbeats now=100 liveness-interval=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
+
+handle-heartbeats
+  msg type=0 from-node-id=2 from-store-id=2 epoch=2 expiration=200
+----
+responses:
+{Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:200.000000000,0}
+
+handle-heartbeat-responses
+  msg type=1 from-node-id=2 from-store-id=2 epoch=1 expiration=110
+----
+
+support-from node-id=2 store-id=2
+----
+requester state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
+
+support-for node-id=2 store-id=2
+----
+supporter state: {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:200.000000000,0}
+
+withdraw-support now=201
+----
+
+support-for node-id=2 store-id=2
+----
+supporter state: {Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:0,0}
+
+debug-requester-state
+----
+meta:
+{MaxEpoch:1 MaxRequested:110.000000000,0}
+support from:
+{Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:201.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:0,0}
