@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -298,8 +299,7 @@ func (srp *sqlRowProcessor) SetSyntheticFailurePercent(rate uint32) {
 
 var (
 	forceGenericPlan = sessiondatapb.PlanCacheModeForceGeneric
-	ieOverrides      = sessiondata.InternalExecutorOverride{
-		AttributeToUser: true,
+	ieOverrideBase   = sessiondata.InternalExecutorOverride{
 		// The OriginIDForLogicalDataReplication session variable will bind the
 		// origin ID 1 to each per-statement batch request header sent by the
 		// internal executor. This metadata will be plumbed to the MVCCValueHeader
@@ -325,7 +325,31 @@ var (
 		DisablePlanGists: true,
 		QualityOfService: &sessiondatapb.UserLowQoS,
 	}
+	// Have a separate override for each of the replicated queries.
+	ieOverrideOptimisticInsert, ieOverrideInsert, ieOverrideDelete sessiondata.InternalExecutorOverride
 )
+
+const (
+	replicatedOptimisticInsertOpName = "replicated-optimistic-insert"
+	replicatedInsertOpName           = "replicated-insert"
+	replicatedDeleteOpName           = "replicated-delete"
+)
+
+func init() {
+	getIEOverride := func(opName string) sessiondata.InternalExecutorOverride {
+		o := ieOverrideBase
+		// We want the ingestion queries to show up on the SQL Activity page
+		// alongside with the foreground traffic by default. We can achieve this
+		// by using the same naming scheme as AttributeToUser feature of the IE
+		// override (effectively, we opt out of using the "external" metrics for
+		// the ingestion queries).
+		o.ApplicationName = catconstants.AttributedToUserInternalAppNamePrefix + "-" + opName
+		return o
+	}
+	ieOverrideOptimisticInsert = getIEOverride(replicatedOptimisticInsertOpName)
+	ieOverrideInsert = getIEOverride(replicatedInsertOpName)
+	ieOverrideDelete = getIEOverride(replicatedDeleteOpName)
+}
 
 var tryOptimisticInsertEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -450,7 +474,7 @@ func (lww *lwwQuerier) InsertRow(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if _, err = ie.ExecParsed(ctx, "replicated-optimistic-insert", kvTxn, ieOverrides, stmt, datums...); err != nil {
+		if _, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, ieOverrideOptimisticInsert, stmt, datums...); err != nil {
 			// If the optimistic insert failed with unique violation, we have to
 			// fall back to the pessimistic path. If we got a different error,
 			// then we bail completely.
@@ -478,7 +502,7 @@ func (lww *lwwQuerier) InsertRow(
 	if err != nil {
 		return batchStats{}, err
 	}
-	if _, err = ie.ExecParsed(ctx, "replicated-insert", kvTxn, ieOverrides, stmt, datums...); err != nil {
+	if _, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, ieOverrideInsert, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
@@ -506,7 +530,7 @@ func (lww *lwwQuerier) DeleteRow(
 		return batchStats{}, err
 	}
 
-	if _, err := ie.ExecParsed(ctx, "replicated-delete", kvTxn, ieOverrides, stmt, datums...); err != nil {
+	if _, err := ie.ExecParsed(ctx, replicatedDeleteOpName, kvTxn, ieOverrideDelete, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", stmt.SQL, err.Error())
 		return batchStats{}, err
 	}
