@@ -3120,30 +3120,34 @@ func (c *clusterImpl) UpdateSideEyeEnvironmentName(
 // CaptureSideEyeSnapshot asks the Side-Eye service to take a snapshot of the
 // cockroach processes running on this cluster. All errors are logged and
 // swallowed.
+//
+// Returns the URL of the captured snapshot, or "" if not successful.
 func (c *clusterImpl) CaptureSideEyeSnapshot(
 	ctx context.Context, l *logger.Logger, client *sideeyeclient.SideEyeClient,
-) {
+) string {
 	l.PrintfCtx(ctx, "capturing snapshot of the cluster with Side-Eye...")
 
 	if c.arch == vm.ArchARM64 {
 		l.Printf("Side-Eye does not support ARM64 machines; skipping snapshot")
-		return
+		return ""
 	}
 
 	envName := c.sideEyeEnvName()
 	if envName == "" {
 		l.PrintfCtx(ctx, "cluster does not have Side-Eye agents set up; skipping snapshot")
-		return
+		return ""
 	}
 
 	snapURL, ok := roachprod.CaptureSideEyeSnapshot(ctx, l, envName, client)
-	if ok {
-		l.PrintfCtx(ctx, "captured Side-eye Snapshot: %s", snapURL)
-		annotation := fmt.Sprintf("Captured Side-Eye snaphost: %s", snapURL)
-		if err := c.AddGrafanaAnnotation(ctx, l, grafana.AddAnnotationRequest{Text: annotation}); err != nil {
-			l.PrintfCtx(ctx, "error adding Grafana annotation for snapshot: %s", err)
-		}
+	if !ok {
+		return ""
 	}
+	l.PrintfCtx(ctx, "captured Side-Eye snapshot: %s", snapURL)
+	annotation := fmt.Sprintf("Captured Side-Eye snapshot: %s", snapURL)
+	if err := c.AddGrafanaAnnotation(ctx, l, grafana.AddAnnotationRequest{Text: annotation}); err != nil {
+		l.PrintfCtx(ctx, "error adding Grafana annotation for snapshot: %s", err)
+	}
+	return snapURL
 }
 
 // archForTest determines the CPU architecture to use for a test. If the test

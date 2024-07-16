@@ -160,6 +160,7 @@ func (g *githubIssues) createPostRequest(
 	spec *registry.TestSpec,
 	failures []failure,
 	message string,
+	sideEyeTimeoutSnapshotURL string,
 	metamorphicBuild bool,
 	coverageBuild bool,
 ) (issues.PostRequest, error) {
@@ -292,6 +293,11 @@ func (g *githubIssues) createPostRequest(
 				"isn't one, it is possible that this failure is caused by a metamorphic constant.")
 	}
 
+	sideEyeMsg := ""
+	if sideEyeTimeoutSnapshotURL != "" {
+		sideEyeMsg = "A Side-Eye cluster snapshot was captured on timeout: "
+	}
+
 	return issues.PostRequest{
 		MentionOnCreate: mention,
 		ProjectColumnID: projColID,
@@ -303,13 +309,15 @@ func (g *githubIssues) createPostRequest(
 		TopLevelNotes:           topLevelNotes,
 		Message:                 issueMessage,
 		Artifacts:               artifacts,
+		SideEyeSnapshotMsg:      sideEyeMsg,
+		SideEyeSnapshotURL:      sideEyeTimeoutSnapshotURL,
 		ExtraParams:             clusterParams,
 		HelpCommand:             generateHelpCommand(testName, issueClusterName, roachtestflags.Cloud, start, end),
 	}, nil
 }
 
 func (g *githubIssues) MaybePost(
-	t *testImpl, l *logger.Logger, message string,
+	t *testImpl, l *logger.Logger, message string, sideEyeTimeoutSnapshotURL string,
 ) (*issues.TestFailureIssue, error) {
 	doPost, skipReason := g.shouldPost(t)
 	if !doPost {
@@ -326,7 +334,10 @@ func (g *githubIssues) MaybePost(
 	default:
 		metamorphicBuild = tests.UsingRuntimeAssertions(t)
 	}
-	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.failures(), message, metamorphicBuild, t.goCoverEnabled)
+	postRequest, err := g.createPostRequest(
+		t.Name(), t.start, t.end, t.spec, t.failures(),
+		message, sideEyeTimeoutSnapshotURL,
+		metamorphicBuild, t.goCoverEnabled)
 	if err != nil {
 		return nil, err
 	}
