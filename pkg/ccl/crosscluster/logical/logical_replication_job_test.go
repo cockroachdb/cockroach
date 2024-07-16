@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -505,6 +507,113 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 			t.Logf("waiting for replication job %d", jobBID)
 			WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 			compareReplicatedTables(t, s, "a", "b", tableName, runnerA, runnerB)
+		})
+	}
+}
+
+func TestMeasurePlanChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	makeProc := func(dstID base.SQLInstanceID, srcIDs []base.SQLInstanceID) []physicalplan.Processor {
+		result := make([]physicalplan.Processor, 0, len(srcIDs))
+		for _, id := range srcIDs {
+			sp := execinfrapb.LogicalReplicationWriterSpec{}
+			sp.PartitionSpec = execinfrapb.StreamIngestionPartitionSpec{SrcInstanceID: id, DestInstanceID: dstID}
+			result = append(result, physicalplan.Processor{SQLInstanceID: dstID,
+				Spec: execinfrapb.ProcessorSpec{
+					Core: execinfrapb.ProcessorCoreUnion{
+						LogicalReplicationWriter: &sp}}})
+		}
+		return result
+	}
+
+	makePlan := func(procs ...[]physicalplan.Processor) sql.PhysicalPlan {
+		allProcs := make([]physicalplan.Processor, len(procs))
+
+		for _, list := range procs {
+			allProcs = append(allProcs, list...)
+		}
+
+		plan := sql.PhysicalPlan{}
+		plan.PhysicalInfrastructure = &physicalplan.PhysicalInfrastructure{Processors: allProcs}
+		return plan
+	}
+	for _, tc := range []struct {
+		name   string
+		before sql.PhysicalPlan
+		after  sql.PhysicalPlan
+		frac   float64
+	}{
+		{
+			name:   "same node",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1})),
+			after:  makePlan(makeProc(1, []base.SQLInstanceID{1})),
+			frac:   0,
+		},
+		{
+			name:   "same nodes; swapped order",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1}), makeProc(1, []base.SQLInstanceID{2})),
+			after:  makePlan(makeProc(1, []base.SQLInstanceID{2}), makeProc(1, []base.SQLInstanceID{1})),
+			frac:   0,
+		},
+		{
+			name:   "dropped and added dest node",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1})),
+			after:  makePlan(makeProc(2, []base.SQLInstanceID{1})),
+			frac:   1,
+		},
+		{
+			name:   "added src and dest node",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1})),
+			after:  makePlan(makeProc(1, []base.SQLInstanceID{1}), makeProc(2, []base.SQLInstanceID{2})),
+			frac:   1,
+		},
+		{
+			name:   "dropped src and dest node",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1}), makeProc(2, []base.SQLInstanceID{2})),
+			after:  makePlan(makeProc(1, []base.SQLInstanceID{1})),
+			frac:   0.5,
+		},
+		{
+			name:   "added dest node",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1, 2, 3})),
+			after:  makePlan(makeProc(1, []base.SQLInstanceID{1, 3}), makeProc(2, []base.SQLInstanceID{2})),
+			frac:   .25,
+		},
+		{
+			name:   "dropped dest node",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1, 3}), makeProc(2, []base.SQLInstanceID{2})),
+			after:  makePlan(makeProc(1, []base.SQLInstanceID{1, 2, 3})),
+			frac:   .2,
+		},
+		{
+			name:   "dropped and added src node",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1})),
+			after:  makePlan(makeProc(1, []base.SQLInstanceID{2})),
+			frac:   1,
+		},
+		{
+			name:   "new src node",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1})),
+			after:  makePlan(makeProc(1, []base.SQLInstanceID{1, 2})),
+			frac:   0.5,
+		},
+		{
+			name:   "dropped src node",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1, 2, 3})),
+			after:  makePlan(makeProc(1, []base.SQLInstanceID{1, 2})),
+			frac:   .25,
+		},
+		{
+			name:   "swapped dest node",
+			before: makePlan(makeProc(1, []base.SQLInstanceID{1}), makeProc(2, []base.SQLInstanceID{2})),
+			after:  makePlan(makeProc(1, []base.SQLInstanceID{2}), makeProc(2, []base.SQLInstanceID{1})),
+			frac:   0,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			frac := sql.MeasurePlanChange(&tc.before, &tc.after, getNodes)
+			require.Equal(t, tc.frac, frac)
 		})
 	}
 }
