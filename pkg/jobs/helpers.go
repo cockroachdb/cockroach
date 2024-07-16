@@ -30,5 +30,5 @@ func ResetConstructors() func() {
 // TestingWrapResumerConstructor injects a wrapper around resumer creation for
 // the specified job type.
 func (r *Registry) TestingWrapResumerConstructor(typ jobspb.Type, wrap func(Resumer) Resumer) {
-	r.creationKnobs.Store(typ, wrap)
+	r.creationKnobs.Store(typ, &wrap)
 }

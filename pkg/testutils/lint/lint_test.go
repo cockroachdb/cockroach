@@ -707,13 +707,14 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			`\bsync\.(RW)?Mutex`,
+			`\bsync\.((RW)?Mutex|Map)`,
 			"--",
 			"*.go",
 			":!*/doc.go",
 			":!raft/*.go",
 			":!util/syncutil/mutex_sync.go",
 			":!util/syncutil/mutex_sync_race.go",
+			":!testutils/lint/lint_test.go",
 			":!testutils/lint/passes/deferunlockcheck/testdata/src/github.com/cockroachdb/cockroach/pkg/util/syncutil/mutex_sync.go",
 			// Exception needed for goroutineStalledStates.
 			":!kv/kvserver/concurrency/concurrency_manager_test.go",
@@ -727,7 +728,18 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use 'syncutil.{,RW}Mutex' instead", s)
+			var fix string
+			switch {
+			case strings.Contains(s, "sync.Mutex"):
+				fix = "syncutil.Mutex"
+			case strings.Contains(s, "sync.RWMutex"):
+				fix = "syncutil.RWMutex"
+			case strings.Contains(s, "sync.Map"):
+				fix = "syncutil.Map"
+			default:
+				t.Fatalf("unexpected sync reference: %s", s)
+			}
+			t.Errorf("\n%s <- forbidden; use '%s' instead", s, fix)
 		}); err != nil {
 			t.Error(err)
 		}

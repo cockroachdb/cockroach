@@ -262,7 +262,7 @@ func TestMapRangeNestedCall(t *testing.T) { // Issue 46399
 	})
 
 	if length != 0 {
-		t.Fatalf("Unexpected sync.Map size, got %v want %v", length, 0)
+		t.Fatalf("Unexpected syncutil.Map size, got %v want %v", length, 0)
 	}
 }
 

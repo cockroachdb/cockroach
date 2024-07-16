@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"sync"
 	"time"
 	"unsafe"
 
@@ -226,7 +225,7 @@ func (ds *DistSender) RangeFeedSpans(
 	defer sp.Finish()
 
 	rr := newRangeFeedRegistry(ctx, cfg.withDiff)
-	ds.activeRangeFeeds.Store(rr, nil)
+	ds.activeRangeFeeds.Store(rr, &struct{}{})
 	defer ds.activeRangeFeeds.Delete(rr)
 	if cfg.rangeObserver != nil {
 		cfg.rangeObserver(rr.ForEachPartialRangefeed)
@@ -308,8 +307,7 @@ const stopIter = false
 // iterutil.StopIteration can be returned by `fn` to stop iteration, and doing
 // so will not return this error.
 func (ds *DistSender) ForEachActiveRangeFeed(fn ActiveRangeFeedIterFn) (iterErr error) {
-	ds.activeRangeFeeds.Range(func(k, v interface{}) bool {
-		r := k.(*rangeFeedRegistry)
+	ds.activeRangeFeeds.Range(func(r *rangeFeedRegistry, _ *struct{}) bool {
 		iterErr = r.ForEachPartialRangefeed(fn)
 		return iterErr == nil
 	})
@@ -325,8 +323,7 @@ func (r *rangeFeedRegistry) ForEachPartialRangefeed(fn ActiveRangeFeedIterFn) (i
 		defer active.Unlock()
 		return active.PartialRangeFeed
 	}
-	r.ranges.Range(func(k, v interface{}) bool {
-		active := k.(*activeRangeFeed)
+	r.ranges.Range(func(active *activeRangeFeed, _ *struct{}) bool {
 		if err := fn(r.RangeFeedContext, partialRangeFeed(active)); err != nil {
 			iterErr = err
 			return stopIter
@@ -408,7 +405,7 @@ func (a *activeRangeFeed) setLastError(err error) {
 // range feeds.
 type rangeFeedRegistry struct {
 	RangeFeedContext
-	ranges sync.Map // map[*activeRangeFeed]nil
+	ranges syncutil.Map[*activeRangeFeed, struct{}]
 }
 
 func newRangeFeedRegistry(ctx context.Context, withDiff bool) *rangeFeedRegistry {
@@ -520,7 +517,7 @@ func newActiveRangeFeed(
 		}
 	}
 
-	rr.ranges.Store(active, nil)
+	rr.ranges.Store(active, &struct{}{})
 	metrics.RangefeedRanges.Inc(1)
 
 	return active

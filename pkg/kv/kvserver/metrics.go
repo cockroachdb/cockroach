@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -4082,21 +4081,19 @@ func (m *pebbleCategoryIterMetrics) update(stats sstable.CategoryStats) {
 }
 
 type pebbleCategoryIterMetricsContainer struct {
-	registry *metric.Registry
-	// sstable.Category => *pebbleCategoryIterMetrics
-	metricsMap sync.Map
+	registry   *metric.Registry
+	metricsMap syncutil.Map[sstable.Category, pebbleCategoryIterMetrics]
 }
 
 func (m *pebbleCategoryIterMetricsContainer) update(stats []sstable.CategoryStatsAggregate) {
 	for _, s := range stats {
-		val, ok := m.metricsMap.Load(s.Category)
+		cm, ok := m.metricsMap.Load(s.Category)
 		if !ok {
-			val, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedIterMetrics(s.Category))
+			cm, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedIterMetrics(s.Category))
 			if !ok {
-				m.registry.AddMetricStruct(val)
+				m.registry.AddMetricStruct(cm)
 			}
 		}
-		cm := val.(*pebbleCategoryIterMetrics)
 		cm.update(s.CategoryStats)
 	}
 }
@@ -4125,21 +4122,19 @@ func (m *pebbleCategoryDiskWriteMetrics) update(stats vfs.DiskWriteStatsAggregat
 }
 
 type pebbleCategoryDiskWriteMetricsContainer struct {
-	registry *metric.Registry
-	// vfs.DiskWriteCategory => *pebbleCategoryDiskWriteMetrics
-	metricsMap sync.Map
+	registry   *metric.Registry
+	metricsMap syncutil.Map[vfs.DiskWriteCategory, pebbleCategoryDiskWriteMetrics]
 }
 
 func (m *pebbleCategoryDiskWriteMetricsContainer) update(stats []vfs.DiskWriteStatsAggregate) {
 	for _, s := range stats {
-		val, ok := m.metricsMap.Load(s.Category)
+		cm, ok := m.metricsMap.Load(s.Category)
 		if !ok {
-			val, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedWriteMetrics(s.Category))
+			cm, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedWriteMetrics(s.Category))
 			if !ok {
-				m.registry.AddMetricStruct(val)
+				m.registry.AddMetricStruct(cm)
 			}
 		}
-		cm := val.(*pebbleCategoryDiskWriteMetrics)
 		cm.update(s)
 	}
 }

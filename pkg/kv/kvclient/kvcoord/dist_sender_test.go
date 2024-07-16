@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -4449,7 +4450,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 
 	waitForInitialPuts := makeBarrier(2)
 	waitForInitialMeta2Scans := makeBarrier(2)
-	var queriedMetaKeys sync.Map
+	var queriedMetaKeys syncutil.Map[string, struct{}]
 	var ds *DistSender
 	testFn := func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 		rs, err := keys.Range(ba.Requests)
@@ -4508,7 +4509,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 				return br, nil
 			}
 		}
-		queriedMetaKeys.Store(string(rs.Key), struct{}{})
+		queriedMetaKeys.Store(string(rs.Key), &struct{}{})
 		return br, nil
 	}
 
