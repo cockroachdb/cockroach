@@ -362,9 +362,9 @@ func WaitForEval(
 	scratch []reflect.SelectCase,
 ) (state WaitEndState, scratch2 []reflect.SelectCase) {
 	scratch = scratch[:0]
-	if len(handles) < requiredQuorum || requiredQuorum == 0 {
+	if len(handles) < requiredQuorum {
 		log.Fatalf(ctx, "%v", errors.AssertionFailedf(
-			"invalid arguments to WaitForEval: len(handles)=%d required_quorum=%d",
+			"invalid arguments to WaitForEval: len(handles)=%d < required_quorum=%d",
 			len(handles), requiredQuorum))
 	}
 
@@ -380,6 +380,9 @@ func WaitForEval(
 		}
 		scratch = append(scratch,
 			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(h.handle.WaitChannel())})
+	}
+	if requiredQuorum == 0 && requiredWaitCount == 0 {
+		log.Fatalf(ctx, "both requiredQuorum and requiredWaitCount are zero")
 	}
 	// We track the original length of the scratch slice and also the current
 	// length, where after each successful iteration we decrement the current
