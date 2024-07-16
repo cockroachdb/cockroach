@@ -249,10 +249,14 @@ func getNodes(plan *sql.PhysicalPlan) (src, dst map[string]struct{}, nodeCount i
 			// Skip other processors in the plan (like the Frontier processor).
 			continue
 		}
-		dst[proc.SQLInstanceID.String()] = struct{}{}
-		count += 1
-		src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.PartitionID] = struct{}{}
-		count += 1
+		if _, ok := dst[proc.SQLInstanceID.String()]; !ok {
+			dst[proc.SQLInstanceID.String()] = struct{}{}
+			count += 1
+		}
+		if _, ok := src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.SrcInstanceID.String()]; !ok {
+			src[proc.Spec.Core.LogicalReplicationWriter.PartitionSpec.SrcInstanceID.String()] = struct{}{}
+			count += 1
+		}
 	}
 	return src, dst, count
 }
