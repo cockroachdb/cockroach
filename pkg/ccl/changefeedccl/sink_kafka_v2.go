@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/aws/aws-msk-iam-sasl-signer-go/signer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -416,6 +417,14 @@ func buildKgoConfig(
 	if dialConfig.saslEnabled {
 		var s sasl.Mechanism
 		switch dialConfig.saslMechanism {
+		// This is a "fake" mechanism we use to signify that we're using AWS MSK
+		// IAM, which is really OAUTHBEARER with a custom token provider.
+		case changefeedbase.SASLTypeAWSMSKIAM:
+			tp, err := newKgoAWSIAMRoleOauthTokenProvider(ctx, dialConfig)
+			if err != nil {
+				return nil, err
+			}
+			s = sasloauth.Oauth(tp)
 		// TODO(#126991): Remove this sarama dependency.
 		case sarama.SASLTypeOAuth:
 			tp, err := newKgoOauthTokenProvider(ctx, dialConfig)
@@ -612,6 +621,22 @@ func newKgoOauthTokenProvider(
 			return sasloauth.Auth{}, err
 		}
 		return sasloauth.Auth{Token: tok.AccessToken}, nil
+	}, nil
+}
+
+// newKgoAWSIAMRoleOauthTokenProvider returns a new token provider that uses the
+// AWS MSK IAM signer to generate a SASL Oauth token. Currently only implicit
+// auth & role assumption is supported.
+func newKgoAWSIAMRoleOauthTokenProvider(
+	ctx context.Context, dialConfig kafkaDialConfig,
+) (func(ctx context.Context) (sasloauth.Auth, error), error) {
+	return func(ctx context.Context) (sasloauth.Auth, error) {
+		token, _, err := signer.GenerateAuthTokenFromRole(
+			ctx, dialConfig.saslAwsRegion, dialConfig.saslAwsIAMRoleArn, dialConfig.saslAwsIAMSessionName)
+		if err != nil {
+			return sasloauth.Auth{}, err
+		}
+		return sasloauth.Auth{Token: token}, nil
 	}, nil
 }
 
