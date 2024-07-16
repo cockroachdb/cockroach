@@ -95,6 +95,20 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		}
 	}
 
+	specs, err := testsToRun(r, filter, roachtestflags.RunSkipped, roachtestflags.SelectProbability, true)
+	if err != nil {
+		return err
+	}
+
+	n := len(specs)
+	if n*roachtestflags.Count < parallelism {
+		// Don't spin up more workers than necessary. This has particular
+		// implications for the common case of running a single test once: if
+		// parallelism is set to 1, we'll use teeToStdout below to get logs to
+		// stdout/stderr.
+		parallelism = n * roachtestflags.Count
+	}
+
 	artifactsDir := roachtestflags.ArtifactsDir
 	literalArtifactsDir := roachtestflags.LiteralArtifactsDir
 	if literalArtifactsDir == "" {
@@ -137,19 +151,6 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		return err
 	}
 
-	specs, err := testsToRun(r, filter, roachtestflags.RunSkipped, roachtestflags.SelectProbability, true)
-	if err != nil {
-		return err
-	}
-
-	n := len(specs)
-	if n*roachtestflags.Count < parallelism {
-		// Don't spin up more workers than necessary. This has particular
-		// implications for the common case of running a single test once: if
-		// parallelism is set to 1, we'll use teeToStdout below to get logs to
-		// stdout/stderr.
-		parallelism = n * roachtestflags.Count
-	}
 	if opt.debugMode == DebugKeepAlways && n > 1 {
 		return errors.Newf("--debug-always is only allowed when running a single test")
 	}
