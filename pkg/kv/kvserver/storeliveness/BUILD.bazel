@@ -4,6 +4,8 @@ go_library(
     name = "storeliveness",
     srcs = [
         "fabric.go",
+        "requester_state.go",
+        "supporter_state.go",
         "transport.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness",
