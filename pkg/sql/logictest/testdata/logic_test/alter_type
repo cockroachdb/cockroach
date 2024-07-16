@@ -694,3 +694,20 @@ statement error pgcode 2BP01 could not remove enum value "b" as it is being used
 ALTER TYPE typ_110827 DROP VALUE 'b';
 
 subtest end
+
+# We accidentally introduced a regression formatting dependent rows out,
+# which contain a reference to the type, so validate that the formatting logic
+# works correctly when inaccessible columns exist. (#127136)
+subtest validate_type_dependent_row
+
+statement ok
+CREATE TYPE typ_127136 AS ENUM('a', 'b', 'c');
+CREATE TABLE t_127136 (x INT PRIMARY KEY);
+CREATE INDEX foo ON t_127136((x*10));
+ALTER TABLE t_127136 ADD COLUMN y typ_127136;
+INSERT INTO t_127136 VALUES (1, 'a');
+
+statement error pgcode 2BP01 could not remove enum value "a" as it is being used by "t_127136" in row: x=1, y='a'
+ALTER TYPE typ_127136 DROP VALUE 'a';
+
+subtest end
