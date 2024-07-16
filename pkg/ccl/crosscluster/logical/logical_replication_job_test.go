@@ -692,13 +692,15 @@ func setupLogicalTestServer(
 	for _, s := range testClusterSettings {
 		dbA.Exec(t, s)
 	}
-
-	createStmt := "CREATE TABLE tab (pk int primary key, payload string)"
-	dbA.Exec(t, createStmt)
-	dbB.Exec(t, createStmt)
-	dbA.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
-	dbB.Exec(t, "ALTER TABLE tab "+lwwColumnAdd)
+	createBasicTable(t, dbA, "tab")
+	createBasicTable(t, dbB, "tab")
 	return server, s, dbA, dbB
+}
+
+func createBasicTable(t *testing.T, db *sqlutils.SQLRunner, tableName string) {
+	createStmt := fmt.Sprintf("CREATE TABLE %s (pk int primary key, payload string)", tableName)
+	db.Exec(t, createStmt)
+	db.Exec(t, fmt.Sprintf("ALTER TABLE %s %s", tableName, lwwColumnAdd))
 }
 
 func compareReplicatedTables(
@@ -839,5 +841,91 @@ func TestFlushErrorHandling(t *testing.T) {
 	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("d")}))
 	require.Equal(t, 1, int(dlq))
 	require.Equal(t, int64(3), lrw.metrics.RetryQueueEvents.Value())
+}
 
+func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlA, sqlB, cleanup := setupTwoDBUDFTestCluster(t)
+	defer cleanup()
+
+	// Set the default back to the lww resolver, but leave udfName set.
+	defaultSQLProcessor = lwwProcessor
+
+	dbA := sqlutils.MakeSQLRunner(sqlA)
+	dbB := sqlutils.MakeSQLRunner(sqlB)
+	createBasicTable(t, dbA, "tab")
+	createBasicTable(t, dbB, "tab")
+	lwwFunc := `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL,proposed_mvcc_timestamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+	RETURNS crdb_replication_applier_decision
+	AS $$
+	BEGIN
+	IF existing_origin_timestamp IS NULL THEN
+	    IF existing_mvcc_timestamp < proposed_mvcc_timestamp THEN
+			SELECT crdb_internal.log('case 1');
+			RETURN ('accept_proposed', NULL);
+		ELSE
+			SELECT crdb_internal.log('case 2');
+			RETURN ('ignore_proposed', NULL);
+		END IF;
+	ELSE
+		IF existing_origin_timestamp < proposed_mvcc_timestamp THEN
+			SELECT crdb_internal.log('case 3');
+			RETURN ('accept_proposed', NULL);
+		ELSE
+			SELECT crdb_internal.log('case 4');
+			RETURN ('ignore_proposed', NULL);
+		END IF;
+	END IF;
+	END
+	$$ LANGUAGE plpgsql`
+	// TODO(ssd): We should make this type automatically for people or remove the `upsert_specified action so that we don't need it`
+	dbB.Exec(t, applierTypes)
+	dbB.Exec(t, lwwFunc)
+	dbA.Exec(t, applierTypes)
+	dbA.Exec(t, lwwFunc)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	// Swap one of the URLs to external:// to verify this indirection works.
+	// TODO(dt): this create should support placeholder for URI.
+	dbB.Exec(t, "CREATE EXTERNAL CONNECTION a AS '"+dbAURL.String()+"'")
+	dbAURL = url.URL{
+		Scheme: "external",
+		Host:   "a",
+	}
+
+	var (
+		jobAID jobspb.JobID
+		jobBID jobspb.JobID
+	)
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbBURL.String()).Scan(&jobAID)
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	now := s.Clock().Now()
+	t.Logf("waiting for replication job %d", jobAID)
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	t.Logf("waiting for replication job %d", jobBID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'potato')")
+	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
+	dbA.Exec(t, "UPSERT INTO tab VALUES (1, 'hello, again')")
+	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
+
+	now = s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
+	WaitUntilReplicatedTime(t, now, dbB, jobBID)
+
+	expectedRows := [][]string{
+		{"1", "goodbye, again"},
+		{"2", "potato"},
+		{"3", "celeriac"},
+	}
+	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRows)
+	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRows)
 }
