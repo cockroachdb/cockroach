@@ -258,13 +258,6 @@ func TestExecBuild_forecast1401(
 	runExecBuildLogicTest(t, "forecast1401")
 }
 
-func TestExecBuild_generic(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "generic")
-}
-
 func TestExecBuild_geospatial(
 	t *testing.T,
 ) {
