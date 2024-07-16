@@ -268,11 +268,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 
+				// We are going to modify the AST to replace any index expressions with
+				// virtual columns. If the txn ends up retrying, then this change is not
+				// syntactically valid, since the virtual column is only added in the descriptor
+				// and not in the AST.
+				columns := make(tree.IndexElemList, len(d.Columns))
+				copy(columns, d.Columns)
 				if err := replaceExpressionElemsWithVirtualCols(
 					params.ctx,
 					n.tableDesc,
 					tableName,
-					d.Columns,
+					columns,
 					false, /* isInverted */
 					false, /* isNewTable */
 					params.p.SemaCtx(),
@@ -282,7 +288,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 				// Check if the columns exist on the table.
-				for _, column := range d.Columns {
+				for _, column := range columns {
 					if column.Expr != nil {
 						return pgerror.New(
 							pgcode.InvalidTableDefinition,
@@ -301,7 +307,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					StoreColumnNames: d.Storing.ToStrings(),
 					CreatedAtNanos:   params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 				}
-				if err := idx.FillColumns(d.Columns); err != nil {
+				if err := idx.FillColumns(columns); err != nil {
 					return err
 				}
 
