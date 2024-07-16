@@ -183,8 +183,29 @@ func WaitForRunning(
 		switch status {
 		case jobs.StatusPending:
 		case jobs.StatusRunning:
+			// TODO(msbutler): this should return here
 		default:
-			return errors.Newf("job too fast! job got to state %s before the target node could be shutdown",
+			return errors.Newf("job too fast! job got to state %s",
+				status)
+		}
+		return nil
+	}, maxWait)
+}
+
+func WaitForSucceed(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return testutils.SucceedsWithinError(func() error {
+		var status jobs.Status
+		if err := db.QueryRowContext(ctx, "SELECT status FROM [SHOW JOB $1]", jobID).Scan(&status); err != nil {
+			return err
+		}
+		switch status {
+		case jobs.StatusRunning:
+		case jobs.StatusSucceeded:
+			return nil
+		default:
+			return errors.Newf("job too fast! job got to state %s",
 				status)
 		}
 		return nil
