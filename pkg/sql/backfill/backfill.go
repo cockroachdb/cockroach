@@ -696,7 +696,8 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	return ib.init(evalCtx, predicates, colExprs, mon)
 }
 
-// Close releases the resources used by the IndexBackfiller.
+// Close releases the resources used by the IndexBackfiller. It can be called
+// multiple times.
 func (ib *IndexBackfiller) Close(ctx context.Context) {
 	if ib.mon != nil {
 		func() {
@@ -705,6 +706,7 @@ func (ib *IndexBackfiller) Close(ctx context.Context) {
 			ib.muBoundAccount.boundAccount.Close(ctx)
 		}()
 		ib.mon.Stop(ctx)
+		ib.mon = nil
 	}
 }
 
