@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -6668,7 +6669,7 @@ func (b benchNodeStore) GetStoreDescriptor(id roachpb.StoreID) (*roachpb.StoreDe
 	panic("implement me")
 }
 
-var _ NodeDescStore = &benchNodeStore{}
+var _ kvclient.NodeDescStore = &benchNodeStore{}
 
 func toKey(i roachpb.RangeID) roachpb.Key {
 	buf := make([]byte, 4)

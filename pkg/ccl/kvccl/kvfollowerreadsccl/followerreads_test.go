@@ -488,7 +488,7 @@ func TestCanSendToFollower(t *testing.T) {
 	}
 }
 
-// mockNodeStore implements the kvcoord.NodeDescStore interface.
+// mockNodeStore implements the kvclient.NodeDescStore interface.
 type mockNodeStore []roachpb.NodeDescriptor
 
 func (s mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescriptor, error) {

@@ -16,6 +16,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,7 +72,7 @@ const (
 // sendError is returned.
 func NewReplicaSlice(
 	ctx context.Context,
-	nodeDescs NodeDescStore,
+	nodeDescs kvclient.NodeDescStore,
 	desc *roachpb.RangeDescriptor,
 	leaseholder *roachpb.ReplicaDescriptor,
 	filter ReplicaSliceFilter,

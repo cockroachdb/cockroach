@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -79,7 +80,7 @@ type Connector interface {
 	// in the form of NodeDescriptors and StoreDescriptors. This obviates the
 	// need for SQL-only tenant servers to join the cluster-wide gossip
 	// network.
-	kvcoord.NodeDescStore
+	kvclient.NodeDescStore
 
 	// RangeDescriptorDB provides range addressing information in the form of
 	// RangeDescriptors through delegated RangeLookup requests. This is
@@ -231,7 +232,7 @@ type client struct {
 // connector is capable of providing information on each of the KV nodes in the
 // cluster in the form of NodeDescriptors. This obviates the need for SQL-only
 // tenant servers to join the cluster-wide gossip network.
-var _ kvcoord.NodeDescStore = (*connector)(nil)
+var _ kvclient.NodeDescStore = (*connector)(nil)
 
 // connector is capable of providing Range addressing information in the form of
 // RangeDescriptors through delegated RangeLookup requests. This is necessary
@@ -511,7 +512,7 @@ func (c *connector) updateStoreMap(ctx context.Context, key string, content roac
 	c.mu.storeDescs[desc.StoreID] = desc
 }
 
-// GetNodeDescriptor implements the kvcoord.NodeDescStore interface.
+// GetNodeDescriptor implements the kvclient.NodeDescStore interface.
 func (c *connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -522,14 +523,14 @@ func (c *connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescr
 	return desc, nil
 }
 
-// GetNodeDescriptorCount implements the kvcoord.NodeDescStore interface.
+// GetNodeDescriptorCount implements the kvclient.NodeDescStore interface.
 func (c *connector) GetNodeDescriptorCount() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.mu.nodeDescs)
 }
 
-// GetStoreDescriptor implements the kvcoord.NodeDescStore interface.
+// GetStoreDescriptor implements the kvclient.NodeDescStore interface.
 func (c *connector) GetStoreDescriptor(storeID roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -1060,7 +1061,7 @@ func (c *connector) Query(
 // AddressResolver wraps a NodeDescStore interface in an adapter that allows it
 // be used as a nodedialer.AddressResolver. Addresses are resolved to a node's
 // address.
-func AddressResolver(s kvcoord.NodeDescStore) nodedialer.AddressResolver {
+func AddressResolver(s kvclient.NodeDescStore) nodedialer.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, error) {
 		nd, err := s.GetNodeDescriptor(nodeID)
 		if err != nil {
