@@ -246,7 +246,6 @@ type hashJoiner struct {
 	}
 
 	exportBufferedState struct {
-		hashTableReleased  bool
 		rightExported      int
 		rightWindowedBatch coldata.Batch
 	}
@@ -702,20 +701,35 @@ func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
 	})
 }
 
-func (hj *hashJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch {
+func (hj *hashJoiner) ExportBuffered(
+	input colexecop.Operator, reuseMode colexecop.BufferingOpReuseMode,
+) coldata.Batch {
+	if buildutil.CrdbTestBuild && reuseMode != colexecop.BufferingOpNoReuse {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"hash joiner is not expected to be reused after spilling to disk",
+		))
+	}
 	if hj.InputOne == input {
 		// We do not buffer anything from the left source. Furthermore, the memory
 		// limit can only hit during the building of the hash table step at which
 		// point we haven't requested a single batch from the left.
 		return coldata.ZeroBatch
 	} else if hj.InputTwo == input {
-		if hj.exportBufferedState.hashTableReleased {
+		if hj.ht == nil {
+			// The hash table has been released which means that the right input
+			// has been fully exported.
 			return coldata.ZeroBatch
 		}
 		if hj.exportBufferedState.rightExported == hj.ht.Vals.Length() {
-			// We no longer need the hash table, so we can release it.
+			// Release no longer needed in-memory resources.
+			//
+			// We can only spill to disk while building the hash table (i.e.
+			// before the probing phase), so we only need to release the hash
+			// table and the windowed batch we used for the export (since we
+			// haven't allocated any other resources).
 			hj.ht.Release()
-			hj.exportBufferedState.hashTableReleased = true
+			hj.ht = nil
+			hj.exportBufferedState.rightWindowedBatch = nil
 			return coldata.ZeroBatch
 		}
 		newRightExported := hj.exportBufferedState.rightExported + coldata.BatchSize()
@@ -782,13 +796,12 @@ func (hj *hashJoiner) Reset(ctx context.Context) {
 	// complete in build() method.
 	hj.emittingRightState.rowIdx = 0
 	if buildutil.CrdbTestBuild {
-		if hj.exportBufferedState.hashTableReleased {
+		if hj.ht == nil {
 			colexecerror.InternalError(errors.AssertionFailedf(
 				"the hash joiner is being reset after having spilled to disk",
 			))
 		}
 	}
-	hj.exportBufferedState.hashTableReleased = false
 	hj.exportBufferedState.rightExported = 0
 }
 

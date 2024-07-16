@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,6 +56,8 @@ func NewSortChunks(
 type sortChunksOp struct {
 	colexecop.InitHelper
 
+	// allocator is used by both the input (for buffered tuples) and the sorter
+	// (for a handful of things).
 	allocator *colmem.Allocator
 	input     *chunker
 	sorter    colexecop.ResettableOperator
@@ -62,6 +65,7 @@ type sortChunksOp struct {
 	exportedFromBuffer int
 	exportedFromBatch  int
 	windowedBatch      coldata.Batch
+	exportComplete     bool
 }
 
 var _ colexecop.Operator = &sortChunksOp{}
@@ -86,10 +90,6 @@ func (c *sortChunksOp) Init(ctx context.Context) {
 	}
 	c.input.init(c.Ctx)
 	c.sorter.Init(c.Ctx)
-	// TODO(yuzefovich): switch to calling this method on allocator. This will
-	// require plumbing unlimited allocator to work correctly in tests with
-	// memory limit of 1.
-	c.windowedBatch = coldata.NewMemBatchNoCols(c.input.inputTypes, coldata.BatchSize())
 }
 
 func (c *sortChunksOp) Next() coldata.Batch {
@@ -112,7 +112,25 @@ func (c *sortChunksOp) Next() coldata.Batch {
 	}
 }
 
-func (c *sortChunksOp) ExportBuffered(colexecop.Operator) coldata.Batch {
+func (c *sortChunksOp) ExportBuffered(
+	_ colexecop.Operator, reuseMode colexecop.BufferingOpReuseMode,
+) coldata.Batch {
+	if buildutil.CrdbTestBuild && reuseMode != colexecop.BufferingOpNoReuse {
+		// sortChunksOp currently doesn't implement the colexecop.Resetter
+		// interface, so it cannot be reused.
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"sort chunks op is not expected to be reused after spilling to disk",
+		))
+	}
+	if c.exportComplete {
+		return coldata.ZeroBatch
+	}
+	if c.windowedBatch == nil {
+		// TODO(yuzefovich): switch to calling this method on allocator. This will
+		// require plumbing unlimited allocator to work correctly in tests with
+		// memory limit of 1.
+		c.windowedBatch = coldata.NewMemBatchNoCols(c.input.inputTypes, coldata.BatchSize())
+	}
 	// First, we check whether chunker has buffered up any tuples, and if so,
 	// whether we have exported them all.
 	if c.input.bufferedTuples.Length() > 0 {
@@ -142,6 +160,10 @@ func (c *sortChunksOp) ExportBuffered(colexecop.Operator) coldata.Batch {
 		c.exportedFromBatch = c.windowedBatch.Length()
 		return c.windowedBatch
 	}
+	// The export is now complete, so we can release no longer needed memory
+	// resources.
+	defer c.allocator.ReleaseAll()
+	*c = sortChunksOp{exportComplete: true}
 	return coldata.ZeroBatch
 }
 
@@ -205,7 +227,6 @@ type chunker struct {
 	colexecop.OneInputNode
 	colexecop.NonExplainable
 
-	allocator *colmem.Allocator
 	// inputTypes contains the types of all of the columns from input.
 	inputTypes []*types.T
 	// inputDone indicates whether input has been fully consumed.
@@ -256,6 +277,8 @@ type chunker struct {
 
 var _ spooler = &chunker{}
 
+// allocator will only be used for the append-only buffered batch for buffered
+// tuples.
 func newChunker(
 	unlimitedAllocator *colmem.Allocator,
 	allocator *colmem.Allocator,
@@ -271,18 +294,17 @@ func newChunker(
 	deselector := colexecutils.NewDeselectorOp(unlimitedAllocator, input, inputTypes)
 	return &chunker{
 		OneInputNode:      colexecop.NewOneInputNode(deselector),
-		allocator:         allocator,
 		inputTypes:        inputTypes,
 		alreadySortedCols: alreadySortedCols,
 		nullsAreDistinct:  nullsAreDistinct,
 		partitioners:      partitioners,
 		state:             chunkerReading,
+		bufferedTuples:    colexecutils.NewAppendOnlyBufferedBatch(allocator, inputTypes, nil /* colsToStore */),
 	}
 }
 
 func (s *chunker) init(ctx context.Context) {
 	s.Input.Init(ctx)
-	s.bufferedTuples = colexecutils.NewAppendOnlyBufferedBatch(s.allocator, s.inputTypes, nil /* colsToStore */)
 	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]int, 0, 16)
 }

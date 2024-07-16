@@ -132,21 +132,41 @@ func (n OneInputNode) Child(nth int, verbose bool) execopnode.OpNode {
 	return nil
 }
 
+// BufferingOpReuseMode determines whether the BufferingInMemoryOperator can be
+// reused after ExportBuffered call (after being Reset).
+type BufferingOpReuseMode int
+
+const (
+	// BufferingOpNoReuse indicates that the BufferingInMemoryOperator will
+	// **not** be reused after ExportBuffered call, so any memory resources
+	// could be fully released.
+	BufferingOpNoReuse BufferingOpReuseMode = iota
+	// BufferingOpCanReuse indicates that the BufferingInMemoryOperator _might_
+	// be reused after ExportBuffered call, so all memory resources should be
+	// preserved.
+	BufferingOpCanReuse
+)
+
 // BufferingInMemoryOperator is an Operator that buffers up intermediate tuples
 // in memory and knows how to export them once the memory limit has been
 // reached.
 type BufferingInMemoryOperator interface {
 	Operator
 
-	// ExportBuffered returns all the batches that have been buffered up from the
-	// input and have not yet been processed by the operator. It needs to be
+	// ExportBuffered returns all the batches that have been buffered up from
+	// the input and have not yet been processed by the operator. It needs to be
 	// called once the memory limit has been reached in order to "dump" the
 	// buffered tuples into a disk-backed operator. It will return a zero-length
-	// batch once the buffer has been emptied.
+	// batch once the buffer has been emptied. The underlying buffer might be
+	// fully cleared when the first zero-length batch is returned.
 	//
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
-	ExportBuffered(input Operator) coldata.Batch
+	//
+	// If BufferingOpNoReuse is used, then attempting to reuse the Operator (by
+	// Resetting it) after calling ExportBuffered can result in undefined
+	// behavior.
+	ExportBuffered(input Operator, reuseMode BufferingOpReuseMode) coldata.Batch
 }
 
 // Closer is an object that releases resources when Close is called. Note that

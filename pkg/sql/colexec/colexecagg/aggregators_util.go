@@ -23,6 +23,14 @@ import (
 // NewAggregatorArgs encompasses all arguments necessary to instantiate either
 // of the aggregators.
 type NewAggregatorArgs struct {
+	// Allocator will be utilized for miscellaneous allocations in the
+	// aggregators.
+	//
+	// In the in-memory hash aggregator it will be used for:
+	// - aggregateFuncAlloc
+	// - DISTINCT and FILTER helpers
+	// - aggBucketAlloc
+	// - AppendOnlyBufferedBatch for buffered tuples.
 	Allocator      *colmem.Allocator
 	Input          colexecop.Operator
 	InputTypes     []*types.T

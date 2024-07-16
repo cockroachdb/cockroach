@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/errors"
 )
 
 // hashGroupJoiner currently is the naive implementation of hash group-join
@@ -104,17 +106,23 @@ func (h *hashGroupJoiner) Next() coldata.Batch {
 // being able to spill the intermediate aggregation state). Thus, we currently
 // always instantiate a copyingOperator around the left input which allows us to
 // perform the export.
-func (h *hashGroupJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch {
-	if h.ha.ht != nil {
-		// This is the first call to ExportBuffered - release the hash table of
-		// the hash aggregator since we no longer need it.
-		h.ha.ht.Release()
-		h.ha.ht = nil
+func (h *hashGroupJoiner) ExportBuffered(
+	input colexecop.Operator, reuseMode colexecop.BufferingOpReuseMode,
+) coldata.Batch {
+	if buildutil.CrdbTestBuild && reuseMode != colexecop.BufferingOpNoReuse {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"hash group joiner is not expected to be reused after spilling to disk",
+		))
 	}
+	h.ha.maybeReleaseInMemoryResources()
 	if h.InputTwo == input {
 		// When exporting from the right input, simply delegate to the hash
 		// joiner.
-		return h.hj.ExportBuffered(input)
+		return h.hj.ExportBuffered(input, reuseMode)
+	}
+	if h.hjLeftSource.sq == nil {
+		// All tuples have been exported.
+		return coldata.ZeroBatch
 	}
 	if !h.hjLeftSource.zeroBatchEnqueued {
 		h.hjLeftSource.sq.Enqueue(h.Ctx, coldata.ZeroBatch)
@@ -123,6 +131,14 @@ func (h *hashGroupJoiner) ExportBuffered(input colexecop.Operator) coldata.Batch
 	b, err := h.hjLeftSource.sq.Dequeue(h.Ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
+	}
+	if b.Length() == 0 {
+		// We reached the end of the queue, so we won't need it anymore and can
+		// release its resources.
+		if err = h.hjLeftSource.sq.Close(h.Ctx); err != nil {
+			colexecerror.InternalError(err)
+		}
+		h.hjLeftSource.sq = nil
 	}
 	return b
 }
@@ -139,9 +155,10 @@ func (h *hashGroupJoiner) Close(ctx context.Context) error {
 // copyingOperator is a utility operator that copies all the batches from the
 // input into the spilling queue first before propagating the batch further.
 type copyingOperator struct {
-	colexecop.OneInputInitCloserHelper
+	colexecop.OneInputHelper
 	colexecop.NonExplainable
 
+	// sq will be nil once the queue has been closed.
 	sq                *colexecutils.SpillingQueue
 	zeroBatchEnqueued bool
 }
@@ -152,8 +169,8 @@ func newCopyingOperator(
 	input colexecop.Operator, args *colexecutils.NewSpillingQueueArgs,
 ) *copyingOperator {
 	return &copyingOperator{
-		OneInputInitCloserHelper: colexecop.MakeOneInputInitCloserHelper(input),
-		sq:                       colexecutils.NewSpillingQueue(args),
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		sq:             colexecutils.NewSpillingQueue(args),
 	}
 }
 
@@ -167,7 +184,7 @@ func (c *copyingOperator) Next() coldata.Batch {
 
 // Close implements the colexecop.Closer interface.
 func (c *copyingOperator) Close(ctx context.Context) error {
-	if !c.CloserHelper.Close() {
+	if c.sq == nil {
 		return nil
 	}
 	err := c.sq.Close(ctx)

@@ -70,6 +70,10 @@ import (
 //     operator when given an input operator. We take in a constructor rather
 //     than an already created operator in order to hide the complexity of buffer
 //     exporting operator that serves as the input to the disk-backed operator.
+//   - diskBackedReuseMode indicates whether the disk-backed operator created
+//     by this function can be reused multiple times (by Resetting). If no reuse
+//     can happen, then some memory resources used by the in-memory operator can
+//     be freed when spilling to disk to allow for lower memory footprint.
 //   - spillingCallbackFn will be called when the spilling from in-memory to disk
 //     backed operator occurs. It should only be set in tests.
 func NewOneInputDiskSpiller(
@@ -77,9 +81,10 @@ func NewOneInputDiskSpiller(
 	inMemoryOp colexecop.BufferingInMemoryOperator,
 	inMemoryMemMonitorName redact.RedactableString,
 	diskBackedOpConstructor func(input colexecop.Operator) colexecop.Operator,
+	diskBackedReuseMode colexecop.BufferingOpReuseMode,
 	spillingCallbackFn func(),
 ) colexecop.ClosableOperator {
-	diskBackedOpInput := newBufferExportingOperator(inMemoryOp, input)
+	diskBackedOpInput := newBufferExportingOperator(inMemoryOp, input, diskBackedReuseMode)
 	return &diskSpillerBase{
 		inputs:                  []colexecop.Operator{input},
 		inMemoryOp:              inMemoryOp,
@@ -146,8 +151,12 @@ func NewTwoInputDiskSpiller(
 	diskBackedOpConstructor func(inputOne, inputTwo colexecop.Operator) colexecop.Operator,
 	spillingCallbackFn func(),
 ) colexecop.ClosableOperator {
-	diskBackedOpInputOne := newBufferExportingOperator(inMemoryOp, inputOne)
-	diskBackedOpInputTwo := newBufferExportingOperator(inMemoryOp, inputTwo)
+	// We currently support two operator types that have two inputs and could
+	// spill to disk (hash joiner and hash group joiner), and neither of them
+	// can be reused.
+	const reuseMode = colexecop.BufferingOpNoReuse
+	diskBackedOpInputOne := newBufferExportingOperator(inMemoryOp, inputOne, reuseMode)
+	diskBackedOpInputTwo := newBufferExportingOperator(inMemoryOp, inputTwo, reuseMode)
 	names := make([]string, len(inMemoryMemMonitorNames))
 	for i := range names {
 		names[i] = string(inMemoryMemMonitorNames[i])
@@ -316,19 +325,23 @@ type bufferExportingOperator struct {
 	colexecop.ZeroInputNode
 	colexecop.NonExplainable
 
-	firstSource     colexecop.BufferingInMemoryOperator
-	secondSource    colexecop.Operator
-	firstSourceDone bool
+	firstSource          colexecop.BufferingInMemoryOperator
+	secondSource         colexecop.Operator
+	firstSourceReuseMode colexecop.BufferingOpReuseMode
+	firstSourceDone      bool
 }
 
 var _ colexecop.ResettableOperator = &bufferExportingOperator{}
 
 func newBufferExportingOperator(
-	firstSource colexecop.BufferingInMemoryOperator, secondSource colexecop.Operator,
+	firstSource colexecop.BufferingInMemoryOperator,
+	secondSource colexecop.Operator,
+	firstSourceReuseMode colexecop.BufferingOpReuseMode,
 ) colexecop.Operator {
 	return &bufferExportingOperator{
-		firstSource:  firstSource,
-		secondSource: secondSource,
+		firstSource:          firstSource,
+		secondSource:         secondSource,
+		firstSourceReuseMode: firstSourceReuseMode,
 	}
 }
 
@@ -341,7 +354,7 @@ func (b *bufferExportingOperator) Next() coldata.Batch {
 	if b.firstSourceDone {
 		return b.secondSource.Next()
 	}
-	batch := b.firstSource.ExportBuffered(b.secondSource)
+	batch := b.firstSource.ExportBuffered(b.secondSource, b.firstSourceReuseMode)
 	if batch.Length() == 0 {
 		b.firstSourceDone = true
 		return b.secondSource.Next()
