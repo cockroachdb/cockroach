@@ -550,6 +550,7 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/fsm",
+        "//pkg/util/growstack",
         "//pkg/util/grpcutil",
         "//pkg/util/grunning",
         "//pkg/util/hlc",
