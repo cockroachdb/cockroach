@@ -78,7 +78,7 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	// populate it.
 	for _, node := range resp.Nodes {
 		if ok, _ := node.Desc.Locality.Matches(localityFilter); ok {
-			_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
+			_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, node.Desc.NodeID)
 		}
 	}
 	nodes := make([]base.SQLInstanceID, 0, len(planCtx.nodeStatuses))

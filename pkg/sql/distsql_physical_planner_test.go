@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1306,7 +1307,7 @@ func TestPartitionSpans(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := mockGossip.AddInfoProto(
-			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
+			gossip.MakeDistSQLNodeVersionKey(roachpb.NodeID(sqlInstanceID)),
 			&execinfrapb.DistSQLVersionGossipInfo{
 				MinAcceptedVersion: execinfra.MinAcceptedVersion,
 				Version:            execinfra.Version,
@@ -1337,13 +1338,13 @@ func TestPartitionSpans(t *testing.T) {
 
 			gw := gossip.MakeOptionalGossip(mockGossip)
 
-			connHealth := func(nodeId roachpb.NodeID) error {
+			connHealth := func(nodeID int) bool {
 				for _, n := range tc.deadNodes {
-					if int(nodeId) == n {
-						return fmt.Errorf("test node is unhealthy")
+					if nodeID == n {
+						return false
 					}
 				}
-				return nil
+				return true
 			}
 
 			dsp := DistSQLPlanner{
@@ -1352,19 +1353,9 @@ func TestPartitionSpans(t *testing.T) {
 				stopper:              stopper,
 				spanResolver:         tsp,
 				gossip:               gw,
-				nodeHealth: distSQLNodeHealth{
-					gossip: gw,
-					connHealthSystem: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
-						return connHealth(node)
-					},
-					connHealthInstance: func(sqlInstance base.SQLInstanceID, _ string) error {
-						return connHealth(roachpb.NodeID(sqlInstance))
-					},
-					isAvailable: func(base.SQLInstanceID) bool {
-						return true
-					},
-				},
-				sqlAddressResolver: mockInstances,
+				kvNodeAvailable:      func(id roachpb.NodeID) bool { return connHealth(int(id)) },
+				sqlNodeAvailable:     func(id base.SQLInstanceID, _ string) bool { return connHealth(int(id)) },
+				sqlAddressResolver:   mockInstances,
 				distSQLSrv: &distsql.ServerImpl{
 					ServerConfig: execinfra.ServerConfig{
 						NodeID:       base.NewSQLIDContainerForNode(nID),
@@ -1693,7 +1684,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		// the test comment - for such a node, the descriptor would be taken out of
 		// the gossip data, but other datums it advertised are left in place.
 		if err := mockGossip.AddInfoProto(
-			gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
+			gossip.MakeDistSQLNodeVersionKey(roachpb.NodeID(sqlInstanceID)),
 			&execinfrapb.DistSQLVersionGossipInfo{
 				MinAcceptedVersion: execinfra.MinAcceptedVersion,
 				Version:            execinfra.Version,
@@ -1717,15 +1708,11 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		stopper:              stopper,
 		spanResolver:         tsp,
 		gossip:               gw,
-		nodeHealth: distSQLNodeHealth{
-			gossip: gw,
-			connHealthSystem: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
-				_, err := mockGossip.GetNodeIDAddress(node)
-				return err
-			},
-			isAvailable: func(base.SQLInstanceID) bool {
-				return true
-			},
+		kvNodeAvailable: func(id roachpb.NodeID) bool {
+			if _, err := mockGossip.GetNodeIDAddress(id); err != nil {
+				return false
+			}
+			return true
 		},
 		codec: keys.SystemSQLCodec,
 	}
@@ -1768,19 +1755,19 @@ func TestCheckNodeHealth(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	const sqlInstanceID = base.SQLInstanceID(5)
+	const nodeID = roachpb.NodeID(5)
 
-	mockGossip := gossip.NewTest(roachpb.NodeID(sqlInstanceID), stopper, metric.NewRegistry())
+	mockGossip := gossip.NewTest(nodeID, stopper, metric.NewRegistry())
 
 	desc := &roachpb.NodeDescriptor{
-		NodeID:  roachpb.NodeID(sqlInstanceID),
+		NodeID:  nodeID,
 		Address: util.UnresolvedAddr{NetworkField: "tcp", AddressField: "testaddr"},
 	}
 	if err := mockGossip.SetNodeDescriptor(desc); err != nil {
 		t.Fatal(err)
 	}
 	if err := mockGossip.AddInfoProto(
-		gossip.MakeDistSQLNodeVersionKey(sqlInstanceID),
+		gossip.MakeDistSQLNodeVersionKey(nodeID),
 		&execinfrapb.DistSQLVersionGossipInfo{
 			MinAcceptedVersion: execinfra.MinAcceptedVersion,
 			Version:            execinfra.Version,
@@ -1790,10 +1777,10 @@ func TestCheckNodeHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	notAvailable := func(base.SQLInstanceID) bool {
+	notAvailable := func(roachpb.NodeID) bool {
 		return false
 	}
-	available := func(base.SQLInstanceID) bool {
+	available := func(roachpb.NodeID) bool {
 		return true
 	}
 
@@ -1806,44 +1793,53 @@ func TestCheckNodeHealth(t *testing.T) {
 	_ = connUnhealthy
 
 	livenessTests := []struct {
-		isAvailable func(id base.SQLInstanceID) bool
-		exp         string
+		isAvailable func(id roachpb.NodeID) bool
+		exp         bool
 	}{
-		{available, ""},
-		{notAvailable, "not using n5 since it is not available"},
+		{available, true},
+		{notAvailable, false},
 	}
 
 	gw := gossip.MakeOptionalGossip(mockGossip)
 	for _, test := range livenessTests {
 		t.Run("liveness", func(t *testing.T) {
-			h := distSQLNodeHealth{
-				gossip:           gw,
-				connHealthSystem: connHealthy,
-				isAvailable:      test.isAvailable,
+			nodeLiveness := livenesspb.TestCreateNodeVitality()
+			nodeLiveness.AddNode(nodeID)
+			if !test.isAvailable(nodeID) {
+				nodeLiveness.DownNode(nodeID)
 			}
-			if err := h.checkSystem(context.Background(), sqlInstanceID); !testutils.IsError(err, test.exp) {
-				t.Fatalf("expected %v, got %v", test.exp, err)
+			if CheckKVNodeHealth(
+				context.Background(),
+				nodeID,
+				connHealthy,
+				nodeLiveness,
+				gw,
+			) != test.exp {
+				t.Fatalf("expected %v", test.exp)
 			}
 		})
 	}
 
 	connHealthTests := []struct {
 		connHealth func(roachpb.NodeID, rpc.ConnectionClass) error
-		exp        string
+		exp        bool
 	}{
-		{connHealthy, ""},
-		{connUnhealthy, "injected conn health error"},
+		{connHealthy, true},
+		{connUnhealthy, false},
 	}
 
 	for _, test := range connHealthTests {
 		t.Run("connHealth", func(t *testing.T) {
-			h := distSQLNodeHealth{
-				gossip:           gw,
-				connHealthSystem: test.connHealth,
-				isAvailable:      available,
-			}
-			if err := h.checkSystem(context.Background(), sqlInstanceID); !testutils.IsError(err, test.exp) {
-				t.Fatalf("expected %v, got %v", test.exp, err)
+			nodeLiveness := livenesspb.TestCreateNodeVitality()
+			nodeLiveness.AddNode(nodeID)
+			if CheckKVNodeHealth(
+				context.Background(),
+				nodeID,
+				test.connHealth,
+				nodeLiveness,
+				gw,
+			) != test.exp {
+				t.Fatalf("expected %v", test.exp)
 			}
 		})
 	}
