@@ -28,6 +28,7 @@ import (
 //
 // See TableStatistic for a description of the fields.
 type JSONStatistic struct {
+	StatisticID   uint64   `json:"statistic_id,omitempty"`
 	Name          string   `json:"name,omitempty"`
 	CreatedAt     string   `json:"created_at"`
 	Columns       []string `json:"columns"`

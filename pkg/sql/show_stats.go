@@ -258,6 +258,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					if ignoreStatsRowWithDroppedColumn {
 						continue
 					}
+					statsRow.StatisticID = (uint64)(*r[statIDIdx].(*tree.DInt))
 					statsRow.CreatedAt = tree.AsStringWithFlags(r[createdAtIdx], tree.FmtBareStrings)
 					statsRow.RowCount = (uint64)(*r[rowCountIdx].(*tree.DInt))
 					statsRow.DistinctCount = (uint64)(*r[distinctCountIdx].(*tree.DInt))

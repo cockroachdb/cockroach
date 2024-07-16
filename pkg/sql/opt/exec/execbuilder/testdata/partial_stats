@@ -22,6 +22,7 @@ CREATE TABLE g (b INT PRIMARY KEY)
 statement ok
 ALTER TABLE g INJECT STATISTICS '[
   {
+    "statistic_id": 1,
     "avg_size": 1,
     "columns": [
       "b"
@@ -52,10 +53,10 @@ ALTER TABLE g INJECT STATISTICS '[
     "histo_version": 2,
     "name": "__auto__",
     "null_count": 0,
-    "row_count": 3,
-    "statistics_id": 1
+    "row_count": 3
   },
   {
+    "statistic_id": 2,
     "avg_size": 1,
     "columns": [
       "b"
@@ -125,6 +126,7 @@ ALTER TABLE g INJECT STATISTICS '[
     "row_count": 9
   },
     {
+      "statistic_id": 3,
       "avg_size": 2,
       "columns": [
         "b"
@@ -156,34 +158,21 @@ ALTER TABLE g INJECT STATISTICS '[
       "name": "partial",
       "null_count": 0,
       "partial_predicate": "(b < 0:::INT8) OR ((b > 8:::INT8) OR (b IS NULL))",
-      "row_count": 3
+      "row_count": 3,
+      "full_statistic_id": 2
     }
 ]'
 
-# Here and below, we retrieve the id of the statistic (which is the
-# histogram_id) to ensure that we can mark our partial injected statistic(s) as
-# being collected from the injected full table statistics, for the purposes of
-# testing. This is because our merge function verifies that a partial statistic
-# is merging with the full statistic it has been collected from. Since the
-# statistic id is generated when a statistic is added to
-# system.table_statistics, and since we don't store it in the JSON statistic
-# object, we need to set it manually here.
-
-let $stat_id_simple
-SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE g] WHERE created = '1988-08-07 00:00:00.000000'
-
-statement ok
-UPDATE system.table_statistics SET "fullStatisticID" = '$stat_id_simple' WHERE name = 'partial'
-
-query TTTIIII
-SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+query IITTTIIII colnames
+SELECT histogram_id, full_histogram_id, statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
 FROM [SHOW STATISTICS FOR TABLE g WITH MERGE]
 ORDER BY created
 ----
-__auto__    {b}  1988-08-05 00:00:00 +0000 UTC  3   3   0  1
-__auto__    {b}  1988-08-07 00:00:00 +0000 UTC  9   9   0  1
-partial     {b}  1988-08-08 00:00:00 +0000 UTC  3   3   0  2
-__merged__  {b}  1988-08-08 00:00:00 +0000 UTC  12  12  0  1
+histogram_id  full_histogram_id  statistics_name  column_names  created                        row_count  distinct_count  null_count  avg_size
+1             NULL               __auto__         {b}           1988-08-05 00:00:00 +0000 UTC  3          3               0           1
+2             NULL               __auto__         {b}           1988-08-07 00:00:00 +0000 UTC  9          9               0           1
+3             2                  partial          {b}           1988-08-08 00:00:00 +0000 UTC  3          3               0           2
+0             NULL               __merged__       {b}           1988-08-08 00:00:00 +0000 UTC  12         12              0           1
 
 query T
 SELECT jsonb_pretty(stat)
@@ -453,6 +442,7 @@ statement ok
 ALTER TABLE h INJECT STATISTICS '
  [
       {
+          "statistic_id": 1,
           "avg_size": 1,
           "columns": [
               "h"
@@ -503,15 +493,10 @@ ALTER TABLE h INJECT STATISTICS '
            "name": "partial",
            "null_count": 0,
            "partial_predicate": "(h < 10:::INT8) OR ((h > 40:::INT8) OR (h IS NULL))",
-           "row_count": 0
+           "row_count": 0,
+           "full_statistic_id": 1
        }
  ]'
-
-let $stat_id_empty
-SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE h] WHERE statistics_name = 'full'
-
-statement ok
-UPDATE system.table_statistics SET "fullStatisticID" = '$stat_id_empty' WHERE name = 'partial'
 
 query TTTIIII
 SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
@@ -566,7 +551,8 @@ WHERE stat->>'name' = '__merged__';
     "histo_version": 2,
     "name": "__merged__",
     "null_count": 0,
-    "row_count": 4
+    "row_count": 4,
+    "statistic_id": 1
 }
 
 # Verify partial statistics collection when we add
@@ -578,6 +564,7 @@ CREATE TABLE i (i INT PRIMARY KEY)
 statement ok
 ALTER TABLE i INJECT STATISTICS '[
   {
+    "statistic_id": 1,
     "avg_size": 1,
     "columns": [
       "i"
@@ -660,15 +647,10 @@ ALTER TABLE i INJECT STATISTICS '[
     "name": "sp",
     "null_count": 0,
     "partial_predicate": "(i < 0:::INT8) OR ((i > 3:::INT8) OR (i IS NULL))",
-    "row_count": 6
+    "row_count": 6,
+    "full_statistic_id": 1
   }
 ]'
-
-let $stat_id_start_and_end
-SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE i] WHERE statistics_name = 'full_0'
-
-statement ok
-UPDATE system.table_statistics SET "fullStatisticID" = '$stat_id_start_and_end' WHERE name = 'sp'
 
 query TTTIIII
 SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
@@ -787,6 +769,7 @@ statement ok
 ALTER TABLE ab INJECT STATISTICS
 '[
     {
+       "statistic_id":1,
        "avg_size":3,
        "columns":[
           "b"
@@ -899,9 +882,11 @@ ALTER TABLE ab INJECT STATISTICS
        "name":"partial_b",
        "null_count":5,
        "row_count":36,
-       "partial_predicate": "(b < 15:::INT8) OR ((b > 35:::INT8) OR (b IS NULL))"
+       "partial_predicate": "(b < 15:::INT8) OR ((b > 35:::INT8) OR (b IS NULL))",
+       "full_statistic_id": 1
     },
     {
+       "statistic_id":2,
        "avg_size":3,
        "columns":[
           "a"
@@ -1008,21 +993,10 @@ ALTER TABLE ab INJECT STATISTICS
        "name":"partial_a",
        "null_count":5,
        "row_count":36,
-       "partial_predicate": "(b < 15:::INT8) OR ((b > 35:::INT8) OR (b IS NULL))"
+       "partial_predicate": "(b < 15:::INT8) OR ((b > 35:::INT8) OR (b IS NULL))",
+       "full_statistic_id": 2
     }
  ]'
-
-let $stat_id_full_a
-SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE ab] WHERE statistics_name = 'full_a'
-
-statement ok
-UPDATE system.table_statistics SET "fullStatisticID" = '$stat_id_full_a' WHERE name = 'partial_a'
-
-let $stat_id_full_b
-SELECT "histogram_id" FROM [SHOW STATISTICS FOR TABLE ab] WHERE statistics_name = 'full_b'
-
-statement ok
-UPDATE system.table_statistics SET "fullStatisticID" = '$stat_id_full_b' WHERE name = 'partial_b'
 
 query TTTIIII colnames
 SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size

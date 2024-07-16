@@ -1587,11 +1587,45 @@ func insertJSONStatistic(
 		fullStatisticIDValue = s.FullStatisticID
 	}
 
-	_ /* rows */, err := txn.Exec(
-		ctx,
-		"insert-stats",
-		txn.KV(),
-		`INSERT INTO system.table_statistics (
+	if s.StatisticID != 0 {
+		_ /* rows */, err := txn.Exec(
+			ctx,
+			"insert-stats",
+			txn.KV(),
+			`INSERT INTO system.table_statistics (
+					"statisticID",
+					"tableID",
+					"name",
+					"columnIDs",
+					"createdAt",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					"avgSize",
+					histogram,
+					"partialPredicate",
+					"fullStatisticID"
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			s.StatisticID,
+			tableID,
+			name,
+			columnIDs,
+			s.CreatedAt,
+			s.RowCount,
+			s.DistinctCount,
+			s.NullCount,
+			s.AvgSize,
+			histogram,
+			predicateValue,
+			fullStatisticIDValue,
+		)
+		return err
+	} else {
+		_ /* rows */, err := txn.Exec(
+			ctx,
+			"insert-stats",
+			txn.KV(),
+			`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
 					"columnIDs",
@@ -1604,19 +1638,20 @@ func insertJSONStatistic(
 					"partialPredicate",
 					"fullStatisticID"
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		tableID,
-		name,
-		columnIDs,
-		s.CreatedAt,
-		s.RowCount,
-		s.DistinctCount,
-		s.NullCount,
-		s.AvgSize,
-		histogram,
-		predicateValue,
-		fullStatisticIDValue,
-	)
-	return err
+			tableID,
+			name,
+			columnIDs,
+			s.CreatedAt,
+			s.RowCount,
+			s.DistinctCount,
+			s.NullCount,
+			s.AvgSize,
+			histogram,
+			predicateValue,
+			fullStatisticIDValue,
+		)
+		return err
+	}
 }
 
 // validateConstraintNameIsNotUsed checks that the name of the constraint we're
