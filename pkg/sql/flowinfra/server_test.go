@@ -148,7 +148,7 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 
 	var v execinfrapb.DistSQLVersionGossipInfo
 	if err := s.GossipI().(*gossip.Gossip).GetInfoProto(
-		gossip.MakeDistSQLNodeVersionKey(base.SQLInstanceID(s.NodeID())), &v,
+		gossip.MakeDistSQLNodeVersionKey(s.NodeID()), &v,
 	); err != nil {
 		t.Fatal(err)
 	}

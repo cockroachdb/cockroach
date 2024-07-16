@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -916,19 +915,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		NodeID:           cfg.nodeIDContainer,
 	}
 
-	var isAvailable func(sqlInstanceID base.SQLInstanceID) bool
-	nodeLiveness, hasNodeLiveness := cfg.nodeLiveness.Optional(47900)
-	if hasNodeLiveness {
-		isAvailable = func(sqlInstanceID base.SQLInstanceID) bool {
-			return nodeLiveness.GetNodeVitalityFromCache(roachpb.NodeID(sqlInstanceID)).IsLive(livenesspb.DistSQL)
-		}
-	} else {
-		// We're on a SQL tenant, so this is the only node DistSQL will ever
-		// schedule on - always returning true is fine.
-		isAvailable = func(sqlInstanceID base.SQLInstanceID) bool {
-			return true
-		}
-	}
+	nodeLiveness, _ := cfg.nodeLiveness.Optional(distsql.MultiTenancyIssueNo)
 
 	// Setup the trace collector that is used to fetch inflight trace spans from
 	// all nodes in the cluster.
@@ -952,6 +939,32 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
 			),
 		)
+	}
+
+	kvNodeAvailable := func(nodeID roachpb.NodeID) bool {
+		return sql.CheckKVNodeHealth(
+			ctx,
+			nodeID,
+			cfg.kvNodeDialer.ConnHealthTryDial,
+			nodeLiveness,
+			cfg.gossip,
+		)
+	}
+
+	// NB: This will return ErrNotHeartbeated on the first call, but that's fine
+	// as we will plan without this node. The connection will still be
+	// established asyncronously and cached in the rpc layer for future calls.
+	//
+	// TODO(baptist): We shouldn't need the addr passed into this function. The
+	// cfg.sqlInstanceDialer used here already has an address resolver. Which
+	// would presumably return the same result. Clean this up and replace calls
+	// to ConnHealthTryDialInstance with ConnHealthTryDial.
+	sqlNodeAvailable := func(sqlInstanceID base.SQLInstanceID, addr string) bool {
+		if err := cfg.sqlInstanceDialer.ConnHealthTryDialInstance(sqlInstanceID, addr); err != nil {
+			log.VEventf(ctx, 2, "sql instance n%d is not available for planning %v", sqlInstanceID, err)
+			return false
+		}
+		return true
 	}
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.kvNodeDialer)
@@ -1023,9 +1036,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.nodeDescs,
 			cfg.gossip,
 			cfg.stopper,
-			isAvailable,
-			cfg.kvNodeDialer.ConnHealthTryDial, // only used by system tenant
-			cfg.sqlInstanceDialer.ConnHealthTryDialInstance,
+			kvNodeAvailable,
+			sqlNodeAvailable,
 			cfg.sqlInstanceDialer,
 			codec,
 			cfg.sqlInstanceReader,
