@@ -523,6 +523,14 @@ func (t *testingRaft) FollowerState(replicaID roachpb.ReplicaID) FollowerStateIn
 	return t.FollowerStateRLocked(replicaID)
 }
 
+func (t *testingRaft) LastEntryIndex() uint64 {
+	return t.LastEntryIndexRLocked()
+}
+
+func (t *testingRaft) LastEntryIndexRLocked() uint64 {
+	return t.lastEntryIndex
+}
+
 func (t *testingRaft) FollowerStateRLocked(replicaID roachpb.ReplicaID) FollowerStateInfo {
 	return t.replicas[replicaID].info
 }

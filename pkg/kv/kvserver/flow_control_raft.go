@@ -74,6 +74,25 @@ func (r raftInterfaceImpl) FollowerStateRLocked(
 	}
 }
 
+// LastEntryIndex is the highest index assigned in the log. Only for
+// debugging.
+//
+// Requires Replica.raftMu to be held, Replica.mu is not held.
+func (r raftInterfaceImpl) LastEntryIndex() uint64 {
+	r.raftMu.AssertHeld()
+	r.mu.RLock()
+
+	return r.LastEntryIndexRLocked()
+}
+
+// Requires Replica.raftMu and Replica.mu.RLock to be held.
+func (r raftInterfaceImpl) LastEntryIndexRLocked() uint64 {
+	r.raftMu.AssertHeld()
+	r.mu.AssertRHeld()
+
+	return r.mu.internalRaftGroup.LastIndex()
+}
+
 // MakeMsgApp is used to construct a MsgApp for entries in [start, end).
 //
 // Requires Replica.raftMu to be held, Replica.mu is not held.

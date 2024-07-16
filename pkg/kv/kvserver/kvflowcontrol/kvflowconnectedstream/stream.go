@@ -597,6 +597,13 @@ type RaftInterface interface {
 	//
 	// Requires Replica.raftMu and Replica.mu.RLock to be held.
 	FollowerStateRLocked(replicaID roachpb.ReplicaID) FollowerStateInfo
+	// LastEntryIndex is the highest index assigned in the log. Only for
+	// debugging.
+	//
+	// Requires Replica.raftMu to be held, Replica.mu is not held.
+	LastEntryIndex() uint64
+	// Requires Replica.raftMu and Replica.mu.RLock to be held.
+	LastEntryIndexRLocked() uint64
 	// NextUnstableIndex returns the index of the next entry that will be sent to
 	// local storage, if there are any. All entries < this index are either stored,
 	// or have been sent to storage.
@@ -1712,8 +1719,36 @@ func newReplicaSendStream(
 	rss.sendQueue.nextRaftIndex = init.nextRaftIndex
 	rss.sendQueue.approxMeanSizeBytes = init.approxMeanSizeBytes
 	rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
-	rss.mu.Lock()
-	defer rss.mu.Unlock()
+
+	if log.V(1) {
+		rss.mu.Lock()
+		defer rss.mu.Unlock()
+
+		var info FollowerStateInfo
+		var nextUnstableIndex uint64
+		var lastEntryIndex uint64
+		if rss.parent.desc.ReplicaID == rss.parent.parent.opts.LocalReplicaID {
+			// This replica is the leader, we must be holding Replica.mu already. Use
+			// the RLocked methods accordingly.
+			info = rss.parent.parent.opts.RaftInterface.FollowerStateRLocked(rss.parent.desc.ReplicaID)
+			nextUnstableIndex = rss.parent.parent.opts.RaftInterface.NextUnstableIndexRLocked()
+			lastEntryIndex = rss.parent.parent.opts.RaftInterface.LastEntryIndexRLocked()
+		} else {
+			// Otherwise, the stream must be initialized during HandleRaftEvent,
+			// without locking Replica.mu.
+			info = rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID)
+			nextUnstableIndex = rss.parent.parent.opts.RaftInterface.NextUnstableIndex()
+			lastEntryIndex = rss.parent.parent.opts.RaftInterface.LastEntryIndex()
+		}
+		log.Infof(ctx, "init replica send stream replica_id=%d leader_id=%d "+
+			"next_unstable_index=%d last_entry_index=%d [info=%v send_stream=%v]",
+			rss.parent.desc.ReplicaID,
+			rss.parent.parent.opts.LocalReplicaID,
+			nextUnstableIndex,
+			lastEntryIndex,
+			info,
+			rss.stringLocked())
+	}
 
 	return rss
 }
