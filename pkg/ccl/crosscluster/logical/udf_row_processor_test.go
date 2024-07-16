@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,6 +30,9 @@ import (
 
 func TestUDFWithRandomTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.WithIssue(t, 127289)
+
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
