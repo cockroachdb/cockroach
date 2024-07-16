@@ -81,6 +81,7 @@ func (r raftInterfaceImpl) FollowerStateRLocked(
 func (r raftInterfaceImpl) LastEntryIndex() uint64 {
 	r.raftMu.AssertHeld()
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	return r.LastEntryIndexRLocked()
 }

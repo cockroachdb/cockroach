@@ -792,19 +792,22 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(ctx context.Context, entries
 		// processing, it has already been stepped, so the stable index would have
 		// advanced.
 		rr2.replica.raftMu.AssertHeld()
-		rr2.replica.mu.Lock()
-		defer rr2.replica.mu.Unlock()
+		msgAppResp, shouldAddMsg := func() (raftpb.Message, bool) {
+			rr2.replica.mu.Lock()
+			defer rr2.replica.mu.Unlock()
 
-		sindex := rr2.raftAdmittedInterface.StableIndexRLocked()
-		nextAdmitted := rr2.mu.waitingForAdmissionState.computeAdmitted(sindex)
-		if admittedIncreased(rr2.raftAdmittedInterface.GetAdmittedRLocked(), nextAdmitted) {
-			msgAppResp := rr2.raftAdmittedInterface.SetAdmittedLocked(nextAdmitted)
-			if rr2.mu.leaderID != 0 && rr2.mu.leaderID != rr2.replica.replicaID && rr2.mu.leaderNodeID != 0 {
-				rr2.admittedPiggybacker.AddMsgForRange(rr2.replica.RangeID, rr2.mu.leaderNodeID, rr2.mu.leaderStoreID, msgAppResp)
+			sindex := rr2.raftAdmittedInterface.StableIndexRLocked()
+			nextAdmitted := rr2.mu.waitingForAdmissionState.computeAdmitted(sindex)
+			if admittedIncreased(rr2.raftAdmittedInterface.GetAdmittedRLocked(), nextAdmitted) {
+				return rr2.raftAdmittedInterface.SetAdmittedLocked(nextAdmitted), true
 			}
-			// rr2.mu.leaderID can be 0 if there is no known leader.
-			// If the local replica is the leader we have already updated admitted.
+			return raftpb.Message{}, false
+		}()
+		if shouldAddMsg && rr2.mu.leaderID != 0 && rr2.mu.leaderID != rr2.replica.replicaID && rr2.mu.leaderNodeID != 0 {
+			rr2.admittedPiggybacker.AddMsgForRange(rr2.replica.RangeID, rr2.mu.leaderNodeID, rr2.mu.leaderStoreID, msgAppResp)
 		}
+		// rr2.mu.leaderID can be 0 if there is no known leader.
+		// If the local replica is the leader we have already updated admitted.
 	}()
 
 	if rr2.mu.rcAtLeader == nil {
