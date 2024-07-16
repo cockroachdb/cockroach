@@ -925,7 +925,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			if len(rows) > 0 {
 				return pgerror.Newf(pgcode.DependentObjectsStillExist,
 					"could not remove enum value %q as it is being used by %q in row: %s",
-					member.LogicalRepresentation, desc.GetName(), labeledRowValues(desc.PublicColumns(), rows))
+					member.LogicalRepresentation, desc.GetName(), labeledRowValues(desc.AccessibleColumns(), rows))
 			}
 		}
 
