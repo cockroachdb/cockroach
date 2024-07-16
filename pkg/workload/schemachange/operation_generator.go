@@ -400,6 +400,8 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 	if err != nil {
 		return nil, err
 	}
+	isJSONTyp := typ != nil && typ.Family() == types.ArrayFamily &&
+		typ.ArrayContents().Family() == types.JsonFamily
 	op := makeOpStmt(OpStmtDDL)
 	codesWithConditions{
 		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
@@ -410,6 +412,10 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 		{
 			code:      pgcode.FeatureNotSupported,
 			condition: def.Unique.IsUnique && typ != nil && !colinfo.ColumnTypeIsIndexable(typ),
+		},
+		// JSON arrays are not supported as a column type (#23468).
+		{
+			code: pgcode.FeatureNotSupported, condition: isJSONTyp,
 		},
 	}.add(op.expectedExecErrors)
 	// Our type inside `def` will get quoted during
