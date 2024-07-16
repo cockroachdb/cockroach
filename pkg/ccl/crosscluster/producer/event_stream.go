@@ -541,6 +541,10 @@ func streamPartition(
 	if !evalCtx.SessionData().AvoidBuffering {
 		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
 	}
+	if !evalCtx.TxnImplicit {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"crdb_internal.stream_partition not allowed in explicit transaction")
+	}
 	if len(spec.Spans) == 0 {
 		return nil, errors.AssertionFailedf("expected at least one span, got none")
 	}
