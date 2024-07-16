@@ -1,0 +1,7 @@
+# LogicTest: local
+
+statement error pgcode XXC01 pq: plan_cache_mode=force_generic_plan and plan_cache_mode=auto require a CCL binary
+SET plan_cache_mode = force_generic_plan
+
+statement error pgcode XXC01 pq: plan_cache_mode=force_generic_plan and plan_cache_mode=auto require a CCL binary
+SET plan_cache_mode = auto
