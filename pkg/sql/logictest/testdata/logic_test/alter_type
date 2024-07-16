@@ -711,3 +711,17 @@ statement error pgcode 2BP01 could not remove enum value "a" as it is being used
 ALTER TYPE typ_127136 DROP VALUE 'a';
 
 subtest end
+
+# Previously, we did not properly handle scanning index expressions for type
+# references when removing an enum value (#127147).
+subtest validate_type_in_index_expr
+
+statement ok
+CREATE TYPE typ_127147 AS ENUM ('a', 'b', 'c');
+CREATE TABLE t (x TEXT PRIMARY KEY, INDEX ((x::typ_127147)));
+INSERT INTO t VALUES ('a');
+
+statement error pgcode 2BP01 could not remove enum value "a" as it is being used by "t" in row: x='a'
+ALTER TYPE typ_127147 DROP VALUE 'a';
+
+subtest end
