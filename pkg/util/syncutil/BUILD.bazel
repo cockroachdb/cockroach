@@ -9,6 +9,7 @@ go_library(
         "mutex_sync.go",  # keep
         "mutex_sync_race.go",  # keep
         "mutex_tracing.go",
+        "set.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/syncutil",
     visibility = ["//visibility:public"],
@@ -27,6 +28,7 @@ go_test(
         "map_test.go",
         "mutex_sync_race_test.go",  # keep
         "mutex_tracing_test.go",
+        "set_test.go",
     ],
     embed = [":syncutil"],
     deps = ["@com_github_stretchr_testify//require"],

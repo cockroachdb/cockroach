@@ -721,7 +721,7 @@ type DistSender struct {
 	dontConsiderConnHealth bool
 
 	// Currently executing range feeds.
-	activeRangeFeeds syncutil.Map[*rangeFeedRegistry, struct{}]
+	activeRangeFeeds syncutil.Set[*rangeFeedRegistry]
 }
 
 var _ kv.Sender = &DistSender{}

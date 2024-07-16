@@ -163,7 +163,7 @@ type raftSchedulerBatch struct {
 }
 
 func newRaftSchedulerBatch(
-	numShards int, priorityIDs *syncutil.Map[roachpb.RangeID, struct{}],
+	numShards int, priorityIDs *syncutil.Set[roachpb.RangeID],
 ) *raftSchedulerBatch {
 	b := raftSchedulerBatchPool.Get().(*raftSchedulerBatch)
 	if cap(b.rangeIDs) >= numShards {
@@ -176,7 +176,7 @@ func newRaftSchedulerBatch(
 	}
 	// Cache the priority range IDs in an owned map, since we expect this to be
 	// very small or empty and we do a lookup for every Add() call.
-	priorityIDs.Range(func(id roachpb.RangeID, _ *struct{}) bool {
+	priorityIDs.Range(func(id roachpb.RangeID) bool {
 		b.priorityIDs[id] = true
 		return true
 	})
@@ -217,7 +217,7 @@ type raftScheduler struct {
 	// separate shards to reduce contention at high worker counts. Allocation
 	// is modulo range ID, with shard 0 reserved for priority ranges.
 	shards      []*raftSchedulerShard // 1 + RangeID % (len(shards) - 1)
-	priorityIDs syncutil.Map[roachpb.RangeID, struct{}]
+	priorityIDs syncutil.Set[roachpb.RangeID]
 	done        sync.WaitGroup
 }
 
@@ -329,18 +329,18 @@ func (s *raftScheduler) Wait(context.Context) {
 
 // AddPriorityID adds the given range ID to the set of priority ranges.
 func (s *raftScheduler) AddPriorityID(rangeID roachpb.RangeID) {
-	s.priorityIDs.Store(rangeID, new(struct{}))
+	s.priorityIDs.Add(rangeID)
 }
 
 // RemovePriorityID removes the given range ID from the set of priority ranges.
 func (s *raftScheduler) RemovePriorityID(rangeID roachpb.RangeID) {
-	s.priorityIDs.Delete(rangeID)
+	s.priorityIDs.Remove(rangeID)
 }
 
 // PriorityIDs returns the current priority ranges.
 func (s *raftScheduler) PriorityIDs() []roachpb.RangeID {
 	var priorityIDs []roachpb.RangeID
-	s.priorityIDs.Range(func(id roachpb.RangeID, _ *struct{}) bool {
+	s.priorityIDs.Range(func(id roachpb.RangeID) bool {
 		priorityIDs = append(priorityIDs, id)
 		return true
 	})
@@ -483,7 +483,7 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 
 func (s *raftScheduler) enqueue1(addFlags raftScheduleFlags, id roachpb.RangeID) {
 	now := nowNanos()
-	_, hasPriority := s.priorityIDs.Load(id)
+	hasPriority := s.priorityIDs.Contains(id)
 	shardIdx := shardIndex(id, len(s.shards), hasPriority)
 	shard := s.shards[shardIdx]
 	shard.Lock()
