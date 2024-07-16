@@ -1408,15 +1408,7 @@ func (rs *replicaState) handleReadyState(
 			func() {
 				rs.replicaSendStream.mu.Lock()
 				defer rs.replicaSendStream.mu.Unlock()
-
-				switch rs.replicaSendStream.connectedState {
-				case replicate:
-					rs.replicaSendStream.makeConsistentInStateReplicateLocked(ctx, info)
-				case probeRecentlyReplicate:
-					rs.replicaSendStream.makeConsistentWhenProbeToReplicateLocked(ctx, info.Next)
-				case snapshot:
-					rs.replicaSendStream.makeConsistentWhenSnapshotToReplicateLocked(ctx, info.Next)
-				}
+				rs.replicaSendStream.makeConsistentInStateReplicateLocked(ctx, info)
 			}()
 		}
 	case tracker.StateSnapshot:
