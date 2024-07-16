@@ -74,14 +74,14 @@ type eventStream struct {
 }
 
 var quantize = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"physical_replication.producer.timestamp_granularity",
 	"the granularity at which replicated times are quantized to make tracking more efficient",
 	5*time.Second,
 )
 
 var emitMetadata = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"physical_replication.producer.emit_metadata.enabled",
 	"whether to emit metadata events",
 	true,
