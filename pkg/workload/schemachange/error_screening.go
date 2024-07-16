@@ -348,11 +348,16 @@ func (og *operationGenerator) valuesViolateUniqueConstraints(
 			}
 			collector := newExprColumnCollector(colInfo)
 			t.Walk(collector)
-			query.WriteString("SELECT COUNT (*) > 0 FROM (SELECT * FROM ")
-			query.WriteString(tableName.String())
-			query.WriteString(" WHERE ")
+			// For the uniqueness query we are going to use CTEs, where existingValues
+			// will select the expression for all values in the table. newValue will be
+			// the second expression, which will refer to the expression values we are
+			// trying to insert.
+			query.WriteString("WITH existingValues AS (SELECT ")
 			query.WriteString(constraint)
-			query.WriteString("= ( SELECT ")
+			query.WriteString(" FROM ")
+			query.WriteString(tableName.String())
+			query.WriteString("), ")
+			query.WriteString("newValue as ( SELECT ")
 			query.WriteString(" ")
 			query.WriteString(constraint)
 			query.WriteString(" FROM (VALUES( ")
@@ -371,6 +376,7 @@ func (og *operationGenerator) valuesViolateUniqueConstraints(
 				tupleSelectQuery.WriteString(value)
 				colIdx++
 			}
+
 			hasNullsQuery.WriteString(") ) AS T(")
 			hasNullsQuery.WriteString(columns.String())
 			hasNullsQuery.WriteString(")")
@@ -379,7 +385,14 @@ func (og *operationGenerator) valuesViolateUniqueConstraints(
 			tupleSelectQuery.WriteString(")")
 			query.WriteString(") ) AS T(")
 			query.WriteString(columns.String())
-			query.WriteString(") ) )")
+			query.WriteString(") )")
+			// Finally we are going to compute the intersection between the existing
+			// expression values in the table and the new expression value that will
+			// be computed for this row.
+			// Note: We could have done a join query instead, but the optimizer can be clever
+			// and potentially optimize out constants, which could lead to failures as
+			// seen in #125751, for floating point values.
+			query.WriteString(" SELECT count(*) > 0 FROM (SELECT * FROM existingValues INTERSECT SELECT * FROM newValue)")
 			evalTxn, err := tx.Begin(ctx)
 			if err != nil {
 				return false, nil, err
