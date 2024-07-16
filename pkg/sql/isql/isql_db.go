@@ -125,8 +125,8 @@ type Executor interface {
 		qargs ...interface{},
 	) (tree.Datums, error)
 
-	// QueryRowExParsed is like QueryRowEd, but allows the caller to provide an already
-	// parsed statement.
+	// QueryRowExParsed is like QueryRowEx, but allows the caller to provide an
+	// already parsed statement.
 	QueryRowExParsed(
 		ctx context.Context,
 		opName string,

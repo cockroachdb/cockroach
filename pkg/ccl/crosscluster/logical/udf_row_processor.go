@@ -39,7 +39,7 @@ const (
 	// acceptProposed indicates that the mutation should be applied. An insert
 	// or update will be upserted. A delete will be deleted.
 	acceptProposed applierDecision = "accept_proposed"
-	// upsertProposed indicatest that an insert or update mutation should be applied.
+	// upsertProposed indicates that an insert or update mutation should be applied.
 	upsertProposed  applierDecision = "upsert_proposed"
 	deleteProposed  applierDecision = "delete_proposed"
 	upsertSpecified applierDecision = "upsert_specified"
@@ -104,7 +104,8 @@ type applierQuerier struct {
 	udfName     string
 	settings    *cluster.Settings
 	queryBuffer queryBuffer
-	sd          sessiondata.InternalExecutorOverride
+
+	ieoInsert, ieoDelete, ieoApplyUDF sessiondata.InternalExecutorOverride
 
 	// Used for the applier query to reduce allocations.
 	proposedMVCCTs     tree.DDecimal
@@ -140,12 +141,18 @@ func makeApplierQuerier(
 		return nil, errors.AssertionFailedf("unexpected type for database name: %T", datums[0])
 	}
 
-	sd := ieOverrides
-	sd.Database = string(*databaseName)
+	insertOverride := getIEOverride(replicatedInsertOpName)
+	deleteOverride := getIEOverride(replicatedDeleteOpName)
+	applyUDFOverride := getIEOverride(replicatedApplyUDFOpName)
+	insertOverride.Database = string(*databaseName)
+	deleteOverride.Database = string(*databaseName)
+	applyUDFOverride.Database = string(*databaseName)
 	return &applierQuerier{
 		queryBuffer: qb,
 		settings:    settings,
-		sd:          sd,
+		ieoInsert:   insertOverride,
+		ieoDelete:   deleteOverride,
+		ieoApplyUDF: applyUDFOverride,
 		// TODO(ssd): Thread this name through from the SQL statement.
 		udfName: udfName,
 	}, nil
@@ -217,7 +224,7 @@ func (aq *applierQuerier) processRow(
 	if err != nil {
 		return batchStats{}, err
 	}
-	return aq.applyDecicion(ctx, kvTxn, ie, row, decision, decisionRow)
+	return aq.applyDecision(ctx, kvTxn, ie, row, decision, decisionRow)
 }
 
 func (aq *applierQuerier) applyUDF(
@@ -257,8 +264,10 @@ func (aq *applierQuerier) applyUDF(
 	aq.proposedMVCCTs.Decimal = eval.TimestampToDecimal(row.MvccTimestamp)
 	aq.proposedPrevMVCCTs.Decimal = eval.TimestampToDecimal(prevRow.MvccTimestamp)
 
-	decisionRow, err := aq.queryRowExParsed(ctx, "replicated-apply-udf", txn, ie, stmt,
-		append(datums, &aq.proposedMVCCTs, &aq.proposedPrevMVCCTs)...)
+	decisionRow, err := aq.queryRowExParsed(
+		ctx, replicatedApplyUDFOpName, txn, ie, aq.ieoApplyUDF, stmt,
+		append(datums, &aq.proposedMVCCTs, &aq.proposedPrevMVCCTs)...,
+	)
 	if err != nil {
 		return noDecision, nil, err
 	}
@@ -288,7 +297,7 @@ func (aq *applierQuerier) applyUDF(
 	return decision, mutatedDatums, nil
 }
 
-func (aq *applierQuerier) applyDecicion(
+func (aq *applierQuerier) applyDecision(
 	ctx context.Context,
 	txn *kv.Txn,
 	ie isql.Executor,
@@ -311,7 +320,7 @@ func (aq *applierQuerier) applyDecicion(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if err := aq.execParsed(ctx, "replicated-delete", txn, ie, stmt, datums...); err != nil {
+		if err := aq.execParsed(ctx, replicatedDeleteOpName, txn, ie, aq.ieoDelete, stmt, datums...); err != nil {
 			return batchStats{}, err
 		}
 		return batchStats{}, nil
@@ -327,7 +336,7 @@ func (aq *applierQuerier) applyDecicion(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if err := aq.execParsed(ctx, "replicated-insert", txn, ie, stmt, datums...); err != nil {
+		if err := aq.execParsed(ctx, replicatedInsertOpName, txn, ie, aq.ieoInsert, stmt, datums...); err != nil {
 			return batchStats{}, err
 		}
 		return batchStats{}, nil
@@ -350,7 +359,7 @@ func (aq *applierQuerier) applyDecicion(
 		// extra column at all since in the case of upsertSpecfied, the
 		// origin is really the UDF itself, not the remote cluster.
 		datums[len(datums)-1] = &tree.DDecimal{Decimal: eval.TimestampToDecimal(row.MvccTimestamp)}
-		if err := aq.execParsed(ctx, "replicated-insert", txn, ie, stmt, datums...); err != nil {
+		if err := aq.execParsed(ctx, replicatedInsertOpName, txn, ie, aq.ieoInsert, stmt, datums...); err != nil {
 			return batchStats{}, err
 		}
 		return batchStats{}, nil
@@ -364,10 +373,11 @@ func (aq *applierQuerier) execParsed(
 	opName string,
 	txn *kv.Txn,
 	ie isql.Executor,
+	o sessiondata.InternalExecutorOverride,
 	stmt statements.Statement[tree.Statement],
 	datums ...interface{},
 ) error {
-	if _, err := ie.ExecParsed(ctx, opName, txn, aq.sd, stmt, datums...); err != nil {
+	if _, err := ie.ExecParsed(ctx, opName, txn, o, stmt, datums...); err != nil {
 		log.Warningf(ctx, "%s failed (query: %s): %s", opName, stmt.SQL, err.Error())
 		return err
 	}
@@ -379,10 +389,11 @@ func (aq *applierQuerier) queryRowExParsed(
 	opName string,
 	txn *kv.Txn,
 	ie isql.Executor,
+	o sessiondata.InternalExecutorOverride,
 	stmt statements.Statement[tree.Statement],
 	datums ...interface{},
 ) (tree.Datums, error) {
-	if row, err := ie.QueryRowExParsed(ctx, opName, txn, aq.sd, stmt, datums...); err != nil {
+	if row, err := ie.QueryRowExParsed(ctx, opName, txn, o, stmt, datums...); err != nil {
 		log.Warningf(ctx, "%s failed (query: %s): %s", opName, stmt.SQL, err.Error())
 		return nil, err
 	} else {
