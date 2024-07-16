@@ -54,9 +54,8 @@ Typical usage:
 }
 
 func makeCleanCommand() *cobra.Command {
-	config := defaultCleanConfig()
-	runCmdFunc := func(cmd *cobra.Command, commandLine []string) error {
-		args, _ := splitArgsAtDash(cmd, commandLine)
+	var config cleanConfig
+	runCmdFunc := func(cmd *cobra.Command, args []string) error {
 
 		config.inputFilePath = args[0]
 		config.outputFilePath = args[1]
@@ -69,8 +68,8 @@ func makeCleanCommand() *cobra.Command {
 	}
 	command := &cobra.Command{
 		Use:   "clean <inputFilePath> <outputFilePath>",
-		Short: "remove noisy logs from the benchmark output and dump it to a file",
-		Long:  `remove noisy logs from the benchmark output and dump it to a file`,
+		Short: "Summarise the benchmark output from the input file and write the summary to the output file",
+		Long:  `Summarise the benchmark output from the input file and write the summary to the output file`,
 		Args:  cobra.ExactArgs(2),
 		RunE:  runCmdFunc,
 	}
