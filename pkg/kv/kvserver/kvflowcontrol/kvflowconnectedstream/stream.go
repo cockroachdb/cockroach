@@ -1666,6 +1666,8 @@ func newReplicaSendStream(
 	rss.sendQueue.nextRaftIndex = init.nextRaftIndex
 	rss.sendQueue.approxMeanSizeBytes = init.approxMeanSizeBytes
 	rss.sendQueue.watcherHandleID = InvalidStoreStreamSendTokenHandleID
+	rss.mu.Lock()
+	defer rss.mu.Unlock()
 
 	log.VInfof(ctx, 1,
 		"init replica send stream(%v): index_to_send=%v next_raft_index=%d "+
