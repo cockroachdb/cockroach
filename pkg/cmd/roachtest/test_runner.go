@@ -834,7 +834,7 @@ func (r *testRunner) runWorker(
 		handleClusterCreationFailure := func(err error) {
 			t.Error(errClusterProvisioningFailed(err))
 
-			if _, err := github.MaybePost(t, l, t.failureMsg()); err != nil {
+			if _, err := github.MaybePost(t, l, t.failureMsg(), "" /* sideEyeTimeoutSnapshotURL */); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		}
@@ -1074,6 +1074,10 @@ func (r *testRunner) runTest(
 		c.grafanaTags = []string{vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), vm.SanitizeLabel(c.Name())}
 	}
 
+	// sideEyeTimeoutSnapshotURL may be set during teardown to communicate to the
+	// deferred function below that a Side-Eye snapshot was taken for a timed out
+	// test.
+	sideEyeTimeoutSnapshotURL := ""
 	defer func() {
 		t.end = timeutil.Now()
 		if err := c.removeLabels([]string{VmLabelTestName}); err != nil {
@@ -1140,8 +1144,7 @@ func (r *testRunner) runTest(
 				}
 
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
-
-				issue, err := github.MaybePost(t, l, output)
+				issue, err := github.MaybePost(t, l, output, sideEyeTimeoutSnapshotURL)
 				if err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
 				}
@@ -1336,8 +1339,15 @@ func (r *testRunner) runTest(
 	// operations originating from the test vs the harness. The only error that can originate here
 	// is from artifact collection, which is best effort and for which we do not fail the test.
 	replaceLogger("test-teardown")
-	if err := r.teardownTest(ctx, t, c, timedOut); err != nil {
-		l.Printf("error during test teardown: %v; see test-teardown.log for details", err)
+	var err error
+	sideEyeTimeoutSnapshotURL, err = r.teardownTest(ctx, t, c, timedOut)
+	if err != nil {
+		l.PrintfCtx(ctx, "error during test teardown: %v; see test-teardown.log for details", err)
+	}
+	// If we captured a Side-Eye snapshot during teardown, log it to the test's
+	// original logger (in addition to the teardown logger used in teardownTest).
+	if sideEyeTimeoutSnapshotURL != "" {
+		l.PrintfCtx(ctx, "A Side-Eye cluster snapshot was captured: %s", sideEyeTimeoutSnapshotURL)
 	}
 }
 
@@ -1493,15 +1503,19 @@ func (r *testRunner) postTestAssertions(
 
 // teardownTest is best effort and should not fail a test.
 // Errors during artifact collection will be propagated up.
+//
+// The string return value, if not empty, represents the URL of a Side-Eye
+// snapshot of the cluster taken before teardown.
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
-) error {
+) (string, error) {
 	if timedOut || t.Failed() {
+		snapURL := ""
 		if timedOut {
 			// If the Side-Eye integration was configured, capture a snapshot of the
 			// cluster to help with debugging.
 			if r.sideEyeClient != nil {
-				c.CaptureSideEyeSnapshot(ctx, t.L(), r.sideEyeClient)
+				snapURL = c.CaptureSideEyeSnapshot(ctx, t.L(), r.sideEyeClient)
 			}
 		}
 
@@ -1522,7 +1536,7 @@ func (r *testRunner) teardownTest(
 			}
 			t.L().Printf("test timed out; check __stacks.log and CRDB logs for goroutine dumps")
 		}
-		return err
+		return snapURL, err
 	}
 
 	// Test was successful. If we are collecting code coverage, copy the files now.
@@ -1536,7 +1550,7 @@ func (r *testRunner) teardownTest(
 		getGoCoverArtifacts(ctx, c, t)
 	}
 
-	return nil
+	return "", nil
 }
 
 func (r *testRunner) collectArtifacts(
