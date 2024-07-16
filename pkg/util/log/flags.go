@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 )
 
@@ -72,7 +74,7 @@ func init() {
 	// using TestLogScope.
 	cfg := getTestConfig(nil /* output to files disabled */, true /* mostly inline */)
 
-	if _, err := ApplyConfig(cfg, FileSinkMetrics{}, nil /* fatalOnLogStall */); err != nil {
+	if _, err := ApplyConfig(cfg, nil /* diskWriteStats */, "", nil /* fatalOnLogStall */); err != nil {
 		panic(err)
 	}
 
@@ -97,7 +99,10 @@ func IsActive() (active bool, firstUse string) {
 //
 // The returned logShutdownFn can be used to gracefully shut down logging facilities.
 func ApplyConfig(
-	config logconfig.Config, metrics FileSinkMetrics, fatalOnLogStall func() bool,
+	config logconfig.Config,
+	diskWriteStats disk.WriteStatsManager,
+	writeCategory vfs.DiskWriteCategory,
+	fatalOnLogStall func() bool,
 ) (logShutdownFn func(), err error) {
 	// Sanity check.
 	if active, firstUse := IsActive(); active {
@@ -198,6 +203,18 @@ func ApplyConfig(
 		if err := fakeConfig.Channels.Validate(fakeConfig.CommonSinkConfig.Filter); err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "programming error: incorrect filter config")
 		}
+
+		// Collect stats for disk writes incurred by logs.
+		var metrics FileSinkMetrics
+		if diskWriteStats != nil {
+			writeStatsCollector, err := diskWriteStats.GetOrCreateCollector(*fakeConfig.Dir)
+			if err != nil {
+				return nil, errors.Wrap(err, "unable to get stats collector for log directory")
+			}
+			logBytesWritten := writeStatsCollector.CreateStat(writeCategory)
+			metrics.LogBytesWritten = logBytesWritten
+		}
+
 		fileSinkInfo, fileSink, err := newFileSinkInfo("stderr", fakeConfig, metrics)
 		if err != nil {
 			return nil, err
@@ -315,6 +332,18 @@ func ApplyConfig(
 		if fileGroupName == "default" {
 			fileGroupName = ""
 		}
+
+		// Collect stats for disk writes incurred by logs.
+		var metrics FileSinkMetrics
+		if diskWriteStats != nil {
+			writeStatsCollector, err := diskWriteStats.GetOrCreateCollector(*fc.Dir)
+			if err != nil {
+				return nil, errors.Wrap(err, "unable to get stats collector for log directory")
+			}
+			logBytesWritten := writeStatsCollector.CreateStat(writeCategory)
+			metrics.LogBytesWritten = logBytesWritten
+		}
+
 		fileSinkInfo, fileSink, err := newFileSinkInfo(fileGroupName, *fc, metrics)
 		if err != nil {
 			return nil, err

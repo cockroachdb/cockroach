@@ -18,6 +18,7 @@ go_library(
         "//pkg/base",
         "//pkg/cli/exit",
         "//pkg/settings",
+        "//pkg/storage/disk",
         "//pkg/storage/enginepb",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
