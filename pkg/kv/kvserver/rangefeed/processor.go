@@ -159,11 +159,14 @@ type Processor interface {
 	// initResolvedTSScan. The Processor promises to clean up the iterator by
 	// calling its Close method when it is finished.
 	//
-	// Note that newRtsIter must be called under the same lock as first
-	// registration to ensure that all there would be no missing events.
-	// This is currently achieved by Register function synchronizing with
-	// the work loop before the lock is released.
+	// Note that newRtsIter must be called under the same raftMu lock as first
+	// registration to ensure that all there would be no missing events. This is
+	// currently achieved by Register function synchronizing with the work loop
+	// before the lock is released.
 	//
+	// Is it possible for iterator to be nil and error is nil from
+	// IntentScannerConstructor? This looks questionable. We are checking if the
+	// function is nil underlying which is also questionable. Am I insane?
 	// If the iterator is nil then no initialization scan will be performed and
 	// the resolved timestamp will immediately be considered initialized.
 	Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error
@@ -365,9 +368,11 @@ func NewLegacyProcessor(cfg Config) *LegacyProcessor {
 	return p
 }
 
-// IntentScannerConstructor is used to construct an IntentScanner. It
-// should be called from underneath a stopper task to ensure that the
-// engine has not been closed.
+// IntentScannerConstructor is used to construct an IntentScanner. It should be
+// called from underneath a stopper task to ensure that the engine has not been
+// closed. It is important to call this while holding the raftMu lock. Contract:
+// this intent scanner must be called while holding raftMu lock, and it must be
+// closed by the caller. If error is non-nil, no need to close the iterator.
 type IntentScannerConstructor func() (IntentScanner, error)
 
 // Start implements Processor interface.
@@ -409,7 +414,10 @@ func (p *LegacyProcessor) run(
 	defer cancelOutputLoops()
 
 	// Launch an async task to scan over the resolved timestamp iterator and
-	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
+	// initialize the unresolvedIntentQueue. Ignore error if quiescing. It is
+	// important to construct the IntentScanner before firing async tasks while
+	// holding the raftMu lock to avoid	missing events. If err is non-nil, no
+	// need to close rts.Iter.
 	if rtsIterFunc != nil {
 		rtsIter, err := rtsIterFunc()
 		if err != nil {

@@ -115,7 +115,9 @@ func (p *ScheduledProcessor) Start(
 	}
 
 	// Launch an async task to scan over the resolved timestamp iterator and
-	// initialize the unresolvedIntentQueue.
+	// initialize the unresolvedIntentQueue. It is important to construct the
+	// IntentScanner before initScan.Run while holding the raftMu lock to avoid
+	// missing events.
 	if rtsIterFunc != nil {
 		rtsIter, err := rtsIterFunc()
 		if err != nil {
