@@ -691,6 +691,7 @@ ALTER TYPE typ_110827 DROP VALUE 'a';
 statement error pgcode 2BP01 could not remove enum value "b" as it is being used by table ".*t_110827"
 ALTER TYPE typ_110827 DROP VALUE 'b';
 
+
 subtest end
 
 # We accidentally introduced a regression formatting dependent rows out,
@@ -707,5 +708,25 @@ INSERT INTO t_127136 VALUES (1, 'a');
 
 statement error pgcode 2BP01 could not remove enum value "a" as it is being used by "t_127136" in row: x=1, y='a'
 ALTER TYPE typ_127136 DROP VALUE 'a';
+
+subtest end
+
+# Previously, we did not properly handle scanning index expressions for type
+# references when removing an enum value (#127147).
+subtest validate_type_in_index_expr
+
+statement ok
+CREATE TYPE typ_127147 AS ENUM ('a', 'b', 'c');
+CREATE TABLE t (x TEXT PRIMARY KEY, INDEX ((x::typ_127147)));
+INSERT INTO t VALUES ('a');
+
+statement error pgcode 2BP01 could not remove enum value "a" as it is being used by "t" in row: x='a'
+ALTER TYPE typ_127147 DROP VALUE 'a';
+
+statement ok
+TRUNCATE TABLE t;
+
+statement ok
+ALTER TYPE typ_127147 DROP VALUE 'a';
 
 subtest end
