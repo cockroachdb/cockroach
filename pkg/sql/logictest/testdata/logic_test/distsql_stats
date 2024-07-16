@@ -1631,7 +1631,9 @@ statement ok
 CREATE STATISTICS s FROM all_null
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (
 SELECT json_array_elements(statistics) - 'created_at' AS stat
 FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
@@ -1654,6 +1656,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         ],
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1666,6 +1669,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "s",
         "null_count": 1,
         "row_count": 1
@@ -1689,7 +1693,9 @@ statement ok
 CREATE STATISTICS s FROM greeting_stats
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (
 SELECT json_array_elements(statistics) - 'created_at' AS stat
 FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
@@ -1712,6 +1718,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
         ],
         "histo_col_type": "test.public.greeting",
         "histo_version": 3,
+        "id": 0,
         "name": "s",
         "null_count": 0,
         "row_count": 1
@@ -1877,7 +1884,9 @@ SHOW HISTOGRAM $hist_id_1
 upper_bound  range_rows  distinct_range_rows  equal_rows
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (SELECT json_array_elements(statistics) - 'created_at' AS stat
         FROM [SHOW STATISTICS USING JSON FOR TABLE tabula])
 ----
@@ -1890,6 +1899,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1902,6 +1912,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1914,6 +1925,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "distinct_count": 0,
         "histo_col_type": "",
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1926,6 +1938,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "aristotle",
         "null_count": 0,
         "row_count": 0
@@ -1973,7 +1986,9 @@ SHOW HISTOGRAM $hist_id_1
 upper_bound  range_rows  distinct_range_rows  equal_rows
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (SELECT json_array_elements(statistics) - 'created_at' - 'avg_size' AS stat
         FROM [SHOW STATISTICS USING JSON FOR TABLE tabula])
 ----
@@ -1993,6 +2008,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -2012,6 +2028,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -2023,6 +2040,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         ],
         "distinct_count": 1,
         "histo_col_type": "",
+        "id": 0,
         "name": "locke",
         "null_count": 0,
         "row_count": 1
@@ -2034,6 +2052,7 @@ SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "name": "locke",
         "null_count": 1,
         "row_count": 1
@@ -2081,7 +2100,9 @@ NULL             {rowid}       0          0               0           true
 t1_ab            {a,b}         0          0               0           false
 
 query T
-SELECT jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
   FROM (
 SELECT json_array_elements(statistics) - 'created_at' AS stat
 FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
@@ -2096,6 +2117,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "null_count": 0,
         "row_count": 0
     },
@@ -2107,6 +2129,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "null_count": 0,
         "row_count": 0
     },
@@ -2118,6 +2141,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
+        "id": 0,
         "null_count": 0,
         "row_count": 0
     },
@@ -2129,6 +2153,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         ],
         "distinct_count": 0,
         "histo_col_type": "",
+        "id": 0,
         "name": "t1_ab",
         "null_count": 0,
         "row_count": 0
@@ -2362,6 +2387,18 @@ ORDER BY statistics_name
 statistics_name  partial_predicate                                  row_count  null_count
 xy_x_partial     (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
 xy_x_partial_2   (x IS NULL) OR ((x < 0:::INT8) OR (x > 3:::INT8))  4          0
+
+query T
+SELECT jsonb_pretty(stat->'name')
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE xy]
+)
+WHERE stat->>'full_statistic_id' = '$statistics_id'
+ORDER BY stat->>'name';
+----
+"xy_x_partial"
+"xy_x_partial_2"
 
 # Test null values.
 statement ok
