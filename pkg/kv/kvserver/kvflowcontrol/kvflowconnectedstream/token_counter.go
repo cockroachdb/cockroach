@@ -98,14 +98,14 @@ type tokenCounterPerWorkClass struct {
 
 	signalCh chan struct{}
 	stats    struct {
-		deltaStats
+		DeltaStats
 		noTokenStartTime time.Time
 	}
 }
 
-type deltaStats struct {
-	noTokenDuration time.Duration
-	tokensDeducted  kvflowcontrol.Tokens
+type DeltaStats struct {
+	NoTokenDuration time.Duration
+	TokensDeducted  kvflowcontrol.Tokens
 }
 
 func makeTokenCounterPerWorkClass(
@@ -136,10 +136,10 @@ func (bwc *tokenCounterPerWorkClass) adjustTokensLocked(
 		}
 		if before <= 0 && bwc.tokens > 0 {
 			bwc.signal()
-			bwc.stats.noTokenDuration += now.Sub(bwc.stats.noTokenStartTime)
+			bwc.stats.NoTokenDuration += now.Sub(bwc.stats.noTokenStartTime)
 		}
 	} else {
-		bwc.stats.deltaStats.tokensDeducted -= delta
+		bwc.stats.DeltaStats.TokensDeducted -= delta
 		if before > 0 && bwc.tokens <= 0 {
 			bwc.stats.noTokenStartTime = now
 		}
@@ -166,12 +166,12 @@ const (
 	RefreshWaitSignaled
 )
 
-func (bwc *tokenCounterPerWorkClass) getAndResetStats(now time.Time) deltaStats {
-	stats := bwc.stats.deltaStats
+func (bwc *tokenCounterPerWorkClass) getAndResetStats(now time.Time) DeltaStats {
+	stats := bwc.stats.DeltaStats
 	if bwc.tokens <= 0 {
-		stats.noTokenDuration += now.Sub(bwc.stats.noTokenStartTime)
+		stats.NoTokenDuration += now.Sub(bwc.stats.noTokenStartTime)
 	}
-	bwc.stats.deltaStats = deltaStats{}
+	bwc.stats.DeltaStats = DeltaStats{}
 	// Doesn't matter if bwc.tokens is actually > 0 since in that case we won't
 	// use this value.
 	bwc.stats.noTokenStartTime = now
@@ -184,6 +184,7 @@ func (bwc *tokenCounterPerWorkClass) getAndResetStats(now time.Time) deltaStats 
 type tokenCounter struct {
 	clock    *hlc.Clock
 	settings *cluster.Settings
+	metrics  *flowControlMetrics
 
 	mu struct {
 		syncutil.RWMutex
@@ -197,10 +198,13 @@ type tokenCounter struct {
 
 var _ TokenCounter = &tokenCounter{}
 
-func newTokenCounter(settings *cluster.Settings, clock *hlc.Clock) *tokenCounter {
+func newTokenCounter(
+	settings *cluster.Settings, clock *hlc.Clock, metrics *flowControlMetrics,
+) *tokenCounter {
 	b := &tokenCounter{
 		clock:    clock,
 		settings: settings,
+		metrics:  metrics,
 	}
 
 	regularTokens := kvflowcontrol.Tokens(RegularTokensPerStream.Get(&settings.SV))
@@ -306,6 +310,14 @@ func (b *tokenCounter) Return(
 	ctx context.Context, wc admissionpb.WorkClass, tokens kvflowcontrol.Tokens,
 ) {
 	b.adjust(ctx, wc, tokens, false /* admin */, b.clock.PhysicalTime())
+}
+
+// Tokens returns the current available token count. Distinct from
+// TokensAvailable, which will also create a handle for waiting when there
+// are no tokens available. This should be used only for metrics and
+// inspection.
+func (b *tokenCounter) Tokens(wc admissionpb.WorkClass) kvflowcontrol.Tokens {
+	return b.tokens(wc)
 }
 
 type waitHandle struct {
@@ -490,10 +502,18 @@ func (b *tokenCounter) adjust(
 			b.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(
 				ctx, delta, b.mu.limit.elastic, admin, now)
 	}
+
+	if adjustment.regular != 0 || adjustment.elastic != 0 {
+		b.metrics.onTokenAdjustment(adjustment)
+	}
+	if unaccounted.regular != 0 || unaccounted.elastic != 0 {
+		b.metrics.onUnaccounted(unaccounted)
+	}
+
 	return adjustment, unaccounted
 }
 
-func (b *tokenCounter) getAndResetStats(now time.Time) (regularStats, elasticStats deltaStats) {
+func (b *tokenCounter) GetAndResetStats(now time.Time) (regularStats, elasticStats DeltaStats) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	regularStats = b.mu.counters[admissionpb.RegularWorkClass].getAndResetStats(now)

@@ -56,7 +56,11 @@ func TestStoreStreamSendTokenWatcher(t *testing.T) {
 	ElasticTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.elastic))
 	RegularTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.regular))
 
-	counter := newTokenCounter(settings, clock)
+	metrics := NewMetrics()
+	ssTokenCounter := NewStoreStreamsTokenCounter(settings, clock, metrics)
+	metrics.Init(ssTokenCounter, sendQueuesSizeCounterForTesting{}, clock)
+
+	counter := newTokenCounter(settings, clock, metrics.EvalFlowControlMetrics)
 
 	var handleA, handleB StoreStreamSendTokenHandleID
 	tokenIncrement := kvflowcontrol.Tokens(1)

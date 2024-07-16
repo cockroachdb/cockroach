@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -32,11 +33,18 @@ type StoreStreamsTokenCounter interface {
 	// SendTokenCounterForStream returns the send token counter for the given
 	// stream.
 	SendTokenCounterForStream(kvflowcontrol.Stream) TokenCounter
+	// GetEvalTokenCounters returns every eval token counter. This is used for
+	// metrics and inspection.
+	GetEvalTokenCounters() map[kvflowcontrol.Stream]TokenCounter
+	// GetSendTokenCounters returns every send token counter. This is used for
+	// metrics and inspection.
+	GetSendTokenCounters() map[kvflowcontrol.Stream]TokenCounter
 }
 
 type storeStreamsTokenCounter struct {
 	settings *cluster.Settings
 	clock    *hlc.Clock
+	metrics  *FlowControlMetrics
 
 	mu struct {
 		syncutil.Mutex
@@ -51,7 +59,8 @@ func (sstc *storeStreamsTokenCounter) EvalTokenCounterForStream(
 	defer sstc.mu.Unlock()
 
 	if _, ok := sstc.mu.evalCounters[stream]; !ok {
-		sstc.mu.evalCounters[stream] = newTokenCounter(sstc.settings, sstc.clock)
+		sstc.mu.evalCounters[stream] = newTokenCounter(
+			sstc.settings, sstc.clock, sstc.metrics.EvalFlowControlMetrics)
 	}
 	return sstc.mu.evalCounters[stream]
 }
@@ -63,17 +72,41 @@ func (sstc *storeStreamsTokenCounter) SendTokenCounterForStream(
 	defer sstc.mu.Unlock()
 
 	if _, ok := sstc.mu.sendCounters[stream]; !ok {
-		sstc.mu.sendCounters[stream] = newTokenCounter(sstc.settings, sstc.clock)
+		sstc.mu.sendCounters[stream] = newTokenCounter(
+			sstc.settings, sstc.clock, sstc.metrics.SendFlowControlMetrics)
 	}
 	return sstc.mu.sendCounters[stream]
 }
 
+func (sstc *storeStreamsTokenCounter) GetEvalTokenCounters() map[kvflowcontrol.Stream]TokenCounter {
+	sstc.mu.Lock()
+	defer sstc.mu.Unlock()
+
+	evalCounters := make(map[kvflowcontrol.Stream]TokenCounter)
+	for stream, counter := range sstc.mu.evalCounters {
+		evalCounters[stream] = counter
+	}
+	return evalCounters
+}
+
+func (sstc *storeStreamsTokenCounter) GetSendTokenCounters() map[kvflowcontrol.Stream]TokenCounter {
+	sstc.mu.Lock()
+	defer sstc.mu.Unlock()
+
+	sendCounters := make(map[kvflowcontrol.Stream]TokenCounter)
+	for stream, counter := range sstc.mu.sendCounters {
+		sendCounters[stream] = counter
+	}
+	return sendCounters
+}
+
 func NewStoreStreamsTokenCounter(
-	settings *cluster.Settings, clock *hlc.Clock,
+	settings *cluster.Settings, clock *hlc.Clock, metrics *FlowControlMetrics,
 ) StoreStreamsTokenCounter {
 	sstc := &storeStreamsTokenCounter{
 		settings: settings,
 		clock:    clock,
+		metrics:  metrics,
 	}
 
 	sstc.mu.sendCounters = make(map[kvflowcontrol.Stream]TokenCounter)
@@ -94,6 +127,14 @@ type TokenCounter interface {
 	Deduct(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
 	// Return returns flow tokens for the given priority.
 	Return(context.Context, admissionpb.WorkClass, kvflowcontrol.Tokens)
+	// Tokens returns the current available token count for a given priority.
+	// Distinct from TokensAvailable, which will also create a handle for waiting
+	// when there are no tokens available. This should be used only for metrics
+	// and inspection.
+	Tokens(admissionpb.WorkClass) kvflowcontrol.Tokens
+	// GetAndResetStats returns the stats for the token counter since the last
+	// call to GetAndResetStats
+	GetAndResetStats(time.Time) (regularStats, elasticStats DeltaStats)
 	// String returns a string representation of the token counter.
 	String() string
 }

@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "kvflowconnectedstream",
     srcs = [
+        "metrics.go",
         "raft.go",
         "store_stream.go",
         "stream.go",
@@ -12,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvserverpb",
@@ -26,11 +28,14 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_dustin_go_humanize//:go-humanize",
     ],
 )
 

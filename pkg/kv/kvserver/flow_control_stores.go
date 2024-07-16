@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowconnectedstream"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -233,6 +234,7 @@ type StoresForRACv2 interface {
 	kvadmission.StoresForEvalRACv2
 	admission.OnLogEntryAdmitted
 	PiggybackedAdmittedProcessor
+	kvflowconnectedstream.SendQueuesSizeCounter
 }
 
 // PiggybackedAdmittedProcessor routes to the relevant range's
@@ -248,6 +250,8 @@ func MakeStoresForRACv2(stores *Stores) StoresForRACv2 {
 type storesForRACv2 Stores
 
 var _ kvadmission.StoresForEvalRACv2 = &storesForRACv2{}
+
+var _ kvflowconnectedstream.SendQueuesSizeCounter = &storesForRACv2{}
 
 // Lookup implements kvadmission.StoresForEvalRACv2.
 func (ss *storesForRACv2) Lookup(rangeID roachpb.RangeID) kvadmission.RangeControllerProvider {
@@ -291,6 +295,23 @@ func (ss *storesForRACv2) lookup(rangeID roachpb.RangeID) *replicaRACv2Integrati
 		panic("")
 	}
 	return rr
+}
+
+func (ss *storesForRACv2) SendQueuesSize() kvflowcontrol.Tokens {
+	ls := (*Stores)(ss)
+	var size kvflowcontrol.Tokens
+	if err := ls.VisitStores(func(s *Store) error {
+		s.VisitReplicas(func(r *Replica) (wantMore bool) {
+			if rc := r.raftMu.racV2Integration.RangeController(); rc != nil {
+				size += rc.SendQueueSize()
+			}
+			return true
+		})
+		return nil
+	}); err != nil {
+		panic("")
+	}
+	return size
 }
 
 // AdmittedLogEntry implements admission.OnLogEntryAdmitted.

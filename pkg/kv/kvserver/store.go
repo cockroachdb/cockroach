@@ -1280,6 +1280,7 @@ type StoreConfig struct {
 	// RACv2
 	RACv2StreamsTokenCounter kvflowconnectedstream.StoreStreamsTokenCounter
 	RACv2SendTokensWatcher   kvflowconnectedstream.StoreStreamSendTokensWatcher
+	RACv2Metrics             *kvflowconnectedstream.FlowControlMetrics
 	RACv2AdmittedPiggybacker AdmittedPiggybackStateManager
 
 	// SchedulerLatencyListener listens in on scheduling latencies, information

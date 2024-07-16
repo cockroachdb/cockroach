@@ -588,6 +588,8 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(
 				RaftInterface:     NewRaftNode(rr2.replica),
 				MessageSender:     rr2.replica,
 				Scheduler:         (*racV2Scheduler)(rr2.replica.store.scheduler),
+				Clock:             rr2.replica.store.cfg.Clock,
+				Metrics:           rr2.replica.store.cfg.RACv2Metrics,
 			}
 			state := kvflowconnectedstream.RangeControllerInitState{
 				ReplicaSet:  rr2.mu.replicas,

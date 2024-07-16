@@ -28,11 +28,14 @@ func TestTokenCounter(t *testing.T) {
 	}
 	settings := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClockForTesting(hlc.NewHybridManualClock())
+	metrics := NewMetrics()
+	ssTokenCounter := NewStoreStreamsTokenCounter(settings, clock, metrics)
+	metrics.Init(ssTokenCounter, sendQueuesSizeCounterForTesting{}, clock)
 
 	ElasticTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.elastic))
 	RegularTokensPerStream.Override(ctx, &settings.SV, int64(tokensPerWorkClass.regular))
 
-	counter := newTokenCounter(settings, clock)
+	counter := newTokenCounter(settings, clock, metrics.EvalFlowControlMetrics)
 
 	// Initially, expect there to be tokens available, so no handle is returned.
 	available, handle := counter.TokensAvailable(admissionpb.RegularWorkClass)

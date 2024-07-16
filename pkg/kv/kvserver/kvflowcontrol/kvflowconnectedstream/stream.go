@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -500,6 +501,9 @@ type RangeController interface {
 	// since there is no need to wait for tokens at this replica (which may
 	// still be the leaseholder).
 	Close(ctx context.Context)
+	// SendQueueSize returns the size of all send queues for this range
+	// controller.
+	SendQueueSize() kvflowcontrol.Tokens
 	// String returns a string representation of the RangeController.
 	String() string
 }
@@ -779,6 +783,8 @@ type RangeControllerOptions struct {
 	MessageSender MessageSender
 	// Scheduler is for scheduling popping from the send-queue.
 	Scheduler Scheduler
+	Metrics   *FlowControlMetrics
+	Clock     *hlc.Clock
 	// TestMode is set to true when running tests. Some locks are not acquired to
 	// allow synchronous callbacks from the testing framework.
 	TestMode bool
@@ -1002,6 +1008,8 @@ func (rc *RangeControllerImpl) WaitForEval(
 	ctx context.Context, pri admissionpb.WorkPriority,
 ) error {
 	wc := admissionpb.WorkClassFromPri(pri)
+	start := rc.opts.Clock.PhysicalTime()
+	rc.opts.Metrics.EvalFlowControlMetrics.onWaiting(wc)
 	waitForAllReplicateHandles := false
 	if wc == admissionpb.ElasticWorkClass {
 		waitForAllReplicateHandles = true
@@ -1017,6 +1025,7 @@ retry:
 
 	if vssRefreshCh == nil {
 		// RangeControllerImpl is closed.
+		rc.opts.Metrics.EvalFlowControlMetrics.onBypassed(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 		return nil
 	}
 	for _, vs := range vss {
@@ -1052,12 +1061,14 @@ retry:
 			case WaitSuccess:
 				continue
 			case ContextCanceled:
+				rc.opts.Metrics.EvalFlowControlMetrics.onErrored(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 				return ctx.Err()
 			case RefreshWaitSignaled:
 				goto retry
 			}
 		}
 	}
+	rc.opts.Metrics.EvalFlowControlMetrics.onAdmitted(wc, rc.opts.Clock.PhysicalTime().Sub(start))
 	return nil
 }
 
@@ -1295,6 +1306,16 @@ func (rc *RangeControllerImpl) Close(ctx context.Context) {
 	for _, rs := range rc.replicaMap {
 		rs.close(ctx)
 	}
+}
+
+func (rc *RangeControllerImpl) SendQueueSize() kvflowcontrol.Tokens {
+	var size kvflowcontrol.Tokens
+	for _, rs := range rc.replicaMap {
+		if rs.replicaSendStream != nil {
+			size += rs.replicaSendStream.queueSize()
+		}
+	}
+	return size
 }
 
 type replicaState struct {

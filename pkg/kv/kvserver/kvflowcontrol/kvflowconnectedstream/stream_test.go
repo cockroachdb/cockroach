@@ -277,10 +277,12 @@ func TestRangeController(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
+				metrics := NewMetrics()
 				raftImpls = make(map[roachpb.RangeID]*testingRaft)
 				controllers = make(map[roachpb.RangeID]RangeController)
 				sendTokensWatcher = NewStoreStreamSendTokensWatcher(stopper)
-				tokenCounter = NewStoreStreamsTokenCounter(settings, clock)
+				tokenCounter = NewStoreStreamsTokenCounter(settings, clock, metrics)
+				metrics.Init(tokenCounter, sendQueuesSizeCounterForTesting{}, clock)
 
 				for _, r := range scanRanges(t, d.Input) {
 					raftImpls[r.rangeID] = &testingRaft{}
