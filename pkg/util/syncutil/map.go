@@ -37,7 +37,7 @@ import (
 // separate Mutex or RWMutex.
 //
 // Nil values are not supported; to use an Map as a set store a dummy non-nil
-// pointer instead of nil.
+// pointer instead of nil. The Set type is provided for this purpose.
 //
 // The zero Map is valid and empty.
 //
@@ -167,6 +167,8 @@ func (e *entry[V]) load() (value *V, ok bool) {
 
 // Store sets the value for a key.
 func (m *Map[K, V]) Store(key K, value *V) {
+	m.assertNotNil(value)
+
 	read := m.loadReadOnly()
 	if e, ok := read.m[key]; ok && e.tryStore(value) {
 		return
@@ -192,6 +194,15 @@ func (m *Map[K, V]) Store(key K, value *V) {
 			m.read.Store(&readOnly[K, V]{m: read.m, amended: true})
 		}
 		m.dirty[key] = newEntry(value)
+	}
+}
+
+// assertNotNil asserts that a provided value to store is non-nil. Map does not
+// support nil values because nil is used to indicate that an entry has been
+// deleted. Callers should use a dummy non-nil pointer instead of nil.
+func (*Map[K, V]) assertNotNil(v *V) {
+	if v == nil {
+		panic("syncutil.Map: store with a nil value is unsupported")
 	}
 }
 
@@ -230,6 +241,8 @@ func (e *entry[V]) storeLocked(v *V) {
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 func (m *Map[K, V]) LoadOrStore(key K, value *V) (actual *V, loaded bool) {
+	m.assertNotNil(value)
+
 	// Avoid locking if it's a clean hit.
 	read := m.loadReadOnly()
 	if e, ok := read.m[key]; ok {
