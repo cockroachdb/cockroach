@@ -18,9 +18,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -83,7 +83,7 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 	require.NoError(t, err)
 	defer server.Stopper().Stop(context.Background())
 
-	getRevisionsForTest := func(setupSQL, schemaChangeSQL, dataSQL string, deletePreservingEncoding bool) ([]kvclient.VersionedValues, []byte, error) {
+	getRevisionsForTest := func(setupSQL, schemaChangeSQL, dataSQL string, deletePreservingEncoding bool) ([]backupccl.VersionedValues, []byte, error) {
 		setupStmts := strings.Split(setupSQL, ";")
 		for _, stmt := range setupStmts {
 			if _, err := sqlDB.Exec(stmt); err != nil {
@@ -128,14 +128,14 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 		prefix := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc.GetID(), index.ID)
 		prefixEnd := append(prefix, []byte("\xff")...)
 
-		revisionsCh := make(chan []kvclient.VersionedValues)
+		revisionsCh := make(chan []backupccl.VersionedValues)
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(revisionsCh)
-			return kvclient.GetAllRevisions(context.Background(), kvDB, prefix, prefixEnd, now, end, revisionsCh)
+			return backupccl.GetAllRevisions(context.Background(), kvDB, prefix, prefixEnd, now, end, revisionsCh)
 		})
 
-		var revisions []kvclient.VersionedValues
+		var revisions []backupccl.VersionedValues
 		g.GoCtx(func(ctx context.Context) error {
 			for r := range revisionsCh {
 				revisions = append(revisions, r...)
@@ -397,9 +397,9 @@ type WrappedVersionedValues struct {
 }
 
 func compareRevisionHistories(
-	expectedHistory []kvclient.VersionedValues,
+	expectedHistory []backupccl.VersionedValues,
 	expectedPrefixLength int,
-	deletePreservingHistory []kvclient.VersionedValues,
+	deletePreservingHistory []backupccl.VersionedValues,
 	deletePreservingPrefixLength int,
 ) error {
 	decodedExpected, err := decodeVersionedValues(expectedHistory, false)
@@ -416,7 +416,7 @@ func compareRevisionHistories(
 }
 
 func decodeVersionedValues(
-	revisions []kvclient.VersionedValues, deletePreserving bool,
+	revisions []backupccl.VersionedValues, deletePreserving bool,
 ) ([]WrappedVersionedValues, error) {
 	wrappedVersionedValues := make([]WrappedVersionedValues, len(revisions))
 

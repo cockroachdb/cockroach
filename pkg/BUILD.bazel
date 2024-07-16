@@ -208,6 +208,7 @@ ALL_TESTS = [
     "//pkg/kv/kvclient/rangefeed/rangefeedbuffer:rangefeedbuffer_test",
     "//pkg/kv/kvclient/rangefeed/rangefeedcache:rangefeedcache_test",
     "//pkg/kv/kvclient/rangefeed:rangefeed_test",
+    "//pkg/kv/kvclient:kvclient_disallowed_imports_test",
     "//pkg/kv/kvclient:kvclient_test",
     "//pkg/kv/kvnemesis:kvnemesis_test",
     "//pkg/kv/kvpb:kvpb_disallowed_imports_test",
