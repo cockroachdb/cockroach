@@ -200,7 +200,8 @@ type saramaConfig struct {
 		MaxMessages int          `json:",omitempty"`
 	}
 
-	Compression compressionCodec `json:",omitempty"`
+	Compression      compressionCodec `json:",omitempty"`
+	CompressionLevel int              `json:",omitempty"`
 
 	RequiredAcks string `json:",omitempty"`
 
@@ -241,6 +242,7 @@ func defaultSaramaConfig() *saramaConfig {
 	// The default compression protocol is sarama.CompressionNone,
 	// which is 0.
 	config.Compression = 0
+	config.CompressionLevel = sarama.CompressionLevelDefault
 
 	// This works around what seems to be a bug in sarama where it isn't
 	// computing the right value to compare against `Producer.MaxMessageBytes`
@@ -860,6 +862,9 @@ func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 	kafka.Producer.Flush.MaxMessages = c.Flush.MaxMessages
 	kafka.ClientID = c.ClientID
 
+	kafka.Producer.Compression = sarama.CompressionCodec(c.Compression)
+	kafka.Producer.CompressionLevel = c.CompressionLevel
+
 	if c.Version != "" {
 		parsedVersion, err := sarama.ParseKafkaVersion(c.Version)
 		if err != nil {
@@ -874,7 +879,7 @@ func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 		}
 		kafka.Producer.RequiredAcks = parsedAcks
 	}
-	kafka.Producer.Compression = sarama.CompressionCodec(c.Compression)
+
 	return nil
 }
 
