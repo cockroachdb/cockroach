@@ -386,22 +386,25 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.String},
+			Types:      tree.VariadicType{VarType: types.Any},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				var buffer bytes.Buffer
-				length := 0
+				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
 				for _, d := range args {
 					if d == tree.DNull {
 						continue
 					}
-					length += len(string(tree.MustBeDString(d)))
-					if length > builtinconstants.MaxAllocatedStringSize {
+					// This is more lenient than we want and may lead to serious
+					// over-allocation for some data types (e.g. printing large arrays of
+					// integers). A proper solution would add a lot of complexity
+					// here, with attendant performance penalties. The right answer is
+					// probably to push this functionality into the Formatter.
+					if ctx.Buffer.Len()+int(d.Size()) > builtinconstants.MaxAllocatedStringSize {
 						return nil, errStringTooLarge
 					}
-					buffer.WriteString(string(tree.MustBeDString(d)))
+					d.Format(ctx)
 				}
-				return tree.NewDString(buffer.String()), nil
+				return tree.NewDString(ctx.CloseAndGetString()), nil
 			},
 			Info:              "Concatenates a comma-separated list of strings.",
 			Volatility:        volatility.Immutable,
