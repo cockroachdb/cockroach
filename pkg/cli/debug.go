@@ -184,7 +184,7 @@ func OpenFilesystemEnv(dir string, rw fs.RWMode) (*fs.Env, error) {
 			return nil, err
 		}
 	}
-	return fs.InitEnv(context.Background(), vfs.Default, dir, envConfig, nil /* statsCollector */)
+	return fs.InitEnv(context.Background(), vfs.Default, dir, envConfig, nil /* diskWriteStats */)
 }
 
 // OpenEngine opens the engine at 'dir'. Depending on the supplied options,
@@ -1724,7 +1724,7 @@ func pebbleCryptoInitializer(ctx context.Context) {
 			if err := PopulateEnvConfigHook(dir, &envConfig); err != nil {
 				return nil, err
 			}
-			env, err := fs.InitEnv(ctx, vfs.Default, dir, envConfig, nil /* statsCollector */)
+			env, err := fs.InitEnv(ctx, vfs.Default, dir, envConfig, nil /* diskWriteStats */)
 			if err != nil {
 				return nil, err
 			}

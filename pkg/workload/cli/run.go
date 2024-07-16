@@ -190,7 +190,7 @@ func CmdHelper(
 			if err := cfg.Validate(nil /* no default log directory */); err != nil {
 				return err
 			}
-			if _, err := log.ApplyConfig(cfg, log.FileSinkMetrics{}, nil /* fatalOnLogStall */); err != nil {
+			if _, err := log.ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */); err != nil {
 				return err
 			}
 		}

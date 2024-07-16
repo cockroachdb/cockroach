@@ -170,6 +170,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
+        "//pkg/storage/disk",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/testutils",
