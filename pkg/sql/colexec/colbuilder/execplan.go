@@ -315,6 +315,8 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 // - post describes the post-processing spec of the processor. It will be used
 // to determine whether top K sort can be planned. If you want the general sort
 // operator, then pass in empty struct.
+// - diskBackedReuseMode indicates whether this disk-backed sort can be used
+// multiple times.
 func (r opResult) createDiskBackedSort(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -328,6 +330,7 @@ func (r opResult) createDiskBackedSort(
 	processorID int32,
 	opNamePrefix redact.RedactableString,
 	factory coldata.ColumnFactory,
+	diskBackedReuseMode colexecop.BufferingOpReuseMode,
 ) colexecop.Operator {
 	var (
 		sorterMemMonitorName redact.RedactableString
@@ -440,6 +443,7 @@ func (r opResult) createDiskBackedSort(
 			r.ToClose = append(r.ToClose, es.(colexecop.Closer))
 			return es
 		},
+		diskBackedReuseMode,
 		args.TestingKnobs.SpillingCallbackFn,
 	)
 	r.ToClose = append(r.ToClose, diskSpiller)
@@ -470,11 +474,15 @@ func (r opResult) makeDiskBackedSorterConstructor(
 			// acquired. The hash-based partitioner will do this up front.
 			sortArgs.FDSemaphore = nil
 		}
+		// Given that this disk-backed sort is created for the fallback strategy
+		// of the hash-based partitioner, it can be reused multiple times (in
+		// the worst case, for each partition).
+		const reuseMode = colexecop.BufferingOpCanReuse
 		return r.createDiskBackedSort(
 			ctx, flowCtx, &sortArgs, input, inputTypes,
 			execinfrapb.Ordering{Columns: orderingCols}, 0, /* limit */
 			0 /* matchLen */, maxNumberPartitions, args.Spec.ProcessorID,
-			opNamePrefix+"-", factory,
+			opNamePrefix+"-", factory, reuseMode,
 		)
 	}
 }
@@ -1059,6 +1067,7 @@ func NewColOperator(
 							result.ToClose = append(result.ToClose, toClose)
 							return eha
 						},
+						colexecop.BufferingOpNoReuse,
 						args.TestingKnobs.SpillingCallbackFn,
 					)
 					result.Root = diskSpiller
@@ -1125,6 +1134,7 @@ func NewColOperator(
 						result.ToClose = append(result.ToClose, toClose)
 						return ed
 					},
+					colexecop.BufferingOpNoReuse,
 					args.TestingKnobs.SpillingCallbackFn,
 				)
 				result.Root = diskSpiller
@@ -1415,7 +1425,7 @@ func NewColOperator(
 			limit := core.Sorter.Limit
 			result.Root = result.createDiskBackedSort(
 				ctx, flowCtx, args, input, result.ColumnTypes, ordering, limit, matchLen, 0, /* maxNumberPartitions */
-				spec.ProcessorID, "" /* opNamePrefix */, factory,
+				spec.ProcessorID, "" /* opNamePrefix */, factory, colexecop.BufferingOpNoReuse,
 			)
 
 		case core.Windower != nil:
@@ -1475,7 +1485,8 @@ func NewColOperator(
 								ctx, flowCtx, args, input, inputTypes,
 								execinfrapb.Ordering{Columns: orderingCols}, 0 /*limit */, 0, /* matchLen */
 								0 /* maxNumberPartitions */, spec.ProcessorID,
-								opNamePrefix, factory)
+								opNamePrefix, factory, colexecop.BufferingOpNoReuse,
+							)
 						},
 					)
 					// Window partitioner will append a boolean column.
@@ -1485,7 +1496,7 @@ func NewColOperator(
 						input = result.createDiskBackedSort(
 							ctx, flowCtx, args, input, result.ColumnTypes,
 							wf.Ordering, 0 /* limit */, 0 /* matchLen */, 0, /* maxNumberPartitions */
-							spec.ProcessorID, opNamePrefix, factory,
+							spec.ProcessorID, opNamePrefix, factory, colexecop.BufferingOpNoReuse,
 						)
 					}
 				}
