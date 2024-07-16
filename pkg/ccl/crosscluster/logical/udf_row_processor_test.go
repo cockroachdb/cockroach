@@ -263,10 +263,15 @@ func setupTwoDBUDFTestCluster(
 	_, err = sqlDB.Exec("CREATE DATABASE b")
 	require.NoError(t, err)
 
+	sysSQL := srv.SystemLayer().SQLConn(t)
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
 	sqlB := s.SQLConn(t, serverutils.DBName("b"))
 	for _, s := range testClusterSettings {
 		_, err := sqlA.Exec(s)
+		require.NoError(t, err)
+	}
+	for _, s := range testClusterSystemSettings {
+		_, err = sysSQL.Exec(s)
 		require.NoError(t, err)
 	}
 	defaultSQLProcessor = udfApplierProcessor
