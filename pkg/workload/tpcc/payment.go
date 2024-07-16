@@ -157,7 +157,7 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 		)
 
 		// Starting the background goroutine which will reset the w_ytd values periodically in warehouseWytdResetPeriod
-		go p.startResetValueWorker(ctx)
+		go p.startResetValueWorker()
 	}
 
 	if err := p.sr.Init(ctx, "payment", mcp); err != nil {
@@ -167,45 +167,44 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 	return p, nil
 }
 
-func (p *payment) startResetValueWorker(ctx context.Context) {
-	ticker := time.NewTicker(warehouseWytdResetPeriod)
-	defer ticker.Stop()
+func (p *payment) startResetValueWorker() {
+	p.config.resetTableGrp.GoCtx(func(ctx context.Context) error {
+		ticker := time.NewTicker(warehouseWytdResetPeriod)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
 
-	p.config.resetTableWg.Add(1)
-	defer p.config.resetTableWg.Done()
+				// Creating batches of maxRowsToUpdateTxn to avoid long-running txns
+				for startRange := 0; startRange < p.config.warehouses; startRange += maxRowsToUpdateTxn {
+					endRange := min(p.config.warehouses, startRange+maxRowsToUpdateTxn)
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
+					if _, err := p.config.executeTx(
+						ctx, p.mcp.Get(),
+						func(tx pgx.Tx) error {
+							if _, err := p.resetWarehouse.ExecTx(
+								ctx, tx, wYtd, startRange, endRange,
+							); err != nil {
+								return errors.Wrap(err, "reset warehouse failed")
+							}
 
-			// Creating batches of maxRowsToUpdateTxn to avoid long-running txns
-			for startRange := 0; startRange < p.config.warehouses; startRange += maxRowsToUpdateTxn {
-				endRange := min(p.config.warehouses, startRange+maxRowsToUpdateTxn)
+							if _, err := p.resetDistrict.ExecTx(
+								ctx, tx, ytd, startRange, endRange,
+							); err != nil {
+								return errors.Wrap(err, "reset district failed")
+							}
 
-				if _, err := p.config.executeTx(
-					ctx, p.mcp.Get(),
-					func(tx pgx.Tx) error {
-						if _, err := p.resetWarehouse.ExecTx(
-							ctx, tx, wYtd, startRange, endRange,
-						); err != nil {
-							return errors.Wrap(err, "reset warehouse failed")
-						}
-
-						if _, err := p.resetDistrict.ExecTx(
-							ctx, tx, ytd, startRange, endRange,
-						); err != nil {
-							return errors.Wrap(err, "reset district failed")
-						}
-
-						return nil
-					}); err != nil {
-					log.Errorf(ctx, "%v", err)
+							return nil
+						}); err != nil {
+						log.Errorf(ctx, "%v", err)
+					}
 				}
 			}
 		}
-	}
+	})
+
 }
 
 func (p *payment) run(ctx context.Context, wID int) (interface{}, time.Duration, error) {
