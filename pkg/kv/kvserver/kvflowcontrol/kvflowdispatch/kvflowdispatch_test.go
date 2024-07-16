@@ -187,6 +187,34 @@ func TestDispatchSize(t *testing.T) {
 	require.LessOrEqual(t, len(entry), AdmittedRaftLogEntriesBytes, "consider adjusting kvadmission.flow_control.dispatch.max_bytes")
 }
 
+func BenchmarkDispatch(b *testing.B) {
+	ctx := context.Background()
+	nodeIDContainer := &base.NodeIDContainer{}
+	nodeID := roachpb.NodeID(1)
+	nodeID2 := roachpb.NodeID(2)
+	storeID := roachpb.StoreID(1)
+	rangeID := roachpb.RangeID(1)
+	nodeIDContainer.Set(ctx, nodeID)
+
+	dispatch := New(metric.NewRegistry(), dummyHandles{}, nodeIDContainer)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for j := 0; j < 5; j++ {
+			dispatch.Dispatch(ctx, nodeID2, kvflowcontrolpb.AdmittedRaftLogEntries{
+				RangeID:           rangeID,
+				AdmissionPriority: int32(admissionpb.NormalPri),
+				UpToRaftLogPosition: kvflowcontrolpb.RaftLogPosition{
+					Term:  1,
+					Index: 10,
+				},
+				StoreID: storeID,
+			})
+		}
+		dispatch.PendingDispatchFor(nodeID2, math.MaxInt64)
+	}
+}
+
 func parseLogPosition(t *testing.T, input string) kvflowcontrolpb.RaftLogPosition {
 	inner := strings.Split(input, "/")
 	require.Len(t, inner, 2)
