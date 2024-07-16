@@ -675,7 +675,7 @@ func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	if err != nil {
 		return err
 	}
-	r.raftMu.racV2Integration.tryUpdateLeader(context.Background(), leaderID, false)
+	r.raftMu.racV2Integration.tryUpdateLeader(r.raftCtx, leaderID, false)
 	return nil
 }
 

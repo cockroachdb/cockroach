@@ -443,6 +443,19 @@ corresponds to user facing work.
 // but less, and since both the proposal and reproposal are going to be
 // persisted in the raft log we count them both.
 // ======================================================================
+// Leader not in the set of replicas.
+//
+// It is possible for a follower to receive knowledge of the leader via a
+// different path than the raft group conf. Specifically, if a follower
+// receives a higher-term message, Raft sets the term and sets the lead field,
+// even if the config Raft is operating with is outdated and does not contain
+// this replica yet. There may also be a case on the leader where when there
+// is a config change that removes this node, but the node briefly continues
+// to lead the term while no longer being in the config, as discussed in
+// https://cockroachlabs.slack.com/archives/C06UFBJ743F/p1721066789728519?thread_ts=1720981359.607369&cid=C06UFBJ743F
+// So the RACv2 code should make no assumption about the leader being in the
+// set of replicas derived from the descriptor.
+// ======================================================================
 
 type RangeController interface {
 	// WaitForEval is called concurrently by all requests wanting to evaluate.
@@ -875,6 +888,10 @@ func (rc *RangeControllerImpl) updateReplicaSetAndMap(
 		desc, ok := newSet[r]
 		if !ok {
 			rs := rc.replicaMap[r]
+			// It is possible that we close the replicaState corresponding to the
+			// local replica, while it stays leader and so the RangeControllerImpl
+			// continues to exist. See discussion in
+			// https://cockroachlabs.slack.com/archives/C06UFBJ743F/p1721066789728519?thread_ts=1720981359.607369&cid=C06UFBJ743F.
 			rs.close(ctx)
 			delete(rc.replicaMap, r)
 		} else {

@@ -482,7 +482,10 @@ type replicaRACv2Integration struct {
 		// leaderID is set in tryUpdateLeader.
 		leaderID roachpb.ReplicaID
 		// leaderNodeID is a function of leaderID and replicas. It is set when
-		// leaderID is non-zero and replicas is initialized.
+		// leaderID is non-zero and replicas is initialized. Both leaderNodeID and
+		// leaderStoreID can be 0 on a follower even if leaderID is non-zero.
+		// These will become eventually consistent when the replicas state catches
+		// up.
 		leaderNodeID                roachpb.NodeID
 		leaderStoreID               roachpb.StoreID
 		scheduledAdmittedProcessing bool
@@ -543,19 +546,26 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(
 	} else {
 		rd, ok := rr2.mu.replicas[leaderID]
 		if !ok {
-			// TODO(racV2-integration): This is a bug. We should not be in this
-			// state. Rarely hitting this in TestRACV2Basic/relocate_range --stress.
-			//
-			//  leader=4 is not in the set of replicas=[(n1,s1):1,(n2,s2):2LEARNER,(n3,s3):3LEARNER]
-			//  desc=r69:/{Table/Max-Max} [(n1,s1):1, (n2,s2):2LEARNER, (n3,s3):3LEARNER, next=4, gen=3]
-			//
-			log.Errorf(ctx,
-				"leader=%d is not in the set of replicas=%v desc=%v",
-				leaderID, rr2.mu.replicas, rr2.replica.Desc())
-			return
+			if leaderID == rr2.replica.replicaID {
+				// Is leader, but not in the set of replicas. We expect this should
+				// not be happening anymore, due to raft.Config.StepDownOnRemoval
+				// being set to true. But we tolerate it.
+				log.Errorf(ctx,
+					"leader=%d is not in the set of replicas=%v desc=%v",
+					leaderID, rr2.mu.replicas, rr2.replica.Desc())
+				rr2.mu.leaderNodeID = rr2.replica.NodeID()
+				rr2.mu.leaderStoreID = rr2.replica.StoreID()
+			} else {
+				// A follower, which can learn about a leader before it learns about a
+				// config change that includes the leader in the set of replicas, so
+				// ignore.
+				rr2.mu.leaderNodeID = 0
+				rr2.mu.leaderStoreID = 0
+			}
+		} else {
+			rr2.mu.leaderNodeID = rd.NodeID
+			rr2.mu.leaderStoreID = rd.StoreID
 		}
-		rr2.mu.leaderNodeID = rd.NodeID
-		rr2.mu.leaderStoreID = rd.StoreID
 	}
 	if rr2.mu.leaderID != rr2.replica.replicaID {
 		if rr2.mu.rcAtLeader != nil {
@@ -693,8 +703,12 @@ func (rr2 *replicaRACv2Integration) onDescChanged(
 		rr2.raftAdmittedInterface = kvflowconnectedstream.NewRaftNode(rn)
 		rr2.rawNode = rn
 	}
+	// log.Infof(ctx, "onDescChanged %v", desc)
 	rr2.mu.replicas = descToReplicaSet(desc)
-	if wasUninitialized {
+	// We also include rr2.mu.leaderNodeID == 0 in the conditional below since
+	// the leaderID can get ahead of the set of replicas, and we use this chance
+	// to make things consistent.
+	if wasUninitialized || rr2.mu.leaderNodeID == 0 {
 		if rr2.mu.leaderID != 0 {
 			rr2.tryUpdateLeaderLocked(ctx, rr2.mu.leaderID, true, rr2.rawNode.NextUnstableIndex())
 		}
@@ -790,7 +804,7 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(ctx context.Context, entries
 		nextAdmitted := rr2.mu.waitingForAdmissionState.computeAdmitted(sindex)
 		if admittedIncreased(rr2.raftAdmittedInterface.GetAdmitted(), nextAdmitted) {
 			msgAppResp := rr2.raftAdmittedInterface.SetAdmitted(nextAdmitted)
-			if rr2.mu.leaderID != 0 && rr2.mu.leaderID != rr2.replica.replicaID {
+			if rr2.mu.leaderID != 0 && rr2.mu.leaderID != rr2.replica.replicaID && rr2.mu.leaderNodeID != 0 {
 				rr2.admittedPiggybacker.AddMsgForRange(rr2.replica.RangeID, rr2.mu.leaderNodeID, rr2.mu.leaderStoreID, msgAppResp)
 			}
 			// rr2.mu.leaderID can be 0 if there is no known leader.
