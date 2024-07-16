@@ -471,7 +471,9 @@ type RangeController interface {
 	//
 	// NB: a new follower here may already be in StateReplicate and have a
 	// send-queue.
-	SetReplicas(ctx context.Context, replicas ReplicaSet) error
+	//
+	// Requires Replica.raftMu and Replica.mu to be held.
+	SetReplicasLocked(ctx context.Context, replicas ReplicaSet) error
 	// SetLeaseholder is called from leasePostApplyLocked.
 	// TODO: I suspect raftMu is held here too.
 	SetLeaseholder(ctx context.Context, replica roachpb.ReplicaID)
@@ -577,7 +579,7 @@ type RaftInterface interface {
 	//
 	// When a follower transitions from {StateProbe,StateSnapshot} =>
 	// StateReplicate, we start trying to send MsgApps. We should
-	// notice such transitions both in HandleRaftEvent and SetReplicas.
+	// notice such transitions both in HandleRaftEvent and SetReplicasLocked.
 	//
 	// RACv1 also cared about three other cases where the follower behaved as if
 	// it were disconnected (a) paused follower, (b) follower is behind, (c)
@@ -588,14 +590,21 @@ type RaftInterface interface {
 	// elastic experiencing a hiccup, given it paces at rate of slowest). For
 	// (a), we plan to remove follower pausing. So the v2 code will be
 	// simplified.
+	//
+	// Requires Replica.raftMu to be held, Replica.mu is not held.
 	FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo
-	// LastEntryIndex is the highest index assigned in the log.
-	// Only for debugging.
-	LastEntryIndex() uint64
+	// FollowerStateRLocked return the current state of a follower.
+	//
+	// Requires Replica.raftMu and Replica.mu.RLock to be held.
+	FollowerStateRLocked(replicaID roachpb.ReplicaID) FollowerStateInfo
 	// NextUnstableIndex returns the index of the next entry that will be sent to
 	// local storage, if there are any. All entries < this index are either stored,
 	// or have been sent to storage.
+	//
+	// Requires Replica.raftMu to be held, Replica.mu is not held.
 	NextUnstableIndex() uint64
+	// Requires Replica.mu.RLock and Replica.raftMu to be held.
+	NextUnstableIndexRLocked() uint64
 	// MakeMsgApp is used to construct a MsgApp for entries in [start, end).
 	// REQUIRES: start == FollowerStateInfo.Next and replicaID is in
 	// StateReplicate.
@@ -619,7 +628,14 @@ type RaftInterface interface {
 	// TODO: the transition to StateSnapshot is not guaranteed, there are some
 	// error conditions after which the flow stays in StateReplicate. We should
 	// define or eliminate these cases.
+	//
+	// Requires Replica.raftMu to be held, Replica.mu is not held.
 	MakeMsgApp(replicaID roachpb.ReplicaID, start, end uint64, maxSize int64) (raftpb.Message, error)
+}
+
+type RaftNode interface {
+	RaftInterface
+	RaftAdmittedInterface
 }
 
 // Scheduler abstracts the raftScheduler to allow the RangeController to
@@ -671,14 +687,16 @@ func (f FollowerStateInfo) String() string {
 // See the "Design for robust flow token return in RACv2" earlier in this
 // file for details.
 type RaftAdmittedInterface interface {
-	// StableIndex is the index up to which the raft log is stable. The
+	// StableIndexRLocked is the index up to which the raft log is stable. The
 	// Admitted values must be <= this index. It advances when Raft sees
 	// MsgStorageAppendResp.
-	StableIndex() uint64
-	// GetAdmitted returns the admitted values known to Raft. Except for
-	// snapshot application, this value will only advance via the caller
-	// calling SetAdmitted. When a snapshot is applied, the snapshot index
-	// becomes the value of admitted for all priorities.
+	//
+	// Requiries Replica.raftMu and Replica.mu.Rlock are held.
+	StableIndexRLocked() uint64
+	// GetAdmittedRLocked returns the admitted values known to Raft. Except for
+	// snapshot application, this value will only advance via the caller calling
+	// SetAdmitted. When a snapshot is applied, the snapshot index becomes the
+	// value of admitted for all priorities.
 	//
 	// TODO: Get/SetAdmitted can be moved out of this interface, since all
 	// admittance happens outside raft. Alternatively, move more things to raft
@@ -690,8 +708,10 @@ type RaftAdmittedInterface interface {
 	// and an entry at the same index can change. It is easy to make a bug if
 	// there is no explicit coupling with the leader term, because a term change
 	// can slip through in between Get/SetAdmitted calls, by virtue of any Step().
-	GetAdmitted() [kvflowcontrolpb.NumRaftPriorities]uint64
-	// SetAdmitted sets the new value of admitted.
+	//
+	// Requires Replica.raftMu and Replica.mu.Rlock are held.
+	GetAdmittedRLocked() [kvflowcontrolpb.NumRaftPriorities]uint64
+	// SetAdmittedLocked sets the new value of admitted.
 	// REQUIRES:
 	//  The admitted[i] values in the parameter are >= the corresponding
 	//  values returned by GetAdmitted.
@@ -699,7 +719,9 @@ type RaftAdmittedInterface interface {
 	//  admitted[i] <= stableIndex.
 	//
 	// Returns a MsgAppResp that contains these latest admitted values.
-	SetAdmitted(admitted [kvflowcontrolpb.NumRaftPriorities]uint64) raftpb.Message
+	//
+	// Requires Replica.raftMu and Replica.mu are held.
+	SetAdmittedLocked(admitted [kvflowcontrolpb.NumRaftPriorities]uint64) raftpb.Message
 }
 
 // MessageSender abstracts Replica.sendRaftMessage. The context used is always
@@ -750,6 +772,9 @@ type RangeControllerOptions struct {
 	MessageSender MessageSender
 	// Scheduler is for scheduling popping from the send-queue.
 	Scheduler Scheduler
+	// TestMode is set to true when running tests. Some locks are not acquired to
+	// allow synchronous callbacks from the testing framework.
+	TestMode bool
 }
 
 // RangeControllerInitState is the initial state at the time of creation.
@@ -1216,15 +1241,15 @@ func (rc *RangeControllerImpl) HandleControllerSchedulerEvent(ctx context.Contex
 	return nil
 }
 
-func (rc *RangeControllerImpl) scheduleReplica(r roachpb.ReplicaID) {
+func (rc *RangeControllerImpl) scheduleReplicaLocked(r roachpb.ReplicaID) {
 	rc.scheduledReplicas[r] = struct{}{}
 	if len(rc.scheduledReplicas) == 1 {
 		rc.opts.Scheduler.ScheduleControllerEvent(rc.opts.RangeID)
 	}
 }
 
-func (rc *RangeControllerImpl) SetReplicas(ctx context.Context, replicas ReplicaSet) error {
-	nextRaftIndex := rc.opts.RaftInterface.NextUnstableIndex()
+func (rc *RangeControllerImpl) SetReplicasLocked(ctx context.Context, replicas ReplicaSet) error {
+	nextRaftIndex := rc.opts.RaftInterface.NextUnstableIndexRLocked()
 	rc.updateReplicaSetAndMap(ctx, replicas, nextRaftIndex)
 	rc.updateVoterSets()
 	return nil
@@ -1297,7 +1322,8 @@ func NewReplicaState(
 		desc:              desc,
 		replicaSendStream: nil,
 	}
-	info := parent.opts.RaftInterface.FollowerState(desc.ReplicaID)
+	// Replica.RaftMu and Replica.mu must be held already.
+	info := parent.opts.RaftInterface.FollowerStateRLocked(desc.ReplicaID)
 	if info.State == tracker.StateReplicate {
 		rs.createReplicaSendStream(ctx, info.Next, nextRaftIndex)
 	}
@@ -1341,6 +1367,9 @@ func (rs *replicaState) createReplicaSendStream(
 
 func (rs *replicaState) close(ctx context.Context) {
 	if rs.replicaSendStream != nil {
+		rs.replicaSendStream.mu.Lock()
+		defer rs.replicaSendStream.mu.Unlock()
+
 		rs.replicaSendStream.closeLocked(ctx)
 	}
 }
@@ -1686,15 +1715,6 @@ func newReplicaSendStream(
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
 
-	log.VInfof(ctx, 1,
-		"init replica send stream(%v): index_to_send=%v next_raft_index=%d "+
-			"next_unstable_index=%d last_entry_index=%d [info=%v send_stream=%v]",
-		rss.parent.desc.ReplicaID, rss.sendQueue.indexToSend,
-		rss.sendQueue.nextRaftIndex,
-		parent.parent.opts.RaftInterface.NextUnstableIndex(),
-		parent.parent.opts.RaftInterface.LastEntryIndex(),
-		parent.parent.opts.RaftInterface.FollowerState(parent.desc.ReplicaID),
-		rss.stringLocked())
 	return rss
 }
 
@@ -1762,7 +1782,7 @@ func (rss *replicaSendStream) scheduleForceFlushLocked(ctx context.Context) {
 	}
 	rss.returnDeductedFromSchedulerTokensLocked(ctx)
 	rss.sendQueue.forceFlushScheduled = true
-	rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
+	rss.parent.parent.scheduleReplicaLocked(rss.parent.desc.ReplicaID)
 }
 
 func (rss *replicaSendStream) scheduled(ctx context.Context) (scheduleAgain bool) {
@@ -2036,7 +2056,14 @@ func (rss *replicaSendStream) notifyLocked(ctx context.Context) {
 			rss.parent.parent.opts.SendTokensWatcher, rss.stringLocked(),
 			rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID))
 
-		rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
+		if rss.parent.parent.opts.TestMode {
+			// NB: When running stream_test.go, we synchronously call back
+			// HandleControllerSchedulerEvent from ScheduleControllerEvent. Avoid
+			// re-entrant locking attempts.
+			rss.mu.Unlock()
+			defer rss.mu.Lock()
+		}
+		rss.parent.parent.scheduleReplicaLocked(rss.parent.desc.ReplicaID)
 	}
 }
 
@@ -2418,7 +2445,7 @@ func (rss *replicaSendStream) startProcessingSendQueueLocked(ctx context.Context
 				rss.parent.sendTokenCounter, admissionpb.ElasticWorkClass, rss)
 		}
 	} else if scheduleAgain := rss.scheduledLocked(ctx); scheduleAgain {
-		rss.parent.parent.scheduleReplica(rss.parent.desc.ReplicaID)
+		rss.parent.parent.scheduleReplicaLocked(rss.parent.desc.ReplicaID)
 	}
 }
 

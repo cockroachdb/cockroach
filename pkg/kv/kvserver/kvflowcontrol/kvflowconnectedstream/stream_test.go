@@ -295,6 +295,7 @@ func TestRangeController(t *testing.T) {
 						RaftInterface:     raftImpls[r.rangeID],
 						MessageSender:     raftImpls[r.rangeID],
 						Scheduler:         raftImpls[r.rangeID],
+						TestMode:          true,
 					}
 
 					raftImpls[r.rangeID].localReplicaID = roachpb.ReplicaID(r.localReplicaID)
@@ -310,7 +311,7 @@ func TestRangeController(t *testing.T) {
 			case "set_replicas":
 				for _, r := range scanRanges(t, d.Input) {
 					raftImpls[r.rangeID].setReplicas(r)
-					controllers[r.rangeID].SetReplicas(ctx, r.replicas())
+					controllers[r.rangeID].SetReplicasLocked(ctx, r.replicas())
 				}
 			case "set_leader":
 				var rangeID, leader int
@@ -420,6 +421,8 @@ func (t testingRange) replicas() ReplicaSet {
 	return replicas
 }
 
+var _ RaftInterface = &testingRaft{}
+
 func (t *testingRaft) prop(ctx context.Context, pri kvflowcontrolpb.RaftPriority, size uint64) {
 	t.lastEntryIndex++
 	index := t.lastEntryIndex
@@ -517,14 +520,18 @@ func (t *testingRaft) ready() testingRaftEvent {
 }
 
 func (t *testingRaft) FollowerState(replicaID roachpb.ReplicaID) FollowerStateInfo {
+	return t.FollowerStateRLocked(replicaID)
+}
+
+func (t *testingRaft) FollowerStateRLocked(replicaID roachpb.ReplicaID) FollowerStateInfo {
 	return t.replicas[replicaID].info
 }
 
-func (t *testingRaft) LastEntryIndex() uint64 {
-	return t.lastEntryIndex
+func (t *testingRaft) NextUnstableIndex() uint64 {
+	return t.NextUnstableIndexRLocked()
 }
 
-func (t *testingRaft) NextUnstableIndex() uint64 {
+func (t *testingRaft) NextUnstableIndexRLocked() uint64 {
 	return t.lastEntryIndex + 1
 }
 

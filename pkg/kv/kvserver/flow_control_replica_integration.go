@@ -575,30 +575,23 @@ func (rr2 *replicaRACv2Integration) tryUpdateLeaderLocked(
 		}
 	} else {
 		if rr2.mu.rcAtLeader == nil {
+			rr2.replica.mu.Lock()
+			defer rr2.replica.mu.Unlock()
+
 			// Transition from follower to leader.
-			var tenantID roachpb.TenantID
-			var rn *raft.RawNode
-			var leaseholderID roachpb.ReplicaID
-			func() {
-				rr2.replica.mu.RLock()
-				defer rr2.replica.mu.RUnlock()
-				tenantID = rr2.replica.mu.tenantID
-				rn = rr2.replica.mu.internalRaftGroup
-				leaseholderID = rr2.replica.mu.state.Lease.Replica.ReplicaID
-			}()
 			opts := kvflowconnectedstream.RangeControllerOptions{
 				RangeID:           rr2.replica.RangeID,
-				TenantID:          tenantID,
+				TenantID:          rr2.replica.mu.tenantID,
 				LocalReplicaID:    rr2.replica.replicaID,
 				SSTokenCounter:    rr2.replica.store.cfg.RACv2StreamsTokenCounter,
 				SendTokensWatcher: rr2.replica.store.cfg.RACv2SendTokensWatcher,
-				RaftInterface:     kvflowconnectedstream.NewRaftNode(rn),
+				RaftInterface:     NewRaftNode(rr2.replica),
 				MessageSender:     rr2.replica,
 				Scheduler:         (*racV2Scheduler)(rr2.replica.store.scheduler),
 			}
 			state := kvflowconnectedstream.RangeControllerInitState{
 				ReplicaSet:  rr2.mu.replicas,
-				Leaseholder: leaseholderID,
+				Leaseholder: rr2.replica.mu.state.Lease.Replica.ReplicaID,
 			}
 			rr2.mu.rcAtLeader = kvflowconnectedstream.NewRangeControllerImpl(ctx, opts, state, nextRaftIndex)
 		}
@@ -700,10 +693,9 @@ func (rr2 *replicaRACv2Integration) onDescChanged(
 			// comment, given replicaRACv2Integration never locks raftMu.
 			rn = rr2.replica.mu.internalRaftGroup
 		}()
-		rr2.raftAdmittedInterface = kvflowconnectedstream.NewRaftNode(rn)
+		rr2.raftAdmittedInterface = NewRaftNode(rr2.replica)
 		rr2.rawNode = rn
 	}
-	// log.Infof(ctx, "onDescChanged %v", desc)
 	rr2.mu.replicas = descToReplicaSet(desc)
 	// We also include rr2.mu.leaderNodeID == 0 in the conditional below since
 	// the leaderID can get ahead of the set of replicas, and we use this chance
@@ -716,7 +708,7 @@ func (rr2 *replicaRACv2Integration) onDescChanged(
 		if rr2.mu.rcAtLeader == nil {
 			return
 		}
-		if err := rr2.mu.rcAtLeader.SetReplicas(ctx, rr2.mu.replicas); err != nil {
+		if err := rr2.mu.rcAtLeader.SetReplicasLocked(ctx, rr2.mu.replicas); err != nil {
 			log.Errorf(ctx, "error setting replicas: %v", err)
 		}
 	}
@@ -800,10 +792,13 @@ func (rr2 *replicaRACv2Integration) handleRaftEvent(ctx context.Context, entries
 		// processing, it has already been stepped, so the stable index would have
 		// advanced.
 		rr2.replica.raftMu.AssertHeld()
-		sindex := rr2.raftAdmittedInterface.StableIndex()
+		rr2.replica.mu.Lock()
+		defer rr2.replica.mu.Unlock()
+
+		sindex := rr2.raftAdmittedInterface.StableIndexRLocked()
 		nextAdmitted := rr2.mu.waitingForAdmissionState.computeAdmitted(sindex)
-		if admittedIncreased(rr2.raftAdmittedInterface.GetAdmitted(), nextAdmitted) {
-			msgAppResp := rr2.raftAdmittedInterface.SetAdmitted(nextAdmitted)
+		if admittedIncreased(rr2.raftAdmittedInterface.GetAdmittedRLocked(), nextAdmitted) {
+			msgAppResp := rr2.raftAdmittedInterface.SetAdmittedLocked(nextAdmitted)
 			if rr2.mu.leaderID != 0 && rr2.mu.leaderID != rr2.replica.replicaID && rr2.mu.leaderNodeID != 0 {
 				rr2.admittedPiggybacker.AddMsgForRange(rr2.replica.RangeID, rr2.mu.leaderNodeID, rr2.mu.leaderStoreID, msgAppResp)
 			}
