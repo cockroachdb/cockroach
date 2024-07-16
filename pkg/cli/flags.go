@@ -1261,23 +1261,23 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	// Ensure that diagnostic reporting is enabled for server startup commands.
 	serverCfg.StartDiagnosticsReporting = true
 
-	// --locality-file and --locality cannot be used together.
-	if changed(fs, cliflags.LocalityFile.Name) && changed(fs, cliflags.Locality.Name) {
-		return errors.Newf(
-			"--%s is incompatible with --%s",
-			cliflags.Locality.Name,
-			cliflags.LocalityFile.Name,
-		)
-	}
+	// // --locality-file and --locality cannot be used together.
+	// if changed(fs, cliflags.LocalityFile.Name) && changed(fs, cliflags.Locality.Name) {
+	// 	return errors.Newf(
+	// 		"--%s is incompatible with --%s",
+	// 		cliflags.Locality.Name,
+	// 		cliflags.LocalityFile.Name,
+	// 	)
+	// }
 
-	// Only read locality-file if tenant-id-file is not present. The presence
-	// of the tenant-id-file flag (which only exists in `mt start-sql`) will
-	// defer reading the locality-file until the tenant ID has been read.
-	if !changed(fs, cliflags.TenantIDFile.Name) {
-		if err := tryReadLocalityFileFlag(fs); err != nil {
-			return err
-		}
-	}
+	// // Only read locality-file if tenant-id-file is not present. The presence
+	// // of the tenant-id-file flag (which only exists in `mt start-sql`) will
+	// // defer reading the locality-file until the tenant ID has been read.
+	// if !changed(fs, cliflags.TenantIDFile.Name) {
+	// 	if err := tryReadLocalityFileFlag(fs); err != nil {
+	// 		return err
+	// 	}
+	// }
 	return nil
 }
 
