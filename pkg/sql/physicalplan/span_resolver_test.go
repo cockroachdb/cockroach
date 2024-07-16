@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -94,7 +95,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	lr := physicalplan.NewSpanResolver(
 		s3.ClusterSettings(),
 		s3.DistSenderI().(*kvcoord.DistSender),
-		s3.NodeDescStoreI().(kvcoord.NodeDescStore),
+		s3.NodeDescStoreI().(kvclient.NodeDescStore),
 		s3.DistSQLPlanningNodeID(),
 		s3.Locality(),
 		s3.Clock(),
@@ -202,7 +203,7 @@ func TestSpanResolver(t *testing.T) {
 	lr := physicalplan.NewSpanResolver(
 		s.ClusterSettings(),
 		s.DistSenderI().(*kvcoord.DistSender),
-		s.NodeDescStoreI().(kvcoord.NodeDescStore),
+		s.NodeDescStoreI().(kvclient.NodeDescStore),
 		s.DistSQLPlanningNodeID(),
 		s.Locality(),
 		s.Clock(),
@@ -303,7 +304,7 @@ func TestMixedDirections(t *testing.T) {
 	lr := physicalplan.NewSpanResolver(
 		s.ClusterSettings(),
 		s.DistSenderI().(*kvcoord.DistSender),
-		s.NodeDescStoreI().(kvcoord.NodeDescStore),
+		s.NodeDescStoreI().(kvclient.NodeDescStore),
 		s.DistSQLPlanningNodeID(),
 		s.Locality(),
 		s.Clock(),

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -193,10 +192,10 @@ func getAllDescChanges(
 	endKey := startKey.PrefixEnd()
 
 	g := ctxgroup.WithContext(ctx)
-	allRevs := make(chan []kvclient.VersionedValues)
+	allRevs := make(chan []VersionedValues)
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(allRevs)
-		return kvclient.GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime, allRevs)
+		return GetAllRevisions(ctx, db, startKey, endKey, startTime, endTime, allRevs)
 	})
 
 	var res []backuppb.BackupManifest_DescriptorRevision
