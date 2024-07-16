@@ -812,6 +812,13 @@ func TestServerSocketSettings(t *testing.T) {
 	}
 }
 
+func TestFoo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Do nothing.
+}
+
 func TestLocalityAdvAddrFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
