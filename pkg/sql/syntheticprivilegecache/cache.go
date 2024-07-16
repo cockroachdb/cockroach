@@ -90,7 +90,7 @@ func (c *Cache) Get(
 	}
 	privDesc, err := c.c.LoadValueOutsideOfCacheSingleFlight(ctx, fmt.Sprintf("%s-%d", spo.GetPath(), desc.GetVersion()),
 		func(loadCtx context.Context) (_ interface{}, retErr error) {
-			return c.readFromStorage(ctx, txn, spo)
+			return c.readFromStorage(loadCtx, txn, spo)
 		})
 	if err != nil {
 		return nil, err
