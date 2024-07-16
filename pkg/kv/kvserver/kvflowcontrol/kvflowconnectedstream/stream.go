@@ -2063,7 +2063,7 @@ func (rss *replicaSendStream) notifyLocked(ctx context.Context) {
 			rss.mu.Unlock()
 			defer rss.mu.Lock()
 		}
-		rss.parent.parent.scheduleReplicaLocked(rss.parent.desc.ReplicaID)
+		rss.parent.parent.scheduleReplicaLocked(rss.parent.desc.ReplicaID) // nolint:deferunlockcheck
 	}
 }
 
