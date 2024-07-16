@@ -351,7 +351,8 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 	case <-cmvt.workloadInit:
 	}
 	node, db := h.RandomDB(r)
-	l.Printf("starting changefeed on node %d", node)
+	systemNode, systemDB := h.System.RandomDB(r)
+	l.Printf("starting changefeed on node %d (updating system settings via node %d)", node, systemNode)
 
 	options := map[string]string{
 		"updated":  "",
@@ -375,7 +376,7 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		ff.DistributionStrategy.v = &featureUnset
 	}
 
-	jobID, err := newChangefeedCreator(db, l, r, fmt.Sprintf("%s.%s", targetDB, targetTable),
+	jobID, err := newChangefeedCreator(db, systemDB, l, r, fmt.Sprintf("%s.%s", targetDB, targetTable),
 		cmvt.kafka.manager.sinkURL(ctx), ff).
 		With(options).
 		Create()
@@ -401,6 +402,10 @@ func (cmvt *cdcMixedVersionTester) runWorkloadCmd(r *rand.Rand) *roachtestutil.C
 func (cmvt *cdcMixedVersionTester) initWorkload(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
+	if err := enableTenantSplitScatter(l, r, h); err != nil {
+		return err
+	}
+
 	bankInit := roachtestutil.NewCommand("%s workload init bank", test.DefaultCockroachPath).
 		Flag("seed", r.Int63()).
 		Arg("{pgurl%s}", cmvt.crdbNodes)
@@ -498,8 +503,12 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, tester.crdbNodes,
-		// Multi-tenant deployments are currently unsupported. See #127378.
-		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
+		// We set the minimum supported version to 23.2 in this test as it
+		// relies on the `kv.rangefeed.enabled` cluster setting. This
+		// setting is, confusingly, labeled as `TenantWritable` in
+		// 23.1. That mistake was then fixed (#110676) but, to simplify
+		// this test, we only create changefeeds in more recent versions.
+		mixedversion.MinimumSupportedVersion("v23.2.0"),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
@@ -514,7 +523,9 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if supported {
 			coin := r.Int()%2 == 0
 			l.PrintfCtx(ctx, "Setting changefeed.mux_rangefeed.enabled=%t ", coin)
-			return h.ExecWithGateway(r, gatewayNodes, "SET CLUSTER SETTING changefeed.mux_rangefeed.enabled=$1", coin)
+			return h.System.ExecWithGateway(
+				r, gatewayNodes, "SET CLUSTER SETTING changefeed.mux_rangefeed.enabled=$1", coin,
+			)
 		}
 		return nil
 	}
@@ -529,7 +540,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if supported {
 			coin := r.Int()%2 == 0
 			l.PrintfCtx(ctx, "Setting kv.rangefeed.scheduler.enabled=%t", coin)
-			return h.Exec(r, "SET CLUSTER SETTING kv.rangefeed.scheduler.enabled=$1", coin)
+			return h.System.Exec(r, "SET CLUSTER SETTING kv.rangefeed.scheduler.enabled=$1", coin)
 		}
 		return nil
 	}
