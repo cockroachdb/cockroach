@@ -189,12 +189,37 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 		return errors.Wrap(err, "unable to create log directory")
 	}
 
-	logBytesWritten := serverCfg.DiskWriteStatsCollector.CreateStat(fs.CRDBLogWriteCategory)
+	// Identify the directory being used to write logs for stats collection
+	// purposes.
+	var logPath string
+	var err error
+	if cliCtx.ambiguousLogDir && firstStoreDir != nil {
+		logPath, err = filepath.Abs(*firstStoreDir)
+		if err != nil {
+			return err
+		}
+	} else if h.Config.FileDefaults.Dir != nil {
+		logPath, err = filepath.Abs(*h.Config.FileDefaults.Dir)
+		if err != nil {
+			return err
+		}
+	}
+	// Collect stats for disk writes incurred by logs.
+	fileSinkMetrics := log.FileSinkMetrics{}
+	if logPath != "" {
+		writeStatsCollector, err := serverCfg.DiskWriteStats.GetOrCreateCollector(logPath)
+		if err != nil {
+			return errors.Wrap(err, "unable to get stats collector for log directory")
+		}
+		logBytesWritten := writeStatsCollector.CreateStat(fs.CRDBLogWriteCategory)
+		fileSinkMetrics.LogBytesWritten = logBytesWritten
+	}
+
 	// Configuration ready and directories exist; apply it.
 	fatalOnLogStall := func() bool {
 		return fs.MaxSyncDurationFatalOnExceeded.Get(&serverCfg.Settings.SV)
 	}
-	logShutdownFn, err := log.ApplyConfig(h.Config, log.FileSinkMetrics{LogBytesWritten: logBytesWritten}, fatalOnLogStall)
+	logShutdownFn, err := log.ApplyConfig(h.Config, fileSinkMetrics, fatalOnLogStall)
 	if err != nil {
 		return err
 	}

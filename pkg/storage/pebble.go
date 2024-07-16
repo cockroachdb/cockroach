@@ -2201,7 +2201,9 @@ func (p *Pebble) GetMetrics() Metrics {
 	p.batchCommitStats.Lock()
 	m.BatchCommitStats = p.batchCommitStats.AggregatedBatchCommitStats
 	p.batchCommitStats.Unlock()
-	m.DiskWriteStats = p.diskWriteStatsCollector.GetStats()
+	if p.diskWriteStatsCollector != nil {
+		m.DiskWriteStats = p.diskWriteStatsCollector.GetStats()
+	}
 	return m
 }
 

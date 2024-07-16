@@ -172,9 +172,6 @@ type BaseConfig struct {
 	// run-time metrics instead of constructing a fresh one.
 	RuntimeStatSampler *status.RuntimeStatSampler
 
-	// DiskWriteStatsCollector will be used to categorically track disk write metrics.
-	DiskWriteStatsCollector *vfs.DiskWriteStatsCollector
-
 	// GoroutineDumpDirName is the directory name for goroutine dumps using
 	// goroutinedumper. Only used if DisableRuntimeStatsMonitor is false.
 	GoroutineDumpDirName string
@@ -283,6 +280,9 @@ type BaseConfig struct {
 
 	// DiskMonitorManager provides metrics for individual disks.
 	DiskMonitorManager *disk.MonitorManager
+
+	// DiskWriteStats is used to categorically track disk write metrics.
+	DiskWriteStats disk.WriteStatsManager
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -333,7 +333,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.InitTestingKnobs()
 	cfg.EarlyBootExternalStorageAccessor = cloud.NewEarlyBootExternalStorageAccessor(st, cfg.ExternalIODirConfig)
 	cfg.DiskMonitorManager = disk.NewMonitorManager(vfs.Default)
-	cfg.DiskWriteStatsCollector = vfs.NewDiskWriteStatsCollector()
+	cfg.DiskWriteStats = disk.NewWriteStatsManager(vfs.Default)
 }
 
 // InitTestingKnobs sets up any testing knobs based on e.g. envvars.
@@ -752,13 +752,13 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		stickyRegistry = serverKnobs.StickyVFSRegistry
 	}
 
-	storeEnvs, err := fs.InitEnvsFromStoreSpecs(ctx, cfg.Stores.Specs, fs.ReadWrite, stickyRegistry, cfg.DiskWriteStatsCollector)
+	storeEnvs, err := fs.InitEnvsFromStoreSpecs(ctx, cfg.Stores.Specs, fs.ReadWrite, stickyRegistry, cfg.DiskWriteStats)
 	if err != nil {
 		return Engines{}, err
 	}
 	defer storeEnvs.CloseAll()
 
-	walFailoverConfig := storage.WALFailover(cfg.WALFailover, storeEnvs, vfs.Default, cfg.DiskWriteStatsCollector)
+	walFailoverConfig := storage.WALFailover(cfg.WALFailover, storeEnvs, vfs.Default, cfg.DiskWriteStats)
 
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
@@ -767,7 +767,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			walFailoverConfig,
 			storage.Attributes(spec.Attributes),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
-			storage.DiskWriteStatsCollector(cfg.DiskWriteStatsCollector),
 			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores.Specs)),
 		}
 		if len(storeKnobs.EngineKnobs) > 0 {
@@ -815,6 +814,12 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if err != nil {
 				return Engines{}, errors.Wrap(err, "creating disk monitor")
 			}
+
+			statsCollector, err := cfg.DiskWriteStats.GetOrCreateCollector(spec.Path)
+			if err != nil {
+				return Engines{}, errors.Wrap(err, "retrieving stats collector")
+			}
+			addCfgOpt(storage.DiskWriteStatsCollector(statsCollector))
 
 			if spec.Size.Percent > 0 {
 				detail(redact.Sprintf("store %d: max size %s (calculated from %.2f percent of total), max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), spec.Size.Percent, openFileLimitPerStore))

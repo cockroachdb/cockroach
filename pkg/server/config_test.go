@@ -23,12 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,6 +55,36 @@ func TestParseInitNodeAttributes(t *testing.T) {
 	if a, e := cfg.NodeAttributes.Attrs, []string{"attr1=val1", "attr2=val2"}; !reflect.DeepEqual(a, e) {
 		t.Fatalf("expected attributes: %v, found: %v", e, a)
 	}
+}
+
+// TestCreateEnginesWithMultipleStores creates multiple engines and verifies
+// that the correct number of vfs.DiskWriteStatsCollector were initialized.
+func TestCreateEnginesWithMultipleStores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
+	// Override with TestStatsManager
+	cfg.DiskWriteStats = disk.NewTestingStatsManager(vfs.Default)
+	tmpDir1, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tmpDir2, cleanup2 := testutils.TempDir(t)
+	defer cleanup2()
+	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{
+		{Size: base.SizeSpec{InBytes: base.MinimumStoreSize}, Path: tmpDir1},
+		{Size: base.SizeSpec{InBytes: base.MinimumStoreSize}, Path: tmpDir2},
+		{InMemory: true, Size: base.SizeSpec{InBytes: base.MinimumStoreSize * 100}},
+	}}
+	engines, err := cfg.CreateEngines(context.Background())
+	if err != nil {
+		t.Fatalf("Failed to initialize stores: %s", err)
+	}
+	defer engines.Close()
+	if err := cfg.InitNode(context.Background()); err != nil {
+		t.Fatalf("Failed to initialize node: %s", err)
+	}
+	// In-memory stores should not create a stats collector.
+	require.Len(t, cfg.DiskWriteStats.GetAllStatsCollectors(), 2,
+		"Incorrect number of stats collectors")
 }
 
 // TestParseJoinUsingAddrs verifies that JoinList is parsed
