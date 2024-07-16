@@ -11,6 +11,7 @@ go_library(
         "//pkg/settings",
         "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

@@ -12,7 +12,6 @@ package rpc
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
@@ -148,7 +148,7 @@ func (d disablingClientStream) RecvMsg(m interface{}) error {
 // TODO(baptist): This could be enhanced to allow dynamic partition injection.
 type Partitioner struct {
 	partitionEnabled atomic.Bool
-	nodeAddrMap      sync.Map
+	nodeAddrMap      syncutil.Map[string, roachpb.NodeID]
 }
 
 // EnablePartition will enable or disable the partition.
@@ -163,7 +163,7 @@ func (p *Partitioner) RegisterNodeAddr(addr string, id roachpb.NodeID) {
 	if p.partitionEnabled.Load() {
 		panic("Can not register node addresses with a partition enabled")
 	}
-	p.nodeAddrMap.Store(addr, id)
+	p.nodeAddrMap.Store(addr, &id)
 }
 
 // RegisterTestingKnobs creates the testing knobs for this node. It will
@@ -187,11 +187,12 @@ func (p *Partitioner) RegisterTestingKnobs(
 		if !p.partitionEnabled.Load() {
 			return nil
 		}
-		id, ok := p.nodeAddrMap.Load(addr)
+		idPtr, ok := p.nodeAddrMap.Load(addr)
 		if !ok {
 			panic("address not mapped, call RegisterNodeAddr before enabling the partition" + addr)
 		}
-		if partitionedServers[id.(roachpb.NodeID)] {
+		id := *idPtr
+		if partitionedServers[id] {
 			return errors.Newf("rpc error: partitioned from %s, n%d", addr, id)
 		}
 		return nil

@@ -35,7 +35,7 @@ type Dispatch struct {
 		// TODO(irfansharif,aaditya): On kv0/enc=false/nodes=3/cpu=96 this mutex
 		// is responsible for ~3.7% of the mutex contention. Look to address it
 		// as part of #104154. Perhaps shard this mutex by node ID? Or use a
-		// sync.Map instead?
+		// syncutil.Map instead?
 		syncutil.Mutex
 		// outbox maintains pending dispatches on a per-node basis.
 		outbox map[roachpb.NodeID]dispatches

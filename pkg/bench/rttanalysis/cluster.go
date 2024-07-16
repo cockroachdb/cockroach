@@ -12,11 +12,11 @@ package rttanalysis
 
 import (
 	gosql "database/sql"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
@@ -32,9 +32,7 @@ func MakeClusterConstructor(
 	return func(t testing.TB) *Cluster {
 		c := &Cluster{}
 		beforePlan := func(trace tracingpb.Recording, stmt string) {
-			if _, ok := c.stmtToKVBatchRequests.Load(stmt); ok {
-				c.stmtToKVBatchRequests.Store(stmt, trace)
-			}
+			c.stmtToKVBatchRequests.Store(stmt, &trace)
 		}
 		c.adminSQLConn, c.nonAdminSQLConn, c.cleanup = f(t, base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -47,7 +45,7 @@ func MakeClusterConstructor(
 
 // Cluster abstracts a cockroach cluster for use in rttanalysis benchmarks.
 type Cluster struct {
-	stmtToKVBatchRequests sync.Map
+	stmtToKVBatchRequests syncutil.Map[string, tracingpb.Recording]
 	cleanup               func()
 
 	// adminSQLConn should be the default connection for tests. It specifies a
@@ -68,13 +66,14 @@ func (c *Cluster) nonAdminConn() *gosql.DB {
 }
 
 func (c *Cluster) clearStatementTrace(stmt string) {
-	c.stmtToKVBatchRequests.Store(stmt, nil)
+	c.stmtToKVBatchRequests.Delete(stmt)
 }
 
 func (c *Cluster) getStatementTrace(stmt string) (tracingpb.Recording, bool) {
-	out, _ := c.stmtToKVBatchRequests.Load(stmt)
-	r, ok := out.(tracingpb.Recording)
-	return r, ok
+	if out, ok := c.stmtToKVBatchRequests.Load(stmt); ok {
+		return *out, true
+	}
+	return tracingpb.Recording{}, false
 }
 
 func (c *Cluster) close() {

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
@@ -70,7 +71,7 @@ func TestColdStartLatency(t *testing.T) {
 	pauseAfter := make(chan struct{})
 	signalAfter := make([]chan struct{}, numNodes)
 	var latencyEnabled atomic.Bool
-	var addrsToNodeIDs sync.Map
+	var addrsToNodeIDs syncutil.Map[string, int]
 
 	// Set up the host cluster.
 	perServerArgs := make(map[int]base.TestServerArgs, numNodes)
@@ -97,8 +98,10 @@ func TestColdStartLatency(t *testing.T) {
 						if !log.ExpensiveLogEnabled(ctx, 2) {
 							return invoker(ctx, method, req, reply, cc, opts...)
 						}
-						nodeIDi, _ := addrsToNodeIDs.Load(target)
-						nodeID, _ := nodeIDi.(int)
+						var nodeID int
+						if nodeIDPtr, ok := addrsToNodeIDs.Load(target); ok {
+							nodeID = *nodeIDPtr
+						}
 						start := timeutil.Now()
 						defer func() {
 							log.VEventf(ctx, 2, "%d->%d (%v->%v) %s %v %v took %v",
@@ -141,7 +144,8 @@ func TestColdStartLatency(t *testing.T) {
 	}
 
 	for i := 0; i < numNodes; i++ {
-		addrsToNodeIDs.Store(tc.Server(i).RPCAddr(), i)
+		nodeID := i
+		addrsToNodeIDs.Store(tc.Server(i).RPCAddr(), &nodeID)
 	}
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(1))
 
@@ -207,8 +211,10 @@ COMMIT;`}
 						ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
 						method string, streamer grpc.Streamer, opts ...grpc.CallOption,
 					) (grpc.ClientStream, error) {
-						nodeIDi, _ := addrsToNodeIDs.Load(target)
-						nodeID, _ := nodeIDi.(int)
+						var nodeID int
+						if nodeIDPtr, ok := addrsToNodeIDs.Load(target); ok {
+							nodeID = *nodeIDPtr
+						}
 						start := timeutil.Now()
 						maybeWait(ctx, i, nodeID)
 						defer func() {
@@ -231,8 +237,10 @@ COMMIT;`}
 					}
 				},
 				UnaryClientInterceptor: func(target string, class rpc.ConnectionClass) grpc.UnaryClientInterceptor {
-					nodeIDi, _ := addrsToNodeIDs.Load(target)
-					nodeID, _ := nodeIDi.(int)
+					var nodeID int
+					if nodeIDPtr, ok := addrsToNodeIDs.Load(target); ok {
+						nodeID = *nodeIDPtr
+					}
 					return func(
 						ctx context.Context, method string, req, reply interface{},
 						cc *grpc.ClientConn, invoker grpc.UnaryInvoker,
