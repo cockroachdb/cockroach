@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -399,11 +400,23 @@ func ImportFixture(
 	// references). If create table is done in parallel with IMPORT, some IMPORT
 	// jobs may fail because the type is being modified concurrently with the
 	// IMPORT. Removing the need to pre-create is being tracked with #70987.
-	for _, table := range tables {
-		err := createFixtureTable(sqlDB, dbName, table)
-		if err != nil {
-			return 0, errors.Wrapf(err, `creating table %s`, table.Name)
+	const maxTableBatchSize = 5000
+	currentTable := 0
+	for currentTable < len(tables) {
+		batchEnd := min(currentTable+maxTableBatchSize, len(tables))
+		nextBatch := tables[currentTable:batchEnd]
+		if err := crdb.ExecuteTx(ctx, sqlDB, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
+			for _, table := range nextBatch {
+				err := createFixtureTable(tx, dbName, table)
+				if err != nil {
+					return errors.Wrapf(err, `creating table %s`, table.Name)
+				}
+			}
+			return nil
+		}); err != nil {
+			return 0, err
 		}
+		currentTable += maxTableBatchSize
 	}
 
 	// Default to unbounded unless a flag exists for it.
@@ -436,13 +449,21 @@ func ImportFixture(
 	return atomic.LoadInt64(&bytesAtomic), nil
 }
 
-func createFixtureTable(sqlDB *gosql.DB, dbName string, table workload.Table) error {
+func createFixtureTable(tx *gosql.Tx, dbName string, table workload.Table) error {
 	qualifiedTableName := makeQualifiedTableName(dbName, &table)
+	if table.ObjectPrefix != nil && table.ObjectPrefix.ExplicitCatalog {
+		// Switch databases if one is explicitly specified for multi-region
+		// configurations with multiple databases.
+		_, err := tx.Exec("USE $1", table.ObjectPrefix.Catalog())
+		if err != nil {
+			return err
+		}
+	}
 	createTable := fmt.Sprintf(
 		`CREATE TABLE IF NOT EXISTS %s %s`,
 		qualifiedTableName,
 		table.Schema)
-	_, err := sqlDB.Exec(createTable)
+	_, err := tx.Exec(createTable)
 	return err
 }
 
