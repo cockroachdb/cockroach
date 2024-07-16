@@ -1905,7 +1905,8 @@ func dropColumnImpl(
 
 			if colIDs.Contains(colToDrop.GetID()) {
 				containsThisColumn = true
-				return nil, sqlerrors.NewColumnReferencedByPartialIndex(string(colToDrop.ColName()), idx.GetName())
+				return nil, sqlerrors.ColumnReferencedByPartialIndex(
+					"drop", "column", string(colToDrop.ColName()), idx.GetName())
 			}
 		}
 		// Perform the DROP.
@@ -1948,7 +1949,8 @@ func dropColumnImpl(
 			}
 
 			if colIDs.Contains(colToDrop.GetID()) {
-				return nil, sqlerrors.NewColumnReferencedByPartialUniqueWithoutIndexConstraint(string(colToDrop.ColName()), uwoi.GetName())
+				return nil, sqlerrors.ColumnReferencedByPartialUniqueWithoutIndexConstraint(
+					"drop", "column", string(colToDrop.ColName()), uwoi.GetName())
 			}
 		}
 		if uwoi.Dropped() || !uwoi.CollectKeyColumnIDs().Contains(colToDrop.GetID()) {

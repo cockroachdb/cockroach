@@ -44,6 +44,9 @@ func init() {
 			to(scpb.Status_ABSENT,
 				revertible(false),
 				emit(func(this *scpb.ColumnType) *scop.RemoveDroppedColumnType {
+					// TODO(spilchen): We need to ensure this remains a no-op when altering
+					// the type of a column that uses a user-defined type. This will need to
+					// be revisited for issue #127014.
 					if ids := referencedTypeIDs(this); len(ids) > 0 {
 						return &scop.RemoveDroppedColumnType{
 							TableID:  this.TableID,
