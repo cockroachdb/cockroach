@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -327,6 +328,48 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 		assert.Equal(t, 1000, fx.bs.client.(*kafkaSinkClientV2).batchCfg.Bytes)
 		assert.Equal(t, jsonDuration(1*time.Second), fx.bs.client.(*kafkaSinkClientV2).batchCfg.Frequency)
 	})
+}
+
+func TestKafkaSinkClientV2_CompressionOpts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		name         string
+		codec, level string
+		expected     kgo.CompressionCodec
+		err          error // TODO: have to make a fx opt to return error or smth?
+	}{
+		{"default", "", "", kgo.NoCompression(), nil},
+		{"gzip no level", "GZIP", "", kgo.GzipCompression(), nil},
+		{"gzip level 1", "GZIP", "1", kgo.GzipCompression().WithLevel(1), nil},
+		// invalid stuff
+		// ..
+
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			opt := map[string]string{}
+			if c.codec != "" {
+				opt["Compression"] = c.codec
+			}
+			if c.level != "" {
+				opt["CompressionLevel"] = c.level
+			}
+			jbs, err := json.Marshal(opt)
+			require.NoError(t, err)
+
+			fx := newKafkaSinkV2Fx(t, withJSONConfig(string(jbs)), withRealClient())
+			defer fx.close()
+
+			client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+			val := client.OptValue("ProducerBatchCompression").([]kgo.CompressionCodec)
+
+			assert.Equal(t, []kgo.CompressionCodec{c.expected}, val)
+		})
+	}
+
 }
 
 func TestKafkaSinkClientV2_ErrorsEventually(t *testing.T) {

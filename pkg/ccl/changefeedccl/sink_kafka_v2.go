@@ -13,7 +13,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"hash/fnv"
+	"io"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/zstd"
+	"github.com/pierrec/lz4/v4"
 	"github.com/rcrowley/go-metrics"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kerr"
@@ -474,20 +479,31 @@ func buildKgoConfig(
 
 	// TODO: remove this sarama dependency.
 	// NOTE: kgo lets you give multiple compression options in preference order, which is cool but the config json doesnt support that. Should we?
+	var comp kgo.CompressionCodec
+	var level int
 	switch sarama.CompressionCodec(sinkCfg.Compression) {
 	case sarama.CompressionNone:
-		opts = append(opts, kgo.ProducerBatchCompression(kgo.NoCompression()))
 	case sarama.CompressionGZIP:
-		opts = append(opts, kgo.ProducerBatchCompression(kgo.GzipCompression()))
+		comp = kgo.GzipCompression()
 	case sarama.CompressionSnappy:
-		opts = append(opts, kgo.ProducerBatchCompression(kgo.SnappyCompression()))
+		comp = kgo.SnappyCompression()
 	case sarama.CompressionLZ4:
-		opts = append(opts, kgo.ProducerBatchCompression(kgo.Lz4Compression()))
+		comp = kgo.Lz4Compression()
 	case sarama.CompressionZSTD:
-		opts = append(opts, kgo.ProducerBatchCompression(kgo.ZstdCompression()))
+		comp = kgo.ZstdCompression()
 	default:
 		return nil, errors.Errorf(`unknown compression codec: %v`, sinkCfg.Compression)
 	}
+
+	// I dislike using this magic number. TODO: remove this sarama dependency.
+	if level != sarama.CompressionLevelDefault {
+		if err := validateCompressionLevel(sinkCfg.Compression, level); err != nil {
+			return nil, err
+		}
+		comp = comp.WithLevel(level)
+	}
+
+	opts = append(opts, kgo.ProducerBatchCompression(comp))
 
 	if version := sinkCfg.Version; version != "" {
 		if !strings.HasPrefix(version, `v`) {
@@ -504,6 +520,36 @@ func buildKgoConfig(
 	}
 
 	return opts, nil
+}
+
+// TODO: kgo will ignore invalid compression levels, but we want to error on them. So we're being a bit strange. Is it worth it?
+func validateCompressionLevel(compressionType compressionCodec, level int) error {
+	// TODO: remove this sarama dependency.
+	switch sarama.CompressionCodec(compressionType) {
+	case sarama.CompressionNone:
+		return nil
+	case sarama.CompressionGZIP:
+		if level < gzip.BestSpeed || level > gzip.BestCompression {
+			return errors.Errorf(`invalid gzip compression level: %d`, level)
+		}
+	case sarama.CompressionSnappy:
+		return errors.Errorf(`snappy does not support compression levels`) // TODO: or is it just a no-op?
+	case sarama.CompressionLZ4:
+		// This is a bit silly.
+		w := lz4.NewWriter(io.Discard)
+		if err := w.Apply(lz4.CompressionLevelOption(lz4.CompressionLevel(level))); err != nil {
+			return errors.Wrap(err, `invalid lz4 compression level`)
+		}
+		w.Close()
+	case sarama.CompressionZSTD:
+		ok, _ := zstd.EncoderLevelFromString(strconv.FormatInt(int64(level), 10))
+		if !ok {
+			return errors.Errorf(`invalid zstd compression level: %d`, level)
+		}
+	default:
+		return errors.Errorf(`unknown compression codec: %v`, compressionType)
+	}
+	return nil
 }
 
 type kgoLogAdapter struct {
