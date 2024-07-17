@@ -18,6 +18,7 @@ ok
 
 plan
 ----
+Seed:               12345
 Upgrades:           v22.2.3 → v23.1.10 → v23.2.4 → <current>
 Deployment mode:    system-only
 Mutators:           cluster_setting[test_cluster_setting]

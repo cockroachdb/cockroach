@@ -90,7 +90,6 @@ type (
 		plan      *TestPlan
 		cluster   cluster.Cluster
 		crdbNodes option.NodeListOption
-		seed      int64
 		logger    *logger.Logger
 
 		binaryVersions  *atomic.Value
@@ -122,7 +121,6 @@ func newTestRunner(
 	l *logger.Logger,
 	c cluster.Cluster,
 	crdbNodes option.NodeListOption,
-	randomSeed int64,
 ) *testRunner {
 	var ranUserHooks atomic.Bool
 	var binaryVersions atomic.Value
@@ -140,7 +138,6 @@ func newTestRunner(
 		background:      newBackgroundRunner(ctx, l),
 		monitor:         newCRDBMonitor(ctx, c, crdbNodes),
 		ranUserHooks:    &ranUserHooks,
-		seed:            randomSeed,
 	}
 }
 
@@ -338,7 +335,7 @@ func (tr *testRunner) testFailure(err error, l *logger.Logger, testContext *Cont
 	}
 
 	tf := &testFailureDetails{
-		seed:                  tr.seed,
+		seed:                  tr.plan.seed,
 		testContext:           testContext,
 		binaryVersions:        loadAtomicVersions(tr.binaryVersions),
 		clusterVersionsBefore: loadAtomicVersions(clusterVersionsBefore),

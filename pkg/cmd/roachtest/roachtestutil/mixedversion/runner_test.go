@@ -153,8 +153,8 @@ func testTestRunner() *testRunner {
 		logger:       nilLogger,
 		crdbNodes:    nodes,
 		background:   newBackgroundRunner(runnerCtx, nilLogger),
-		seed:         seed,
 		ranUserHooks: &ranUserHooks,
+		plan:         &TestPlan{seed: seed},
 	}
 }
 

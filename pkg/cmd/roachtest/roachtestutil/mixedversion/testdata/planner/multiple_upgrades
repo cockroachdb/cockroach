@@ -15,6 +15,7 @@ ok
 
 plan
 ----
+Seed:               12345
 Upgrades:           v22.1.8 → v22.2.3 → v23.1.4 → <current>
 Deployment mode:    system-only
 Plan:
