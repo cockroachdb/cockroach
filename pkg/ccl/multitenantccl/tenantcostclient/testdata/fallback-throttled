@@ -8,7 +8,7 @@ fallback_rate: 1000
 
 # Issue a 3K write that triggers fetch of more tokens and also sets fallback
 # rate.
-write bytes=3069952
+write bytes=3069945
 ----
 
 wait-for-event

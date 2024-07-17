@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -2880,18 +2879,7 @@ func (ds *DistSender) sendToReplicas(
 				}
 
 				if ds.kvInterceptor != nil {
-					var reqInfo tenantcostmodel.RequestInfo
-					var respInfo tenantcostmodel.ResponseInfo
-					if ba.IsWrite() {
-						replicationNetworkPaths := ds.computeWriteReplicationNetworkPaths(ctx, desc, &curReplica)
-						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, true /* isWrite */)
-						reqInfo = tenantcostmodel.MakeRequestInfo(ba, len(desc.Replicas().Descriptors()), networkCost, replicationNetworkPaths)
-					}
-					if !reqInfo.IsWrite() {
-						networkCost := ds.computeNetworkCost(ctx, desc, &curReplica, false /* isWrite */)
-						respInfo = tenantcostmodel.MakeResponseInfo(br, true, networkCost)
-					}
-					if err := ds.kvInterceptor.OnResponseWait(ctx, reqInfo, respInfo); err != nil {
+					if err := ds.kvInterceptor.OnResponseWait(ctx, ba, br, desc, &curReplica); err != nil {
 						return nil, err
 					}
 				}
