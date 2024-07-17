@@ -1047,6 +1047,23 @@ INSERT INTO t115377 VALUES (2, 0, 0, 'east')
 statement error pgcode 23505 duplicate key value violates unique constraint \"unique_k\"
 INSERT INTO t115377 VALUES (2, 1, 1, 'east')
 
+# Regression test for #126988.
+statement ok
+CREATE TABLE t126988 (
+  k INT PRIMARY KEY,
+  j INT,
+  i INT,
+  v INT AS (i) VIRTUAL,
+  UNIQUE WITHOUT INDEX (i, j),
+  INDEX (j, v) STORING (i)
+)
+
+statement ok
+INSERT INTO t126988 VALUES (1, 10, 200)
+
+statement error pgcode 23505 duplicate key value violates unique constraint \"unique_i_j\"\nDETAIL: Key \(10, 200\) already exists.
+INSERT INTO t126988 VALUES (1, 10, 200)
+
 subtest end
 
 # Regression test for hitting a nil pointer in the insert fast path when seeing
