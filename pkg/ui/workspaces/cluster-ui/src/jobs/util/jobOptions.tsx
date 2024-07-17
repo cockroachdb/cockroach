@@ -27,7 +27,10 @@ export function jobToVisual(job: Job): JobStatusVisual {
   if (job.type === "CHANGEFEED") {
     return JobStatusVisual.BadgeOnly;
   }
-  if (job.type === "REPLICATION STREAM PRODUCER") {
+  if (
+    job.type === "REPLICATION STREAM PRODUCER" ||
+    job.type === "LOGICAL REPLICATION INGESTION"
+  ) {
     return JobStatusVisual.BadgeOnly;
   }
   if (job.type === "REPLICATION STREAM INGESTION") {
