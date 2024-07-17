@@ -16,7 +16,7 @@ advance wait=true
 
 # Fire off a 1K write. This will trigger a low RU notification, which will
 # happen while the token bucket request is still in progress.
-write bytes=1021952
+write bytes=1021945
 ----
 
 wait-for-event

@@ -10,7 +10,11 @@
 
 package tenantcostmodel
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+)
 
 // EstimatedCPU is a prediction of how much CPU a particular operation will
 // consume. It includes measured SQL CPU usage as well as an estimate of KV CPU
@@ -136,61 +140,79 @@ var DefaultEstimatedCPUModel = EstimatedCPUModel{
 	},
 }
 
-// RequestCost returns the cost, in estimated KV vCPUs, of the given request. If
-// it is a write, that includes the per-batch, per-request, and per-byte costs,
-// multiplied by the number of replicas. If it is a read, then the cost is zero,
-// since reads can only be costed by examining the ResponseInfo. ratePerNode
-// is the average write batch QPS in the tenant cluster, on a per-node basis.
-// Because tenant clusters do not have physical nodes, these are logical nodes
-// derived from the number of provisioned vCPUs and regions in the virtual
-// cluster.
-func (m *EstimatedCPUModel) RequestCost(bri RequestInfo, ratePerNode float64) EstimatedCPU {
-	if !bri.IsWrite() {
-		return 0
+// MakeBatchInfo returns the count and size of KV read and write operations that
+// are part of the given batch.
+func (c *EstimatedCPUModel) MakeBatchInfo(
+	request *kvpb.BatchRequest, response *kvpb.BatchResponse,
+) (info BatchInfo) {
+	for i := range request.Requests {
+		// Request count is guaranteed to equal response count.
+		req := request.Requests[i].GetInner()
+		resp := response.Responses[i].GetInner()
+
+		if kvpb.IsReadOnly(req) {
+			info.ReadCount++
+			info.ReadBytes += resp.Header().NumBytes
+		} else {
+			info.WriteCount++
+			if swr, isSizedWrite := req.(kvpb.SizedWriteRequest); isSizedWrite {
+				info.WriteBytes += swr.WriteBytes()
+			}
+		}
 	}
-
-	// Add cost for the batch.
-	ecpu := m.lookupCost(m.WriteBatchCost.RatePerNode, m.WriteBatchCost.CPUPerBatch, ratePerNode)
-
-	// Add cost for additional requests in the batch, beyond the first.
-	if bri.writeCount > 1 {
-		ecpuPerRequest := m.lookupCost(
-			m.WriteRequestCost.BatchSize, m.WriteRequestCost.CPUPerRequest, float64(bri.writeCount))
-		ecpu += ecpuPerRequest * EstimatedCPU(bri.writeCount-1)
-	}
-
-	// Add cost for bytes in the requests.
-	ecpuPerByte := m.lookupCost(
-		m.WriteBytesCost.PayloadSize, m.WriteBytesCost.CPUPerByte, float64(bri.writeBytes))
-	ecpu += ecpuPerByte * EstimatedCPU(bri.writeBytes)
-
-	// Multiply by the number of replicas.
-	return ecpu * EstimatedCPU(bri.writeReplicas)
+	return info
 }
 
-// ResponseCost returns the cost, in estimated KV vCPUs, of the given response.
-// If it is a read, that includes the per-batch, per-request, and per-byte
-// costs. If it is a write, then the cost is zero, since writes can only be
-// costed by examining the RequestInfo.
-func (m *EstimatedCPUModel) ResponseCost(bri ResponseInfo) EstimatedCPU {
-	if !bri.IsRead() {
-		return 0
+// BatchCost returns the cost of the given batch in estimated KV vCPUs. This
+// represents the amount of CPU that the KV layer is expected to consume in
+// order to process the read or write requests contained in the batch, including
+// the cost of replicating any writes.
+//
+// ratePerNode is the average write batch QPS in the tenant cluster, on a
+// per-node basis. Because tenant clusters do not have physical nodes, these are
+// logical nodes derived from the number of provisioned vCPUs and regions in the
+// virtual cluster.
+func (m *EstimatedCPUModel) BatchCost(
+	bi BatchInfo, ratePerNode float64, replicas int64,
+) EstimatedCPU {
+	var readCPU, writeCPU EstimatedCPU
+
+	if bi.ReadCount > 0 {
+		// Add cost for the batch.
+		readCPU = m.ReadBatchCost
+
+		// Add cost for additional requests in the batch, beyond the first.
+		if bi.ReadCount > 1 {
+			readCPU += m.ReadRequestCost * EstimatedCPU(bi.ReadCount-1)
+		}
+
+		// Add cost for bytes in the requests.
+		ecpuPerByte := m.lookupCost(
+			m.ReadBytesCost.PayloadSize, m.ReadBytesCost.CPUPerByte, float64(bi.ReadBytes))
+		readCPU += ecpuPerByte * EstimatedCPU(bi.ReadBytes)
 	}
 
-	// Add cost for the batch.
-	ecpu := m.ReadBatchCost
+	if bi.WriteCount > 0 {
+		// Add cost for the batch.
+		writeCPU = m.lookupCost(m.WriteBatchCost.RatePerNode, m.WriteBatchCost.CPUPerBatch, ratePerNode)
 
-	// Add cost for additional requests in the batch, beyond the first.
-	if bri.readCount > 1 {
-		ecpu += m.ReadRequestCost * EstimatedCPU(bri.readCount-1)
+		// Add cost for additional requests in the batch, beyond the first.
+		if bi.WriteCount > 1 {
+			ecpuPerRequest := m.lookupCost(
+				m.WriteRequestCost.BatchSize, m.WriteRequestCost.CPUPerRequest, float64(bi.WriteCount))
+			writeCPU += ecpuPerRequest * EstimatedCPU(bi.WriteCount-1)
+		}
+
+		// Add cost for bytes in the requests.
+		ecpuPerByte := m.lookupCost(
+			m.WriteBytesCost.PayloadSize, m.WriteBytesCost.CPUPerByte, float64(bi.WriteBytes))
+		writeCPU += ecpuPerByte * EstimatedCPU(bi.WriteBytes)
+
+		// Multiply by the number of replicas.
+		writeCPU *= EstimatedCPU(replicas)
 	}
 
-	// Add cost for bytes in the requests.
-	ecpuPerByte := m.lookupCost(
-		m.ReadBytesCost.PayloadSize, m.ReadBytesCost.CPUPerByte, float64(bri.readBytes))
-	ecpu += ecpuPerByte * EstimatedCPU(bri.readBytes)
-
-	return ecpu
+	return readCPU + writeCPU
 }
 
 func (m *EstimatedCPUModel) lookupCost(

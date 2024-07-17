@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMetrics_getEstimatedReplicationBytes(t *testing.T) {
+func TestMetrics_EstimatedReplicationBytesForPath(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sqlLocality := roachpb.Locality{Tiers: []roachpb.Tier{
@@ -49,7 +49,7 @@ func TestMetrics_getEstimatedReplicationBytes(t *testing.T) {
 	}
 
 	get := func(np networkPath) *aggmetric.Counter {
-		return m.getEstimatedReplicationBytes(
+		return m.EstimatedReplicationBytesForPath(
 			np.fromNodeID, np.fromLocality, np.toNodeID, np.toLocality,
 		)
 	}

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -125,10 +126,11 @@ func newTenantSideCostController(
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
 	provider kvtenant.TokenBucketProvider,
+	nodeDescs kvclient.NodeDescStore,
 	locality roachpb.Locality,
 	timeSource timeutil.TimeSource,
 	testInstr TestInstrumentation,
-) (multitenant.TenantSideCostController, error) {
+) (*tenantSideCostController, error) {
 	if tenantID == roachpb.SystemTenantID {
 		return nil, errors.AssertionFailedf("cost controller can't be used for system tenant")
 	}
@@ -138,6 +140,8 @@ func newTenantSideCostController(
 		settings:            st,
 		tenantID:            tenantID,
 		provider:            provider,
+		nodeDescs:           nodeDescs,
+		locality:            locality,
 		responseChan:        make(chan *kvpb.TokenBucketResponse, 1),
 		lowTokensNotifyChan: make(chan struct{}, 1),
 	}
@@ -177,10 +181,11 @@ func NewTenantSideCostController(
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
 	provider kvtenant.TokenBucketProvider,
+	nodeDescs kvclient.NodeDescStore,
 	locality roachpb.Locality,
 ) (multitenant.TenantSideCostController, error) {
 	return newTenantSideCostController(
-		st, tenantID, provider, locality,
+		st, tenantID, provider, nodeDescs, locality,
 		timeutil.DefaultTimeSource{},
 		nil, /* testInstr */
 	)
@@ -192,11 +197,12 @@ func TestingTenantSideCostController(
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
 	provider kvtenant.TokenBucketProvider,
+	nodeDescs kvclient.NodeDescStore,
 	locality roachpb.Locality,
 	timeSource timeutil.TimeSource,
 	testInstr TestInstrumentation,
 ) (multitenant.TenantSideCostController, error) {
-	return newTenantSideCostController(st, tenantID, provider, locality, timeSource, testInstr)
+	return newTenantSideCostController(st, tenantID, provider, nodeDescs, locality, timeSource, testInstr)
 }
 
 // TestingTokenBucketString returns a string representation of the tenant's
@@ -233,6 +239,8 @@ type tenantSideCostController struct {
 	cpuModel             atomic.Pointer[tenantcostmodel.EstimatedCPUModel]
 	tenantID             roachpb.TenantID
 	provider             kvtenant.TokenBucketProvider
+	nodeDescs            kvclient.NodeDescStore
+	locality             roachpb.Locality
 	limiter              limiter
 	stopper              *stop.Stopper
 	instanceID           base.SQLInstanceID
@@ -795,26 +803,34 @@ func (c *tenantSideCostController) OnRequestWait(ctx context.Context) error {
 // OnResponseWait is part of the multitenant.TenantSideBatchInterceptor
 // interface.
 func (c *tenantSideCostController) OnResponseWait(
-	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
+	ctx context.Context,
+	request *kvpb.BatchRequest,
+	response *kvpb.BatchResponse,
+	targetRange *roachpb.RangeDescriptor,
+	targetReplica *roachpb.ReplicaDescriptor,
 ) error {
 	if multitenant.HasTenantCostControlExemption(ctx) {
 		return nil
 	}
 
 	// Account for the cost of write requests and read responses.
+	var batchInfo tenantcostmodel.BatchInfo
 	var tokens float64
+	replicas := int64(len(targetRange.Replicas().Descriptors()))
 	nodeCount := EstimatedNodesSetting.Get(&c.settings.SV)
 	if nodeCount == 0 {
 		// Calculate RU consumption for the operation.
 		ruModel := c.ruModel.Load()
-		writeKVRU, writeNetworkRU := ruModel.RequestCost(req)
-		readKVRU, readNetworkRU := ruModel.ResponseCost(resp)
-		totalRU := writeKVRU + readKVRU + writeNetworkRU + readNetworkRU
+		batchInfo = ruModel.MakeBatchInfo(request, response)
+
+		networkCost := c.computeNetworkCost(ctx, targetRange, targetReplica, batchInfo.WriteCount > 0)
+		kvRU, networkRU := ruModel.BatchCost(batchInfo, networkCost, replicas)
+		totalRU := kvRU + networkRU
 		tokens = float64(totalRU)
 
-		c.metrics.TotalKVRU.Inc(float64(writeKVRU + readKVRU))
+		c.metrics.TotalKVRU.Inc(float64(kvRU))
 		c.metrics.TotalRU.Inc(float64(totalRU))
-		c.metrics.TotalCrossRegionNetworkRU.Inc(float64(writeNetworkRU + readNetworkRU))
+		c.metrics.TotalCrossRegionNetworkRU.Inc(float64(networkRU))
 
 		// Record the number of RUs consumed by the IO request.
 		if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&c.settings.SV) {
@@ -828,31 +844,30 @@ func (c *tenantSideCostController) OnResponseWait(
 	} else {
 		// Estimate CPU usage for the operation.
 		cpuModel := c.cpuModel.Load()
+		batchInfo = cpuModel.MakeBatchInfo(request, response)
 		writeQPS := math.Float64frombits(c.globalWriteQPS.Load())
-		estimatedCPU := cpuModel.RequestCost(req, writeQPS/nodeCount)
-		estimatedCPU += cpuModel.ResponseCost(resp)
+		estimatedCPU := cpuModel.BatchCost(batchInfo, writeQPS/nodeCount, replicas)
 		tokens = float64(estimatedCPU) * tokensPerCPUSecond
 
 		c.metrics.TotalEstimatedKVCPUSeconds.Inc(float64(estimatedCPU))
 		c.metrics.TotalEstimatedCPUSeconds.Inc(float64(estimatedCPU))
+
+		if batchInfo.WriteBytes > 0 {
+			// Increment metrics that track estimated number of bytes that will
+			// be replicated from the leaseholder to other replicas in the range.
+			c.UpdateEstimatedWriteReplicationBytes(ctx, targetRange, targetReplica, batchInfo.WriteBytes)
+		}
 	}
 
-	if req.IsWrite() {
-		c.metrics.TotalWriteBatches.Inc(req.WriteReplicas())
-		c.metrics.TotalWriteRequests.Inc(req.WriteReplicas() * req.WriteCount())
-		c.metrics.TotalWriteBytes.Inc(req.WriteReplicas() * req.WriteBytes())
-
-		for _, path := range req.ReplicationNetworkPaths() {
-			c.metrics.updateEstimatedReplicationBytes(
-				path.FromNodeID, path.FromLocality,
-				path.ToNodeID, path.ToLocality,
-				req.WriteBytes(),
-			)
-		}
-	} else if resp.IsRead() {
+	if batchInfo.ReadCount > 0 {
 		c.metrics.TotalReadBatches.Inc(1)
-		c.metrics.TotalReadRequests.Inc(resp.ReadCount())
-		c.metrics.TotalReadBytes.Inc(resp.ReadBytes())
+		c.metrics.TotalReadRequests.Inc(batchInfo.ReadCount)
+		c.metrics.TotalReadBytes.Inc(batchInfo.ReadBytes)
+	}
+	if batchInfo.WriteCount > 0 {
+		c.metrics.TotalWriteBatches.Inc(replicas)
+		c.metrics.TotalWriteRequests.Inc(replicas * batchInfo.WriteCount)
+		c.metrics.TotalWriteBytes.Inc(replicas * batchInfo.WriteBytes)
 	}
 
 	// TODO(andyk): Consider breaking up huge acquisition requests into chunks
@@ -939,25 +954,25 @@ func (c *tenantSideCostController) Metrics() metric.Struct {
 // computeNetworkCost calculates the network cost multiplier for a read or
 // write operation. The network cost accounts for the logical byte traffic
 // between the client region and the replica regions.
-func (ds *DistSender) computeNetworkCost(
+func (c *tenantSideCostController) computeNetworkCost(
 	ctx context.Context,
-	desc *roachpb.RangeDescriptor,
+	targetRange *roachpb.RangeDescriptor,
 	targetReplica *roachpb.ReplicaDescriptor,
 	isWrite bool,
 ) tenantcostmodel.NetworkCost {
 	// It is unfortunate that we hardcode a particular locality tier name here.
 	// Ideally, we would have a cluster setting that specifies the name or some
 	// other way to configure it.
-	clientRegion, _ := ds.locality.Find("region")
+	clientRegion, _ := c.locality.Find("region")
 	if clientRegion == "" {
 		// If we do not have the source, there is no way to find the multiplier.
 		log.VErrEventf(ctx, 2, "missing region tier in current node: locality=%s",
-			ds.locality.String())
+			c.locality.String())
 		return tenantcostmodel.NetworkCost(0)
 	}
 
-	costCfg := ds.getCostControllerConfig(ctx)
-	if costCfg == nil {
+	ruModel := c.ruModel.Load()
+	if ruModel == nil {
 		// This case is unlikely to happen since this method will only be
 		// called through tenant processes, which has a KV interceptor.
 		return tenantcostmodel.NetworkCost(0)
@@ -965,17 +980,17 @@ func (ds *DistSender) computeNetworkCost(
 
 	cost := tenantcostmodel.NetworkCost(0)
 	if isWrite {
-		for i := range desc.Replicas().Descriptors() {
-			if replicaRegion, ok := ds.getReplicaRegion(ctx, &desc.Replicas().Descriptors()[i]); ok {
-				cost += costCfg.NetworkCost(tenantcostmodel.NetworkPath{
+		for i := range targetRange.Replicas().Descriptors() {
+			if replicaRegion, ok := c.getReplicaRegion(ctx, &targetRange.Replicas().Descriptors()[i]); ok {
+				cost += ruModel.NetworkCost(tenantcostmodel.NetworkPath{
 					ToRegion:   replicaRegion,
 					FromRegion: clientRegion,
 				})
 			}
 		}
 	} else {
-		if replicaRegion, ok := ds.getReplicaRegion(ctx, targetReplica); ok {
-			cost = costCfg.NetworkCost(tenantcostmodel.NetworkPath{
+		if replicaRegion, ok := c.getReplicaRegion(ctx, targetReplica); ok {
+			cost = ruModel.NetworkCost(tenantcostmodel.NetworkPath{
 				ToRegion:   clientRegion,
 				FromRegion: replicaRegion,
 			})
@@ -985,10 +1000,10 @@ func (ds *DistSender) computeNetworkCost(
 	return cost
 }
 
-func (ds *DistSender) getReplicaRegion(
+func (c *tenantSideCostController) getReplicaRegion(
 	ctx context.Context, replica *roachpb.ReplicaDescriptor,
 ) (region string, ok bool) {
-	nodeDesc, err := ds.nodeDescs.GetNodeDescriptor(replica.NodeID)
+	nodeDesc, err := c.nodeDescs.GetNodeDescriptor(replica.NodeID)
 	if err != nil {
 		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
 		// If we don't know where a node is, we can't determine the network cost
@@ -1005,39 +1020,40 @@ func (ds *DistSender) getReplicaRegion(
 	return region, true
 }
 
-// computeWriteReplicationNetworkPaths computes all the network paths taken by
+// UpdateEstimatedWriteReplicationBytes computes all the network paths taken by
 // the leaseholder when it replicates writes to the other replicas for the given
-// range.
-func (ds *DistSender) computeWriteReplicationNetworkPaths(
-	ctx context.Context, desc *roachpb.RangeDescriptor, leaseholderReplica *roachpb.ReplicaDescriptor,
-) []tenantcostmodel.LocalityNetworkPath {
-	np := []tenantcostmodel.LocalityNetworkPath{}
-	fromNode, err := ds.nodeDescs.GetNodeDescriptor(leaseholderReplica.NodeID)
+// range, and then increments the corresponding metrics by the given writeBytes
+// amount.
+func (c *tenantSideCostController) UpdateEstimatedWriteReplicationBytes(
+	ctx context.Context,
+	targetRange *roachpb.RangeDescriptor,
+	targetReplica *roachpb.ReplicaDescriptor,
+	writeBytes int64,
+) {
+	fromNode, err := c.nodeDescs.GetNodeDescriptor(targetReplica.NodeID)
 	if err != nil {
 		// If we don't know where a node is, we can't determine the network
 		// path for the operation.
-		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", leaseholderReplica.NodeID, err)
-		return np
+		log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", targetReplica.NodeID, err)
+		return
 	}
-	for _, replica := range desc.Replicas().Descriptors() {
-		if replica.ReplicaID == leaseholderReplica.ReplicaID {
+	for _, replica := range targetRange.Replicas().Descriptors() {
+		if replica.ReplicaID == targetReplica.ReplicaID {
 			continue
 		}
-		toNode, err := ds.nodeDescs.GetNodeDescriptor(replica.NodeID)
+		toNode, err := c.nodeDescs.GetNodeDescriptor(replica.NodeID)
 		if err != nil {
 			// If we don't know where a node is, we can't determine the network
 			// path for the operation.
 			log.VErrEventf(ctx, 2, "node %d is not gossiped: %v", replica.NodeID, err)
 			continue
 		}
-		np = append(np, tenantcostmodel.LocalityNetworkPath{
-			FromNodeID:   leaseholderReplica.NodeID,
-			FromLocality: fromNode.Locality,
-			ToNodeID:     replica.NodeID,
-			ToLocality:   toNode.Locality,
-		})
+
+		c.metrics.EstimatedReplicationBytesForPath(
+			targetReplica.NodeID, fromNode.Locality,
+			replica.NodeID, toNode.Locality,
+		).Inc(writeBytes)
 	}
-	return np
 }
 
 // calculateBackgroundCPUSecs returns the number of CPU seconds estimated to

@@ -7,7 +7,7 @@ throttle: -1
 ----
 
 # Issue 5K RU write to force token bucket request.
-write bytes=5117952 label=w1
+write bytes=5117945 label=w1
 ----
 
 wait-for-event

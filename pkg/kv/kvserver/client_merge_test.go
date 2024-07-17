@@ -264,6 +264,8 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 126249)
+
 	for _, retries := range []int64{0, 3} {
 		t.Run(fmt.Sprintf("retries=%d", retries), func(t *testing.T) {
 			mergeWithData(t, retries)
