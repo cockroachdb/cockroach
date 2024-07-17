@@ -37,6 +37,12 @@ import (
 	"github.com/kr/pretty"
 )
 
+// optimizePutThreshold is the minimum length of a contiguous run
+// of batched puts or conditional puts, after which the constituent
+// put operations will possibly be optimized by determining whether
+// the key space being written is starting out empty.
+const optimizePutThreshold = 10
+
 // optimizePuts searches for contiguous runs of Put & CPut commands in
 // the supplied request union. Any run which exceeds a minimum length
 // threshold employs a full order iterator to determine whether the
