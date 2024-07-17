@@ -3745,22 +3745,22 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 			npeers[id] = sm
 		case *raft:
 			// TODO(tbg): this is all pretty confused. Clean this up.
-			learners := make(map[pb.PeerID]bool, len(v.trk.Config.Learners))
-			for i := range v.trk.Config.Learners {
+			learners := make(map[pb.PeerID]bool, len(v.config.Learners))
+			for i := range v.config.Learners {
 				learners[i] = true
 			}
 			v.id = id
-			v.trk = tracker.MakeProgressTracker(v.trk.MaxInflight, v.trk.MaxInflightBytes)
+			v.trk = tracker.MakeProgressTracker(&v.config, v.trk.MaxInflight, v.trk.MaxInflightBytes)
 			if len(learners) > 0 {
-				v.trk.Config.Learners = map[pb.PeerID]struct{}{}
+				v.config.Learners = map[pb.PeerID]struct{}{}
 			}
 			for i := 0; i < size; i++ {
 				pr := &tracker.Progress{}
 				if _, ok := learners[peerAddrs[i]]; ok {
 					pr.IsLearner = true
-					v.trk.Config.Learners[peerAddrs[i]] = struct{}{}
+					v.config.Learners[peerAddrs[i]] = struct{}{}
 				} else {
-					v.trk.Config.Voters[0][peerAddrs[i]] = struct{}{}
+					v.config.Voters[0][peerAddrs[i]] = struct{}{}
 				}
 				v.trk.Progress[peerAddrs[i]] = pr
 			}
