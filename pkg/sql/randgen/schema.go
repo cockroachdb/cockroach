@@ -227,26 +227,49 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 		return strconv.Itoa(ordinal)
 	}
 
+	addColumnDef := func(columnDef *tree.ColumnTableDef) {
+		columnDefs = append(columnDefs, columnDef)
+		defs = append(defs, columnDef)
+	}
+
 	// Make new defs from scratch.
 	nComputedColumns := randutil.RandIntInRange(rng, 0, (nColumns+1)/2)
 	nNormalColumns := nColumns - nComputedColumns
+
 	for i := 0; i < nNormalColumns; i++ {
-		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i))
-		columnDefs = append(columnDefs, columnDef)
-		defs = append(defs, columnDef)
+		addColumnDef(randColumnTableDef(rng, tableIdx, colSuffix(i)))
 	}
 
 	// Make defs for computed columns.
 	normalColDefs := columnDefs
 	for i := nNormalColumns; i < nColumns; i++ {
-		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i))
-		columnDefs = append(columnDefs, columnDef)
-		defs = append(defs, columnDef)
+		addColumnDef(randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i)))
 	}
 
 	// Make a random primary key with high likelihood.
 	var pk *tree.IndexTableDef
+
 	if options.primaryIndexRequired || (rng.Intn(8) != 0) {
+		// If we are requiring a primary index, then make sure
+		// that we have at least one column for the random
+		// index generator to find.
+		if options.primaryIndexRequired {
+			hasOneForwardIndexableColumn := false
+			for _, c := range columnDefs {
+				semType := tree.MustBeStaticallyKnownType(c.Type)
+				hasOneForwardIndexableColumn = hasOneForwardIndexableColumn || colinfo.ColumnTypeIsIndexable(semType)
+			}
+
+			for !hasOneForwardIndexableColumn {
+				columnDef := randColumnTableDef(rng, tableIdx, colSuffix(nColumns))
+				semType := tree.MustBeStaticallyKnownType(columnDef.Type)
+				if colinfo.ColumnTypeIsIndexable(semType) {
+					addColumnDef(columnDef)
+					break
+				}
+			}
+		}
+
 		for {
 			indexDef, ok := randIndexTableDefFromCols(ctx, rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
 			canUseIndex := ok && !indexDef.Inverted
