@@ -41,10 +41,9 @@ $$ LANGUAGE plpgsql`
 
 func TestUDFWithRandomTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	skip.WithIssue(t, 127289)
-
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 127321)
 	ctx := context.Background()
 
 	s, sqlA, sqlB, cleanup := setupTwoDBUDFTestCluster(t)
