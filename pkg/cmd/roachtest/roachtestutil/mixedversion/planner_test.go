@@ -347,6 +347,7 @@ func newTest(options ...CustomOption) *Test {
 		_isLocal:        boolP(false),
 		prng:            newRand(),
 		hooks:           &testHooks{crdbNodes: nodes},
+		seed:            seed,
 		predecessorFunc: testPredecessorFunc,
 	}
 }

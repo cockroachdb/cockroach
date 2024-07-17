@@ -15,6 +15,7 @@ ok
 
 plan debug=true
 ----
+Seed:               12345
 Upgrades:           v24.2.2 → <current>
 Deployment mode:    system-only
 Mutators:           concurrent_user_hooks_mutator
