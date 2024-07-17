@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradejob"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -654,7 +656,12 @@ func forEveryNodeUntilClusterStable(
 	f func(ctx context.Context, client serverpb.MigrationClient) error,
 ) error {
 	log.Infof(ctx, "executing operation %s", redact.Safe(op))
-	return c.UntilClusterStable(ctx, func() error {
+	return c.UntilClusterStable(ctx, retry.Options{
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     1.0,
+		MaxRetries:     60, // retry for 60 seconds
+	}, func() error {
 		return c.ForEveryNodeOrServer(ctx, op, f)
 	})
 }
