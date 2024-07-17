@@ -22,7 +22,7 @@ import (
 
 const (
 	// TODO(azhu): create table and enum in the db to be replicated into instead of defaultdb.
-	dlqBaseTableName = "defaultdb.crdb_replication_conflict_dlq_%d"
+	dlqBaseTableName = "defaultdb.crdb_replication_dlq_%d"
 	writeEnumStmt    = `CREATE TYPE IF NOT EXISTS defaultdb.crdb_replication_mutation_type AS ENUM (
 			'insert', 'update', 'delete'
 	)`
