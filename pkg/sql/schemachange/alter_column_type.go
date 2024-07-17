@@ -14,9 +14,12 @@ package schemachange
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -226,4 +229,50 @@ func ClassifyConversion(
 
 	return ColumnConversionImpossible,
 		pgerror.Newf(pgcode.CannotCoerce, "cannot convert %s to %s", oldType.SQLString(), newType.SQLString())
+}
+
+// ClassifyConversionFromTree is a wrapper for ClassifyConversion when we want
+// to take into account the parsed AST for ALTER TABLE .. ALTER COLUMN.
+func ClassifyConversionFromTree(
+	ctx context.Context, t *tree.AlterTableAlterColumnType, oldType *types.T, newType *types.T,
+) (ColumnConversionKind, error) {
+	if t.Using != nil {
+		// If an expression is provided, we always need to try a general conversion.
+		// We have to follow the process to create a new column and backfill it
+		// using the expression.
+		return ColumnConversionGeneral, nil
+	}
+	return ClassifyConversion(ctx, oldType, newType)
+}
+
+// ValidateAlterColumnTypeChecks performs validation checks on the proposed type
+// change. This function is common to both legacy schema change and the
+// declarative schema change. As such, it cannot reference the state system of
+// either: catalog for legacy, and elements for dsc.
+func ValidateAlterColumnTypeChecks(
+	ctx context.Context,
+	t *tree.AlterTableAlterColumnType,
+	settions *cluster.Settings,
+	origTyp *types.T,
+	isGeneratedAsIdentity bool,
+) (*types.T, error) {
+	typ := origTyp
+	// Special handling for STRING COLLATE xy to verify that we recognize the language.
+	if t.Collation != "" {
+		if types.IsStringType(typ) {
+			typ = types.MakeCollatedString(typ, t.Collation)
+		} else {
+			return typ, pgerror.New(pgcode.Syntax, "COLLATE can only be used with string types")
+		}
+	}
+
+	// Special handling for IDENTITY column to make sure it cannot be altered into
+	// a non-integer type.
+	if isGeneratedAsIdentity {
+		if typ.InternalType.Family != types.IntFamily {
+			return typ, sqlerrors.NewIdentityColumnTypeError()
+		}
+	}
+
+	return typ, colinfo.ValidateColumnDefType(ctx, settions, typ)
 }

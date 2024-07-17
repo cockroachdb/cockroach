@@ -304,32 +304,34 @@ func NewColumnReferencedByComputedColumnError(droppingColumn, computedColumn str
 	)
 }
 
-// NewColumnReferencedByPartialIndex is returned when we drop a column that is
-// referenced in a partial index's predicate.
-func NewColumnReferencedByPartialIndex(droppingColumn, partialIndex string) error {
-	return errors.WithIssueLink(errors.WithHint(
+// ColumnReferencedByPartialIndex is returned when an attempt is made to
+// modify a column that is referenced in a partial index's predicate.
+func ColumnReferencedByPartialIndex(op, objType, column, partialIndex string) error {
+	return errors.WithIssueLink(errors.WithHintf(
 		pgerror.Newf(
 			pgcode.InvalidColumnReference,
-			"column %q cannot be dropped because it is referenced by partial index %q",
-			droppingColumn, partialIndex,
+			"cannot %s %s %q because it is referenced by partial index %q",
+			op, objType, column, partialIndex,
 		),
-		"drop the partial index first, then drop the column",
+		"drop the partial index first, then %s the %s",
+		op, objType,
 	), errors.IssueLink{IssueURL: build.MakeIssueURL(97372)})
 }
 
-// NewColumnReferencedByPartialUniqueWithoutIndexConstraint is almost the same as
-// NewColumnReferencedByPartialIndex except it's used when dropping column that is
+// ColumnReferencedByPartialUniqueWithoutIndexConstraint is almost the same as
+// ColumnReferencedByPartialIndex except it's used when altering a column that is
 // referenced in a partial unique without index constraint's predicate.
-func NewColumnReferencedByPartialUniqueWithoutIndexConstraint(
-	droppingColumn, partialUWIConstraint string,
+func ColumnReferencedByPartialUniqueWithoutIndexConstraint(
+	op, objType, column, partialUWIConstraint string,
 ) error {
-	return errors.WithIssueLink(errors.WithHint(
+	return errors.WithIssueLink(errors.WithHintf(
 		pgerror.Newf(
 			pgcode.InvalidColumnReference,
-			"column %q cannot be dropped because it is referenced by partial unique constraint %q",
-			droppingColumn, partialUWIConstraint,
+			"cannot %s %s %q because it is referenced by partial unique constraint %q",
+			op, objType, column, partialUWIConstraint,
 		),
-		"drop the unique constraint first, then drop the column",
+		"drop the unique constraint first, then %s the %s",
+		op, objType,
 	), errors.IssueLink{IssueURL: build.MakeIssueURL(97372)})
 }
 

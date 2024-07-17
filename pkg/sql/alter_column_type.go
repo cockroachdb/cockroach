@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -65,6 +63,8 @@ func AlterColumnType(
 	cmds tree.AlterTableCmds,
 	tn *tree.TableName,
 ) error {
+	objType := "column"
+	op := "alter type of"
 	for _, tableRef := range tableDesc.DependedOnBy {
 		found := false
 		for _, colID := range tableRef.ColumnIDs {
@@ -74,14 +74,14 @@ func AlterColumnType(
 		}
 		if found {
 			return params.p.dependentError(
-				ctx, "column", col.GetName(), tableDesc.ParentID, tableRef.ID, "alter type of",
+				ctx, objType, col.GetName(), tableDesc.ParentID, tableRef.ID, op,
 			)
 		}
 	}
 	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, tableDesc.GetRowLevelTTL(), col); err != nil {
 		return err
 	}
-	if err := schemaexpr.ValidateComputedColumnExpressionDoesNotDependOnColumn(tableDesc, col); err != nil {
+	if err := schemaexpr.ValidateComputedColumnExpressionDoesNotDependOnColumn(tableDesc, col, objType, op); err != nil {
 		return err
 	}
 
@@ -90,39 +90,15 @@ func AlterColumnType(
 		return err
 	}
 
-	// Special handling for STRING COLLATE xy to verify that we recognize the language.
-	if t.Collation != "" {
-		if types.IsStringType(typ) {
-			typ = types.MakeCollatedString(typ, t.Collation)
-		} else {
-			return pgerror.New(pgcode.Syntax, "COLLATE can only be used with string types")
-		}
-	}
-
-	// Special handling for IDENTITY column to make sure it cannot be altered into
-	// a non-integer type.
-	if col.IsGeneratedAsIdentity() {
-		if typ.InternalType.Family != types.IntFamily {
-			return sqlerrors.NewIdentityColumnTypeError()
-		}
-	}
-
-	err = colinfo.ValidateColumnDefType(ctx, params.EvalContext().Settings, typ)
+	typ, err = schemachange.ValidateAlterColumnTypeChecks(ctx, t,
+		params.EvalContext().Settings, typ, col.IsGeneratedAsIdentity())
 	if err != nil {
 		return err
 	}
 
-	var kind schemachange.ColumnConversionKind
-	if t.Using != nil {
-		// If an expression is provided, we always need to try a general conversion.
-		// We have to follow the process to create a new column and backfill it
-		// using the expression.
-		kind = schemachange.ColumnConversionGeneral
-	} else {
-		kind, err = schemachange.ClassifyConversion(ctx, col.GetType(), typ)
-		if err != nil {
-			return err
-		}
+	kind, err := schemachange.ClassifyConversionFromTree(ctx, t, col.GetType(), typ)
+	if err != nil {
+		return err
 	}
 
 	switch kind {

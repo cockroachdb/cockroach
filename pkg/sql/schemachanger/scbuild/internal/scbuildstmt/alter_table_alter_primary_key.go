@@ -1107,7 +1107,7 @@ func checkIfColumnCanBeDropped(b BuildCtx, columnToDrop *scpb.Column) bool {
 		return false
 	}
 	canBeDropped := true
-	walkDropColumnDependencies(b, columnToDrop, func(e scpb.Element) {
+	walkColumnDependencies(b, columnToDrop, "drop", "column", func(e scpb.Element) {
 		if !canBeDropped {
 			return
 		}
