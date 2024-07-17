@@ -264,8 +264,6 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 126249)
-
 	for _, retries := range []int64{0, 3} {
 		t.Run(fmt.Sprintf("retries=%d", retries), func(t *testing.T) {
 			mergeWithData(t, retries)
@@ -275,6 +273,10 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 func mergeWithData(t *testing.T, retries int64) {
 	ctx := context.Background()
+
+	// Set a long txn liveness threshold so that the merge txn cannot be aborted,
+	// even when we manually advance the clock to trigger a lease acquisition.
+	defer txnwait.TestingOverrideTxnLivenessThreshold(time.Hour)()
 
 	manualClock := hlc.NewHybridManualClock()
 	var store *kvserver.Store
