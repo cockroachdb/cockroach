@@ -230,22 +230,9 @@ func (m *metrics) getConsumption(consumption *kvpb.TenantConsumption) {
 	consumption.EstimatedCPUSeconds = m.TotalEstimatedCPUSeconds.Count()
 }
 
-// updateEstimatedReplicationBytes updates the EstimatedReplicationBytes metric
-// that represents the estimated replication bytes for the given KV replication
-// network path.
-func (m *metrics) updateEstimatedReplicationBytes(
-	fromNodeID roachpb.NodeID,
-	fromLocality roachpb.Locality,
-	toNodeID roachpb.NodeID,
-	toLocality roachpb.Locality,
-	inc int64,
-) {
-	m.getEstimatedReplicationBytes(fromNodeID, fromLocality, toNodeID, toLocality).Inc(inc)
-}
-
-// getEstimatedReplicationBytes returns the metric that represents the estimated
-// replication bytes for the given network path.
-func (m *metrics) getEstimatedReplicationBytes(
+// EstimatedReplicationBytesForPath returns the metric that represents the
+// estimated replication bytes for the given network path.
+func (m *metrics) EstimatedReplicationBytesForPath(
 	fromNodeID roachpb.NodeID,
 	fromLocality roachpb.Locality,
 	toNodeID roachpb.NodeID,
