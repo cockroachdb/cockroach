@@ -1237,7 +1237,19 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 }
 
 func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
-	typName, typeExists, err := og.randEnum(ctx, tx, og.pctExisting(false))
+	return og.createType(ctx, tx, true)
+}
+
+func (og *operationGenerator) createCompositeType(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	return og.createType(ctx, tx, false)
+}
+
+func (og *operationGenerator) createType(
+	ctx context.Context, tx pgx.Tx, isEnum bool,
+) (*opStmt, error) {
+
+	typName, typeExists, err := og.randTypeName(ctx, tx, og.pctExisting(false), isEnum)
+
 	if err != nil {
 		return nil, err
 	}
@@ -1250,9 +1262,18 @@ func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.DuplicateObject, condition: typeExists},
 		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
 	})
-	stmt := randgen.RandCreateType(og.params.rng, typName.Object(), "asdf")
-	stmt.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
-	opStmt.sql = tree.Serialize(stmt)
+
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	var statement tree.Statement
+
+	if isEnum {
+		statement = randgen.RandCreateEnumType(og.params.rng, typName.Object(), letters)
+	} else {
+		statement = randgen.RandCreateCompositeType(og.params.rng, typName.Object(), letters)
+	}
+
+	statement.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
+	opStmt.sql = tree.Serialize(statement)
 	return opStmt, nil
 }
 
@@ -3476,9 +3497,16 @@ func (og *operationGenerator) randSequence(
 
 }
 
-func (og *operationGenerator) randEnum(
-	ctx context.Context, tx pgx.Tx, pctExisting int,
+func (og *operationGenerator) randTypeName(
+	ctx context.Context, tx pgx.Tx, pctExisting int, isEnum bool,
 ) (name *tree.TypeName, exists bool, _ error) {
+	var prefix string
+	if isEnum {
+		prefix = "enum_"
+	} else {
+		prefix = "composite_"
+	}
+
 	if og.randIntn(100) >= pctExisting {
 		// Most of the time, this case is for creating enums, so it
 		// is preferable that the schema exists
@@ -3486,16 +3514,17 @@ func (og *operationGenerator) randEnum(
 		if err != nil {
 			return nil, false, err
 		}
-		typeName := tree.MakeSchemaQualifiedTypeName(randSchema, fmt.Sprintf("enum_%s", og.newUniqueSeqNumSuffix()))
+		typeName := tree.MakeSchemaQualifiedTypeName(randSchema, fmt.Sprintf("%s%s", prefix, og.newUniqueSeqNumSuffix()))
 		return &typeName, false, nil
 	}
-	const q = `
-  SELECT schema, name
-    FROM [SHOW ENUMS]
-   WHERE name LIKE 'enum%'
-ORDER BY random()
-   LIMIT 1;
-`
+	var q = fmt.Sprintf(`
+		SELECT schema, name
+		    FROM [SHOW TYPES]
+		   WHERE name LIKE '%s'
+		ORDER BY random()
+		   LIMIT 1;
+		`, prefix+"%")
+
 	var schemaName string
 	var typName string
 	if err := tx.QueryRow(ctx, q).Scan(&schemaName, &typName); err != nil {
@@ -3695,7 +3724,7 @@ func (og *operationGenerator) randType(
 ) (*tree.TypeName, *types.T, error) {
 	if og.randIntn(100) <= og.params.enumPct {
 		// TODO(ajwerner): Support arrays of enums.
-		typName, exists, err := og.randEnum(ctx, tx, enumPctExisting)
+		typName, exists, err := og.randTypeName(ctx, tx, enumPctExisting, true)
 		if err != nil {
 			return nil, nil, err
 		}
