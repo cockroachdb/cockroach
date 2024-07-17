@@ -674,14 +674,14 @@ func (r *raft) nextMsgApp(
 	prevTerm, err := r.raftLog.term(prevIndex)
 	if err != nil {
 		if !r.maybeSendSnapshot(to, pr) {
-			return pb.Message{}, errors.New("failed to enter StateSnapshot")
+			return pb.Message{}, errors.Join(fmt.Errorf("failed to enter StateSnapshot"), err)
 		}
 		return pb.Message{}, err // ErrCompacted or ErrUnavailable
 	}
 	entries, err := r.raftLog.slice(pr.Next, hi, maxSize)
 	if err != nil {
 		if !r.maybeSendSnapshot(to, pr) {
-			return pb.Message{}, errors.New("failed to enter StateSnapshot")
+			return pb.Message{}, errors.Join(fmt.Errorf("failed to enter StateSnapshot"), err)
 		}
 		return pb.Message{}, err // ErrCompacted
 	}
