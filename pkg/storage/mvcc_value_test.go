@@ -121,18 +121,18 @@ func TestMVCCValueFormat(t *testing.T) {
 	strVal.SetString("foo")
 	intVal.SetInt(17)
 	var importEpoch uint32 = 3
-	var originID uint32 = 1
+	logicalReplicationMetadata := &enginepb.LogicalReplicationMetadata{OriginID: 1}
 
 	valHeader := enginepb.MVCCValueHeader{}
 	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
 
 	valHeaderFull := valHeader
 	valHeaderFull.ImportEpoch = importEpoch
-	valHeaderFull.OriginID = originID
+	valHeaderFull.LogicalReplicationMetadata = logicalReplicationMetadata
 
 	valHeaderWithJobIDOnly := enginepb.MVCCValueHeader{ImportEpoch: importEpoch}
 
-	valHeaderWithOriginIDOnly := enginepb.MVCCValueHeader{OriginID: originID}
+	valHeaderWithOriginIDOnly := enginepb.MVCCValueHeader{LogicalReplicationMetadata: logicalReplicationMetadata}
 
 	testcases := map[string]struct {
 		val    MVCCValue
@@ -169,17 +169,17 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 	strVal.SetString("foo")
 	intVal.SetInt(17)
 	var importEpoch uint32 = 3
-	var originID uint32 = 1
+	logicalReplicationMetadata := &enginepb.LogicalReplicationMetadata{OriginID: 1}
 
 	valHeader := enginepb.MVCCValueHeader{}
 	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
 
 	valHeaderFull := valHeader
 	valHeaderFull.ImportEpoch = importEpoch
-	valHeaderFull.OriginID = originID
+	valHeaderFull.LogicalReplicationMetadata = logicalReplicationMetadata
 
 	valHeaderWithJobIDOnly := enginepb.MVCCValueHeader{ImportEpoch: importEpoch}
-	valHeaderWithOriginIDOnly := enginepb.MVCCValueHeader{OriginID: originID}
+	valHeaderWithOriginIDOnly := enginepb.MVCCValueHeader{LogicalReplicationMetadata: logicalReplicationMetadata}
 
 	testcases := map[string]struct {
 		val MVCCValue

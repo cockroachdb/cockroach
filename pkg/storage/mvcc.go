@@ -2670,7 +2670,11 @@ func mvccPutInternal(
 	versionValue.LocalTimestamp = opts.LocalTimestamp
 	versionValue.OmitInRangefeeds = opts.OmitInRangefeeds
 	versionValue.ImportEpoch = opts.ImportEpoch
-	versionValue.OriginID = opts.OriginID
+	if opts.OriginID != 0 {
+		versionValue.LogicalReplicationMetadata = &enginepb.LogicalReplicationMetadata{
+			OriginID: opts.OriginID,
+		}
+	}
 
 	if buildutil.CrdbTestBuild {
 		if seq, seqOK := kvnemesisutil.FromContext(ctx); seqOK {
