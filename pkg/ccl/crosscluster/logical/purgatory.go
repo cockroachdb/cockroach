@@ -30,7 +30,7 @@ var retryQueueBackoff = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.retry_queue_backoff",
 	"minimum delay between retries of items in the retry queue",
-	time.Minute,
+	time.Second*3,
 )
 
 var retryQueueSizeLimit = settings.RegisterByteSizeSetting(
