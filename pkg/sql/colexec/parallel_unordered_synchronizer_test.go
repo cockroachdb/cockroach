@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +54,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		numInputs     = rng.Intn(maxInputs-1) + 2
 		numBatches    = rng.Intn(maxBatches) + 1
 		blockDuration = time.Second
-		errSuffix     = "test-induced metadata"
+		traceSuffix   = "test-induced metadata"
 	)
 
 	type synchronizerTerminationScenario int
@@ -120,7 +121,9 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		inputIdx := i
 		inputs[i].MetadataSources = []colexecop.MetadataSource{
 			colexectestutils.CallbackMetadataSource{DrainMetaCb: func() []execinfrapb.ProducerMetadata {
-				return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d %s", inputIdx, errSuffix)}}
+				return []execinfrapb.ProducerMetadata{{TraceData: []tracingpb.RecordedSpan{{
+					Operation: fmt.Sprintf("input %d %s", inputIdx, traceSuffix),
+				}}}}
 			}},
 		}
 	}
@@ -170,11 +173,10 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 				// Call DrainMeta before the input is finished.
 				meta := s.DrainMeta()
 				// Make sure that all expected metadata is still propagated.
-				// Note that if the last input wasn't pre-emptied, then the
-				// error will not match.
 				require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
 				for _, m := range meta {
-					require.True(t, strings.Contains(m.Err.Error(), errSuffix))
+					require.Equal(t, 1, len(m.TraceData))
+					require.True(t, strings.Contains(m.TraceData[0].Operation, traceSuffix))
 				}
 			}
 		}
