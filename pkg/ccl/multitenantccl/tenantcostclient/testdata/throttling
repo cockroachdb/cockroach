@@ -7,7 +7,7 @@ throttle: 1000
 ----
 
 # Issue 3K RU write to consume all tokens in the bucket and create 2K debt.
-write bytes=3069952
+write bytes=3069945
 ----
 
 wait-for-event
@@ -20,7 +20,7 @@ token-bucket
 
 # Issue 4K RU write that should block as long as it takes to accumulate 2K RUs
 # with a 1K fill rate.
-write bytes=4093952 label=w1
+write bytes=4093945 label=w1
 ----
 
 timers

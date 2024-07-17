@@ -7,7 +7,7 @@ throttle: 1000
 
 # Issue 2K RU write that triggers fetch of more tokens and also sets throttle
 # rate.
-write bytes=2045952
+write bytes=2045945
 ----
 
 wait-for-event
@@ -34,7 +34,7 @@ token-bucket
 
 # Verify that a small write doesn't have to wait a second for the entire debt
 # to be paid.
-write bytes=1024 label=w1
+write bytes=1020 label=w1
 ----
 
 timers
