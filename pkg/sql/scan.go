@@ -138,18 +138,21 @@ func (p *planner) Scan() *scanNode {
 // scanNode implements eval.IndexedVarContainer.
 var _ eval.IndexedVarContainer = &scanNode{}
 
+// IndexedVarEval implements the eval.IndexedVarContainer interface.
 func (n *scanNode) IndexedVarEval(
 	ctx context.Context, idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
 	panic("scanNode can't be run in local mode")
 }
 
+// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (n *scanNode) IndexedVarResolvedType(idx int) *types.T {
 	return n.resultColumns[idx].Typ
 }
 
+// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
 func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return (*tree.Name)(&n.resultColumns[idx].Name)
+	return n.resultColumns.Name(idx)
 }
 
 func (n *scanNode) startExec(params runParams) error {
