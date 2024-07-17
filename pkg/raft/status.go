@@ -127,7 +127,7 @@ func getStatus(r *raft) Status {
 	if s.RaftState == StateLeader {
 		s.Progress = getProgressCopy(r)
 	}
-	s.Config = r.trk.Config.Clone()
+	s.Config = r.config.Clone()
 	// NOTE: we assign to LeadSupportUntil even if RaftState is not currently
 	// StateLeader. The replica may have been the leader and stepped down to a
 	// follower before its lead support ran out.

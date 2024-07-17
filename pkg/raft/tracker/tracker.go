@@ -29,7 +29,7 @@ import (
 // configuration. In particular, it tracks the match index for each peer, which
 // in-turn allows for reasoning about the committed index.
 type ProgressTracker struct {
-	Config quorum.Config
+	Config *quorum.Config
 
 	Progress ProgressMap
 
@@ -40,39 +40,15 @@ type ProgressTracker struct {
 }
 
 // MakeProgressTracker initializes a ProgressTracker.
-func MakeProgressTracker(maxInflight int, maxBytes uint64) ProgressTracker {
+func MakeProgressTracker(config *quorum.Config, maxInflight int, maxBytes uint64) ProgressTracker {
 	p := ProgressTracker{
 		MaxInflight:      maxInflight,
 		MaxInflightBytes: maxBytes,
-		Config: quorum.Config{
-			Voters: quorum.JointConfig{
-				quorum.MajorityConfig{},
-				nil, // only populated when used
-			},
-			Learners:     nil, // only populated when used
-			LearnersNext: nil, // only populated when used
-		},
-		Votes:    map[pb.PeerID]bool{},
-		Progress: map[pb.PeerID]*Progress{},
+		Config:           config,
+		Votes:            map[pb.PeerID]bool{},
+		Progress:         map[pb.PeerID]*Progress{},
 	}
 	return p
-}
-
-// ConfState returns a ConfState representing the active configuration.
-func (p *ProgressTracker) ConfState() pb.ConfState {
-	return pb.ConfState{
-		Voters:         p.Config.Voters[0].Slice(),
-		VotersOutgoing: p.Config.Voters[1].Slice(),
-		Learners:       quorum.MajorityConfig(p.Config.Learners).Slice(),
-		LearnersNext:   quorum.MajorityConfig(p.Config.LearnersNext).Slice(),
-		AutoLeave:      p.Config.AutoLeave,
-	}
-}
-
-// IsSingleton returns true if (and only if) there is only one voting member
-// (i.e. the leader) in the current configuration.
-func (p *ProgressTracker) IsSingleton() bool {
-	return len(p.Config.Voters[0]) == 1 && len(p.Config.Voters[1]) == 0
 }
 
 type matchAckIndexer map[pb.PeerID]*Progress

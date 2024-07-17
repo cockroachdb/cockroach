@@ -443,6 +443,7 @@ go_test(
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/raft",
         "//pkg/raft/confchange",
+        "//pkg/raft/quorum",
         "//pkg/raft/raftpb",
         "//pkg/raft/raftstoreliveness",
         "//pkg/raft/tracker",
