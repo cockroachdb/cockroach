@@ -737,8 +737,10 @@ func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
 		}
 
 		// If skip-version upgrades are not enabled, the only possible
-		// predecessor is the immediate predecessor release.
-		if !skipVersions {
+		// predecessor is the immediate predecessor release. If the
+		// predecessor doesn't support skip versions, then its predecessor
+		// won't either. Don't attempt to find it.
+		if !skipVersions || !pred.AtLeast(minSupportedSkipVersionUpgrade) {
 			return []*clusterupgrade.Version{pred}, nil
 		}
 
