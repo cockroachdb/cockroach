@@ -912,3 +912,12 @@ type AddTableZoneConfig struct {
 	TableID    descpb.ID
 	ZoneConfig *zonepb.ZoneConfig
 }
+
+// AddIndexZoneConfig adds a zone config to an index.
+type AddIndexZoneConfig struct {
+	immediateMutationOp
+	TableID      descpb.ID
+	IndexID      descpb.IndexID
+	Subzone      zonepb.Subzone
+	SubzoneSpans []zonepb.SubzoneSpan
+}
