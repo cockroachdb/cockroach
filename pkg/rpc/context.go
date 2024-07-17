@@ -15,6 +15,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"fmt"
 	"hash/fnv"
 	"io"
 	"math"
@@ -515,6 +516,9 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	}
 
 	masterCtx, _ := opts.Stopper.WithCancelOnQuiesce(ctx)
+
+	fmt.Println("CERTS:")
+	fmt.Println(opts.SSLCertsDir)
 
 	secCtx := NewSecurityContext(
 		SecurityContextOptions{
