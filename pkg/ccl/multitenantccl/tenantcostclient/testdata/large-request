@@ -8,7 +8,7 @@ throttle: 1000
 ----
 
 # Fire off a write that needs significantly more than the initial tokens.
-write bytes=15357952 label=w1
+write bytes=15357945 label=w1
 ----
 
 timers

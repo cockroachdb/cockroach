@@ -29,9 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
@@ -184,7 +186,13 @@ type tenantServerDeps struct {
 }
 
 type spanLimiterFactory func(isql.Executor, *cluster.Settings, *spanconfig.TestingKnobs) spanconfig.Limiter
-type costControllerFactory func(*cluster.Settings, roachpb.TenantID, kvtenant.TokenBucketProvider, roachpb.Locality) (multitenant.TenantSideCostController, error)
+type costControllerFactory func(
+	*cluster.Settings,
+	roachpb.TenantID,
+	kvtenant.TokenBucketProvider,
+	kvclient.NodeDescStore,
+	roachpb.Locality,
+) (multitenant.TenantSideCostController, error)
 
 // NewSeparateProcessTenantServer creates a tenant-specific, SQL-only
 // server against a KV backend, with defaults appropriate for a
@@ -1183,7 +1191,8 @@ func makeTenantSQLServerArgs(
 		tenantKnobs.OverrideTokenBucketProvider != nil {
 		provider = tenantKnobs.OverrideTokenBucketProvider(provider)
 	}
-	costController, err := deps.costControllerFactory(st, sqlCfg.TenantID, provider, baseCfg.Locality)
+	costController, err := deps.costControllerFactory(
+		st, sqlCfg.TenantID, provider, tenantConnect, baseCfg.Locality)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
@@ -1428,7 +1437,11 @@ var NewTenantSideCostController costControllerFactory = NewNoopTenantSideCostCon
 // NewNoopTenantSideCostController returns a noop cost
 // controller. Used by shared-process tenants.
 func NewNoopTenantSideCostController(
-	*cluster.Settings, roachpb.TenantID, kvtenant.TokenBucketProvider, roachpb.Locality,
+	*cluster.Settings,
+	roachpb.TenantID,
+	kvtenant.TokenBucketProvider,
+	kvclient.NodeDescStore,
+	roachpb.Locality,
 ) (multitenant.TenantSideCostController, error) {
 	// Return a no-op implementation.
 	return noopTenantSideCostController{}, nil
@@ -1461,7 +1474,11 @@ func (noopTenantSideCostController) OnRequestWait(ctx context.Context) error {
 }
 
 func (noopTenantSideCostController) OnResponseWait(
-	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
+	ctx context.Context,
+	request *kvpb.BatchRequest,
+	response *kvpb.BatchResponse,
+	targetRange *roachpb.RangeDescriptor,
+	targetReplica *roachpb.ReplicaDescriptor,
 ) error {
 	return nil
 }

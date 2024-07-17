@@ -15,13 +15,13 @@ token-bucket
 5000.00 tokens filling @ 0.00 tokens/s
 
 # Ensure that estimated CPU metrics change, but not RU metrics.
-write repeat=100 count=6 bytes=2048 networkCost=1
+write repeat=35 count=6 bytes=2048 localities=same-zone
 ----
 
-# Expect ~269 tokens to be consumed.
+# Expect ~283 tokens to be consumed.
 token-bucket
 ----
-4731.05 tokens filling @ 0.00 tokens/s
+4717.33 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -30,20 +30,18 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 0
 tenant.sql_usage.read_requests: 0
 tenant.sql_usage.read_bytes: 0
-tenant.sql_usage.write_batches: 100
-tenant.sql_usage.write_requests: 600
-tenant.sql_usage.write_bytes: 204800
+tenant.sql_usage.write_batches: 105
+tenant.sql_usage.write_requests: 630
+tenant.sql_usage.write_bytes: 218190
 tenant.sql_usage.sql_pods_cpu_seconds: 0.00
 tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 0.27
-tenant.sql_usage.estimated_cpu_seconds: 0.27
-tenant.sql_usage.estimated_replication_bytes: 819200
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 409600
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 204800
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 204800
+tenant.sql_usage.estimated_kv_cpu_seconds: 0.28
+tenant.sql_usage.estimated_cpu_seconds: 0.28
+tenant.sql_usage.estimated_replication_bytes: 145460
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 145460
 
 # Wait for the token bucket response triggered by low tokens. Not doing this
 # causes a race condition, since in some cases this response arrives after the
@@ -58,10 +56,10 @@ advance wait=true
 ----
 00:00:01.000
 
-# ~29 tokens removed from bucket to account for background CPU.
+# ~31 tokens removed from bucket to account for background CPU.
 token-bucket
 ----
-4701.92 tokens filling @ 0.00 tokens/s
+4686.71 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -70,20 +68,18 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 0
 tenant.sql_usage.read_requests: 0
 tenant.sql_usage.read_bytes: 0
-tenant.sql_usage.write_batches: 100
-tenant.sql_usage.write_requests: 600
-tenant.sql_usage.write_bytes: 204800
+tenant.sql_usage.write_batches: 105
+tenant.sql_usage.write_requests: 630
+tenant.sql_usage.write_bytes: 218190
 tenant.sql_usage.sql_pods_cpu_seconds: 0.00
 tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 0.27
-tenant.sql_usage.estimated_cpu_seconds: 0.30
-tenant.sql_usage.estimated_replication_bytes: 819200
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 409600
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 204800
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 204800
+tenant.sql_usage.estimated_kv_cpu_seconds: 0.28
+tenant.sql_usage.estimated_cpu_seconds: 0.31
+tenant.sql_usage.estimated_replication_bytes: 145460
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 145460
 
 # Do same writes, but with a different write batch rate. This time, the
 # estimated CPU consumption should be less.
@@ -104,7 +100,7 @@ wait-for-event
 token-bucket-response
 ----
 
-write repeat=100 count=6 bytes=2048 networkCost=1
+write repeat=35 count=6 bytes=2048 localities=cross-zone
 ----
 
 # Wait until the next tick, at which point background CPU usage will be added.
@@ -113,10 +109,10 @@ advance wait=true
 ----
 00:00:42.000
 
-# Expect ~241 tokens to be removed, as compared to ~298 above (269 + 29).
+# Expect ~254 tokens to be removed, as compared to ~314 above (283 + 31).
 token-bucket
 ----
-4460.51 tokens filling @ 0.00 tokens/s
+4432.93 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -125,20 +121,19 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 0
 tenant.sql_usage.read_requests: 0
 tenant.sql_usage.read_bytes: 0
-tenant.sql_usage.write_batches: 200
-tenant.sql_usage.write_requests: 1200
-tenant.sql_usage.write_bytes: 409600
+tenant.sql_usage.write_batches: 210
+tenant.sql_usage.write_requests: 1260
+tenant.sql_usage.write_bytes: 436380
 tenant.sql_usage.sql_pods_cpu_seconds: 0.00
 tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 0.49
-tenant.sql_usage.estimated_cpu_seconds: 0.54
-tenant.sql_usage.estimated_replication_bytes: 1638400
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 819200
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 409600
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 409600
+tenant.sql_usage.estimated_kv_cpu_seconds: 0.51
+tenant.sql_usage.estimated_cpu_seconds: 0.57
+tenant.sql_usage.estimated_replication_bytes: 290920
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 218190
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 72730
 
 # Advance time to next period and do same writes, with the same write batch
 # rate, but with a global estimated CPU rate. The estimated CPU rate should not
@@ -160,7 +155,7 @@ wait-for-event
 token-bucket-response
 ----
 
-write repeat=100 count=6 bytes=2048 networkCost=1
+write repeat=35 count=6 bytes=2048 localities=cross-zone
 ----
 
 advance wait=true
@@ -168,10 +163,10 @@ advance wait=true
 ----
 00:00:53.000
 
-# Expect ~241 tokens to be consumed, like above.
+# Expect ~254 tokens to be consumed, like above.
 token-bucket
 ----
-4219.10 tokens filling @ 0.00 tokens/s
+4179.15 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -180,24 +175,23 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 0
 tenant.sql_usage.read_requests: 0
 tenant.sql_usage.read_bytes: 0
-tenant.sql_usage.write_batches: 300
-tenant.sql_usage.write_requests: 1800
-tenant.sql_usage.write_bytes: 614400
+tenant.sql_usage.write_batches: 315
+tenant.sql_usage.write_requests: 1890
+tenant.sql_usage.write_bytes: 654570
 tenant.sql_usage.sql_pods_cpu_seconds: 0.00
 tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 0.70
-tenant.sql_usage.estimated_cpu_seconds: 0.78
-tenant.sql_usage.estimated_replication_bytes: 2457600
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 1228800
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 614400
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 614400
+tenant.sql_usage.estimated_kv_cpu_seconds: 0.74
+tenant.sql_usage.estimated_cpu_seconds: 0.82
+tenant.sql_usage.estimated_replication_bytes: 436380
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 290920
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
 
 # Now perform some read operations.
 
-read repeat=1000 count=20 bytes=10000
+read repeat=1000 count=20 bytes=10000 localities=cross-zone
 ----
 
 advance wait=true
@@ -207,7 +201,7 @@ advance wait=true
 
 token-bucket
 ----
-2827.49 tokens filling @ 0.00 tokens/s
+2787.54 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -216,20 +210,19 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 1000
 tenant.sql_usage.read_requests: 20000
 tenant.sql_usage.read_bytes: 10000000
-tenant.sql_usage.write_batches: 300
-tenant.sql_usage.write_requests: 1800
-tenant.sql_usage.write_bytes: 614400
+tenant.sql_usage.write_batches: 315
+tenant.sql_usage.write_requests: 1890
+tenant.sql_usage.write_bytes: 654570
 tenant.sql_usage.sql_pods_cpu_seconds: 0.00
 tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 1.96
-tenant.sql_usage.estimated_cpu_seconds: 2.17
-tenant.sql_usage.estimated_replication_bytes: 2457600
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 1228800
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 614400
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 614400
+tenant.sql_usage.estimated_kv_cpu_seconds: 2.00
+tenant.sql_usage.estimated_cpu_seconds: 2.21
+tenant.sql_usage.estimated_replication_bytes: 436380
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 290920
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
 
 # KV CPU seconds should not change, only total CPU seconds. Background CPU usage
 # should be accounted for.
@@ -244,7 +237,7 @@ advance wait=true
 
 token-bucket
 ----
-1730.24 tokens filling @ 0.00 tokens/s
+1690.29 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -253,20 +246,19 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 1000
 tenant.sql_usage.read_requests: 20000
 tenant.sql_usage.read_bytes: 10000000
-tenant.sql_usage.write_batches: 300
-tenant.sql_usage.write_requests: 1800
-tenant.sql_usage.write_bytes: 614400
+tenant.sql_usage.write_batches: 315
+tenant.sql_usage.write_requests: 1890
+tenant.sql_usage.write_bytes: 654570
 tenant.sql_usage.sql_pods_cpu_seconds: 0.99
 tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 0
 tenant.sql_usage.external_io_egress_bytes: 0
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 1.96
-tenant.sql_usage.estimated_cpu_seconds: 3.27
-tenant.sql_usage.estimated_replication_bytes: 2457600
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 1228800
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 614400
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 614400
+tenant.sql_usage.estimated_kv_cpu_seconds: 2.00
+tenant.sql_usage.estimated_cpu_seconds: 3.31
+tenant.sql_usage.estimated_replication_bytes: 436380
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 290920
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
 
 # External I/O should not block or consume tokens.
 external-egress bytes=1024000
@@ -282,7 +274,7 @@ advance wait=true
 
 token-bucket
 ----
-1730.24 tokens filling @ 0.00 tokens/s
+1690.29 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -291,20 +283,19 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 1000
 tenant.sql_usage.read_requests: 20000
 tenant.sql_usage.read_bytes: 10000000
-tenant.sql_usage.write_batches: 300
-tenant.sql_usage.write_requests: 1800
-tenant.sql_usage.write_bytes: 614400
+tenant.sql_usage.write_batches: 315
+tenant.sql_usage.write_requests: 1890
+tenant.sql_usage.write_bytes: 654570
 tenant.sql_usage.sql_pods_cpu_seconds: 0.99
 tenant.sql_usage.pgwire_egress_bytes: 0
 tenant.sql_usage.external_io_ingress_bytes: 1024000
 tenant.sql_usage.external_io_egress_bytes: 1024000
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 1.96
-tenant.sql_usage.estimated_cpu_seconds: 3.27
-tenant.sql_usage.estimated_replication_bytes: 2457600
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 1228800
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 614400
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 614400
+tenant.sql_usage.estimated_kv_cpu_seconds: 2.00
+tenant.sql_usage.estimated_cpu_seconds: 3.31
+tenant.sql_usage.estimated_replication_bytes: 436380
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 290920
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
 
 # PGWire egress should not block or consume tokens.
 pgwire-egress
@@ -318,7 +309,7 @@ advance wait=true
 
 token-bucket
 ----
-1730.24 tokens filling @ 0.00 tokens/s
+1690.29 tokens filling @ 0.00 tokens/s
 
 metrics
 ----
@@ -327,20 +318,19 @@ tenant.sql_usage.kv_request_units: 0.00
 tenant.sql_usage.read_batches: 1000
 tenant.sql_usage.read_requests: 20000
 tenant.sql_usage.read_bytes: 10000000
-tenant.sql_usage.write_batches: 300
-tenant.sql_usage.write_requests: 1800
-tenant.sql_usage.write_bytes: 614400
+tenant.sql_usage.write_batches: 315
+tenant.sql_usage.write_requests: 1890
+tenant.sql_usage.write_bytes: 654570
 tenant.sql_usage.sql_pods_cpu_seconds: 0.99
 tenant.sql_usage.pgwire_egress_bytes: 12345
 tenant.sql_usage.external_io_ingress_bytes: 1024000
 tenant.sql_usage.external_io_egress_bytes: 1024000
 tenant.sql_usage.cross_region_network_ru: 0.00
-tenant.sql_usage.estimated_kv_cpu_seconds: 1.96
-tenant.sql_usage.estimated_cpu_seconds: 3.27
-tenant.sql_usage.estimated_replication_bytes: 2457600
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 1228800
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 614400
-tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 614400
+tenant.sql_usage.estimated_kv_cpu_seconds: 2.00
+tenant.sql_usage.estimated_cpu_seconds: 3.31
+tenant.sql_usage.estimated_replication_bytes: 436380
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 290920
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 145460
 
 # Ensure that token bucket request is made after 10 seconds (though it returns
 # no tokens).
@@ -355,7 +345,43 @@ token-bucket-response
 
 token-bucket
 ----
-1730.24 tokens filling @ 0.00 tokens/s
+1690.29 tokens filling @ 0.00 tokens/s
+
+# Perform cross-region write request.
+write count=100 bytes=1000 localities=cross-region
+----
+
+# Wait until the next tick, at which point background CPU usage will be added.
+advance wait=true
+1s
+----
+00:01:08.000
+
+token-bucket
+----
+1652.30 tokens filling @ 0.00 tokens/s
+
+metrics
+----
+tenant.sql_usage.request_units: 0.00
+tenant.sql_usage.kv_request_units: 0.00
+tenant.sql_usage.read_batches: 1000
+tenant.sql_usage.read_requests: 20000
+tenant.sql_usage.read_bytes: 10000000
+tenant.sql_usage.write_batches: 320
+tenant.sql_usage.write_requests: 2390
+tenant.sql_usage.write_bytes: 661570
+tenant.sql_usage.sql_pods_cpu_seconds: 0.99
+tenant.sql_usage.pgwire_egress_bytes: 12345
+tenant.sql_usage.external_io_ingress_bytes: 1024000
+tenant.sql_usage.external_io_egress_bytes: 1024000
+tenant.sql_usage.cross_region_network_ru: 0.00
+tenant.sql_usage.estimated_kv_cpu_seconds: 2.03
+tenant.sql_usage.estimated_cpu_seconds: 3.35
+tenant.sql_usage.estimated_replication_bytes: 441980
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="",to_region="europe-west1",to_zone=""}: 2800
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az1"}: 292320
+tenant.sql_usage.estimated_replication_bytes{from_region="us-central1",from_zone="az1",to_region="us-central1",to_zone="az2"}: 146860
 
 # Allow the provider to grant tokens again.
 configure
@@ -367,8 +393,8 @@ throttle: 0
 advance wait=true
 10s
 ----
-00:01:17.000
+00:01:18.000
 
 token-bucket
 ----
-1730.24 tokens filling @ 0.00 tokens/s
+1652.30 tokens filling @ 0.00 tokens/s
