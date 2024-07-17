@@ -178,13 +178,8 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 
 		// Ensure that the declarative schema changer is off so that we do not get failures related to unimplemented
 		// statements in the dsc.
-		for _, node := range c.All() {
-			if err := helper.ExecWithGateway(r, option.NodeListOption{node}, "SET use_declarative_schema_changer = off"); err != nil {
-				return err
-			}
-		}
-
 		setUpQuery := `
+SET use_declarative_schema_changer = off;
 CREATE DATABASE IF NOT EXISTS testdb;
 CREATE SCHEMA IF NOT EXISTS testdb.testsc;
 CREATE TABLE IF NOT EXISTS testdb.testsc.t (i INT PRIMARY KEY, j INT NOT NULL, INDEX idx (j), CONSTRAINT check_j CHECK (j > 0));
@@ -205,7 +200,11 @@ CREATE VIEW IF NOT EXISTS testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);
 		// so that we don't fall back to legacy schema changer implicitly.
 		// Being explicit can help catch bugs that will otherwise be
 		// buried by the fallback.
+		// To make sure the session variables are applied correctly, we limit each
+		// connection pool to have at most 1 connection.
 		for _, node := range c.All() {
+			db := helper.Connect(node)
+			db.SetMaxOpenConns(1)
 			if err := helper.ExecWithGateway(r, option.NodeListOption{node}, "SET use_declarative_schema_changer = unsafe_always"); err != nil {
 				return err
 			}
