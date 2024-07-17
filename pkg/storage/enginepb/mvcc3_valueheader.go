@@ -24,6 +24,7 @@ func (h *MVCCValueHeader) pure() MVCCValueHeaderPure {
 		OmitInRangefeeds: h.OmitInRangefeeds,
 		ImportEpoch:      h.ImportEpoch,
 		OriginID:         h.OriginID,
+		OriginTimestamp:  h.OriginTimestamp,
 	}
 }
 
