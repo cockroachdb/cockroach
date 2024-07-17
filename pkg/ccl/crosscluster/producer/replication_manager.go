@@ -174,6 +174,16 @@ func (r *replicationStreamManagerImpl) StreamPartition(
 	if err := r.checkLicense(); err != nil {
 		return nil, err
 	}
+
+	if !r.evalCtx.SessionData().AvoidBuffering {
+		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
+	}
+
+	if !r.evalCtx.TxnIsSingleStmt {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"crdb_internal.stream_partition not allowed in explicit or multi-statement transaction")
+	}
+
 	// We release the descriptor collection state because stream_partitions
 	// runs forever.
 	r.txn.Descriptors().ReleaseAll(ctx)
