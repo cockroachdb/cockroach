@@ -153,6 +153,22 @@ func (c *ElementCollection[E]) ForEach(fn func(current Status, target TargetStat
 	}
 }
 
+// ForEachUntil is like ForEach, but if fn returns true, we exit early from
+// iterating over c.
+func (c *ElementCollection[E]) ForEachUntil(
+	fn func(current Status, target TargetStatus, e E) bool,
+) {
+	if c == nil {
+		return
+	}
+	for _, j := range c.indexes {
+		current, target, e := c.g.Get(j)
+		if fn(current, target, e.(E)) {
+			return
+		}
+	}
+}
+
 // ForEachTarget is like ForEach but without current status.
 func (c *ElementCollection[E]) ForEachTarget(fn func(target TargetStatus, e E)) {
 	c.ForEach(func(current Status, target TargetStatus, e E) {

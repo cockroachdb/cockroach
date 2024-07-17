@@ -922,7 +922,6 @@ func (s *TestState) Validate(ctx context.Context) error {
 	for upsertedID, zc := range s.catalogChanges.zoneConfigsToUpdate {
 		s.LogSideEffectf("upsert zone config for #%d", upsertedID)
 		var val roachpb.Value
-		fmt.Println("issue is likely with bad zc", zc)
 		if err := val.SetProto(zc); err != nil {
 			return err
 		}
