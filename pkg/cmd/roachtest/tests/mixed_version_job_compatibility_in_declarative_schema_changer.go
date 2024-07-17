@@ -165,12 +165,15 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 
 		// Ensure that the declarative schema changer is off so that we do not get failures related to unimplemented
 		// statements in the dsc.
+		// To make sure the session variables are applied correctly, we limit each
+		// connection pool to have at most 1 connection.
 		for _, node := range c.All() {
+			db := helper.Connect(node)
+			db.SetMaxOpenConns(1)
 			if err := helper.ExecWithGateway(r, option.NodeListOption{node}, "SET use_declarative_schema_changer = off"); err != nil {
 				return err
 			}
 		}
-
 		setUpQuery := `
 CREATE DATABASE IF NOT EXISTS testdb;
 CREATE SCHEMA IF NOT EXISTS testdb.testsc;
