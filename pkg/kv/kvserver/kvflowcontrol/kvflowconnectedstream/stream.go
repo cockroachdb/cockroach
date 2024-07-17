@@ -1944,11 +1944,13 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendLocked(
 			// Best guess at the inheritedPri based on the stats. We will correct
 			// this before.
 			inheritedPri = rss.queuePriorityLocked()
-			if kvflowcontrolpb.WorkClassFromRaftPriority(inheritedPri) == admissionpb.ElasticWorkClass {
-				log.Fatalf(ctx, "%v", errors.AssertionFailedf(
-					"inherited elastic work-class from regular work-class [info=%v send_stream=%v]",
-					rss.parent.parent.opts.RaftInterface.FollowerState(rss.parent.desc.ReplicaID),
-					rss.stringLocked()))
+			// It is possible that we have already popped the RegularWorkClass items
+			// from the send-queue in a previous dequeueFromQueueAndSendLocked, and
+			// we had some remaining regular tokens that we are using now. We
+			// lower-bound the inheritedPri to be one corresponding to a regular
+			// work class
+			if inheritedPri < kvflowcontrolpb.RaftLowPri {
+				inheritedPri = kvflowcontrolpb.RaftNormalPri
 			}
 			remainingTokens[admissionpb.RegularWorkClass] = rss.sendQueue.deductedForScheduler.tokens
 		} else {
