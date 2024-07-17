@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,6 +30,11 @@ import (
 // Stream is a object capable of transmitting RangeFeedEvents.
 type Stream interface {
 	kvpb.RangeFeedEventSink
+	// Disconnect disconnects the stream with the provided error. Note that this
+	// function can be called by the processor worker while holding raftMu, so it
+	// is important that this function doesn't block IO or try acquiring locks
+	// that could lead to deadlocks.
+	Disconnect(err *kvpb.Error)
 }
 
 // Shared event is an entry stored in registration channel. Each entry is
@@ -81,7 +85,6 @@ type registration struct {
 
 	// Output.
 	stream Stream
-	done   *future.ErrorFuture
 	unreg  func()
 	// Internal.
 	id            int64
@@ -122,7 +125,6 @@ func newRegistration(
 	metrics *Metrics,
 	stream Stream,
 	unregisterFn func(),
-	done *future.ErrorFuture,
 ) registration {
 	r := registration{
 		span:             span,
@@ -132,7 +134,6 @@ func newRegistration(
 		withOmitRemote:   withOmitRemote,
 		metrics:          metrics,
 		stream:           stream,
-		done:             done,
 		unreg:            unregisterFn,
 		buf:              make(chan *sharedEvent, bufferSz),
 		blockWhenFull:    blockWhenFull,
@@ -299,7 +300,7 @@ func (r *registration) disconnect(pErr *kvpb.Error) {
 			r.mu.outputLoopCancelFn()
 		}
 		r.mu.disconnected = true
-		r.done.Set(pErr.GoError())
+		r.stream.Disconnect(pErr)
 	}
 }
 
