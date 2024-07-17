@@ -38,13 +38,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
 	originTimestampColumnName = "crdb_replication_origin_timestamp"
+)
 
-	lwwProcessor        = "last-write-wins"
-	udfApplierProcessor = "applier-udf"
+type processorType string
+
+// SafeValue implements the redact.SafeValue interface.
+func (p processorType) SafeValue() {}
+
+var _ redact.SafeValue = defaultSQLProcessor
+
+const (
+	lwwProcessor        processorType = "last-write-wins"
+	udfApplierProcessor processorType = "applier-udf"
 )
 
 // TODO(ssd): Thread through from job
