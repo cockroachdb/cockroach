@@ -8531,6 +8531,53 @@ select
  └── filters
       └── j1:1 IN ('1', '10', '100') [outer=(1), constraints=(/1: [/'1' - /'1'] [/'10' - /'10'] [/'100' - /'100']; tight)]
 
+# Regression test for #122733. Do not construct an unnecessary index-join above
+# the inverted index scan.
+exec-ddl
+CREATE TABLE t122733 (
+  a STRING,
+  b STRING,
+  c STRING AS (b) VIRTUAL,
+  PRIMARY KEY (a, b),
+  INVERTED INDEX i122733 (a, c gin_trgm_ops)
+)
+----
+
+opt expect=GenerateInvertedIndexScans
+SELECT 1
+FROM (SELECT 'foo' FROM t122733) AS tmp (f)
+JOIN t122733@i122733 ON tmp.f = a AND tmp.f = c
+----
+project
+ ├── columns: "?column?":14!null
+ ├── fd: ()-->(14)
+ ├── inner-join (cross)
+ │    ├── columns: a:8!null b:9!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    ├── fd: ()-->(8,9)
+ │    ├── scan t122733
+ │    │    └── computed column expressions
+ │    │         └── c:3
+ │    │              └── b:2
+ │    ├── select
+ │    │    ├── columns: a:8!null b:9!null
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8,9)
+ │    │    ├── scan t122733@i122733,inverted
+ │    │    │    ├── columns: a:8!null b:9!null
+ │    │    │    ├── constraint: /8: [/'foo' - /'foo']
+ │    │    │    ├── inverted constraint: /13/9
+ │    │    │    │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │    │    ├── flags: force-index=i122733
+ │    │    │    ├── key: (9)
+ │    │    │    └── fd: ()-->(8)
+ │    │    └── filters
+ │    │         └── b:9 = 'foo' [outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
+ │    └── filters (true)
+ └── projections
+      └── 1 [as="?column?":14]
+
 # --------------------------------------------------
 # GenerateZigzagJoins
 # --------------------------------------------------
