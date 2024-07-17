@@ -59,13 +59,13 @@ type Limiter interface {
 	// acquiring the requested quantity and putting the limiter in debt.
 	//
 	// The only errors which should be returned are due to the context.
-	Wait(ctx context.Context, reqInfo tenantcostmodel.RequestInfo) error
+	Wait(ctx context.Context, reqInfo tenantcostmodel.BatchInfo) error
 
 	// RecordRead subtracts the bytes read by a request from the token bucket.
 	// This call may push the Limiter into debt in the ReadBytes dimensions
 	// forcing subsequent Wait calls to block until the debt is paid.
 	// However, RecordRead itself will never block.
-	RecordRead(ctx context.Context, respInfo tenantcostmodel.ResponseInfo)
+	RecordRead(ctx context.Context, respInfo tenantcostmodel.BatchInfo)
 }
 
 type limiter struct {
@@ -119,7 +119,7 @@ func (rl *limiter) init(
 }
 
 // Wait is part of the Limiter interface.
-func (rl *limiter) Wait(ctx context.Context, reqInfo tenantcostmodel.RequestInfo) error {
+func (rl *limiter) Wait(ctx context.Context, reqInfo tenantcostmodel.BatchInfo) error {
 	exempt := rl.authorizer.IsExemptFromRateLimiting(ctx, rl.tenantID)
 	if !exempt {
 		r := newWaitRequest(reqInfo)
@@ -130,28 +130,28 @@ func (rl *limiter) Wait(ctx context.Context, reqInfo tenantcostmodel.RequestInfo
 		}
 	}
 
-	if reqInfo.IsWrite() {
+	if reqInfo.WriteCount > 0 {
 		rl.metrics.writeBatchesAdmitted.Inc(1)
-		rl.metrics.writeRequestsAdmitted.Inc(reqInfo.WriteCount())
-		rl.metrics.writeBytesAdmitted.Inc(reqInfo.WriteBytes())
+		rl.metrics.writeRequestsAdmitted.Inc(reqInfo.WriteCount)
+		rl.metrics.writeBytesAdmitted.Inc(reqInfo.WriteBytes)
 	}
 
 	return nil
 }
 
 // RecordRead is part of the Limiter interface.
-func (rl *limiter) RecordRead(ctx context.Context, respInfo tenantcostmodel.ResponseInfo) {
+func (rl *limiter) RecordRead(ctx context.Context, respInfo tenantcostmodel.BatchInfo) {
 	exempt := rl.authorizer.IsExemptFromRateLimiting(ctx, rl.tenantID)
 
 	rl.metrics.readBatchesAdmitted.Inc(1)
-	rl.metrics.readRequestsAdmitted.Inc(respInfo.ReadCount())
-	rl.metrics.readBytesAdmitted.Inc(respInfo.ReadBytes())
+	rl.metrics.readRequestsAdmitted.Inc(respInfo.ReadCount)
+	rl.metrics.readBytesAdmitted.Inc(respInfo.ReadBytes)
 	if !exempt {
 		rl.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
 			tb := res.(*tokenBucket)
 			amount := tb.config.ReadBatchUnits
-			amount += float64(respInfo.ReadCount()) * tb.config.ReadRequestUnits
-			amount += float64(respInfo.ReadBytes()) * tb.config.ReadUnitsPerByte
+			amount += float64(respInfo.ReadCount) * tb.config.ReadRequestUnits
+			amount += float64(respInfo.ReadBytes) * tb.config.ReadUnitsPerByte
 			tb.Adjust(tokenbucket.Tokens(-amount))
 			// Do not notify the head of the queue. In the best case we did not disturb
 			// the time at which it can be fulfilled and in the worst case, we made it
@@ -199,7 +199,7 @@ func (tb *tokenBucket) init(config Config, timeSource timeutil.TimeSource) {
 
 // waitRequest is used to wait for adequate resources in the tokenBuckets.
 type waitRequest struct {
-	info tenantcostmodel.RequestInfo
+	info tenantcostmodel.BatchInfo
 }
 
 var _ quotapool.Request = (*waitRequest)(nil)
@@ -210,7 +210,7 @@ var waitRequestSyncPool = sync.Pool{
 
 // newWaitRequest allocates a waitRequest from the sync.Pool.
 // It should be returned with putWaitRequest.
-func newWaitRequest(info tenantcostmodel.RequestInfo) *waitRequest {
+func newWaitRequest(info tenantcostmodel.BatchInfo) *waitRequest {
 	r := waitRequestSyncPool.Get().(*waitRequest)
 	*r = waitRequest{info: info}
 	return r
@@ -227,10 +227,10 @@ func (req *waitRequest) Acquire(
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	tb := res.(*tokenBucket)
 	var needed float64
-	if req.info.IsWrite() {
+	if req.info.WriteCount > 0 {
 		needed = tb.config.WriteBatchUnits
-		needed += float64(req.info.WriteCount()) * tb.config.WriteRequestUnits
-		needed += float64(req.info.WriteBytes()) * tb.config.WriteUnitsPerByte
+		needed += float64(req.info.WriteCount) * tb.config.WriteRequestUnits
+		needed += float64(req.info.WriteBytes) * tb.config.WriteUnitsPerByte
 	} else {
 		// Only acquire tokens for read requests once the response has been
 		// received. However, TryToFulfill still needs to be called with a zero

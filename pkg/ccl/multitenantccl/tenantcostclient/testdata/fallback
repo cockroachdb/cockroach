@@ -24,7 +24,7 @@ error: true
 
 # Issue a large write that requires 12K more RUs, which forces another fetch and
 # puts the bucket into debt.
-write bytes=12285952
+write bytes=12285945
 ----
 
 wait-for-event
@@ -48,7 +48,7 @@ token-bucket
 
 # Issue another 5K write which must wait until the fallback rate adds 2K to the
 # bucket in order to complete.
-write bytes=5117952 label=w1
+write bytes=5117945 label=w1
 ----
 
 timers
