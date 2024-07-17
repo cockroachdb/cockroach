@@ -163,6 +163,12 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						// completes in a reasonable amount of time.
 						_, err := conn.Exec("SET CLUSTER SETTING jobs.retention_time='1h'")
 						require.NoError(t, err)
+						// Create a user that will be used for authentication for the REST
+						// API calls.
+						_, err = conn.Exec("CREATE USER roachadmin password 'roacher'")
+						require.NoError(t, err)
+						_, err = conn.Exec("GRANT ADMIN to roachadmin")
+						require.NoError(t, err)
 					}
 				}
 				err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.Node(c.Spec().NodeCount))
@@ -172,6 +178,18 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			// Upload a file containing the ORM queries.
 			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, workloadNode))
 			mon := c.NewMonitor(ctx, c.All())
+			// Upload a file containing the web API calls we want to benchmark.
+			require.NoError(t, c.PutString(ctx,
+				LargeSchemaAPICalls,
+				"apiCalls",
+				0755,
+				workloadNode))
+			// Get a list of web console URLs.
+			webConsoleURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Range(1, c.Spec().NodeCount-1))
+			require.NoError(t, err)
+			for urlIdx := range webConsoleURLs {
+				webConsoleURLs[urlIdx] = "http://" + webConsoleURLs[urlIdx]
+			}
 			// Next startup the workload for our list of databases from earlier.
 			for dbListType, dbList := range [][]string{activeDBList, inactiveDBList} {
 				dbList := dbList
@@ -206,9 +224,11 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						DisableHistogram:  true, // We setup the flag above.
 						WorkloadInstances: wlInstance,
 						Duration:          time.Minute * 60,
-						ExtraRunArgs: fmt.Sprintf("--db-list-file=%s --txn-preamble-file=%s --conns=%d --workers=%d %s %s",
+						ExtraRunArgs: fmt.Sprintf("--db-list-file=%s --txn-preamble-file=%s --admin-urls=%q "+
+							"--console-api-file=apiCalls --conns=%d --workers=%d %s %s",
 							populateFileName,
 							"ormQueries.sql",
+							strings.Join(webConsoleURLs, ","),
 							numWorkers,
 							numWorkers,
 							waitEnabled,
@@ -238,4 +258,9 @@ const LargeSchemaOrmQueries = `
            ) as sp
         ON sp.nspoid = typnamespace 
      ORDER BY sp.r, pg_type.oid DESC;
+`
+
+// LargeSchemaAPICalls are calls into the consoles cluster API.
+const LargeSchemaAPICalls = `
+api/v2/databases/$targetDb/tables/
 `
