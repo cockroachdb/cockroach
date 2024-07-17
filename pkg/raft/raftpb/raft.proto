@@ -89,10 +89,12 @@ message Message {
 	repeated Entry       entries     = 7  [(gogoproto.nullable) = false];
 	optional uint64      commit      = 8  [(gogoproto.nullable) = false];
 	optional uint64      lead        = 16 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
+	optional uint64      leadEpoch   = 17 [(gogoproto.nullable) = false,
+		(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness.Epoch"];
 	// (type=MsgStorageAppend,vote=5,term=10) means the local node is voting for
-	// peer 5 in term 10. For MsgStorageAppends, the term, vote, lead, and commit
-	// fields will either all be set (to facilitate the construction of a
-	// HardState) if any of the fields have changed or will all be unset if none
+	// peer 5 in term 10. For MsgStorageAppends, the term, vote, lead, leadEpoch,
+	// and commit fields will either all be set (to facilitate the construction of
+	// a HardState) if any of the fields have changed or will all be unset if none
 	// of the fields have changed.
 	optional uint64      vote        = 13 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
 	// snapshot is non-nil and non-empty for MsgSnap messages and nil for all other
@@ -125,10 +127,12 @@ message Message {
 }
 
 message HardState {
-	optional uint64 term   = 1 [(gogoproto.nullable) = false];
-	optional uint64 vote   = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
-	optional uint64 commit = 3 [(gogoproto.nullable) = false];
-	optional uint64 lead   = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
+	optional uint64 term         = 1 [(gogoproto.nullable) = false];
+	optional uint64 vote         = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
+	optional uint64 commit       = 3 [(gogoproto.nullable) = false];
+	optional uint64 lead         = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "PeerID"];
+	optional uint64 lead_epoch   = 5 [(gogoproto.nullable) = false,
+		(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness.Epoch"];
 }
 
 // ConfChangeTransition specifies the behavior of a configuration change with

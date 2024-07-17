@@ -191,6 +191,7 @@ func (sl StateLoader) SynthesizeHardState(
 	if oldHS.Term == newHS.Term {
 		newHS.Vote = oldHS.Vote
 		newHS.Lead = oldHS.Lead
+		newHS.LeadEpoch = oldHS.LeadEpoch
 	}
 	err := sl.SetHardState(ctx, readWriter, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
