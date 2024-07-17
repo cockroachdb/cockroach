@@ -25,6 +25,8 @@ import (
 type (
 	// TestPlan is the output of planning a mixed-version test.
 	TestPlan struct {
+		// seed is the seed used to generate this test plan.
+		seed int64
 		// setup groups together steps that setup the cluster for a test
 		// run. This involves starting the cockroach process in the
 		// initial version, installing fixtures, running initial upgrades,
@@ -67,6 +69,7 @@ type (
 	testPlanner struct {
 		versions       []*clusterupgrade.Version
 		deploymentMode DeploymentMode
+		seed           int64
 		currentContext *Context
 		crdbNodes      option.NodeListOption
 		rt             test.Test
@@ -266,6 +269,7 @@ func (p *testPlanner) Plan() *TestPlan {
 	firstTestedUpgradeVersion := testUpgrades[0].from
 
 	testPlan := &TestPlan{
+		seed:           p.seed,
 		setup:          setup,
 		initSteps:      p.testStartSteps(firstTestedUpgradeVersion),
 		upgrades:       testUpgrades,
@@ -966,6 +970,7 @@ func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 		lines = append(lines, fmt.Sprintf("%-20s%v", titleWithColon, val))
 	}
 
+	addLine("Seed", plan.seed)
 	addLine("Upgrades", strings.Join(formattedVersions, " → "))
 	addLine("Deployment mode", plan.deploymentMode)
 

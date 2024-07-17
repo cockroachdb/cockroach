@@ -18,6 +18,7 @@ ok
 
 plan debug=true
 ----
+Seed:               12345
 Upgrades:           v21.2.29 → v22.1.8 → v22.2.3 → v23.1.10 → v23.2.4 → <current>
 Deployment mode:    system-only
 Mutators:           preserve_downgrade_option_randomizer
