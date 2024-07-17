@@ -1679,3 +1679,23 @@ func retrieveColumnComputeExpression(
 	columnType := mustRetrieveColumnTypeElem(b, tableID, columnID)
 	return columnType.ComputeExpr
 }
+
+// mustRetrieveColumnTypeElem retrieves the index column elements associated
+// with the given indexID.
+func mustRetrieveIndexColumnElements(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) []*scpb.IndexColumn {
+	// Get the index columns for indexID.
+	var idxCols []*scpb.IndexColumn
+	b.QueryByID(tableID).FilterIndexColumn().
+		Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) bool {
+			return e.IndexID == indexID
+		}).ForEach(func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
+		idxCols = append(idxCols, e)
+	})
+	if len(idxCols) == 0 {
+		panic(errors.AssertionFailedf("programming error: cannot find a IndexColumn "+
+			"element for index ID %v", indexID))
+	}
+	return idxCols
+}

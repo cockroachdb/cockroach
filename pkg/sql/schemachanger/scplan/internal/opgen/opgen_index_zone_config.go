@@ -20,8 +20,14 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.IndexZoneConfig) *scop.NotImplemented {
-					return &scop.NotImplemented{}
+				emit(func(this *scpb.IndexZoneConfig) *scop.AddIndexZoneConfig {
+
+					return &scop.AddIndexZoneConfig{
+						TableID:      this.TableID,
+						IndexID:      this.IndexID,
+						Subzone:      this.Subzone,
+						SubzoneSpans: this.SubzoneSpans,
+					}
 				}),
 			),
 		),
