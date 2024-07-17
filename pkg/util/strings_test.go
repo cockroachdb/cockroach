@@ -142,7 +142,7 @@ func TestStringListBuilder(t *testing.T) {
 	expect("[one, two]")
 }
 
-func TestCollapseRepeatedChar(t *testing.T) {
+func TestCollapseRepeatedRune(t *testing.T) {
 	type testCase struct {
 		input    string
 		target   rune
@@ -172,13 +172,13 @@ func TestCollapseRepeatedChar(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if result := CollapseRepeatedChar(test.input, test.target); result != test.expected {
+		if result := CollapseRepeatedRune(test.input, test.target); result != test.expected {
 			t.Errorf("%q: expected %q but got %q", test.input, test.expected, result)
 		}
 	}
 }
 
-func BenchmarkCollapseRepeatedChar(b *testing.B) {
+func BenchmarkCollapseRepeatedRune(b *testing.B) {
 	type testCase struct {
 		name  string
 		input string
@@ -193,7 +193,7 @@ func BenchmarkCollapseRepeatedChar(b *testing.B) {
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
-				_ = CollapseRepeatedChar(tc.input, '%')
+				_ = CollapseRepeatedRune(tc.input, '%')
 			}
 		})
 	}

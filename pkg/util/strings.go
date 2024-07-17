@@ -18,6 +18,7 @@ import (
 	"strings"
 	"text/tabwriter"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -168,63 +169,89 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 	return string(buf)
 }
 
-// CollapseRepeatedChar will take the given string and given character
-// and collapse any repeating instances of this character to a
-// single instance.
-// E.g. CollapseRepeatedChar("wwwhy hello there", 'w') returns "why hello there"
-func CollapseRepeatedChar(toCollapse string, collapseChar rune) string {
-	// start and end indices denote the subrange of toCollapse
-	start, end := 0, len(toCollapse)-1
-	hasSuffixCollapseChar, hasPrefixcollapseChar := false, false
-	collapseCharWidth := utf8.RuneLen(collapseChar)
-	for start <= end {
-		r, w := utf8.DecodeRuneInString(toCollapse[start:])
-		if r != collapseChar {
-			break
-		}
-		start += w
-		hasPrefixcollapseChar = true
+// CollapseRepeatedRune will collapse repeated, adjacent target runes in the
+// input string into a single target rune. If there are no repeated, adjacent
+// target runes, the input will be returned, unmodified.
+func CollapseRepeatedRune(input string, target rune) string {
+	targetSize := utf8.RuneLen(target)
+
+	// First, remove repeated target runes in the prefix and suffix of the
+	// string.
+	start := strings.IndexFunc(input, func(r rune) bool { return r != target })
+	if start > 0 {
+		// Remove the prefix.
+		input = input[start-targetSize:]
 	}
-	for end >= start {
-		r, w := utf8.DecodeLastRuneInString(toCollapse[:end+1])
-		if r != collapseChar {
-			break
-		}
-		end -= w
-		hasSuffixCollapseChar = true
+	end := strings.LastIndexFunc(input, func(r rune) bool { return r != target })
+	if end >= 0 && end < len(input)-targetSize {
+		// Remove the suffix.
+		_, endSize := utf8.DecodeRuneInString(input[end:])
+		input = input[:end+endSize+targetSize]
 	}
 
-	// include a single collapseChar on prefix/suffix
-	if hasPrefixcollapseChar {
-		start -= collapseCharWidth
-	}
-	if hasSuffixCollapseChar {
-		end += collapseCharWidth
-	}
-
-	if !strings.Contains(toCollapse[start:end+1], fmt.Sprintf("%c%c", collapseChar, collapseChar)) {
-		return toCollapse[start : end+1]
-	}
-	var builder strings.Builder
-	builder.Grow(len(toCollapse))
-	for i := start; i <= end; {
-		r, w := utf8.DecodeRuneInString(toCollapse[i:])
-		i += w
-		if r != collapseChar {
-			continue
-		}
-		builder.WriteString(toCollapse[start:i])
-		for {
-			r, w := utf8.DecodeRuneInString(toCollapse[i:])
-			if r != collapseChar {
-				break
+	// findRepeatedT finds the next occurrence of repeated, adjacent target
+	// runes in s and returns the byte index of the start and the byte index of
+	// the character following the repeated target runes. If there are no
+	// repeated target runes in s, then ok=false is returned.
+	findRepeatedTarget := func(s string) (start int, end int, ok bool) {
+		rest := s
+		searched := 0
+		for ; len(rest) > 0; rest = s[searched:] {
+			start = strings.IndexRune(rest, target)
+			if start < 0 || start == len(rest)-targetSize {
+				// There are no more target runes in the string, or there is a
+				// single target rune at the end of the string.
+				return -1, -1, false
 			}
-			i += w
+			end = strings.IndexFunc(rest[start+targetSize:], func(r rune) bool { return r != target })
+			switch end {
+			case 0:
+				// We found a single occurrence of the target rune. Continue the
+				// search.
+				searched += start + targetSize
+				continue
+			case -1:
+				// There are no more non-target runes, so the suffix of the
+				// string must be repeated target runes.
+				return start + searched, len(s), true
+			default:
+				// We found repeated target runes.
+				start += searched
+				end += start + targetSize
+				return start, end, true
+			}
 		}
-		start = i
+		return -1, -1, false
 	}
-	if !hasSuffixCollapseChar {
-		builder.WriteString(toCollapse[start:])
+
+	rest := input
+	var buf []byte
+	n := 0
+	for len(rest) > 0 {
+		start, end, ok := findRepeatedTarget(rest)
+		if !ok {
+			// There are no repeated target runes in the rest of the string.
+			if buf == nil {
+				// If no repeated target runes were found previously, we can
+				// return the input string as-is (with the prefix and suffix
+				// possibly sliced off above).
+				return input
+			}
+			// If repeated target runes were found previously, copy the rest of
+			// the string to the buffer.
+			n += copy(buf[n:], rest)
+			break
+		}
+		if buf == nil {
+			// Lazily allocate the buffer.
+			buf = make([]byte, len(input))
+		}
+		// Copy up to "start" and including the first target rune.
+		n += copy(buf[n:], rest[:start+targetSize])
+		// Skip over the repeated target runes.
+		rest = rest[end:]
 	}
-	return builder.String()
+
+	buf = buf[:n]
+	return *(*string)(unsafe.Pointer(&buf))
 }

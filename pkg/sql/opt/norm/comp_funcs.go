@@ -160,19 +160,23 @@ func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.Sca
 	)
 }
 
-func (c *CustomFuncs) CollapseRepeatedChar(input opt.ScalarExpr) opt.ScalarExpr {
-	pattern, ok := memo.ExtractConstDatum(input).(*tree.DString)
-	if !ok {
-		panic(errors.AssertionFailedf("expected string constant"))
-	}
-	collapsed := util.CollapseRepeatedChar(string(*pattern), '%')
-	return c.f.ConstructConstVal(tree.NewDString(collapsed), input.DataType())
-}
-
-func (c *CustomFuncs) CanCollapseRepeatedChar(input opt.ScalarExpr) bool {
+// CanCollapseRepeatedLikeWildcards returns true if the input pattern contains
+// repeated '%' characters.
+func (c *CustomFuncs) CanCollapseRepeatedLikeWildcards(input opt.ScalarExpr) bool {
 	pattern, ok := memo.ExtractConstDatum(input).(*tree.DString)
 	if !ok {
 		panic(errors.AssertionFailedf("expected string constant"))
 	}
 	return strings.Contains(string(*pattern), "%%")
+}
+
+// CollapseRepeatedLikeWildcards collapses repeated '%' characters in the input
+// pattern.
+func (c *CustomFuncs) CollapseRepeatedLikeWildcards(input opt.ScalarExpr) opt.ScalarExpr {
+	pattern, ok := memo.ExtractConstDatum(input).(*tree.DString)
+	if !ok {
+		panic(errors.AssertionFailedf("expected string constant"))
+	}
+	collapsed := util.CollapseRepeatedRune(string(*pattern), '%')
+	return c.f.ConstructConstVal(tree.NewDString(collapsed), input.DataType())
 }
