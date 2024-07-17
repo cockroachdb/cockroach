@@ -338,34 +338,110 @@ func TestKafkaSinkClientV2_CompressionOpts(t *testing.T) {
 		name         string
 		codec, level string
 		expected     kgo.CompressionCodec
-		err          error // TODO: have to make a fx opt to return error or smth?
+		shouldErr    bool
 	}{
-		{"default", "", "", kgo.NoCompression(), nil},
-		{"gzip no level", "GZIP", "", kgo.GzipCompression(), nil},
-		{"gzip level 1", "GZIP", "1", kgo.GzipCompression().WithLevel(1), nil},
+		{
+			name:     "default",
+			expected: kgo.NoCompression(),
+		},
+		{
+			name:     "gzip no level",
+			codec:    "GZIP",
+			expected: kgo.GzipCompression(),
+		},
+		{
+			name:     "gzip level zero (not the default)",
+			codec:    "GZIP",
+			level:    "0",
+			expected: kgo.GzipCompression().WithLevel(0),
+		},
+		{
+			name:     "gzip level 9",
+			codec:    "GZIP",
+			level:    "9",
+			expected: kgo.GzipCompression().WithLevel(9),
+		},
+		{
+			name:     "snappy no level",
+			codec:    "SNAPPY",
+			expected: kgo.SnappyCompression(),
+		},
+		{
+			name:     "lz4 no level",
+			codec:    "LZ4",
+			expected: kgo.Lz4Compression(),
+		},
+		{
+			name:     "lz4 level 0", // this is actually the only level we're able to set. see https://github.com/twmb/franz-go/issues/778.
+			codec:    "LZ4",
+			level:    "0",
+			expected: kgo.Lz4Compression().WithLevel(0),
+		},
+		{
+			name:     "zstd no level",
+			codec:    "ZSTD",
+			expected: kgo.ZstdCompression(),
+		},
+		{
+			name:     "zstd level 4",
+			codec:    "ZSTD",
+			level:    "4",
+			expected: kgo.ZstdCompression().WithLevel(4),
+		},
 		// invalid stuff
-		// ..
-
+		{
+			name:      "invalid gzip level",
+			codec:     "GZIP",
+			level:     "100",
+			shouldErr: true,
+		},
+		{
+			name:      "invalid snappy level",
+			codec:     "SNAPPY",
+			level:     "1", // snappy doesn't have levels
+			shouldErr: true,
+		},
+		{
+			name:      "invalid lz4 level",
+			codec:     "LZ4",
+			level:     "10", // lz4 has strange levels: 0, 1 << (8 + iota), ..
+			shouldErr: true,
+		},
+		{
+			name:      "invalid zstd level",
+			codec:     "ZSTD",
+			level:     "10", // zstd has a valid range of [1, 4]. TODO: put this info in error messages
+			shouldErr: true,
+		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			opt := map[string]string{}
+			opt := map[string]any{}
 			if c.codec != "" {
 				opt["Compression"] = c.codec
 			}
 			if c.level != "" {
-				opt["CompressionLevel"] = c.level
+				i, err := strconv.Atoi(c.level)
+				require.NoError(t, err)
+				opt["CompressionLevel"] = i
 			}
 			jbs, err := json.Marshal(opt)
 			require.NoError(t, err)
 
-			fx := newKafkaSinkV2Fx(t, withJSONConfig(string(jbs)), withRealClient())
+			var createErr error
+			fx := newKafkaSinkV2Fx(t, withJSONConfig(string(jbs)), withRealClient(), withCreateClientErrorCb(func(err error) { createErr = err }))
 			defer fx.close()
+
+			if c.shouldErr {
+				require.Error(t, createErr)
+				return
+			} else {
+				require.NoError(t, createErr)
+			}
 
 			client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
 			val := client.OptValue("ProducerBatchCompression").([]kgo.CompressionCodec)
-
 			assert.Equal(t, []kgo.CompressionCodec{c.expected}, val)
 		})
 	}
@@ -430,13 +506,14 @@ type kafkaSinkV2Fx struct {
 	mockCtrl *gomock.Controller
 
 	// set with fxOpts to modify the created sinks
-	targetNames     []string
-	topicOverride   string
-	topicPrefix     string
-	sinkJSONConfig  changefeedbase.SinkSpecificJSONConfig
-	batchConfig     sinkBatchConfig
-	realClient      bool
-	additionalKOpts []kgo.Opt
+	targetNames         []string
+	topicOverride       string
+	topicPrefix         string
+	sinkJSONConfig      changefeedbase.SinkSpecificJSONConfig
+	batchConfig         sinkBatchConfig
+	realClient          bool
+	additionalKOpts     []kgo.Opt
+	createClientErrorCb func(error)
 
 	sink *kafkaSinkClientV2
 	bs   *batchingSink
@@ -486,6 +563,12 @@ func withKOptsClient(kOpts []kgo.Opt) fxOpt {
 	}
 }
 
+func withCreateClientErrorCb(cb func(error)) fxOpt {
+	return func(fx *kafkaSinkV2Fx) {
+		fx.createClientErrorCb = cb
+	}
+}
+
 func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
@@ -520,6 +603,10 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 
 	var err error
 	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts, fx.batchConfig, "no addrs", settings, knobs, nilMetricsRecorderBuilder)
+	if err != nil && fx.createClientErrorCb != nil {
+		fx.createClientErrorCb(err)
+		return fx
+	}
 	require.NoError(t, err)
 
 	targets := makeChangefeedTargets(fx.targetNames...)
@@ -537,6 +624,10 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	u.RawQuery = q.Encode()
 
 	bs, err := makeKafkaSinkV2(ctx, sinkURL{URL: u}, targets, fx.sinkJSONConfig, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
+	if err != nil && fx.createClientErrorCb != nil {
+		fx.createClientErrorCb(err)
+		return fx
+	}
 	require.NoError(t, err)
 	fx.bs = bs.(*batchingSink)
 
@@ -544,11 +635,15 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 }
 
 func (fx *kafkaSinkV2Fx) close() {
-	if _, ok := fx.sink.client.(*mocks.MockKafkaClientV2); ok {
-		fx.kc.EXPECT().Close().AnyTimes()
+	if fx.sink != nil {
+		if _, ok := fx.sink.client.(*mocks.MockKafkaClientV2); ok {
+			fx.kc.EXPECT().Close().AnyTimes()
+		}
+		require.NoError(fx.t, fx.sink.Close())
 	}
-	require.NoError(fx.t, fx.sink.Close())
-	require.NoError(fx.t, fx.bs.Close())
+	if fx.bs != nil {
+		require.NoError(fx.t, fx.bs.Close())
+	}
 }
 
 type fnMatcher func(arg any) bool

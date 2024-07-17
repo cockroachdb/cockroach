@@ -15,7 +15,6 @@ import (
 	"hash/fnv"
 	"io"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -480,7 +479,6 @@ func buildKgoConfig(
 	// TODO: remove this sarama dependency.
 	// NOTE: kgo lets you give multiple compression options in preference order, which is cool but the config json doesnt support that. Should we?
 	var comp kgo.CompressionCodec
-	var level int
 	switch sarama.CompressionCodec(sinkCfg.Compression) {
 	case sarama.CompressionNone:
 	case sarama.CompressionGZIP:
@@ -496,7 +494,7 @@ func buildKgoConfig(
 	}
 
 	// I dislike using this magic number. TODO: remove this sarama dependency.
-	if level != sarama.CompressionLevelDefault {
+	if level := sinkCfg.CompressionLevel; level != sarama.CompressionLevelDefault {
 		if err := validateCompressionLevel(sinkCfg.Compression, level); err != nil {
 			return nil, err
 		}
@@ -529,7 +527,7 @@ func validateCompressionLevel(compressionType compressionCodec, level int) error
 	case sarama.CompressionNone:
 		return nil
 	case sarama.CompressionGZIP:
-		if level < gzip.BestSpeed || level > gzip.BestCompression {
+		if level < gzip.NoCompression || level > gzip.BestCompression {
 			return errors.Errorf(`invalid gzip compression level: %d`, level)
 		}
 	case sarama.CompressionSnappy:
@@ -542,10 +540,12 @@ func validateCompressionLevel(compressionType compressionCodec, level int) error
 		}
 		w.Close()
 	case sarama.CompressionZSTD:
-		ok, _ := zstd.EncoderLevelFromString(strconv.FormatInt(int64(level), 10))
-		if !ok {
+		// This is also a bit silly.
+		w, err := zstd.NewWriter(io.Discard, zstd.WithEncoderLevel(zstd.EncoderLevel(level)))
+		if err != nil {
 			return errors.Errorf(`invalid zstd compression level: %d`, level)
 		}
+		_ = w.Close()
 	default:
 		return errors.Errorf(`unknown compression codec: %v`, compressionType)
 	}
