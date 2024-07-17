@@ -31,7 +31,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// This test requires us to come back and change the stmts in executeSupportedDDLs to be those
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
-		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V241-V242",
+		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V242-V243",
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.AllExceptAWS,
@@ -97,40 +97,13 @@ func executeSupportedDDLs(
 		return err
 	}
 
-	// DDLs supported in V23_2.
-	v232DDLs := []string{
-		`COMMENT ON DATABASE testdb IS 'this is a database comment'`,
-		`COMMENT ON SCHEMA testdb.testsc IS 'this is a schema comment'`,
-		`COMMENT ON TABLE testdb.testsc.t IS 'this is a table comment'`,
-		`COMMENT ON COLUMN testdb.testsc.t.i IS 'this is a column comment'`,
-		`COMMENT ON INDEX testdb.testsc.t@idx IS 'this is a index comment'`,
-		`COMMENT ON CONSTRAINT check_j ON testdb.testsc.t IS 'this is a constraint comment'`,
-		`ALTER TABLE testdb.testsc.t ADD COLUMN k INT DEFAULT 35`,
-		`ALTER TABLE testdb.testsc.t DROP COLUMN k`,
-		`ALTER TABLE testdb.testsc.t2 ADD PRIMARY KEY (i)`,
-		`ALTER TABLE testdb.testsc.t2 ALTER PRIMARY KEY USING COLUMNS (j)`,
-		`CREATE FUNCTION fn(a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL`,
-		`CREATE INDEX ON testdb.testsc.t3 (i)`,
-		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN k SET NOT NULL`,
-		`ALTER TABLE testdb.testsc.t2 ALTER PRIMARY KEY USING COLUMNS (k) USING HASH`,
-		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT j_unique UNIQUE WITHOUT INDEX (k)`,
-		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT j_unique_not_valid UNIQUE WITHOUT INDEX (k) NOT VALID`,
-		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT fk FOREIGN KEY (j) REFERENCES testdb.testsc.t2 (j)`,
-		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT fk_not_valid FOREIGN KEY (j) REFERENCES testdb.testsc.t2 (j) NOT VALID`,
-		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT check_positive CHECK (j > 0)`,
-		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT check_positive_not_valid CHECK (j > 0) NOT VALID`,
-		`ALTER TABLE testdb.testsc.t3 DROP CONSTRAINT check_positive`,
-		`ALTER TABLE testdb.testsc.t3 VALIDATE CONSTRAINT check_positive_not_valid`,
-	}
-
-	// DDLs supported in V24_1.
-	v241DDLs := []string{
-		`ALTER TABLE testdb.testsc.t ADD COLUMN k int, ADD COLUMN l int, DROP COLUMN l`,
-		`ALTER TABLE testdb.testsc.t ALTER COLUMN k SET DEFAULT 42`,
-		`ALTER TABLE testdb.testsc.t ALTER COLUMN k DROP DEFAULT`,
-		`CREATE DATABASE testdb2`,
-		`CREATE SCHEMA testdb2.testsc`,
-		`CREATE SEQUENCE testdb2.testsc.s`,
+	// DDLs supported in V24_2.
+	// TODO(sql-foundations): uncomment these when the final 24.2 cluster version
+	// is created.
+	v242DDLs := []string{
+		// `ALTER DATABASE testdb CONFIGURE ZONE USING gc.ttlseconds=1000`,
+		// `ALTER TABLE testdb.testsc.t CONFIGURE ZONE USING gc.ttlseconds=2000`,
+		// `COMMENT ON TYPE testdb.testsc.typ IS 'comment'`,
 	}
 
 	// Used to clean up our CREATE-d elements after we are done with them.
@@ -151,7 +124,7 @@ func executeSupportedDDLs(
 		`DROP DATABASE testdb2 CASCADE`,
 	}
 
-	ddls := append(v232DDLs, append(v241DDLs, cleanup...)...)
+	ddls := append(v242DDLs, cleanup...)
 
 	for _, ddl := range ddls {
 		if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
