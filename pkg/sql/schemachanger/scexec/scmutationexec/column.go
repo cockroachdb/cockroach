@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -54,11 +55,21 @@ func (i *immediateVisitor) UpsertColumnType(ctx context.Context, op scop.UpsertC
 	if err != nil {
 		return err
 	}
-	mut, err := FindMutation(tbl, MakeColumnIDMutationSelector(op.ColumnType.ColumnID))
+
+	catCol, err := catalog.MustFindColumnByID(tbl, op.ColumnType.ColumnID)
 	if err != nil {
 		return err
 	}
-	col := mut.AsColumn().ColumnDesc()
+	col := catCol.ColumnDesc()
+
+	// This can be called when adding a new column or for an update to existing
+	// column. If the column type is set, then this implies we are updating the
+	// type of an existing column.
+	if catCol.HasType() {
+		return i.updateExistingColumnType(ctx, op, col)
+	}
+
+	// Else, we are adding a new column.
 	col.Type = op.ColumnType.Type
 	if op.ColumnType.ElementCreationMetadata.In_23_1OrLater {
 		col.Nullable = true
@@ -354,4 +365,24 @@ func (i *immediateVisitor) RemoveColumnOnUpdateExpression(
 	d := col.ColumnDesc()
 	d.OnUpdateExpr = nil
 	return updateColumnExprSequenceUsage(d)
+}
+
+// updateExistingColumnType will handle data type changes to existing columns.
+func (i *immediateVisitor) updateExistingColumnType(
+	ctx context.Context, op scop.UpsertColumnType, desc *descpb.ColumnDescriptor,
+) error {
+	kind, err := schemachange.ClassifyConversion(ctx, desc.Type, op.ColumnType.Type)
+	if err != nil {
+		return err
+	}
+	switch kind {
+	case schemachange.ColumnConversionTrivial:
+		// For trivial conversions, we can just update the column type. This is
+		// allowed because there is no backfill for this type conversion.
+		desc.Type = op.ColumnType.Type
+	default:
+		return errors.AssertionFailedf("unsupported column type change %v -> %v (%v)",
+			desc.Type, op.ColumnType.Type, kind)
+	}
+	return nil
 }

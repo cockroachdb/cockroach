@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
@@ -314,7 +315,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// that overlap with the new range of the split and keep registrations that
 		// are only interested in keys that are still on the original range running.
 		reason := kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT
-		if res.Split.SplitTrigger.ManualSplit {
+		if res.Split.SplitTrigger.ManualSplit && b.r.Version().AtLeast(clusterversion.V24_1.Version()) {
 			reason = kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT
 		}
 		b.r.disconnectRangefeedWithReason(

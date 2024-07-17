@@ -1639,3 +1639,10 @@ func newTypeT(t *types.T) scpb.TypeT {
 		TypeName:      t.SQLString(),
 	}
 }
+
+func retrieveColumnTypeElem(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnType {
+	_, _, ret := scpb.FindColumnType(b.QueryByID(tableID).Filter(hasColumnIDAttrFilter(columnID)))
+	return ret
+}
