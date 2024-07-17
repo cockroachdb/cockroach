@@ -799,7 +799,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		}
 		*valPtr = val.RawBytes
 		*omitInRangefeedsPtr = vh.OmitInRangefeeds
-		*originIDPtr = vh.OriginID
+		*originIDPtr = vh.GetLogicalReplicationOriginID()
 	}
 
 	// Pass the ops to the rangefeed processor.

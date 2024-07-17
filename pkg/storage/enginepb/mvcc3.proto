@@ -208,13 +208,18 @@ message MVCCValueHeader {
   // INTO on the table this key belongs to when the table was not empty.
   uint32 import_epoch = 4;
   
-  // OriginID identifes the original cluster that wrote this key during Logical
-  // Data Replication (LDR). 0 identifies a local write and the default value
-  // when LDR is not being run, 1 identifies a remote write, and 2+ are reserved
-  // to identify remote clusters.
-  uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
+  // LogicalReplicationMetadata contains metadata that is only set during
+  // Logical Data Replication ingestion.
+  LogicalReplicationMetadata logical_replication_metadata = 5;
 
   // NextID = 6.
+}
+
+message LogicalReplicationMetadata {
+  // OriginID identifes the original cluster that wrote this key in Logical Data
+  // Replication. 0 identifies a local write, 1 identifies a remote write, and
+  // 2+ are reserved to identify remote clusters.
+  uint32 origin_id = 1  [(gogoproto.customname) = "OriginID"];
 }
 
 // MVCCValueHeaderPure is not to be used directly. It's generated only for use of
@@ -225,7 +230,7 @@ message MVCCValueHeaderPure {
 
   bool omit_in_rangefeeds = 3;
   uint32 import_epoch = 4;
-  uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
+  LogicalReplicationMetadata logical_replication_metadata = 5;
 }
 // MVCCValueHeaderCrdbTest is not to be used directly. It's generated only for use of
 // its marshaling methods by MVCCValueHeader. See the comment there.
@@ -239,7 +244,7 @@ message MVCCValueHeaderCrdbTest {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
   bool omit_in_rangefeeds = 3;
   uint32 import_epoch = 4;
-  uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
+  LogicalReplicationMetadata logical_replication_metadata = 5;
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
@@ -288,7 +293,7 @@ message MVCCWriteValueOp {
   // MVCCValueHeader of the corresponding write. It is only relevant for
   // transactional writes, which in the case of MVCCWriteValueOp are 1PC writes.
   bool omit_in_rangefeeds = 6;
-
+  
   // OriginID identifes the original cluster that wrote this key in Logical Data
   // Replication. 0 identifies a local write, 1 identifies a remote write, and
   // 2+ are reserved to identify remote clusters.

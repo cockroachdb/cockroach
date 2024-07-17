@@ -349,7 +349,7 @@ func (i *CatchUpIterator) CatchUpScan(
 			// and this iterator has opted into filtering; 2) the value is from a
 			// remote cluster (non zero originID), and the iterator has opted into
 			// omitting remote values.
-			if (mvccVal.OmitInRangefeeds && withFiltering) || (mvccVal.OriginID != 0 && withOmitRemote) {
+			if (mvccVal.OmitInRangefeeds && withFiltering) || (mvccVal.GetLogicalReplicationOriginID() != 0 && withOmitRemote) {
 				i.Next()
 				continue
 			}

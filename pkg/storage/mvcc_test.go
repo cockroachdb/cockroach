@@ -421,7 +421,7 @@ func TestMVCCValueHeadersForRangefeeds(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, valueRes.Value)
 				require.Equal(t, omitInRangefeeds, vh.OmitInRangefeeds)
-				require.Equal(t, originID, vh.OriginID)
+				require.Equal(t, originID, vh.GetLogicalReplicationOriginID())
 
 				txn = *txn2
 				// Transactional delete
@@ -444,7 +444,7 @@ func TestMVCCValueHeadersForRangefeeds(t *testing.T) {
 				require.NotNil(t, valueRes.Value)
 				require.Zero(t, len(valueRes.Value.RawBytes))
 				require.Equal(t, omitInRangefeeds, vh.OmitInRangefeeds)
-				require.Equal(t, originID, vh.OriginID)
+				require.Equal(t, originID, vh.GetLogicalReplicationOriginID())
 
 				// Non-transactional put (e.g. 1PC put)
 				writeTs := hlc.Timestamp{Logical: 3}
@@ -455,7 +455,7 @@ func TestMVCCValueHeadersForRangefeeds(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, valueRes.Value)
 				require.Equal(t, omitInRangefeeds, vh.OmitInRangefeeds)
-				require.Equal(t, originID, vh.OriginID)
+				require.Equal(t, originID, vh.GetLogicalReplicationOriginID())
 
 				// Non-transactional delete (e.g. 1PC delete)
 				writeTs = hlc.Timestamp{Logical: 4}
@@ -469,7 +469,7 @@ func TestMVCCValueHeadersForRangefeeds(t *testing.T) {
 				require.NotNil(t, valueRes.Value)
 				require.Zero(t, len(valueRes.Value.RawBytes))
 				require.Equal(t, omitInRangefeeds, vh.OmitInRangefeeds)
-				require.Equal(t, originID, vh.OriginID)
+				require.Equal(t, originID, vh.GetLogicalReplicationOriginID())
 			})
 		}
 	}

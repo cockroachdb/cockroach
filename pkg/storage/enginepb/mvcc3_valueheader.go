@@ -18,12 +18,25 @@ func (h MVCCValueHeader) IsEmpty() bool {
 	return h == MVCCValueHeader{}
 }
 
+// GetLogicalReplicationOriginID returns the origin ID of the logical
+// replication metadata. If no LDR metadata is set, 0 is returned.
+func (h *MVCCValueHeader) GetLogicalReplicationOriginID() uint32 {
+	if h.LogicalReplicationMetadata == nil {
+		return 0
+	}
+	return h.LogicalReplicationMetadata.OriginID
+}
+
+func (h *LogicalReplicationMetadata) Equal(that *LogicalReplicationMetadata) bool {
+	return h.OriginID == that.OriginID
+}
+
 func (h *MVCCValueHeader) pure() MVCCValueHeaderPure {
 	return MVCCValueHeaderPure{
-		LocalTimestamp:   h.LocalTimestamp,
-		OmitInRangefeeds: h.OmitInRangefeeds,
-		ImportEpoch:      h.ImportEpoch,
-		OriginID:         h.OriginID,
+		LocalTimestamp:             h.LocalTimestamp,
+		OmitInRangefeeds:           h.OmitInRangefeeds,
+		ImportEpoch:                h.ImportEpoch,
+		LogicalReplicationMetadata: h.LogicalReplicationMetadata,
 	}
 }
 
