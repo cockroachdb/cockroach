@@ -28,6 +28,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	testingUDFAcceptProposedBase = `
+CREATE OR REPLACE FUNCTION repl_apply(action STRING, data %[1]s, existing %[1]s, prev %[1]s, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
+RETURNS string
+AS $$
+BEGIN
+  RETURN 'accept_proposed';
+END;
+$$ LANGUAGE plpgsql`
+)
+
 func TestUDFWithRandomTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -58,15 +69,7 @@ func TestUDFWithRandomTables(t *testing.T) {
 	t.Logf(stmt)
 	runnerA.Exec(t, stmt)
 	runnerB.Exec(t, stmt)
-	runnerB.Exec(t, `
-		CREATE OR REPLACE FUNCTION repl_apply(action STRING, data rand_table, existing rand_table, prev rand_table, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timetamp DECIMAL, proposed_previous_mvcc_timestamp DECIMAL)
-		RETURNS string
-		AS $$
-		BEGIN
-		RETURN 'accept_proposed'
-		END;
-		$$ LANGUAGE plpgsql
-		`)
+	runnerB.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBase, tableName))
 
 	numInserts := 20
 	_, err := randgen.PopulateTableWithRandData(rng,
