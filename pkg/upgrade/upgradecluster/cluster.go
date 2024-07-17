@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc"
@@ -66,39 +67,45 @@ func New(cfg ClusterConfig) *Cluster {
 }
 
 // UntilClusterStable is part of the upgrade.Cluster interface.
-func (c *Cluster) UntilClusterStable(ctx context.Context, fn func() error) error {
-	live, _, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
+func (c *Cluster) UntilClusterStable(
+	ctx context.Context, retryOpts retry.Options, fn func() error,
+) error {
+	live, unavailable, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
 	if err != nil {
 		return err
 	}
 
-	// Allow for several retries in case of transient node unavailability.
-	const maxUnavailableRetries = 10
-	unavailableRetries := 0
-
-	for {
-		if err := fn(); err != nil {
-			return err
-		}
-		curLive, curUnavailable, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
-		if err != nil {
-			return err
-		}
-
-		if ok, diffs := live.Identical(curLive); !ok || curUnavailable != nil {
-			log.Infof(ctx, "%s, retrying, unavailable %v", diffs, curUnavailable)
-			live = curLive
-			if curUnavailable != nil {
-				unavailableRetries++
-				if unavailableRetries > maxUnavailableRetries {
-					return errors.Newf("nodes %v required, but unavailable", curUnavailable)
-				}
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		for {
+			if err := fn(); err != nil {
+				return err
 			}
-			continue
+
+			curLive, curUnavailable, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
+			if err != nil {
+				return err
+			}
+
+			if ok, diffs := live.Identical(curLive); !ok || curUnavailable != nil {
+				log.Infof(ctx, "waiting for cluster stability, unavailable: %v, diff: %v", curUnavailable, diffs)
+				live = curLive
+				unavailable = curUnavailable
+
+				if ok {
+					// We want to retry indefinitely when there are no unavailable nodes
+					// and only a changing (unstable) cluster node set. To that end, we
+					// only use a retry attempt when there is at least one unavailable
+					// node, otherwise the inner loop will continue indefinitely.
+					break
+				}
+			} else {
+				return nil
+			}
 		}
-		break
 	}
-	return nil
+
+	return errors.Newf(
+		"cluster not stable, nodes: %v, unavailable: %v", live, unavailable)
 }
 
 // NumNodesOrTenantPods is part of the upgrade.Cluster interface.
