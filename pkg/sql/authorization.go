@@ -354,8 +354,15 @@ func (p *planner) CheckGrantOptionsForUser(
 	}
 
 	return runPredicateFn(ctx, user, func(role username.SQLUsername) (bool, error) {
-		isOwner, err := isOwner(ctx, p, privilegeObject, role)
-		return privs.CheckGrantOptions(role, privList) || isOwner, err
+		if enableGrantOptionForOwner.Get(&p.ExecCfg().Settings.SV) {
+			if owned, err := isOwner(ctx, p, privilegeObject, role); err != nil {
+				return false, err
+			} else if owned {
+				// Short-circuit if the role is the owner of the object.
+				return true, nil
+			}
+		}
+		return privs.CheckGrantOptions(role, privList), nil
 	})
 }
 
@@ -680,6 +687,13 @@ var enableGrantOptionInheritance = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.auth.grant_option_inheritance.enabled",
 	"determines whether the GRANT OPTION for privileges is inherited through role membership",
+	true,
+).WithPublic()
+
+var enableGrantOptionForOwner = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.auth.grant_option_for_owner.enabled",
+	"determines whether the GRANT OPTION for privileges is implicitly given to the owner of an object",
 	true,
 ).WithPublic()
 

@@ -206,9 +206,6 @@ func NewPublicSchemaPrivilegeDescriptor() *PrivilegeDescriptor {
 func (p *PrivilegeDescriptor) CheckGrantOptions(
 	user username.SQLUsername, privList privilege.List,
 ) bool {
-	if p.Owner() == user {
-		return true
-	}
 	userPriv, exists := p.FindUser(user)
 	if !exists {
 		return false

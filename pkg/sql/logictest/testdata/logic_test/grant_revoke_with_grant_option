@@ -743,7 +743,70 @@ GRANT SELECT ON TABLE tbl_owned_by_root TO other
 statement ok
 GRANT SELECT ON TABLE tbl_owned_by_parent TO other
 
+# Reset the privileges to the initial state.
+statement ok
+REVOKE SELECT ON TABLE tbl_owned_by_root FROM other
+
+statement ok
+REVOKE SELECT ON TABLE tbl_owned_by_parent FROM other
+
 statement ok
 RESET role
+
+subtest end
+
+subtest disable_grant_option_for_owner
+
+statement ok
+SET CLUSTER SETTING sql.auth.grant_option_for_owner.enabled = false
+
+statement ok
+SET ROLE parent
+
+# Verify that parent is not able to grant SELECT on tbl_owned_by_parent.
+statement error user parent missing WITH GRANT OPTION privilege on SELECT
+GRANT SELECT ON TABLE tbl_owned_by_parent TO other
+
+statement ok
+SET ROLE child
+
+# Verify that child also is not able to grant SELECT on tbl_owned_by_parent.
+statement error user child missing WITH GRANT OPTION privilege on SELECT
+GRANT SELECT ON TABLE tbl_owned_by_parent TO other
+
+statement ok
+RESET role
+
+statement ok
+GRANT SELECT ON TABLE tbl_owned_by_parent TO parent WITH GRANT OPTION
+
+# Verify that parent now is able to grant SELECT on tbl_owned_by_parent, since
+# parent was explicitly given the GRANT OPTION
+statement ok
+GRANT SELECT ON TABLE tbl_owned_by_parent TO other
+
+statement ok
+REVOKE SELECT ON TABLE tbl_owned_by_parent FROM other
+
+statement ok
+SET ROLE child
+
+# Verify that child also now is able to grant SELECT on tbl_owned_by_parent,
+# by virtue of inheriting the explicit GRANT OPTION from parent.
+statement ok
+GRANT SELECT ON TABLE tbl_owned_by_parent TO other
+
+statement ok
+REVOKE SELECT ON TABLE tbl_owned_by_parent FROM other
+
+statement ok
+RESET role
+
+# Reset the privileges to the initial state.
+statement ok
+REVOKE SELECT ON TABLE tbl_owned_by_parent FROM parent
+
+statement ok
+RESET CLUSTER SETTING sql.auth.grant_option_for_owner.enabled
 
 subtest end
