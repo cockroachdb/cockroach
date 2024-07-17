@@ -446,6 +446,8 @@ type Planner interface {
 	// protected timestamp.
 	ExtendHistoryRetention(ctx context.Context, id jobspb.JobID) error
 
+	StartUpdateCachedTableMetadataJob(ctx context.Context) (jobspb.JobID, error)
+
 	// InsertTemporarySchema inserts a temporary schema into the current session
 	// data.
 	InsertTemporarySchema(

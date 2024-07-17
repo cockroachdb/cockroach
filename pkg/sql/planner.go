@@ -1021,6 +1021,27 @@ func (p *planner) StartHistoryRetentionJob(
 	return StartHistoryRetentionJob(ctx, p.EvalContext(), p.InternalSQLTxn(), desc, protectTS, expiration)
 }
 
+// StartUpdateCachedTableMetadataJob starts a job that will update the cached
+// table metadata for all tables in the cluster.
+func (p *planner) StartUpdateCachedTableMetadataJob(ctx context.Context) (jobspb.JobID, error) {
+	execConfig := p.ExecutorConfig().(*ExecutorConfig)
+	registry := execConfig.JobRegistry
+
+	jr := jobs.Record{
+		JobID:       registry.MakeJobID(),
+		Description: "Update cluster table metadata.",
+		Username:    p.SessionData().User(),
+		Details:     jobspb.UpdateCachedTableMetadataDetails{},
+		Progress:    jobspb.UpdateCachedTableMetadataProgress{},
+		CreatedBy:   &jobs.CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
+	}
+
+	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, p.InternalSQLTxn()); err != nil {
+		return 0, err
+	}
+	return jr.JobID, nil
+}
+
 func (p *planner) ExtendHistoryRetention(ctx context.Context, jobID jobspb.JobID) error {
 	return ExtendHistoryRetention(ctx, p.EvalContext(), p.InternalSQLTxn(), jobID)
 }

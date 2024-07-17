@@ -8824,6 +8824,25 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.update_cached_table_metadata": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategoryJobs,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				_, err := evalCtx.Planner.StartUpdateCachedTableMetadataJob(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info:       `TODO`,
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {

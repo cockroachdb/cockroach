@@ -27,8 +27,7 @@ import (
 )
 
 const (
-	dbPrivQuery = `
-SELECT database_name,
+	dbPrivQuery = ` SELECT database_name,
        'database' AS object_type,
        grantee,
        privilege_type,
