@@ -41,6 +41,6 @@ func (i *immediateVisitor) CreateDatabaseDescriptor(
 func (i *immediateVisitor) AddDatabaseZoneConfig(
 	ctx context.Context, op scop.AddDatabaseZoneConfig,
 ) error {
-	i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.DatabaseID, *op.ZoneConfig)
+	i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.DatabaseID, op.ZoneConfig)
 	return nil
 }
