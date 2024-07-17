@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -51,10 +52,11 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 		},
 		func(r *rand.Rand) protoutil.Message {
 			type expectedHardState struct {
-				Term   uint64
-				Vote   raftpb.PeerID
-				Commit uint64
-				Lead   raftpb.PeerID
+				Term      uint64
+				Vote      raftpb.PeerID
+				Commit    uint64
+				Lead      raftpb.PeerID
+				LeadEpoch raftstoreliveness.StoreLivenessEpoch
 			}
 			// Conversion fails if new fields are added to `HardState`, in which case this method
 			// and the expected sums should be updated.
@@ -62,10 +64,11 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 
 			n := r.Uint64()
 			return &raftpb.HardState{
-				Term:   n % 3,
-				Vote:   raftpb.PeerID(n % 7),
-				Commit: n % 11,
-				Lead:   raftpb.PeerID(n % 13),
+				Term:      n % 3,
+				Vote:      raftpb.PeerID(n % 7),
+				Commit:    n % 11,
+				Lead:      raftpb.PeerID(n % 13),
+				LeadEpoch: raftstoreliveness.StoreLivenessEpoch(n % 17),
 			}
 		},
 		func(r *rand.Rand) protoutil.Message {

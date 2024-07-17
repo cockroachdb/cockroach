@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -610,7 +611,7 @@ func TestRawNodeRestart(t *testing.T) {
 		{Term: 1, Index: 1},
 		{Term: 1, Index: 2, Data: []byte("foo")},
 	}
-	st := pb.HardState{Term: 1, Commit: 1, Lead: 1}
+	st := pb.HardState{Term: 1, Commit: 1, Lead: 1, LeadEpoch: 1}
 
 	want := Ready{
 		HardState: emptyState, // no HardState is emitted because there was no change
@@ -633,6 +634,7 @@ func TestRawNodeRestart(t *testing.T) {
 	assert.Equal(t, uint64(1), rawNode.raft.raftLog.committed)
 	assert.Equal(t, pb.PeerID(1), rawNode.raft.lead)
 	assert.True(t, rawNode.raft.state == StateFollower)
+	assert.Equal(t, raftstoreliveness.StoreLivenessEpoch(1), rawNode.raft.leadEpoch)
 
 	// Ensure we campaign after the election timeout has elapsed.
 	for i := 0; i < rawNode.raft.randomizedElectionTimeout; i++ {
