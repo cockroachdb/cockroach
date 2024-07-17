@@ -54,6 +54,7 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 				Term   uint64
 				Vote   raftpb.PeerID
 				Commit uint64
+				Lead   raftpb.PeerID
 			}
 			// Conversion fails if new fields are added to `HardState`, in which case this method
 			// and the expected sums should be updated.
@@ -64,6 +65,7 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 				Term:   n % 3,
 				Vote:   raftpb.PeerID(n % 7),
 				Commit: n % 11,
+				Lead:   raftpb.PeerID(n % 13),
 			}
 		},
 		func(r *rand.Rand) protoutil.Message {

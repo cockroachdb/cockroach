@@ -42,7 +42,7 @@ stabilize 1
   1/5 EntryConfChangeV2 l2 l3
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:5
+  HardState Term:1 Vote:1 Commit:5 Lead:1
   CommittedEntries:
   1/4 EntryNormal "foo"
 > 1 handling Ready

@@ -87,11 +87,12 @@ func DescribeHardState(hs pb.HardState) string {
 		fmt.Fprintf(&buf, " Vote:%d", hs.Vote)
 	}
 	fmt.Fprintf(&buf, " Commit:%d", hs.Commit)
+	fmt.Fprintf(&buf, " Lead:%d", hs.Lead)
 	return buf.String()
 }
 
 func DescribeSoftState(ss SoftState) string {
-	return fmt.Sprintf("Lead:%d State:%s", ss.Lead, ss.RaftState)
+	return fmt.Sprintf("State:%s", ss.RaftState)
 }
 
 func DescribeConfState(state pb.ConfState) string {
