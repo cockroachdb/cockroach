@@ -814,12 +814,32 @@ func (s *TestState) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 
 // UpdateZoneConfig implements the scexec.Catalog interface.
 func (s *TestState) UpdateZoneConfig(
-	ctx context.Context, id descpb.ID, zc zonepb.ZoneConfig,
+	ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig,
 ) error {
 	if s.catalogChanges.zoneConfigsToUpdate == nil {
 		s.catalogChanges.zoneConfigsToUpdate = make(map[descpb.ID]*zonepb.ZoneConfig)
 	}
-	s.catalogChanges.zoneConfigsToUpdate[id] = &zc
+	s.catalogChanges.zoneConfigsToUpdate[id] = zc
+	return nil
+}
+
+// UpdateSubzoneConfig implements the scexec.Catalog interface.
+func (s *TestState) UpdateSubzoneConfig(
+	ctx context.Context,
+	tableID descpb.ID,
+	subzones []zonepb.Subzone,
+	subzoneSpans []zonepb.SubzoneSpan,
+) error {
+	if s.catalogChanges.zoneConfigsToUpdate == nil {
+		s.catalogChanges.zoneConfigsToUpdate = make(map[descpb.ID]*zonepb.ZoneConfig)
+	}
+	var zc *zonepb.ZoneConfig
+	if czc, ok := s.catalogChanges.zoneConfigsToUpdate[tableID]; ok {
+		czc.Subzones = subzones
+		czc.SubzoneSpans = subzoneSpans
+		zc = czc
+	}
+	s.catalogChanges.zoneConfigsToUpdate[tableID] = zc
 	return nil
 }
 
