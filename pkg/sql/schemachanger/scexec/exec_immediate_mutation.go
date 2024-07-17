@@ -53,9 +53,14 @@ type sequenceToInit struct {
 	startVal int64
 }
 
+// zoneConfigToUpdate is a struct that holds the information needed to update a
+// zone config or subzone configs. If zc is subzone config, then we treat this
+// as a subzone write and update the subzone configs (along with their subzone
+// spans for the table). Otherwise, we write the whole zone config as an update.
 type zoneConfigToUpdate struct {
-	id descpb.ID
-	zc zonepb.ZoneConfig
+	id              descpb.ID
+	zc              *zonepb.ZoneConfig
+	isSubzoneConfig bool
 }
 
 var _ scmutationexec.ImmediateMutationStateUpdater = (*immediateState)(nil)
@@ -136,11 +141,23 @@ func (s *immediateState) InitSequence(id descpb.ID, startVal int64) {
 		})
 }
 
-func (s *immediateState) UpdateZoneConfig(id descpb.ID, zc zonepb.ZoneConfig) {
+func (s *immediateState) UpdateZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig) {
 	s.zoneConfigsToUpdate = append(s.zoneConfigsToUpdate,
 		zoneConfigToUpdate{
 			id: id,
 			zc: zc,
+		})
+}
+
+func (s *immediateState) UpdateSubzoneConfig(
+	tableid descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
+) {
+	zc := &zonepb.ZoneConfig{Subzones: []zonepb.Subzone{subzone}, SubzoneSpans: subzoneSpans}
+	s.zoneConfigsToUpdate = append(s.zoneConfigsToUpdate,
+		zoneConfigToUpdate{
+			id:              tableid,
+			zc:              zc,
+			isSubzoneConfig: true,
 		})
 }
 
@@ -211,8 +228,16 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 	}
 
 	for _, zc := range s.zoneConfigsToUpdate {
-		if err := c.UpdateZoneConfig(ctx, zc.id, zc.zc); err != nil {
-			return err
+		if zc.isSubzoneConfig {
+			if err := c.UpdateSubzoneConfig(ctx, zc.id, zc.zc.Subzones,
+				zc.zc.SubzoneSpans); err != nil {
+				return err
+			}
+		} else {
+
+			if err := c.UpdateZoneConfig(ctx, zc.id, zc.zc); err != nil {
+				return err
+			}
 		}
 	}
 
