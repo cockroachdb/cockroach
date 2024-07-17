@@ -318,6 +318,8 @@ const (
 	// MVCCStatisticsJobID A static job ID used for the MVCC statistics update
 	// job.
 	MVCCStatisticsJobID = jobspb.JobID(104)
+
+	UpdateTableMetadataCacheJobID = jobspb.JobID(105)
 )
 
 // MakeJobID generates a new job ID.
