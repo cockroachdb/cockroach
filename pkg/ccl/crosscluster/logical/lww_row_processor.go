@@ -271,7 +271,16 @@ func (srp *sqlRowProcessor) ProcessRow(
 		return batchStats{}, errors.Wrap(err, "stripping tenant prefix")
 	}
 
-	row, err := srp.decoder.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
+	// This is a workaround for #127315. In the case of primary
+	// key columns that use composite types (for example collated
+	// strings), we need to look at the previous value to
+	// correctly decode the column.
+	isDeleted := len(kv.Value.RawBytes) == 0
+	kvForDecode := kv
+	if isDeleted {
+		kvForDecode.Value.RawBytes = prevValue.RawBytes
+	}
+	row, err := srp.decoder.DecodeKV(ctx, kvForDecode, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
 		srp.lastRow = cdcevent.Row{}
 		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
@@ -291,7 +300,7 @@ func (srp *sqlRowProcessor) ProcessRow(
 	}
 
 	var stats batchStats
-	if row.IsDeleted() {
+	if isDeleted {
 		stats, err = srp.querier.DeleteRow(ctx, txn, srp.ie, row, parsedBeforeRow)
 	} else {
 		stats, err = srp.querier.InsertRow(ctx, txn, srp.ie, row, parsedBeforeRow, prevValue.RawBytes == nil)
