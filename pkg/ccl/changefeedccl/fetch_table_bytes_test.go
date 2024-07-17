@@ -10,6 +10,7 @@ package changefeedccl_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -319,6 +320,39 @@ func TestFetchChangefeedUsageBytesE2EDisabledByDefault(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestFetchSizesUnredactedErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	res := &roachpb.SpanStatsResponse{Errors: []string{"some", "stuff"}}
+
+	tss := mocks.NewMockTenantStatusServer(ctrl)
+	tss.EXPECT().SpanStats(gomock.Any(), gomock.Any()).Return(res, nil).MinTimes(1)
+
+	fx := newUsageFixtureWithMockTSS(ctx, t, tss)
+	defer fx.close()
+
+	fx.db.Exec(t, "CREATE TABLE testdb.test as SELECT generate_series(1, 1000) AS id")
+	row := fx.db.QueryRow(t, `CREATE CHANGEFEED FOR TABLE testdb.test INTO 'null://' WITH initial_scan='no';`)
+	var feedJobId int64
+	row.Scan(&feedJobId)
+
+	payload, err := fx.getChangefeedPayload(ctx, catpb.JobID(feedJobId))
+	require.NoError(t, err)
+	_, err = changefeedccl.FetchChangefeedUsageBytes(ctx, &fx.execCfg, payload)
+	require.Error(t, err)
+
+	err = errors.UnwrapAll(err)
+	errStr := strings.Join(err.(interface{ SafeDetails() []string }).SafeDetails(), ",") //nolint:errcmp
+	require.Contains(t, errStr, "some")
+	require.Contains(t, errStr, "stuff")
+}
+
 type fnMatcher func(arg any) bool
 
 func (f fnMatcher) Matches(x any) bool {
@@ -428,6 +462,10 @@ func newUsageFixtureWithMockTSS(
 	rootDB := sqlutils.MakeSQLRunner(db)
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	if mockTSS != nil {
+		execCfg.TenantStatusServer = mockTSS
+	}
+
 	metrics := execCfg.JobRegistry.MetricsStruct().Changefeed.(*changefeedccl.Metrics).UsageMetrics
 
 	// Must be executed on the system layer, not the tenant, if we're a tenant (metamorphic).
