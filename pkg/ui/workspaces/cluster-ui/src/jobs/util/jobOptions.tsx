@@ -202,7 +202,7 @@ export const typeOptions = [
   },
   {
     value: JobType.REPLICATION_STREAM_PRODUCER.toString(),
-    name: "Physical Replication Producer",
+    name: "Replication Producer",
     key: jobTypeKeys[JobType.REPLICATION_STREAM_PRODUCER],
   },
   {
