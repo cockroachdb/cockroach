@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/logtags"
 )
@@ -95,7 +96,9 @@ type Cluster interface {
 	// ensures that the old data has vanished from the system. This is similar in
 	// spirit to how schema changes are split up into multiple smaller steps that
 	// are carried out sequentially.
-	UntilClusterStable(ctx context.Context, fn func() error) error
+	//
+	// UntilClusterStable will retry according to the provided retry options.
+	UntilClusterStable(ctx context.Context, retryOpts retry.Options, fn func() error) error
 
 	// IterateRangeDescriptors provides a handle on every range descriptor in the
 	// system, which callers can then use to send out arbitrary KV requests to in
