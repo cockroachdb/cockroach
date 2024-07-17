@@ -1281,6 +1281,16 @@ INSERT INTO ka VALUES (9999, NULL)
 statement ok
 CREATE STATISTICS ka_fullstat ON a FROM ka
 
+let $ka_stats
+SHOW STATISTICS USING JSON FOR TABLE ka;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE ka INJECT STATISTICS '$ka_stats'
+
 let $hist_id_ka_outer_buckets_full
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE ka] WHERE statistics_name = 'ka_fullstat'
 
@@ -1349,6 +1359,16 @@ INSERT INTO ka VALUES (10002, 10001)
 statement ok
 CREATE STATISTICS ka_fullstat ON a FROM ka
 
+let $ka_stats
+SHOW STATISTICS USING JSON FOR TABLE ka;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE ka INJECT STATISTICS '$ka_stats'
+
 statement ok
 INSERT INTO ka VALUES (10003, 10002), (10004, NULL)
 
@@ -1382,13 +1402,23 @@ INSERT INTO ka SELECT x, x FROM generate_series(0, 9) as g(x)
 statement ok
 CREATE STATISTICS ka_fullstat ON a FROM ka
 
+let $ka_stats
+SHOW STATISTICS USING JSON FOR TABLE ka;
+
+# Inject statistics so that the current stats
+# cache is invalidated and creating partial
+# statistics has access to the latest full
+# statistic.
+statement ok
+ALTER TABLE ka INJECT STATISTICS '$ka_stats'
+
 statement ok
 INSERT INTO ka VALUES (10, 10)
 
 statement ok
 CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
 
-query T
+query T retry
 EXPLAIN SELECT * FROM ka WHERE a > 5
 ----
 distribution: local
@@ -1399,7 +1429,7 @@ vectorized: true
   table: ka@ka_a_idx
   spans: [/6 - ]
 
-query T
+query T retry
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
 distribution: local
@@ -1413,7 +1443,7 @@ vectorized: true
 statement ok
 SET optimizer_use_merged_partial_statistics = on
 
-query T
+query T retry
 EXPLAIN SELECT * FROM ka WHERE a > 5
 ----
 distribution: local
@@ -1424,7 +1454,7 @@ vectorized: true
   table: ka@ka_a_idx
   spans: [/6 - ]
 
-query T
+query T retry
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
 distribution: local
