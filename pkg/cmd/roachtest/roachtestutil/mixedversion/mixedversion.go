@@ -490,9 +490,8 @@ func NewTest(
 	}
 
 	prng, seed := randutil.NewLockedPseudoRand()
-	testLogger.Printf("mixed-version random seed: %d", seed)
-
 	testCtx, cancel := context.WithCancel(ctx)
+
 	test := &Test{
 		ctx:             testCtx,
 		cancel:          cancel,
@@ -649,7 +648,7 @@ func (t *Test) Run() {
 
 func (t *Test) run(plan *TestPlan) error {
 	return newTestRunner(
-		t.ctx, t.cancel, plan, t.logger, t.cluster, t.crdbNodes, t.seed,
+		t.ctx, t.cancel, plan, t.logger, t.cluster, t.crdbNodes,
 	).run()
 }
 
@@ -678,6 +677,7 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 	planner := testPlanner{
 		versions:       append(previousReleases, clusterupgrade.CurrentVersion()),
 		deploymentMode: deploymentMode,
+		seed:           t.seed,
 		currentContext: newInitialContext(initialRelease, t.crdbNodes, nil /* tenant */),
 		options:        t.options,
 		rt:             t.rt,
