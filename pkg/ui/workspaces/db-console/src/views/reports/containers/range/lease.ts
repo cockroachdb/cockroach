@@ -15,6 +15,11 @@ export function IsLeaseEpoch(lease: protos.cockroach.roachpb.ILease) {
   return !FixLong(lease.epoch).eq(0);
 }
 
+export function IsLeaseLeader(lease: protos.cockroach.roachpb.ILease) {
+  return !FixLong(lease.term).eq(0);
+}
+
 export default {
   IsEpoch: IsLeaseEpoch,
+  IsLeader: IsLeaseLeader,
 };
