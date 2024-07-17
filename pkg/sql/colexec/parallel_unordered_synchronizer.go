@@ -73,7 +73,6 @@ type ParallelUnorderedSynchronizer struct {
 	// streamingMemAcc for the metadata.
 	metadataAccountedFor int64
 	inputs               []colexecargs.OpWithMetaInfo
-	inputCtxs            []context.Context
 	// cancelLocalInput stores context cancellation functions for each of the
 	// inputs. The functions are populated only if localPlan is true.
 	cancelLocalInput []context.CancelFunc
@@ -152,7 +151,6 @@ func NewParallelUnorderedSynchronizer(
 		processorID:       processorID,
 		streamingMemAcc:   streamingMemAcc,
 		inputs:            inputs,
-		inputCtxs:         make([]context.Context, len(inputs)),
 		cancelLocalInput:  make([]context.CancelFunc, len(inputs)),
 		tracingSpans:      make([]*tracing.Span, len(inputs)),
 		readNextBatch:     readNextBatch,
@@ -179,7 +177,8 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 		return
 	}
 	for i, input := range s.inputs {
-		s.inputCtxs[i], s.tracingSpans[i] = execinfra.ProcessorSpan(
+		var inputCtx context.Context
+		inputCtx, s.tracingSpans[i] = execinfra.ProcessorSpan(
 			s.Ctx, s.flowCtx, fmt.Sprintf("parallel unordered sync input %d", i), s.processorID,
 		)
 		if s.flowCtx.Local {
@@ -192,9 +191,9 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 			// because canceling the context would break the gRPC stream and
 			// make it impossible to fetch the remote metadata. Furthermore, it
 			// will result in the remote flow cancellation.
-			s.inputCtxs[i], s.cancelLocalInput[i] = context.WithCancel(s.inputCtxs[i])
+			inputCtx, s.cancelLocalInput[i] = context.WithCancel(inputCtx)
 		}
-		input.Root.Init(s.inputCtxs[i])
+		input.Root.Init(inputCtx)
 		s.nextBatch[i] = func(inputOp colexecop.Operator, inputIdx int) func() {
 			return func() {
 				s.batches[inputIdx] = inputOp.Next()
@@ -259,17 +258,6 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				switch state {
 				case parallelUnorderedSynchronizerStateRunning:
 					if err := colexecerror.CatchVectorizedRuntimeError(s.nextBatch[inputIdx]); err != nil {
-						if s.getState() == parallelUnorderedSynchronizerStateDraining && s.Ctx.Err() == nil && s.cancelLocalInput[inputIdx] != nil {
-							// The synchronizer has just transitioned into the
-							// draining state and eagerly canceled work of this
-							// input. That cancellation is likely to manifest
-							// itself as the context.Canceled error, but it
-							// could be another error too; in any case, we will
-							// swallow the error because the user of the
-							// synchronizer is only interested in the metadata
-							// at this point.
-							continue
-						}
 						sendErr(err)
 						// After we encounter an error, we proceed to draining.
 						// If this is a context cancellation, we'll realize that
@@ -423,7 +411,35 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 	// return the next batch).
 	for _, cancelFunc := range s.cancelLocalInput {
 		if cancelFunc != nil {
+			// Note that if Init was never called, cancelFunc will be nil, in
+			// which case there is nothing to cancel.
 			cancelFunc()
+		}
+	}
+
+	bufferMeta := func(meta []execinfrapb.ProducerMetadata) {
+		if s.flowCtx.Local {
+			// Given that the synchronizer is draining, it is safe to ignore all
+			// errors in the metadata for local plans. This is the case because:
+			// - if the query should result in an error, then some other error
+			// was already propagated to the client, and this was the reason for
+			// why we transitioned into draining;
+			// - if the query should be successful, yet we have some pending
+			// errors, then it must be the case that query execution was
+			// short-circuited (e.g. because of the LIMIT), so we can pretend
+			// the part of the execution that hit the pending error didn't
+			// happen since clearly it wasn't necessary to compute the query
+			// result.
+			//
+			// For a more extensive discussion for why this is safe see PR
+			// #127076.
+			for _, m := range meta {
+				if m.Err == nil {
+					s.bufferedMeta = append(s.bufferedMeta, m)
+				}
+			}
+		} else {
+			s.bufferedMeta = append(s.bufferedMeta, meta...)
 		}
 	}
 
@@ -443,7 +459,7 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 			if msg == nil {
 				batchChDrained = true
 			} else if msg.meta != nil {
-				s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
+				bufferMeta(msg.meta)
 			}
 		default:
 			batchChDrained = true
@@ -462,17 +478,23 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 	// Drain the batchCh, this reads the metadata that was pushed.
 	for msg := <-s.batchCh; msg != nil; msg = <-s.batchCh {
 		if msg.meta != nil {
-			s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
+			bufferMeta(msg.meta)
 		}
 	}
 
-	// Buffer any errors that may have happened without blocking on the channel.
-	for exitLoop := false; !exitLoop; {
-		select {
-		case err := <-s.errCh:
-			s.bufferedMeta = append(s.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
-		default:
-			exitLoop = true
+	if !s.flowCtx.Local {
+		// Buffer any errors that may have happened without blocking on the
+		// channel.
+		//
+		// Note that we ignore any errors in the local flows (see the comment in
+		// bufferMeta above).
+		for exitLoop := false; !exitLoop; {
+			select {
+			case err := <-s.errCh:
+				s.bufferedMeta = append(s.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
+			default:
+				exitLoop = true
+			}
 		}
 	}
 
