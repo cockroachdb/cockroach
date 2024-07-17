@@ -49,6 +49,7 @@ var (
 	_ Details = ImportRollbackDetails{}
 	_ Details = HistoryRetentionDetails{}
 	_ Details = LogicalReplicationDetails{}
+	_ Details = UpdateCachedTableMetadataDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -77,6 +78,7 @@ var (
 	_ ProgressDetails = ImportRollbackProgress{}
 	_ ProgressDetails = HistoryRetentionProgress{}
 	_ ProgressDetails = LogicalReplicationProgress{}
+	_ ProgressDetails = UpdateCachedTableMetadataProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -225,6 +227,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeHistoryRetention, nil
 	case *Payload_LogicalReplicationDetails:
 		return TypeLogicalReplication, nil
+	case *Payload_UpdateCachedTableMetadataDetails:
+		return TypeUpdateCachedTableMetadata, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -273,6 +277,7 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeImportRollback:               ImportRollbackDetails{},
 	TypeHistoryRetention:             HistoryRetentionDetails{},
 	TypeLogicalReplication:           LogicalReplicationDetails{},
+	TypeUpdateCachedTableMetadata:    UpdateCachedTableMetadataDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -336,6 +341,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_HistoryRetentionProgress{HistoryRetentionProgress: &d}
 	case LogicalReplicationProgress:
 		return &Progress_LogicalReplication{LogicalReplication: &d}
+	case UpdateCachedTableMetadataProgress:
+		return &Progress_CachedDbMetadata{CachedDbMetadata: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -397,6 +404,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.HistoryRetentionDetails
 	case *Payload_LogicalReplicationDetails:
 		return *d.LogicalReplicationDetails
+	case *Payload_UpdateCachedTableMetadataDetails:
+		return *d.UpdateCachedTableMetadataDetails
 	default:
 		return nil
 	}
@@ -458,6 +467,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.HistoryRetentionProgress
 	case *Progress_LogicalReplication:
 		return *d.LogicalReplication
+	case *Progress_CachedDbMetadata:
+		return *d.CachedDbMetadata
 	default:
 		return nil
 	}
@@ -543,6 +554,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_HistoryRetentionDetails{HistoryRetentionDetails: &d}
 	case LogicalReplicationDetails:
 		return &Payload_LogicalReplicationDetails{LogicalReplicationDetails: &d}
+	case UpdateCachedTableMetadataDetails:
+		return &Payload_UpdateCachedTableMetadataDetails{UpdateCachedTableMetadataDetails: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -578,7 +591,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 28
+const NumJobTypes = 29
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this
