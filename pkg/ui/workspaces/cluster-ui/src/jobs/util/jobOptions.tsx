@@ -206,6 +206,11 @@ export const typeOptions = [
     key: jobTypeKeys[JobType.REPLICATION_STREAM_PRODUCER],
   },
   {
+    value: JobType.LOGICAL_REPLICATION.toString(),
+    name: "Logical Replication Ingestion",
+    key: jobTypeKeys[JobType.LOGICAL_REPLICATION],
+  },
+  {
     value: JobType.AUTO_SPAN_CONFIG_RECONCILIATION.toString(),
     name: "Span Config Reconciliation",
     key: jobTypeKeys[JobType.AUTO_SPAN_CONFIG_RECONCILIATION],
