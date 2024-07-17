@@ -225,7 +225,7 @@ func (d *txnDeps) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 }
 
 // UpdateZoneConfig implements the scexec.Catalog interface.
-func (d *txnDeps) UpdateZoneConfig(ctx context.Context, id descpb.ID, zc zonepb.ZoneConfig) error {
+func (d *txnDeps) UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig) error {
 	var newZc catalog.ZoneConfig
 	oldZc, err := d.descsCollection.GetZoneConfig(ctx, d.txn.KV(), id)
 	if err != nil {
@@ -239,8 +239,45 @@ func (d *txnDeps) UpdateZoneConfig(ctx context.Context, id descpb.ID, zc zonepb.
 	if oldZc != nil {
 		rawBytes = oldZc.GetRawBytesInStorage()
 	}
-	newZc = zone.NewZoneConfigWithRawBytes(&zc, rawBytes)
+	newZc = zone.NewZoneConfigWithRawBytes(zc, rawBytes)
 	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id, newZc)
+}
+
+// UpdateSubzoneConfig implements the scexec.Catalog interface.
+func (d *txnDeps) UpdateSubzoneConfig(
+	ctx context.Context,
+	tableID descpb.ID,
+	subzones []zonepb.Subzone,
+	subzoneSpans []zonepb.SubzoneSpan,
+) error {
+	var newZc catalog.ZoneConfig
+	oldZc, err := d.descsCollection.GetZoneConfig(ctx, d.txn.KV(), tableID)
+	if err != nil {
+		return err
+	}
+
+	var rawBytes []byte
+	var zc *zonepb.ZoneConfig
+	// If the zone config already exists, we need to preserve the raw bytes as the
+	// expected value that we will be updating. Otherwise, this will be a clean
+	// insert with no expected raw bytes.
+	if oldZc != nil {
+		rawBytes = oldZc.GetRawBytesInStorage()
+		zc = oldZc.ZoneConfigProto()
+	} else {
+		// If no zone config exists, create a new one.
+		zc = &zonepb.ZoneConfig{}
+	}
+
+	// Update the subzones in the zone config.
+	for _, s := range subzones {
+		zc.SetSubzone(s)
+	}
+	zc.SubzoneSpans = subzoneSpans
+
+	newZc = zone.NewZoneConfigWithRawBytes(zc, rawBytes)
+	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(),
+		tableID, newZc)
 }
 
 // DeleteZoneConfig implements the scexec.Catalog interface.

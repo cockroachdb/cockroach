@@ -19,6 +19,6 @@ import (
 func (i *immediateVisitor) AddTableZoneConfig(
 	ctx context.Context, op scop.AddTableZoneConfig,
 ) error {
-	i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.TableID, *op.ZoneConfig)
+	i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.TableID, op.ZoneConfig)
 	return nil
 }
