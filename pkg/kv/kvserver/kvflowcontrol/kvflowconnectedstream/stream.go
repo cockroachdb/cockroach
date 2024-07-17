@@ -2352,6 +2352,21 @@ func (rss *replicaSendStream) makeConsistentWhenUnexpectedPopLocked(
 			rss.stringLocked()))
 	}
 	rss.advanceIndexToSendAndFixStats(ctx, indexToSend)
+	// The popped entries have had eval.tokensDeducted, and were never in the
+	// tracker and are no longer in the send-queue. We don't know their size, so
+	// the simplest thing is to return all eval tokens (eval.tokensDeducted).
+	// Additionally, since we've advanced nextRaftIndexInitial, the invariant
+	// requires we return all eval.tokensDeducted.
+	for wc := range rss.eval.tokensDeducted {
+		if rss.eval.tokensDeducted[wc] > 0 {
+			rss.parent.evalTokenCounter.Return(
+				ctx, admissionpb.WorkClass(wc), rss.eval.tokensDeducted[wc])
+			rss.eval.tokensDeducted[wc] = 0
+		}
+	}
+	// We don't need to touch the tracker since we still expect admission for
+	// entries that were inflight.
+
 	rss.startProcessingSendQueueLocked(ctx)
 }
 
