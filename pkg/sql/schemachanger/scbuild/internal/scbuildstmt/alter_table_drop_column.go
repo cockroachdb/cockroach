@@ -204,7 +204,7 @@ func dropColumn(
 		}
 	}
 	// Next walk through and actually clean up the column references.
-	walkDropColumnDependencies(b, col, func(e scpb.Element) {
+	walkColumnDependencies(b, col, "drop", "column", func(e scpb.Element) {
 		switch e := e.(type) {
 		case *scpb.Column:
 			if e.TableID == col.TableID && e.ColumnID == col.ColumnID {
@@ -315,16 +315,18 @@ func dropColumn(
 	assertAllColumnElementsAreDropped(colElts)
 }
 
-func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Element)) {
-	var sequencesToDrop catalog.DescriptorIDSet
-	var indexesToDrop catid.IndexSet
-	var columnsToDrop catalog.TableColSet
+func walkColumnDependencies(
+	b BuildCtx, col *scpb.Column, op, objType string, fn func(e scpb.Element),
+) {
+	var sequenceDeps catalog.DescriptorIDSet
+	var indexDeps catid.IndexSet
+	var columnDeps catalog.TableColSet
 	tblElts := b.QueryByID(col.TableID).Filter(orFilter(publicTargetFilter, transientTargetFilter))
 
 	// Panic if `col` is referenced in a predicate of an index or
 	// unique without index constraint.
-	// TODO (xiang): Remove this restriction when #96924 is fixed.
-	panicIfColReferencedInPredicate(b, col, tblElts)
+	// TODO (xiang): Remove this restriction when #97813 is fixed.
+	panicIfColReferencedInPredicate(b, col, tblElts, op, objType)
 
 	tblElts.
 		Filter(referencesColumnIDFilter(col.ColumnID)).
@@ -339,17 +341,17 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 				if elt.ColumnID == col.ColumnID {
 					fn(e)
 				} else {
-					columnsToDrop.Add(elt.ColumnID)
+					columnDeps.Add(elt.ColumnID)
 				}
 			case *scpb.SequenceOwner:
 				fn(e)
-				sequencesToDrop.Add(elt.SequenceID)
+				sequenceDeps.Add(elt.SequenceID)
 			case *scpb.SecondaryIndex:
-				indexesToDrop.Add(elt.IndexID)
+				indexDeps.Add(elt.IndexID)
 			case *scpb.SecondaryIndexPartial:
-				indexesToDrop.Add(elt.IndexID)
+				indexDeps.Add(elt.IndexID)
 			case *scpb.IndexColumn:
-				indexesToDrop.Add(elt.IndexID)
+				indexDeps.Add(elt.IndexID)
 			case *scpb.ForeignKeyConstraint:
 				if elt.TableID == col.TableID &&
 					catalog.MakeTableColSet(elt.ColumnIDs...).Contains(col.ColumnID) {
@@ -374,20 +376,20 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 	tblElts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch elt := e.(type) {
 		case *scpb.Column:
-			if columnsToDrop.Contains(elt.ColumnID) {
+			if columnDeps.Contains(elt.ColumnID) {
 				fn(e)
 			}
 		case *scpb.PrimaryIndex:
-			if indexesToDrop.Contains(elt.IndexID) {
+			if indexDeps.Contains(elt.IndexID) {
 				fn(e)
 			}
 		case *scpb.SecondaryIndex:
-			if indexesToDrop.Contains(elt.IndexID) {
+			if indexDeps.Contains(elt.IndexID) {
 				fn(e)
 			}
 		}
 	})
-	sequencesToDrop.ForEach(func(id descpb.ID) {
+	sequenceDeps.ForEach(func(id descpb.ID) {
 		_, target, seq := scpb.FindSequence(b.QueryByID(id))
 		if target == scpb.ToPublic && seq != nil {
 			fn(seq)
@@ -420,8 +422,10 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 
 // panicIfColReferencedInPredicate is a temporary fix that disallow dropping a
 // column that is referenced in predicate of a partial index or unique without index.
-// This restriction shall be lifted once #96924 is fixed.
-func panicIfColReferencedInPredicate(b BuildCtx, col *scpb.Column, tblElts ElementResultSet) {
+// This restriction shall be lifted once #97813 is fixed.
+func panicIfColReferencedInPredicate(
+	b BuildCtx, col *scpb.Column, tblElts ElementResultSet, op, objType string,
+) {
 	contains := func(container []catid.ColumnID, target catid.ColumnID) bool {
 		for _, elem := range container {
 			if elem == target {
@@ -459,12 +463,13 @@ func panicIfColReferencedInPredicate(b BuildCtx, col *scpb.Column, tblElts Eleme
 	if violatingIndex != 0 {
 		colNameElem := mustRetrieveColumnNameElem(b, col.TableID, col.ColumnID)
 		indexNameElem := mustRetrieveIndexNameElem(b, col.TableID, violatingIndex)
-		panic(sqlerrors.NewColumnReferencedByPartialIndex(colNameElem.Name, indexNameElem.Name))
+		panic(sqlerrors.ColumnReferencedByPartialIndex(op, objType, colNameElem.Name, indexNameElem.Name))
 	}
 	if violatingUWI != 0 {
 		colNameElem := mustRetrieveColumnNameElem(b, col.TableID, col.ColumnID)
 		uwiNameElem := mustRetrieveConstraintWithoutIndexNameElem(b, col.TableID, violatingUWI)
-		panic(sqlerrors.NewColumnReferencedByPartialUniqueWithoutIndexConstraint(colNameElem.Name, uwiNameElem.Name))
+		panic(sqlerrors.ColumnReferencedByPartialUniqueWithoutIndexConstraint(
+			op, objType, colNameElem.Name, uwiNameElem.Name))
 	}
 }
 

@@ -205,7 +205,7 @@ CREATE TABLE t8 (
 )
 
 # TODO(mgartner): Lift this restriction. See #96924.
-statement error column "c" cannot be dropped because it is referenced by partial index "t8_a_idx1"
+statement error cannot drop column "c" because it is referenced by partial index "t8_a_idx1"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t8 DROP COLUMN c
 
 query TT
@@ -1975,7 +1975,7 @@ CREATE TABLE t96924 (
 statement ok
 ALTER TABLE t96924 DROP COLUMN a
 
-statement error pq: column "b" cannot be dropped because it is referenced by partial index "t96924_b_key"
+statement error pq: cannot drop column "b" because it is referenced by partial index "t96924_b_key"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t96924 DROP COLUMN b
 
 statement ok
@@ -1984,7 +1984,7 @@ DROP INDEX t96924_b_key CASCADE
 statement ok
 ALTER TABLE t96924 DROP COLUMN b
 
-statement error pq: column "c" cannot be dropped because it is referenced by partial index "t96924_c_key"
+statement error pq: cannot drop column "c" because it is referenced by partial index "t96924_c_key"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t96924 DROP COLUMN c
 
 statement ok
@@ -1993,7 +1993,7 @@ DROP INDEX t96924_c_key CASCADE
 statement ok
 ALTER TABLE t96924 DROP COLUMN c
 
-statement error pq: column "d" cannot be dropped because it is referenced by partial unique constraint "unique_d"
+statement error pq: cannot drop column "d" because it is referenced by partial unique constraint "unique_d"\nHINT: drop the unique constraint first, then drop the column
 ALTER TABLE t96924 DROP COLUMN d
 
 statement ok
@@ -2002,7 +2002,7 @@ ALTER TABLE t96924 DROP CONSTRAINT unique_d
 statement ok
 ALTER TABLE t96924 DROP COLUMN d
 
-statement error pq: column "e" cannot be dropped because it is referenced by partial index "t96924_e_f_idx"
+statement error pq: cannot drop column "e" because it is referenced by partial index "t96924_e_f_idx"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t96924 DROP COLUMN e
 
 statement ok
@@ -2018,7 +2018,7 @@ ALTER TABLE t96924 DROP COLUMN f
 
 # Column `h` is used in the predicate of another index that does not key on `h`,
 # we will prevent dropping column `h` as well.
-statement error pq: column "h" cannot be dropped because it is referenced by partial index "t96924_g_idx"
+statement error pq: cannot drop column "h" because it is referenced by partial index "t96924_g_idx"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t96924 DROP COLUMN h
 
 statement ok
@@ -2029,7 +2029,7 @@ ALTER TABLE t96924 DROP COLUMN h
 
 # Similarly, column `i` cannot be dropped since it's used in the predicate of
 # of a UWI constraint.
-statement error pq: column "i" cannot be dropped because it is referenced by partial unique constraint "unique_g"
+statement error pq: cannot drop column "i" because it is referenced by partial unique constraint "unique_g"\nHINT: drop the unique constraint first, then drop the column
 ALTER TABLE t96924 DROP COLUMN i
 
 statement ok
@@ -2054,7 +2054,7 @@ statement ok
 CREATE INDEX t96924_idx_1 ON t96924(a) WHERE (rowid > 0);
 
 skipif config local-legacy-schema-changer
-statement error column "rowid" cannot be dropped because it is referenced by partial index "t96924_idx_1"
+statement error cannot drop column "rowid" because it is referenced by partial index "t96924_idx_1"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t96924 ALTER PRIMARY KEY USING COLUMNS (a);
 
 statement ok

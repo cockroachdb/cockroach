@@ -1,0 +1,14 @@
+/* setup */
+CREATE TYPE e AS ENUM();
+CREATE TABLE t (i INT PRIMARY KEY, j e);
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t ALTER COLUMN j SET DATA TYPE e;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET DATA TYPE ‹e›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ └── PreCommitPhase
+      └── Stage 1 of 1 in PreCommitPhase
+           └── 1 Mutation operation
+                └── UndoAllInTxnImmediateMutationOpSideEffects

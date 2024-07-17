@@ -593,7 +593,7 @@ ALTER TABLE t30 ALTER COLUMN x TYPE BYTES USING x::BYTES
 statement ok
 CREATE VIEW v AS SELECT x FROM t29
 
-statement error cannot alter type of column "x" because view "v" depends on it
+statement error cannot alter type of column "x" because view "v" depends on it\nHINT: consider dropping "v" first.
 ALTER TABLE t29 ALTER COLUMN x TYPE INT2
 
 statement ok
@@ -647,13 +647,13 @@ statement ok
 CREATE TABLE tab_w_computed (real1 int, real2 int, comp1 bigint as (real1 + real2) stored, comp2 bigint as (real2 * 2) virtual, comp3 int as (real1 * 2) virtual);
 INSERT INTO tab_w_computed (real1, real2) VALUES (1, 2), (3, 4), (5, 6);
 
-statement error pq: cannot alter column "real1" because computed column "comp[0-9]" depends on it\nHINT: consider dropping "comp[0-9]" first.
+statement error pq: cannot alter type of column "real1" because computed column "comp[0-9]" depends on it\nHINT: consider dropping "comp[0-9]" first.
 ALTER TABLE tab_w_computed ALTER COLUMN real1 TYPE bigint;
 
 statement ok
 ALTER TABLE tab_w_computed DROP COLUMN comp1;
 
-statement error pq: cannot alter column "real1" because computed column "comp[0-9]" depends on it\nHINT: consider dropping "comp[0-9]" first.
+statement error pq: cannot alter type of column "real1" because computed column "comp[0-9]" depends on it\nHINT: consider dropping "comp[0-9]" first.
 ALTER TABLE tab_w_computed ALTER COLUMN real1 TYPE bigint;
 
 statement ok
@@ -662,7 +662,7 @@ ALTER TABLE tab_w_computed DROP COLUMN comp3;
 statement ok
 ALTER TABLE tab_w_computed ALTER COLUMN real1 TYPE bigint;
 
-statement error pq: cannot alter column "real2" because computed column "comp[0-9]" depends on it\nHINT: consider dropping "comp[0-9]" first.
+statement error pq: cannot alter type of column "real2" because computed column "comp[0-9]" depends on it\nHINT: consider dropping "comp[0-9]" first.
 ALTER TABLE tab_w_computed ALTER COLUMN real2 TYPE string;
 
 statement ok
@@ -828,4 +828,22 @@ t_with_default  CREATE TABLE public.t_with_default (
 statement ok
 DROP TABLE t_with_default;
 
+subtest dep_function
+
+statement ok
+CREATE TABLE T_FOR_FUNCTION (C1 INT, C2 INT);
+
+statement ok
+CREATE OR REPLACE FUNCTION F1() RETURNS INT AS 'SELECT C2 FROM T_FOR_FUNCTION' LANGUAGE SQL;
+
+statement error pq: cannot alter type of column "c2" because function "f1" depends on it\nHINT: consider dropping "f1" first.
+ALTER TABLE T_FOR_FUNCTION ALTER COLUMN C2 SET DATA TYPE TEXT;
+
+statement ok
+DROP FUNCTION F1;
+
+statement ok
+DROP TABLE T_FOR_FUNCTION;
+
 subtest end
+
