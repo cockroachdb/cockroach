@@ -8461,6 +8461,150 @@ select
  └── filters
       └── j1:1 IN ('1', '10', '100') [outer=(1), constraints=(/1: [/'1' - /'1'] [/'10' - /'10'] [/'100' - /'100']; tight)]
 
+# Regression test for #122733. Do not construct an unnecessary index-join above
+# the inverted index scan.
+exec-ddl
+CREATE TABLE t122733 (
+  a STRING,
+  b STRING,
+  c STRING AS (b) VIRTUAL,
+  PRIMARY KEY (a, b),
+  INVERTED INDEX i122733 (a, c gin_trgm_ops)
+)
+----
+
+opt expect=GenerateInvertedIndexScans
+SELECT 1
+FROM (SELECT 'foo' FROM t122733) AS tmp (f)
+JOIN t122733@i122733 ON a = tmp.f AND c = tmp.f
+----
+project
+ ├── columns: "?column?":14!null
+ ├── fd: ()-->(14)
+ ├── inner-join (cross)
+ │    ├── columns: a:8!null b:9!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    ├── fd: ()-->(8,9)
+ │    ├── scan t122733
+ │    │    └── computed column expressions
+ │    │         └── c:3
+ │    │              └── b:2
+ │    ├── select
+ │    │    ├── columns: a:8!null b:9!null
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8,9)
+ │    │    ├── scan t122733@i122733,inverted
+ │    │    │    ├── columns: a:8!null b:9!null
+ │    │    │    ├── constraint: /8: [/'foo' - /'foo']
+ │    │    │    ├── inverted constraint: /13/9
+ │    │    │    │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │    │    ├── flags: force-index=i122733
+ │    │    │    ├── key: (9)
+ │    │    │    └── fd: ()-->(8)
+ │    │    └── filters
+ │    │         └── b:9 = 'foo' [outer=(9), constraints=(/9: [/'foo' - /'foo']; tight), fd=()-->(9)]
+ │    └── filters (true)
+ └── projections
+      └── 1 [as="?column?":14]
+
+opt expect=GenerateInvertedIndexScans
+SELECT 1
+FROM (SELECT 'foo', 'bar' FROM t122733) AS tmp (f, b)
+JOIN t122733@i122733 ON a = tmp.f AND (c = tmp.f OR c = tmp.b)
+----
+project
+ ├── columns: "?column?":15!null
+ ├── fd: ()-->(15)
+ ├── inner-join (cross)
+ │    ├── columns: a:9!null b:10!null
+ │    ├── fd: ()-->(9)
+ │    ├── scan t122733
+ │    │    └── computed column expressions
+ │    │         └── c:3
+ │    │              └── b:2
+ │    ├── inverted-filter
+ │    │    ├── columns: a:9!null b:10!null
+ │    │    ├── inverted expression: /14
+ │    │    │    ├── tight: false, unique: false
+ │    │    │    └── union spans
+ │    │    │         ├── ["\x12bar\x00\x01", "\x12bar\x00\x01"]
+ │    │    │         └── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │    ├── cardinality: [0 - 2]
+ │    │    ├── key: (10)
+ │    │    ├── fd: ()-->(9)
+ │    │    └── select
+ │    │         ├── columns: a:9!null b:10!null c_inverted_key:14!null
+ │    │         ├── cardinality: [0 - 2]
+ │    │         ├── key: (10)
+ │    │         ├── fd: ()-->(9), (10)-->(14)
+ │    │         ├── scan t122733@i122733,inverted
+ │    │         │    ├── columns: a:9!null b:10!null c_inverted_key:14!null
+ │    │         │    ├── constraint: /9: [/'foo' - /'foo']
+ │    │         │    ├── inverted constraint: /14/10
+ │    │         │    │    └── spans
+ │    │         │    │         ├── ["\x12bar\x00\x01", "\x12bar\x00\x01"]
+ │    │         │    │         └── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │         │    ├── flags: force-index=i122733
+ │    │         │    ├── key: (10)
+ │    │         │    └── fd: ()-->(9), (10)-->(14)
+ │    │         └── filters
+ │    │              └── (b:10 = 'foo') OR (b:10 = 'bar') [outer=(10), constraints=(/10: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
+ │    └── filters (true)
+ └── projections
+      └── 1 [as="?column?":15]
+
+opt expect=GenerateInvertedIndexScans
+SELECT 1
+FROM (SELECT 'foo', 'bar' FROM t122733) AS tmp (f, b)
+JOIN t122733@i122733 ON a = tmp.f AND (c = tmp.f OR c = tmp.b) AND c::INT > 5
+----
+project
+ ├── columns: "?column?":15!null
+ ├── immutable
+ ├── fd: ()-->(15)
+ ├── inner-join (cross)
+ │    ├── columns: a:9!null b:10!null
+ │    ├── immutable
+ │    ├── fd: ()-->(9)
+ │    ├── scan t122733
+ │    │    └── computed column expressions
+ │    │         └── c:3
+ │    │              └── b:2
+ │    ├── inverted-filter
+ │    │    ├── columns: a:9!null b:10!null
+ │    │    ├── inverted expression: /14
+ │    │    │    ├── tight: false, unique: false
+ │    │    │    └── union spans
+ │    │    │         ├── ["\x12bar\x00\x01", "\x12bar\x00\x01"]
+ │    │    │         └── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │    ├── cardinality: [0 - 2]
+ │    │    ├── immutable
+ │    │    ├── key: (10)
+ │    │    ├── fd: ()-->(9)
+ │    │    └── select
+ │    │         ├── columns: a:9!null b:10!null c_inverted_key:14!null
+ │    │         ├── cardinality: [0 - 2]
+ │    │         ├── immutable
+ │    │         ├── key: (10)
+ │    │         ├── fd: ()-->(9), (10)-->(14)
+ │    │         ├── scan t122733@i122733,inverted
+ │    │         │    ├── columns: a:9!null b:10!null c_inverted_key:14!null
+ │    │         │    ├── constraint: /9: [/'foo' - /'foo']
+ │    │         │    ├── inverted constraint: /14/10
+ │    │         │    │    └── spans
+ │    │         │    │         ├── ["\x12bar\x00\x01", "\x12bar\x00\x01"]
+ │    │         │    │         └── ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │    │         │    ├── flags: force-index=i122733
+ │    │         │    ├── key: (10)
+ │    │         │    └── fd: ()-->(9), (10)-->(14)
+ │    │         └── filters
+ │    │              ├── (b:10 = 'foo') OR (b:10 = 'bar') [outer=(10), constraints=(/10: [/'bar' - /'bar'] [/'foo' - /'foo']; tight)]
+ │    │              └── b:10::INT8 > 5 [outer=(10), immutable]
+ │    └── filters (true)
+ └── projections
+      └── 1 [as="?column?":15]
+
 # --------------------------------------------------
 # GenerateZigzagJoins
 # --------------------------------------------------
