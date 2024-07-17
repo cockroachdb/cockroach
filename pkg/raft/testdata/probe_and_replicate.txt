@@ -369,8 +369,8 @@ stabilize 1
 ----
 > 1 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateCandidate
-  HardState Term:8 Vote:1 Commit:18
+  State:StateCandidate
+  HardState Term:8 Vote:1 Commit:18 Lead:0
   Messages:
   1->2 MsgVote Term:8 Log:6/20
   1->3 MsgVote Term:8 Log:6/20
@@ -415,35 +415,34 @@ stabilize 2 3 4 5 6 7
   INFO 7 [logterm: 3, index: 21, vote: 0] cast MsgVote for 1 [logterm: 6, index: 20] at term 8
 > 2 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:8 Vote:1 Commit:18
+  HardState Term:8 Vote:1 Commit:18 Lead:0
   Messages:
   2->1 MsgVoteResp Term:8 Log:0/0
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:8 Vote:1 Commit:14
+  HardState Term:8 Vote:1 Commit:14 Lead:0
   Messages:
   3->1 MsgVoteResp Term:8 Log:0/0
 > 4 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:8 Commit:18
+  State:StateFollower
+  HardState Term:8 Commit:18 Lead:0
   Messages:
   4->1 MsgVoteResp Term:8 Log:0/0 Rejected (Hint: 0)
 > 5 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:8 Commit:18
+  State:StateFollower
+  HardState Term:8 Commit:18 Lead:0
   Messages:
   5->1 MsgVoteResp Term:8 Log:0/0 Rejected (Hint: 0)
 > 6 handling Ready
   Ready MustSync=true:
-  HardState Term:8 Vote:1 Commit:15
+  HardState Term:8 Vote:1 Commit:15 Lead:0
   Messages:
   6->1 MsgVoteResp Term:8 Log:0/0
 > 7 handling Ready
   Ready MustSync=true:
-  HardState Term:8 Vote:1 Commit:13
+  HardState Term:8 Vote:1 Commit:13 Lead:0
   Messages:
   7->1 MsgVoteResp Term:8 Log:0/0
 
@@ -469,7 +468,8 @@ stabilize 1
   7->1 MsgVoteResp Term:8 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:
-  Lead:1 State:StateLeader
+  State:StateLeader
+  HardState Term:8 Vote:1 Commit:18 Lead:1
   Entries:
   8/21 EntryNormal ""
   Messages:
@@ -486,8 +486,8 @@ stabilize 1 2
 > 2 receiving messages
   1->2 MsgApp Term:8 Log:6/20 Commit:18 Entries:[8/21 EntryNormal ""]
 > 2 handling Ready
-  Ready MustSync=false:
-  Lead:1 State:StateFollower
+  Ready MustSync=true:
+  HardState Term:8 Vote:1 Commit:18 Lead:1
   Messages:
   2->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 19)
 > 1 receiving messages
@@ -519,8 +519,8 @@ stabilize 1 3
 > 3 receiving messages
   1->3 MsgApp Term:8 Log:6/20 Commit:18 Entries:[8/21 EntryNormal ""]
 > 3 handling Ready
-  Ready MustSync=false:
-  Lead:1 State:StateFollower
+  Ready MustSync=true:
+  HardState Term:8 Vote:1 Commit:14 Lead:1
   Messages:
   3->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 14)
 > 1 receiving messages
@@ -549,7 +549,7 @@ stabilize 1 3
   ]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:8 Vote:1 Commit:18
+  HardState Term:8 Vote:1 Commit:18 Lead:1
   Entries:
   4/15 EntryNormal "prop_4_15"
   5/16 EntryNormal ""
@@ -576,7 +576,7 @@ stabilize 1 4
   INFO replace the unstable entries from index 21
 > 4 handling Ready
   Ready MustSync=true:
-  Lead:1 State:StateFollower
+  HardState Term:8 Commit:18 Lead:1
   Entries:
   8/21 EntryNormal ""
   Messages:
@@ -585,7 +585,7 @@ stabilize 1 4
   4->1 MsgAppResp Term:8 Log:0/21
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:8 Vote:1 Commit:21
+  HardState Term:8 Vote:1 Commit:21 Lead:1
   CommittedEntries:
   6/19 EntryNormal "prop_6_19"
   6/20 EntryNormal "prop_6_20"
@@ -598,7 +598,7 @@ stabilize 1 4
   1->4 MsgApp Term:8 Log:8/21 Commit:21
 > 4 handling Ready
   Ready MustSync=false:
-  HardState Term:8 Commit:21
+  HardState Term:8 Commit:21 Lead:1
   CommittedEntries:
   6/19 EntryNormal "prop_6_19"
   6/20 EntryNormal "prop_6_20"
@@ -613,8 +613,8 @@ stabilize 1 5
 > 5 receiving messages
   1->5 MsgApp Term:8 Log:6/20 Commit:18 Entries:[8/21 EntryNormal ""]
 > 5 handling Ready
-  Ready MustSync=false:
-  Lead:1 State:StateFollower
+  Ready MustSync=true:
+  HardState Term:8 Commit:18 Lead:1
   Messages:
   5->1 MsgAppResp Term:8 Log:6/20 Rejected (Hint: 18)
 > 1 receiving messages
@@ -637,7 +637,7 @@ stabilize 1 5
   INFO replace the unstable entries from index 19
 > 5 handling Ready
   Ready MustSync=true:
-  HardState Term:8 Commit:21
+  HardState Term:8 Commit:21 Lead:1
   Entries:
   6/19 EntryNormal "prop_6_19"
   6/20 EntryNormal "prop_6_20"
@@ -656,8 +656,8 @@ stabilize 1 6
 > 6 receiving messages
   1->6 MsgApp Term:8 Log:6/20 Commit:18 Entries:[8/21 EntryNormal ""]
 > 6 handling Ready
-  Ready MustSync=false:
-  Lead:1 State:StateFollower
+  Ready MustSync=true:
+  HardState Term:8 Vote:1 Commit:15 Lead:1
   Messages:
   6->1 MsgAppResp Term:8 Log:4/20 Rejected (Hint: 17)
 > 1 receiving messages
@@ -686,7 +686,7 @@ stabilize 1 6
   INFO replace the unstable entries from index 16
 > 6 handling Ready
   Ready MustSync=true:
-  HardState Term:8 Vote:1 Commit:21
+  HardState Term:8 Vote:1 Commit:21 Lead:1
   Entries:
   5/16 EntryNormal ""
   5/17 EntryNormal "prop_5_17"
@@ -711,8 +711,8 @@ stabilize 1 7
 > 7 receiving messages
   1->7 MsgApp Term:8 Log:6/20 Commit:18 Entries:[8/21 EntryNormal ""]
 > 7 handling Ready
-  Ready MustSync=false:
-  Lead:1 State:StateFollower
+  Ready MustSync=true:
+  HardState Term:8 Vote:1 Commit:13 Lead:1
   Messages:
   7->1 MsgAppResp Term:8 Log:3/20 Rejected (Hint: 20)
 > 1 receiving messages
@@ -745,7 +745,7 @@ stabilize 1 7
   INFO replace the unstable entries from index 14
 > 7 handling Ready
   Ready MustSync=true:
-  HardState Term:8 Vote:1 Commit:21
+  HardState Term:8 Vote:1 Commit:21 Lead:1
   Entries:
   4/14 EntryNormal ""
   4/15 EntryNormal "prop_4_15"

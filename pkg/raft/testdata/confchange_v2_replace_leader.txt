@@ -77,7 +77,7 @@ stabilize
   3->1 MsgAppResp Term:1 Log:0/4
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:4
+  HardState Term:1 Vote:1 Commit:4 Lead:1
   CommittedEntries:
   1/4 EntryConfChangeV2 r1 v4
   Messages:
@@ -94,7 +94,7 @@ stabilize
   1->4 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChangeV2 r1 v4]
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:4
+  HardState Term:1 Vote:1 Commit:4 Lead:1
   CommittedEntries:
   1/4 EntryConfChangeV2 r1 v4
   Messages:
@@ -102,7 +102,7 @@ stabilize
   INFO 2 switched to configuration voters=(2 3 4)&&(1 2 3)
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:4
+  HardState Term:1 Vote:1 Commit:4 Lead:1
   CommittedEntries:
   1/4 EntryConfChangeV2 r1 v4
   Messages:
@@ -117,8 +117,7 @@ stabilize
   INFO 4 became follower at term 1
 > 4 handling Ready
   Ready MustSync=true:
-  Lead:1 State:StateFollower
-  HardState Term:1 Commit:0
+  HardState Term:1 Commit:0 Lead:1
   Messages:
   4->1 MsgAppResp Term:1 Log:0/3 Rejected (Hint: 0)
 > 1 receiving messages
@@ -137,7 +136,7 @@ stabilize
   INFO 4 [commit: 4] restored snapshot [index: 4, term: 1]
 > 4 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Commit:4
+  HardState Term:1 Commit:4 Lead:1
   Snapshot Index:4 Term:1 ConfState:Voters:[2 3 4] VotersOutgoing:[1 2 3] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
   4->1 MsgAppResp Term:1 Log:0/4
@@ -176,8 +175,8 @@ stabilize
   INFO 4 [logterm: 1, index: 4] sent MsgVote request to 3 at term 2
 > 4 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateCandidate
-  HardState Term:2 Vote:4 Commit:4
+  State:StateCandidate
+  HardState Term:2 Vote:4 Commit:4 Lead:0
   Messages:
   4->1 MsgVote Term:2 Log:1/4
   4->2 MsgVote Term:2 Log:1/4
@@ -201,20 +200,18 @@ stabilize
   INFO 3 [logterm: 1, index: 4, vote: 0] cast MsgVote for 4 [logterm: 1, index: 4] at term 2
 > 1 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:2 Vote:4 Commit:4
+  State:StateFollower
+  HardState Term:2 Vote:4 Commit:4 Lead:0
   Messages:
   1->4 MsgVoteResp Term:2 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:2 Vote:4 Commit:4
+  HardState Term:2 Vote:4 Commit:4 Lead:0
   Messages:
   2->4 MsgVoteResp Term:2 Log:0/0
 > 3 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:2 Vote:4 Commit:4
+  HardState Term:2 Vote:4 Commit:4 Lead:0
   Messages:
   3->4 MsgVoteResp Term:2 Log:0/0
 > 4 receiving messages
@@ -228,7 +225,8 @@ stabilize
   3->4 MsgVoteResp Term:2 Log:0/0
 > 4 handling Ready
   Ready MustSync=true:
-  Lead:4 State:StateLeader
+  State:StateLeader
+  HardState Term:2 Vote:4 Commit:4 Lead:4
   Entries:
   2/5 EntryNormal ""
   Messages:
@@ -243,21 +241,21 @@ stabilize
   4->3 MsgApp Term:2 Log:1/4 Commit:4 Entries:[2/5 EntryNormal ""]
 > 1 handling Ready
   Ready MustSync=true:
-  Lead:4 State:StateFollower
+  HardState Term:2 Vote:4 Commit:4 Lead:4
   Entries:
   2/5 EntryNormal ""
   Messages:
   1->4 MsgAppResp Term:2 Log:0/5
 > 2 handling Ready
   Ready MustSync=true:
-  Lead:4 State:StateFollower
+  HardState Term:2 Vote:4 Commit:4 Lead:4
   Entries:
   2/5 EntryNormal ""
   Messages:
   2->4 MsgAppResp Term:2 Log:0/5
 > 3 handling Ready
   Ready MustSync=true:
-  Lead:4 State:StateFollower
+  HardState Term:2 Vote:4 Commit:4 Lead:4
   Entries:
   2/5 EntryNormal ""
   Messages:
@@ -268,7 +266,7 @@ stabilize
   3->4 MsgAppResp Term:2 Log:0/5
 > 4 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:4 Commit:5
+  HardState Term:2 Vote:4 Commit:5 Lead:4
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
@@ -283,21 +281,21 @@ stabilize
   4->3 MsgApp Term:2 Log:2/5 Commit:5
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:4 Commit:5
+  HardState Term:2 Vote:4 Commit:5 Lead:4
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
   1->4 MsgAppResp Term:2 Log:0/5
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:4 Commit:5
+  HardState Term:2 Vote:4 Commit:5 Lead:4
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
   2->4 MsgAppResp Term:2 Log:0/5
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:4 Commit:5
+  HardState Term:2 Vote:4 Commit:5 Lead:4
   CommittedEntries:
   2/5 EntryNormal ""
   Messages:
@@ -361,7 +359,7 @@ stabilize
   3->4 MsgAppResp Term:2 Log:0/6
 > 4 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:4 Commit:6
+  HardState Term:2 Vote:4 Commit:6 Lead:4
   CommittedEntries:
   2/6 EntryConfChangeV2
   Messages:
@@ -377,7 +375,7 @@ stabilize
   4->3 MsgApp Term:2 Log:2/6 Commit:6
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:4 Commit:6
+  HardState Term:2 Vote:4 Commit:6 Lead:4
   CommittedEntries:
   2/6 EntryConfChangeV2
   Messages:
@@ -385,7 +383,7 @@ stabilize
   INFO 1 switched to configuration voters=(2 3 4)
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:4 Commit:6
+  HardState Term:2 Vote:4 Commit:6 Lead:4
   CommittedEntries:
   2/6 EntryConfChangeV2
   Messages:
@@ -393,7 +391,7 @@ stabilize
   INFO 2 switched to configuration voters=(2 3 4)
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:4 Commit:6
+  HardState Term:2 Vote:4 Commit:6 Lead:4
   CommittedEntries:
   2/6 EntryConfChangeV2
   Messages:

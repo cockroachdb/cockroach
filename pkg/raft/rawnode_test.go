@@ -251,7 +251,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 				}
 				rawNode.Advance(rd)
 				// Once we are the leader, propose a command and a ConfChange.
-				if !proposed && rd.SoftState.Lead == rawNode.raft.id {
+				if !proposed && rd.HardState.Lead == rawNode.raft.id {
 					require.NoError(t, rawNode.Propose([]byte("somedata")))
 					if ccv1, ok := tc.cc.AsV1(); ok {
 						ccdata, err = ccv1.Marshal()
@@ -380,7 +380,7 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 		}
 		rawNode.Advance(rd)
 		// Once we are the leader, propose a command and a ConfChange.
-		if !proposed && rd.SoftState.Lead == rawNode.raft.id {
+		if !proposed && rd.HardState.Lead == rawNode.raft.id {
 			require.NoError(t, rawNode.Propose([]byte("somedata")))
 			ccdata, err = testCc.Marshal()
 			require.NoError(t, err)
@@ -456,7 +456,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	for {
 		rd = rawNode.Ready()
 		s.Append(rd.Entries)
-		if rd.SoftState.Lead == rawNode.raft.id {
+		if rd.HardState.Lead == rawNode.raft.id {
 			rawNode.Advance(rd)
 			break
 		}
@@ -520,8 +520,8 @@ func TestRawNodeStart(t *testing.T) {
 		{Term: 1, Index: 3, Data: []byte("foo")}, // non-empty entry
 	}
 	want := Ready{
-		SoftState:        &SoftState{Lead: 1, RaftState: StateLeader},
-		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1},
+		SoftState:        &SoftState{RaftState: StateLeader},
+		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1},
 		Entries:          nil, // emitted & checked in intermediate Ready cycle
 		CommittedEntries: entries,
 		MustSync:         false, // since we're only applying, not appending
@@ -610,10 +610,10 @@ func TestRawNodeRestart(t *testing.T) {
 		{Term: 1, Index: 1},
 		{Term: 1, Index: 2, Data: []byte("foo")},
 	}
-	st := pb.HardState{Term: 1, Commit: 1}
+	st := pb.HardState{Term: 1, Commit: 1, Lead: 1}
 
 	want := Ready{
-		HardState: emptyState,
+		HardState: emptyState, // no HardState is emitted because there was no change
 		// commit up to commit index in st
 		CommittedEntries: entries[:st.Commit],
 		MustSync:         false,
@@ -628,6 +628,18 @@ func TestRawNodeRestart(t *testing.T) {
 	assert.Equal(t, want, rd)
 	rawNode.Advance(rd)
 	assert.False(t, rawNode.HasReady())
+	// Ensure that the HardState was correctly loaded post restart.
+	assert.Equal(t, uint64(1), rawNode.raft.Term)
+	assert.Equal(t, uint64(1), rawNode.raft.raftLog.committed)
+	assert.Equal(t, pb.PeerID(1), rawNode.raft.lead)
+	assert.True(t, rawNode.raft.state == StateFollower)
+
+	// Ensure we campaign after the election timeout has elapsed.
+	for i := 0; i < rawNode.raft.randomizedElectionTimeout; i++ {
+		rawNode.raft.tick()
+	}
+	assert.Equal(t, StateCandidate, rawNode.raft.state)
+	assert.Equal(t, uint64(2), rawNode.raft.Term) // this should in-turn bump the term
 }
 
 func TestRawNodeRestartFromSnapshot(t *testing.T) {

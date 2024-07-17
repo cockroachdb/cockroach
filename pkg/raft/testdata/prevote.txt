@@ -65,8 +65,9 @@ INFO 3 [logterm: 1, index: 11] sent MsgPreVote request to 2 at term 1
 
 process-ready 3
 ----
-Ready MustSync=false:
-Lead:0 State:StatePreCandidate
+Ready MustSync=true:
+State:StatePreCandidate
+HardState Term:1 Vote:1 Commit:11 Lead:0
 Messages:
 3->1 MsgPreVote Term:2 Log:1/11
 3->2 MsgPreVote Term:2 Log:1/11
@@ -86,7 +87,7 @@ stabilize
 ----
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:12
+  HardState Term:1 Vote:1 Commit:12 Lead:1
   CommittedEntries:
   1/12 EntryNormal "prop_1"
   Messages:
@@ -107,15 +108,15 @@ stabilize
   2->3 MsgPreVoteResp Term:1 Log:0/0 Rejected (Hint: 0)
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:1 Vote:1 Commit:12
+  HardState Term:1 Vote:1 Commit:12 Lead:1
   CommittedEntries:
   1/12 EntryNormal "prop_1"
   Messages:
   2->1 MsgAppResp Term:1 Log:0/12
 > 3 handling Ready
   Ready MustSync=true:
-  Lead:1 State:StateFollower
-  HardState Term:1 Vote:1 Commit:12
+  State:StateFollower
+  HardState Term:1 Vote:1 Commit:12 Lead:1
   Entries:
   1/12 EntryNormal "prop_1"
   CommittedEntries:
@@ -139,8 +140,9 @@ INFO 2 [logterm: 1, index: 12] sent MsgPreVote request to 3 at term 1
 stabilize
 ----
 > 2 handling Ready
-  Ready MustSync=false:
-  Lead:0 State:StatePreCandidate
+  Ready MustSync=true:
+  State:StatePreCandidate
+  HardState Term:1 Vote:1 Commit:12 Lead:0
   Messages:
   2->1 MsgPreVote Term:2 Log:1/12
   2->3 MsgPreVote Term:2 Log:1/12
@@ -170,8 +172,8 @@ stabilize
   3->2 MsgPreVoteResp Term:2 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateCandidate
-  HardState Term:2 Vote:2 Commit:12
+  State:StateCandidate
+  HardState Term:2 Vote:2 Commit:12 Lead:0
   Messages:
   2->1 MsgVote Term:2 Log:1/12
   2->3 MsgVote Term:2 Log:1/12
@@ -189,14 +191,13 @@ stabilize
   INFO 3 [logterm: 1, index: 12, vote: 0] cast MsgVote for 2 [logterm: 1, index: 12] at term 2
 > 1 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:2 Vote:2 Commit:12
+  State:StateFollower
+  HardState Term:2 Vote:2 Commit:12 Lead:0
   Messages:
   1->2 MsgVoteResp Term:2 Log:0/0
 > 3 handling Ready
   Ready MustSync=true:
-  Lead:0 State:StateFollower
-  HardState Term:2 Vote:2 Commit:12
+  HardState Term:2 Vote:2 Commit:12 Lead:0
   Messages:
   3->2 MsgVoteResp Term:2 Log:0/0
 > 2 receiving messages
@@ -207,7 +208,8 @@ stabilize
   3->2 MsgVoteResp Term:2 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
-  Lead:2 State:StateLeader
+  State:StateLeader
+  HardState Term:2 Vote:2 Commit:12 Lead:2
   Entries:
   2/13 EntryNormal ""
   Messages:
@@ -219,14 +221,14 @@ stabilize
   2->3 MsgApp Term:2 Log:1/12 Commit:12 Entries:[2/13 EntryNormal ""]
 > 1 handling Ready
   Ready MustSync=true:
-  Lead:2 State:StateFollower
+  HardState Term:2 Vote:2 Commit:12 Lead:2
   Entries:
   2/13 EntryNormal ""
   Messages:
   1->2 MsgAppResp Term:2 Log:0/13
 > 3 handling Ready
   Ready MustSync=true:
-  Lead:2 State:StateFollower
+  HardState Term:2 Vote:2 Commit:12 Lead:2
   Entries:
   2/13 EntryNormal ""
   Messages:
@@ -236,7 +238,7 @@ stabilize
   3->2 MsgAppResp Term:2 Log:0/13
 > 2 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:2 Commit:13
+  HardState Term:2 Vote:2 Commit:13 Lead:2
   CommittedEntries:
   2/13 EntryNormal ""
   Messages:
@@ -248,14 +250,14 @@ stabilize
   2->3 MsgApp Term:2 Log:2/13 Commit:13
 > 1 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:2 Commit:13
+  HardState Term:2 Vote:2 Commit:13 Lead:2
   CommittedEntries:
   2/13 EntryNormal ""
   Messages:
   1->2 MsgAppResp Term:2 Log:0/13
 > 3 handling Ready
   Ready MustSync=false:
-  HardState Term:2 Vote:2 Commit:13
+  HardState Term:2 Vote:2 Commit:13 Lead:2
   CommittedEntries:
   2/13 EntryNormal ""
   Messages:

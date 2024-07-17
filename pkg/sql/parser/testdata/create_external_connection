@@ -1,15 +1,17 @@
 parse
 CREATE EXTERNAL CONNECTION 'foo' AS 'bar'
 ----
-CREATE EXTERNAL CONNECTION 'foo' AS 'bar'
-CREATE EXTERNAL CONNECTION ('foo') AS ('bar') -- fully parenthesized
+CREATE EXTERNAL CONNECTION 'foo' AS '*****' -- normalized!
+CREATE EXTERNAL CONNECTION ('foo') AS ('*****') -- fully parenthesized
 CREATE EXTERNAL CONNECTION '_' AS '_' -- literals removed
-CREATE EXTERNAL CONNECTION 'foo' AS 'bar' -- identifiers removed
+CREATE EXTERNAL CONNECTION 'foo' AS '*****' -- identifiers removed
+CREATE EXTERNAL CONNECTION 'foo' AS 'bar' -- passwords exposed
 
 parse
 CREATE EXTERNAL CONNECTION IF NOT EXISTS 'foo' AS 'bar'
 ----
-CREATE EXTERNAL CONNECTION IF NOT EXISTS 'foo' AS 'bar'
-CREATE EXTERNAL CONNECTION IF NOT EXISTS ('foo') AS ('bar') -- fully parenthesized
+CREATE EXTERNAL CONNECTION IF NOT EXISTS 'foo' AS '*****' -- normalized!
+CREATE EXTERNAL CONNECTION IF NOT EXISTS ('foo') AS ('*****') -- fully parenthesized
 CREATE EXTERNAL CONNECTION IF NOT EXISTS '_' AS '_' -- literals removed
-CREATE EXTERNAL CONNECTION IF NOT EXISTS 'foo' AS 'bar' -- identifiers removed
+CREATE EXTERNAL CONNECTION IF NOT EXISTS 'foo' AS '*****' -- identifiers removed
+CREATE EXTERNAL CONNECTION IF NOT EXISTS 'foo' AS 'bar' -- passwords exposed

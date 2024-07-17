@@ -8,12 +8,12 @@ END
 ----
 DECLARE
 BEGIN
-IMPORT TABLE foo FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql' WITH OPTIONS (max_row_size = '524288');
+IMPORT TABLE foo FROM PGDUMP '*****' WITH OPTIONS (max_row_size = '524288');
 END;
  -- normalized!
 DECLARE
 BEGIN
-IMPORT TABLE foo FROM PGDUMP ('userfile://defaultdb.public.userfiles_root/db.sql') WITH OPTIONS (max_row_size = ('524288'));
+IMPORT TABLE foo FROM PGDUMP ('*****') WITH OPTIONS (max_row_size = ('524288'));
 END;
  -- fully parenthesized
 DECLARE
@@ -23,9 +23,14 @@ END;
  -- literals removed
 DECLARE
 BEGIN
-IMPORT TABLE _ FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql' WITH OPTIONS (_ = '524288');
+IMPORT TABLE _ FROM PGDUMP '*****' WITH OPTIONS (_ = '524288');
 END;
  -- identifiers removed
+DECLARE
+BEGIN
+IMPORT TABLE foo FROM PGDUMP 'userfile://defaultdb.public.userfiles_root/db.sql' WITH OPTIONS (max_row_size = '524288');
+END;
+ -- passwords exposed
 
 parse
 DECLARE
