@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -126,7 +127,7 @@ type DistSQLPlanner struct {
 	// distSender is used to construct the spanResolver upon SetSQLInstanceInfo.
 	distSender *kvcoord.DistSender
 	// nodeDescs is used to construct the spanResolver upon SetSQLInstanceInfo.
-	nodeDescs kvcoord.NodeDescStore
+	nodeDescs kvclient.NodeDescStore
 	// rpcCtx is used to construct the spanResolver upon SetSQLInstanceInfo.
 	rpcCtx *rpc.Context
 
@@ -171,7 +172,7 @@ func NewDistSQLPlanner(
 	rpcCtx *rpc.Context,
 	distSQLSrv *distsql.ServerImpl,
 	distSender *kvcoord.DistSender,
-	nodeDescs kvcoord.NodeDescStore,
+	nodeDescs kvclient.NodeDescStore,
 	gw gossip.OptionalGossip,
 	stopper *stop.Stopper,
 	isAvailable func(base.SQLInstanceID) bool,
@@ -5196,6 +5197,6 @@ func (dsp *DistSQLPlanner) createPlanForInsert(
 	return plan, nil
 }
 
-func (dsp *DistSQLPlanner) NodeDescStore() kvcoord.NodeDescStore {
+func (dsp *DistSQLPlanner) NodeDescStore() kvclient.NodeDescStore {
 	return dsp.nodeDescs
 }

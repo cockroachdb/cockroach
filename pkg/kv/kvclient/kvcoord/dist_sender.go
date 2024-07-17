@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -662,7 +663,7 @@ type DistSender struct {
 	clock *hlc.Clock
 	// nodeDescs provides information on the KV nodes that DistSender may
 	// consider routing requests to.
-	nodeDescs NodeDescStore
+	nodeDescs kvclient.NodeDescStore
 	// nodeIDGetter provides access to the local KV node ID if it's available
 	// (0 otherwise). The default implementation uses the Gossip network if it's
 	// available, but custom implementation can be provided via
@@ -734,7 +735,7 @@ type DistSenderConfig struct {
 	Settings  *cluster.Settings
 	Stopper   *stop.Stopper
 	Clock     *hlc.Clock
-	NodeDescs NodeDescStore
+	NodeDescs kvclient.NodeDescStore
 	// NodeIDGetter, if set, provides non-gossip based implementation for
 	// obtaining the local KV node ID. The DistSender uses the node ID to
 	// preferentially route requests to a local replica (if one exists).

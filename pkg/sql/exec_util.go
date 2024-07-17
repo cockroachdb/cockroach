@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -1453,7 +1454,7 @@ type ExecutorConfig struct {
 	EventsExporter obs.EventsExporterInterface
 
 	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
-	NodeDescs kvcoord.NodeDescStore
+	NodeDescs kvclient.NodeDescStore
 
 	TenantCapabilitiesReader SystemTenantOnly[tenantcapabilities.Reader]
 

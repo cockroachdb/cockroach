@@ -445,7 +445,7 @@ type ApplicationLayerInterface interface {
 	PrivilegeChecker() interface{}
 
 	// NodeDescStoreI returns the node descriptor lookup interface.
-	// The concrete return type is compatible with interface kvcoord.NodeDescStore.
+	// The concrete return type is compatible with interface kvclient.NodeDescStore.
 	NodeDescStoreI() interface{}
 
 	// Locality returns the locality used by the server.
