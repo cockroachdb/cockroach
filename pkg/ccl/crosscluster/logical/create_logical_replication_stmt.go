@@ -188,6 +188,12 @@ func createLogicalReplicationStreamPlanHook(
 		if err != nil {
 			return err
 		}
+
+		defaultMode := jobspb.LogicalReplicationDetails_IMMEDIATE
+		if mode, ok := options.GetMode(); ok {
+			defaultMode = *mode
+		}
+
 		replicationStartTime := spec.ReplicationStartTime
 		progress := jobspb.LogicalReplicationProgress{}
 		if cursor, ok := options.GetCursor(); ok {
@@ -205,7 +211,7 @@ func createLogicalReplicationStreamPlanHook(
 			ConflictResolutionType: jobspb.LogicalReplicationDetails_DefaultConflictResolution_LWW,
 		}
 		if cr, ok := options.GetDefaultFunction(); ok {
-			defaultConflictResolution = *cr
+			defaultConflictResolution = cr
 		}
 
 		jr := jobs.Record{
@@ -220,6 +226,7 @@ func createLogicalReplicationStreamPlanHook(
 				ReplicationPairs:          repPairs,
 				TableNames:                srcTableNames,
 				DefaultConflictResolution: defaultConflictResolution,
+				Mode:                      defaultMode,
 			},
 			Progress: progress,
 		}
@@ -260,7 +267,7 @@ func createLogicalReplicationStreamTypeCheck(
 
 type resolvedLogicalReplicationOptions struct {
 	cursor          *hlc.Timestamp
-	mode            *string
+	mode            *jobspb.LogicalReplicationDetails_Mode
 	defaultFunction *jobspb.LogicalReplicationDetails_DefaultConflictResolution
 	// Mapping of table name to function descriptor
 	userFunctions map[string]int32
@@ -274,9 +281,16 @@ func evalLogicalReplicationOptions(
 ) (*resolvedLogicalReplicationOptions, error) {
 	r := &resolvedLogicalReplicationOptions{}
 	if options.Mode != nil {
-		mode, err := eval.String(ctx, options.Mode)
+		var mode jobspb.LogicalReplicationDetails_Mode
+		m, err := eval.String(ctx, options.Mode)
 		if err != nil {
 			return nil, err
+		}
+		switch strings.ToLower(m) {
+		case "immediate":
+			mode = jobspb.LogicalReplicationDetails_IMMEDIATE
+		default:
+			return nil, errors.Newf("mode %q is not supported", m)
 		}
 		r.mode = &mode
 	}
@@ -365,21 +379,24 @@ func (r *resolvedLogicalReplicationOptions) GetCursor() (hlc.Timestamp, bool) {
 	return *r.cursor, true
 }
 
-func (r *resolvedLogicalReplicationOptions) GetMode() (string, bool) {
+func (r *resolvedLogicalReplicationOptions) GetMode() (
+	*jobspb.LogicalReplicationDetails_Mode,
+	bool,
+) {
 	if r == nil || r.mode == nil {
-		return "", false
+		return nil, false
 	}
-	return *r.mode, true
+	return r.mode, true
 }
 
 func (r *resolvedLogicalReplicationOptions) GetDefaultFunction() (
-	*jobspb.LogicalReplicationDetails_DefaultConflictResolution,
+	jobspb.LogicalReplicationDetails_DefaultConflictResolution,
 	bool,
 ) {
 	if r == nil || r.defaultFunction == nil {
-		return &jobspb.LogicalReplicationDetails_DefaultConflictResolution{}, false
+		return jobspb.LogicalReplicationDetails_DefaultConflictResolution{}, false
 	}
-	return r.defaultFunction, true
+	return *r.defaultFunction, true
 }
 
 func (r *resolvedLogicalReplicationOptions) GetUserFunctions() (map[string]int32, bool) {

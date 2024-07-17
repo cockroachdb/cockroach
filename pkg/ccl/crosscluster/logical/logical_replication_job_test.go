@@ -967,3 +967,116 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	dbA.CheckQueryResults(t, "SELECT * from a.tab", expectedRows)
 	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRows)
 }
+
+func TestOptionsParsing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	dbB.Exec(t, "CREATE EXTERNAL CONNECTION a AS '"+dbAURL.String()+"'")
+	dbAURL = url.URL{
+		Scheme: "external",
+		Host:   "a",
+	}
+
+	// Create a random UDF for parse testing
+	udf := `CREATE FUNCTION add(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+	SELECT a + b;
+  $$;`
+	dbA.Exec(t, udf)
+
+	tests := []struct {
+		name        string
+		command     string
+		args        []interface{}
+		expectError bool
+	}{
+		{
+			name:        "valid mode",
+			command:     "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE=$2",
+			args:        []interface{}{dbBURL.String(), "IMMEDIATE"},
+			expectError: false,
+		},
+		{
+			name:        "invalid mode",
+			command:     "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE=$2",
+			args:        []interface{}{dbBURL.String(), "BLAH"},
+			expectError: true,
+		},
+		{
+			name:        "valid cursor",
+			command:     "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2",
+			args:        []interface{}{dbBURL.String(), "2024-07-16T19:40:52.240356Z"},
+			expectError: false,
+		},
+		{
+			name:        "invalid cursor",
+			command:     "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH CURSOR=$2",
+			args:        []interface{}{dbBURL.String(), "not a timestamp"},
+			expectError: true,
+		},
+		{
+			name:        "valid conflict resolution LWW",
+			command:     "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION=$2",
+			args:        []interface{}{dbBURL.String(), "LWW"},
+			expectError: false,
+		},
+		{
+			name:        "valid conflict resolution DLQ",
+			command:     "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION=$2",
+			args:        []interface{}{dbBURL.String(), "DLQ"},
+			expectError: false,
+		},
+		{
+			name:        "valid conflict resolution UDF",
+			command:     "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION=$2",
+			args:        []interface{}{dbBURL.String(), "add"},
+			expectError: false,
+		},
+		{
+			name:        "invalid conflict resolution UDF",
+			command:     "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION=$2",
+			args:        []interface{}{dbBURL.String(), "fakeFunction"},
+			expectError: true,
+		},
+		{
+			name:        "valid function override",
+			command:     "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH FUNCTION add FOR TABLE tab",
+			args:        []interface{}{dbBURL.String()},
+			expectError: false,
+		},
+		{
+			name:        "invalid function override",
+			command:     "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH FUNCTION fakeFunction FOR TABLE tab",
+			args:        []interface{}{dbBURL.String()},
+			expectError: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := dbA.DB.QueryContext(ctx, tc.command, tc.args...)
+			if tc.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
