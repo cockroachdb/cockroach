@@ -390,6 +390,31 @@ func TestMVCCGetWithValueHeader(t *testing.T) {
 	}
 }
 
+func TestMVCCValueHeaderOriginTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
+
+	// Put a value with a non-zero origin timestamp.
+	_, err := MVCCPut(ctx, engine, testKey1, hlc.Timestamp{WallTime: 1}, value1, MVCCWriteOptions{OriginTimestamp: hlc.Timestamp{WallTime: 1}})
+	require.NoError(t, err)
+
+	valueRes, vh, err := MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 3}, MVCCGetOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, valueRes.Value)
+	require.Equal(t, &hlc.Timestamp{WallTime: 1}, vh.OriginTimestamp)
+
+	// Ensure a regular put has no origin timestamp.
+	_, err = MVCCPut(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, value1, MVCCWriteOptions{})
+	require.NoError(t, err)
+	valueRes, vh, err = MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 3}, MVCCGetOptions{})
+	require.NoError(t, err)
+	require.Zero(t, vh.OriginTimestamp)
+}
+
 // TestMVCCValueHeadersForRangefeeds tests that the value headers used by
 // rangefeeds are set correctly.
 func TestMVCCValueHeadersForRangefeeds(t *testing.T) {

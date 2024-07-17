@@ -33,6 +33,7 @@ func populatedMVCCValueHeader() MVCCValueHeader {
 		OmitInRangefeeds: true,
 		ImportEpoch:      1,
 		OriginID:         1,
+		OriginTimestamp:  &hlc.Timestamp{WallTime: 1, Logical: 1},
 	}
 	allFieldsSet.KVNemesisSeq.Set(123)
 	return allFieldsSet
@@ -62,6 +63,7 @@ func TestMVCCValueHeader_IsEmpty(t *testing.T) {
 	require.False(t, MVCCValueHeader{OmitInRangefeeds: allFieldsSet.OmitInRangefeeds}.IsEmpty())
 	require.False(t, MVCCValueHeader{ImportEpoch: allFieldsSet.ImportEpoch}.IsEmpty())
 	require.False(t, MVCCValueHeader{OriginID: allFieldsSet.OriginID}.IsEmpty())
+	require.False(t, MVCCValueHeader{OriginTimestamp: allFieldsSet.OriginTimestamp}.IsEmpty())
 }
 
 func TestMVCCValueHeader_MarshalUnmarshal(t *testing.T) {

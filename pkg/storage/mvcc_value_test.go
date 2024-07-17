@@ -122,6 +122,7 @@ func TestMVCCValueFormat(t *testing.T) {
 	intVal.SetInt(17)
 	var importEpoch uint32 = 3
 	var originID uint32 = 1
+	var originTs = hlc.Timestamp{WallTime: 1, Logical: 1}
 
 	valHeader := enginepb.MVCCValueHeader{}
 	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
@@ -129,10 +130,13 @@ func TestMVCCValueFormat(t *testing.T) {
 	valHeaderFull := valHeader
 	valHeaderFull.ImportEpoch = importEpoch
 	valHeaderFull.OriginID = originID
+	valHeaderFull.OriginTimestamp = &originTs
 
 	valHeaderWithJobIDOnly := enginepb.MVCCValueHeader{ImportEpoch: importEpoch}
 
 	valHeaderWithOriginIDOnly := enginepb.MVCCValueHeader{OriginID: originID}
+
+	valHeaderWithOriginTsOnly := enginepb.MVCCValueHeader{OriginTimestamp: &originTs}
 
 	testcases := map[string]struct {
 		val    MVCCValue
@@ -150,9 +154,12 @@ func TestMVCCValueFormat(t *testing.T) {
 		"headerOriginIDOnly+tombstone": {val: MVCCValue{MVCCValueHeader: valHeaderWithOriginIDOnly}, expect: "{originID=1}/<empty>"},
 		"headerOriginIDOnly+bytes":     {val: MVCCValue{MVCCValueHeader: valHeaderWithOriginIDOnly, Value: strVal}, expect: "{originID=1}/BYTES/foo"},
 		"headerOriginIDOnly+int":       {val: MVCCValue{MVCCValueHeader: valHeaderWithOriginIDOnly, Value: intVal}, expect: "{originID=1}/INT/17"},
-		"headerFull+tombstone":         {val: MVCCValue{MVCCValueHeader: valHeaderFull}, expect: "{localTs=0.000000009,0, importEpoch=3, originID=1}/<empty>"},
-		"headerFull+bytes":             {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: strVal}, expect: "{localTs=0.000000009,0, importEpoch=3, originID=1}/BYTES/foo"},
-		"headerFull+int":               {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: intVal}, expect: "{localTs=0.000000009,0, importEpoch=3, originID=1}/INT/17"},
+		"headerFull+tombstone":         {val: MVCCValue{MVCCValueHeader: valHeaderFull}, expect: "{localTs=0.000000009,0, importEpoch=3, originID=1, originTs=0.000000001,1}/<empty>"},
+		"headerFull+bytes":             {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: strVal}, expect: "{localTs=0.000000009,0, importEpoch=3, originID=1, originTs=0.000000001,1}/BYTES/foo"},
+		"headerFull+int":               {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: intVal}, expect: "{localTs=0.000000009,0, importEpoch=3, originID=1, originTs=0.000000001,1}/INT/17"},
+		"headerOriginTsOnly+tombstone": {val: MVCCValue{MVCCValueHeader: valHeaderWithOriginTsOnly}, expect: "{originTs=0.000000001,1}/<empty>"},
+		"headerOriginTsOnly+bytes":     {val: MVCCValue{MVCCValueHeader: valHeaderWithOriginTsOnly, Value: strVal}, expect: "{originTs=0.000000001,1}/BYTES/foo"},
+		"headerOriginTsOnly+int":       {val: MVCCValue{MVCCValueHeader: valHeaderWithOriginTsOnly, Value: intVal}, expect: "{originTs=0.000000001,1}/INT/17"},
 	}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
@@ -170,6 +177,7 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 	intVal.SetInt(17)
 	var importEpoch uint32 = 3
 	var originID uint32 = 1
+	var originTs = hlc.Timestamp{WallTime: 1, Logical: 1}
 
 	valHeader := enginepb.MVCCValueHeader{}
 	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
@@ -177,9 +185,11 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 	valHeaderFull := valHeader
 	valHeaderFull.ImportEpoch = importEpoch
 	valHeaderFull.OriginID = originID
+	valHeaderFull.OriginTimestamp = &originTs
 
 	valHeaderWithJobIDOnly := enginepb.MVCCValueHeader{ImportEpoch: importEpoch}
 	valHeaderWithOriginIDOnly := enginepb.MVCCValueHeader{OriginID: originID}
+	valHeaderWithOriginTsOnly := enginepb.MVCCValueHeader{OriginTimestamp: &originTs}
 
 	testcases := map[string]struct {
 		val MVCCValue
@@ -199,6 +209,9 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 		"headerFull+tombstone":         {val: MVCCValue{MVCCValueHeader: valHeaderFull}},
 		"headerFull+bytes":             {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: strVal}},
 		"headerFull+int":               {val: MVCCValue{MVCCValueHeader: valHeaderFull, Value: intVal}},
+		"headerOriginTsOnly+tombstone": {val: MVCCValue{MVCCValueHeader: valHeaderWithOriginTsOnly}},
+		"headerOriginTsOnly+bytes":     {val: MVCCValue{MVCCValueHeader: valHeaderWithOriginTsOnly, Value: strVal}},
+		"headerOriginTsOnly+int":       {val: MVCCValue{MVCCValueHeader: valHeaderWithOriginTsOnly, Value: intVal}},
 	}
 	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
 	for name, tc := range testcases {

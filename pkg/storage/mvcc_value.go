@@ -131,6 +131,9 @@ func (v MVCCValue) SafeFormat(w redact.SafePrinter, _ rune) {
 		if v.OriginID != 0 {
 			fields = append(fields, fmt.Sprintf("originID=%v", v.OriginID))
 		}
+		if v.OriginTimestamp != nil {
+			fields = append(fields, fmt.Sprintf("originTs=%s", v.OriginTimestamp))
+		}
 		w.Print(strings.Join(fields, ", "))
 		w.Printf("}")
 	}

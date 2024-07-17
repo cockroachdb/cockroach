@@ -213,8 +213,14 @@ message MVCCValueHeader {
   // when LDR is not being run, 1 identifies a remote write, and 2+ are reserved
   // to identify remote clusters.
   uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
+  
+  // OriginTimestamp identifies the timestamp this kv was written on the
+  // original source cluster during Logical Data Replication. A default empty
+  // timestamp implies that this kv did not originate from a Logical Data
+  // Replication stream.
+  util.hlc.Timestamp origin_timestamp = 6  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.Timestamp"];
 
-  // NextID = 6.
+   // NextID = 7.
 }
 
 // MVCCValueHeaderPure is not to be used directly. It's generated only for use of
@@ -226,6 +232,7 @@ message MVCCValueHeaderPure {
   bool omit_in_rangefeeds = 3;
   uint32 import_epoch = 4;
   uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
+  util.hlc.Timestamp origin_timestamp = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.Timestamp"];
 }
 // MVCCValueHeaderCrdbTest is not to be used directly. It's generated only for use of
 // its marshaling methods by MVCCValueHeader. See the comment there.
@@ -240,6 +247,8 @@ message MVCCValueHeaderCrdbTest {
   bool omit_in_rangefeeds = 3;
   uint32 import_epoch = 4;
   uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
+  util.hlc.Timestamp origin_timestamp = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.Timestamp"];
+
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
