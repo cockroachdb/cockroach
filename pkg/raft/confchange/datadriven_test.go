@@ -32,9 +32,11 @@ import (
 
 func TestConfChangeDataDriven(t *testing.T) {
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
-		tr := tracker.MakeProgressTracker(10, 0)
+		cfg := quorum.MakeEmptyConfig()
+		tr := tracker.MakeProgressTracker(&cfg, 10, 0)
 		c := Changer{
 			Tracker:   tr,
+			Config:    cfg,
 			LastIndex: 0, // incremented in this test with each cmd
 		}
 
@@ -106,8 +108,8 @@ func TestConfChangeDataDriven(t *testing.T) {
 			if err != nil {
 				return err.Error() + "\n"
 			}
-			c.Tracker.Config, c.Tracker.Progress = cfg, trk
-			return fmt.Sprintf("%s\n%s", c.Tracker.Config, c.Tracker.Progress)
+			c.Config, c.Tracker.Progress = cfg, trk
+			return fmt.Sprintf("%s\n%s", c.Config, c.Tracker.Progress)
 		})
 	})
 }

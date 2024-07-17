@@ -33,6 +33,7 @@ import (
 // configuration.
 type Changer struct {
 	Tracker   tracker.ProgressTracker
+	Config    quorum.Config
 	LastIndex uint64
 }
 
@@ -142,7 +143,7 @@ func (c Changer) Simple(ccs ...pb.ConfChangeSingle) (quorum.Config, tracker.Prog
 	if err := c.apply(&cfg, trk, ccs...); err != nil {
 		return c.err(err)
 	}
-	if n := symdiff(incoming(c.Tracker.Config.Voters), incoming(cfg.Voters)); n > 1 {
+	if n := symdiff(incoming(c.Config.Voters), incoming(cfg.Voters)); n > 1 {
 		return quorum.Config{}, nil, errors.New("more than one voter changed without entering joint config")
 	}
 
@@ -344,7 +345,7 @@ func checkInvariants(cfg quorum.Config, trk tracker.ProgressMap) error {
 // the purposes of the Changer) and returns those copies. It returns an error
 // if checkInvariants does.
 func (c Changer) checkAndCopy() (quorum.Config, tracker.ProgressMap, error) {
-	cfg := c.Tracker.Config.Clone()
+	cfg := c.Config.Clone()
 	trk := tracker.ProgressMap{}
 
 	for id, pr := range c.Tracker.Progress {
