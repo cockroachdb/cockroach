@@ -24,6 +24,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 )
@@ -55,14 +56,14 @@ func TestConfChangeQuick(t *testing.T) {
 			return fmt.Errorf("cfg: %+v\ncfg2a: %+v\ntrk: %+v\ntrk2a: %+v",
 				cfg, cfg2a, trk, trk2a)
 		}
-		c.Tracker.Config = cfg
+		c.Config = cfg
 		c.Tracker.Progress = trk
 		cfg2b, trk2b, err := c.LeaveJoint()
 		if err != nil {
 			return err
 		}
 		// Reset back to the main branch with autoLeave=false.
-		c.Tracker.Config = cfg
+		c.Config = cfg
 		c.Tracker.Progress = trk
 		cfg, trk, err = c.LeaveJoint()
 		if err != nil {
@@ -72,7 +73,7 @@ func TestConfChangeQuick(t *testing.T) {
 			return fmt.Errorf("cfg: %+v\ncfg2b: %+v\ntrk: %+v\ntrk2b: %+v",
 				cfg, cfg2b, trk, trk2b)
 		}
-		c.Tracker.Config = cfg
+		c.Config = cfg
 		c.Tracker.Progress = trk
 		return nil
 	}
@@ -83,7 +84,7 @@ func TestConfChangeQuick(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			c.Tracker.Config, c.Tracker.Progress = cfg, trk
+			c.Config, c.Tracker.Progress = cfg, trk
 		}
 		return nil
 	}
@@ -92,8 +93,10 @@ func TestConfChangeQuick(t *testing.T) {
 
 	wrapper := func(invoke testFunc) func(setup initialChanges, ccs confChanges) (*Changer, error) {
 		return func(setup initialChanges, ccs confChanges) (*Changer, error) {
-			tr := tracker.MakeProgressTracker(10, 0)
+			cfg := quorum.MakeEmptyConfig()
+			tr := tracker.MakeProgressTracker(&cfg, 10, 0)
 			c := &Changer{
+				Config:    cfg,
 				Tracker:   tr,
 				LastIndex: 10,
 			}
@@ -116,7 +119,7 @@ func TestConfChangeQuick(t *testing.T) {
 		if n < infoCount {
 			t.Log("initial setup:", Describe(setup...))
 			t.Log("changes:", Describe(ccs...))
-			t.Log(c.Tracker.Config)
+			t.Log(c.Config)
 			t.Log(c.Tracker.Progress)
 		}
 		n++

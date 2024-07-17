@@ -108,10 +108,10 @@ func chain(
 		if err != nil {
 			return quorum.Config{}, nil, err
 		}
-		chg.Tracker.Config = cfg
+		chg.Config = cfg
 		chg.Tracker.Progress = trk
 	}
-	return chg.Tracker.Config, chg.Tracker.Progress, nil
+	return chg.Config, chg.Tracker.Progress, nil
 }
 
 // Restore takes a Changer (which must represent an empty configuration), and

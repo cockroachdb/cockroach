@@ -72,6 +72,18 @@ type Config struct {
 	LearnersNext map[pb.PeerID]struct{}
 }
 
+// MakeEmptyConfig constructs and returns an empty Config.
+func MakeEmptyConfig() Config {
+	return Config{
+		Voters: JointConfig{
+			MajorityConfig{},
+			nil, // only populated when used
+		},
+		Learners:     nil, // only populated when used
+		LearnersNext: nil, // only populated when used
+	}
+}
+
 func (c Config) String() string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "voters=%s", c.Voters)
@@ -103,5 +115,16 @@ func (c *Config) Clone() Config {
 		Voters:       JointConfig{clone(c.Voters[0]), clone(c.Voters[1])},
 		Learners:     clone(c.Learners),
 		LearnersNext: clone(c.LearnersNext),
+	}
+}
+
+// ConfState returns a ConfState representing the active configuration.
+func (c *Config) ConfState() pb.ConfState {
+	return pb.ConfState{
+		Voters:         c.Voters[0].Slice(),
+		VotersOutgoing: c.Voters[1].Slice(),
+		Learners:       MajorityConfig(c.Learners).Slice(),
+		LearnersNext:   MajorityConfig(c.LearnersNext).Slice(),
+		AutoLeave:      c.AutoLeave,
 	}
 }
