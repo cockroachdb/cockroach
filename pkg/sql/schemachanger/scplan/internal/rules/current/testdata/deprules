@@ -2452,6 +2452,20 @@ deprules
     - $column-Node[CurrentStatus] = ABSENT
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: column type update is decomposed as a drop then add
+  from: old-column-type-Node
+  kind: Precedence
+  to: new-column-type-Node
+  query:
+    - $old-column-type[Type] = '*scpb.ColumnType'
+    - $new-column-type[Type] = '*scpb.ColumnType'
+    - joinOnColumnID($old-column-type, $new-column-type, $table-id, $col-id)
+    - $old-column-type-Target[TargetStatus] = ABSENT
+    - $old-column-type-Node[CurrentStatus] = PUBLIC
+    - $new-column-type-Target[TargetStatus] = PUBLIC
+    - $new-column-type-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($old-column-type, $old-column-type-Target, $old-column-type-Node)
+    - joinTargetNode($new-column-type, $new-column-type-Target, $new-column-type-Node)
 - name: column writable right before column constraint is enforced.
   from: column-Node
   kind: SameStagePrecedence
@@ -6608,6 +6622,20 @@ deprules
     - $column-Node[CurrentStatus] = ABSENT
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: column type update is decomposed as a drop then add
+  from: old-column-type-Node
+  kind: Precedence
+  to: new-column-type-Node
+  query:
+    - $old-column-type[Type] = '*scpb.ColumnType'
+    - $new-column-type[Type] = '*scpb.ColumnType'
+    - joinOnColumnID($old-column-type, $new-column-type, $table-id, $col-id)
+    - $old-column-type-Target[TargetStatus] = ABSENT
+    - $old-column-type-Node[CurrentStatus] = PUBLIC
+    - $new-column-type-Target[TargetStatus] = PUBLIC
+    - $new-column-type-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($old-column-type, $old-column-type-Target, $old-column-type-Node)
+    - joinTargetNode($new-column-type, $new-column-type-Target, $new-column-type-Node)
 - name: column writable right before column constraint is enforced.
   from: column-Node
   kind: SameStagePrecedence
