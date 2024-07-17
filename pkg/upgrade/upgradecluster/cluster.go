@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc"
@@ -66,39 +67,35 @@ func New(cfg ClusterConfig) *Cluster {
 }
 
 // UntilClusterStable is part of the upgrade.Cluster interface.
-func (c *Cluster) UntilClusterStable(ctx context.Context, fn func() error) error {
-	live, _, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
+func (c *Cluster) UntilClusterStable(
+	ctx context.Context, retryOpts retry.Options, fn func() error,
+) error {
+	live, unavailable, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
 	if err != nil {
 		return err
 	}
 
-	// Allow for several retries in case of transient node unavailability.
-	const maxUnavailableRetries = 10
-	unavailableRetries := 0
-
-	for {
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		if err := fn(); err != nil {
 			return err
 		}
+
 		curLive, curUnavailable, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
 		if err != nil {
 			return err
 		}
 
 		if ok, diffs := live.Identical(curLive); !ok || curUnavailable != nil {
-			log.Infof(ctx, "%s, retrying, unavailable %v", diffs, curUnavailable)
+			log.Infof(ctx, "waiting for cluster stability, unavailable: %v, diff: %v", curUnavailable, diffs)
 			live = curLive
-			if curUnavailable != nil {
-				unavailableRetries++
-				if unavailableRetries > maxUnavailableRetries {
-					return errors.Newf("nodes %v required, but unavailable", curUnavailable)
-				}
-			}
-			continue
+			unavailable = curUnavailable
+		} else {
+			return nil
 		}
-		break
 	}
-	return nil
+
+	return errors.Newf(
+		"cluster not stable, nodes: %v, unavailable: %v", live, unavailable)
 }
 
 // NumNodesOrTenantPods is part of the upgrade.Cluster interface.
