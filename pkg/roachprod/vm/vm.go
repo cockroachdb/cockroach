@@ -62,6 +62,12 @@ const (
 	DisksInitializedFile = "/mnt/data1/" + InitializedFile
 )
 
+// UnimplementedError is returned when a method is not implemented by a
+// provider. An error is returned instead of panicking to isolate failures to a
+// single test (in the context of `roachtest`), otherwise the entire test run
+// would fail.
+var UnimplementedError = errors.New("unimplemented")
+
 type CPUArch string
 
 // ParseArch parses a string into a CPUArch using a simple, non-exhaustive heuristic.
