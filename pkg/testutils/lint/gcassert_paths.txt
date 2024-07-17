@@ -21,6 +21,7 @@ sql/colexec/colexecsel
 sql/colexec/colexecspan
 sql/colexec/colexecwindow
 sql/colfetcher
+sql/execinfrapb
 sql/opt
 sql/row
 storage
