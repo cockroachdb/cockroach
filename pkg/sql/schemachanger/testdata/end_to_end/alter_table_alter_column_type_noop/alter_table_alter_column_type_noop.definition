@@ -1,0 +1,8 @@
+setup
+CREATE TYPE e AS ENUM();
+CREATE TABLE t (i INT PRIMARY KEY, j e);
+----
+
+test
+ALTER TABLE t ALTER COLUMN j SET DATA TYPE e;
+----
