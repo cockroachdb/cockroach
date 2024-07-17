@@ -13,7 +13,6 @@ package security
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
@@ -129,8 +128,6 @@ func ForTenant(tenantIdentifier uint64) Option {
 func NewCertificateManager(
 	certsDir string, tlsSettings TLSSettings, opts ...Option,
 ) (*CertificateManager, error) {
-	fmt.Println("DIR:")
-	fmt.Println(certsDir)
 	cm := makeCertificateManager(certsDir, tlsSettings, opts...)
 	return cm, cm.LoadCertificates()
 }

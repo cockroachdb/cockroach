@@ -326,9 +326,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	authorizer := tenantcapabilitiesauthorizer.New(cfg.Settings, tenantCapabilitiesTestingKnobs)
 	rpcCtxOpts := rpc.ServerContextOptionsFromBaseConfig(cfg.BaseConfig.Config)
 
-	fmt.Println("CTX")
-	fmt.Println(cfg.BaseConfig.Config.SSLCertsDir)
-
 	rpcCtxOpts.TenantID = roachpb.SystemTenantID
 	rpcCtxOpts.UseNodeAuth = true
 	rpcCtxOpts.NodeID = nodeIDContainer

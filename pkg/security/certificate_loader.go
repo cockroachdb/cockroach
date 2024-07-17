@@ -13,7 +13,6 @@ package security
 import (
 	"context"
 	"crypto/x509"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -253,9 +252,6 @@ func (cl *CertificateLoader) MaybeCreateCertsDir() error {
 		return nil
 	}
 
-	fmt.Println(dirInfo)
-	fmt.Println(cl.certsDir)
-
 	if !oserror.IsNotExist(err) {
 		return makeErrorf(err, "could not stat certs directory %s", cl.certsDir)
 	}
@@ -292,15 +288,10 @@ func (cl *CertificateLoader) Load() error {
 		log.Infof(context.Background(), "scanning certs directory %s", cl.certsDir)
 	}
 
-	fmt.Println(fileInfos)
-
 	// Walk the directory contents.
 	for _, info := range fileInfos {
 		filename := info.Name()
 		fullPath := filepath.Join(cl.certsDir, filename)
-
-		fmt.Println("FULLPATH")
-		fmt.Println(fullPath)
 
 		if info.IsDir() {
 			// Skip subdirectories.

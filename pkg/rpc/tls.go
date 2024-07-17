@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -119,8 +118,6 @@ func NewSecurityContext(
 // fails eagerly.
 func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManager, error) {
 	ctx.lazy.certificateManager.Do(func() {
-		debug.PrintStack()
-
 		var opts []security.Option
 		if !(ctx.useNodeAuth || ctx.tenID == roachpb.SystemTenantID) {
 			opts = append(opts, security.ForTenant(ctx.tenID.ToUint64()))

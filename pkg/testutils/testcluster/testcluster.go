@@ -267,9 +267,6 @@ func NewTestCluster(
 		t:           t,
 	}
 
-	fmt.Println("ARGS")
-	fmt.Println(clusterArgs)
-
 	// Check if any of the args have a locality set.
 	noLocalities := true
 	for _, arg := range tc.clusterArgs.ServerArgsPerNode {
