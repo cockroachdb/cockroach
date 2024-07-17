@@ -67,9 +67,9 @@ type sqlRowProcessor struct {
 // A querier handles rows for any table that has previously been added
 // to the querier using the passed isql.Txn and internal executor.
 type querier interface {
-	AddTable(int32, catalog.TableDescriptor) error
-	InsertRow(context.Context, isql.Txn, isql.Executor, cdcevent.Row, *cdcevent.Row, bool) (batchStats, error)
-	DeleteRow(context.Context, isql.Txn, isql.Executor, cdcevent.Row, *cdcevent.Row) (batchStats, error)
+	AddTable(targetDescID int32, td catalog.TableDescriptor) error
+	InsertRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row, likelyInsert bool) (batchStats, error)
+	DeleteRow(ctx context.Context, txn isql.Txn, ie isql.Executor, row cdcevent.Row, prevRow *cdcevent.Row) (batchStats, error)
 	RequiresParsedBeforeRow() bool
 }
 
