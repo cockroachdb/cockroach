@@ -538,13 +538,6 @@ func streamPartition(
 	if err := protoutil.Unmarshal(opaqueSpec, &spec); err != nil {
 		return nil, errors.Wrapf(err, "invalid partition spec for stream %d", streamID)
 	}
-	if !evalCtx.SessionData().AvoidBuffering {
-		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
-	}
-	if !evalCtx.TxnImplicit {
-		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-			"crdb_internal.stream_partition not allowed in explicit transaction")
-	}
 	if len(spec.Spans) == 0 {
 		return nil, errors.AssertionFailedf("expected at least one span, got none")
 	}
