@@ -73,6 +73,8 @@ type TestingKnobs struct {
 	SkipUpdateSQLActivityJobBootstrap bool
 
 	SkipMVCCStatisticsJobBootstrap bool
+
+	SkipUpdateCachedTableMetadataBootstrap bool
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.
