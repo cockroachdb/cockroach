@@ -642,13 +642,19 @@ const acceptableCountDecrease = 0.1
 const acceptableP50Increase = 1.0
 const acceptableP99Increase = 1.0
 const acceptableP999Increase = 3.0 // this can have higher variations and not part of what we are trying to solve short term.
+// minAcceptableLatencyThreshold is the threshold below which we consider the
+// latency acceptable regardless of any relative change from the baseline.
+const minAcceptableLatencyThreshold = 10 * time.Millisecond
 
 // isAcceptableChange determines if a change from the baseline is acceptable.
 // An acceptable change is defined as the following:
-// 1) Num ops/second is within 10% of the baseline.
-// 2) The P50th percentile latency is within 4x of the baseline.
-// 3) The P99th percentile latency is within 2x of the baseline.
-// 4) The P99.9th percentile latency is within 2x of the baseline.
+//  1. Num ops/second is within 10% of the baseline.
+//  2. The P50th percentile latency is within 4x of the baseline.
+//  3. The P99th percentile latency is within 2x of the baseline.
+//  4. The P99.9th percentile latency is within 2x of the baseline.
+//  5. OR the p50/99/99.9th percentile latencies are below 10ms, in which case
+//     the latency relative to the baseline is ignored.
+//
 // It compares all the metrics rather than failing fast. Normally multiple
 // metrics will fail at once if a test is going to fail and it is helpful to see
 // all the differences.
@@ -666,20 +672,30 @@ func isAcceptableChange(
 			logger.Printf("%s: qps decreased from %d to %d", name, baseStat.TotalCount(), otherStat.TotalCount())
 			allPassed = false
 		}
-		if float64(otherStat.ValueAtQuantile(50)) > float64(baseStat.ValueAtQuantile(50))*(1+acceptableP50Increase) {
+		if !isAcceptableLatencyChange(baseStat, otherStat, 50 /* p50 */, acceptableP50Increase) {
 			logger.Printf("%s: P50 increased from %s to %s", name, time.Duration(baseStat.ValueAtQuantile(50)), time.Duration(otherStat.ValueAtQuantile(50)))
 			allPassed = false
 		}
-		if float64(otherStat.ValueAtQuantile(99)) > float64(baseStat.ValueAtQuantile(99))*(1+acceptableP99Increase) {
+		if !isAcceptableLatencyChange(baseStat, otherStat, 99 /* p99 */, acceptableP99Increase) {
 			logger.Printf("%s: P99 increased from %s to %s", name, time.Duration(baseStat.ValueAtQuantile(99)), time.Duration(otherStat.ValueAtQuantile(99)))
 			allPassed = false
 		}
-		if float64(otherStat.ValueAtQuantile(99.9)) > float64(baseStat.ValueAtQuantile(99.9))*(1+acceptableP999Increase) {
+		if !isAcceptableLatencyChange(baseStat, otherStat, 99.9 /* p99.9 */, acceptableP999Increase) {
 			logger.Printf("%s: P99.9 increased from %s to %s", name, time.Duration(baseStat.ValueAtQuantile(99.9)), time.Duration(otherStat.ValueAtQuantile(99.9)))
 			allPassed = false
 		}
 	}
 	return allPassed
+}
+
+// isAcceptableLatencyChange determines if a change in latency, between change
+// and baseline, is acceptable.
+func isAcceptableLatencyChange(
+	base, change *hdrhistogram.Histogram, p, relativeThreshold float64,
+) bool {
+	changeLatency := time.Duration(change.ValueAtQuantile(p))
+	latencyThreshold := time.Duration(float64(base.ValueAtQuantile(p)) * (1 + relativeThreshold))
+	return changeLatency <= latencyThreshold || changeLatency < minAcceptableLatencyThreshold
 }
 
 // isWorse returns true if a is significantly worse than b. Note that this is
