@@ -163,9 +163,6 @@ const (
 	// StartServiceForVirtualCluster starts a SQL/HTTP-only server
 	// process for a virtual cluster.
 	StartServiceForVirtualCluster
-	// StartRoutingProxy starts the SQL proxy process to route
-	// connections to multiple virtual clusters.
-	StartRoutingProxy
 )
 
 const (
@@ -182,9 +179,9 @@ const (
 
 func (st StartTarget) String() string {
 	return [...]string{
-		StartDefault:                  "default",
-		StartServiceForVirtualCluster: "SQL/HTTP instance for virtual cluster",
-		StartRoutingProxy:             "SQL proxy for multiple tenants",
+		StartDefault:                        "default",
+		StartSharedProcessForVirtualCluster: "shared-process virtual cluster instance",
+		StartServiceForVirtualCluster:       "SQL/HTTP instance for virtual cluster",
 	}[st]
 }
 
@@ -353,10 +350,6 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 // `start-single-node` (this was written to provide a short hand to start a
 // single node cluster with a replication factor of one).
 func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts StartOpts) error {
-	if startOpts.Target == StartRoutingProxy {
-		return fmt.Errorf("start SQL proxy not implemented")
-	}
-
 	// Determine if custom ports were specified in the start options.
 	customPortsSpecified := func() bool {
 		if startOpts.SQLPort != 0 && startOpts.SQLPort != config.DefaultSQLPort {
@@ -941,10 +934,6 @@ func (c *SyncedCluster) generateStartArgs(
 
 	case StartServiceForVirtualCluster:
 		args = []string{"mt", "start-sql"}
-
-	case StartRoutingProxy:
-		// args = []string{"mt", "start-proxy"}
-		panic("unimplemented")
 
 	default:
 		return nil, errors.Errorf("unsupported start target %v", startOpts.Target)
