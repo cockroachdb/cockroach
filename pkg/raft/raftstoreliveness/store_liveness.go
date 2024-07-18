@@ -12,9 +12,9 @@ package raftstoreliveness
 
 import "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
-// StoreLivenessEpoch is an epoch in the Store Liveness fabric, referencing an
-// uninterrupted period of support from one store to another.
-type StoreLivenessEpoch int64
+// Epoch is an epoch in the Store Liveness fabric, referencing an uninterrupted
+// period of support from one store to another.
+type Epoch int64
 
 // StoreLiveness is a representation of the Store Liveness fabric. It provides
 // information about uninterrupted periods of "support" between stores.
@@ -36,7 +36,7 @@ type StoreLiveness interface {
 	// If S_local cannot map the replica ID to a store ID, false will be returned.
 	// It is therefore important to ensure that the replica ID to store ID mapping
 	// is not lost during periods of support.
-	SupportFor(id uint64) (StoreLivenessEpoch, bool)
+	SupportFor(id uint64) (Epoch, bool)
 
 	// SupportFrom returns the epoch of the current uninterrupted period of Store
 	// Liveness support from the specified replica's remote store (S_remote) for
@@ -53,7 +53,7 @@ type StoreLiveness interface {
 	// providing.
 	//
 	// If S_local cannot map the replica ID to a store ID, false will be returned.
-	SupportFrom(id uint64) (StoreLivenessEpoch, hlc.Timestamp, bool)
+	SupportFrom(id uint64) (Epoch, hlc.Timestamp, bool)
 
 	// SupportFromEnabled returns whether StoreLiveness is currently active, and
 	// callers can rely on getting support from peers by calling SupportFrom.

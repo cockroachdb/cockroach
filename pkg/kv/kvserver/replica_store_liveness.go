@@ -34,9 +34,7 @@ func (r *replicaRLockedStoreLiveness) getStoreIdent(replicaID uint64) (slpb.Stor
 }
 
 // SupportFor implements the raftstoreliveness.StoreLiveness interface.
-func (r *replicaRLockedStoreLiveness) SupportFor(
-	replicaID uint64,
-) (raftstoreliveness.StoreLivenessEpoch, bool) {
+func (r *replicaRLockedStoreLiveness) SupportFor(replicaID uint64) (raftstoreliveness.Epoch, bool) {
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
 		return 0, false
@@ -45,13 +43,13 @@ func (r *replicaRLockedStoreLiveness) SupportFor(
 	if !ok {
 		return 0, false
 	}
-	return raftstoreliveness.StoreLivenessEpoch(epoch), true
+	return raftstoreliveness.Epoch(epoch), true
 }
 
 // SupportFrom implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFrom(
 	replicaID uint64,
-) (raftstoreliveness.StoreLivenessEpoch, hlc.Timestamp, bool) {
+) (raftstoreliveness.Epoch, hlc.Timestamp, bool) {
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
 		return 0, hlc.Timestamp{}, false
@@ -60,7 +58,7 @@ func (r *replicaRLockedStoreLiveness) SupportFrom(
 	if !ok {
 		return 0, hlc.Timestamp{}, false
 	}
-	return raftstoreliveness.StoreLivenessEpoch(epoch), exp, true
+	return raftstoreliveness.Epoch(epoch), exp, true
 }
 
 // SupportFromEnabled implements the raftstoreliveness.StoreLiveness interface.

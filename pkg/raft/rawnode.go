@@ -181,9 +181,14 @@ func MustSync(st, prevst pb.HardState, entsnum int) bool {
 	// (Updated on stable storage before responding to RPCs)
 	// currentTerm
 	// currentLead
+	// currentLeadEpoch
 	// votedFor
 	// log entries[]
-	return entsnum != 0 || st.Vote != prevst.Vote || st.Term != prevst.Term || st.Lead != prevst.Lead
+	return entsnum != 0 || st.Vote != prevst.Vote || st.Term != prevst.Term ||
+		// TODO(arul): The st.LeadEpoch != prevst.LeadEpoch condition is currently
+		// untested because we don't set r.leadEpoch yet. We'll do so when we
+		// introduce MsgFortifyResp. Test this then.
+		st.Lead != prevst.Lead || st.LeadEpoch != prevst.LeadEpoch
 }
 
 func needStorageAppendMsg(r *raft, rd Ready) bool {
