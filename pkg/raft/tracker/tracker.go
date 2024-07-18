@@ -37,11 +37,11 @@ type ProgressTracker struct {
 }
 
 // MakeProgressTracker initializes a ProgressTracker.
-func MakeProgressTracker(config *quorum.Config) ProgressTracker {
+func MakeProgressTracker(config *quorum.Config, progressMap ProgressMap) ProgressTracker {
 	p := ProgressTracker{
 		Config:   config,
+		Progress: progressMap,
 		Votes:    map[pb.PeerID]bool{},
-		Progress: map[pb.PeerID]*Progress{},
 	}
 	return p
 }

@@ -32,10 +32,9 @@ import (
 
 func TestConfChangeDataDriven(t *testing.T) {
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
-		cfg := quorum.MakeEmptyConfig()
 		c := Changer{
-			Config:           cfg,
-			ProgressMap:      tracker.MakeProgressTracker(&cfg).Progress,
+			Config:           quorum.MakeEmptyConfig(),
+			ProgressMap:      tracker.MakeEmptyProgressMap(),
 			MaxInflight:      10,
 			MaxInflightBytes: 0,
 			LastIndex:        0, // incremented in this test with each cmd
