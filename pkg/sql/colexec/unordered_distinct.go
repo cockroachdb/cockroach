@@ -121,9 +121,7 @@ func (op *UnorderedDistinct) Next() coldata.Batch {
 }
 
 // ExportBuffered implements the colexecop.BufferingInMemoryOperator interface.
-func (op *UnorderedDistinct) ExportBuffered(
-	colexecop.Operator, colexecop.BufferingOpReuseMode,
-) coldata.Batch {
+func (op *UnorderedDistinct) ExportBuffered(colexecop.Operator) coldata.Batch {
 	if op.lastInputBatch != nil {
 		batch := op.lastInputBatch
 		op.lastInputBatch = nil
@@ -131,9 +129,22 @@ func (op *UnorderedDistinct) ExportBuffered(
 	}
 	// We only need to export the last input batch because the buffered in the
 	// hash table data is used by the unorderedDistinctFilterer (which is
-	// planned by the external distinct). Because of this we also cannot release
-	// the memory used by the hash table since it'll be used in the future.
+	// planned by the external distinct).
 	return coldata.ZeroBatch
+}
+
+// ReleaseBeforeExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (op *UnorderedDistinct) ReleaseBeforeExport() {
+	// We need to hold onto the hash table to perform the filtering in the
+	// unorderedDistinctFilterer.
+}
+
+// ReleaseAfterExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (op *UnorderedDistinct) ReleaseAfterExport() {
+	// We need to hold onto the hash table to perform the filtering in the
+	// unorderedDistinctFilterer.
 }
 
 // Reset resets the UnorderedDistinct.

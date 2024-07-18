@@ -157,16 +157,28 @@ type BufferingInMemoryOperator interface {
 	// the input and have not yet been processed by the operator. It needs to be
 	// called once the memory limit has been reached in order to "dump" the
 	// buffered tuples into a disk-backed operator. It will return a zero-length
-	// batch once the buffer has been emptied. The underlying buffer might be
-	// fully cleared when the first zero-length batch is returned.
+	// batch once the buffer has been emptied.
 	//
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
+	ExportBuffered(input Operator) coldata.Batch
+	// ReleaseBeforeExport allows to operators to free up the in-memory
+	// resources that they no longer need, except for those that are needed for
+	// exporting the buffered tuples.
 	//
-	// If BufferingOpNoReuse is used, then attempting to reuse the Operator (by
-	// Resetting it) after calling ExportBuffered can result in undefined
-	// behavior.
-	ExportBuffered(input Operator, reuseMode BufferingOpReuseMode) coldata.Batch
+	// It will only be called when the operator is used in the
+	// BufferingOpNoReuse mode. All calls except for the first one should be a
+	// noop.
+	ReleaseBeforeExport()
+	// ReleaseAfterExport allows to operators to free up the in-memory resources
+	// that they used for exporting the buffered tuples (and don't need
+	// anymore).
+	//
+	// It will only be called when the operator is used in the
+	// BufferingOpNoReuse mode. All calls except for the first one should be a
+	// noop. Calling this method may invalidate the contents of the last batch
+	// returned by ExportBuffered. ExportBuffered won't be called after this.
+	ReleaseAfterExport()
 }
 
 // Closer is an object that releases resources when Close is called. Note that

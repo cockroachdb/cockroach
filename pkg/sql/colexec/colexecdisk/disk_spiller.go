@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -325,10 +326,12 @@ type bufferExportingOperator struct {
 	colexecop.ZeroInputNode
 	colexecop.NonExplainable
 
-	firstSource          colexecop.BufferingInMemoryOperator
-	secondSource         colexecop.Operator
-	firstSourceReuseMode colexecop.BufferingOpReuseMode
-	firstSourceDone      bool
+	firstSource               colexecop.BufferingInMemoryOperator
+	secondSource              colexecop.Operator
+	firstSourceReuseMode      colexecop.BufferingOpReuseMode
+	firstSourceReleasedBefore bool
+	firstSourceReleasedAfter  bool
+	firstSourceDone           bool
 }
 
 var _ colexecop.ResettableOperator = &bufferExportingOperator{}
@@ -352,9 +355,17 @@ func (b *bufferExportingOperator) Init(context.Context) {
 
 func (b *bufferExportingOperator) Next() coldata.Batch {
 	if b.firstSourceDone {
+		if !b.firstSourceReleasedAfter && b.firstSourceReuseMode == colexecop.BufferingOpNoReuse {
+			b.firstSourceReleasedAfter = true
+			b.firstSource.ReleaseAfterExport()
+		}
 		return b.secondSource.Next()
 	}
-	batch := b.firstSource.ExportBuffered(b.secondSource, b.firstSourceReuseMode)
+	if !b.firstSourceReleasedBefore && b.firstSourceReuseMode == colexecop.BufferingOpNoReuse {
+		b.firstSourceReleasedBefore = true
+		b.firstSource.ReleaseBeforeExport()
+	}
+	batch := b.firstSource.ExportBuffered(b.secondSource)
 	if batch.Length() == 0 {
 		b.firstSourceDone = true
 		return b.secondSource.Next()
@@ -363,6 +374,14 @@ func (b *bufferExportingOperator) Next() coldata.Batch {
 }
 
 func (b *bufferExportingOperator) Reset(ctx context.Context) {
+	if buildutil.CrdbTestBuild {
+		if b.firstSourceReuseMode == colexecop.BufferingOpNoReuse {
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"the BufferingInMemoryOp %T is being reset even though "+
+					"BufferingOpNoReuse was specified", b.firstSource,
+			))
+		}
+	}
 	if r, ok := b.firstSource.(colexecop.Resetter); ok {
 		r.Reset(ctx)
 	}

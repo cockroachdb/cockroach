@@ -482,9 +482,7 @@ func (p *sortOp) Child(nth int, verbose bool) execopnode.OpNode {
 	return nil
 }
 
-func (p *sortOp) ExportBuffered(
-	_ colexecop.Operator, reuseMode colexecop.BufferingOpReuseMode,
-) coldata.Batch {
+func (p *sortOp) ExportBuffered(colexecop.Operator) coldata.Batch {
 	if p.exportComplete {
 		return coldata.ZeroBatch
 	}
@@ -497,13 +495,21 @@ func (p *sortOp) ExportBuffered(
 		p.exported = newExported
 		return b
 	}
-	if reuseMode == colexecop.BufferingOpNoReuse {
-		// This operator won't be used anymore, so we can release all of its
-		// memory resources.
-		defer p.allocator.ReleaseAll()
-		*p = sortOp{exportComplete: true}
-	} else {
-		p.exportComplete = true
-	}
+	p.exportComplete = true
 	return coldata.ZeroBatch
+}
+
+// ReleaseBeforeExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (p *sortOp) ReleaseBeforeExport() {}
+
+// ReleaseAfterExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (p *sortOp) ReleaseAfterExport() {
+	if p.allocator == nil {
+		// Resources have already been released.
+		return
+	}
+	defer p.allocator.ReleaseAll()
+	*p = sortOp{exportComplete: true}
 }
