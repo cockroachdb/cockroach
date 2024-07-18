@@ -579,10 +579,11 @@ func TestLargeDynamicRows(t *testing.T) {
 			return nil
 		},
 	}
-	s := serverutils.StartServerOnly(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	url, cleanup := sqlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := s.PGUrl(t)
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -595,9 +596,7 @@ func TestLargeDynamicRows(t *testing.T) {
 	// 4.0 MiB is minimum, but due to #117070 use 5MiB instead to avoid flakes.
 	// Copy sets max row size to this value / 3.
 	const memLimit = kvserverbase.MaxCommandSizeFloor + 1<<20
-	for _, l := range []serverutils.ApplicationLayerInterface{s, s.SystemLayer()} {
-		kvserverbase.MaxCommandSize.Override(ctx, &l.ClusterSettings().SV, memLimit)
-	}
+	kvserverbase.MaxCommandSize.Override(ctx, &s.ClusterSettings().SV, memLimit)
 
 	err = conn.Exec(ctx, "CREATE TABLE t (s STRING)")
 	require.NoError(t, err)
@@ -616,9 +615,7 @@ func TestLargeDynamicRows(t *testing.T) {
 	batchNumber = 0
 
 	// Reset and make sure we use 1 batch.
-	for _, l := range []serverutils.ApplicationLayerInterface{s, s.SystemLayer()} {
-		kvserverbase.MaxCommandSize.Override(ctx, &l.ClusterSettings().SV, kvserverbase.MaxCommandSizeDefault)
-	}
+	kvserverbase.MaxCommandSize.Override(ctx, &s.ClusterSettings().SV, kvserverbase.MaxCommandSizeDefault)
 
 	// This won't work if the batch size gets set to less than 5. When the batch
 	// size is 4, the test hook will count an extra empty batch.
