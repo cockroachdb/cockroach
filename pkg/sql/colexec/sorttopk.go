@@ -233,9 +233,7 @@ func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
 	}
 }
 
-func (t *topKSorter) ExportBuffered(
-	_ colexecop.Operator, resetMode colexecop.BufferingOpReuseMode,
-) coldata.Batch {
+func (t *topKSorter) ExportBuffered(colexecop.Operator) coldata.Batch {
 	if t.exportComplete {
 		return coldata.ZeroBatch
 	}
@@ -270,15 +268,21 @@ func (t *topKSorter) ExportBuffered(
 		t.exportedFromBatch = t.windowedBatch.Length()
 		return t.windowedBatch
 	}
-	if resetMode == colexecop.BufferingOpNoReuse {
-		// This operator won't be used anymore, so we can release all of its
-		// memory resources.
-		defer t.allocator.ReleaseAll()
-		*t = topKSorter{exportComplete: true}
-	} else {
-		t.exportComplete = true
-	}
+	t.exportComplete = true
 	return coldata.ZeroBatch
+}
+
+// ReleaseBeforeExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (t *topKSorter) ReleaseBeforeExport() {}
+
+// ReleaseAfterExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (t *topKSorter) ReleaseAfterExport() {
+	// This operator won't be used anymore, so we can release all of its
+	// memory resources.
+	defer t.allocator.ReleaseAll()
+	*t = topKSorter{exportComplete: true}
 }
 
 // Len is part of heap.Interface and is only meant to be used internally.

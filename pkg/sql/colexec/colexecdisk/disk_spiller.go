@@ -328,6 +328,7 @@ type bufferExportingOperator struct {
 	firstSource          colexecop.BufferingInMemoryOperator
 	secondSource         colexecop.Operator
 	firstSourceReuseMode colexecop.BufferingOpReuseMode
+	firstSourceReleased  bool
 	firstSourceDone      bool
 }
 
@@ -354,9 +355,16 @@ func (b *bufferExportingOperator) Next() coldata.Batch {
 	if b.firstSourceDone {
 		return b.secondSource.Next()
 	}
-	batch := b.firstSource.ExportBuffered(b.secondSource, b.firstSourceReuseMode)
+	if !b.firstSourceReleased && b.firstSourceReuseMode == colexecop.BufferingOpNoReuse {
+		b.firstSourceReleased = true
+		b.firstSource.ReleaseBeforeExport()
+	}
+	batch := b.firstSource.ExportBuffered(b.secondSource)
 	if batch.Length() == 0 {
 		b.firstSourceDone = true
+		if b.firstSourceReuseMode == colexecop.BufferingOpNoReuse {
+			b.firstSource.ReleaseAfterExport()
+		}
 		return b.secondSource.Next()
 	}
 	return batch

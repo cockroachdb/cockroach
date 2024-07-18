@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -112,16 +111,7 @@ func (c *sortChunksOp) Next() coldata.Batch {
 	}
 }
 
-func (c *sortChunksOp) ExportBuffered(
-	_ colexecop.Operator, reuseMode colexecop.BufferingOpReuseMode,
-) coldata.Batch {
-	if buildutil.CrdbTestBuild && reuseMode != colexecop.BufferingOpNoReuse {
-		// sortChunksOp currently doesn't implement the colexecop.Resetter
-		// interface, so it cannot be reused.
-		colexecerror.InternalError(errors.AssertionFailedf(
-			"sort chunks op is not expected to be reused after spilling to disk",
-		))
-	}
+func (c *sortChunksOp) ExportBuffered(colexecop.Operator) coldata.Batch {
 	if c.exportComplete {
 		return coldata.ZeroBatch
 	}
@@ -160,11 +150,19 @@ func (c *sortChunksOp) ExportBuffered(
 		c.exportedFromBatch = c.windowedBatch.Length()
 		return c.windowedBatch
 	}
-	// The export is now complete, so we can release no longer needed memory
-	// resources.
+	c.exportComplete = true
+	return coldata.ZeroBatch
+}
+
+// ReleaseBeforeExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (c *sortChunksOp) ReleaseBeforeExport() {}
+
+// ReleaseAfterExport implements the colexecop.BufferingInMemoryOperator
+// interface.
+func (c *sortChunksOp) ReleaseAfterExport() {
 	defer c.allocator.ReleaseAll()
 	*c = sortChunksOp{exportComplete: true}
-	return coldata.ZeroBatch
 }
 
 // chunkerState represents the state of the chunker spooler.
