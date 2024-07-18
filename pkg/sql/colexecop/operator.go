@@ -132,14 +132,29 @@ func (n OneInputNode) Child(nth int, verbose bool) execopnode.OpNode {
 	return nil
 }
 
+// BufferingOpReuseMode determines whether the BufferingInMemoryOperator can be
+// reused after ExportBuffered call (after being Reset).
+type BufferingOpReuseMode int
+
+const (
+	// BufferingOpNoReuse indicates that the BufferingInMemoryOperator will
+	// **not** be reused after ExportBuffered call, so any memory resources
+	// could be fully released.
+	BufferingOpNoReuse BufferingOpReuseMode = iota
+	// BufferingOpCanReuse indicates that the BufferingInMemoryOperator _might_
+	// be reused after ExportBuffered call, so all memory resources should be
+	// preserved.
+	BufferingOpCanReuse
+)
+
 // BufferingInMemoryOperator is an Operator that buffers up intermediate tuples
 // in memory and knows how to export them once the memory limit has been
 // reached.
 type BufferingInMemoryOperator interface {
 	Operator
 
-	// ExportBuffered returns all the batches that have been buffered up from the
-	// input and have not yet been processed by the operator. It needs to be
+	// ExportBuffered returns all the batches that have been buffered up from
+	// the input and have not yet been processed by the operator. It needs to be
 	// called once the memory limit has been reached in order to "dump" the
 	// buffered tuples into a disk-backed operator. It will return a zero-length
 	// batch once the buffer has been emptied.
@@ -147,6 +162,23 @@ type BufferingInMemoryOperator interface {
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
 	ExportBuffered(input Operator) coldata.Batch
+	// ReleaseBeforeExport allows to operators to free up the in-memory
+	// resources that they no longer need, except for those that are needed for
+	// exporting the buffered tuples.
+	//
+	// It will only be called when the operator is used in the
+	// BufferingOpNoReuse mode. All calls except for the first one should be a
+	// noop.
+	ReleaseBeforeExport()
+	// ReleaseAfterExport allows to operators to free up the in-memory resources
+	// that they used for exporting the buffered tuples (and don't need
+	// anymore).
+	//
+	// It will only be called when the operator is used in the
+	// BufferingOpNoReuse mode. All calls except for the first one should be a
+	// noop. Calling this method may invalidate the contents of the last batch
+	// returned by ExportBuffered. ExportBuffered won't be called after this.
+	ReleaseAfterExport(input Operator)
 }
 
 // Closer is an object that releases resources when Close is called. Note that
