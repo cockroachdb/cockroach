@@ -93,7 +93,6 @@ SELECT (res).decision, (res).row FROM
 //   - Compute columns will always be NULL in the proposed value
 //     passed to the UDF.
 type applierQuerier struct {
-	udfName     string
 	settings    *cluster.Settings
 	queryBuffer queryBuffer
 
@@ -107,53 +106,40 @@ type applierQuerier struct {
 func makeApplierQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]catalog.TableDescriptor,
+	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 ) (*applierQuerier, error) {
 	qb := queryBuffer{
-		deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableDescs)),
-		insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
-		applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableDescs)),
+		deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableConfigs)),
+		insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
+		applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
 	}
 
-	// TODO(ssd): We should improve this once we are passing the function in for real.
-	getDatabaseNameQuery := `SELECT name FROM system.namespace WHERE id IN (SELECT "parentID" FROM system.namespace where id = $1)`
-	var tableID int32
-	for t := range tableDescs {
-		tableID = int32(t)
+	var databaseName string
+	for _, t := range tableConfigs {
+		databaseName = t.dstDBName
 		break
-	}
-
-	datums, err := ie.QueryRow(ctx, "replication-get-database", nil, getDatabaseNameQuery, tableID)
-	if err != nil {
-		return nil, err
-	}
-	databaseName, ok := datums[0].(*tree.DString)
-	if !ok {
-		return nil, errors.AssertionFailedf("unexpected type for database name: %T", datums[0])
 	}
 
 	insertOverride := getIEOverride(replicatedInsertOpName)
 	deleteOverride := getIEOverride(replicatedDeleteOpName)
 	applyUDFOverride := getIEOverride(replicatedApplyUDFOpName)
-	insertOverride.Database = string(*databaseName)
-	deleteOverride.Database = string(*databaseName)
-	applyUDFOverride.Database = string(*databaseName)
+	insertOverride.Database = databaseName
+	deleteOverride.Database = databaseName
+	applyUDFOverride.Database = databaseName
 	return &applierQuerier{
 		queryBuffer: qb,
 		settings:    settings,
 		ieoInsert:   insertOverride,
 		ieoDelete:   deleteOverride,
 		ieoApplyUDF: applyUDFOverride,
-		// TODO(ssd): Thread this name through from the SQL statement.
-		udfName: udfName,
 	}, nil
 }
 
 func makeUDFApplierProcessor(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableDescs map[descpb.ID]catalog.TableDescriptor,
+	tableDescs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
 	aq, err := makeApplierQuerier(ctx, settings, tableDescs, ie)
@@ -163,9 +149,13 @@ func makeUDFApplierProcessor(
 	return makeSQLProcessorFromQuerier(ctx, settings, tableDescs, ie, aq)
 }
 
-func (aq *applierQuerier) AddTable(targetDescID int32, td catalog.TableDescriptor) error {
+func (aq *applierQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) error {
 	var err error
-	aq.queryBuffer.applierQueries[td.GetID()], err = makeApplierApplyQueries(targetDescID, td, aq.udfName)
+	td := tc.srcDesc
+	if tc.dstFnName == "" {
+		return errors.AssertionFailedf("empty function name")
+	}
+	aq.queryBuffer.applierQueries[td.GetID()], err = makeApplierApplyQueries(targetDescID, td, tc.dstFnName)
 	if err != nil {
 		return err
 	}
