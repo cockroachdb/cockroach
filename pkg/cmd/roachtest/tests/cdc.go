@@ -2136,9 +2136,10 @@ func registerCDC(r registry.Registry) {
 		Name:             "cdc/kafka-azure",
 		Owner:            `cdc`,
 		CompatibleClouds: registry.OnlyAzure,
-		Cluster:          r.MakeClusterSpec(2),
-		Leases:           registry.MetamorphicLeases,
-		Suites:           registry.Suites(registry.Nightly),
+		// The Azure CLI only packages AMD64 binaries in its deb installer, so lock to AMD64.
+		Cluster: r.MakeClusterSpec(2, spec.Arch(vm.ArchAMD64)),
+		Leases:  registry.MetamorphicLeases,
+		Suites:  registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
