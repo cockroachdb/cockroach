@@ -25,11 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -312,6 +315,30 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 		return nil, nil, nil, err
 	}
 
+	var (
+		defaultFnDesc catalog.Descriptor
+		defaultFnName string
+	)
+	if defaultFnID := p.payload.DefaultConflictResolution.FunctionId; defaultFnID != 0 {
+		if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
+			fnDesc, err := descriptors.ByID(txn.KV()).Get().Desc(ctx, catid.DescID(defaultFnID))
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up function descriptor")
+			}
+			scDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Schema(ctx, fnDesc.GetParentSchemaID())
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up schema descriptor for function %d", fnDesc.GetID())
+			}
+			defaultFnDesc = fnDesc
+			defaultFnName = fmt.Sprintf("%s.%s",
+				lexbase.EscapeSQLIdent(scDesc.GetName()),
+				lexbase.EscapeSQLIdent(fnDesc.GetName()))
+			return nil
+		}); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
 	tableIDToName := make(map[int32]fullyQualifiedTableName)
 	tablesMd := make(map[int32]execinfrapb.TableReplicationMetadata)
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
@@ -332,11 +359,39 @@ func (p *logicalReplicationPlanner) generatePlanWithFrontier(
 				return errors.Wrapf(err, "failed to look up schema descriptor for table %d", pair.DstDescriptorID)
 			}
 
+			var fnName string
+			if pair.DstFunctionID != 0 {
+				fnDesc, err := descriptors.ByID(txn.KV()).Get().Desc(ctx, catid.DescID(pair.DstFunctionID))
+				if err != nil {
+					return errors.Wrapf(err, "failed to look up function descriptor")
+				}
+				fnScDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Schema(ctx, fnDesc.GetParentSchemaID())
+				if err != nil {
+					return errors.Wrapf(err, "failed to look up schema descriptor for function %d", fnDesc.GetID())
+				}
+				if fnDesc.GetParentID() != dbDesc.GetID() {
+					return errors.Errorf("cross-database function reference not allowed")
+				}
+				// TODO(ssd): Right now we are pushing the
+				// escaped, qualified function name down to the
+				// processors. This makes it a fragile to
+				// renames.
+				fnName = fmt.Sprintf("%s.%s",
+					lexbase.EscapeSQLIdent(fnScDesc.GetName()),
+					lexbase.EscapeSQLIdent(fnDesc.GetName()))
+			} else if defaultFnDesc != nil {
+				if defaultFnDesc.GetParentID() != dbDesc.GetID() {
+					return errors.Errorf("cross-database function reference not allowed")
+				}
+				fnName = defaultFnName
+			}
+
 			tablesMd[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
 				SourceDescriptor:              srcTableDesc,
 				DestinationParentDatabaseName: dbDesc.GetName(),
 				DestinationParentSchemaName:   scDesc.GetName(),
 				DestinationTableName:          dstTableDesc.GetName(),
+				DestinationFunctionName:       fnName,
 			}
 			tableIDToName[pair.DstDescriptorID] = fullyQualifiedTableName{
 				database: dbDesc.GetName(),

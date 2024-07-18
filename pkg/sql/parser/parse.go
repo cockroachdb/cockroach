@@ -290,6 +290,26 @@ func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 	return rename.Name, nil
 }
 
+// ParseTableName parses a function name. The function name must contain one
+// or more name parts, using the full input SQL syntax: each name
+// part containing special characters, or non-lowercase characters,
+// must be enclosed in double quote. The name may not be an invalid
+// table name (the caller is responsible for guaranteeing that only
+// valid table names are provided as input).
+func ParseFunctionName(sql string) (*tree.UnresolvedObjectName, error) {
+	// We wrap the name we want to parse into a dummy statement since our parser
+	// can only parse full statements.
+	stmt, err := ParseOne(fmt.Sprintf("ALTER FUNCTION %s RENAME TO x", sql))
+	if err != nil {
+		return nil, err
+	}
+	rename, ok := stmt.AST.(*tree.AlterRoutineRename)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected an ALTER FUNCTION statement, but found %T", stmt)
+	}
+	return rename.Function.FuncName.ToUnresolvedObjectName(), nil
+}
+
 // ParseTablePattern parses a table pattern. The table name must contain one
 // or more name parts, using the full input SQL syntax: each name
 // part containing special characters, or non-lowercase characters,
