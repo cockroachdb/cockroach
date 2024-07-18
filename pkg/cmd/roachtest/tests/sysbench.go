@@ -69,6 +69,7 @@ type sysbenchOptions struct {
 	concurrency  int
 	tables       int
 	rowsPerTable int
+	usePostgres  bool
 }
 
 func (o *sysbenchOptions) cmd(haproxy bool) string {
@@ -109,26 +110,64 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	roachNodes := c.Range(1, c.Spec().NodeCount-1)
 	loadNode := c.Node(c.Spec().NodeCount)
 
-	t.Status("installing cockroach")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-	err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), allNodes[0]))
-	require.NoError(t, err)
+	if opts.usePostgres {
+		if len(roachNodes) != 1 {
+			t.Fatal("sysbench with postgres requires exactly one node")
+		}
+		pgNode := roachNodes[:1]
 
-	t.Status("installing haproxy")
-	if err = c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
-		t.Fatal(err)
+		t.Status("installing postgres")
+		if err := c.Install(ctx, t.L(), pgNode, "postgresql"); err != nil {
+			t.Fatal(err)
+		}
+		cmds := []string{
+			// Move the data directory to the local SSD.
+			`sudo service postgresql stop`,
+			`sudo mv /var/lib/postgresql /var/lib/postgresql.bak`,
+			`sudo -u postgres mkdir /mnt/data1/postgresql`,
+			`sudo ln -s /mnt/data1/postgresql /var/lib/postgresql`,
+			`sudo -u postgres cp -R /var/lib/postgresql.bak/* /var/lib/postgresql/`,
+			// Allow remote connections.
+			`echo "port = 26257"               | sudo tee -a /etc/postgresql/*/main/postgresql.conf`,
+			`echo "listen_addresses = '*'"     | sudo tee -a /etc/postgresql/*/main/postgresql.conf`,
+			`echo "host all all 0.0.0.0/0 md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf`,
+			// Start the PG server.
+			`sudo service postgresql start`,
+			// Create the database and user.
+			`sudo -u postgres psql -c "CREATE DATABASE sysbench"`,
+			fmt.Sprintf(`sudo -u postgres psql -c "CREATE ROLE %s WITH LOGIN PASSWORD '%s'"`, install.DefaultUser, install.DefaultPassword),
+		}
+		for _, cmd := range cmds {
+			c.Run(ctx, option.WithNodes(pgNode), cmd)
+		}
+	} else {
+		t.Status("installing cockroach")
+		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
+		if len(roachNodes) >= 3 {
+			err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), allNodes[0]))
+			require.NoError(t, err)
+		}
+		c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach sql --url={pgurl:1} -e "CREATE DATABASE sysbench"`)
 	}
-	// cockroach gen haproxy does not support specifying a non root user
-	pgurl, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
-		External: true,
-		Auth:     install.AuthRootCert,
-		Secure:   c.IsSecure(),
-	})
-	if err != nil {
-		t.Fatal(err)
+
+	useHAProxy := len(roachNodes) > 1
+	if useHAProxy {
+		t.Status("installing haproxy")
+		if err := c.Install(ctx, t.L(), loadNode, "haproxy"); err != nil {
+			t.Fatal(err)
+		}
+		// cockroach gen haproxy does not support specifying a non root user
+		pgurl, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
+			External: true,
+			Auth:     install.AuthRootCert,
+			Secure:   c.IsSecure(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.Run(ctx, option.WithNodes(loadNode), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
+		c.Run(ctx, option.WithNodes(loadNode), "haproxy -f haproxy.cfg -D")
 	}
-	c.Run(ctx, option.WithNodes(loadNode), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
-	c.Run(ctx, option.WithNodes(loadNode), "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
 	if err := c.Install(ctx, t.L(), loadNode, "sysbench"); err != nil {
@@ -138,14 +177,12 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	// Keep track of the start time for roachperf. Note that this is just an
 	// estimate and not as accurate as what a workload histogram would give.
 	var start time.Time
-	m := c.NewMonitor(ctx, roachNodes)
-	m.Go(func(ctx context.Context) error {
+	runWorkload := func(ctx context.Context) error {
 		t.Status("preparing workload")
-		c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach sql --url={pgurl:1} -e "CREATE DATABASE sysbench"`)
 		c.Run(ctx, option.WithNodes(loadNode), opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")
-		cmd := opts.cmd(true /* haproxy */) + " run"
+		cmd := opts.cmd(useHAProxy /* haproxy */) + " run"
 		start = timeutil.Now()
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(loadNode), cmd)
 
@@ -168,34 +205,61 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 		t.Status("exporting results")
 		return exportSysbenchResults(t, result.Stdout, start)
-	})
-	m.Wait()
+	}
+	if opts.usePostgres {
+		if err := runWorkload(ctx); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		m := c.NewMonitor(ctx, roachNodes)
+		m.Go(runWorkload)
+		m.Wait()
+	}
 }
 
 func registerSysbench(r registry.Registry) {
 	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
-		const n = 3
-		const cpus = 32
-		const conc = 8 * cpus
-		opts := sysbenchOptions{
-			workload:     w,
-			duration:     10 * time.Minute,
-			concurrency:  conc,
-			tables:       10,
-			rowsPerTable: 10000000,
-		}
+		for _, n := range []int{1, 3} {
+			const cpus = 32
+			concPerCPU := n*3 - 1
+			conc := cpus * concPerCPU
+			opts := sysbenchOptions{
+				workload:     w,
+				duration:     10 * time.Minute,
+				concurrency:  conc,
+				tables:       10,
+				rowsPerTable: 10000000,
+			}
 
-		r.Add(registry.TestSpec{
-			Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
-			Benchmark:        true,
-			Owner:            registry.OwnerTestEng,
-			Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus)),
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runSysbench(ctx, t, c, opts)
-			},
-		})
+			r.Add(registry.TestSpec{
+				Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
+				Benchmark:        true,
+				Owner:            registry.OwnerTestEng,
+				Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus)),
+				CompatibleClouds: registry.OnlyGCE,
+				Suites:           registry.Suites(registry.Nightly),
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runSysbench(ctx, t, c, opts)
+				},
+			})
+
+			// Add a variant of each test that uses PostgreSQL instead of CockroachDB.
+			if n == 1 {
+				pgOpts := opts
+				pgOpts.usePostgres = true
+				r.Add(registry.TestSpec{
+					Name:             fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, cpus, conc),
+					Benchmark:        true,
+					Owner:            registry.OwnerTestEng,
+					Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus)),
+					CompatibleClouds: registry.OnlyGCE,
+					Suites:           registry.ManualOnly,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runSysbench(ctx, t, c, pgOpts)
+					},
+				})
+			}
+		}
 	}
 }
 
