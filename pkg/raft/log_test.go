@@ -591,23 +591,23 @@ func TestStableToWithSnap(t *testing.T) {
 	for _, tt := range []struct {
 		sl   logSlice
 		to   logMark
-		want uint64 // the unstable.offset
+		want uint64 // prev.index
 	}{
 		// out of bounds
-		{sl: snapID.append(), to: logMark{term: 1, index: 2}, want: 6},
-		{sl: snapID.append(), to: logMark{term: 2, index: 6}, want: 6},
-		{sl: snapID.append(), to: logMark{term: 2, index: 7}, want: 6},
-		{sl: snapID.append(6, 6, 8), to: logMark{term: 2, index: 4}, want: 6},
-		{sl: snapID.append(6, 6, 8), to: logMark{term: 2, index: 10}, want: 6},
+		{sl: snapID.append(), to: logMark{term: 1, index: 2}, want: 5},
+		{sl: snapID.append(), to: logMark{term: 2, index: 6}, want: 5},
+		{sl: snapID.append(), to: logMark{term: 2, index: 7}, want: 5},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 2, index: 4}, want: 5},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 2, index: 10}, want: 5},
 		// successful acknowledgements
-		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 5}, want: 6},
-		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 6}, want: 7},
-		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 7}, want: 8},
-		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 8}, want: 9},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 5}, want: 5},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 6}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 7}, want: 7},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 8}, want: 8},
 		// mismatching accepted term
-		{sl: snapID.append(6, 6, 8), to: logMark{term: 3, index: 6}, want: 6},
-		{sl: snapID.append(6, 6, 8), to: logMark{term: 3, index: 7}, want: 6},
-		{sl: snapID.append(6, 6, 8), to: logMark{term: 3, index: 8}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 3, index: 6}, want: 5},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 3, index: 7}, want: 5},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 3, index: 8}, want: 5},
 	} {
 		t.Run("", func(t *testing.T) {
 			s := NewMemoryStorage()
@@ -616,7 +616,7 @@ func TestStableToWithSnap(t *testing.T) {
 			raftLog := newLog(s, discardLogger)
 			require.True(t, raftLog.append(tt.sl))
 			raftLog.stableTo(tt.to)
-			require.Equal(t, tt.want, raftLog.unstable.prev.index+1)
+			require.Equal(t, tt.want, raftLog.unstable.prev.index)
 		})
 	}
 }
