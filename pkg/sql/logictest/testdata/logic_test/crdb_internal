@@ -567,7 +567,6 @@ SELECT 'schema.bar'::regclass::int
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
-  (18, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   ($testdb_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   ($testdb_foo_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   ($schema_bar_id, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))

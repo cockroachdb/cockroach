@@ -3,13 +3,12 @@
 # RANGE DEFAULT is akin to a full reconciliation.
 
 
-# ID 18 is for the time series range which is the only named zone that doesn't
-# have an entry in `system.zones` at bootstrap. It should inherit from RANGE
-# DEFAULT.
+# ID 18 is for the time series range. At bootstrap, it has an explicit zone
+# config which should inherit from RANGE DEFAULT.
 query-sql
 SELECT count(*) FROM system.zones WHERE id=18
 ----
-0
+1
 
 translate named-zone=timeseries
 ----
