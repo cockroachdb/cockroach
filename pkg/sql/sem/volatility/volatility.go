@@ -46,13 +46,13 @@ const (
 	// Immutable means that the operator cannot modify the database, the
 	// transaction state, or any other state. It cannot depend on configuration
 	// settings and is guaranteed to return the same results given the same
-	// arguments in any context. ImmutableCopy operators can be constant folded.
+	// arguments in any context. Immutable operators can be constant folded.
 	// Examples: log, from_json.
 	Immutable
 	// Stable means that the operator cannot modify the database or the
 	// transaction state and is guaranteed to return the same results given the
-	// same arguments whenever it is evaluated within the same statement. Multiple
-	// calls to a stable operator can be optimized to a single call.
+	// same arguments whenever it is evaluated within the same statement.
+	// Multiple calls to a stable operator can be optimized to a single call.
 	// Examples: current_timestamp, current_date.
 	Stable
 	// Volatile means that the operator can do anything, including
