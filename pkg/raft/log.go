@@ -247,13 +247,6 @@ func (l *raftLog) hasNextUnstableEnts() bool {
 	return len(l.nextUnstableEnts()) > 0
 }
 
-// hasNextOrInProgressUnstableEnts returns if there are any entries that are
-// available to be written to the local stable log or in the process of being
-// written to the local stable log.
-func (l *raftLog) hasNextOrInProgressUnstableEnts() bool {
-	return len(l.unstable.entries) > 0
-}
-
 // nextCommittedEnts returns all the available entries for execution.
 // Entries can be committed even when the local raft instance has not durably
 // appended them to the local raft log yet. If allowUnstable is true, committed
@@ -407,7 +400,7 @@ func (l *raftLog) acceptApplying(i uint64, size entryEncodingSize, allowUnstable
 		i < l.maxAppliableIndex(allowUnstable)
 }
 
-func (l *raftLog) stableTo(id entryID) { l.unstable.stableTo(id) }
+func (l *raftLog) stableTo(mark logMark) { l.unstable.stableTo(mark) }
 
 func (l *raftLog) stableSnapTo(i uint64) { l.unstable.stableSnapTo(i) }
 
