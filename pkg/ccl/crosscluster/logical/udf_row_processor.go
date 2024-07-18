@@ -62,7 +62,7 @@ const (
 	applierQueryBase = `
 WITH data (%s)
 AS (VALUES (%s))
-SELECT %s('%s', data, existing, (%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d, $%d) AS decision
+SELECT [FUNCTION %d]('%s', data, existing, (%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d, $%d) AS decision
 FROM data LEFT JOIN [%d as existing]
 %s`
 	applierUpsertQueryBase = `UPSERT INTO [%d as t] (%s) VALUES (%s)`
@@ -105,32 +105,18 @@ func makeApplierQuerier(
 	settings *cluster.Settings,
 	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
-) (*applierQuerier, error) {
-	qb := queryBuffer{
-		deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableConfigs)),
-		insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
-		applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
-	}
-
-	var databaseName string
-	for _, t := range tableConfigs {
-		databaseName = t.dstDBName
-		break
-	}
-
-	insertOverride := getIEOverride(replicatedInsertOpName)
-	deleteOverride := getIEOverride(replicatedDeleteOpName)
-	applyUDFOverride := getIEOverride(replicatedApplyUDFOpName)
-	insertOverride.Database = databaseName
-	deleteOverride.Database = databaseName
-	applyUDFOverride.Database = databaseName
+) *applierQuerier {
 	return &applierQuerier{
-		queryBuffer: qb,
+		queryBuffer: queryBuffer{
+			deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableConfigs)),
+			insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
+			applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
+		},
 		settings:    settings,
-		ieoInsert:   insertOverride,
-		ieoDelete:   deleteOverride,
-		ieoApplyUDF: applyUDFOverride,
-	}, nil
+		ieoInsert:   getIEOverride(replicatedInsertOpName),
+		ieoDelete:   getIEOverride(replicatedDeleteOpName),
+		ieoApplyUDF: getIEOverride(replicatedApplyUDFOpName),
+	}
 }
 
 func makeUDFApplierProcessor(
@@ -139,20 +125,17 @@ func makeUDFApplierProcessor(
 	tableDescs map[descpb.ID]sqlProcessorTableConfig,
 	ie isql.Executor,
 ) (*sqlRowProcessor, error) {
-	aq, err := makeApplierQuerier(ctx, settings, tableDescs, ie)
-	if err != nil {
-		return nil, err
-	}
+	aq := makeApplierQuerier(ctx, settings, tableDescs, ie)
 	return makeSQLProcessorFromQuerier(ctx, settings, tableDescs, ie, aq)
 }
 
 func (aq *applierQuerier) AddTable(targetDescID int32, tc sqlProcessorTableConfig) error {
 	var err error
 	td := tc.srcDesc
-	if tc.dstFnName == "" {
+	if tc.dstOID == 0 {
 		return errors.AssertionFailedf("empty function name")
 	}
-	aq.queryBuffer.applierQueries[td.GetID()], err = makeApplierApplyQueries(targetDescID, td, tc.dstFnName)
+	aq.queryBuffer.applierQueries[td.GetID()], err = makeApplierApplyQueries(targetDescID, td, tc.dstOID)
 	if err != nil {
 		return err
 	}
@@ -384,7 +367,7 @@ func escapedColumnNameList(names []string) string {
 }
 
 func makeApplierApplyQueries(
-	dstTableDescID int32, td catalog.TableDescriptor, udfName string,
+	dstTableDescID int32, td catalog.TableDescriptor, udfOID uint32,
 ) (map[catid.FamilyID]queryBuilder, error) {
 	if td.NumFamilies() > 1 {
 		return nil, errors.Errorf("multiple-column familes not supported by the custom-UDF applier")
@@ -421,7 +404,7 @@ func makeApplierApplyQueries(
 		q := fmt.Sprintf(applierQueryBase,
 			colNames,
 			valStr,
-			udfName,
+			udfOID,
 			mutType,
 			prevValStr,
 			remoteMVCCIdx,
