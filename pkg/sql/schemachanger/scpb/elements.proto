@@ -521,6 +521,11 @@ message IndexPartitioning {
 message RowLevelTTL {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   cockroach.sql.catalog.catpb.RowLevelTTL row_level_ttl = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // The expression for the TTL column. It represents either the custom
+  // expression specified in ExpirationExpr, or the default expression if
+  // ExpirationExpr is not set. This expression is used to establish column
+  // dependencies.
+  Expression ttl_expr = 3 [(gogoproto.customname) = "TTLExpr"];
 }
 
 message ColumnName {
