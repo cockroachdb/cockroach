@@ -595,9 +595,6 @@ Note that running some modes in secure mode and others in insecure
 mode is not a supported Cockroach configuration. To start nodes in
 insecure mode, use the --insecure flag.
 
-As a debugging aid, the --sequential flag starts the nodes sequentially so node
-IDs match hostnames. Otherwise nodes are started in parallel.
-
 The --binary flag specifies the remote binary to run. It is up to the roachprod
 user to ensure this binary exists, usually via "roachprod put". Note that no
 cockroach software is installed by default on a newly created cluster.
@@ -702,9 +699,6 @@ initialization for the cluster to create and distribute the certs.
 Note that running some modes in secure mode and others in insecure
 mode is not a supported Cockroach configuration. To start nodes in
 insecure mode, use the --insecure flag.
-
-As a debugging aid, the --sequential flag starts the services
-sequentially; otherwise services are started in parallel.
 
 The --binary flag specifies the remote binary to run, if starting
 external services. It is up to the roachprod user to ensure this
