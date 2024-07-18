@@ -10,6 +10,7 @@ package logical
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
@@ -680,6 +681,27 @@ func (r retryEligibility) String() string {
 		return "not retryable"
 	}
 	return "unknown"
+}
+
+type replicationMutationType int
+
+const (
+	insertMutation replicationMutationType = iota
+	deleteMutation
+	updateMutation
+)
+
+func (t replicationMutationType) String() string {
+	switch t {
+	case insertMutation:
+		return "insert"
+	case deleteMutation:
+		return "delete"
+	case updateMutation:
+		return "update"
+	default:
+		return fmt.Sprintf("Unrecognized replicationMutationType(%d)", int(t))
+	}
 }
 
 // flushChunk is the per-thread body of flushBuffer; see flushBuffer's contract.
