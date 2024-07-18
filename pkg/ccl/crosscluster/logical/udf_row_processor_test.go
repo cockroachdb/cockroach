@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,7 +42,6 @@ func TestUDFWithRandomTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 127321)
 	ctx := context.Background()
 
 	s, sqlA, sqlB, cleanup := setupTwoDBUDFTestCluster(t)
@@ -70,8 +68,17 @@ func TestUDFWithRandomTables(t *testing.T) {
 	runnerB.Exec(t, stmt)
 	runnerB.Exec(t, fmt.Sprintf(testingUDFAcceptProposedBase, tableName))
 
+	// Workaround for the behaviour described in #127321. This
+	// ensures that we are generating rows using the same
+	// optimization decisions that our replication process will
+	// use.
+	//
+	// TODO(ssd): There is still a question here about what we
+	// should do in production.
+	_, err := sqlA.Exec("SET plan_cache_mode=force_generic_plan")
+	require.NoError(t, err)
 	numInserts := 20
-	_, err := randgen.PopulateTableWithRandData(rng,
+	_, err = randgen.PopulateTableWithRandData(rng,
 		sqlA, tableName, numInserts, nil)
 	require.NoError(t, err)
 

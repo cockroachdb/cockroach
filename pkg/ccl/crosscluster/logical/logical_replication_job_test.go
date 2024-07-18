@@ -547,8 +547,17 @@ func TestRandomTables(t *testing.T) {
 	runnerA.Exec(t, stmt)
 	runnerB.Exec(t, stmt)
 
+	// Workaround for the behaviour described in #127321. This
+	// ensures that we are generating rows using the same
+	// optimization decisions that our replication process will
+	// use.
+	//
+	// TODO(ssd): There is still a question here about what we
+	// should do in production.
+	_, err := sqlA.Exec("SET plan_cache_mode=force_generic_plan")
+	require.NoError(t, err)
 	numInserts := 20
-	_, err := randgen.PopulateTableWithRandData(rng,
+	_, err = randgen.PopulateTableWithRandData(rng,
 		sqlA, tableName, numInserts, nil)
 	require.NoError(t, err)
 
