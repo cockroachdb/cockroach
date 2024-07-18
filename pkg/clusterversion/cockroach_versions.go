@@ -279,6 +279,10 @@ const (
 	// of the StoreLiveness fabric.
 	V24_3_StoreLivenessEnabled
 
+	// V24_3_TableMetadata is the migration to add the table_metadata table
+	// to the system tenant.
+	V24_3_TableMetadata
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -350,6 +354,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_3_Start: {Major: 24, Minor: 2, Internal: 2},
 
 	V24_3_StoreLivenessEnabled: {Major: 24, Minor: 2, Internal: 4},
+	V24_3_TableMetadata:        {Major: 24, Minor: 2, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
