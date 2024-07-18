@@ -2962,8 +2962,21 @@ message Header {
   reserved 7, 10, 12, 14, 20;
 
   WriteOptions write_options = 35;
-   
-  // Next ID: 36
+
+  // deadlock_timeout specifies the maximum amount of time that the batch
+  // request will wait on a lock before checking to see if there is a deadlock
+  // condition.
+  //
+  // This differs from kv.lock_table.deadlock_detection_push_delay in that it
+  // gets applied at a finer granularity, where
+  // kv.lock_table.deadlock_detection_push_delay is a cluster-wide config.
+  //
+  // A value of zero will cause the timeout duration to be taken from the
+  // cluster config. Any non-zero value will be used as the deadlock timeout.
+  google.protobuf.Duration deadlock_timeout = 36 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
+
+  // Next ID: 37
 }
 
 message WriteOptions {

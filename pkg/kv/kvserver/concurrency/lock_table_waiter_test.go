@@ -189,7 +189,13 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 			g.state = waitingState{kind: doneWaiting}
 			g.notify()
 
-			err := w.WaitOn(ctx, makeReq(), g)
+			request := makeReq()
+			testutils.RunTrueAndFalse(t, "deadlock_timeout", func(t *testing.T, deadlock_timeout bool) {
+				if deadlock_timeout {
+					request.DeadlockTimeout = time.Nanosecond * 1
+				}
+			})
+			err := w.WaitOn(ctx, request, g)
 			require.Nil(t, err)
 		})
 	})

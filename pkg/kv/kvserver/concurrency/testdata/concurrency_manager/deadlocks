@@ -1160,3 +1160,210 @@ reset namespace
 ----
 
 subtest end
+
+# -------------------------------------------------------------
+# Deadlock due to lock ordering detected after request's deadlock timeout.
+#
+# Class: lock holder aborted while pushing lock holder.
+#
+# Setup: txn1, txn2, txn3 acquire locks a, b, c
+#
+# Test:  set the cluster's deadlock timeout to 1h (debug-disable-txn-pushes)
+#        set the requests' deadlock timeout to 1ns (deadlock-timeout=1ns)
+#        txn1, txn2, txn3 read b, c, a
+#        txn1 is aborted to break deadlock
+#        txn3 proceeds and commits
+#        txn2 proceeds and commits
+# -------------------------------------------------------------
+
+subtest granular_deadlock_timeout
+
+debug-disable-txn-pushes
+----
+
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-request name=req1w txn=txn1 ts=10,1 deadlock-timeout=1ns
+  put key=a value=v
+----
+
+new-request name=req2w txn=txn2 ts=10,1 deadlock-timeout=1ns
+  put key=b value=v
+----
+
+new-request name=req3w txn=txn3 ts=10,1 deadlock-timeout=1ns
+  put key=c value=v
+----
+
+sequence req=req1w
+----
+[1] sequence req1w: sequencing request
+[1] sequence req1w: acquiring latches
+[1] sequence req1w: scanning lock table for conflicting locks
+[1] sequence req1w: sequencing complete, returned guard
+
+sequence req=req2w
+----
+[2] sequence req2w: sequencing request
+[2] sequence req2w: acquiring latches
+[2] sequence req2w: scanning lock table for conflicting locks
+[2] sequence req2w: sequencing complete, returned guard
+
+sequence req=req3w
+----
+[3] sequence req3w: sequencing request
+[3] sequence req3w: acquiring latches
+[3] sequence req3w: scanning lock table for conflicting locks
+[3] sequence req3w: sequencing complete, returned guard
+
+on-lock-acquired req=req1w key=a
+----
+[-] acquire lock: txn 00000001 @ ‹a›
+
+on-lock-acquired req=req2w key=b
+----
+[-] acquire lock: txn 00000002 @ ‹b›
+
+on-lock-acquired req=req3w key=c
+----
+[-] acquire lock: txn 00000003 @ ‹c›
+
+finish req=req1w
+----
+[-] finish req1w: finishing request
+
+finish req=req2w
+----
+[-] finish req2w: finishing request
+
+finish req=req3w
+----
+[-] finish req3w: finishing request
+
+debug-lock-table
+----
+num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+ lock: "c"
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+# --------------------------------
+# Setup complete, test starts here
+# --------------------------------
+
+new-request name=req1r txn=txn1 ts=10,1 deadlock-timeout=1ns
+  get key=b
+----
+
+new-request name=req2r txn=txn2 ts=10,1 deadlock-timeout=1ns
+  get key=c
+----
+
+new-request name=req3r txn=txn3 ts=10,1 deadlock-timeout=1ns
+  get key=a
+----
+
+sequence req=req1r
+----
+[4] sequence req1r: sequencing request
+[4] sequence req1r: acquiring latches
+[4] sequence req1r: scanning lock table for conflicting locks
+[4] sequence req1r: waiting in lock wait-queues
+[4] sequence req1r: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"b"› (queuedLockingRequests: 0, queuedReaders: 1)
+[4] sequence req1r: pushing after 1ns for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[4] sequence req1r: pushing timestamp of txn 00000002 above 10.000000000,1
+[4] sequence req1r: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req2r
+----
+[5] sequence req2r: sequencing request
+[5] sequence req2r: acquiring latches
+[5] sequence req2r: scanning lock table for conflicting locks
+[5] sequence req2r: waiting in lock wait-queues
+[5] sequence req2r: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"c"› (queuedLockingRequests: 0, queuedReaders: 1)
+[5] sequence req2r: pushing after 1ns for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req2r: pushing timestamp of txn 00000003 above 10.000000000,1
+[5] sequence req2r: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+sequence req=req3r
+----
+[4] sequence req1r: dependency cycle detected 00000001->00000002->00000003->00000001
+[5] sequence req2r: dependency cycle detected 00000002->00000003->00000001->00000002
+[6] sequence req3r: sequencing request
+[6] sequence req3r: acquiring latches
+[6] sequence req3r: scanning lock table for conflicting locks
+[6] sequence req3r: waiting in lock wait-queues
+[6] sequence req3r: lock wait-queue event: wait for txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[6] sequence req3r: pushing after 1ns for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[6] sequence req3r: pushing timestamp of txn 00000001 above 10.000000000,1
+[6] sequence req3r: blocked on select in concurrency_test.(*cluster).PushTransaction
+[6] sequence req3r: dependency cycle detected 00000003->00000001->00000002->00000003
+
+debug-lock-table
+----
+num=3
+ lock: "a"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 37, txn: 00000003-0000-0000-0000-000000000000
+ lock: "b"
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 35, txn: 00000001-0000-0000-0000-000000000000
+ lock: "c"
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+   waiting readers:
+    req: 36, txn: 00000002-0000-0000-0000-000000000000
+
+# Break the deadlock by aborting txn1.
+on-txn-updated txn=txn1 status=aborted
+----
+[-] update txn: aborting txn1
+[4] sequence req1r: detected pusher aborted
+[4] sequence req1r: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"b"› for 0.000s
+[4] sequence req1r: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
+[6] sequence req3r: resolving intent ‹"a"› for txn 00000001 with ABORTED status
+[6] sequence req3r: lock wait-queue event: done waiting
+[6] sequence req3r: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[6] sequence req3r: acquiring latches
+[6] sequence req3r: scanning lock table for conflicting locks
+[6] sequence req3r: sequencing complete, returned guard
+
+# Txn3 can proceed and eventually commit.
+finish req=req3r
+----
+[-] finish req3r: finishing request
+
+on-txn-updated txn=txn3 status=committed
+----
+[-] update txn: committing txn3
+[5] sequence req2r: resolving intent ‹"c"› for txn 00000003 with COMMITTED status
+[5] sequence req2r: lock wait-queue event: done waiting
+[5] sequence req2r: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"c"› for 0.000s
+[5] sequence req2r: acquiring latches
+[5] sequence req2r: scanning lock table for conflicting locks
+[5] sequence req2r: sequencing complete, returned guard
+
+# Txn2 can proceed and eventually commit.
+finish req=req2r
+----
+[-] finish req2r: finishing request
+
+on-txn-updated txn=txn2 status=committed
+----
+[-] update txn: committing txn2
+
+reset namespace
+----
+
+subtest end
