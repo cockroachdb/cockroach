@@ -1109,7 +1109,16 @@ func (r *Replica) AdminTransferLease(
 			}
 			select {
 			case pErr := <-transfer.C():
-				return pErr.GoError()
+				err = pErr.GoError()
+				if IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) && transferRejectedRetry.Next() {
+					// If the lease transfer was rejected because the target may need a
+					// snapshot, try again. This error can be returned immediately by the
+					// initTransferHelper (caught above), or it can be returned after the
+					// transfer has been initiated (caught here).
+					log.VEventf(ctx, 2, "retrying lease transfer to store %d after rejection", target)
+					continue
+				}
+				return err
 			case <-ctx.Done():
 				transfer.Cancel()
 				return ctx.Err()
