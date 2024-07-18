@@ -394,9 +394,7 @@ Ready MustSync=true:
 HardState Term:3 Commit:11 Lead:4
 Messages:
 1->4 MsgHeartbeatResp Term:3 Log:0/0
-1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Responses:[
-  AppendThread->1 MsgStorageAppendResp Term:3 Log:2/12
-]
+1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11
 
 deliver-msgs 4
 ----
@@ -457,7 +455,7 @@ raft-log 1
 deliver-msgs 1
 ----
 AppendThread->1 MsgStorageAppendResp Term:1 Log:1/12
-INFO 1 [term: 3] ignored entry appends from a MsgStorageAppendResp message with lower term [term: 1]
+INFO mark (term,index)=(1,12) mismatched the last accepted term 3 in unstable log; ignoring 
 
 process-append-thread 1
 ----
@@ -476,14 +474,13 @@ raft-log 1
 deliver-msgs 1
 ----
 AppendThread->1 MsgStorageAppendResp Term:2 Log:2/12
-INFO 1 [term: 3] ignored entry appends from a MsgStorageAppendResp message with lower term [term: 2]
+INFO mark (term,index)=(2,12) mismatched the last accepted term 3 in unstable log; ignoring 
 
 process-append-thread 1
 ----
 Processing:
 1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11
 Responses:
-AppendThread->1 MsgStorageAppendResp Term:3 Log:2/12
 
 raft-log 1
 ----
@@ -492,8 +489,7 @@ raft-log 1
 
 deliver-msgs 1
 ----
-AppendThread->1 MsgStorageAppendResp Term:3 Log:2/12
-INFO entry at (index,term)=(12,2) mismatched with entry at (12,3) in unstable log; ignoring
+no messages
 
 process-append-thread 1
 ----

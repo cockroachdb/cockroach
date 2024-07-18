@@ -336,7 +336,7 @@ func TestHasNextCommittedEnts(t *testing.T) {
 			require.True(t, raftLog.append(init))
 			require.NoError(t, storage.Append(init.entries[:1]))
 
-			raftLog.stableTo(entryID{term: 1, index: 4})
+			raftLog.stableTo(logMark{term: init.term, index: 4})
 			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
@@ -390,7 +390,7 @@ func TestNextCommittedEnts(t *testing.T) {
 			require.True(t, raftLog.append(init))
 			require.NoError(t, storage.Append(init.entries[:1]))
 
-			raftLog.stableTo(entryID{term: 1, index: 4})
+			raftLog.stableTo(logMark{term: init.term, index: 4})
 			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(tt.applied, 0 /* size */)
 			raftLog.acceptApplying(tt.applying, 0 /* size */, tt.allowUnstable)
@@ -444,7 +444,7 @@ func TestAcceptApplying(t *testing.T) {
 			require.True(t, raftLog.append(init))
 			require.NoError(t, storage.Append(init.entries[:1]))
 
-			raftLog.stableTo(entryID{term: 1, index: 4})
+			raftLog.stableTo(logMark{term: init.term, index: 4})
 			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
 
@@ -488,7 +488,7 @@ func TestAppliedTo(t *testing.T) {
 			require.True(t, raftLog.append(init))
 			require.NoError(t, storage.Append(init.entries[:1]))
 
-			raftLog.stableTo(entryID{term: 1, index: 4})
+			raftLog.stableTo(logMark{term: init.term, index: 4})
 			raftLog.commitTo(logMark{term: init.term, index: 5})
 			raftLog.appliedTo(3, 0 /* size */)
 			raftLog.acceptApplying(5, maxSize+overshoot, false /* allowUnstable */)
@@ -525,7 +525,7 @@ func TestNextUnstableEnts(t *testing.T) {
 			require.Equal(t, len(tt.entries) != 0, raftLog.hasNextUnstableEnts())
 			require.Equal(t, tt.entries, raftLog.nextUnstableEnts())
 			if len(tt.entries) != 0 {
-				raftLog.stableTo(tt.lastEntryID())
+				raftLog.stableTo(tt.mark())
 			}
 			require.Equal(t, tt.lastEntryID(), raftLog.unstable.prev)
 		})
@@ -563,20 +563,24 @@ func TestCommitTo(t *testing.T) {
 func TestStableTo(t *testing.T) {
 	init := entryID{}.append(1, 2)
 	for _, tt := range []struct {
-		stablei   uint64
-		stablet   uint64
-		wunstable uint64
+		mark logMark
+		want uint64 // prev.index
 	}{
-		{1, 1, 2},
-		{2, 2, 3},
-		{2, 1, 1}, // bad term
-		{3, 1, 1}, // bad index
+		// out of bounds
+		{mark: logMark{term: 2, index: 0}, want: 0},
+		{mark: logMark{term: 2, index: 3}, want: 0},
+		// outdated accepted term
+		{mark: logMark{term: 1, index: 1}, want: 0},
+		{mark: logMark{term: 1, index: 2}, want: 0},
+		// successful acknowledgements
+		{mark: logMark{term: 2, index: 1}, want: 1},
+		{mark: logMark{term: 2, index: 2}, want: 2},
 	} {
 		t.Run("", func(t *testing.T) {
 			raftLog := newLog(NewMemoryStorage(), discardLogger)
 			require.True(t, raftLog.append(init))
-			raftLog.stableTo(entryID{term: tt.stablet, index: tt.stablei})
-			require.Equal(t, tt.wunstable, raftLog.unstable.prev.index+1)
+			raftLog.stableTo(tt.mark)
+			require.Equal(t, tt.want, raftLog.unstable.prev.index)
 		})
 	}
 }
@@ -586,24 +590,24 @@ func TestStableToWithSnap(t *testing.T) {
 	snap := pb.Snapshot{Metadata: pb.SnapshotMetadata{Term: snapID.term, Index: snapID.index}}
 	for _, tt := range []struct {
 		sl   logSlice
-		to   entryID
+		to   logMark
 		want uint64 // the unstable.offset
 	}{
 		// out of bounds
-		{sl: snapID.append(), to: entryID{term: 1, index: 2}, want: 6},
-		{sl: snapID.append(), to: entryID{term: 2, index: 6}, want: 6},
-		{sl: snapID.append(), to: entryID{term: 2, index: 7}, want: 6},
-		{sl: snapID.append(6, 6, 8), to: entryID{term: 2, index: 4}, want: 6},
-		{sl: snapID.append(6, 6, 8), to: entryID{term: 2, index: 10}, want: 6},
+		{sl: snapID.append(), to: logMark{term: 1, index: 2}, want: 6},
+		{sl: snapID.append(), to: logMark{term: 2, index: 6}, want: 6},
+		{sl: snapID.append(), to: logMark{term: 2, index: 7}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 2, index: 4}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 2, index: 10}, want: 6},
 		// successful acknowledgements
-		{sl: snapID.append(6, 6, 8), to: entryID{term: 2, index: 5}, want: 6},
-		{sl: snapID.append(6, 6, 8), to: entryID{term: 6, index: 6}, want: 7},
-		{sl: snapID.append(6, 6, 8), to: entryID{term: 6, index: 7}, want: 8},
-		{sl: snapID.append(6, 6, 8), to: entryID{term: 8, index: 8}, want: 9},
-		// mismatching entry terms
-		{sl: snapID.append(6, 6, 8), to: entryID{term: 3, index: 6}, want: 6},
-		{sl: snapID.append(6, 6, 8), to: entryID{term: 3, index: 7}, want: 6},
-		{sl: snapID.append(6, 6, 8), to: entryID{term: 3, index: 8}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 5}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 6}, want: 7},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 7}, want: 8},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 8, index: 8}, want: 9},
+		// mismatching accepted term
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 3, index: 6}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 3, index: 7}, want: 6},
+		{sl: snapID.append(6, 6, 8), to: logMark{term: 3, index: 8}, want: 6},
 	} {
 		t.Run("", func(t *testing.T) {
 			s := NewMemoryStorage()
