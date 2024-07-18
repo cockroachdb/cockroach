@@ -636,11 +636,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if columnName == catpb.TTLDefaultExpirationColumnName &&
 				tableDesc.HasRowLevelTTL() &&
 				tableDesc.GetRowLevelTTL().HasDurationExpr() {
-				return pgerror.Newf(
-					pgcode.InvalidTableDefinition,
-					`cannot alter column %s while ttl_expire_after is set`,
-					columnName,
-				)
+				return sqlerrors.NewAlterDependsOnDurationExprError("alter", "column", columnName, tn.Object())
 			}
 			// Apply mutations to copy of column descriptor.
 			if err := applyColumnMutation(params.ctx, tableDesc, col, t, params, n.n.Cmds, tn); err != nil {
@@ -1913,7 +1909,7 @@ func dropColumnImpl(
 	if err := schemaexpr.ValidateColumnHasNoDependents(tableDesc, colToDrop); err != nil {
 		return nil, err
 	}
-	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, rowLevelTTL, colToDrop); err != nil {
+	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, rowLevelTTL, colToDrop, tn, "drop"); err != nil {
 		return nil, err
 	}
 
