@@ -257,7 +257,7 @@ var opWeights = []int{
 	alterDatabaseAddRegion:            1,
 	alterTableAddConstraintUnique:     0,
 	alterTableLocality:                1,
-	createIndex:                       1,
+	createIndex:                       0, // Disabled and tracked with #127280.
 	createSequence:                    1,
 	createTable:                       10,
 	createTableAs:                     1,
@@ -278,7 +278,7 @@ var opWeights = []int{
 	alterTableRenameColumn:            1,
 	renameIndex:                       1,
 	renameSequence:                    1,
-	renameTable:                       1,
+	renameTable:                       0, // Disabled and tracked with #127980.
 	renameView:                        1,
 	alterTableSetColumnDefault:        1,
 	alterTableSetColumnNotNull:        1,
