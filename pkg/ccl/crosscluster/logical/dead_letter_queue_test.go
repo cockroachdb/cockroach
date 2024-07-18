@@ -185,7 +185,7 @@ func TestDLQClient(t *testing.T) {
 		tableDesc    catalog.TableDescriptor
 		kv           streampb.StreamEvent_KV
 		dlqReason    retryEligibility
-		mutationType ReplicationMutationType
+		mutationType replicationMutationType
 		applyError   error
 	}
 
@@ -195,28 +195,28 @@ func TestDLQClient(t *testing.T) {
 			jobID:        1,
 			tableDesc:    tableNameToDesc["defaultdb.public.foo"],
 			dlqReason:    noSpace,
-			mutationType: Insert,
+			mutationType: insertMutation,
 		},
 		{
 			name:         "insert dlq fallback row for default.baz.foo",
 			jobID:        1,
 			tableDesc:    tableNameToDesc["defaultdb.baz.foo"],
 			dlqReason:    tooOld,
-			mutationType: Insert,
+			mutationType: insertMutation,
 		},
 		{
 			name:         "insert dlq fallback row for a.public.bar",
 			jobID:        1,
 			tableDesc:    tableNameToDesc["a.public.bar"],
 			dlqReason:    noSpace,
-			mutationType: Insert,
+			mutationType: insertMutation,
 		},
 		{
 			name:         "insert dlq fallback row for a.baz.foo",
 			jobID:        1,
 			tableDesc:    tableNameToDesc["a.baz.foo"],
 			dlqReason:    tooOld,
-			mutationType: Insert,
+			mutationType: insertMutation,
 		},
 		{
 			name:           "expect error when given nil cdcEventRow",
