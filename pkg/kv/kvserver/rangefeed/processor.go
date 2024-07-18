@@ -164,11 +164,9 @@ type Processor interface {
 	// currently achieved by Register function synchronizing with the work loop
 	// before the lock is released.
 	//
-	// Is it possible for iterator to be nil and error is nil from
-	// IntentScannerConstructor? This looks questionable. We are checking if the
-	// function is nil underlying which is also questionable. Am I insane?
-	// If the iterator is nil then no initialization scan will be performed and
-	// the resolved timestamp will immediately be considered initialized.
+	// If the IntentScannerConstructor is nil then no initialization scan will be
+	// performed and the resolved timestamp will immediately be considered
+	// initialized. This is only possible in tests.
 	Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error
 	// Stop processor and close all registrations.
 	//
@@ -396,7 +394,9 @@ func (p *LegacyProcessor) Start(stopper *stop.Stopper, newRtsIter IntentScannerC
 	return nil
 }
 
-// run is called from Start and runs the rangefeed.
+// run is called from Start and runs the rangefeed. It is important to call
+// IntentScannerConstructor before firing async initialScan.Run while holding
+// raftMu locks to avoid missing events.
 func (p *LegacyProcessor) run(
 	ctx context.Context,
 	_forStacks roachpb.RangeID,
@@ -421,6 +421,7 @@ func (p *LegacyProcessor) run(
 	if rtsIterFunc != nil {
 		rtsIter, err := rtsIterFunc()
 		if err != nil {
+			// No need to close rtsIter if error is non-nil.
 			p.StopWithErr(kvpb.NewError(err))
 		} else {
 			initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
@@ -429,6 +430,7 @@ func (p *LegacyProcessor) run(
 			}
 		}
 	} else {
+		// Only possible in tests.
 		p.initResolvedTS(ctx)
 	}
 

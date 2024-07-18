@@ -92,14 +92,14 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 	return p
 }
 
-// Start performs processor one-time initialization e.g registers with
-// scheduler and fires up background tasks to populate processor state.
-// The provided iterator is used to initialize the rangefeed's resolved
-// timestamp. It must obey the contract of an iterator used for an
-// initResolvedTSScan. The Processor promises to clean up the iterator by
-// calling its Close method when it is finished. If the iterator is nil then
-// no initialization scan will be performed and the resolved timestamp will
-// immediately be considered initialized.
+// Start performs processor one-time initialization e.g registers with scheduler
+// and fires up background tasks to populate processor state. The provided
+// iterator is used to initialize the rangefeed's resolved timestamp. It must
+// obey the contract of an iterator used for an initResolvedTSScan. The
+// Processor promises to clean up the iterator by calling its Close method when
+// it is finished. If the iterator is nil then no initialization scan will be
+// performed and the resolved timestamp will immediately be considered
+// initialized. If the method returns an error, processor will be stopped.
 func (p *ScheduledProcessor) Start(
 	stopper *stop.Stopper, rtsIterFunc IntentScannerConstructor,
 ) error {
@@ -121,7 +121,7 @@ func (p *ScheduledProcessor) Start(
 	if rtsIterFunc != nil {
 		rtsIter, err := rtsIterFunc()
 		if err != nil {
-			p.scheduler.StopProcessor()
+			p.StopWithErr(kvpb.NewError(err))
 			return err
 		}
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
