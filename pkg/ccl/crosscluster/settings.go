@@ -17,7 +17,7 @@ import (
 // StreamReplicationStreamLivenessTrackFrequency controls frequency to check
 // the liveness of a streaming replication producer job.
 var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"stream_replication.stream_liveness_track_frequency",
 	"controls how frequent we check for the liveness of a replication stream producer job",
 	time.Minute,
@@ -27,7 +27,7 @@ var StreamReplicationStreamLivenessTrackFrequency = settings.RegisterDurationSet
 // StreamReplicationMinCheckpointFrequency controls the minimum frequency the stream replication
 // source cluster sends checkpoints to destination cluster.
 var StreamReplicationMinCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel,
 	"stream_replication.min_checkpoint_frequency",
 	"controls minimum frequency the stream replication source cluster sends checkpoints "+
 		"to the destination cluster",

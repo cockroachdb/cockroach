@@ -243,6 +243,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				return mgr.StreamPartition(
+					ctx,
 					streampb.StreamID(tree.MustBeDInt(args[0])),
 					[]byte(tree.MustBeDBytes(args[1])),
 				)
