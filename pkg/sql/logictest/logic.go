@@ -2948,6 +2948,7 @@ func (t *logicTest) processSubtest(
 
 				for i := 0; i < repeat; i++ {
 					if t.retry && !*rewriteResultsInTestfiles {
+
 						if err := testutils.SucceedsWithinError(func() error {
 							t.purgeZoneConfig()
 							return t.execQuery(query)
