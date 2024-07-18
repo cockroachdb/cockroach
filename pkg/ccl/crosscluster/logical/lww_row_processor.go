@@ -345,7 +345,7 @@ const (
 	insertQueryPessimistic = `
 INSERT INTO [%d AS t] (%s)
 VALUES (%s)
-ON CONFLICT ON CONSTRAINT %s
+ON CONFLICT (%s)
 DO UPDATE SET
 %s
 WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_replication_origin_timestamp
@@ -353,6 +353,23 @@ WHERE (t.crdb_internal_mvcc_timestamp <= excluded.crdb_replication_origin_timest
  OR (t.crdb_replication_origin_timestamp <= excluded.crdb_replication_origin_timestamp
      AND t.crdb_replication_origin_timestamp IS NOT NULL)`
 )
+
+func sqlEscapedJoin(parts []string, sep string) string {
+	switch len(parts) {
+	case 0:
+		return ""
+	case 1:
+		return lexbase.EscapeSQLIdent(parts[0])
+	default:
+		var s strings.Builder
+		s.WriteString(lexbase.EscapeSQLIdent(parts[0]))
+		for _, p := range parts[1:] {
+			s.WriteString(sep)
+			s.WriteString(lexbase.EscapeSQLIdent(p))
+		}
+		return s.String()
+	}
+}
 
 func makeInsertQueries(
 	dstTableDescID int32, td catalog.TableDescriptor,
@@ -433,7 +450,7 @@ func makeInsertQueries(
 			dstTableDescID,
 			columnNames.String(),
 			valueStrings.String(),
-			lexbase.EscapeSQLIdent(td.GetPrimaryIndex().GetName()),
+			sqlEscapedJoin(td.TableDesc().PrimaryIndex.KeyColumnNames, ","),
 			onConflictUpdateClause.String(),
 		))
 		if err != nil {
