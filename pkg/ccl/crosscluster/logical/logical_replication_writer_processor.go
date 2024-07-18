@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -125,11 +124,16 @@ func newLogicalReplicationWriterProcessor(
 		}
 	}
 
-	tableDescs := make(map[descpb.ID]catalog.TableDescriptor)
+	tableConfigs := make(map[descpb.ID]sqlProcessorTableConfig)
 	tableIDToName := make(map[int32]fullyQualifiedTableName)
 	for tableID, md := range spec.TableMetadata {
 		desc := md.SourceDescriptor
-		tableDescs[descpb.ID(tableID)] = tabledesc.NewBuilder(&desc).BuildImmutableTable()
+		tableConfigs[descpb.ID(tableID)] = sqlProcessorTableConfig{
+			srcDesc:   tabledesc.NewBuilder(&desc).BuildImmutableTable(),
+			dstDBName: md.DestinationParentDatabaseName,
+			dstFnName: md.DestinationFunctionName,
+		}
+
 		tableIDToName[tableID] = fullyQualifiedTableName{
 			database: md.DestinationParentDatabaseName,
 			schema:   md.DestinationParentSchemaName,
@@ -140,7 +144,7 @@ func newLogicalReplicationWriterProcessor(
 	for i := range bhPool {
 
 		rp, err := makeSQLProcessor(
-			ctx, flowCtx.Cfg.Settings, tableDescs,
+			ctx, flowCtx.Cfg.Settings, tableConfigs,
 			// Initialize the executor with a fresh session data - this will
 			// avoid creating a new copy on each executor usage.
 			flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */))),
@@ -159,8 +163,8 @@ func newLogicalReplicationWriterProcessor(
 	dlqDbExec := flowCtx.Cfg.DB.Executor(isql.WithSessionData(sql.NewInternalSessionData(ctx, flowCtx.Cfg.Settings, "" /* opName */)))
 
 	var numTablesWithSecondaryIndexes int
-	for _, td := range tableDescs {
-		if len(td.NonPrimaryIndexes()) > 0 {
+	for _, tc := range tableConfigs {
+		if len(tc.srcDesc.NonPrimaryIndexes()) > 0 {
 			numTablesWithSecondaryIndexes++
 		}
 	}
@@ -185,7 +189,7 @@ func newLogicalReplicationWriterProcessor(
 			// (Here we have access to the descriptor of the source table, but
 			// for now we assume that the source and the target descriptors are
 			// similar.)
-			if 2*numTablesWithSecondaryIndexes < len(tableDescs) && useImplicitTxns.Get(&flowCtx.Cfg.Settings.SV) {
+			if 2*numTablesWithSecondaryIndexes < len(tableConfigs) && useImplicitTxns.Get(&flowCtx.Cfg.Settings.SV) {
 				return 1
 			}
 			return int(flushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
