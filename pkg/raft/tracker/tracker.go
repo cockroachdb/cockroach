@@ -34,19 +34,14 @@ type ProgressTracker struct {
 	Progress ProgressMap
 
 	Votes map[pb.PeerID]bool
-
-	MaxInflight      int
-	MaxInflightBytes uint64
 }
 
 // MakeProgressTracker initializes a ProgressTracker.
-func MakeProgressTracker(config *quorum.Config, maxInflight int, maxBytes uint64) ProgressTracker {
+func MakeProgressTracker(config *quorum.Config) ProgressTracker {
 	p := ProgressTracker{
-		MaxInflight:      maxInflight,
-		MaxInflightBytes: maxBytes,
-		Config:           config,
-		Votes:            map[pb.PeerID]bool{},
-		Progress:         map[pb.PeerID]*Progress{},
+		Config:   config,
+		Votes:    map[pb.PeerID]bool{},
+		Progress: map[pb.PeerID]*Progress{},
 	}
 	return p
 }

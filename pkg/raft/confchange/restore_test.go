@@ -91,17 +91,17 @@ func TestRestore(t *testing.T) {
 	f := func(cs pb.ConfState) bool {
 		cfg := quorum.MakeEmptyConfig()
 		chg := Changer{
-			Config:    cfg,
-			Tracker:   tracker.MakeProgressTracker(&cfg, 20, 0),
-			LastIndex: 10,
+			Config:      cfg,
+			ProgressMap: tracker.MakeProgressTracker(&cfg).Progress,
+			LastIndex:   10,
 		}
-		cfg, trk, err := Restore(chg, cs)
+		cfg, progressMap, err := Restore(chg, cs)
 		if err != nil {
 			t.Error(err)
 			return false
 		}
 		chg.Config = cfg
-		chg.Tracker.Progress = trk
+		chg.ProgressMap = progressMap
 
 		for _, sl := range [][]pb.PeerID{
 			cs.Voters,

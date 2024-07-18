@@ -340,8 +340,10 @@ func TestReplicaDescriptorsCanMakeProgressRandom(t *testing.T) {
 			emptyCfg := quorum.MakeEmptyConfig()
 			cfg, _, err := confchange.Restore(
 				confchange.Changer{
-					Config:  emptyCfg,
-					Tracker: tracker.MakeProgressTracker(&emptyCfg, 1, 0),
+					Config:           emptyCfg,
+					ProgressMap:      tracker.MakeProgressTracker(&emptyCfg).Progress,
+					MaxInflight:      1,
+					MaxInflightBytes: 0,
 				},
 				rng.ConfState(),
 			)

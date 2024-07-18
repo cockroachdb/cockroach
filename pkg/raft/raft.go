@@ -328,6 +328,9 @@ type raft struct {
 	config quorum.Config
 	trk    tracker.ProgressTracker
 
+	maxInflight      int
+	maxInflightBytes uint64
+
 	state StateType
 
 	// isLearner is true if the local raft node is a learner.
@@ -419,6 +422,8 @@ func newRaft(c *Config) *raft {
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
 		config:                      quorum.MakeEmptyConfig(),
+		maxInflight:                 c.MaxInflightMsgs,
+		maxInflightBytes:            c.MaxInflightBytes,
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
@@ -431,12 +436,14 @@ func newRaft(c *Config) *raft {
 	}
 	lastID := r.raftLog.lastEntryID()
 
-	r.trk = tracker.MakeProgressTracker(&r.config, c.MaxInflightMsgs, c.MaxInflightBytes)
+	r.trk = tracker.MakeProgressTracker(&r.config)
 
 	cfg, trk, err := confchange.Restore(confchange.Changer{
-		Config:    r.config,
-		Tracker:   r.trk,
-		LastIndex: lastID.index,
+		Config:           r.config,
+		ProgressMap:      r.trk.Progress,
+		MaxInflight:      r.maxInflight,
+		MaxInflightBytes: r.maxInflightBytes,
+		LastIndex:        lastID.index,
 	}, cs)
 	if err != nil {
 		panic(err)
@@ -762,7 +769,7 @@ func (r *raft) reset(term uint64) {
 		*pr = tracker.Progress{
 			Match:     0,
 			Next:      r.raftLog.lastIndex() + 1,
-			Inflights: tracker.NewInflights(r.trk.MaxInflight, r.trk.MaxInflightBytes),
+			Inflights: tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
 			IsLearner: pr.IsLearner,
 		}
 		if id == r.id {
@@ -1904,11 +1911,13 @@ func (r *raft) restore(s snapshot) bool {
 
 	// Reset the configuration and add the (potentially updated) peers in anew.
 	r.config = quorum.MakeEmptyConfig()
-	r.trk = tracker.MakeProgressTracker(&r.config, r.trk.MaxInflight, r.trk.MaxInflightBytes)
+	r.trk = tracker.MakeProgressTracker(&r.config)
 	cfg, trk, err := confchange.Restore(confchange.Changer{
-		Config:    r.config,
-		Tracker:   r.trk,
-		LastIndex: r.raftLog.lastIndex(),
+		Config:           r.config,
+		ProgressMap:      r.trk.Progress,
+		MaxInflight:      r.maxInflight,
+		MaxInflightBytes: r.maxInflightBytes,
+		LastIndex:        r.raftLog.lastIndex(),
 	}, cs)
 
 	if err != nil {
@@ -1935,9 +1944,11 @@ func (r *raft) promotable() bool {
 func (r *raft) applyConfChange(cc pb.ConfChangeV2) pb.ConfState {
 	cfg, trk, err := func() (quorum.Config, tracker.ProgressMap, error) {
 		changer := confchange.Changer{
-			Config:    r.config,
-			Tracker:   r.trk,
-			LastIndex: r.raftLog.lastIndex(),
+			Config:           r.config,
+			ProgressMap:      r.trk.Progress,
+			MaxInflight:      r.maxInflight,
+			MaxInflightBytes: r.maxInflightBytes,
+			LastIndex:        r.raftLog.lastIndex(),
 		}
 		if cc.LeaveJoint() {
 			return changer.LeaveJoint()
