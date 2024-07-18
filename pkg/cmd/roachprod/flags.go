@@ -246,9 +246,30 @@ func initFlags() {
 
 	startInstanceCmd.Flags().StringVarP(&storageCluster, "storage-cluster", "S", "", "storage cluster")
 	_ = startInstanceCmd.MarkFlagRequired("storage-cluster")
-	startInstanceCmd.Flags().IntVar(&startOpts.SQLInstance,
-		"sql-instance", 0, "specific SQL/HTTP instance to connect to (this is a roachprod abstraction for separate-process deployments distinct from the internal instance ID)")
-	startInstanceCmd.Flags().StringVar(&startOpts.VirtualClusterLocation, "external-nodes", startOpts.VirtualClusterLocation, "if set, starts service in external mode, as a separate process in the given nodes")
+	startInstanceCmd.Flags().IntVar(
+		&startOpts.SQLInstance,
+		"sql-instance",
+		0,
+		"specific SQL/HTTP instance to connect to (this is a roachprod abstraction for separate-process deployments distinct from the internal instance ID)",
+	)
+	startInstanceCmd.Flags().StringVar(
+		&startOpts.VirtualClusterLocation,
+		"external-nodes",
+		startOpts.VirtualClusterLocation,
+		"if set, starts service in external mode, as a separate process in the given nodes",
+	)
+	startInstanceCmd.Flags().StringVar(
+		&startOpts.PCRSourceCluster,
+		"pcr-cluster",
+		startOpts.PCRSourceCluster,
+		"if starting a PCR cluster, this should be the name of the virtual cluster on the source",
+	)
+	startInstanceCmd.Flags().StringVar(
+		&startOpts.PCRSourcePGURL,
+		"pcr-pgurl",
+		startOpts.PCRSourcePGURL,
+		"if starting a PCR cluster, this should be the pgurl of the system tenant on the source",
+	)
 
 	// Flags for processes that stop (kill) processes.
 	for _, stopProcessesCmd := range []*cobra.Command{stopCmd, stopInstanceCmd, deployCmd} {

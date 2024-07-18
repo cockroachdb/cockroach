@@ -694,6 +694,10 @@ default. To start an external process instance, pass the
 --external-cluster flag indicating where the SQL server processes
 should be started.
 
+In shared-process mode, it is possible to start the virtual cluster
+using the Physical Cluster Replication (PCR) feature. The --pcr-cluster
+and --pcr-pgurl can be used to configure the replication.
+
 Nodes are started in secure mode by default and there is a one time
 initialization for the cluster to create and distribute the certs.
 Note that running some modes in secure mode and others in insecure

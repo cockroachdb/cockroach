@@ -79,12 +79,17 @@ func StartVirtualClusterOpts(name string, nodes NodeListOption, opts ...StartSto
 	return startOpts
 }
 
-// DefaultStartSharedVirtualClusterOpts returns StartOpts for starting a shared
+// StartSharedVirtualClusterOpts returns StartOpts for starting a shared
 // process virtual cluster with the given name.
-func StartSharedVirtualClusterOpts(name string) StartOpts {
+func StartSharedVirtualClusterOpts(name string, opts ...StartStopOption) StartOpts {
 	startOpts := DefaultStartOpts()
 	startOpts.RoachprodOpts.Target = install.StartSharedProcessForVirtualCluster
 	startOpts.RoachprodOpts.VirtualClusterName = name
+
+	for _, opt := range opts {
+		opt(&startOpts)
+	}
+
 	return startOpts
 }
 
@@ -180,6 +185,19 @@ func StorageCluster(nodes NodeListOption) StartStopOption {
 		switch opts := opts.(type) {
 		case *StartOpts:
 			opts.SeparateProcessStorageNodes = nodes
+		}
+	}
+}
+
+// PCR enables Physical Cluster Replication on the virtual cluster
+// being created. Note that this option should only be used on the
+// destination cluster, when creating a shared-process tenant.
+func PCR(virtualCluster, systemPGURL string) StartStopOption {
+	return func(opts interface{}) {
+		switch opts := opts.(type) {
+		case *StartOpts:
+			opts.RoachprodOpts.PCRSourceCluster = virtualCluster
+			opts.RoachprodOpts.PCRSourcePGURL = systemPGURL
 		}
 	}
 }

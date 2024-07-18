@@ -135,6 +135,8 @@ type StartOpts struct {
 	VirtualClusterName     string
 	VirtualClusterID       int
 	VirtualClusterLocation string // where separate process virtual clusters will be started
+	PCRSourceCluster       string // name of source virtual cluster when starting PCR cluster
+	PCRSourcePGURL         string // pgurl of the source system tenant when starting PCR cluster
 	SQLInstance            int
 	StorageCluster         *SyncedCluster
 
@@ -149,6 +151,10 @@ type StartOpts struct {
 
 func (s *StartOpts) IsVirtualCluster() bool {
 	return s.Target == StartSharedProcessForVirtualCluster || s.Target == StartServiceForVirtualCluster
+}
+
+func (s *StartOpts) IsPCR() bool {
+	return s.PCRSourceCluster != ""
 }
 
 // customPortsSpecified determines if custom ports were passed in
@@ -175,6 +181,22 @@ func (s *StartOpts) validate(isLocal, supportsRegistration bool) error {
 
 	if !supportsRegistration && s.customPortsSpecified() {
 		return fmt.Errorf("service registration is not supported for this cluster, but custom ports were specified")
+	}
+
+	// If the source pgurl is quoted ('pgurl://'), remove these extra
+	// quotes. This can happen if the pgurl was passed using a subshell
+	// to call `roachprod pgurl` (e.g., `roachprod start-sql --pcr-pgurl
+	// $(roachprod pgurl ...)`)
+	if pgurl := s.PCRSourcePGURL; len(pgurl) > 2 && pgurl[0] == '\'' && pgurl[len(pgurl)-1] == '\'' {
+		s.PCRSourcePGURL = pgurl[1 : len(s.PCRSourcePGURL)-1]
+	}
+
+	if (s.PCRSourceCluster != "" || s.PCRSourcePGURL != "") && s.Target != StartSharedProcessForVirtualCluster {
+		return fmt.Errorf("pcr options can only be passed when starting a shared-process virtual cluster")
+	}
+
+	if (s.PCRSourceCluster == "") != (s.PCRSourcePGURL == "") {
+		return fmt.Errorf("both pcr cluster name and pgurl must be passed")
 	}
 
 	return nil
@@ -466,8 +488,10 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	// If we did not skip calling `init` on the cluster, we also set up
 	// default cluster settings, an admin user, and a backup schedule on
 	// the new cluster, making it the cluster a little more realistic
-	// and convenient to manage.
-	if !startOpts.SkipInit {
+	// and convenient to manage. This is also skipped for PCR setups,
+	// since this is destination virtual cluster and we should not write
+	// to it explicitly.
+	if !(startOpts.SkipInit || startOpts.IsPCR()) {
 		storageCluster := c
 		if startOpts.StorageCluster != nil {
 			storageCluster = startOpts.StorageCluster
@@ -1224,7 +1248,10 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 			[]string{"-e", stmts})
 
 		if err != nil || results[0].Err != nil {
-			err := errors.CombineErrors(err, results[0].Err)
+			err := errors.CombineErrors(
+				err,
+				errors.Wrapf(results[0].Err, "output:\n%s", results[0].CombinedOut),
+			)
 			return err
 		}
 
@@ -1458,15 +1485,27 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 
 	if virtualClusterID <= 0 {
 		// If the virtual cluster metadata does not exist yet, create it.
-		_, err = runSQL(fmt.Sprintf("CREATE TENANT '%s'", startOpts.VirtualClusterName))
+		var pcrConfig string
+		if startOpts.IsPCR() {
+			pcrConfig = fmt.Sprintf(
+				" FROM REPLICATION OF %s ON '%s'",
+				startOpts.PCRSourceCluster,
+				startOpts.PCRSourcePGURL,
+			)
+		}
+
+		_, err = runSQL(fmt.Sprintf("CREATE TENANT '%s'%s", startOpts.VirtualClusterName, pcrConfig))
 		if err != nil {
 			return -1, err
 		}
 	}
 
-	_, err = runSQL(fmt.Sprintf("ALTER TENANT '%s' START SERVICE %s", startOpts.VirtualClusterName, serviceMode))
-	if err != nil {
-		return -1, err
+	// PCR virtual clusters do not need to be explicitly started.
+	if !startOpts.IsPCR() {
+		_, err = runSQL(fmt.Sprintf("ALTER TENANT '%s' START SERVICE %s", startOpts.VirtualClusterName, serviceMode))
+		if err != nil {
+			return -1, err
+		}
 	}
 
 	return virtualClusterIDByName(startOpts.VirtualClusterName)
