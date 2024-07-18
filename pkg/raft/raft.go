@@ -351,6 +351,8 @@ type raft struct {
 
 	// the leader id
 	lead pb.PeerID
+	// TODO(arul): This should be populated when responding to a MsgFortify.
+	leadEpoch raftstoreliveness.Epoch
 	// leadTransferee is id of the leader transfer target when its value is not zero.
 	// Follow the procedure defined in raft thesis 3.10.
 	leadTransferee pb.PeerID
@@ -462,10 +464,11 @@ func (r *raft) softState() SoftState { return SoftState{RaftState: r.state} }
 
 func (r *raft) hardState() pb.HardState {
 	return pb.HardState{
-		Term:   r.Term,
-		Vote:   r.Vote,
-		Commit: r.raftLog.committed,
-		Lead:   r.lead,
+		Term:      r.Term,
+		Vote:      r.Vote,
+		Commit:    r.raftLog.committed,
+		Lead:      r.lead,
+		LeadEpoch: r.leadEpoch,
 	}
 }
 
@@ -2010,6 +2013,7 @@ func (r *raft) loadState(state pb.HardState) {
 	r.Term = state.Term
 	r.Vote = state.Vote
 	r.lead = state.Lead
+	r.leadEpoch = state.LeadEpoch
 }
 
 // pastElectionTimeout returns true if r.electionElapsed is greater
