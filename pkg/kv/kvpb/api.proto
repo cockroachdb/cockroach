@@ -2962,8 +2962,22 @@ message Header {
   reserved 7, 10, 12, 14, 20;
 
   WriteOptions write_options = 35;
-   
-  // Next ID: 36
+
+  // DeadlockTimeout specifies the maximum amount of time that a request will
+  // wait on a lock before pushing the lock holder transaction to detect
+  // deadlocks.
+  //
+  // DeadlockTimeout, if set, takes precedence over the
+  // kv.lock_table.deadlock_detection_push_delay cluster setting. If unset,
+  // the cluster setting is used instead.
+  //
+  // This differs from kv.lock_table.deadlock_detection_push_delay in that it
+  // gets applied at a finer granularity, where
+  // kv.lock_table.deadlock_detection_push_delay is a a cluster wide setting.
+  google.protobuf.Duration deadlock_timeout = 36 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
+
+  // Next ID: 37
 }
 
 message WriteOptions {
