@@ -129,9 +129,8 @@ func newLogicalReplicationWriterProcessor(
 	for tableID, md := range spec.TableMetadata {
 		desc := md.SourceDescriptor
 		tableConfigs[descpb.ID(tableID)] = sqlProcessorTableConfig{
-			srcDesc:   tabledesc.NewBuilder(&desc).BuildImmutableTable(),
-			dstDBName: md.DestinationParentDatabaseName,
-			dstFnName: md.DestinationFunctionName,
+			srcDesc: tabledesc.NewBuilder(&desc).BuildImmutableTable(),
+			dstOID:  md.DestinationFunctionOid,
 		}
 
 		tableIDToName[tableID] = fullyQualifiedTableName{

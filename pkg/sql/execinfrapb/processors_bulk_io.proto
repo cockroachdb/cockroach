@@ -485,9 +485,9 @@ message TableReplicationMetadata {
   optional string destination_parent_database_name = 2 [(gogoproto.nullable) = false];
   optional string destination_parent_schema_name = 3 [(gogoproto.nullable) = false];
   optional string destination_table_name = 4 [(gogoproto.nullable) = false];
-  // DestinationFunctionName, if non-empty, is the name of the
+  // DestinationFunctionOid, if non-zero, is the name of the
   // user-defined function that should be used for the table.
-  optional string destination_function_name = 5 [(gogoproto.nullable) = false];
+  optional uint32 destination_function_oid = 5 [(gogoproto.nullable) = false];
 }
 
 message LogicalReplicationWriterSpec {

@@ -201,9 +201,8 @@ func (q *queryBuffer) ApplierQueryForRow(row cdcevent.Row) (queryBuilder, error)
 }
 
 type sqlProcessorTableConfig struct {
-	srcDesc   catalog.TableDescriptor
-	dstDBName string
-	dstFnName string
+	srcDesc catalog.TableDescriptor
+	dstOID  uint32
 }
 
 func makeSQLProcessor(
@@ -397,17 +396,13 @@ func makeSQLLastWriteWinsHandler(
 	needFallback := false
 	shouldUseFallback := make(map[catid.DescID]bool, len(tableConfigs))
 	for _, tc := range tableConfigs {
-		shouldUseFallback[tc.srcDesc.GetID()] = tc.dstFnName != ""
-		needFallback = needFallback || tc.dstFnName != ""
+		shouldUseFallback[tc.srcDesc.GetID()] = tc.dstOID != 0
+		needFallback = needFallback || tc.dstOID != 0
 	}
 
 	var fallbackQuerier querier
 	if needFallback {
-		var err error
-		fallbackQuerier, err = makeApplierQuerier(ctx, settings, tableConfigs, ie)
-		if err != nil {
-			return nil, err
-		}
+		fallbackQuerier = makeApplierQuerier(ctx, settings, tableConfigs, ie)
 	}
 
 	qb := queryBuffer{
