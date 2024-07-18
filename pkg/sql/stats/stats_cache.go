@@ -135,6 +135,13 @@ func NewTableStatisticsCache(
 	return tableStatsCache
 }
 
+// Clear removes all entries from the stats cache.
+func (sc *TableStatisticsCache) Clear() {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.mu.cache.Clear()
+}
+
 // Start begins watching for updates in the stats table.
 func (sc *TableStatisticsCache) Start(
 	ctx context.Context, codec keys.SQLCodec, rangeFeedFactory *rangefeed.Factory,

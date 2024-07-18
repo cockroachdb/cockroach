@@ -2605,6 +2605,8 @@ var builtinOidsArray = []string{
 	2637: `crdb_internal.start_logical_replication_job(conn_str: string, table_names: string[]) -> int`,
 	2638: `crdb_internal.plan_logical_replication(req: bytes) -> bytes`,
 	2639: `crdb_internal.start_replication_stream_for_tables(req: bytes) -> bytes`,
+	2640: `crdb_internal.clear_query_plan_cache() -> void`,
+	2641: `crdb_internal.clear_table_stats_cache() -> void`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
