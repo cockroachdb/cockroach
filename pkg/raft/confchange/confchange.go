@@ -32,9 +32,11 @@ import (
 // refusing invalid configuration changes before they affect the active
 // configuration.
 type Changer struct {
-	Config    quorum.Config
-	Tracker   tracker.ProgressTracker
-	LastIndex uint64
+	Config           quorum.Config
+	ProgressMap      tracker.ProgressMap
+	MaxInflight      int
+	MaxInflightBytes uint64
+	LastIndex        uint64
 }
 
 // EnterJoint verifies that the outgoing (=right) majority config of the joint
@@ -271,7 +273,7 @@ func (c Changer) initProgress(
 		// making the first index the better choice).
 		Match:     0,
 		Next:      max(c.LastIndex, 1), // invariant: Match < Next
-		Inflights: tracker.NewInflights(c.Tracker.MaxInflight, c.Tracker.MaxInflightBytes),
+		Inflights: tracker.NewInflights(c.MaxInflight, c.MaxInflightBytes),
 		IsLearner: isLearner,
 		// When a node is first added, we should mark it as recently active.
 		// Otherwise, CheckQuorum may cause us to step down if it is invoked
@@ -348,7 +350,7 @@ func (c Changer) checkAndCopy() (quorum.Config, tracker.ProgressMap, error) {
 	cfg := c.Config.Clone()
 	trk := tracker.ProgressMap{}
 
-	for id, pr := range c.Tracker.Progress {
+	for id, pr := range c.ProgressMap {
 		// A shallow copy is enough because we only mutate the Learner field.
 		ppr := *pr
 		trk[id] = &ppr

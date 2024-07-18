@@ -104,14 +104,14 @@ func chain(
 	chg Changer, ops ...func(Changer) (quorum.Config, tracker.ProgressMap, error),
 ) (quorum.Config, tracker.ProgressMap, error) {
 	for _, op := range ops {
-		cfg, trk, err := op(chg)
+		cfg, progressMap, err := op(chg)
 		if err != nil {
 			return quorum.Config{}, nil, err
 		}
 		chg.Config = cfg
-		chg.Tracker.Progress = trk
+		chg.ProgressMap = progressMap
 	}
-	return chg.Config, chg.Tracker.Progress, nil
+	return chg.Config, chg.ProgressMap, nil
 }
 
 // Restore takes a Changer (which must represent an empty configuration), and

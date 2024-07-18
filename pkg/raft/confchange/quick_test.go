@@ -41,7 +41,7 @@ func TestConfChangeQuick(t *testing.T) {
 	const infoCount = 5
 
 	runWithJoint := func(c *Changer, ccs []pb.ConfChangeSingle) error {
-		cfg, trk, err := c.EnterJoint(false /* autoLeave */, ccs...)
+		cfg, progressMap, err := c.EnterJoint(false /* autoLeave */, ccs...)
 		if err != nil {
 			return err
 		}
@@ -52,29 +52,29 @@ func TestConfChangeQuick(t *testing.T) {
 			return err
 		}
 		cfg2a.AutoLeave = false
-		if !reflect.DeepEqual(cfg, cfg2a) || !reflect.DeepEqual(trk, trk2a) {
-			return fmt.Errorf("cfg: %+v\ncfg2a: %+v\ntrk: %+v\ntrk2a: %+v",
-				cfg, cfg2a, trk, trk2a)
+		if !reflect.DeepEqual(cfg, cfg2a) || !reflect.DeepEqual(progressMap, trk2a) {
+			return fmt.Errorf("cfg: %+v\ncfg2a: %+v\nprogressMap: %+v\ntrk2a: %+v",
+				cfg, cfg2a, progressMap, trk2a)
 		}
 		c.Config = cfg
-		c.Tracker.Progress = trk
+		c.ProgressMap = progressMap
 		cfg2b, trk2b, err := c.LeaveJoint()
 		if err != nil {
 			return err
 		}
 		// Reset back to the main branch with autoLeave=false.
 		c.Config = cfg
-		c.Tracker.Progress = trk
-		cfg, trk, err = c.LeaveJoint()
+		c.ProgressMap = progressMap
+		cfg, progressMap, err = c.LeaveJoint()
 		if err != nil {
 			return err
 		}
-		if !reflect.DeepEqual(cfg, cfg2b) || !reflect.DeepEqual(trk, trk2b) {
-			return fmt.Errorf("cfg: %+v\ncfg2b: %+v\ntrk: %+v\ntrk2b: %+v",
-				cfg, cfg2b, trk, trk2b)
+		if !reflect.DeepEqual(cfg, cfg2b) || !reflect.DeepEqual(progressMap, trk2b) {
+			return fmt.Errorf("cfg: %+v\ncfg2b: %+v\nprogressMap: %+v\ntrk2b: %+v",
+				cfg, cfg2b, progressMap, trk2b)
 		}
 		c.Config = cfg
-		c.Tracker.Progress = trk
+		c.ProgressMap = progressMap
 		return nil
 	}
 
@@ -84,7 +84,7 @@ func TestConfChangeQuick(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			c.Config, c.Tracker.Progress = cfg, trk
+			c.Config, c.ProgressMap = cfg, trk
 		}
 		return nil
 	}
@@ -94,11 +94,12 @@ func TestConfChangeQuick(t *testing.T) {
 	wrapper := func(invoke testFunc) func(setup initialChanges, ccs confChanges) (*Changer, error) {
 		return func(setup initialChanges, ccs confChanges) (*Changer, error) {
 			cfg := quorum.MakeEmptyConfig()
-			tr := tracker.MakeProgressTracker(&cfg, 10, 0)
 			c := &Changer{
-				Config:    cfg,
-				Tracker:   tr,
-				LastIndex: 10,
+				Config:           cfg,
+				ProgressMap:      tracker.MakeProgressTracker(&cfg).Progress,
+				MaxInflight:      10,
+				MaxInflightBytes: 0,
+				LastIndex:        10,
 			}
 
 			if err := runWithSimple(c, setup); err != nil {
@@ -120,7 +121,7 @@ func TestConfChangeQuick(t *testing.T) {
 			t.Log("initial setup:", Describe(setup...))
 			t.Log("changes:", Describe(ccs...))
 			t.Log(c.Config)
-			t.Log(c.Tracker.Progress)
+			t.Log(c.ProgressMap)
 		}
 		n++
 		return c
