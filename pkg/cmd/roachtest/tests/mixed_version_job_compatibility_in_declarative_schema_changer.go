@@ -62,7 +62,7 @@ func setShortGCTTLInSystemZoneConfig(
 	return h.Exec(r, "ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1;")
 }
 
-// executeSupportedDDLs tests all stmts supported in V23_1.
+// executeSupportedDDLs tests all stmts supported in V24_2.
 // Stmts here is based on set up in testSetupResetStep.
 func executeSupportedDDLs(
 	ctx context.Context,
@@ -118,10 +118,6 @@ func executeSupportedDDLs(
 		`DROP SCHEMA testdb.testsc`,
 		`DROP DATABASE testdb CASCADE`,
 		`DROP OWNED BY foo`,
-		`DROP FUNCTION fn`,
-		`DROP SEQUENCE testdb2.testsc.s`,
-		`DROP SCHEMA testdb2.testsc`,
-		`DROP DATABASE testdb2 CASCADE`,
 	}
 
 	ddls := append(v242DDLs, cleanup...)
@@ -151,8 +147,17 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 
 		// Ensure that the declarative schema changer is off so that we do not get failures related to unimplemented
 		// statements in the dsc.
+		// To make sure the session variables are applied correctly, we limit each
+		// connection pool to have at most 1 connection.
+		for _, node := range c.All() {
+			db := helper.Connect(node)
+			db.SetMaxOpenConns(1)
+			if err := helper.ExecWithGateway(r, option.NodeListOption{node}, "SET use_declarative_schema_changer = off"); err != nil {
+				return err
+			}
+		}
+
 		setUpQuery := `
-SET use_declarative_schema_changer = off;
 CREATE DATABASE IF NOT EXISTS testdb;
 CREATE SCHEMA IF NOT EXISTS testdb.testsc;
 CREATE TABLE IF NOT EXISTS testdb.testsc.t (i INT PRIMARY KEY, j INT NOT NULL, INDEX idx (j), CONSTRAINT check_j CHECK (j > 0));
@@ -173,16 +178,8 @@ CREATE VIEW IF NOT EXISTS testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);
 		// so that we don't fall back to legacy schema changer implicitly.
 		// Being explicit can help catch bugs that will otherwise be
 		// buried by the fallback.
-		// To make sure the session variables are applied correctly, we limit each
-		// connection pool to have at most 1 connection.
 		for _, node := range c.All() {
-			db := helper.Connect(node)
-			db.SetMaxOpenConns(1)
 			if err := helper.ExecWithGateway(r, option.NodeListOption{node}, "SET use_declarative_schema_changer = unsafe_always"); err != nil {
-				return err
-			}
-			// We also need to set experimental_enable_unique_without_index_constraints - since we will be testing this syntax.
-			if err := helper.ExecWithGateway(r, option.NodeListOption{node}, "SET experimental_enable_unique_without_index_constraints = true"); err != nil {
 				return err
 			}
 		}
