@@ -270,6 +270,10 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 func mergeWithData(t *testing.T, retries int64) {
 	ctx := context.Background()
 
+	// Set a long txn liveness threshold so that the merge txn cannot be aborted,
+	// even when we manually advance the clock to trigger a lease acquisition.
+	defer txnwait.TestingOverrideTxnLivenessThreshold(time.Hour)()
+
 	manualClock := hlc.NewHybridManualClock()
 	var store *kvserver.Store
 	// Maybe inject some retryable errors when the merge transaction commits.
