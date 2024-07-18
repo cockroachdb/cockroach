@@ -437,6 +437,10 @@ type Request struct {
 	// The SafeFormatter capable of formatting the request. This is used to enrich
 	// logging with request level information when latches conflict.
 	BaFmt redact.SafeFormatter
+
+	// DeadlockTimeout is the amount of time that the request will wait on a lock
+	// before pushing the lock holder's transaction for deadlock detection.
+	DeadlockTimeout time.Duration
 }
 
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to
