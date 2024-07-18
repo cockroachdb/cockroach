@@ -26,7 +26,7 @@ var pgjdbcReleaseTagRegex = regexp.MustCompile(`^REL(?P<major>\d+)\.(?P<minor>\d
 
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
-var supportedPGJDBCTag = "REL42.3.3"
+var supportedPGJDBCTag = "REL42.7.3"
 
 // This test runs pgjdbc's full test suite against a single cockroach node.
 
@@ -70,14 +70,13 @@ func registerPgjdbc(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
 		if err := repeatRunE(
 			ctx,
 			t,
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
+			`sudo apt-get -qq install default-jre openjdk-17-jdk-headless gradle`,
 		); err != nil {
 			t.Fatal(err)
 		}
